@@ -19,6 +19,9 @@ interface TrackingEvent {
 const FLUSH_SIZE = 5;
 const FLUSH_INTERVAL_MS = 15_000;
 
+/** A touch screen: lets the route tell an iPad from a Mac, which send the same User-Agent. */
+const hasTouch = () => typeof navigator !== "undefined" && navigator.maxTouchPoints > 1;
+
 export function useSurveyTracking(
   currentIndex: number,
   hasAnswer: boolean,
@@ -79,7 +82,11 @@ export function useSurveyTracking(
         };
         const allEvents = [...buffer.current, event];
         buffer.current = [];
-        const payload = JSON.stringify({ events: allEvents, _csrf: getCsrfToken() });
+        const payload = JSON.stringify({
+          events: allEvents,
+          _csrf: getCsrfToken(),
+          touch: hasTouch(),
+        });
         const blob = new Blob([payload], { type: "application/json" });
         navigator.sendBeacon("/api/survey-tracking", blob);
       }
@@ -132,7 +139,7 @@ function flushEvents(events: TrackingEvent[]) {
       "Content-Type": "application/json",
       "x-csrf-token": getCsrfToken(),
     },
-    body: JSON.stringify({ events }),
+    body: JSON.stringify({ events, touch: hasTouch() }),
   }).catch(() => {
     // Fire-and-forget — analytics events may be lost on network failure
   });

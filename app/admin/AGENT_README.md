@@ -28,3 +28,4 @@ Start with the domain doc in [`docs/admin/domains/AGENT_README.md`](../../docs/a
 - `page.tsx`: default `/admin` landing route
 - `login/page.tsx`: public admin sign-in page
 - `auth/callback/route.ts`: magic-link callback
+- `ap/`: AP-Analytics pages under their own `layout.tsx` (the admin layout steps aside for `/admin/ap`)

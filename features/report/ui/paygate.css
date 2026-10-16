@@ -6,9 +6,7 @@
    backdrop, viewport, close button, scroll region — is report.css's.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* The leave offer (features/booking/ui/founderCallDialog.css) draws with the same tokens. */
-.report-pricing-modal--paygate,
-.report-leave-offer {
+.report-pricing-modal--paygate {
   --rpg-ink: #17121f;
   --rpg-ink-strong: #161021;
   --rpg-muted: #4b5563;

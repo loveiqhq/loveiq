@@ -3,10 +3,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SurveyAnswerValue } from "@features/survey/server/types";
 import {
+  resolveDraftQuestionOrderArm,
+  resolveQuestionOrderOverride,
+  type QuestionOrderArm,
+} from "@shared/experiments/questionOrderArm";
+import {
   SURVEY_STATE_KEY,
   clearPersistedSurveyState,
   loadPendingCompletion,
 } from "./surveyStorage";
+import { getSessionId } from "./surveySession";
 
 export type AnswerValue = SurveyAnswerValue;
 
@@ -20,21 +26,49 @@ interface SurveyState {
    * themselves stay in `answers` and submit + score exactly like any other.
    */
   prefilled: string[];
+  /**
+   * C13's arm for this run, kept with the draft so a resume reopens the order it was
+   * answered in. Decided once, when the draft loads — see resolveDraftQuestionOrderArm.
+   */
+  orderArm: QuestionOrderArm;
 }
 
-/** Prefilled qIds live alongside the answers, so they survive a resume. */
-function readPrefilled(): string[] {
+/** A draft as stored: its arm is whatever the device holds, if anything. */
+type Draft = Omit<SurveyState, "orderArm"> & { orderArm?: unknown };
+
+/** Prefilled qIds and the C13 arm live alongside the answers, so they survive a resume. */
+function readDraftExtras(): Pick<Draft, "prefilled" | "orderArm"> {
   try {
     const raw = localStorage.getItem(SURVEY_STATE_KEY);
-    if (!raw) return [];
+    if (!raw) return { prefilled: [] };
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed?.prefilled) ? parsed.prefilled.filter(Boolean) : [];
+    return {
+      prefilled: Array.isArray(parsed?.prefilled) ? parsed.prefilled.filter(Boolean) : [],
+      orderArm: parsed?.orderArm,
+    };
   } catch {
-    return [];
+    return { prefilled: [] };
   }
 }
 
+/**
+ * C13's arm for a run: `?order=` where previews are allowed (never production), else
+ * what the draft says. Without a window (server render) there is no session, so control.
+ */
+function orderArmFor(draft: Draft): QuestionOrderArm {
+  if (typeof window === "undefined") return "control";
+  const preview = resolveQuestionOrderOverride(
+    new URLSearchParams(window.location.search).get("order")
+  );
+  return preview ?? resolveDraftQuestionOrderArm(getSessionId(), draft);
+}
+
 function loadState(): SurveyState {
+  const draft = loadDraft();
+  return { ...draft, orderArm: orderArmFor(draft) };
+}
+
+function loadDraft(): Draft {
   if (typeof window === "undefined") {
     return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString(), prefilled: [] };
   }
@@ -46,9 +80,9 @@ function loadState(): SurveyState {
         answers: pendingCompletion.answers || {},
         currentIndex: pendingCompletion.currentIndex || 0,
         startedAt: pendingCompletion.startedAt || new Date().toISOString(),
-        // A pending completion predates this field, so read it from the draft —
-        // otherwise the question list would grow back under a saved index.
-        prefilled: readPrefilled(),
+        // A pending completion predates these fields, so read them from the draft —
+        // otherwise the question list would grow back, or reorder, under a saved index.
+        ...readDraftExtras(),
       };
     }
 
@@ -60,6 +94,7 @@ function loadState(): SurveyState {
         currentIndex: parsed.currentIndex || 0,
         startedAt: parsed.startedAt || new Date().toISOString(),
         prefilled: Array.isArray(parsed.prefilled) ? parsed.prefilled.filter(Boolean) : [],
+        orderArm: parsed.orderArm,
       };
     }
   } catch {
@@ -127,13 +162,15 @@ export function useSurveyState() {
   const clearState = useCallback(() => {
     // Starting over drops the landing prefill too, so every question returns.
     answersRef.current = {};
-    setState({
+    // Cleared first: it drops the session id, and the new run's arm is its new id's.
+    clearPersistedSurveyState({ clearPendingCompletion: true });
+    const fresh: Draft = {
       answers: {},
       currentIndex: 0,
       startedAt: new Date().toISOString(),
       prefilled: [],
-    });
-    clearPersistedSurveyState({ clearPendingCompletion: true });
+    };
+    setState({ ...fresh, orderArm: orderArmFor(fresh) });
   }, []);
 
   return {
@@ -141,6 +178,7 @@ export function useSurveyState() {
     currentIndex: state.currentIndex,
     startedAt: state.startedAt,
     prefilled: state.prefilled,
+    orderArm: state.orderArm,
     setAnswer,
     getAnswer,
     getLatestAnswers,

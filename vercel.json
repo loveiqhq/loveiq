@@ -35,8 +35,20 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/kpi-weekly",
+      "schedule": "15 8 * * *"
+    },
+    {
+      "path": "/api/cron/kpi-dropoff",
+      "schedule": "30 8 * * *"
+    },
+    {
       "path": "/api/cron/journey-backfill",
       "schedule": "0 4 1 1 *"
+    },
+    {
+      "path": "/api/cron/brain-ga4-backfill",
+      "schedule": "30 4 1 1 *"
     },
     {
       "path": "/api/cron/brain-ingest",
@@ -51,6 +63,10 @@
       "schedule": "41 * * * *"
     },
     {
+      "path": "/api/cron/brain-notion-reach",
+      "schedule": "20 5 * * *"
+    },
+    {
       "path": "/api/cron/brain-gmail",
       "schedule": "11 * * * *"
     },
@@ -61,6 +77,10 @@
     {
       "path": "/api/cron/brain-drive",
       "schedule": "52 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-meeting-notes",
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/cron/brain-crm",
@@ -97,6 +117,12 @@
   ],
   "functions": {
     "app/api/cron/brain-mine/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/kpi-weekly/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/kpi-dropoff/route.ts": {
       "maxDuration": 300
     },
     "app/api/stripe/webhook/route.ts": {
@@ -150,10 +176,16 @@
     "app/api/cron/journey-backfill/route.ts": {
       "maxDuration": 300
     },
+    "app/api/cron/brain-ga4-backfill/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/cron/brain-fast/route.ts": {
       "maxDuration": 120
     },
     "app/api/cron/brain-notion/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/brain-notion-reach/route.ts": {
       "maxDuration": 120
     },
     "app/api/cron/brain-gmail/route.ts": {
@@ -161,6 +193,9 @@
     },
     "app/api/cron/brain-drive/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/brain-meeting-notes/route.ts": {
+      "maxDuration": 120
     },
     "app/api/cron/brain-calendar/route.ts": {
       "maxDuration": 120

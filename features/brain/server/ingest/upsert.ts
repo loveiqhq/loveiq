@@ -1,6 +1,7 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { loadPeople, peopleIn } from "@features/brain/server/people";
+import { reportingDay } from "@shared/time/reporting-day";
 
 /**
  * Shared write path for every non-git ingester (Jira, Google analytics).
@@ -30,6 +31,36 @@ export interface BrainRow {
    * "revenue?" answered with May. Null where a period is meaningless (docs).
    */
   period_end?: string | null;
+}
+
+/**
+ * `meta.at`: the moment a record describes, as UTC in `toISOString()` form, the one
+ * format whose text order is time order.
+ *
+ * `period_end` is a day, so `browse_context` listed one day's meetings, chats and mail
+ * in no particular order, and paged through them unstably. The listing orders by this
+ * within a day and shows it in Berlin time. File the record under `dayOfMoment(at)`, or it
+ * sorts and reads under a day it does not belong to. Absent where a record has no time of
+ * day: a Slack day, an all-day event, a decision.
+ */
+export function momentOf(value: string | number | null | undefined): string | undefined {
+  if (value === null || value === undefined || value === "" || value === 0) return undefined;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+}
+
+/**
+ * The day a timed record is filed under (`period_end`): the BERLIN day of its moment.
+ *
+ * It was the UTC day, so between midnight and 2 a.m. in Berlin a chat, a mail or a note
+ * counted toward the day before: "what did we agree today" missed it, and a listing put
+ * it above the evening it followed. The business already reports in Berlin days
+ * (`reportingDay`), GA4 included. Ids are not touched: a Slack or WhatsApp id still
+ * carries the UTC day it was keyed on, and a Slack day summary, which has no single
+ * moment, stays a UTC day.
+ */
+export function dayOfMoment(at: string | undefined): string | null {
+  return at ? reportingDay(new Date(at)) : null;
 }
 
 const BATCH = 200;
@@ -741,23 +772,30 @@ const SWEEP_INTERVAL_MS = 20 * 60 * 60 * 1000;
  * A source with no row has never swept, so it sweeps on its next complete walk.
  */
 export async function shouldSweep(source: string, nowMs = Date.now()): Promise<boolean> {
+  const last = await sweptAt(source);
+  if (last === undefined) return false;
+  if (last === null) return true;
+  return nowMs - last >= SWEEP_INTERVAL_MS;
+}
+
+/** When `source` last swept (ms): null when it never has, undefined when unreadable. */
+export async function sweptAt(source: string): Promise<number | null | undefined> {
   try {
     const res = await supabaseFetch(
       `/rest/v1/brain_sweep_state?source=eq.${encodeURIComponent(source)}&select=swept_at`
     );
     if (!res.ok) {
       logger.warn({ source, status: res.status }, "brain sweep state unreadable, not sweeping");
-      return false;
+      return undefined;
     }
     const rows = (await res.json().catch(() => null)) as Array<{ swept_at?: string }> | null;
-    if (!Array.isArray(rows)) return false;
-    if (rows.length === 0) return true;
+    if (!Array.isArray(rows)) return undefined;
+    if (rows.length === 0) return null;
     const last = Date.parse(rows[0]?.swept_at ?? "");
-    if (!Number.isFinite(last)) return false;
-    return nowMs - last >= SWEEP_INTERVAL_MS;
+    return Number.isFinite(last) ? last : undefined;
   } catch (err) {
     logger.warn({ err, source }, "brain sweep state threw, not sweeping");
-    return false;
+    return undefined;
   }
 }
 

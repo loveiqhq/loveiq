@@ -103,7 +103,8 @@ import {
   buildUnitEconomicsLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
+import { LANDING_TEST_START_DAY } from "@shared/experiments/landingVariant";
 
 /** Two arms, 30 days, shaped like the real RPC response. */
 function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> = {}) {
@@ -280,7 +281,9 @@ function landingChartPayloads(blocks: SlackBlock[]): Array<{
  * Reads the mocks rather than restating their fixtures, so a change to the
  * shared `beforeEach` reaches these tests the same way it reaches the handler.
  */
-async function landingLiveBlocks(): Promise<SlackBlock[]> {
+async function landingLiveBlocks(
+  over: Partial<Parameters<typeof buildConversionDigest>[0]> = {}
+): Promise<SlackBlock[]> {
   // Yesterday in Berlin, derived from the (faked) clock exactly as the handler
   // derives it. Hardcoding a day made every test that moves the clock — and
   // several do, because the landing axis is only valid from 21 Aug — silently
@@ -307,6 +310,7 @@ async function landingLiveBlocks(): Promise<SlackBlock[]> {
     adSpend: null,
     friction: null,
     now,
+    ...over,
   });
   return digest.blocks;
 }
@@ -1023,7 +1027,7 @@ describe("conversion-digest handler", () => {
     expect(flat).toContain("Landing Page V2 (Survey in Hero, before V3)");
     expect(flat).not.toContain("white_prev");
     // The counts are named, not bare percentages.
-    expect(flat).toContain("224 of 420 drafts reached question 30");
+    expect(flat).toContain("224 of 420 surveys reached question 30");
 
     // And the trend chart is drawn, in each arm's own colour.
     const midwayChart = blocks
@@ -1078,7 +1082,7 @@ describe("conversion-digest handler", () => {
 
     // The counts ARE worth printing.
     expect(flat).toContain("Midway progress, by landing page");
-    expect(flat).toContain("48 of 90 drafts reached question 30");
+    expect(flat).toContain("48 of 90 surveys reached question 30");
     // The chart is not.
     const titles = blocks
       .map((b) => (b as { image_url?: string }).image_url)
@@ -1092,6 +1096,32 @@ describe("conversion-digest handler", () => {
           ).title ?? ""
       );
     expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
+  });
+
+  it("counts each landing page's midway from the comparison's own first day", async () => {
+    // The fixture above, with the comparison starting on its second day: the first day's
+    // drafts are in the window and in the function's totals, and in neither page's count.
+    const days = Array.from({ length: 3 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 900, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 102, reached: 63 },
+        { arm: "white_prev", sessions: 90, reached: 48 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    const flat = blockText(await landingLiveBlocks({ landingFrom: days[1] }));
+    expect(flat).toContain("Midway progress, by landing page");
+    expect(flat).toContain("32 of 60 surveys reached question 30");
+    expect(flat).toContain("42 of 68 surveys reached question 30");
+    expect(flat).not.toContain("48 of 90");
   });
 
   it("stays silent per-arm too when the funnel refuses the midway row", async () => {
@@ -1135,10 +1165,15 @@ describe("conversion-digest handler", () => {
     );
     mockFetchMidwayProgress.mockResolvedValue({
       overall: { sessions: 1000, reached: 620 },
-      daily: days.flatMap((day) => [
-        { day, arm: "white_prev", sessions: 30, reached: 16 },
-        { day, arm: "white", sessions: 34, reached: 21 },
-      ]),
+      // Totals are the sums of the daily rows, as the function builds them; the
+      // per-page lines rebuild them from the days they keep (midwaySince).
+      daily: [
+        ...days.flatMap((day) => [
+          { day, arm: "white_prev", sessions: 30, reached: 16 },
+          { day, arm: "white", sessions: 34, reached: 21 },
+        ]),
+        { day: days[0]!, arm: "unknown", sessions: 104, reached: 61 },
+      ],
       totals: [
         { arm: "white", sessions: 476, reached: 294 },
         { arm: "white_prev", sessions: 420, reached: 224 },
@@ -1152,7 +1187,7 @@ describe("conversion-digest handler", () => {
     const blocks = await landingLiveBlocks();
     const flat = blockText(blocks);
     expect(flat).toContain("no landing page recorded");
-    expect(flat).toContain("61 of 104 drafts");
+    expect(flat).toContain("61 of 104 surveys");
     // 476 + 420 + 104 = 1000 = overall.sessions, and every part is on screen.
   });
 
@@ -1812,7 +1847,11 @@ describe("conversion-digest handler", () => {
      * charts: makeStartFunnel() and makeAxisRows() carry V1 and V2, and the midway
      * fixture below carries both plus an unattributed bucket. Round 3's versions
      * have no data in them, which is the point.
+     *
+     * A morning after the restart (LANDING_TEST_START_DAY): before it the block says the
+     * test restarts instead ("says the test restarts, not that nobody visited").
      */
+    vi.setSystemTime(new Date("2026-10-20T07:05:00.000Z"));
     mockFetchMidwayProgress.mockResolvedValue({
       // Above the fixture's 510 finishers, so the funnel keeps the midway row.
       overall: { sessions: 1000, reached: 620 },
@@ -1849,7 +1888,7 @@ describe("conversion-digest handler", () => {
     // round 3's. The funnel's own midway row stays: it was never split by arm.
     expect(json).toContain("Midway (question 30)");
     expect(json).not.toContain("Midway progress");
-    expect(json).not.toContain("drafts reached question");
+    expect(json).not.toContain("surveys reached question");
     // And no "concluded" notice: the test is running.
     expect(json).not.toContain("Landing page test concluded");
   });
@@ -1860,9 +1899,15 @@ describe("conversion-digest handler", () => {
    * wrong arms, or dropped a half of the count, shows up as a wrong number.
    */
   describe("survey starts per visit, round 3's deciding number", () => {
+    // From the restart at the condensed phone hero: the per-arm counts start there.
     const days = Array.from({ length: 14 }, (_, i) =>
-      new Date(Date.UTC(2026, 9, 6) + i * 86_400_000).toISOString().slice(0, 10)
+      new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + i * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
     );
+    /** Daily rows behind a midway read's totals, all on the first day. */
+    const onFirstDay = <T extends { arm: string }>(totals: T[]) =>
+      totals.map((t) => ({ day: days[0]!, ...t }));
     const startFunnel = (videoVisitsPerDay = 22) => ({
       daily: days.flatMap((day) => [
         { day, arm: "white_card", visits: 20, starts: 2 },
@@ -1879,14 +1924,15 @@ describe("conversion-digest handler", () => {
         { arm: "white", visits: 1386, starts: 126 },
       ],
     });
+    const pastFirstTotals = [
+      { arm: "white_card", sessions: 60, reached: 20 },
+      { arm: "white_video", sessions: 70, reached: 25 },
+      { arm: "white", sessions: 170, reached: 75 },
+    ];
     const startsPastFirst = {
       overall: { sessions: 300, reached: 120 },
-      daily: [],
-      totals: [
-        { arm: "white_card", sessions: 60, reached: 20 },
-        { arm: "white_video", sessions: 70, reached: 25 },
-        { arm: "white", sessions: 170, reached: 75 },
-      ],
+      daily: onFirstDay(pastFirstTotals),
+      totals: pastFirstTotals,
       midwayIndex: 1,
       firstArmDay: "2026-10-06",
     };
@@ -1896,7 +1942,7 @@ describe("conversion-digest handler", () => {
       { axis: "landing" as const, arm: "white", n: 50, conversions: 3 },
     ];
     const build = async (over: Record<string, unknown> = {}) => {
-      vi.setSystemTime(new Date("2026-10-20T09:05:00.000Z"));
+      vi.setSystemTime(new Date("2026-10-27T09:05:00.000Z"));
       const now = new Date();
       const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
       return blockText(
@@ -1941,6 +1987,215 @@ describe("conversion-digest handler", () => {
       expect(failedDrafts).not.toContain("what this test is decided on");
       const failedCohorts = await build({ cohorts: null });
       expect(failedCohorts).toContain("Survey starts per visit is not available today");
+    });
+
+    /**
+     * Migration 20261007190000: get_midway_progress_daily counts finished surveys itself
+     * (a submit deletes the draft, so they were missing) and says how many. `reached` is
+     * then the whole count, and adding the cohort's finishers again would count them
+     * twice. Same numbers as above, so the line must not move.
+     */
+    const withFinishedTotals = [
+      { arm: "white_card", sessions: 64, reached: 24, finished: 4 },
+      { arm: "white_video", sessions: 76, reached: 31, finished: 6 },
+      { arm: "white", sessions: 170, reached: 75, finished: 0 },
+    ];
+    const withFinished = {
+      ...startsPastFirst,
+      overall: { sessions: 310, reached: 130, finished: 10 },
+      daily: onFirstDay(withFinishedTotals),
+      totals: withFinishedTotals,
+    };
+
+    it("reads finished surveys from the migrated function once, not twice", async () => {
+      const text = await build({ startsPastFirst: withFinished });
+      expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
+      expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
+    });
+
+    it("takes the finishers from the function, so it needs no cohort and ignores a different one", async () => {
+      const noCohorts = await build({ startsPastFirst: withFinished, cohorts: null });
+      expect(noCohorts).not.toContain("not available today");
+      expect(noCohorts).toContain(
+        `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
+      );
+      const otherCohorts = await build({
+        startsPastFirst: withFinished,
+        cohorts: [{ axis: "landing" as const, arm: "white_video", n: 99, conversions: 0 }],
+      });
+      expect(otherCohorts).toContain(
+        `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
+      );
+    });
+
+    it("counts each landing page from the restart, not over the whole window", async () => {
+      // Five days of round 3 before the condensed phone hero, under the same arm names:
+      // in the window and in the functions' totals, and in none of the counts.
+      const early = Array.from({ length: 5 }, (_, i) =>
+        new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (5 - i) * 86_400_000)
+          .toISOString()
+          .slice(0, 10)
+      );
+      const base = startFunnel();
+      const text = await build({
+        startFunnel: {
+          daily: [
+            ...early.flatMap((day) => [
+              { day, arm: "white_card", visits: 50, starts: 9 },
+              { day, arm: "white_video", visits: 50, starts: 9 },
+            ]),
+            ...base.daily,
+          ],
+          totals: base.totals.map((t) =>
+            t.arm === "white" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
+          ),
+        },
+        startsPastFirst: {
+          ...startsPastFirst,
+          daily: [
+            ...early.map((day) => ({ day, arm: "white_card", sessions: 9, reached: 9 })),
+            ...startsPastFirst.daily,
+          ],
+          totals: startsPastFirst.totals.map((t) =>
+            t.arm === "white_card"
+              ? { ...t, sessions: t.sessions + 45, reached: t.reached + 45 }
+              : t
+          ),
+        },
+      });
+      expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
+      expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
+    });
+
+    it("counts from the restart on the production path too, where finished surveys are counted", async () => {
+      // As above, with get_midway_progress_daily's `finished` (migration 20261007190000):
+      // five earlier days under the same arm names, finishers included, in no count.
+      const early = Array.from({ length: 5 }, (_, i) =>
+        new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (5 - i) * 86_400_000)
+          .toISOString()
+          .slice(0, 10)
+      );
+      const base = startFunnel();
+      const text = await build({
+        startFunnel: {
+          daily: [
+            ...early.flatMap((day) => [
+              { day, arm: "white_card", visits: 50, starts: 9 },
+              { day, arm: "white_video", visits: 50, starts: 9 },
+            ]),
+            ...base.daily,
+          ],
+          totals: base.totals.map((t) =>
+            t.arm === "white" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
+          ),
+        },
+        startsPastFirst: {
+          ...withFinished,
+          daily: [
+            ...early.map((day) => ({
+              day,
+              arm: "white_card",
+              sessions: 9,
+              reached: 9,
+              finished: 5,
+            })),
+            ...withFinished.daily,
+          ],
+          totals: withFinished.totals.map((t) =>
+            t.arm === "white_card"
+              ? {
+                  ...t,
+                  sessions: t.sessions + 45,
+                  reached: t.reached + 45,
+                  finished: t.finished + 25,
+                }
+              : t
+          ),
+        },
+      });
+      expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
+      expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
+    });
+
+    it("says the test restarts, not that nobody visited, on the morning before it does", async () => {
+      // 14 Oct's digest reports 13 Oct: a week of visits, all before the restart.
+      const before = Array.from({ length: 7 }, (_, i) =>
+        new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (7 - i) * 86_400_000)
+          .toISOString()
+          .slice(0, 10)
+      );
+      const dayKey = before.at(-1)!;
+      const text = blockText(
+        (
+          await buildConversionDigest({
+            dayKey,
+            liveAxesOverride: ["landing"],
+            funnel: null,
+            cohorts,
+            startFunnel: {
+              daily: before.flatMap((day) => [
+                { day, arm: "white_card", visits: 200, starts: 14 },
+                { day, arm: "white_video", visits: 200, starts: 10 },
+              ]),
+              totals: [
+                { arm: "white_card", visits: 1400, starts: 98 },
+                { arm: "white_video", visits: 1400, starts: 70 },
+              ],
+            },
+            startsPastFirst: { ...withFinished, daily: [] },
+            axisRows: [],
+            cvrDays: null,
+            midway: null,
+            paywall: null,
+            emailExperiments: null,
+            unitEconomics: null,
+            adSpend: null,
+            friction: null,
+            now: new Date(`${LANDING_TEST_START_DAY}T07:05:00Z`),
+          } as Parameters<typeof buildConversionDigest>[0])
+        ).blocks
+      );
+      expect(text).toContain("the landing test restarts on 14 Oct, with the condensed phone hero");
+      expect(text).toContain("its first numbers arrive in the 15 Oct digest");
+      expect(text).not.toContain("no visits recorded");
+    });
+
+    it("shows the numbers from the morning after the restart day", async () => {
+      // 15 Oct's digest reports 14 Oct, the restart day itself: counts, not the notice.
+      const day = LANDING_TEST_START_DAY;
+      const text = blockText(
+        (
+          await buildConversionDigest({
+            dayKey: day,
+            liveAxesOverride: ["landing"],
+            funnel: null,
+            cohorts,
+            startFunnel: {
+              daily: [
+                { day, arm: "white_card", visits: 200, starts: 14 },
+                { day, arm: "white_video", visits: 210, starts: 10 },
+              ],
+              totals: [
+                { arm: "white_card", visits: 200, starts: 14 },
+                { arm: "white_video", visits: 210, starts: 10 },
+              ],
+            },
+            startsPastFirst: { ...withFinished, daily: [] },
+            axisRows: [],
+            cvrDays: null,
+            midway: null,
+            paywall: null,
+            emailExperiments: null,
+            unitEconomics: null,
+            adSpend: null,
+            friction: null,
+            now: new Date(`${day}T22:05:00Z`),
+          } as Parameters<typeof buildConversionDigest>[0])
+        ).blocks
+      );
+      expect(text).not.toContain("restarts on");
+      expect(text).toContain("one day of data for each version");
+      expect(text).toContain(`${card}* — 200 visits → 14 started the survey`);
     });
 
     it("says an arm has no visits rather than printing 0% beside it", async () => {
@@ -3036,7 +3291,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("the Pricing 3.0 verdict waits for a window wholly after the launch", () => {
+describe("the price test's verdict waits for a window wholly after its lists started", () => {
   // A decisive split, so the only thing that can hold the verdict back is the window.
   const cohorts = [
     { axis: "pricing", arm: "A3", n: 500, conversions: 80 },
@@ -3044,7 +3299,7 @@ describe("the Pricing 3.0 verdict waits for a window wholly after the launch", (
   ];
   const digestOn = async (daysAfterLaunch: number) => {
     const day = new Date(
-      Date.parse(`${PRICING_3_LAUNCH_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
+      Date.parse(`${PRICE_TEST_START_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
     )
       .toISOString()
       .slice(0, 10);
@@ -3061,15 +3316,73 @@ describe("the Pricing 3.0 verdict waits for a window wholly after the launch", (
     return blockText(blocks);
   };
 
-  it("stays silent while the 30-day cohorts still hold readers from before 3.0", async () => {
+  it("stays silent while the 30-day cohorts still hold readers from before the lists", async () => {
     // Day 28 after the launch: the window starts the day before it.
     expect(await digestOn(28)).not.toContain("Worth acting on");
   });
 
-  it("calls it once every reader in the window finished under 3.0", async () => {
+  it("calls it once every reader in the window finished under the current lists", async () => {
     const text = await digestOn(29);
     expect(text).toContain("Worth acting on");
-    expect(text).toContain("Pricing 3.0 A");
+    expect(text).toContain("Pricing 3.0 higher");
+  });
+});
+
+describe("the landing test's verdict waits for a window wholly after its restart", () => {
+  // Decisive again; the restart at the condensed phone hero is the only thing in the way.
+  const cohorts = [
+    { axis: "landing", arm: "white_card", n: 500, conversions: 80 },
+    { axis: "landing", arm: "white_video", n: 500, conversions: 20 },
+  ];
+  const digestOn = async (daysAfterRestart: number) => {
+    const day = new Date(
+      Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + daysAfterRestart * 86_400_000
+    )
+      .toISOString()
+      .slice(0, 10);
+    const { blocks } = await buildConversionDigest({
+      dayKey: day,
+      funnel: null,
+      cohorts,
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date(`${day}T09:05:00Z`),
+    });
+    return blockText(blocks);
+  };
+
+  it("stays silent while the 30-day cohorts still hold readers of the old phone hero", async () => {
+    expect(await digestOn(28)).not.toContain("Worth acting on");
+  });
+
+  it("waits for the comparison's own first day on a historical read, not the restart", async () => {
+    // Round 2 read back (V2 vs V1 from 21 Aug): its 30-day window is wholly after its own
+    // start on 19 Sep, long before round 3's restart, so the verdict is due.
+    const { blocks } = await buildConversionDigest({
+      dayKey: "2026-09-19",
+      funnel: null,
+      cohorts: [
+        { axis: "landing", arm: "white_prev", n: 500, conversions: 80 },
+        { axis: "landing", arm: "white", n: 500, conversions: 20 },
+      ],
+      liveAxesOverride: ["landing"],
+      landingArms: ["white_prev", "white"],
+      landingFrom: "2026-08-21",
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date("2026-09-19T09:05:00Z"),
+    });
+    expect(blockText(blocks)).toContain("Worth acting on");
+  });
+
+  it("calls it once every reader in the window came through the condensed phone hero", async () => {
+    const text = await digestOn(29);
+    expect(text).toContain("Worth acting on");
+    expect(text).toContain(armLabel("landing", "white_card").short);
   });
 });
 

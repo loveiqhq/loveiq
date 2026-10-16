@@ -24,6 +24,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
 vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
+  markReportPriceQuotePaywallReached: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@features/checkout/server/fulfillment", () => ({
@@ -48,8 +49,10 @@ import {
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
+  markReportPriceQuotePaywallReached,
 } from "@features/pricing/logic/reportPricing";
 import {
+  getReportAccessPlanForSubmission,
   lookupReportTokenBySubmissionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
@@ -113,6 +116,7 @@ describe("POST /api/stripe/checkout-session", () => {
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(false);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
     vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({ ...BASE_QUOTE });
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue(null);
   });
 
   it("returns the disabled placeholder payload while checkout is not enabled", async () => {
@@ -224,6 +228,56 @@ describe("POST /api/stripe/checkout-session", () => {
   });
 
   /**
+   * Backing out of Stripe returns to the archetype the reader was READING. It used to
+   * return to the one being bought, which they cannot view yet, so the report fell back
+   * to their own: on 2026-10-06 the founder, reading Minimalist Companion, cancelled a
+   * Quiet Withdrawer checkout and was moved to his own report without a word.
+   */
+  it.each([
+    [
+      "a single report bought from another archetype's row",
+      "full_report",
+      "Quiet Withdrawer",
+      "http://localhost/report?archetype=minimalist-companion",
+      "archetype=quiet-withdrawer",
+    ],
+    [
+      "all 14 bought while reading another archetype",
+      "all_reports",
+      undefined,
+      "http://localhost/report?archetype=minimalist-companion",
+      "archetype=minimalist-companion",
+    ],
+  ])(
+    "%s: cancel returns to the report being read",
+    async (_label, plan, archetype, cancelUrl, successArchetype) => {
+      const createSession = vi.fn().mockResolvedValue({
+        id: "cs_test_view",
+        url: "https://checkout.stripe.com/c/pay/cs_test_view",
+      });
+      vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+      vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+      vi.mocked(getStripeServerClient).mockReturnValue({
+        checkout: { sessions: { create: createSession } },
+      } as never);
+
+      const res = await POST(
+        makeRequest({
+          ...(archetype ? { archetype } : {}),
+          viewArchetype: "Minimalist Companion",
+          plan,
+          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        })
+      );
+
+      expect(res.status).toBe(200);
+      const [params] = createSession.mock.calls[0];
+      expect(params.cancel_url).toBe(cancelUrl);
+      expect(params.success_url).toContain(successArchetype);
+    }
+  );
+
+  /**
    * `checkout_started_at` is now the SERVER-SIDE TRUTH for the funnel's
    * begin_checkout stage (migration 20260905180000) and for the Slack journey
    * rail's "Checkout" dot. A session Stripe returns without a hosted URL cannot
@@ -251,6 +305,49 @@ describe("POST /api/stripe/checkout-session", () => {
 
     expect(res.status).toBe(500);
     expect(markReportPriceQuoteCheckoutStarted).not.toHaveBeenCalled();
+    expect(markReportPriceQuotePaywallReached).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The sticky "Unlock Full Report" bar went straight to Stripe without the pricing
+   * pop-up until 09.10 (V1's "Unlock the full report" still does), and only the pop-up's
+   * /api/price call stamped `paywall_reached_at`: 7 of 15 real readers who checked out
+   * from 15 September on had no paywall record, so the funnel's paywall step read lower
+   * than the checkout step under it.
+   */
+  it("stamps the paywall as reached when a checkout starts, and a failed stamp costs nothing", async () => {
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: {
+        sessions: {
+          create: vi.fn().mockResolvedValue({
+            id: "cs_test_sticky",
+            url: "https://checkout.stripe.com/c/pay/cs_test_sticky",
+          }),
+        },
+      },
+    } as never);
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 4242,
+      userEmail: "reader@example.com",
+      userId: 7,
+    } as never);
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      archetypeTiers: {},
+    } as never);
+    const body = {
+      archetype: "Spark Seeker",
+      plan: "full_report",
+      reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+    };
+
+    expect((await POST(makeRequest(body))).status).toBe(200);
+    expect(markReportPriceQuotePaywallReached).toHaveBeenCalledWith({ submissionId: 4242 });
+
+    vi.mocked(markReportPriceQuotePaywallReached).mockRejectedValueOnce(new Error("db down"));
+    expect((await POST(makeRequest(body))).status).toBe(200);
+    expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledTimes(2);
   });
 
   it("no longer stamps a forced-paywall arm into session metadata", async () => {
@@ -646,6 +743,41 @@ describe("Pricing 3.0 — what Stripe is asked to sell", () => {
     expect(keys).toHaveLength(3);
     expect(keys[0]).toBe(keys[1]);
     expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  /**
+   * Stripe refuses a reused key whose parameters differ, and consent rides in the
+   * metadata: a reader who backed out, answered the cookie banner and paid again within
+   * the minute got "We couldn't prepare secure checkout" instead of a session.
+   */
+  it("gives a retry after the cookie banner its own idempotency key, and an identical one the same", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-07T10:00:05.000Z"));
+    try {
+      const createSession = enableStripe();
+      const post = async (gaConsent: boolean) => {
+        const res = await POST(
+          makeRequest({
+            archetype: "Spark Seeker",
+            gaClientId: "1234567890.1759830000",
+            gaConsent,
+            gaSessionId: "1759830000",
+            plan: "full_report",
+            reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+          })
+        );
+        expect(res.status).toBe(200);
+      };
+      await post(false);
+      await post(false);
+      await post(true);
+      const calls = createSession.mock.calls;
+      expect(calls.map((call) => call[0].metadata.gaAnalyticsConsent)).toEqual(["0", "0", "1"]);
+      expect(calls[1]![1].idempotencyKey).toBe(calls[0]![1].idempotencyKey);
+      expect(calls[2]![1].idempotencyKey).not.toBe(calls[0]![1].idempotencyKey);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("carries the unlock position through both return URLs", async () => {

@@ -27,6 +27,7 @@
  *   analytics_event         >180d  (engagement telemetry, no longer needed for ML/admin)
  *   invite_event            >180d  (invite share + click attribution)
  *   brain_query             >180d  (company-brain question log, both doors)
+ *   email_message_event     >180d  (each nurture email's delivery, opens and clicks)
  *   payment_webhook_event   >365d  (Stripe events; one year is the dispute window)
  *
  * Note: rate limiter now lives in Upstash KV (per-key TTLs auto-evict) so no
@@ -86,6 +87,9 @@ const RETENTION_DAYS: RetentionRule[] = [
   // outlive a "did last quarter's ranking change help?" comparison, which is the
   // whole reason the rows are kept.
   { table: "brain_query", days: 180, column: "created_at" },
+  // Each nurture email's delivery, opens and clicks, per reader (the Resend webhook). Kept as
+  // long as the other engagement telemetry; the campaign table reads at most a few months back.
+  { table: "email_message_event", days: 180, column: "first_at" },
 ];
 
 function safeCompare(a: string, b: string): boolean {

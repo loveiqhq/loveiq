@@ -20,6 +20,7 @@ import {
 } from "@features/checkout/server/reportPurchase";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
+import { describeQuestionCount } from "@features/survey/server/utils";
 import {
   codeSpan,
   context,
@@ -30,6 +31,9 @@ import {
   section,
   SECTION_BUDGET,
 } from "@shared/observability/slack-blocks";
+
+/** The tag fulfillment.ts puts on ops lines about our own payments, so one search finds both. */
+const INTERNAL_TAG = ":test_tube: [internal] ";
 
 /** ms → "45s" / "12 min" / "1h 4m". Returns null so callers can omit the row entirely. */
 export function formatDuration(ms: number | null): string | null {
@@ -167,6 +171,10 @@ function trafficLine(journey: SubmissionJourney): string {
  * deliberate: green/red is the worst possible pair for a colourblind reader, and
  * the label is what keeps the rail legible for them.
  *
+ * One exception to green: a purchase that took no money (see `noMoneyTaken`)
+ * still fills every step before it, but its own dot stays red and reads
+ * "Paid €0 (test/comp)". A green "Paid" means a sale.
+ *
  * The pairing was INVERTED until 2026-08-24, when this was blue/hollow:
  * `:white_circle:` meant done and `:black_circle:` meant not-done, so the solid
  * dot — which every reader takes as "complete" — actually marked the steps that
@@ -204,7 +212,10 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
     ["Report opened", Boolean(journey.milestones.reportViewedAt)],
     ["Paywall hit", Boolean(journey.milestones.paywallInitiatedAt)],
     ["Checkout", Boolean(journey.milestones.checkoutStartedAt)],
-    ["Paid", Boolean(journey.milestones.purchasedAt)],
+    [
+      journey.noMoneyTaken ? "Paid €0 (test/comp)" : "Paid",
+      Boolean(journey.milestones.purchasedAt),
+    ],
   ];
   // Walk backwards so the FURTHEST step reached fills in everything before it,
   // rather than only a payment doing so.
@@ -214,18 +225,22 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
     reached = reached || steps[i]![1] || i <= floorIdx;
     filled[i] = reached;
   }
+  const paid = steps.length - 1;
   return steps
-    .map(([label], i) => `${filled[i] ? ":large_green_circle:" : ":red_circle:"} ${label}`)
+    .map(([label], i) => {
+      const green = filled[i] && !(i === paid && journey.noMoneyTaken);
+      return `${green ? ":large_green_circle:" : ":red_circle:"} ${label}`;
+    })
     .join("  \u2192  ");
 }
 
 /**
  * The experiments as a two-column fields block.
  *
- * The LIVE axes are always shown, so an arm that failed to record stays visible
- * rather than quietly missing. Concluded axes are not: `paywall` since it was
- * settled in favour of the forced wall, and `survey` since the theme test was
- * settled in favour of white on 2026-08-25. An arm nothing randomises is either a
+ * The LIVE axes are shown (landing always, pricing once a price was quoted), so an arm
+ * that failed to record stays visible rather than quietly missing. Concluded axes are
+ * not: `paywall` since it was settled in favour of the forced wall, and `survey` since
+ * the theme test was settled in favour of white on 2026-08-25. An arm nothing randomises is either a
  * permanent "Not recorded" or a permanent constant, and both are noise on every
  * single message — the class of blank row that made these look broken. The
  * historical value is still stored, and still in the structured log line beside
@@ -233,12 +248,14 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  // `landing` concluded on 2026-09-19 in favour of V2, so it is not shown: an arm
-  // nothing assigns is a permanent constant on every message. Pricing 3.0 is live, but
-  // its arm is assigned when the report first quotes a price, after the survey, so a
-  // survey-completed message has none yet. That is not a missing record, and a
-  // permanent "Not recorded" row on every one would be noise, so it shows when set.
-  const axes: ExperimentAxis[] = journey.arms.pricing ? ["pricing"] : [];
+  // `landing` is live again for its round 3 (V2's question card vs V3's hero video), so
+  // a buyer's message says which version they came through, and keeps the row when it
+  // was not recorded, like the survey message's line. It left this list when round 2
+  // concluded on 2026-09-19 and must leave again when round 3 does. Pricing 3.0 is
+  // live, but its arm is assigned when the report first quotes a price, after the
+  // survey, so a survey-completed message has none yet. That is not a missing record,
+  // and a permanent "Not recorded" row on every one would be noise, so it shows when set.
+  const axes: ExperimentAxis[] = journey.arms.pricing ? ["landing", "pricing"] : ["landing"];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
@@ -345,7 +362,7 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
    * does not. Dropped entirely when there is no email rather than padded, so the
    * title never ends in a dangling space.
    */
-  const title = `Survey submission ${bold(`#${journey.submissionId}`)}`;
+  const title = `${journey.internal ? INTERNAL_TAG : ""}Survey submission ${bold(`#${journey.submissionId}`)}`;
   const lines: string[] = [
     journey.emailMasked ? `${title} ${codeSpan(journey.emailMasked)}` : title,
   ];
@@ -488,9 +505,11 @@ export function buildJourneyMessage(
     // The fallback text is what lands in the dead-letter table when delivery fails
     // (blocks are NOT dead-lettered), and its first 100 chars are the 60s dedup
     // key — so the submission id and amount go early to keep it both standalone
-    // and unique between two same-plan buyers in the same minute.
-    text = `:credit_card: Purchase #${journey.submissionId} — ${amount ?? "amount unknown"} — ${escapeSlack(options.planLabel)} — ${name} (${email})`;
-    blocks.push(header(`💳 ${amount ?? "Purchase"} — ${options.planLabel}`));
+    // and unique between two same-plan buyers in the same minute. The internal tag
+    // is 23 characters and leaves both inside it.
+    const tag = journey.internal ? INTERNAL_TAG : "";
+    text = `${tag}:credit_card: Purchase #${journey.submissionId} — ${amount ?? "amount unknown"} — ${escapeSlack(options.planLabel)} — ${name} (${email})`;
+    blocks.push(header(`${tag}💳 ${amount ?? "Purchase"} — ${options.planLabel}`));
     const archetypeSuffix = options.archetype ? ` · ${escapeSlack(options.archetype)}` : "";
     blocks.push(
       context(`*${name}* (${email}) · submission #${journey.submissionId}${archetypeSuffix}`)
@@ -554,7 +573,7 @@ export function buildJourneyMessage(
      * it is genuinely useful (57 vs 58 after the survey work order) and costs
      * nothing in a line nobody reads in-channel.
      */
-    text = `:memo: Survey submission #${journey.submissionId} — ${options.questionCount} question${options.questionCount === 1 ? "" : "s"}${surveyTime ? ` in ${surveyTime}` : ""}`;
+    text = `:memo: Survey submission #${journey.submissionId} — ${describeQuestionCount(options.questionCount)}${surveyTime ? ` in ${surveyTime}` : ""}`;
     blocks.push(section(compactSurveyLines(journey, options.reachedFloor).join("\n")));
   }
 

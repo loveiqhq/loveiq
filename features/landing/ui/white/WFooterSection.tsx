@@ -23,6 +23,7 @@ const legalLinks = [
 const WFooterSection: FC = () => {
   return (
     <footer
+      data-landing-section="footer"
       className="relative border-t border-black/[0.08] bg-gray-50 px-4 pb-10 pt-12 text-gray-700"
       aria-labelledby="w-footer-heading"
     >

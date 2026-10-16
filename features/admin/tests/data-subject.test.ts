@@ -93,6 +93,9 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
     if (path.includes("/survey_submission_answer?survey_submission_id=")) return ok([]);
     if (path.includes("/payment?user_id=")) return ok([]);
     if (path.includes("/report_section_feedback")) return ok([{ id: 5, comment: "hi" }], 1);
+    if (path.includes("/email_message_event?survey_submission_id=in.(10)")) {
+      return ok([{ resend_id: "e1", event_type: "opened", survey_submission_id: 10 }]);
+    }
     return ok([], 0);
   }
 
@@ -112,6 +115,13 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
       ([p]) => typeof p === "string" && p.includes("/report_section_feedback?survey_submission_id=")
     );
     expect(fetchedFeedback).toBe(true);
+  });
+
+  it("exports each nurture email's delivery, opens and clicks (Art. 15)", async () => {
+    const result = await exportDataSubject("a@x.com");
+    expect(result.exportData?.email_message_event).toEqual([
+      { resend_id: "e1", event_type: "opened", survey_submission_id: 10 },
+    ]);
   });
 
   it("issues an explicit DELETE for report_section_feedback and counts it", async () => {

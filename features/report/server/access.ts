@@ -65,6 +65,25 @@ export function doesAccessPlanCover(
 }
 
 /**
+ * Whether the reader holds the full report for the archetype on screen.
+ *
+ * `accessPlan` describes the reader's OWN report (it is scoped to their archetype in
+ * the report API), while a single report bought for another archetype lives only in
+ * `archetypeTiers`. Asking either one alone got the unlock bar wrong both ways: shown
+ * over a report that was already bought, or hidden over the reader's own report
+ * after they bought someone else's.
+ */
+export function ownsFullReportFor(
+  accessPlan: ReportAccessPlan,
+  archetypeTiers: Readonly<Record<string, "essentials" | "full_report">> | null | undefined,
+  archetype: string | null | undefined
+): boolean {
+  if (doesAccessPlanCover(accessPlan, "full_report")) return true;
+  if (!archetype || !archetypeTiers) return false;
+  return new Map(Object.entries(archetypeTiers)).get(archetype) === "full_report";
+}
+
+/**
  * Per-archetype ownership for the pricing modal.
  *
  * The pricing modal can open scoped to a specific archetype (e.g. when a user

@@ -43,7 +43,7 @@ import {
   SUBMIT_OUTCOME_UNKNOWN,
   submitSurveyOnce,
 } from "@features/survey/server/server";
-import { dropBlankOptionalAnswers } from "@features/survey/server/utils";
+import { describeQuestionCount, dropBlankOptionalAnswers } from "@features/survey/server/utils";
 import { SURVEY_EMAIL_RE, tidySurveyEmail } from "@features/survey/email";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
@@ -260,7 +260,7 @@ const notifySlackSurvey = async ({
     await notifySlack({
       channel: "survey",
       kind: "survey_completed",
-      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${questionCount} questions in ~${Math.round(durationMs / 60_000)} min`,
+      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${describeQuestionCount(questionCount)} in ~${Math.round(durationMs / 60_000)} min`,
       username: "survey_response",
       context: { submissionId, sessionId },
     });
@@ -419,6 +419,12 @@ export async function POST(request: Request) {
    * internal traffic and `is_likely_test` already marks the @loveiq.org ones; noted
    * here rather than fixed, because the alternative is letting the client tell the
    * server its arm, which is the property this derivation exists to remove.
+   *
+   * AND ONE ON PRODUCTION, outside every readout. A draft begun before C13 launched
+   * keeps the control order when it is resumed (`resolveDraftQuestionOrderArm`), so
+   * its stamp can say "variant" for a control run. Such a run started before the
+   * launch, and every C13 readout must filter on sessions started after it (see
+   * questionOrderArm.ts), so these rows never reach one.
    *
    * Only stamped when a session id is present, which preserves the
    * "no session, no stamp" rule the landing arm follows: a crawler or a direct

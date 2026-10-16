@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildJourneyMessage, formatDuration } from "@features/attribution/server/slack-journey";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
 import type { SlackBlock } from "@shared/observability/slack";
+import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 /**
  * `slack-journey.ts` had NO test file, which is how two defects shipped and
@@ -24,6 +25,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
     submissionId: 1756,
     firstName: "Kitten",
     emailMasked: "a***@gmail.com",
+    internal: false,
     arms: { landing: "white", survey: "white", pricing: null, paywall: null },
     traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: null },
     device: "Desktop",
@@ -44,6 +46,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
       purchasedAt: null,
     },
     money: null,
+    noMoneyTaken: false,
     quoteCount: 0,
     recordingSessionId: null,
     ...overrides,
@@ -358,6 +361,20 @@ describe("the compact incoming-survey layout", () => {
     );
   });
 
+  /**
+   * A staff submission looked exactly like a visitor's unless someone read the
+   * masked domain. Same rule as `payment.is_test`, decided in journey.ts.
+   */
+  it("tags a staff submission's title as internal, and nobody else's", () => {
+    const title = (internal: boolean) =>
+      soleSection(
+        buildJourneyMessage(journey({ internal }), { kind: "survey_completed", questionCount: 58 })
+          .blocks
+      ).split("\n")[0];
+    expect(title(true)).toBe(":test_tube: [internal] Survey submission *#1756* `a***@gmail.com`");
+    expect(title(false)).toBe("Survey submission *#1756* `a***@gmail.com`");
+  });
+
   it("closes the code span even if the address carries a backtick", () => {
     const message = buildJourneyMessage(journey({ emailMasked: "`x***@`evil.com" }), {
       kind: "survey_completed",
@@ -494,6 +511,22 @@ describe("the compact incoming-survey layout", () => {
     expect(soleSection(message.blocks).split("\n")[0]).toContain("`a***@gmail.com`");
   });
 
+  it("says how many of the survey's questions were answered when the optional ones were skipped", () => {
+    // The survey shows "Question X of SURVEY_TOTAL_QUESTIONS"; the two content asks are
+    // optional, so a finished survey has 60, 61 or 62 answers today.
+    const text = (count: number) =>
+      buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: count }).text;
+    expect(text(SURVEY_TOTAL_QUESTIONS - 2)).toContain(
+      `${SURVEY_TOTAL_QUESTIONS - 2} of ${SURVEY_TOTAL_QUESTIONS} questions`
+    );
+    expect(text(SURVEY_TOTAL_QUESTIONS - 1)).toContain(
+      `${SURVEY_TOTAL_QUESTIONS - 1} of ${SURVEY_TOTAL_QUESTIONS} questions`
+    );
+    // Everything answered, or an earlier survey's shorter count: a bare count.
+    expect(text(SURVEY_TOTAL_QUESTIONS)).toContain(`— ${SURVEY_TOTAL_QUESTIONS} questions`);
+    expect(text(59)).toContain("— 59 questions");
+  });
+
   it("says question, not questions, for a single answer", () => {
     const message = buildJourneyMessage(journey(), {
       kind: "survey_completed",
@@ -518,13 +551,8 @@ describe("the compact incoming-survey layout", () => {
     const types = (message.blocks as Array<{ type: string }>).map((b) => b.type);
     expect(types).toContain("header");
     expect(types).toContain("context");
-    /**
-     * No "Experiments they were in" section, because there is no experiment.
-     * The landing axis concluded 2026-09-19 and was the last one randomised, so
-     * this heading would sit over a `section` with `fields: []` — which Slack
-     * rejects outright, failing the whole message rather than the block.
-     */
-    expect(JSON.stringify(message.blocks)).not.toContain("Experiments they were in");
+    // The landing test (round 3) is live, so the buyer's landing version is listed.
+    expect(JSON.stringify(message.blocks)).toContain("Experiments they were in");
     // And no dwell line leaked across.
     expect(JSON.stringify(message.blocks)).not.toContain("Report time");
   });
@@ -541,7 +569,8 @@ describe("pricing arm — the Pricing 3.0 test", () => {
     JSON.stringify(
       buildJourneyMessage(
         journey({
-          arms: { landing: "white", survey: "white", pricing, paywall: null },
+          // A live landing arm, so "retired arm" below can only be the pricing one.
+          arms: { landing: "white_card", survey: "white", pricing, paywall: null },
           money: { plan: "all_reports", amount: 39.99, currency: "EUR" },
           milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" },
         }),
@@ -556,12 +585,12 @@ describe("pricing arm — the Pricing 3.0 test", () => {
 
   it("names the 3.0 list a buyer was on", () => {
     const text = purchase("A3");
-    expect(text).toContain("*Report pricing*\\nPricing 3.0 A");
+    expect(text).toContain("*Report pricing*\\nPricing 3.0 higher");
     expect(text).not.toContain("retired arm");
     expect(text).not.toContain("dearer");
     expect(text).not.toContain("cheaper");
     expect(text).toContain("EUR 39.99");
-    expect(purchase("B3")).toContain("*Report pricing*\\nPricing 3.0 B");
+    expect(purchase("B3")).toContain("*Report pricing*\\nPricing 3.0 lower");
   });
 
   it("marks a concluded 2.x arm as retired rather than presenting it as live", () => {
@@ -572,10 +601,52 @@ describe("pricing arm — the Pricing 3.0 test", () => {
   it("shows no pricing row before the report has quoted a price", () => {
     const text = purchase(null);
     expect(text).not.toContain("Report pricing");
-    // Nor the concluded landing test, so no experiments block at all: never a heading
-    // over an empty field list, which Slack rejects.
-    expect(text).not.toContain("Landing page design");
-    expect(text).not.toContain("Experiments they were in");
+    // The live landing row stays, so the heading never sits over an empty field list,
+    // which Slack rejects.
+    expect(text).toContain("Experiments they were in");
+    expect(text).toContain("*Landing page design*");
+  });
+});
+
+describe("landing arm — round 3 of the landing test", () => {
+  /**
+   * The landing test is live again (V2's question card vs V3's hero video), and a
+   * purchase is where it pays off, so the buyer's message says which version they came
+   * through. Round 2 left this message when it concluded on 2026-09-19; round 3 put it
+   * back. A stamp from before round 3 still reads, marked as retired.
+   */
+  const purchase = (landing: string | null, pricing: string | null = "B3") =>
+    JSON.stringify(
+      buildJourneyMessage(
+        journey({
+          arms: { landing, survey: null, pricing, paywall: null },
+          money: { plan: "all_reports", amount: 19.99, currency: "EUR" },
+          milestones: { ...journey().milestones, purchasedAt: "2026-10-08T10:00:00.000Z" },
+        }),
+        {
+          kind: "purchase",
+          planLabel: "All 14 Archetype Reports",
+          archetype: null,
+          amountText: "EUR 19.99",
+        }
+      ).blocks
+    );
+
+  it("names the version a buyer came through, above the pricing arm", () => {
+    const video = purchase("white_video");
+    expect(video).toContain("*Landing page design*\\nLanding Page V3 (Video in Hero)");
+    expect(video).not.toContain("retired arm");
+    expect(video.indexOf("Landing page design")).toBeLessThan(video.indexOf("Report pricing"));
+    expect(purchase("white_card")).toContain(
+      "*Landing page design*\\nLanding Page V2 (Survey in Hero)"
+    );
+  });
+
+  it("keeps the row when nothing was recorded, and marks an earlier round's stamp", () => {
+    expect(purchase(null)).toContain("*Landing page design*\\nNot recorded");
+    expect(purchase("white")).toContain(
+      "Landing Page V2 (Survey in Hero, before V3) _(retired arm)_"
+    );
   });
 });
 
@@ -598,6 +669,72 @@ describe("journey rail — the glyphs themselves", () => {
     for (const label of ["Survey done", "Report opened", "Paywall hit", "Checkout", "Paid"]) {
       expect(drawn).toContain(label);
     }
+  });
+});
+
+/**
+ * 9 of the 12 messages ever to reach "Paid" (by 2026-10-06) took no money — a
+ * 100% coupon or one of our own test runs — and each showed the same green "Paid"
+ * as a sale, while #payments announced "EUR 0.00" with no test tag.
+ */
+describe("a purchase that took no money", () => {
+  const free = (over: Partial<SubmissionJourney> = {}) =>
+    journey({
+      noMoneyTaken: true,
+      milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" },
+      ...over,
+    });
+
+  it("keeps Paid red and says why, while still filling every step before it", () => {
+    const message = buildJourneyMessage(free(), { kind: "survey_completed", questionCount: 58 });
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid €0 (test/comp)`);
+    expect(filledSteps(message.blocks)).toEqual([
+      "Survey done",
+      "Report opened",
+      "Paywall hit",
+      "Checkout",
+    ]);
+  });
+
+  it("does so when only the server-witnessed floor reaches Paid", () => {
+    // fulfillment's refreshJourneyMessage(…, "paid") arrives as a floor, not as data
+    const message = buildJourneyMessage(journey({ noMoneyTaken: true }), {
+      kind: "survey_completed",
+      questionCount: 58,
+      reachedFloor: "paid",
+    });
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid €0 (test/comp)`);
+    expect(rail(message.blocks)).not.toContain(`${REACHED} Paid`);
+  });
+
+  it("marks a staff €0 purchase on #payments, in the header and the notification text", () => {
+    const message = buildJourneyMessage(free({ internal: true }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 0.00",
+    });
+    const header = (message.blocks as Array<{ type: string; text?: { text?: string } }>).find(
+      (b) => b.type === "header"
+    );
+    expect(header?.text?.text).toBe(":test_tube: [internal] 💳 EUR 0.00 — Full report");
+    expect(message.text).toMatch(
+      /^:test_tube: \[internal\] :credit_card: Purchase #1756 — EUR 0\.00/
+    );
+    // the id and amount stay inside the 100-character dedup key
+    expect(message.text.indexOf("EUR 0.00")).toBeLessThan(100);
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid €0 (test/comp)`);
+  });
+
+  it("leaves a real sale green and untagged", () => {
+    const message = buildJourneyMessage(
+      journey({ milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" } }),
+      { kind: "purchase", planLabel: "Full report", archetype: null, amountText: "EUR 39.99" }
+    );
+    expect(rail(message.blocks)).toContain(`${REACHED} Paid`);
+    expect(JSON.stringify(message.blocks)).not.toContain("[internal]");
+    expect(JSON.stringify(message.blocks)).not.toContain("€0");
+    expect(message.text).toMatch(/^:credit_card: Purchase #1756/);
   });
 });
 

@@ -378,11 +378,11 @@ export const SIGNALS: readonly SignalDef[] = [
     kind: "category",
     measures:
       "On a report with locked chapters, whether a locked chapter's unlock offer ever came into view: seen or not seen.",
-    // locked_card_price_shown says the report HAS locked cards (it fires on load, wherever
-    // they sit); cta_seen says one was on screen.
-    from: ["locked_card_price_shown", "cta_seen"],
+    // locked_card_price_shown (before Report 3.0) or locked_chapters_shown (Report 3.0, which
+    // shows no price) says the report HAS locked cards; cta_seen says one was on screen.
+    from: ["locked_card_price_shown", "locked_chapters_shown", "cta_seen"],
     measure: (v) => {
-      if (!v.some(is("locked_card_price_shown"))) return null;
+      if (!v.some(is("locked_card_price_shown", "locked_chapters_shown"))) return null;
       return v.some((e) => e.event === "cta_seen" && e.props.cta === "locked_chapter")
         ? "seen"
         : "not seen";
@@ -406,10 +406,11 @@ export const SIGNALS: readonly SignalDef[] = [
       // The latest opening before the press: an earlier one may have been closed again.
       const opened = before.filter(is("price_shown", "paywall_initiated")).at(-1);
       if (!opened) return null;
-      // Closed after it, then pressed: either the press came from outside the plans (the
-      // sticky bar buys straight away), or the plans opened again unrecorded (the picker
-      // stays mounted, so a reopening sends no second price_shown, and one the report opens
-      // by itself sends no paywall_initiated). How long they were weighed is unknown; timed
+      // Closed after it, then pressed: either the press came from outside the plans (V1's
+      // archetype list buys straight away, and the sticky bar did until 09.10), or the
+      // plans opened again unrecorded (the picker stays mounted, so a reopening sends no
+      // second price_shown, and one the report opens by itself or from the sticky bar sends
+      // no paywall_initiated). How long they were weighed is unknown; timed
       // from the closed opening, it was 3 of 6 measurable presses in the 28 days to 2026-10-01.
       if (before.some((e) => e.event === "paywall_dismissed" && e.t > opened.t)) return null;
       return checkout.t - opened.t;

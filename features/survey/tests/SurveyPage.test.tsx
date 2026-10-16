@@ -14,6 +14,7 @@ import {
   saveLandingPrefill,
 } from "@features/survey/ui/hooks/surveyStorage";
 import { COMPLETED_REPORT_KEY } from "@features/survey/ui/hooks/surveySession";
+import { __resetFunnelPingsForTests } from "@features/analytics/client";
 
 vi.mock("next/image", () => ({
   default: ({
@@ -614,5 +615,175 @@ describe("SurveyPage — consent comes before any question", () => {
 
     expect(screen.getByRole("button", { name: /i agree/i })).toBeInTheDocument();
     expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The intro's cards record themselves in funnel_event (AP-Analytics' intro table): each card
+ * when shown, Back from it, and Skip Intro on the slide it was pressed on. Only with the
+ * visitor cookie, which exists once the cookie banner is accepted.
+ */
+describe("SurveyPage — the intro's own records", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  const sent = () =>
+    fetchSpy.mock.calls
+      .filter(([url]) => url === "/api/funnel-event")
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)).event as string);
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    __resetSurveyConsentForTests();
+    __resetFunnelPingsForTests();
+    window.history.replaceState(null, "", "/survey");
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-04T12:00:00.000Z");
+    document.cookie = "__liq_vid=11111111-1111-4111-8111-111111111111; path=/";
+    document.cookie = "__csrf=test-token; path=/";
+    Object.defineProperty(navigator, "sendBeacon", { value: undefined, configurable: true });
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+  });
+
+  afterEach(() => {
+    cleanup();
+    fetchSpy.mockRestore();
+    document.cookie = "__liq_vid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+  });
+
+  it("records the intro, the slide reached, Skip Intro on that slide, and the consent", async () => {
+    const user = userEvent.setup();
+    render(<SurveyPage />);
+    await user.click(
+      await screen.findByRole("button", { name: /continue to survey introduction/i })
+    );
+    await screen.findByRole("heading", { name: /quality in/i }, { timeout: 2000 });
+    await user.click(screen.getByRole("button", { name: /skip intro/i }));
+    await screen.findByRole("heading", { name: /before we begin/i });
+
+    expect(sent()).toEqual(["intro_view", "intro_slide_1", "intro_skip_1", "consent_view"]);
+  });
+
+  it("records Back from a slide, and the browser's Back from slide 1 and the consent", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "2");
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: /judgment-free zone/i });
+    await user.click(screen.getByRole("button", { name: /go to previous slide/i }));
+    await screen.findByRole("heading", { name: /quality in/i });
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 0 } }));
+    });
+    await screen.findByRole("button", { name: /continue to survey introduction/i });
+
+    expect(sent()).toEqual([
+      "intro_slide_2",
+      "intro_back_2",
+      "intro_slide_1",
+      "intro_back_1",
+      // Back on the intro: it records its view as it shows.
+      "intro_view",
+    ]);
+  });
+
+  it("records the browser's Back from the consent, and each step once a page", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: /before we begin/i });
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 4 } }));
+    });
+    await screen.findByRole("heading", { name: /how the test works/i });
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 5 } }));
+    });
+    await screen.findByRole("heading", { name: /before we begin/i });
+
+    // Forward onto the consent again is no Back, and its view was sent already.
+    expect(sent()).toEqual(["consent_view", "consent_back", "intro_slide_4"]);
+  });
+
+  it("records no Back from slide 1's hidden button, which a keyboard can still reach", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "1");
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: /quality in/i });
+    await user.click(screen.getByRole("button", { name: /go to previous slide/i }));
+    await new Promise((r) => setTimeout(r, 250));
+
+    expect(screen.getByRole("heading", { name: /quality in/i })).toBeInTheDocument();
+    expect(sent()).toEqual(["intro_slide_1"]);
+  });
+
+  it("records a visitor who declined cookies too, under this page's own id, stored nowhere", async () => {
+    document.cookie = "__liq_vid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    const user = userEvent.setup();
+    render(<SurveyPage />);
+    await user.click(
+      await screen.findByRole("button", { name: /continue to survey introduction/i })
+    );
+    await screen.findByRole("heading", { name: /quality in/i }, { timeout: 2000 });
+    expect(sent()).toEqual(["intro_view", "intro_slide_1"]);
+    const ids = fetchSpy.mock.calls
+      .filter(([url]) => url === "/api/funnel-event")
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)).visitor_id as string);
+    // One id for the page's steps, a UUID, and no cookie or storage written for it.
+    expect(new Set(ids).size).toBe(1);
+    expect(ids[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(document.cookie).not.toContain(ids[0]);
+    expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain(ids[0]);
+  });
+});
+
+/**
+ * Nothing on the intro's slides may move past the consent: Skip Intro lands on it, and a
+ * Continue already under way must not carry on from there onto the questions unagreed.
+ */
+describe("SurveyPage — no way past the consent unagreed", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    __resetSurveyConsentForTests();
+    __resetFunnelPingsForTests();
+    window.history.replaceState(null, "", "/survey");
+    sessionStorage.setItem(SURVEY_STEP_KEY, "2");
+  });
+  afterEach(() => cleanup());
+
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+
+  it("Enter on a focused Skip Intro stops on the consent", async () => {
+    const user = userEvent.setup();
+    render(<SurveyPage />);
+    (await screen.findByRole("button", { name: /skip intro/i })).focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("heading", { name: /before we begin/i });
+    await settle();
+    expect(screen.getByRole("heading", { name: /before we begin/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("Skip Intro within a Continue's 200 ms stops on the consent", async () => {
+    const user = userEvent.setup();
+    render(<SurveyPage />);
+    const [next] = await screen.findAllByRole("button", { name: /continue to next slide/i });
+    await user.click(next!);
+    await user.click(screen.getByRole("button", { name: /skip intro/i }));
+    await settle();
+    expect(screen.getByRole("heading", { name: /before we begin/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("Enter on a focused Back goes back one slide", async () => {
+    const user = userEvent.setup();
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: /judgment-free zone/i });
+    screen.getByRole("button", { name: /go to previous slide/i }).focus();
+    await user.keyboard("{Enter}");
+    await settle();
+    expect(screen.getByRole("heading", { name: /quality in/i })).toBeInTheDocument();
   });
 });

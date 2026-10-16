@@ -168,9 +168,23 @@ for (const s of SURFACES) {
       const cx = Math.round(r.left + r.width / 2);
       const cy = Math.round(r.top + r.height / 2);
       const top = cy >= 0 && cy <= window.innerHeight ? document.elementFromPoint(cx, cy) : null;
+      // The height a tap can land on, not the height drawn: Report 3.0's pill draws at
+      // 32px and its ::after grows the target to 44px (reportV3.css). Measuring the box
+      // flagged that as "32px tall" on every run while a thumb had 45px.
+      const hits = (y) => {
+        const t = document.elementFromPoint(cx, y);
+        return !!t && (t === n || n.contains(t));
+      };
+      let lo = null;
+      let hi = null;
+      for (let y = Math.floor(r.top) - 16; y <= Math.ceil(r.bottom) + 16; y += 1) {
+        if (!hits(y)) continue;
+        if (lo === null) lo = y;
+        hi = y;
+      }
       return {
         visible: true,
-        h: Math.round(r.height),
+        h: lo === null ? 0 : hi - lo + 1,
         reaches: !!top && (top === n || n.contains(top)),
         topEl: top ? top.tagName : null,
       };

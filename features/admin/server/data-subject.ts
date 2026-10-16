@@ -19,6 +19,7 @@
  *       - scoring_result
  *       - analytics_event
  *       - report_section_feedback
+ *       - email_message_event (exported; erased by its ON DELETE CASCADE from survey_submission)
  *       - personal_report
  *         - personal_report_section
  *         - report_access_token
@@ -220,6 +221,11 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
     // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
     `/rest/v1/report_section_feedback?survey_submission_id=${subFilter}&select=*`,
     "rsf"
+  );
+  // Each nurture email's delivery, opens and clicks, kept per reader: theirs to see.
+  result.exportData!.email_message_event = await fetchRows(
+    `/rest/v1/email_message_event?survey_submission_id=${subFilter}&select=*`,
+    "eme"
   );
   // report_access_token is keyed by survey_submission_id (NOT personal_report_id
   // — that column does not exist on this table), so it is fetched here with the

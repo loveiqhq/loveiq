@@ -370,6 +370,17 @@ async function countMissing(): Promise<number> {
 }
 
 /**
+ * THE SAME QUESTION IS EMBEDDED ONCE PER INSTANCE. A narrowed search that comes back weak
+ * asks the same question again with no filter, and that second search embedded it again,
+ * in sequence: measured 2026-10-05, that class of search went from 0.87 s to 6.37 s p50.
+ * `gte-small` gives the same text the same vector, so a vector made once stays right.
+ * Only successes are kept, so a failed call is tried afresh next time.
+ * ponytail: oldest-first eviction, not LRU; a repeat comes within seconds of the first.
+ */
+const EMBEDDED_KEPT = 64;
+const embedded = new Map<string, string>();
+
+/**
  * Embed a QUESTION, for the semantic arm of `brain_search`.
  *
  * Returns null on any failure, and the caller passes that straight through: with a
@@ -380,11 +391,17 @@ async function countMissing(): Promise<number> {
 export async function embedQuery(question: string): Promise<string | null> {
   const text = question.trim().slice(0, 1500);
   if (text.length < 2) return null;
+  const known = embedded.get(text);
+  if (known) return known;
   // One attempt, four seconds. Retrying here the way the backfill does would put
   // 22s of backoff in front of a waiting person on a cold edge worker.
   const vectors = await embedBatch([text], { attempts: 1, timeoutMs: 4_000 });
   const first = vectors?.[0];
-  return first ? toVectorLiteral(first) : null;
+  if (!first) return null;
+  const literal = toVectorLiteral(first);
+  embedded.set(text, literal);
+  if (embedded.size > EMBEDDED_KEPT) embedded.delete(embedded.keys().next().value!);
+  return literal;
 }
 
 /** Exposed for the one-off re-embed script; see scripts/brain-reembed-all.ts. */

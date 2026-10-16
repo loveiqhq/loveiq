@@ -52,6 +52,7 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import { computeRate, fetchFunnelCvrSparklines } from "@features/admin/server/digest-metrics";
+import { DROPOFF_KPI_URL } from "@features/admin/server/dropoff-weekly";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   buildFrictionReport,
@@ -91,11 +92,11 @@ import {
 } from "@features/admin/server/conversion-digest";
 import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 import {
-  LANDING_HERO_VIDEO_LAUNCH_DAY,
-  LANDING_VARIANT_ARMS,
-} from "@shared/experiments/landingVariant";
+  PRICE_TEST_START_AT,
+  PRICE_TEST_START_DAY,
+} from "@features/checkout/server/reportPurchase";
+import { LANDING_TEST_START_DAY, LANDING_VARIANT_ARMS } from "@shared/experiments/landingVariant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -149,37 +150,47 @@ export const STARTED_QUESTION_INDEX = 1;
  * randomises either any more, so presenting one as a live test is exactly the
  * mistake the /admin dashboard made before it was corrected. A verdict on a test
  * nobody is running is not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3),
- * but only once the whole window lies after its launch (`verdictAxesFor`).
- * `landing` is live again for its round 3 (V2's question card vs V3's hero video);
- * its arms are new values, so its verdict can only ever count round-3 readers and
- * needs no launch cut of its own.
+ * but only once the whole window lies after its current lists started (`verdictAxesFor`).
+ * `landing` is live again for its round 3 (V2's question card vs V3's hero video). Its
+ * arms are new values, so its verdict can only ever count round-3 readers, but it waits
+ * like pricing for a window wholly after LANDING_TEST_START_DAY: before the condensed
+ * phone hero most phone visitors never reached either arm's slot.
  */
 const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
 /**
  * The cohorts behind a verdict span the whole window. Before the window lies wholly
- * inside Pricing 3.0 they include readers who finished under the 2.x prices and were
- * re-priced at launch, and a verdict pooled over them would call that a result. The
- * price test is still in *The tests* meanwhile, cut to its launch day.
+ * inside the current price lists they include readers who finished under earlier
+ * prices and were re-priced (the 2.x lists, list B's first prices), and a verdict pooled
+ * over them would call that a result. The price test is still in *The tests*
+ * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY). The landing
+ * test waits the same way for its restart at the condensed phone hero.
  */
-function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[] {
+function verdictAxesFor(
+  dayKey: string,
+  axes: ExperimentAxis[],
+  landingFrom: string
+): ExperimentAxis[] {
   const windowStartDay = new Date(
     Date.parse(`${dayKey}T00:00:00Z`) - (WINDOW_DAYS - 1) * 86_400_000
   )
     .toISOString()
     .slice(0, 10);
-  return axes.filter((axis) => axis !== "pricing" || windowStartDay >= PRICING_3_LAUNCH_DAY);
+  return axes.filter(
+    (axis) =>
+      (axis !== "pricing" || windowStartDay >= PRICE_TEST_START_DAY) &&
+      (axis !== "landing" || windowStartDay >= landingFrom)
+  );
 }
 
 /**
- * When report prices last changed. `buildAlerts` uses it to suppress the
- * "conversion dropped" alert around a repricing, where a rate change is expected
- * rather than a regression. Update this on the next price change.
+ * When report prices last changed, handed to `buildAlerts` (no alert reads it since its
+ * pricing-cutover warning went). It follows PRICE_TEST_START_AT on the next price change.
  *
- * Pricing 3.0: two new products on two new price lists, for every reader who had not
- * bought yet.
+ * Pricing 3.0 (2026-10-06): two new products on two new price lists, for every reader
+ * who had not bought yet. 2026-10-08: list B lowered to €6.99 / €4.99.
  */
-const PRICING_CUTOVER_ISO = `${PRICING_3_LAUNCH_DAY}T00:00:00Z`;
+const PRICING_CUTOVER_ISO = PRICE_TEST_START_AT;
 
 /**
  * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup
@@ -393,6 +404,47 @@ export function buildSiteStartSeries(
  * starts on a low-traffic day swings a daily rate wildly.
  */
 /**
+ * A landing read cut to the days from `from` on, its totals rebuilt from the days kept.
+ *
+ * get_landing_start_funnel_daily and get_midway_progress_daily both SUM their per-arm
+ * totals from their own daily rows, so these are exactly the totals a read starting at
+ * `from` returns. Every per-landing-page line reads them: a restart of the landing test
+ * (LANDING_TEST_START_DAY, the condensed phone hero) moved the charts' first day but the
+ * per-arm counts and the deciding number still pooled the days before it under the same
+ * arm names. The site-wide lines keep reading the uncut window.
+ */
+export function landingStartSince(funnel: LandingStartFunnel, from: string): LandingStartFunnel {
+  const daily = funnel.daily.filter((r) => r.day >= from);
+  const byArm = new Map<string, { arm: string; visits: number; starts: number }>();
+  for (const r of daily) {
+    const t = byArm.get(r.arm) ?? { arm: r.arm, visits: 0, starts: 0 };
+    t.visits += r.visits;
+    t.starts += r.starts;
+    byArm.set(r.arm, t);
+  }
+  return { daily, totals: [...byArm.values()] };
+}
+
+/** The same cut for a midway read; `finished` stays absent when the function sent none. */
+export function midwaySince(midway: MidwayProgress, from: string): MidwayProgress {
+  const daily = midway.daily.filter((r) => r.day >= from);
+  const byArm = new Map<string, MidwayProgress["totals"][number]>();
+  for (const r of daily) {
+    const t = byArm.get(r.arm) ?? {
+      arm: r.arm,
+      sessions: 0,
+      reached: 0,
+      ...(r.finished === undefined ? {} : { finished: 0 }),
+    };
+    t.sessions += r.sessions;
+    t.reached += r.reached;
+    if (r.finished !== undefined) t.finished = (t.finished ?? 0) + r.finished;
+    byArm.set(r.arm, t);
+  }
+  return { ...midway, daily, totals: [...byArm.values()] };
+}
+
+/**
  * Midway daily rows in the shape `buildStartSeries` already understands.
  *
  * sessions -> visits, reached -> starts. Mapping rather than duplicating keeps
@@ -461,8 +513,8 @@ interface DigestInput {
   /**
    * Treat these axes as live, retired arms included.
    *
-   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing` alone, since
-   * `landing` concluded on 2026-09-19.
+   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing`, and `landing`
+   * for its round 3 (round 2 concluded on 2026-09-19).
    *
    * ONE field, not an axis list plus a retired-arms flag, because those two can
    * disagree and a message has to have a single answer to "what is running". An
@@ -483,7 +535,7 @@ interface DigestInput {
   /**
    * The landing pair the per-arm blocks compare, in reading order, and the day that
    * comparison starts. Production omits both and gets round 3's live arms (V2's
-   * question card, then V3's video) from LANDING_HERO_VIDEO_LAUNCH_DAY. A read of
+   * question card, then V3's video) from LANDING_TEST_START_DAY. A read of
    * round 2 passes ["white_prev", "white"] and 2026-08-21.
    *
    * The day matters even with new arm values: the per-arm series take their x-axis
@@ -577,14 +629,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const axisRows = input.axisRows ?? [];
   const verdictAxes = input.liveAxesOverride ?? VERDICT_AXES;
   const landingArms: readonly [string, string] = input.landingArms ?? LANDING_VARIANT_ARMS;
-  const landingFrom = input.landingFrom ?? LANDING_HERO_VIDEO_LAUNCH_DAY;
+  const landingFrom = input.landingFrom ?? LANDING_TEST_START_DAY;
   // An overridden axis is being declared live, so its arms are live too.
   const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
-    for (const axis of verdictAxesFor(dayKey, verdictAxes)) {
+    for (const axis of verdictAxesFor(dayKey, verdictAxes, landingFrom)) {
       const rows = cohorts
         .filter((c) => c.axis === axis && c.arm !== "unknown")
         .map((c) => ({ arm: c.arm, n: c.n, conversions: c.conversions }));
@@ -863,6 +915,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   if (input.friction && input.friction.signals.length > 0) {
     blocks.push(section(buildFrictionWatchList(input.friction, WINDOW_DAYS)));
   }
+  // Every question's drop-off, week by week, lives on its KPI page in Notion
+  // (Eman, 2026-10-11), kept current each morning by the kpi-dropoff cron.
+  blocks.push(
+    context(`<${DROPOFF_KPI_URL}|Survey drop-off by question: charts, table and filters (Notion)>`)
+  );
 
   /**
    * Landing → survey, SITE-WIDE. The trend line, sitting with the funnel above
@@ -1010,14 +1067,16 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   const landingIsLive = verdictAxes.includes("landing");
   if (midway && midwayRowShown && landingIsLive) {
-    const armTotal = (arm: string) => midway.totals.find((t) => t.arm === arm);
+    // Per landing page, so from the comparison's own first day (midwaySince).
+    const byPage = midwaySince(midway, landingFrom);
+    const armTotal = (arm: string) => byPage.totals.find((t) => t.arm === arm);
     const named = landingArms.filter((a) => (armTotal(a)?.sessions ?? 0) > 0);
 
     if (named.length > 0) {
       const line = named
         .map((arm) => {
           const t = armTotal(arm)!;
-          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} surveys reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
         })
         .join("\n");
       /**
@@ -1033,14 +1092,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const unknown = armTotal("unknown");
       const unattributed =
         unknown && unknown.sessions > 0
-          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
+          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} surveys (${computeRate(unknown.reached, unknown.sessions)}%)`
           : "";
       midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
 
-      const series = buildMidwaySeries(
-        { ...midway, daily: midway.daily.filter((r) => r.day >= landingFrom) },
-        [landingArms[0], landingArms[1]]
-      );
+      const series = buildMidwaySeries(byPage, [landingArms[0], landingArms[1]]);
       const hasReal = series.first.some((v) => v != null) || series.last.some((v) => v != null);
       if (hasReal && series.labels.length > 1) {
         const url = await signedChartUrl({
@@ -1048,7 +1104,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           labels: series.labels,
           first: series.first,
           last: series.last,
-          title: `Drafts reaching question ${midway.midwayIndex}, by landing page`,
+          title: `Surveys reaching question ${midway.midwayIndex}, by landing page`,
           legendFirst: armLabel("landing", landingArms[0]).short,
           legendLast: armLabel("landing", landingArms[1]).short,
           colorFirst: armColor("landing", landingArms[0]),
@@ -1059,13 +1115,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
                 `${armLabel("landing", a).short} ${armTotal(a)!.reached}/${armTotal(a)!.sessions}`
             )
             .join("  ·  "),
-          footnote: `reached ÷ drafts saved, 7-day trailing · peak {peak}%`,
+          footnote: `reached ÷ surveys started (finished ones included), 7-day trailing · peak {peak}%`,
         });
         if (url) {
           midwayBlocks.push({
             type: "image",
             image_url: url,
-            alt_text: `Share of survey drafts reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
+            alt_text: `Share of surveys reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
           });
         }
       }
@@ -1099,11 +1155,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // `landingIsLive` gates this comparison (see the midway block above). The
     // site-wide "Visits that reach the survey" chart is unaffected — it never
     // split by arm. The series starts at the comparison's own first day.
-    const series = buildStartSeries(
-      { ...startFunnel, daily: startFunnel.daily.filter((r) => r.day >= landingFrom) },
-      [liveArms[0], liveArms[1]]
-    );
-    const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
+    const byPage = landingStartSince(startFunnel, landingFrom);
+    const series = buildStartSeries(byPage, [liveArms[0], liveArms[1]]);
+    const totalFor = (arm: string) => byPage.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
     const armLine = (arm: string) => {
       const label = armLabel("landing", arm).short;
@@ -1188,6 +1242,21 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           )
         );
       }
+    } else if (dayKey < landingFrom) {
+      // The day this digest reports is before the comparison restarts, so its per-arm
+      // counts are empty by design. Say so: "no visits" under a funnel full of them reads
+      // as a broken test.
+      const label = (day: string) => {
+        const at = new Date(`${day}T00:00:00Z`);
+        return `${at.getUTCDate()} ${at.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
+      };
+      const firstDigest = new Date(`${landingFrom}T00:00:00Z`);
+      firstDigest.setUTCDate(firstDigest.getUTCDate() + 1);
+      landingStartBlocks.push(
+        section(
+          `*Landing page → survey* — the landing test restarts on ${label(landingFrom)}, with the condensed phone hero; its first numbers arrive in the ${label(firstDigest.toISOString().slice(0, 10))} digest.`
+        )
+      );
     } else if (!hasVisits(liveArms[0]) && !hasVisits(liveArms[1])) {
       /**
        * Nothing for EITHER live arm. ONE line — four lines of "no visits recorded
@@ -1225,7 +1294,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * is half-open and ends yesterday: a day only enters the series in the
        * following run.
        */
-      const lastDay = [...new Set(startFunnel.daily.map((r) => r.day))].sort().at(-1)!;
+      const lastDay = [...new Set(byPage.daily.map((r) => r.day))].sort().at(-1)!;
       const readyOn = new Date(`${lastDay}T00:00:00Z`);
       readyOn.setUTCDate(readyOn.getUTCDate() + (7 - days) + 1);
       const readyLabel = `${readyOn.getUTCDate()} ${readyOn.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
@@ -1255,8 +1324,19 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      *
      * Counts and rates only. The verdict is taken once, at the decision date in the
      * experiment registry, not re-taken every morning.
+     *
+     * Since migration 20261007190000 get_midway_progress_daily counts the finished
+     * surveys itself, each session once, and says how many (`finished`): `reached` is
+     * then the whole count. Before it, `reached` held drafts only and the finishers
+     * came from the submission cohort, which is still how a function without
+     * `finished` is read, so the order the code and the migration ship in cannot
+     * double-count the finishers or drop them.
      */
-    if (landingIsLive && (input.startsPastFirst === null || cohorts === null)) {
+    const countsFinished = input.startsPastFirst?.overall.finished !== undefined;
+    if (
+      landingIsLive &&
+      (input.startsPastFirst === null || (!countsFinished && cohorts === null))
+    ) {
       // A failed read says so. Without this line the deciding number simply vanished
       // for the day, which reads as "nothing to decide on yet", not "we could not read it".
       landingStartBlocks.push(
@@ -1264,15 +1344,22 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           "_Survey starts per visit is not available today — one of its data sources did not answer._"
         )
       );
-    } else if (landingIsLive && input.startsPastFirst && cohorts) {
-      const pastFirst = input.startsPastFirst;
-      const perArm = liveArms.map((arm) => ({
-        arm,
-        visits: totalFor(arm)?.visits ?? 0,
-        // An arm with no draft past question one has no row, so zero is the true count.
-        drafts: pastFirst.totals.find((t) => t.arm === arm)?.reached ?? 0,
-        finished: cohorts.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0,
-      }));
+    } else if (landingIsLive && input.startsPastFirst) {
+      const pastFirst = midwaySince(input.startsPastFirst, landingFrom);
+      const perArm = liveArms.map((arm) => {
+        // An arm with no survey past question one has no row, so zero is the true count.
+        const row = pastFirst.totals.find((t) => t.arm === arm);
+        const reached = row?.reached ?? 0;
+        const finished = countsFinished
+          ? (row?.finished ?? 0)
+          : (cohorts?.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0);
+        return {
+          arm,
+          visits: totalFor(arm)?.visits ?? 0,
+          drafts: countsFinished ? reached - finished : reached,
+          finished,
+        };
+      });
       if (perArm.some((a) => a.visits > 0)) {
         // Both halves of each count are printed, so a half that went missing shows as a
         // zero beside the other instead of quietly lowering the total.

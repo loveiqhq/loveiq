@@ -3,3 +3,20 @@ node_modules
 out
 dist
 package-lock.json
+
+# Third-party skills, vendored byte-for-byte from upstream (see .claude/skills/THIRD_PARTY.md)
+.claude/skills/awesome-design-md/design-md
+.claude/skills/brandkit
+.claude/skills/design-taste-frontend
+.claude/skills/full-output-enforcement
+.claude/skills/high-end-visual-design
+.claude/skills/imagegen-frontend-mobile
+.claude/skills/imagegen-frontend-web
+.claude/skills/img2threejs
+.claude/skills/impeccable
+.claude/skills/industrial-brutalist-ui
+.claude/skills/minimalist-ui
+.claude/skills/playwright-cli
+.claude/skills/redesign-existing-projects
+.claude/skills/security-audit
+.claude/skills/stitch-design-taste

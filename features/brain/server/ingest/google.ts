@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { googleAdsSearch } from "@shared/http/google-ads";
 import {
   GA4_SCOPE,
   SEARCH_CONSOLE_SCOPE,
@@ -8,6 +9,7 @@ import {
   isGoogleConfigured,
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
+import { reportingDay } from "@shared/time/reporting-day";
 import { isoWeek, longDate, longMonth, monthEnd } from "./analytics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
@@ -30,13 +32,12 @@ import {
  * Search Console) and AD SPEND (what a click cost, GA4 when Google Ads is
  * linked). Those are the reason this file exists.
  *
- * GOOGLE ADS NEEDS NO SEPARATE INTEGRATION. The Google Ads API requires a
- * developer token behind a manual approval, which is days of waiting. When the
- * Ads account is linked to GA4 — ours is — the same GA4 credential exposes
- * `advertiserAdCost`, `advertiserAdClicks` and `advertiserAdImpressions`, which
- * are the numbers anyone actually asks about. Each enrichment report is kept
- * SEPARATE and best-effort so one of them failing cannot cost us the core
- * traffic numbers.
+ * AD SPEND COMES THROUGH GA4. When the Ads account is linked to GA4 — ours is —
+ * the same GA4 credential exposes `advertiserAdCost`, `advertiserAdClicks` and
+ * `advertiserAdImpressions`, which are the numbers anyone actually asks about.
+ * Only each campaign's conversions need the Google Ads API itself (the admin's
+ * campaign table, `meta.ads_campaigns`). Each enrichment is kept SEPARATE and
+ * best-effort so one of them failing cannot cost us the core traffic numbers.
  *
  * EVERY PIECE DEGRADES ALONE. No credentials, no property id, no site: skip and
  * say so. Search Console failing must not cost us the GA4 numbers.
@@ -138,6 +139,97 @@ interface AdDay {
   impressions: number;
   /** Campaign name to spend, so a grain can report where the money went. */
   campaigns: Map<string, number>;
+}
+
+/** One channel's day (`meta.channels`), the admin's sessions_daily table. */
+interface ChannelDay {
+  sessions: number;
+  users: number;
+  new_users: number;
+  engaged_sessions: number;
+  /** Seconds in the foreground, summed: over sessions, the average per session. */
+  engagement_s: number;
+}
+
+/** One Google Ads campaign's day (`meta.ads_campaigns`), the admin's campaign_daily table. */
+interface CampaignDay {
+  name: string;
+  impressions: number;
+  clicks: number;
+  /** Euros, to the cent. */
+  cost: number;
+  conversions: number;
+}
+
+/**
+ * Each Google Ads campaign's day, by campaign id, from the Ads API itself: GA4's link carries
+ * cost, clicks and impressions but not the conversions Google attributes to a campaign. Only
+ * campaigns that showed, were clicked or cost something. Null when there is no token.
+ */
+async function adsCampaignsByDay(
+  from: string,
+  to: string,
+  oidcToken?: string | null
+): Promise<Map<string, Record<string, CampaignDay>> | null> {
+  const rows = await googleAdsSearch<{
+    customer?: { currencyCode?: string };
+    segments?: { date?: string };
+    campaign?: { id?: string; name?: string };
+    metrics?: { impressions?: string; clicks?: string; costMicros?: string; conversions?: number };
+  }>(
+    "SELECT customer.currency_code, segments.date, campaign.id, campaign.name, metrics.impressions, " +
+      "metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign " +
+      `WHERE segments.date BETWEEN '${from}' AND '${to}'`,
+    // A slow answer must not hold up the cron: the next run, 15 minutes on, asks again.
+    { oidcToken, timeoutMs: 10_000 }
+  );
+  if (!rows) return null;
+  // The table says euros, and no rate is invented here.
+  const currency = rows.find((r) => r.customer?.currencyCode)?.customer?.currencyCode;
+  if (currency && currency !== "EUR") throw new Error(`Google Ads reports in ${currency}`);
+  const byDay = new Map<string, Record<string, CampaignDay>>();
+  for (const r of rows) {
+    const day = r.segments?.date;
+    const id = r.campaign?.id;
+    const impressions = num(r.metrics?.impressions);
+    const clicks = num(r.metrics?.clicks);
+    const micros = num(r.metrics?.costMicros);
+    if (!day || !id || (!impressions && !clicks && !micros)) continue;
+    const forDay = byDay.get(day) ?? {};
+    forDay[id] = {
+      name: r.campaign?.name ?? "",
+      impressions,
+      clicks,
+      cost: Math.round(micros / 10_000) / 100,
+      conversions: Math.round(num(r.metrics?.conversions) * 100) / 100,
+    };
+    byDay.set(day, forDay);
+  }
+  return byDay;
+}
+
+/** A day chunk's two breakdowns, as stored. */
+type Breakdowns = { channels?: unknown; ads_campaigns?: unknown };
+
+/**
+ * The breakdowns the day chunks already hold, from `fromDay` on, for a run that could not read
+ * one of them. Empty when they cannot be read: the day then goes without, which reads as
+ * unknown, never as zero.
+ */
+async function storedBreakdowns(fromDay: string | undefined): Promise<Map<string, Breakdowns>> {
+  const kept = new Map<string, Breakdowns>();
+  if (!fromDay) return kept;
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=day:meta->>day,channels:meta->channels,ads_campaigns:meta->ads_campaigns&source=eq.ga4&meta->>grain=eq.day&period_end=gte.${fromDay}&order=period_end.asc&limit=1000`
+    );
+    const rows = res.ok ? ((await res.json()) as Array<Breakdowns & { day?: unknown }>) : null;
+    if (!Array.isArray(rows)) throw new Error(`status ${res.status}`);
+    for (const r of rows) if (typeof r.day === "string") kept.set(r.day, r);
+  } catch (err) {
+    logger.warn({ err }, "brain-ingest ga4: could not read the stored breakdowns to keep them");
+  }
+  return kept;
 }
 
 /**
@@ -288,7 +380,7 @@ export function ga4Date(raw: string): string {
   return raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw;
 }
 
-export function num(v: string | undefined): number {
+export function num(v: string | number | undefined): number {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
@@ -409,6 +501,15 @@ export async function ingestGa4(
    */
   const dateRanges = [{ startDate: windowFrom, endDate: "today" }];
 
+  // Each campaign's day from Google Ads, asked now and read after the GA4 reports, so it runs
+  // beside them. Best-effort like every enrichment: it never costs the GA4 numbers or `ad_cost`.
+  const adsRead = isOutOfTime()
+    ? Promise.resolve(null)
+    : adsCampaignsByDay(windowFrom, reportingDay(), oidcToken).catch((err: unknown) => {
+        logger.warn({ err }, "brain-ingest ga4: Google Ads campaigns unavailable");
+        return null;
+      });
+
   const core = await runGa4Report(
     token,
     propertyId,
@@ -478,6 +579,58 @@ export async function ingestGa4(
     }
   } catch (err) {
     logger.warn({ err }, "brain-ingest ga4: channel breakdown unavailable");
+  }
+
+  /**
+   * Each channel's day in full, for the admin's sessions_daily table. ITS OWN REQUEST, not
+   * more metrics on the one above, because that one writes the body: user counts can make GA4
+   * withhold a small channel's row (thresholding), and a metric it refused would fail the
+   * request, and either would change the body and re-embed it. Null when it failed or was cut
+   * short: a partial breakdown would read as complete.
+   */
+  let channelDays: Map<string, Record<string, ChannelDay>> | null = null;
+  try {
+    const outcome: ReportOutcome = { truncated: false };
+    const rows = await runGa4Report(
+      token,
+      propertyId,
+      {
+        dateRanges,
+        dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
+        metrics: [
+          { name: "sessions" },
+          // Active users, as the design's table defines its users (GA4's own "Users").
+          { name: "activeUsers" },
+          { name: "newUsers" },
+          { name: "engagedSessions" },
+          { name: "userEngagementDuration" },
+        ],
+        limit: 2000,
+      },
+      isOutOfTime,
+      outcome
+    );
+    if (!outcome.truncated) {
+      channelDays = new Map();
+      for (const r of rows) {
+        const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
+        if (!day) continue;
+        const [sessions = 0, users = 0, newUsers = 0, engaged = 0, seconds = 0] = (
+          r.metricValues ?? []
+        ).map((m) => num(m.value));
+        const forDay = channelDays.get(day) ?? {};
+        forDay[r.dimensionValues?.[1]?.value ?? "unknown"] = {
+          sessions,
+          users,
+          new_users: newUsers,
+          engaged_sessions: engaged,
+          engagement_s: seconds,
+        };
+        channelDays.set(day, forDay);
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "brain-ingest ga4: channel table unavailable");
   }
 
   // Ad spend. The date dimension ALONE is rejected: GA4 answers
@@ -670,9 +823,24 @@ export async function ingestGa4(
   }
   const allDays = [...new Set([...trafficByDay.keys(), ...ads.keys()])].sort();
 
+  /**
+   * A BREAKDOWN THIS RUN COULD NOT READ KEEPS WHAT THE DAY ALREADY HOLDS.
+   *
+   * `meta` is replaced whole on every write, so one failed request would strip the channel or
+   * campaign table from every day in the window, and for good from a day that leaves the
+   * window while the failure lasts. Read back only when something failed.
+   */
+  const campaignDays = await adsRead;
+  const kept =
+    channelDays && campaignDays
+      ? new Map<string, Breakdowns>()
+      : await storedBreakdowns(allDays[0]);
+
   for (const day of allDays) {
     const metrics = trafficByDay.get(day) ?? [];
-    const [sessions = 0, users = 0] = metrics;
+    const [sessions = 0, users = 0, newUsers = 0, , engaged = 0] = metrics;
+    const channels = channelDays ? channelDays.get(day) : kept.get(day)?.channels;
+    const campaigns = campaignDays ? campaignDays.get(day) : kept.get(day)?.ads_campaigns;
     const ad = ads.get(day);
     // Skip only a day that is empty on BOTH counts — no traffic and no spend.
     if (!sessions && !users && !ad) continue;
@@ -697,7 +865,13 @@ export async function ingestGa4(
         day,
         sessions,
         users,
+        new_users: newUsers,
+        engaged_sessions: engaged,
         ...(ad ? { ad_cost: ad.cost, ad_clicks: ad.clicks, ad_impressions: ad.impressions } : {}),
+        // The admin's sessions_daily and campaign_daily tables: left out when unknown or
+        // empty, never written as {}.
+        ...(channels ? { channels } : {}),
+        ...(campaigns ? { ads_campaigns: campaigns } : {}),
         // The window this run ASKED for, not the days that came back. GA4 omits
         // zero-traffic days, so the analytics rollup cannot tell "no spend" from
         // "no data" without this — and it needs to, because it decides whether a

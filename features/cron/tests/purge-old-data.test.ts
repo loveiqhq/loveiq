@@ -83,7 +83,7 @@ describe("GET /api/cron/purge-old-data (F-02)", () => {
   });
 
   it("succeeds and reports per-table deletion counts via Content-Range", async () => {
-    // ALL SEVEN retention rules, in RETENTION_DAYS order. Mocking fewer than
+    // ALL NINE retention rules, in RETENTION_DAYS order. Mocking fewer than
     // the loop iterates lets the un-mocked tables silently hit the error path
     // (undefined → throw → caught) while the test still passes — false
     // confidence. Mock + assert every table so a regression in any rule shows.
@@ -95,13 +95,14 @@ describe("GET /api/cron/purge-old-data (F-02)", () => {
       .mockResolvedValueOnce(purgeResponse(5)) // cron_run
       .mockResolvedValueOnce(purgeResponse(20)) // invite_event
       .mockResolvedValueOnce(purgeResponse(3)) // slack_dead_letter
-      .mockResolvedValueOnce(purgeResponse(7)); // brain_query
+      .mockResolvedValueOnce(purgeResponse(7)) // brain_query
+      .mockResolvedValueOnce(purgeResponse(9)); // email_message_event
 
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(body.totalDeleted).toBe(12 + 345 + 6 + 0 + 5 + 20 + 3 + 7);
+    expect(body.totalDeleted).toBe(12 + 345 + 6 + 0 + 5 + 20 + 3 + 7 + 9);
     expect(body.summary["survey_partial_save"].deleted).toBe(12);
     expect(body.summary["analytics_event"].deleted).toBe(345);
     expect(body.summary["payment_webhook_event"].deleted).toBe(6);
@@ -112,10 +113,15 @@ describe("GET /api/cron/purge-old-data (F-02)", () => {
     // The company-brain question log. Now written on EVERY MCP tool call, where it
     // was one Slack row a week, so it is the fastest-growing table in the list.
     expect(body.summary["brain_query"].deleted).toBe(7);
+    // Each nurture email's delivery, opens and clicks, aged by when they happened.
+    expect(body.summary["email_message_event"].deleted).toBe(9);
+    expect(String(mockSupabaseFetch.mock.calls[8]![0])).toMatch(
+      /^\/rest\/v1\/email_message_event\?first_at=lt\./
+    );
     // Guard against silent drift: every rule must be exercised.
-    expect(Object.keys(body.summary)).toHaveLength(8);
-    expect(mockSupabaseFetch).toHaveBeenCalledTimes(8);
-    // No table errored — the mock covered all 8 calls.
+    expect(Object.keys(body.summary)).toHaveLength(9);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(9);
+    // No table errored — the mock covered all 9 calls.
     const rows = Object.values(body.summary) as Array<{ deleted: number; error?: string }>;
     expect(rows.every((r) => !r.error)).toBe(true);
   });

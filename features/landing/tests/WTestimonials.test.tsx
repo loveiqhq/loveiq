@@ -5,10 +5,11 @@ import WTestimonials from "@features/landing/ui/white/WTestimonials";
 
 afterEach(cleanup);
 
-describe("WTestimonials (white 'Field reports')", () => {
-  it("renders the curated field-reports header (no Trustpilot dependency)", () => {
+describe("WTestimonials (white social proof)", () => {
+  it("renders the curated header (no Trustpilot dependency)", () => {
     render(<WTestimonials />);
-    expect(screen.getByText("Field reports")).toBeInTheDocument();
+    // Its "Field reports" eyebrow went with the 12.10 copy (Figma Report-3.0 1604:8233).
+    expect(screen.queryByText("Field reports")).not.toBeInTheDocument();
     expect(screen.getByText("10,000+")).toBeInTheDocument();
     expect(screen.getByText("4.9/5 Rating")).toBeInTheDocument();
     expect(

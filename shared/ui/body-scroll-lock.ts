@@ -104,6 +104,11 @@ export function unlockBodyScroll(): void {
   smooth?.resize();
 }
 
+/** An overlay holds the page still: the pricing or share pop-up, or the chapter drawer. */
+export function isBodyScrollLocked(): boolean {
+  return depth > 0;
+}
+
 /**
  * Why the page might not have moved, stamped onto every `$dead_swipe`
  * (instrumentation-client.ts).

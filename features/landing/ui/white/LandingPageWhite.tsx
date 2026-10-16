@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 import type { LandingVariant } from "@shared/experiments/landingVariant";
 import ScrollAnimator from "../ScrollAnimator";
 import LandingPageTracker from "../LandingPageTracker";
+import LandingSectionsSeen from "../LandingSectionsSeen";
 import WNavSection from "./WNavSection";
 import WHero from "./WHero";
 import WTrustStrip from "./WTrustStrip";
@@ -43,6 +44,7 @@ const LandingPageWhite: FC<{ variant: LandingVariant }> = ({ variant }) => {
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <ScrollAnimator />
       <LandingPageTracker variant={variant} />
+      <LandingSectionsSeen />
       <WNavSection />
       <WHero media={variant === "white_video" ? "video" : "card"} />
       <WTrustStrip />

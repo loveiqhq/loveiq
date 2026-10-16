@@ -3,6 +3,8 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import { POSTHOG_PROXY_PATH, POSTHOG_UI_HOST } from "@shared/analytics/posthog-proxy";
 import { scrollState } from "@shared/ui/body-scroll-lock";
 import { isProbeRequest } from "@shared/http/probe-cookie";
+import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
+import { readCookie } from "@shared/observability/cookie";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -21,6 +23,22 @@ function resolveDeployEnv(): "production" | "staging" | "development" {
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").toLowerCase();
   if (siteUrl.includes("staging.") || siteUrl.includes(".vercel.app")) return "staging";
   return "development";
+}
+
+/**
+ * The landing A/B arm, from the cookie proxy.ts sets, so it rides on every event from the
+ * session's first `$pageview` on. `setLandingVariant` registers it too, but from the
+ * landing page's mount effect, which runs after that first event: a first visit's landing
+ * pageview carried no arm, and a returning visitor's carried an earlier round's. No valid
+ * cookie, no arm, which is the rule the server's own stamps follow (stampArm.ts).
+ */
+function registerLandingArm(ph: {
+  register: (properties: Record<string, string>) => void;
+  unregister: (property: string) => void;
+}): void {
+  const arm = readCookie(LANDING_VARIANT_COOKIE);
+  if (isLandingVariant(arm)) ph.register({ landing_variant: arm });
+  else ph.unregister("landing_variant");
 }
 
 if (!projectToken || !host) {
@@ -89,7 +107,10 @@ if (!projectToken || !host) {
      * Super properties attach to events, not to the person record: filtering
      * PERSONS by environment is not what this gives you.
      */
-    loaded: (ph) => ph.register({ deploy_env: resolveDeployEnv() }),
+    loaded: (ph) => {
+      ph.register({ deploy_env: resolveDeployEnv() });
+      registerLandingArm(ph);
+    },
     /**
      * A `$dead_swipe` says a swipe moved nothing, never why; `scrollState()` says
      * whether we had frozen the page, the reader was zoomed in, or at the end.

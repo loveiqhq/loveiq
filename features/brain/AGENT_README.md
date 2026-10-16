@@ -11,7 +11,9 @@ Claude Code) is the door people use; the operator's guide is
   analytics, GA4 and Search Console through `google.ts`, Clarity, evidence, report voice,
   domain vocabulary, skills, people) plus `upsert.ts`, the shared write path. That path refuses
   credentials and masks one-time links, and it holds the exclusions every source shares
-  (`isJobApplication`, `isLegalInstrument`).
+  (`isJobApplication`, `isLegalInstrument`). `ingest/slack-media.ts` puts Slack screenshots
+  and screen recordings into words with `claude -p` (the `brain-slack-media` job, in GitHub
+  Actions only).
 - `server/retrieve.ts` — calls the `brain_search` RPC (lexical plus vector arm), dedupes by
   parent, and caps how much of a result any one source may take.
 - `server/embed.ts` — query embeddings through the `brain-embed` edge function.
@@ -47,6 +49,14 @@ Claude Code) is the door people use; the operator's guide is
 - `server/experiments.ts` — `experiments` and `record_experiment`: /admin's `admin_experiment`
   registry (written through `admin_upsert_experiment`, which overwrites every column, so an update
   hands back what it does not change) and live readouts from `features/admin/server/experiment-readouts.ts`.
+  A running test also gets the people each arm needs (`perArmSample`: 95% confidence, 80% power)
+  and the day that is reached at the pace so far.
+- `server/sales.ts` — `get_business_numbers` with `group_by`: a period's real sales, revenue and EUR 0
+  comps by plan, price list, device, source, country tier, landing arm or month, read from
+  `payment` (its metadata) the way the daily numbers count a sale. No model.
+- `server/feedback.ts` — `customer_feedback`: the report's chapter votes and comments
+  (`report_section_feedback`, staff left out) and the Trustpilot review emails in the index, with
+  what it cannot see named every time.
 - `server/break-even.ts` — `break_even`: spend, visitors, finishers, buyers and revenue on the days
   `adCovers` says the ad data covers (the digest's basis), the level each lever alone must reach,
   and what-ifs. No model.
@@ -61,7 +71,8 @@ Claude Code) is the door people use; the operator's guide is
   date handling, the compute-twice reconciler, and the house-voice checks.
 - `server/act/` — the five tools that write (Slack, email drafts, Notion, Google Docs; decisions
   go through `record_decision` in the route). `server/see/` — Figma frames and page
-  screenshots as pixels.
+  screenshots as pixels, and `design-changes.ts` behind `design_changes`: two saved
+  versions of a Figma design compared in one call (any file, read off the link).
 - `tests/` — one file per concern; `scripts/brain-battery.ts` is the retrieval and MCP
   battery that runs against real data.
 

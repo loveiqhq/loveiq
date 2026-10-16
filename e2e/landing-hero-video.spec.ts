@@ -77,7 +77,7 @@ test.describe("Landing arm B — the hero video", () => {
 
   test("keeps the hero's own call to action", async ({ page }) => {
     await page.goto("/?variant=white_video");
-    await page.getByRole("link", { name: "Start my free test - hero" }).click();
+    await page.getByRole("link", { name: "Start my test now - hero" }).click();
     await page.waitForURL(/\/survey/);
   });
 
@@ -96,4 +96,65 @@ test.describe("Landing arm B — the hero video", () => {
     // Desktop: its top 194px from the top of the page, as drawn.
     if (vw >= 1024) expect(Math.abs(box!.y - 194)).toBeLessThanOrEqual(2);
   });
+});
+
+/**
+ * Marcus's condensed phone hero (Figma Report-3.0 `1604:5505`, 12.10), both arms alike.
+ * Below lg the slot sits right under the hero's button, so the video or question 1 is on
+ * the first screen (it used to start some 280px lower). The rating, the "taking the test"
+ * ticker and the privacy line follow the slot there, as the groups laid over the frame
+ * draw them; from 1024 up they stay under the button, beside the slot.
+ */
+test.describe("Landing hero — the slot right under the button on a phone", () => {
+  for (const [variant, slotId, gap] of [
+    // The grid's 40px gap; the video sits 12px into it (group `1637:616`: 28px).
+    ["white_card", "hero-card", 40],
+    ["white_video", "hero-video", 28],
+  ] as const) {
+    test(`${variant}: the slot follows the button, and the rating, ticker and privacy line follow the slot`, async ({
+      page,
+    }) => {
+      // The slot rises 24px into place on load; under reduced motion it starts there.
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`/?variant=${variant}`);
+      const hero = page.locator("section", { has: page.locator("h1") }).first();
+      // Each row renders twice, once per breakpoint; exactly one of each is on screen.
+      const rows = [
+        hero.getByText("4.9/5").filter({ visible: true }),
+        hero.getByText("people are taking the test right now").filter({ visible: true }),
+        hero.getByRole("link", { name: "Trust Center" }).filter({ visible: true }),
+      ];
+      for (const row of rows) await expect(row).toHaveCount(1);
+      // The eyebrow above the headline went with the 12.10 copy (Figma `1604:8233`).
+      await expect(hero.getByText("Anonymous · ~9 minutes · No account")).toHaveCount(0);
+      const vw = page.viewportSize()!.width;
+      const vh = page.viewportSize()!.height;
+      // The paragraph runs on below lg, as the phone frame draws it; the break after
+      // "research." is the desktop's alone.
+      const br = hero.locator("h1 + p br");
+      await expect(br).toHaveCount(1);
+      expect(await br.evaluate((el) => getComputedStyle(el).display)).toBe(
+        vw >= 1024 ? "inline" : "none"
+      );
+      const slot = await page.getByTestId(slotId).boundingBox();
+      expect(slot).not.toBeNull();
+      const [rating, ticker, privacy] = await Promise.all(rows.map((r) => r.boundingBox()));
+      if (vw >= 1024) {
+        // In the copy column, left of the slot.
+        expect(rating!.x + rating!.width).toBeLessThan(slot!.x);
+        return;
+      }
+      const cta = await page.getByRole("link", { name: "Start my test now - hero" }).boundingBox();
+      expect(cta).not.toBeNull();
+      expect(Math.abs(slot!.y - (cta!.y + cta!.height) - gap)).toBeLessThanOrEqual(2);
+      // On the first screen of every phone project (iPhone 15 Pro's is 659px tall).
+      expect(slot!.y).toBeLessThan(vh - 100);
+      // Under the slot (the row starts 24px below it; its text line a little lower), in order.
+      const below = rating!.y - (slot!.y + slot!.height);
+      expect(below).toBeGreaterThanOrEqual(20);
+      expect(below).toBeLessThanOrEqual(60);
+      expect(ticker!.y).toBeGreaterThan(rating!.y);
+      expect(privacy!.y).toBeGreaterThan(ticker!.y);
+    });
+  }
 });

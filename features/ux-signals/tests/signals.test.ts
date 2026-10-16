@@ -225,6 +225,14 @@ describe("each measure", () => {
   it("CTA visibility: only on a report with locked chapters, and only when one was on screen", () => {
     expect(measure("CTA visibility", [ev(0, "report_viewed")])).toBeNull();
     expect(measure("CTA visibility", [ev(0, "locked_card_price_shown")])).toBe("not seen");
+    // Report 3.0 shows no price, so it marks a locked report with locked_chapters_shown.
+    expect(measure("CTA visibility", [ev(0, "locked_chapters_shown")])).toBe("not seen");
+    expect(
+      measure("CTA visibility", [
+        ev(0, "locked_chapters_shown"),
+        ev(1, "cta_seen", { cta: "locked_chapter" }),
+      ])
+    ).toBe("seen");
     expect(
       measure("CTA visibility", [
         ev(0, "locked_card_price_shown"),
@@ -241,10 +249,11 @@ describe("each measure", () => {
       ev(36 * S, "begin_checkout", { plan: "core" }),
     ];
     expect(measure("CTA hesitation", v)).toBe(6 * S);
-    // Straight from the sticky bar to Stripe: no plans were shown to weigh.
+    // Straight to Stripe from outside the plans (V1's archetype list; the sticky bar until
+    // 09.10): no plans were shown to weigh.
     expect(measure("CTA hesitation", [ev(0, "begin_checkout")])).toBeNull();
-    // Closed, then pressed with no opening recorded since: the sticky bar, or a reopened
-    // picker that sent nothing. Unknown, not the 36 s since the closed opening.
+    // Closed, then pressed with no opening recorded since: a way straight to Stripe, or a
+    // reopened picker that sent nothing. Unknown, not the 36 s since the closed opening.
     const closed = [
       ev(0, "price_shown"),
       ev(4 * S, "paywall_dismissed"),

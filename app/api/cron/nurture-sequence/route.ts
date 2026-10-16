@@ -477,6 +477,13 @@ async function sendOne(input: SendInput): Promise<{ ok: true } | { ok: false; re
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
           }),
         },
+        // Resend echoes tags back on every webhook of this email (headers it does not), so
+        // the webhook can keep each email's delivery, opens and clicks per campaign
+        // (email_message_event). Ids only, never the address; both pass Resend's [A-Za-z0-9_-].
+        tags: [
+          { name: "stage", value: input.stage },
+          { name: "sub", value: String(input.submissionId) },
+        ],
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Resend timeout")), RESEND_TIMEOUT_MS)

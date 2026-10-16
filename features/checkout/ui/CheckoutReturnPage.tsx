@@ -22,6 +22,7 @@ import {
   trackReportPurchase,
 } from "@features/analytics/client";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
+import { clearReportNurturePromos } from "@features/survey/ui/hooks/surveySession";
 
 type ReturnState =
   | {
@@ -63,6 +64,14 @@ const CheckoutReturnPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   const planTitle = getReportPurchasePlanTitle(planId);
+  // Say WHAT is now open. A report bought from another archetype's row returns to that
+  // report, and "Your report is unlocked" left the buyer unsure which one they had paid for.
+  const unlockedWhat =
+    planId === "all_reports"
+      ? "All 14 archetype reports are"
+      : planId === "full_report" && archetype
+        ? `Your ${archetype} report is`
+        : "Your report is";
   const trackedTransactionIdRef = useRef<string | null>(null);
   const [state, setState] = useState<ReturnState>(
     sessionId
@@ -188,6 +197,12 @@ const CheckoutReturnPage: FC<Props> = ({
     state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;
   const isRedirecting = canReturnToUnlockedReport;
 
+  // The email's promo code is spent once Stripe completes the checkout that used it. Left
+  // in this tab it rode along on the reader's next checkout, which Stripe then refused.
+  useEffect(() => {
+    if (isPaidAndComplete) clearReportNurturePromos();
+  }, [isPaidAndComplete]);
+
   // Fire `checkout_return_viewed` exactly once per (sessionId, terminal state)
   // pair so a 30s polling loop doesn't double-count. Bind the submission
   // context first so persistence doesn't silently drop on null context.
@@ -275,7 +290,7 @@ const CheckoutReturnPage: FC<Props> = ({
             <p className="checkout-return__copy">{state.message}</p>
           ) : isRedirecting ? (
             <p className="checkout-return__copy">
-              <strong className="checkout-return__done">Payment complete.</strong> Your report is
+              <strong className="checkout-return__done">Payment complete.</strong> {unlockedWhat}{" "}
               unlocked. Redirecting you now…
             </p>
           ) : state.status === "ready" && isPaidAndComplete ? (

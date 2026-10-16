@@ -29,7 +29,7 @@ export const faqs: Faq[] = [
       "Your results will include core archetype, other archetype match scores, attachment style, communication style, risk orientation, strengths and challenges, practical insights and much more. The report is designed to feel both emotionally resonant and scientifically grounded.",
   },
   {
-    question: "Who is this app for?",
+    question: "Who is this for?",
     answer:
       "LoveIQ is for anyone seeking deeper clarity about their sexuality and relationship patterns. It is especially relevant for people who value self-awareness, emotional intelligence, and personal growth.",
   },

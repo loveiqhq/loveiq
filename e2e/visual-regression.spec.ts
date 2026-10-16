@@ -10,15 +10,15 @@ import { test, expect } from "@playwright/test";
 // If a baseline gets older than ~90 days, schedule a refresh — otherwise
 // "no regression" silently rots and stale screenshots become noise.
 //
-//   landing-page            last reviewed: 2026-08-23 — Linux baseline, `white` arm
-//   landing-page-white-prev last reviewed: 2026-08-23 — Linux baseline, `white_prev` arm
-//   landing-page-white-video  added 2026-10-06 — Linux baseline, `white_video` arm (round 3)
+//   landing-page            last reviewed: 2026-10-13 — Linux baseline, `white` arm (12.10 copy, #573)
+//   landing-page-white-prev last reviewed: 2026-10-13 — Linux baseline, `white_prev` arm
+//   landing-page-white-video  last reviewed: 2026-10-13 — Linux baseline, `white_video` arm (round 3)
 //   about-page              last reviewed: 2026-08-23 — Linux baseline
 //   survey-intro            last reviewed: 2026-08-23 — Linux baseline
 //   glossary-page           last reviewed: 2026-08-23 — Linux baseline
 //   glossary-term-page      last reviewed: 2026-08-23 — Linux baseline
 //   admin-login             last reviewed: 2026-08-23 — Linux baseline
-//   nav-mobile-menu-open    last reviewed: 2026-06-19 — Windows only; no Desktop Chrome run
+//   nav-mobile-menu-open    last reviewed: 2026-10-13 — Linux baseline (Mobile Chrome), phone hero of #573
 //
 // The committed `*-win32.png` set predates the Linux baselines and is only used
 // by anyone running the suite on Windows locally; CI compares the `*-linux.png`

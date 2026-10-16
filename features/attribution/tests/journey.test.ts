@@ -7,6 +7,7 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
+import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 
 function ok(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response;
@@ -50,15 +51,21 @@ function route(handlers: {
   quotes?: unknown;
   events?: unknown;
   reportSessions?: unknown;
+  payments?: unknown;
 }) {
   mockSupabaseFetch.mockImplementation(async (path: string) => {
     if (path.includes("/survey_submission?")) return ok(handlers.sub ?? [SUBMISSION]);
     if (path.includes("/report_price_quote?")) return ok(handlers.quotes ?? []);
     if (path.includes("/analytics_event?")) return ok(handlers.events ?? []);
     if (path.includes("/report_session?")) return ok(handlers.reportSessions ?? []);
+    if (path.includes("/payment?")) return ok(handlers.payments ?? []);
     throw new Error(`unexpected path: ${path}`);
   });
 }
+
+/** The query sent for one source — a mock answers any select, so the shape is asserted. */
+const queryFor = (source: string) =>
+  mockSupabaseFetch.mock.calls.map((c) => String(c[0])).find((p) => p.includes(source));
 
 describe("buildSubmissionJourney", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -79,12 +86,13 @@ describe("buildSubmissionJourney", () => {
     });
   });
 
-  it("fetches its four sources concurrently, not sequentially", async () => {
+  it("fetches its five sources concurrently, not sequentially", async () => {
     route({ quotes: [QUOTE_PURCHASED] });
     await buildSubmissionJourney(1296);
     // One call per source, issued in one Promise.all wave. report_session is
-    // the fourth — the server-side proof that the report was opened.
-    expect(mockSupabaseFetch).toHaveBeenCalledTimes(4);
+    // the server-side proof that the report was opened; payment says whether
+    // any money changed hands.
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(5);
   });
 
   it("masks the email and never exposes the raw address", async () => {
@@ -215,6 +223,100 @@ describe("buildSubmissionJourney", () => {
       const j = await buildSubmissionJourney(1296);
       expect(j?.milestones.reportViewedAt).toBeNull();
     });
+  });
+
+  /**
+   * Report 3.0 stamps `paywall_reached_at` server-side when the reader first meets
+   * an offer, usually the first offer card scrolling into view; `paywall_initiated`
+   * fires only when the pop-up or a lock tap opens the paywall, and only with
+   * analytics consent. Reading the event alone left "Paywall hit" red for readers
+   * the server saw reach it.
+   */
+  describe("paywall milestone", () => {
+    const stamped = (at: string) => [{ ...QUOTE_PURCHASED, paywall_reached_at: at }];
+
+    it("uses the server stamp when the event never fired", async () => {
+      route({ quotes: stamped("2026-08-24T10:18:00.000Z"), events: [] });
+      const j = await buildSubmissionJourney(1296);
+      expect(j?.milestones.paywallInitiatedAt).toBe("2026-08-24T10:18:00.000Z");
+    });
+
+    it.each([
+      ["the stamp", "2026-08-24T10:18:00.000Z", "2026-08-24T10:18:00.000Z"],
+      ["the event", "2026-08-24T10:25:00.000Z", "2026-08-24T10:20:00.000Z"],
+    ])("takes whichever saw the paywall first — here %s", async (_label, stamp, expected) => {
+      route({
+        quotes: stamped(stamp),
+        events: [{ event_type: "paywall_initiated", event_time: "2026-08-24T10:20:00.000Z" }],
+      });
+      expect((await buildSubmissionJourney(1296))?.milestones.paywallInitiatedAt).toBe(expected);
+    });
+
+    it("asks for the stamp", async () => {
+      route({});
+      await buildSubmissionJourney(1296);
+      expect(queryFor("/report_price_quote?")).toContain("paywall_reached_at");
+    });
+  });
+
+  /**
+   * `purchased_at` is stamped for a 100% coupon and a staff test alike, and 9 of
+   * the 12 messages ever to reach "Paid" (by 2026-10-06) took no money. Only the
+   * payment rows know — and, as with the digest's `quote_purchase_is_test`, a
+   * missing row is never evidence of a test.
+   */
+  describe("whether money changed hands", () => {
+    it.each([
+      ["a €0 coupon", [{ amount: 0, is_test: false }], true],
+      ["a staff test at full price", [{ amount: 39, is_test: true }], true],
+      [
+        "a coupon and a test",
+        [
+          { amount: 0, is_test: false },
+          { amount: 39, is_test: true },
+        ],
+        true,
+      ],
+      ["a real sale", [{ amount: 39, is_test: false }], false],
+      ["a real sale sent as a string", [{ amount: "39.00", is_test: false }], false],
+      [
+        "a real sale beside a comp",
+        [
+          { amount: 0, is_test: false },
+          { amount: 39, is_test: false },
+        ],
+        false,
+      ],
+      ["no payment row at all", [], false],
+    ])("%s", async (_label, payments, expected) => {
+      route({ quotes: [QUOTE_PURCHASED], payments });
+      expect((await buildSubmissionJourney(1296))?.noMoneyTaken).toBe(expected);
+    });
+
+    it("asks for this submission's succeeded payments, test rows included", async () => {
+      route({});
+      await buildSubmissionJourney(1296);
+      const query = queryFor("/payment?");
+      expect(query).toContain("personal_report!fk_payment_personal_report!inner(");
+      expect(query).toContain("personal_report.survey_submission_id=eq.1296");
+      expect(query).toContain("status=eq.succeeded");
+      expect(query).toContain("is_test");
+      expect(query).not.toContain("is_test=is.false");
+    });
+  });
+
+  it("marks a staff submission internal, without carrying the address", async () => {
+    delete process.env.ADMIN_TEST_EMAIL_REGEX;
+    __resetStaffEmailRegexForTests();
+    route({
+      sub: [{ ...SUBMISSION, app_user: { ...SUBMISSION.app_user, email: "qa@loveiq.org" } }],
+    });
+    const j = await buildSubmissionJourney(1296);
+    expect(j?.internal).toBe(true);
+    expect(JSON.stringify(j)).not.toContain("qa@loveiq.org");
+
+    route({});
+    expect((await buildSubmissionJourney(1296))?.internal).toBe(false);
   });
 
   it("still returns a journey when a source fails, rather than throwing", async () => {

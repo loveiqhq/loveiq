@@ -93,6 +93,100 @@ describe("POST /api/survey-tracking", () => {
     expect(rows.map((r: { time_spent_ms: number }) => r.time_spent_ms)).toEqual([0, 86_400_000]);
   });
 
+  it("records whether a step came from a phone or a computer, never the User-Agent", async () => {
+    const withAgent = (agent: string | null) =>
+      new Request("http://localhost/api/survey-tracking", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "valid-token",
+          ...(agent ? { "user-agent": agent } : {}),
+        },
+        body: JSON.stringify({ events: [validEvent(), validEvent()] }),
+      });
+    const cases: Array<[string | null, string | null]> = [
+      [
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+        "iOS",
+      ],
+      [
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
+        "Android",
+      ],
+      [
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+        "Desktop",
+      ],
+      [null, null],
+    ];
+    for (const [agent, device] of cases) {
+      mockFetchWithTimeout.mockClear();
+      expect((await POST(withAgent(agent))).status).toBe(200);
+      const rows = JSON.parse(mockFetchWithTimeout.mock.calls[0]![1].body);
+      expect(rows.map((r: { device_type: string | null }) => r.device_type)).toEqual([
+        device,
+        device,
+      ]);
+      expect(JSON.stringify(rows)).not.toContain("Mozilla");
+    }
+  });
+
+  it("flags a tablet beside the pricing class, from the User-Agent and the touch flag", async () => {
+    const post = (agent: string | null, touch?: unknown) =>
+      POST(
+        new Request("http://localhost/api/survey-tracking", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": "valid-token",
+            ...(agent ? { "user-agent": agent } : {}),
+          },
+          body: JSON.stringify({
+            events: [validEvent()],
+            ...(touch === undefined ? {} : { touch }),
+          }),
+        })
+      );
+    const mac =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+    const cases: Array<[string | null, unknown, boolean | null, string | null]> = [
+      // iPadOS Safari sends a Mac User-Agent: only the touch flag tells it from a Mac.
+      [mac, true, true, "Desktop"],
+      [mac, false, false, "Desktop"],
+      [mac, undefined, false, "Desktop"],
+      [
+        "Mozilla/5.0 (iPad; CPU OS 12_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+        undefined,
+        true,
+        "iOS",
+      ],
+      [
+        "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+        true,
+        true,
+        "Android",
+      ],
+      [
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
+        true,
+        false,
+        "Android",
+      ],
+      // A bad flag never refuses the batch; no User-Agent is unknown.
+      [mac, "yes", false, "Desktop"],
+      [null, true, null, null],
+    ];
+    for (const [agent, touch, tablet, device] of cases) {
+      mockFetchWithTimeout.mockClear();
+      expect((await post(agent, touch)).status).toBe(200);
+      const [row] = JSON.parse(mockFetchWithTimeout.mock.calls[0]![1].body);
+      expect([row.is_tablet, row.device_type], `${agent} ${String(touch)}`).toEqual([
+        tablet,
+        device,
+      ]);
+    }
+  });
+
   it("returns 200 with valid batch of events", async () => {
     const res = await POST(makeRequest({ events: [validEvent()] }));
     expect(res.status).toBe(200);

@@ -8,7 +8,8 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 
 interface Props {
   quote: ReportPriceQuoteSnapshot | null;
-  onCheckout: () => void;
+  /** Opens the plans (ReportPage's pricing modal); the bar never goes to Stripe itself. */
+  onUnlock: () => void;
   hidden?: boolean;
   archetype?: string | null;
   /**
@@ -54,7 +55,7 @@ const GuaranteeBadge: FC<{ nodeId: string }> = ({ nodeId }) => (
 
 const ReportStickyUnlockBar: FC<Props> = ({
   quote,
-  onCheckout,
+  onUnlock,
   hidden = false,
   archetype,
   v4 = false,
@@ -88,10 +89,12 @@ const ReportStickyUnlockBar: FC<Props> = ({
 
   const handleClick = (variant: "mobile" | "desktop") => () => {
     trackStickyUnlockClicked({ variant, archetype });
-    // begin_checkout is counted by ReportPage.beginCheckout, which onCheckout calls.
-    // It used to fire here behind `if (quote)` while onCheckout ran regardless, so an
-    // unpriced click reached Stripe untracked — see that function for the numbers.
-    onCheckout();
+    // The plans first, then the payment page (Marcus, 09.10): until then this tap went
+    // straight to Stripe for the single report, past the plan the pop-up leads with.
+    // begin_checkout is counted by ReportPage.beginCheckout when a plan is pressed. It
+    // used to fire here behind `if (quote)` while checkout ran regardless, so an unpriced
+    // click reached Stripe untracked — see that function for the numbers.
+    onUnlock();
   };
 
   return (

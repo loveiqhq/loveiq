@@ -85,21 +85,22 @@ describe("the Summary", () => {
 });
 
 describe("Fantasy vs. Reality uses the column", () => {
-  // The table keeps its own 760: at the full 917 it set its names 600px from their
-  // scores. The map keeps its own 548, centred over the table, so the chapter's two
-  // figures share an axis. Centred in the 896 column since 30.09's copy width, it stood
-  // 68px right of the table's middle (final review, 30.09).
+  // The table runs the whole column like every other chapter (review 06.10: at its old
+  // 760 its toggles stood 136px short of the others'). The map keeps its own 548, centred
+  // in the column and so over the table, so the chapter's two figures share an axis.
   it("grows the map's plot to 520, centred over the table", () => {
     const map = ruleIn(".rv3.rv4 .rv4-fvm");
-    expect(map).toContain("margin-left: max(0px, (min(760px, 100%) - 548px) / 2)");
+    expect(map).toContain("margin-left: max(0px, (100% - 548px) / 2)");
     expect(map).toContain("width: min(548px, 100%)");
     expect(ruleIn(".rv3.rv4 .rv4-fvm__img")).toContain("--fvm-plot: min(520px, 100cqi - 28px)");
   });
 
-  it("runs the table across the copy measure with wider score columns", () => {
-    expect(ruleIn(".rv3.rv4 .rv4-fvt")).toContain("width: min(760px, 100%)");
+  it("runs the table across the whole column, its score columns growing with it", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-fvt")).toContain("width: 100%");
+    expect(ruleIn(".rv3.rv4 .rv4-fvt")).not.toContain("760px");
+    // 30% each, as V2's 896 frame spends 430 on them (Figma 8146:76002), never under 140.
     expect(ruleIn(".rv3.rv4 .rv4-fvt__cols,\n  .rv3.rv4 .rv4-fvt__row")).toContain(
-      "grid-template-columns: minmax(0, 1fr) repeat(2, 140px)"
+      "grid-template-columns: minmax(0, 1fr) repeat(2, clamp(140px, 30%, 280px))"
     );
   });
 });

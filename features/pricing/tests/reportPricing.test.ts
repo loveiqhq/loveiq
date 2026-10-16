@@ -23,6 +23,7 @@ import {
   getDiscountAdjustment,
   getPricingBucketsForPlan,
   getReportPriceQuoteForContext,
+  markReportPriceQuotePurchased,
   normalizePriceEnding,
   pricingArmForReport,
 } from "@features/pricing/logic/reportPricing";
@@ -83,19 +84,19 @@ describe("reportPricing", () => {
   describe("price list (Pricing 3.0)", () => {
     // Two products on two price lists, 50/50 (the Pricing_3.0 tab of "Tracking &
     // Pricing"). These assert the exact numbers because they are what the reader is
-    // charged; the re-sync migration carries the same four rows, and the test below
-    // reads them out of it so the two cannot drift.
-    it("full_report is €29.99 or €14.99, each at its own anchor so neither strikes", () => {
+    // charged; the re-sync migrations carry the same four rows, and the test below
+    // reads them out of them so the two cannot drift. List B was lowered on 2026-10-08.
+    it("full_report is €29.99 or €4.99, each at its own anchor so neither strikes", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
         { code: "A3", weight: 50, msrpCents: 2999, startingCents: 2999 },
-        { code: "B3", weight: 50, msrpCents: 1499, startingCents: 1499 },
+        { code: "B3", weight: 50, msrpCents: 499, startingCents: 499 },
       ]);
     });
 
-    it("all_reports is €39.99 (strike €49.99) or €19.99 (strike €29.99)", () => {
+    it("all_reports is €39.99 (strike €49.99) or €6.99 (strike €9.99)", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
         { code: "A3", weight: 50, msrpCents: 4999, startingCents: 3999 },
-        { code: "B3", weight: 50, msrpCents: 2999, startingCents: 1999 },
+        { code: "B3", weight: 50, msrpCents: 999, startingCents: 699 },
       ]);
     });
 
@@ -109,21 +110,36 @@ describe("reportPricing", () => {
     });
 
     it("re-syncs existing quotes to exactly these prices", () => {
-      const sql = readFileSync(
-        join(process.cwd(), "supabase/migrations/20261005120100_pricing_3_resync_quotes.sql"),
-        "utf8"
-      );
-      const rows = [
-        ...sql.matchAll(
-          /\('(full_report|all_reports)'(?:::text)?,\s*'(A3|B3)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
+      const migration = (name: string) =>
+        readFileSync(join(process.cwd(), "supabase/migrations", name), "utf8");
+      const cents = (euros: string) => Math.round(Number(euros) * 100);
+      // A3 is still the 3.0 launch re-sync's; B3 is the 2026-10-08 one's, which moves
+      // only rows already on B3.
+      const launch = [
+        ...migration("20261005120100_pricing_3_resync_quotes.sql").matchAll(
+          /\('(full_report|all_reports)'(?:::text)?,\s*'(A3)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
         ),
       ].map(([, plan, code, msrp, starting]) => ({
         plan,
         code,
-        msrpCents: Math.round(Number(msrp) * 100),
-        startingCents: Math.round(Number(starting) * 100),
+        msrpCents: cents(msrp),
+        startingCents: cents(starting),
       }));
-      expect(rows).toHaveLength(4);
+      const listBSql = migration("20261008120000_pricing_3_list_b_lower_resync.sql");
+      expect(listBSql).toContain("AND q.experiment_group = 'B3'");
+      const listB = [
+        ...listBSql.matchAll(
+          /\('(full_report|all_reports)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
+        ),
+      ].map(([, plan, msrp, starting]) => ({
+        plan,
+        code: "B3",
+        msrpCents: cents(msrp),
+        startingCents: cents(starting),
+      }));
+      const rows = [...launch, ...listB];
+      expect(launch).toHaveLength(2);
+      expect(listB).toHaveLength(2);
       for (const row of rows) {
         const bucket = getPricingBucketsForPlan(row.plan as "full_report" | "all_reports").find(
           (b) => b.code === row.code
@@ -309,6 +325,155 @@ describe("reportPricing", () => {
         ],
       })
     );
+  });
+
+  it("credits the singles already paid on the report against the All 14 quote", async () => {
+    const allQuote = {
+      id: 78,
+      personal_report_id: 9,
+      survey_submission_id: 42,
+      user_id: 7,
+      plan: "all_reports",
+      currency: "EUR",
+      experiment_group: "B3",
+      forced_paywall_arm: null,
+      base_price_bucket: "B3",
+      base_price: 9.99,
+      msrp: 9.99,
+      starting_price: 6.99,
+      current_price: 6.99,
+      initial_price: 6.99,
+      discount_step: 0,
+      discount_multiplier: 1,
+      pricing_cluster_id: "B3-all_reports-B3-tier_2-desktop-google-serious-engaged-d0",
+      country_tier: "tier_2",
+      country_multiplier: 1,
+      device_type: "Desktop",
+      device_multiplier: 1,
+      traffic_source: "google",
+      traffic_multiplier: 1,
+      behavioral_bucket: "serious",
+      behavioral_multiplier: 1,
+      engagement_score: 40,
+      engagement_multiplier: 1,
+      report_preview_views: 1,
+      fantasy_signal_count: 1,
+      survey_duration_ms: 600000,
+      initial_price_timestamp: "2026-10-06T19:00:00.000Z",
+      expires_at: "2026-11-06T19:00:00.000Z",
+      checkout_started_at: null,
+      purchased_at: null,
+      metadata: null,
+      view_count: 1,
+    };
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) {
+          return createJsonResponse([
+            {
+              amount: 4.99,
+              refund_amount: null,
+              currency: "EUR",
+              metadata: { plan: "full_report" },
+            },
+          ]);
+        }
+        if (url.includes("select=metadata")) return createJsonResponse([]);
+        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+          return createJsonResponse([
+            {
+              id: 42,
+              user_id: 7,
+              utm_tracker: "utm_source=google",
+              duration_ms: 600000,
+              app_user: { id: 7, email: "user@example.com", utm_tracker: null, user_profile: null },
+            },
+          ]);
+        }
+        if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+          return createJsonResponse([]);
+        }
+        if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+          return createJsonResponse([{ id: 1 }]);
+        }
+        if (
+          url.includes("/rest/v1/report_price_quote?personal_report_id=eq.9&plan=eq.all_reports")
+        ) {
+          return createJsonResponse([allQuote]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/report_price_quote?id=eq.78")) {
+          const patch = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+          return createJsonResponse([{ ...allQuote, ...patch }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const quote = await getReportPriceQuoteForContext({
+      now: new Date("2026-10-07T10:00:00.000Z"),
+      plan: "all_reports",
+      reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+    });
+
+    // €6.99 less the €4.99 single bought on this report.
+    expect(quote).toEqual(
+      expect.objectContaining({ chargedPriceCents: 200, upgradeCreditCents: 499 })
+    );
+    // The stored quote keeps the list price: the credit is never written back.
+    const patches = mockFetchWithTimeout.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === "PATCH"
+    );
+    for (const [, options] of patches) {
+      expect(JSON.parse((options as { body: string }).body).current_price ?? 6.99).toBe(6.99);
+    }
+  });
+
+  it("checkout refuses rather than charge All 14 without its credit", async () => {
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) {
+        return { ok: false, status: 503, json: async () => ({}) } as Response;
+      }
+      if (url.includes("/rest/v1/report_price_quote?id=eq.78")) {
+        return createJsonResponse([
+          {
+            id: 78,
+            personal_report_id: 9,
+            plan: "all_reports",
+            experiment_group: "B3",
+            base_price_bucket: "B3",
+            base_price: 9.99,
+            msrp: 9.99,
+            starting_price: 6.99,
+            current_price: 6.99,
+            initial_price: 6.99,
+            discount_step: 0,
+            discount_multiplier: 1,
+            metadata: null,
+          },
+        ]);
+      }
+      if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+        return createJsonResponse([
+          { id: 42, user_id: 7, utm_tracker: null, duration_ms: 1, app_user: { id: 7 } },
+        ]);
+      }
+      return createJsonResponse([]);
+    });
+    const args = {
+      now: new Date("2026-10-07T10:00:00.000Z"),
+      plan: "all_reports" as const,
+      quoteId: 78,
+      reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+    };
+
+    // The pay screen falls back to the full price...
+    await expect(getReportPriceQuoteForContext(args)).resolves.toEqual(
+      expect.objectContaining({ chargedPriceCents: 699 })
+    );
+    // ...but checkout must not charge it after the screen may have shown the credit.
+    await expect(
+      getReportPriceQuoteForContext({ ...args, strictUpgradeCredit: true })
+    ).rejects.toThrow("upgrade_credit_lookup_failed");
   });
 
   it("reuses the original same-session quote during checkout validation even after the ladder has stepped down", async () => {
@@ -574,7 +739,7 @@ describe("reportPricing", () => {
 
   it.each([
     { reportId: 4243, arm: "A3", starting: 3999, msrp: 4999 },
-    { reportId: 4242, arm: "B3", starting: 1999, msrp: 2999 },
+    { reportId: 4242, arm: "B3", starting: 699, msrp: 999 },
   ])(
     "an all_reports fresh quote in $arm is its list's base verbatim (step 0)",
     async ({ reportId, arm, starting, msrp }) => {
@@ -779,6 +944,43 @@ describe("reportPricing", () => {
       // would advertise "€9.99, was €45.99", a 78% discount nobody authorised.
       expect(quote.currentPriceCents).toBe(999);
       expect(quote.msrpCents).toBe(4599);
+    });
+  });
+
+  /**
+   * One full_report quote serves the single report for every archetype, so a second
+   * single is paid on the same quote. The audit's example, production quote 7897: bought
+   * at 19:42:55, and a checkout started on it again at 19:43:15.
+   */
+  describe("a second purchase on the same quote", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("keeps the first purchase's time and payment id", async () => {
+      const row: { metadata: Record<string, unknown>; purchased_at: string | null } = {
+        metadata: { generatedAt: "2026-10-06T19:40:00.000Z" },
+        purchased_at: null,
+      };
+      // PostgREST on this one row: a PATCH whose filter the row fails changes nothing.
+      mockFetchWithTimeout.mockImplementation(
+        async (url: string, options?: { body?: string; method?: string }) => {
+          if (options?.method !== "PATCH") return createJsonResponse([row]);
+          if (!url.includes("purchased_at=is.null") || row.purchased_at === null) {
+            Object.assign(row, JSON.parse(options.body ?? "{}"));
+          }
+          return createJsonResponse([]);
+        }
+      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+
+      vi.setSystemTime(new Date("2026-10-06T19:42:55.000Z"));
+      await markReportPriceQuotePurchased({ paymentId: 101, quoteId: 7897 });
+      vi.setSystemTime(new Date("2026-10-06T19:44:02.000Z"));
+      await markReportPriceQuotePurchased({ paymentId: 102, quoteId: 7897 });
+
+      expect(row.purchased_at).toBe("2026-10-06T19:42:55.000Z");
+      expect(row.metadata).toEqual({ generatedAt: "2026-10-06T19:40:00.000Z", paymentId: 101 });
     });
   });
 });

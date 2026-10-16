@@ -285,7 +285,16 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
       ) : null}
 
       <div className="rv3-sci" data-node-id="10360:9879">
-        <div className="rv3-sci__track" ref={trackRef} id={deck ? trackId : undefined}>
+        {/* A scroller with nothing focusable inside: focusable itself, so arrow keys can
+         * move it (axe scrollable-region-focusable, review 06.10). */}
+        <div
+          className="rv3-sci__track"
+          ref={trackRef}
+          id={deck ? trackId : undefined}
+          role="region"
+          aria-label="The disciplines behind this report"
+          tabIndex={0}
+        >
           {cards.map((card, i) => (
             <article
               key={card.title}

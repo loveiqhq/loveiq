@@ -71,11 +71,12 @@ const PRICING_SIGNAL_SELECT = [
  * in Drive, agreed at the 1 Oct sync and launched with the new paygate (Figma
  * 1382:2557). Two products, two price lists, 50/50:
  *
- *   all_reports  "All 14 Archetype Reports"     A3 €39.99 (strike €49.99)   B3 €19.99 (strike €29.99)
- *   full_report  "Only Your Highest Archetype"  A3 €29.99 (no strike)       B3 €14.99 (no strike)
+ *   all_reports  "All 14 Archetype Reports"     A3 €39.99 (strike €49.99)   B3 €6.99 (strike €9.99)
+ *   full_report  "Only Your Highest Archetype"  A3 €29.99 (no strike)       B3 €4.99 (no strike)
  *
  * A3 is the price the Figma frames show; B3 is the "one lower price tier" Marcus asked
- * for beside it. `startingCents` is what the reader is charged and `msrpCents` the
+ * for beside it. B3 was €19.99 (strike €29.99) and €14.99 until the sheet lowered it on
+ * 2026-10-08 (re-synced by 20261008120000). `startingCents` is what the reader is charged and `msrpCents` the
  * struck-out anchor; a bucket priced at its own anchor draws no strike.
  *
  * WHY "A3"/"B3" AND NOT "A"/"B". `experiment_group` already holds A and B from the
@@ -114,13 +115,13 @@ const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [{ code: "B", weight: 100, msrpCents: 2999, startingCents: 999 }],
   full_report: [
     { code: "A3", weight: 50, msrpCents: 2999, startingCents: 2999 },
-    { code: "B3", weight: 50, msrpCents: 1499, startingCents: 1499 },
+    { code: "B3", weight: 50, msrpCents: 499, startingCents: 499 },
   ],
   // Retired with Pricing 3.0; kept for historical rows only.
   core: [{ code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 }],
   all_reports: [
     { code: "A3", weight: 50, msrpCents: 4999, startingCents: 3999 },
-    { code: "B3", weight: 50, msrpCents: 2999, startingCents: 1999 },
+    { code: "B3", weight: 50, msrpCents: 999, startingCents: 699 },
   ],
 };
 
@@ -234,6 +235,13 @@ export interface ReportPriceQuoteSnapshot {
    * no change in behaviour.
    */
   chargedPriceCents: number;
+  /**
+   * All 14 only: the credit taken off `chargedPriceCents` (`applyUpgradeCredit`), never
+   * more than the price. Absent or 0 when nothing is credited.
+   */
+  upgradeCreditCents?: number;
+  /** All 14 only: everything already paid on the report, which the pay screen names. */
+  upgradePaidCents?: number;
   discountMultiplier: number;
   discountStep: number;
   pricingClusterId: string;
@@ -672,6 +680,11 @@ function normalizeCountryCode(value: string | null | undefined) {
   return COUNTRY_NAME_TO_CODE[collapsed] ?? null;
 }
 
+/** The price tier a country (ISO code or English name) falls in, as quotes record it. */
+export function countryTierOf(code: string | null): string {
+  return getCountryPricing(code).tier;
+}
+
 function getCountryPricing(code: string | null) {
   const resolvedCode = normalizeCountryCode(code);
   return (
@@ -823,6 +836,45 @@ export function getEngagementScore({
 
 function getEngagementMultiplier(engagementScore: number) {
   return engagementScore >= 40 ? 1.1 : 1;
+}
+
+/**
+ * The per-visitor factors a quote records and, while `pricing_uplift_enabled` is on, multiplies
+ * its arm's price by. For AP-Analytics' Payment page, read off the functions that price, so the
+ * page never states a factor the pricing does not use.
+ */
+export function personalPriceFactors() {
+  const tiers = new Map<string, number>();
+  for (const { tier, multiplier } of Object.values(COUNTRY_CODE_TO_TIER))
+    tiers.set(tier, multiplier);
+  tiers.set("default", getCountryPricing(null).multiplier);
+  return {
+    country: [...tiers].map(([key, multiplier]) => ({ key, multiplier })),
+    device: (["iOS", "Desktop", "Android"] as const).map((key) => ({
+      key,
+      multiplier: getDeviceMultiplier(key),
+    })),
+    traffic: (["google", "direct", "newsletter", "instagram", "tiktok", "other"] as const).map(
+      (key) => ({ key, multiplier: getTrafficMultiplier(key) })
+    ),
+    behaviour: (
+      [
+        ["zero", "0"],
+        ["light", "50"],
+        ["moderate", "100"],
+        ["consistent", "300"],
+        ["serious", "700"],
+      ] as const
+    ).map(([key, answer]) => ({ key, multiplier: getBehavioralPricing(answer).multiplier })),
+    engagement: [
+      { key: "under 40", multiplier: getEngagementMultiplier(0) },
+      { key: "40 or more", multiplier: getEngagementMultiplier(40) },
+    ],
+    discount: PLAN_LADDERS.full_report.map((step) => ({
+      key: `step ${step.step}`,
+      multiplier: step.multiplier,
+    })),
+  };
 }
 
 export function getDiscountAdjustment({
@@ -1455,6 +1507,7 @@ export async function getReportPriceQuoteForContext({
   quoteId,
   reportSessionId,
   reportToken,
+  strictUpgradeCredit = false,
   submissionId,
   userAgent,
 }: {
@@ -1464,6 +1517,8 @@ export async function getReportPriceQuoteForContext({
   quoteId?: number;
   reportSessionId?: string | null;
   reportToken?: string | null;
+  /** Checkout: throw when the All 14 credit cannot be read, never charge without it. */
+  strictUpgradeCredit?: boolean;
   submissionId?: number | null;
   userAgent?: string | null;
 }) {
@@ -1488,16 +1543,20 @@ export async function getReportPriceQuoteForContext({
     });
 
     if (validatedQuote) {
-      return validatedQuote;
+      return withUpgradeCredit(validatedQuote, context.personalReportId, strictUpgradeCredit);
     }
   }
 
-  return resolveQuote({
-    context,
-    now,
-    plan,
-    pricingSessionId,
-  });
+  return withUpgradeCredit(
+    await resolveQuote({
+      context,
+      now,
+      plan,
+      pricingSessionId,
+    }),
+    context.personalReportId,
+    strictUpgradeCredit
+  );
 }
 
 export async function getReportPriceQuotesForContext({
@@ -1537,11 +1596,79 @@ export async function getReportPriceQuotesForContext({
         plan,
         pricingSessionId,
       });
-      return [plan, quote] as const;
+      return [plan, await withUpgradeCredit(quote, context.personalReportId)] as const;
     })
   );
 
   return Object.fromEntries(results) as ReportPriceQuotes;
+}
+
+/** Stripe takes no card payment under €0.50, so a smaller remainder is credited too. */
+const STRIPE_MIN_CHARGE_CENTS = 50;
+
+/**
+ * What a reader already paid for reports on this personal report: every succeeded payment
+ * except All 14 itself, less refunds. All 14 credits it, so singles never add up to more
+ * than All 14 costs. Before this, two singles on the lower list (then €29.98) cost more
+ * than All 14 (€19.99), and report 165 bought three in one night. €0 comps add nothing, and
+ * staff test purchases are left out like everywhere money is counted.
+ */
+export async function getUpgradeCreditCents(personalReportId: number): Promise<number> {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&is_test=is.false&select=amount,refund_amount,currency,metadata&limit=100`
+  );
+  if (!response.ok) {
+    throw new Error("upgrade_credit_lookup_failed");
+  }
+  const rows = (await response.json()) as Array<{
+    amount: number | string | null;
+    refund_amount: number | string | null;
+    currency: string | null;
+    metadata: Record<string, unknown> | null;
+  }>;
+  return rows.reduce((total, row) => {
+    if (row.metadata?.plan === "all_reports") return total;
+    if ((row.currency ?? "EUR").toUpperCase() !== "EUR") return total;
+    const paid =
+      fromEuroAmount(Number(row.amount)) - fromEuroAmount(Number(row.refund_amount ?? 0));
+    return total + Math.max(0, paid);
+  }, 0);
+}
+
+/** Take the credit off an All 14 quote; every other plan comes back as it is. */
+export function applyUpgradeCredit(
+  quote: ReportPriceQuoteSnapshot,
+  creditCents: number
+): ReportPriceQuoteSnapshot {
+  if (quote.plan !== "all_reports" || creditCents <= 0) return quote;
+  let charged = Math.max(0, quote.chargedPriceCents - creditCents);
+  if (charged < STRIPE_MIN_CHARGE_CENTS) charged = 0;
+  return {
+    ...quote,
+    chargedPriceCents: charged,
+    upgradeCreditCents: quote.chargedPriceCents - charged,
+    upgradePaidCents: creditCents,
+  };
+}
+
+/**
+ * A failed lookup shows the full price, as before the credit existed: never a broken pay
+ * screen. Checkout passes `strict`: charging the full price after the screen showed the
+ * credited one is worse than an error the reader can retry.
+ */
+async function withUpgradeCredit(
+  quote: ReportPriceQuoteSnapshot | null,
+  personalReportId: number,
+  strict = false
+): Promise<ReportPriceQuoteSnapshot | null> {
+  if (!quote || quote.plan !== "all_reports") return quote;
+  try {
+    return applyUpgradeCredit(quote, await getUpgradeCreditCents(personalReportId));
+  } catch (err) {
+    if (strict) throw err;
+    logger.warn({ err, personalReportId }, "pricing: upgrade credit lookup failed");
+    return quote;
+  }
 }
 
 /**
@@ -1613,15 +1740,23 @@ export async function markReportPriceQuotePurchased({
     metadata: Record<string, unknown> | null;
   }>;
   const existingMetadata = lookupRows[0]?.metadata ?? {};
-  const response = await supabaseServiceFetch(`/rest/v1/report_price_quote?id=eq.${quoteId}`, {
-    body: JSON.stringify({
-      metadata: paymentId ? { ...existingMetadata, paymentId } : existingMetadata,
-      purchased_at: new Date().toISOString(),
-      updated_date_time: new Date().toISOString(),
-    }),
-    headers: { Prefer: "return=minimal" },
-    method: "PATCH",
-  });
+  // Write-once: the FIRST purchase keeps the stamp and its payment id. One full_report
+  // quote serves the single report for every archetype, so a second single bought on it
+  // moved `purchased_at` later and replaced `paymentId`, and the first sale's day moved
+  // with it in every daily readout. Each payment row carries `pricing_quote_id`, so the
+  // later purchases are still found from the payment side.
+  const response = await supabaseServiceFetch(
+    `/rest/v1/report_price_quote?id=eq.${quoteId}&purchased_at=is.null`,
+    {
+      body: JSON.stringify({
+        metadata: paymentId ? { ...existingMetadata, paymentId } : existingMetadata,
+        purchased_at: new Date().toISOString(),
+        updated_date_time: new Date().toISOString(),
+      }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
 
   if (!response.ok) {
     throw new Error("pricing_quote_purchase_update_failed");

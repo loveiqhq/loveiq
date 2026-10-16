@@ -19,12 +19,15 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 let delegatedToken: string | null = "delegated-token";
+/** A distinct token for the export's owner, when a test needs to tell logins apart. */
+let ownerToken: string | null = null;
 const delegatedFor: string[] = [];
 vi.mock("@shared/http/google-oauth", () => ({
   DRIVE_SCOPE: "drive",
   getGoogleAccessToken: vi.fn(async () => "test-token"),
   getDelegatedToken: vi.fn(async (subject: string) => {
     delegatedFor.push(subject);
+    if (ownerToken && subject === "ec@loveiq.org") return ownerToken;
     // A colleague whose token is refused is how the sweep gate gets exercised.
     if (refuseColleagueToken.has(subject)) return null;
     return delegatedToken;
@@ -98,6 +101,17 @@ let files: unknown[] = [];
 let exportBody = "Summary\n\nWe agreed to ship the paywall.";
 const exportOverrides: Record<string, string> = {};
 let listOk = true;
+/** Folders carrying the team export's tag, and what each folder holds, by folder id. */
+let teamFolders: Array<{ id: string }> = [];
+const folderChildren: Record<string, Array<{ id: string; mimeType?: string }>> = {};
+let teamFolderCheckFails = false;
+/** The login each team export lookup was made with. */
+const lookupAuth: string[] = [];
+/** The walk's own listing calls, not the team export check that runs before them. */
+const isWalkListing = (u: string) => {
+  const q = decodeURIComponent(u);
+  return u.includes("/files?q=") && !q.includes("properties has") && !q.includes("' in parents");
+};
 let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
 let exportFails = false;
@@ -132,7 +146,7 @@ let sheetValues: Array<{ values?: unknown[][] }> = [
 let sheetsApiFails = false;
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
-  fetchWithTimeout: vi.fn(async (url: string) => {
+  fetchWithTimeout: vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
     httpCalls.push(url);
     if (url.startsWith("https://sheets.googleapis.com/")) {
       if (sheetsApiFails) return { ok: false, status: 500, text: async () => "boom" };
@@ -146,6 +160,28 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       };
     }
     if (url.includes("/files?q=")) {
+      // The team export check, answered before the listing's failure switches below so it
+      // never uses them up.
+      const q = decodeURIComponent(url);
+      if (q.includes("properties has")) {
+        lookupAuth.push(init?.headers?.Authorization ?? "");
+        if (teamFolderCheckFails) return { ok: false, status: 403, text: async () => "denied" };
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ files: teamFolders }),
+          text: async () => "",
+        };
+      }
+      const parent = q.match(/'([^']+)' in parents/)?.[1];
+      if (parent) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ files: folderChildren[parent] ?? [] }),
+          text: async () => "",
+        };
+      }
       if (listTimeouts > 0) {
         listTimeouts -= 1;
         throw timeout(url);
@@ -374,6 +410,115 @@ describe("ingestDrive", () => {
     exportFailStatus = 500;
     exportBody = "Summary\n\nWe agreed to ship the paywall.";
     targets = {};
+    teamFolders = [];
+    for (const k of Object.keys(folderChildren)) delete folderChildren[k];
+    teamFolderCheckFails = false;
+    ownerToken = null;
+    lookupAuth.length = 0;
+  });
+
+  /**
+   * THE TEAM'S DATA EXPORT IS NEVER INDEXED. Found 2026-10-11: the walk had put about
+   * 38,000 chunks of it (customers' answers, orientation, birthdays) into the corpus.
+   * Every file under the tagged folder goes, at any depth and whoever owns it, and the
+   * walk stops rather than index anything when the folder cannot be checked.
+   */
+  it("never fetches a file from the team's data export, at any depth or owner", async () => {
+    teamFolders = [{ id: "ZZteamFolderZZ" }];
+    folderChildren.ZZteamFolderZZ = [
+      { id: "ZZexportCsvZZ" },
+      { id: "ZZsubfolderZZ", mimeType: "application/vnd.google-apps.folder" },
+    ];
+    folderChildren.ZZsubfolderZZ = [{ id: "ZZmarcusAnalysisZZ" }];
+    colleagueMailboxes.value = ["mb@loveiq.org"];
+    colleagueFiles["mb@loveiq.org"] = [
+      { ...FILE, id: "ZZmarcusAnalysisZZ", name: "explorer-sample.csv", mimeType: "text/csv" },
+    ];
+    files = [
+      FILE,
+      { ...FILE, id: "ZZexportCsvZZ", name: "user_profile.csv", mimeType: "text/csv" },
+    ];
+    await ingestDrive(STAMP);
+    const written = dbCalls
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string }>);
+    // Positive control: the ordinary document is still indexed.
+    expect(written.map((r) => r.source_id)).toEqual(["doc:1AbCdEf"]);
+    for (const id of ["ZZexportCsvZZ", "ZZmarcusAnalysisZZ"]) {
+      expect(httpCalls.some((u) => u.includes(`/files/${id}`))).toBe(false);
+    }
+  });
+
+  it("looks only at folders the export's owner holds, and skips an exported file anywhere", async () => {
+    // A file the export wrote, moved out of the folder: its own tag keeps it out.
+    files = [
+      FILE,
+      {
+        ...FILE,
+        id: "ZZmovedExportZZ",
+        name: "payment.csv",
+        mimeType: "text/csv",
+        properties: { loveiq_team_export_file: "production" },
+      },
+    ];
+    await ingestDrive(STAMP);
+    const lookup = decodeURIComponent(
+      httpCalls.find((u) => decodeURIComponent(u).includes("properties has"))!
+    );
+    // A stranger can share a tagged folder; nobody else can make one ec@ owns.
+    expect(lookup).toContain("'ec@loveiq.org' in owners");
+    expect(httpCalls.some((u) => u.includes("/files/ZZmovedExportZZ"))).toBe(false);
+    expect(httpCalls.some((u) => u.includes("/files/1AbCdEf"))).toBe(true);
+  });
+
+  it("stops the walk when the export folder is too deep to check, or the clock runs out", async () => {
+    teamFolders = [{ id: "ZZteamFolderZZ" }];
+    folderChildren.ZZteamFolderZZ = Array.from({ length: 60 }, (_, i) => ({
+      id: `ZZsub${i}ZZ`,
+      mimeType: "application/vnd.google-apps.folder",
+    }));
+    expect((await ingestDrive(STAMP)).skipped).toBe("team-export-check-failed");
+    let calls = 0;
+    expect((await ingestDrive(STAMP, () => ++calls > 2)).skipped).toMatch(
+      /team-export-check-failed|drive-time-budget/
+    );
+    expect(dbCalls.some((c) => c.method !== "GET" && c.path.includes("brain_chunk"))).toBe(false);
+  });
+
+  it("checks the export folder as its owner, so a colleague's file in it is covered too", async () => {
+    const before = process.env.GOOGLE_WORKSPACE_ADMIN;
+    process.env.GOOGLE_WORKSPACE_ADMIN = "admin@loveiq.org";
+    try {
+      ownerToken = "owner-token";
+      await ingestDrive(STAMP);
+      expect(delegatedFor).toContain("ec@loveiq.org");
+      expect(lookupAuth).toEqual(["Bearer owner-token"]);
+    } finally {
+      if (before === undefined) delete process.env.GOOGLE_WORKSPACE_ADMIN;
+      else process.env.GOOGLE_WORKSPACE_ADMIN = before;
+    }
+  });
+
+  it("still reaches the sweep when every listed file was the export's", async () => {
+    teamFolders = [{ id: "ZZteamFolderZZ" }];
+    folderChildren.ZZteamFolderZZ = [{ id: "ZZexportCsvZZ" }];
+    files = [{ ...FILE, id: "ZZexportCsvZZ", name: "user_profile.csv", mimeType: "text/csv" }];
+    const res = await ingestDrive(STAMP);
+    expect(res.skipped).toBeUndefined();
+    // The sweep is recorded before it runs; its own guards then decide what goes.
+    expect(dbCalls.some((c) => c.method !== "GET" && c.path.includes("brain_sweep_state"))).toBe(
+      true
+    );
+  });
+
+  it("stops the walk, indexing nothing, when the export folder cannot be checked", async () => {
+    teamFolderCheckFails = true;
+    const res = await ingestDrive(STAMP);
+    expect(res.skipped).toBe("team-export-check-failed");
+    expect(dbCalls.some((c) => c.method !== "GET" && c.path.includes("brain_chunk"))).toBe(false);
   });
 
   /**
@@ -848,7 +993,7 @@ describe("ingestDrive", () => {
 
   it("asks Drive only for native Google Docs, which are the only exportable kind", async () => {
     await ingestDrive(STAMP);
-    const list = httpCalls.find((u) => u.includes("/files?q="))!;
+    const list = httpCalls.find(isWalkListing)!;
     expect(decodeURIComponent(list)).toContain("mimeType='application/vnd.google-apps.document'");
     expect(decodeURIComponent(list)).toContain("trashed=false");
   });
@@ -1091,7 +1236,7 @@ describe("PDFs — the 213 files that used to be invisible", () => {
     // type, no PDF is ever seen, and the ingester looks like it works.
     pdfText = "some real text ".repeat(40);
     await ingestDrive(STAMP, () => false, null);
-    const listing = httpCalls.find((u) => u.includes("/files?q="));
+    const listing = httpCalls.find(isWalkListing);
     expect(decodeURIComponent(listing ?? "")).toContain("mimeType='application/pdf'");
   });
 
@@ -1463,7 +1608,7 @@ describe("a transient Drive refusal is retried, not fatal", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
   });
 
-  const listCalls = () => httpCalls.filter((u) => u.includes("/files?q=")).length;
+  const listCalls = () => httpCalls.filter(isWalkListing).length;
 
   it("completes the walk when the listing 500s once", async () => {
     listTransientFailures = 1;
@@ -1556,7 +1701,7 @@ describe("a Drive request that times out is a refusal, not the end of the run", 
     targetFailure = null;
   });
 
-  const listCalls = () => httpCalls.filter((u) => u.includes("/files?q=")).length;
+  const listCalls = () => httpCalls.filter(isWalkListing).length;
 
   it("retries a listing page that timed out, and completes the walk", async () => {
     listTimeouts = 1;

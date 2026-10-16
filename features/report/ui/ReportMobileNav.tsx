@@ -262,7 +262,7 @@ const ReportMobileNav: FC<Props> = ({
             width={27}
             unoptimized
           />
-          <span className="report-mobile-topbar__wordmark" aria-label="LoveIQ Report">
+          <span className="report-mobile-topbar__wordmark" role="img" aria-label="LoveIQ Report">
             <span aria-hidden="true" className="report-mobile-topbar__love">
               Love
             </span>

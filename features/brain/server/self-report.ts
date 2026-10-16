@@ -36,6 +36,8 @@ export interface CallRow {
   error: string | null;
   /** Who asked: a member's address, "shared", or null before sign-in existed (2026-09-26). */
   actor?: string | null;
+  /** Searches only, from 2026-10-11: milliseconds per stage (embed, search, fallback). */
+  stage_ms?: { embed?: number; search?: number; fallback?: number } | null;
 }
 
 export interface WindowStats {
@@ -60,6 +62,15 @@ export interface WindowStats {
    * slowest first. Three, not ten, so last week's quiet tool can still be the baseline.
    */
   toolP95: Array<[string, number, number]>;
+  /** Where a search's time went, over the searches that recorded it. */
+  searchStages: {
+    timed: number;
+    embedP50: number | null;
+    searchP50: number | null;
+    searchP95: number | null;
+    /** Searches answered by the smaller keyword-only search because the full one failed. */
+    fallbacks: number;
+  };
   unanswered: Array<{ query: string; times: number; best: number | null }>;
 }
 
@@ -135,6 +146,12 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
     }
     asked.set(key, seen);
   }
+  const staged = searches.filter((r) => r.stage_ms);
+  const stage = (k: "embed" | "search") =>
+    staged
+      .map((r) => r.stage_ms?.[k])
+      .filter((n): n is number => typeof n === "number")
+      .sort((a, b) => a - b);
   return {
     calls: rows.length,
     bySurface: countBy(rows, (r) => r.surface ?? "unknown"),
@@ -152,6 +169,13 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
     p95: percentile(all, 0.95),
     slowest,
     toolP95,
+    searchStages: {
+      timed: staged.length,
+      embedP50: percentile(stage("embed"), 0.5),
+      searchP50: percentile(stage("search"), 0.5),
+      searchP95: percentile(stage("search"), 0.95),
+      fallbacks: staged.filter((r) => typeof r.stage_ms?.fallback === "number").length,
+    },
     unanswered: [...asked.values()].sort(
       (a, b) => b.times - a.times || (a.best ?? -1) - (b.best ?? -1)
     ),
@@ -270,7 +294,7 @@ export async function selfReport(
   const [calls, testCalls, runs, batteryRows] = await Promise.all([
     readAll<CallRow>(
       `/rest/v1/brain_query?select=created_at,surface,actor,tool,query:args->>query,source_count,` +
-        `content_score,latency_ms,error&created_at=gte.${enc(beforeSince)}` +
+        `content_score,latency_ms,error,stage_ms&created_at=gte.${enc(beforeSince)}` +
         `&surface=neq.mcp-battery&order=id.asc`
     ),
     supabaseFetch(
@@ -518,6 +542,16 @@ export function renderSelfReport(
               : "") +
             toolForTool(s, b)
     );
+    const st = s.searchStages;
+    if (st.timed) {
+      out.push(
+        `Search stages, over ${n(st.timed)} timed searches: embedding the question took ${secs(st.embedP50)} ` +
+          `at the middle, the ranked search ${secs(st.searchP50)} (95% within ${secs(st.searchP95)})` +
+          (st.fallbacks
+            ? `; ${n(st.fallbacks)} fell back to the smaller keyword-only search because the full one did not answer.`
+            : "; none needed the smaller fallback search.")
+      );
+    }
   }
 
   if (!r.batteries) {

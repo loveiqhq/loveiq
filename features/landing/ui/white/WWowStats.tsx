@@ -95,7 +95,11 @@ const stats: { graphic: ReactNode; value: string; body: string }[] = [
 ];
 
 const WWowStats: FC = () => (
-  <section className="bg-white py-16 lg:py-[92px]" aria-labelledby="w-wowstats-heading">
+  <section
+    className="bg-white py-16 lg:py-[92px]"
+    aria-labelledby="w-wowstats-heading"
+    data-landing-section="wow_stats"
+  >
     <div className="content-shell flex flex-col items-center">
       <div className="animate-on-scroll flex items-center gap-2.5">
         <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
@@ -108,7 +112,7 @@ const WWowStats: FC = () => (
         id="w-wowstats-heading"
         className="animate-on-scroll stagger-1 mt-3.5 max-w-[760px] text-center font-serif text-[clamp(1.6rem,4.5vw,2.125rem)] font-medium leading-[1.3] tracking-[-0.01em] text-[#161021]"
       >
-        Knowing your personality is the difference between guessing and asking.
+        Knowing your sexuality better is the difference between guessing and asking.
       </h2>
 
       <ul className="m-0 mt-10 grid w-full max-w-[1035px] list-none gap-[22px] p-0 sm:grid-cols-3">

@@ -80,6 +80,7 @@ vi.mock("@features/report/server/personalReport", () => ({
 }));
 
 import { POST } from "@/app/api/survey/route";
+import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 function validBody() {
   return {
@@ -231,7 +232,7 @@ describe("POST /api/survey notifications", () => {
     expect(flat).toContain("Landing page design: *Landing Page V1* (First Design)");
     // …and so is the price test, Pricing 3.0, once a quote has stamped its list.
     expect(flat).toContain("Report pricing");
-    expect(flat).toContain("Pricing 3.0 A");
+    expect(flat).toContain("Pricing 3.0 higher");
     // Concluded experiments are not listed as ones they were in — the paywall and
     // the survey theme since 2026-08-25. The fixture still carries both arms, so this
     // proves the axis list excludes them rather than the values being absent; they are
@@ -270,6 +271,30 @@ describe("POST /api/survey notifications", () => {
     const payload = JSON.parse((slackCall[1] as { body: string }).body) as { text: string };
     expect(payload.text).toContain("Survey completed #123");
     expect(payload.text).toContain("`a***@example.com`");
+  });
+
+  it("says how many of the survey's questions were answered in the fallback line too", async () => {
+    // One optional ask skipped: "61 of 62 questions", the same wording as the journey text.
+    mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 124, isExisting: false });
+    routeJourneyAndSlack(null);
+    const answered = SURVEY_TOTAL_QUESTIONS - 1;
+    const answers = Object.fromEntries(
+      Array.from({ length: answered }, (_, i) => [`q${i + 1}`, "yes"])
+    );
+
+    const res = await POST(makeRequest({ ...validBody(), answers }));
+    expect(res.status).toBe(200);
+
+    const slackCall = await vi.waitFor(() => {
+      const call = mockFetchWithTimeout.mock.calls.find((c) =>
+        String(c[0]).startsWith("https://hooks.slack.test/")
+      );
+      expect(call).toBeDefined();
+      return call!;
+    });
+    const payload = JSON.parse((slackCall[1] as { body: string }).body) as { text: string };
+    expect(payload.text).toContain("Survey completed #124");
+    expect(payload.text).toContain(`${answered} of ${SURVEY_TOTAL_QUESTIONS} questions`);
   });
 
   it("skips Slack for an existing submission and logs the skip", async () => {

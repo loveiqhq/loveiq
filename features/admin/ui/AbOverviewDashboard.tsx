@@ -362,8 +362,8 @@ export function AbOverviewView({
             ))}
           </div>
         ) : (
-          // A heading over an empty grid reads as a loading failure. Nothing has
-          // been randomised since the landing test concluded on 19 Sep 2026.
+          // A heading over an empty grid reads as a loading failure. Shown only when
+          // no axis is live (LIVE_AXES in experiment-readouts.ts).
           <p className="rounded-xl border border-white/10 bg-surface p-5 text-sm text-text-muted">
             Nothing is being tested right now. Every version we were comparing has been settled —
             the results are below.
@@ -371,9 +371,11 @@ export function AbOverviewView({
         )}
 
         <p className="mt-3 text-xs text-text-muted">
-          &ldquo;Not attributable&rdquo; means we have no record of which version that person saw —
-          mostly people who took the survey before we started recording it in June, plus anyone who
-          arrived without the cookie. They are counted here but excluded from the comparison.
+          &ldquo;Not attributable&rdquo; means we cannot credit that person to a version as the test
+          runs now — mostly people who took the survey before we started recording it in June,
+          anyone who arrived without the cookie, and readers who finished before a test&apos;s
+          current run began (the price lists of 8 Oct, the landing test&apos;s restart on 14 Oct).
+          They are counted here but excluded from the comparison.
         </p>
 
         {data.concludedReadouts.length > 0 && (

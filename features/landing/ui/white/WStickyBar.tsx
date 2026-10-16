@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import Link from "next/link";
-import { trackStartSurvey } from "@features/analytics/client";
+import { trackCtaSeen, trackStartSurvey } from "@features/analytics/client";
 
 /**
  * Persistent bottom CTA (Figma node 8947:8713). Slides in once the hero is out
@@ -12,9 +12,18 @@ const SHOW_AFTER_PX = 700;
 
 const WStickyBar: FC = () => {
   const [visible, setVisible] = useState(false);
+  // Counted the first time it slides in, so its clicks have a denominator.
+  const counted = useRef(false);
 
   useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > SHOW_AFTER_PX);
+    const onScroll = () => {
+      const show = window.scrollY > SHOW_AFTER_PX;
+      setVisible(show);
+      if (show && !counted.current) {
+        counted.current = true;
+        trackCtaSeen({ cta: "sticky_bar" });
+      }
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -33,16 +42,16 @@ const WStickyBar: FC = () => {
         {/* Below ~360px the label and the CTA fight for the same row; the CTA
             alone carries the message there. */}
         <p className="hidden whitespace-nowrap text-[12.5px] font-bold text-[#161021] min-[360px]:block sm:text-[13.5px]">
-          Your result is waiting.
+          Your report is waiting.
         </p>
         <Link
           href="/survey"
           tabIndex={visible ? undefined : -1}
-          aria-label="Continue free test - sticky bar"
+          aria-label="Start test - sticky bar"
           onClick={() => trackStartSurvey("sticky")}
           className="focus-visible-ring group inline-flex shrink-0 items-center gap-2.5 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] px-[17px] py-2.5 text-[15px] font-semibold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition duration-300 hover:shadow-[0_14px_30px_-10px_rgba(191,102,217,0.85)] sm:text-[16px]"
         >
-          <span>Continue free test</span>
+          <span>Start test</span>
           <svg
             aria-hidden
             className="h-[17px] w-[17px] transition-transform duration-300 motion-safe:group-hover:translate-x-1"

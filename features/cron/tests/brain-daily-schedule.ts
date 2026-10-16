@@ -8,6 +8,7 @@ type BrainDailyJob =
   | "brain-night-shift"
   | "brain-radar"
   | "brain-health"
+  | "brain-slack-media"
   | "brain-battery-retrieval"
   | "brain-battery-mcp";
 
@@ -45,18 +46,26 @@ export function brainDailySchedules(): Record<BrainDailyJob, string> {
   const mine = cronOf("brain-mine");
   const night = cronOf("brain-night-shift");
   const health = cronOf("brain-health");
-  if (!brief || !mine || !night || !health) {
+  const media = cronOf("brain-slack-media");
+  if (!brief || !mine || !night || !health || !media) {
     throw new Error(
-      "the clock no longer starts the brief, miner and Night Shift daily and the health report on Mondays"
+      "the clock no longer starts the brief, miner, Night Shift and Slack screenshots daily and the health report on Mondays"
     );
   }
   const runs = (job: string) => workflow.includes(`scripts/brain-cron.ts ${job}`);
   const records = (flag: string) => workflow.includes(`scripts/brain-battery.ts ${flag} --record`);
   if (
-    !["brain-brief", "brain-mine", "brain-radar", "brain-night-shift", "brain-health"].every(runs)
+    ![
+      "brain-brief",
+      "brain-mine",
+      "brain-radar",
+      "brain-night-shift",
+      "brain-health",
+      "brain-slack-media",
+    ].every(runs)
   ) {
     throw new Error(
-      "brain-daily.yml no longer runs brain-brief, brain-mine, brain-radar, brain-night-shift and brain-health"
+      "brain-daily.yml no longer runs brain-brief, brain-mine, brain-radar, brain-night-shift, brain-health and brain-slack-media"
     );
   }
   if (!records("--retrieval") || !records("--mcp")) {
@@ -69,6 +78,7 @@ export function brainDailySchedules(): Record<BrainDailyJob, string> {
     // Runs inside the miner's job, straight after it.
     "brain-radar": mine,
     "brain-health": health,
+    "brain-slack-media": media,
     "brain-battery-retrieval": health,
     "brain-battery-mcp": health,
   };

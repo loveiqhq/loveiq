@@ -39,6 +39,20 @@ function countRequiredAnswers(answers: SurveyAnswers): number {
 }
 
 /**
+ * "60 of 62 questions": how many a respondent answered out of the "Question X of N" they
+ * were shown, when the gap is the optional asks they skipped. Said as a bare count, the
+ * #incoming-surveys line read 60, 61 or 62 for the same survey and looked wrong. A count
+ * below the required number comes from an earlier survey (59 questions before
+ * 2026-10-06) whose total is not known here, so it stays a bare count.
+ */
+export function describeQuestionCount(answered: number): string {
+  if (answered >= SURVEY_REQUIRED_QUESTIONS && answered < SURVEY_TOTAL_QUESTIONS) {
+    return `${answered} of ${SURVEY_TOTAL_QUESTIONS} questions`;
+  }
+  return `${answered} question${answered === 1 ? "" : "s"}`;
+}
+
+/**
  * `answers` without optional answers that say nothing.
  *
  * A respondent who types into an optional box and then clears it leaves `""` behind, and

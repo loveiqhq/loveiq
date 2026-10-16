@@ -1,5 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { loadPeople } from "@features/brain/server/people";
+import { HIRING_MAILBOX_LIST } from "@features/brain/server/ingest/gmail";
 import { readAll } from "@features/brain/server/read-all";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { DRIVE_SCOPE, getDelegatedToken } from "@shared/http/google-oauth";
@@ -315,6 +316,8 @@ export async function googleThreads(
   const rows = await readAll<ChunkRow>(
     `/rest/v1/brain_chunk?select=source_id,body,meta` +
       `&source=eq.gmail&period_end=gte.${since}` +
+      // An ask is made of a person. The hiring inbox is nobody's, and anyone can write to it.
+      `&meta->>mailbox=not.in.${HIRING_MAILBOX_LIST}` +
       // Narrowed through the `fts` index first: without it every gmail body in the window
       // is read (15,042 buffers against 1,988, measured 2026-09-25). The phrases decide.
       `&fts=fts(english).${encodeURIComponent("(assigned & action & item) | (mentioned & comment)")}` +
