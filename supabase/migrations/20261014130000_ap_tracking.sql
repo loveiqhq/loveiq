@@ -455,7 +455,8 @@ AS $function$
         ) g
     ),
     'subs', (
-      SELECT coalesce(json_agg(json_build_object(
+      -- Two objects joined: one call takes at most 100 arguments, and a finisher has more.
+      SELECT coalesce(json_agg((jsonb_build_object(
                'id', x.id, 'day', x.day, 'at', x.created_date_time, 'startAt', x.start_date_time,
                'durationMs', x.duration_ms,
                'src', x.j->>'utm_source', 'med', x.j->>'utm_medium',
@@ -466,7 +467,8 @@ AS $function$
                'country', x.country, 'gender', x.gender, 'relationship', x.relationship, 'age', x.age,
                'openedAt', x.opened_at, 'visits', coalesce(x.visits, 0), 'returnedAt', x.returned_at,
                'readMs', coalesce(x.read_ms, 0), 'closed', coalesce(x.closed, 0),
-               'sessions', coalesce(x.sessions, '[]'::json),
+               'sessions', coalesce(x.sessions, '[]'::json)
+             ) || jsonb_build_object(
                'paywallAt', x.paywall_at, 'clickedAt', x.clicked_at, 'checkoutAt', x.checkout_at,
                'paidAt', x.paid_at, 'sales', coalesce(x.sales, 0), 'revenue', coalesce(x.revenue, 0),
                'gifted', coalesce(x.gifted, false), 'plan', x.plan, 'full', coalesce(x.full_paid, false),
@@ -480,7 +482,7 @@ AS $function$
                -- The person (an internal id, never shown) and their history, all time.
                'uid', x.uid, 'userFirstAt', x.user_first_at, 'userSubs', coalesce(x.user_subs, 0),
                'userPays', coalesce(x.user_pays, '[]'::json)
-             ) ORDER BY x.created_date_time), '[]'::json)
+             )) ORDER BY x.created_date_time), '[]'::json)
         FROM sub_rows x
     ),
     'money', (
