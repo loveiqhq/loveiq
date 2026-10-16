@@ -2,6 +2,7 @@ import { fetchFacts, type Facts } from "@features/admin/server/ap/facts";
 import { ALL, startsComplete, totals } from "@features/admin/server/ap/metrics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { brainDailyRollup, longDate } from "@features/brain/server/ingest/analytics";
+import { reportingDay } from "@shared/time/reporting-day";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 
 /**
@@ -24,10 +25,13 @@ import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
  */
 
 type RollupRow = Awaited<ReturnType<typeof brainDailyRollup>>[number];
-/** A day of the rollup with the dashboard's figures in place (asDashboard). */
-type Rollup = Omit<RollupRow, "survey_starts"> & {
-  /** Null on a day whose starts the dashboard does not hold every one of. */
-  survey_starts: number | null;
+/**
+ * A day of the series: the rollup's row with the dashboard's figures in place (asDashboard).
+ * A figure is null where it has no reading: starts the dashboard does not hold every one of,
+ * or the rollup's own figures on a Berlin day the UTC rollup has not reached yet.
+ */
+type Rollup = { day: string } & {
+  [K in Exclude<keyof RollupRow, "day">]: RollupRow[K] | null;
 };
 
 /** One GA4 day, read back from the brain's own day record. */
@@ -316,7 +320,9 @@ async function ga4Days(from: string, until: string): Promise<Map<string, Ga4Day>
  */
 export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[]> {
   const from = addDays(until, -(BASELINE_DAYS + 1 + extraDays));
-  const today = new Date().toISOString().slice(0, 10);
+  // The rollup counts back from its own UTC day; Berlin's runs ahead of it at night, and the
+  // later of the two reaches `from` either way.
+  const today = reportingDay();
   const span =
     Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) +
     1;
@@ -332,7 +338,9 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
     const row = byDay.get(d);
     out.push({
       day: d,
-      rollup: row && facts ? asDashboard(row, facts, d) : row,
+      // A Berlin day the UTC rollup has not reached (today, before 02:00) still has the
+      // dashboard's figures; its own are null, no reading rather than zero.
+      rollup: facts ? asDashboard(row ?? unreached(d), facts, d) : row,
       ga4: ga4.get(d),
       dashboard: facts !== null,
     });
@@ -350,7 +358,7 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
  * far" counts of a day's finishers, which grow with the day's age and so cannot be compared
  * day against day.
  */
-function asDashboard(row: RollupRow, facts: Facts, day: string): Rollup {
+function asDashboard(row: Rollup, facts: Facts, day: string): Rollup {
   const t = totals(facts, ALL, day, day);
   return {
     ...row,
@@ -360,6 +368,21 @@ function asDashboard(row: RollupRow, facts: Facts, day: string): Rollup {
     revenue: t.revenue,
   };
 }
+
+/** A day with no rollup row: every figure of the rollup's own unknown. */
+const unreached = (day: string): Rollup => ({
+  day,
+  unique_visitors: null,
+  survey_starts: null,
+  intro_completed: null,
+  submissions: null,
+  reports_created: null,
+  reports_paid: null,
+  revenue: null,
+  report_opens: null,
+  invites_sent: null,
+  top_sources: null,
+});
 
 /** Every metric that is unusual on `day`; with `onsetOnly`, only those that were not already unusual the day before. */
 export function jumpsOn(series: DaySeries[], day: string, onsetOnly = false): Reading[] {
@@ -667,7 +690,7 @@ export async function noticeJumps(
 ): Promise<number> {
   const hour = now.getUTCHours();
   if (hour < 7 || hour > 10) return 0;
-  const day = addDays(now.toISOString().slice(0, 10), -1);
+  const day = addDays(reportingDay(now), -1);
   const series = await loadSeries(day);
   const readings = jumpsOn(series, day, true);
   if (readings.length === 0) return 0;

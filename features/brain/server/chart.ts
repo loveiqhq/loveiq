@@ -23,6 +23,7 @@ import {
   type DaySeries,
 } from "@features/brain/server/jumps";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { reportingDay } from "@shared/time/reporting-day";
 import { signImagePayload } from "@shared/url/signed-image-url";
 
 /** A day as jumps.ts loads it, plus Google Ads spend when a chart asks for it. */
@@ -215,7 +216,9 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       `\`days\` is a whole number from ${MIN_DAYS} to ${MAX_DAYS}, not "${String(req.days)}".`
     );
   }
-  const today = isoDay(now);
+  // The dashboard's (Berlin) day: in UTC, from midnight to 02:00 the last whole day read as
+  // partial and today's date as one that had not happened yet.
+  const today = reportingDay(new Date(now));
   if (req.until !== undefined && req.until !== null && typeof req.until !== "string") {
     return refuse(`\`until\` must be a day like 2026-09-17, not ${JSON.stringify(req.until)}.`);
   }

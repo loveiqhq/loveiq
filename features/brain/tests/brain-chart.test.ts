@@ -207,6 +207,23 @@ describe("show_chart: what gets drawn", () => {
     expect(old.payload.footnote).toBe("daily, UTC");
   });
 
+  it("ends on Berlin's day, not UTC's, between midnight in Berlin and in London", async () => {
+    // 22:30 UTC on 26 Sep is 00:30 on 27 Sep in Berlin: the 26th is whole, the 27th is today.
+    const night = Date.parse("2026-09-26T22:30:00Z");
+    const byDefault = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
+    expect(byDefault.ok && byDefault.text).toContain("7 days to 26 Sep 2026");
+    const whole = await drawChart(
+      { metrics: ["visitors"], days: 7, until: "2026-09-26" } as never,
+      night
+    );
+    expect(whole.ok && whole.text).not.toContain("Today is still going");
+    const today = await drawChart(
+      { metrics: ["visitors"], days: 7, until: "2026-09-27" } as never,
+      night
+    );
+    expect(today.ok && today.text).toContain("Today is still going, so its numbers are partial.");
+  });
+
   it("groups thousands in an amount, as the reader would write it", async () => {
     dayOf = () => ({ rollup: { revenue: "250" } });
     const { payload, text } = await draw({ metrics: ["revenue"], days: 7 });

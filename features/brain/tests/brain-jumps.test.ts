@@ -607,6 +607,17 @@ describe("loadSeries counts as the AP-Analytics dashboard does", () => {
     expect(readMetric(metric("visitors"), s, "2026-09-25")).not.toBeNull();
   });
 
+  it("has the dashboard's figures for Berlin's today before the UTC rollup reaches it", async () => {
+    // 00:30 in Berlin on the 26th: the rollup's newest day is UTC's 25th.
+    vi.setSystemTime(new Date("2026-09-25T22:30:00Z"));
+    const s = await loadSeries("2026-09-26");
+    const today = s.find((d) => d.day === "2026-09-26")!;
+    expect(today.rollup).toMatchObject({ unique_visitors: 200, submissions: 4, revenue: 0 });
+    // The rollup's own figures for it are unknown, never zero.
+    expect(metric("report_opens").count!(today)).toBeNull();
+    expect(metric("reports_paid").count!(today)).toBeNull();
+  });
+
   it("serves the rollup's rows, and says so, when the dashboard's facts cannot be read", async () => {
     mockSupabaseFetch
       .mockReset()
