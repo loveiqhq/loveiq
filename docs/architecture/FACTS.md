@@ -209,8 +209,11 @@ be measured" on 2026-10-14. Since 2026-10-16 a trigger keeps every change to a q
 arm or list price in `report_price_quote_arm_history`, one row each. The table is
 backfilled from the 2026-10-06 and 2026-10-08 re-syncs. The list a quote was dealt is the
 `old_experiment_group` of its earliest row (by `changed_at`), else its own
-`experiment_group`. `experiments` and the digest's arm readouts read it that way, and
-`experiments` prints the 2.x test's final numbers. A payment's own
+`experiment_group`. `experiments` and the digest's arm readouts read it that way. A
+finished price test is read one stretch of unchanged prices at a time, because list A
+changed its prices in the middle of the 2.x test, on 2026-08-24. `rpc/get_price_list_changes`
+lists every change: the three 2.x ones are pinned there, with the deploy each moment comes
+from, and the history records every later one. A payment's own
 `metadata.experimentGroup` is stamped at checkout and never changes, so sales by price
 list (`get_business_numbers` with `group_by: price_list`) were always right.
 
