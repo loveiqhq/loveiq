@@ -46,7 +46,8 @@ import { delta, fmt } from "@features/admin/server/ap/format";
 
 const TOKEN = "test-token-ap-equality";
 const NOW = new Date("2026-10-16T10:00:00Z");
-const FIRST = "2026-08-01";
+// From the first records (DATA_START), so a period can reach back before them.
+const FIRST = "2026-03-21";
 for (let d = "2026-06-01"; d <= "2026-10-15"; d = addDays(d, 1)) ad.byDay.set(d, 40);
 
 const at = (day: string, hhmm: string) => `${day}T${hhmm}:00Z`;
@@ -219,6 +220,15 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
     expect(text).toMatch(/versus 2026-09-26 to 2026-10-05 \(10 days/);
     expect(text).toContain("the period just before, as the dashboard compares it");
     expect(linkQuery(text)).toBe("period=custom&from=2026-10-06&to=2026-10-15");
+    for (const t of await dashboard(linkQuery(text)))
+      expect(printed(text, t.label), t.label).toBe(expected(t));
+  });
+
+  it("compares with exactly the dashboard's period before, even where it predates the records", async () => {
+    // 25 Mar to 10 Apr: the 17 days before start on 8 Mar, before LoveIQ's first records.
+    const text = await tool({ since: "2026-03-25", until: "2026-04-10", compare_to: "previous" });
+    expect(text).toMatch(/versus 2026-03-08 to 2026-03-24 \(17 days/);
+    expect(text).toContain("The comparison period starts before LoveIQ's records");
     for (const t of await dashboard(linkQuery(text)))
       expect(printed(text, t.label), t.label).toBe(expected(t));
   });
