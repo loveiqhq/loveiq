@@ -689,6 +689,42 @@ const NEVER_LIST = new Set([
 ]);
 
 /**
+ * THE NEXT CALL, NOT ONLY THE FAULT, for HogQL slips PostHog answers with a 400.
+ *
+ * HogQL is ClickHouse's SQL, and a query written in Postgres's dialect fails on the first
+ * difference. All three real 400s 11-16 Oct 2026 were that: greatest() with three
+ * arguments, toDate(timestamp, 'Europe/Berlin'), and `countIf(started) AS started` with
+ * `started` used again. Each message and each rewrite here was run against our project on
+ * 2026-10-16, and so were slips that need nothing (FILTER (WHERE …), ::date, date_trunc and
+ * INTERVAL '7 days' all run), so only real errors get a hint.
+ */
+const HOGQL_FIXES: Array<[RegExp, string]> = [
+  [
+    /Function '(?:greatest|least)' expects 2 arguments/i,
+    "greatest() and least() take two arguments: nest them, greatest(a, greatest(b, c)).",
+  ],
+  [
+    /Function 'toDate' expects 1 argument/i,
+    "toDate takes one argument and already reads the project's Berlin time, so " +
+      "toDate(timestamp) is the Berlin day; toDate(toTimeZone(timestamp, 'UTC')) is the UTC day.",
+  ],
+  [
+    /Aggregate function .+ is found in WHERE/i,
+    "A name given with AS stands for its expression everywhere in the query, WHERE included, " +
+      "so countIf(started) AS started turns every other `started` into the count. Name each " +
+      "result apart from the columns (AS n_started), and filter on a count with HAVING.",
+  ],
+  [
+    /WITHIN GROUP is not supported/i,
+    "For a median write median(x) or quantile(0.5)(x); quantile(0.9)(x) for another percentile.",
+  ],
+  [
+    /Unsupported type cast to '(?:numeric|decimal)'/i,
+    "Cast with toFloat(x) or x::float, and round with round(toFloat(x), 2).",
+  ],
+];
+
+/**
  * Rows the product-analytics tool may return. A query with no LIMIT gets this one, and a
  * bigger LIMIT is refused: the answer lands in a chat, and a count that needs more rows
  * than this is a count that should be aggregated in the query.
@@ -1862,7 +1898,10 @@ export const TOOLS = [
       "LIMIT gets one, a bigger LIMIT is refused, and a longer result says so, so count and " +
       "GROUP BY rather than listing rows. Wrap a UNION as SELECT * FROM (…): PostHog cuts " +
       "every part of a bare one but the last at 100 rows, so it is refused. HogQL reads " +
-      "x != '' as true when x is NULL; use notEmpty(x).",
+      "x != '' as true when x is NULL; use notEmpty(x). HogQL is ClickHouse's SQL: greatest() " +
+      "and least() take two arguments, toDate(timestamp) is already the Berlin day and takes " +
+      "no zone, a name given with AS applies across the whole query (count AS n_started, never " +
+      "under a column's own name), and median(x) is a median.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2743,9 +2782,35 @@ export const EXTERNAL_SERVICES: Record<
       "TO COUNT ANYTHING (people, plays, taps, a rate), use query_product_analytics, which " +
       "runs a HogQL query on the server. GET /events here returns whole raw events, each with " +
       "every property, so a count read that way overflows the answer long before it is " +
-      "complete.",
+      "complete. /query and the computed /insights/trend, /funnel and /retention endpoints " +
+      "are answered with that advice and never sent: over GET with this key PostHog refuses " +
+      "the first and has retired the rest. Saved insights (/projects/244778/insights/) still " +
+      "read here.",
   },
 };
+
+/**
+ * POSTHOG PATHS THAT CAN ONLY FAIL HERE, answered without asking PostHog.
+ *
+ * 8 of the 13 failed `query_external_service` calls 11-16 Oct 2026 were PostHog: GET
+ * /projects/244778/query answers 403 "This action does not support personal API key access"
+ * (hogqlTable POSTs that endpoint and works), /insights/trend, /funnel and /retention answer
+ * 404 (re-checked 2026-10-16), and the `@current` form, refused by the path check, came back
+ * as a 404 once rewritten. Matched before that check, so `@current` gets this answer too.
+ */
+const POSTHOG_QUERY_PATH =
+  /^\/(?:projects|environments)\/[^/?]+\/(?:query|insights\/(?:trends?|funnels?|paths?|retention|stickiness|lifecycle))(?:[/?]|$)/i;
+
+const POSTHOG_USE_HOGQL =
+  "Not sent to PostHog: its query endpoint and the trend, funnel and retention insight " +
+  "endpoints cannot answer through this gateway. Read over GET with this server's key, /query " +
+  'answers 403 "This action does not support personal API key access", and /insights/trend ' +
+  "and its siblings answer 404, retired. Count with query_product_analytics instead, which " +
+  'runs one HogQL query on the server, e.g. {"query": "SELECT toDate(timestamp) AS day, ' +
+  "count(DISTINCT person_id) AS visitors FROM events WHERE event = '$pageview' AND " +
+  "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-01 00:00:00') " +
+  'GROUP BY day ORDER BY day"}. Saved insights (/projects/244778/insights/) and the rest of ' +
+  "PostHog's API are still read here.";
 
 /**
  * WHICH rpc/ FUNCTIONS query_product_data MAY CALL.
@@ -5536,7 +5601,14 @@ async function callTool(
       );
     }
     const r = await hogqlTable(query, PRODUCT_ANALYTICS_ROW_CAP);
-    if (!r.ok) return textResult(`PostHog did not run the query. ${r.error}`, true);
+    if (!r.ok) {
+      const fixes = HOGQL_FIXES.filter(([said]) => said.test(r.error)).map(([, fix]) => fix);
+      return textResult(
+        `PostHog did not run the query. ${r.error}` +
+          (fixes.length ? `\nHow to write it in HogQL: ${fixes.join(" ")}` : ""),
+        true
+      );
+    }
     if (r.rows.length === 0) {
       stats.sourceCount = 0;
       return textResult(
@@ -5661,6 +5733,9 @@ async function callTool(
       decodedPath = decodeURIComponent(path);
     } catch {
       return textResult("path must be a simple path inside that service's API.", true);
+    }
+    if (key === "posthog" && POSTHOG_QUERY_PATH.test(decodedPath)) {
+      return textResult(POSTHOG_USE_HOGQL, true);
     }
     /**
      * SAY WHICH RULE TRIPPED, because a refusal that does not is indistinguishable

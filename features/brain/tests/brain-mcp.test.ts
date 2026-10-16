@@ -7180,6 +7180,51 @@ describe("/api/mcp", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    /**
+     * 8 OF 13 FAILED GATEWAY CALLS 11-16 Oct 2026 WERE THESE PATHS: a 403 for the query
+     * endpoint over GET with a personal key, 404s for the retired insight endpoints, and the
+     * `@current` form. Each could only fail, so each is answered here with the HogQL route.
+     */
+    it.each([
+      ["the query endpoint", "/projects/244778/query/"],
+      ["the query endpoint, environments form", "/environments/244778/query"],
+      ["a retired trend insight", "/projects/244778/insights/trend"],
+      ["the @current form, before the path check refuses it", "/projects/@current/insights/trend/"],
+      [
+        "a retired funnel, with the base's /api written twice",
+        "/api/projects/244778/insights/funnel",
+      ],
+    ])(
+      "answers PostHog's %s with query_product_analytics, without asking PostHog",
+      async (_what, path) => {
+        process.env.POSTHOG_API_KEY = "phx_test";
+        const r = await call({ service: "posthog", path, params: { query: "{}" } });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("Count with query_product_analytics instead");
+        expect(r.content[0]!.text).not.toMatch(/smuggle a different host/);
+        expect(mockFetch).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([
+      [
+        "saved insights",
+        "/projects/244778/insights/",
+        "https://eu.posthog.com/api/projects/244778/insights/",
+      ],
+      [
+        "one saved insight",
+        "/projects/244778/insights/42/",
+        "https://eu.posthog.com/api/projects/244778/insights/42/",
+      ],
+      ["events", "/projects/244778/events", "https://eu.posthog.com/api/projects/244778/events"],
+    ])("still reads PostHog's %s", async (_what, path, url) => {
+      process.env.POSTHOG_API_KEY = "phx_test";
+      const r = await call({ service: "posthog", path });
+      expect(r.isError).toBeFalsy();
+      expect(String(mockFetch.mock.calls[0]![0])).toBe(url);
+    });
+
     it("never returns the API key to the caller", async () => {
       const r = await call({ service: "stripe", path: "/charges" });
       expect(JSON.stringify(r)).not.toContain("sk_test_secret_value");
@@ -8795,7 +8840,39 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
     const r = await call({ query: "SELECT nope FROM events" });
     expect(r.isError).toBe(true);
     expect(r.content[0]!.text).toContain("PostHog answered 400: Unable to resolve field: nope");
+    // An error with no known rewrite gets no invented one.
+    expect(r.content[0]!.text).not.toContain("How to write it in HogQL");
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * THE THREE REAL 400s 11-16 Oct 2026, and two more Postgres habits PostHog refuses, each
+   * with PostHog's own sentence (captured 2026-10-16) and the rewrite that then ran.
+   */
+  it.each([
+    ["Function 'greatest' expects 2 arguments, found 3", "greatest(a, greatest(b, c))"],
+    ["Function 'least' expects 2 arguments, found 3", "greatest(a, greatest(b, c))"],
+    ["Function 'toDate' expects 1 argument, found 2", "toDate(toTimeZone(timestamp, 'UTC'))"],
+    [
+      "Aggregate function countIf(started) AS started is found in WHERE in query.",
+      "Name each result apart from the columns (AS n_started)",
+    ],
+    [
+      "Aggregation 'percentile_cont' with WITHIN GROUP is not supported in ClickHouse dialect",
+      "median(x) or quantile(0.5)(x)",
+    ],
+    ["Unsupported type cast to 'numeric'", "round(toFloat(x), 2)"],
+  ])("says how to write it when PostHog answers %s", async (detail, fix) => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ type: "validation_error", detail }),
+    });
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain(`PostHog answered 400: ${detail}`);
+    expect(r.content[0]!.text).toContain("How to write it in HogQL:");
+    expect(r.content[0]!.text).toContain(fix);
   });
 
   it("treats a 200 that carries an error as the error it is", async () => {
