@@ -116,7 +116,6 @@ export function engagementWindows(
   });
 }
 
-
 export type ArmStatus = "Running" | "Winner" | "Ended";
 
 export interface ArmRow {
@@ -246,7 +245,6 @@ function armRow(
   };
 }
 
-
 function pageEngagement(
   all: LandingArmEngagement[],
   time: PostHogResult<LandingTime> | null
@@ -273,7 +271,6 @@ function pageEngagement(
     })),
   };
 }
-
 
 export function buildLanding(input: {
   facts: Facts;
@@ -347,7 +344,13 @@ export function buildLanding(input: {
  * visitor and per finished survey. Starts that aren't all recorded leave their rates blank.
  */
 function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today: string): Tile[] {
-  const scope: Scope = { assessment: "a", source: "all", device: "all", tier: "all", visitor: "all" };
+  const scope: Scope = {
+    assessment: "a",
+    source: "all",
+    device: "all",
+    tier: "all",
+    visitor: "all",
+  };
   const t = totals(facts, scope);
   const p = comparableStarts(
     previous ? totals(previous, scope) : null,
