@@ -2124,9 +2124,11 @@ export const TOOLS = [
       "over a window: the cost per visitor, the share of visitors who finish the survey, the share " +
       "of finishers who pay, the average order and the net after ad spend, then the level each of " +
       "those four alone would have to reach to break even. Give any of the four to ask 'what if': " +
-      "'what if 5% of finishers paid', 'what if a visitor cost EUR 0.05'. Counted like the digest's " +
-      "cost per paying customer: every visitor and buyer on the days the ad data covers, not only " +
-      "those who came from an ad, and it says when the purchases are too few to trust.",
+      "'what if 5% of finishers paid', 'what if a visitor cost EUR 0.05'. Counted as the " +
+      "AP-Analytics dashboard counts its visitors, finished surveys, paying customers and " +
+      "revenue, with a link to the same days there: every visitor and buyer on the days the ad " +
+      "data covers, not only those who came from an ad, and it says when the paying customers " +
+      "are too few to trust.",
     inputSchema: {
       type: "object",
       properties: {

@@ -1160,28 +1160,41 @@ describe("/api/mcp", () => {
             )
           ).json()
         ).result as { content: Array<{ text: string }>; isError?: boolean };
-      const day = (i: number) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+      // Berlin days, as the dashboard's facts and break_even count them.
+      const day = (i: number) =>
+        new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(
+          new Date(Date.now() - i * 86_400_000)
+        );
 
       beforeEach(() => {
-        // 1,000 visitors and 50 finishers a day, one EUR 25 purchase two days ago, EUR 50 a day spent.
-        mockRollup.mockResolvedValue(
-          Array.from({ length: 200 }, (_, i) => ({
-            day: day(i),
-            unique_visitors: 1000,
-            submissions: 50,
-            reports_paid: i === 2 ? 1 : 0,
-            revenue: i === 2 ? "25.00" : 0,
-          }))
-        );
+        // 1,000 visitors and 50 finishers a day, one EUR 25 purchase two days ago, EUR 50 a day
+        // spent: the dashboard's facts (ap_facts) for whatever days break_even reads.
+        mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+          if (path !== "/rest/v1/rpc/ap_facts")
+            return { ok: true, status: 200, json: async () => [] };
+          const { p_from, p_to } = JSON.parse(String(init?.body));
+          const days = Array.from({ length: 200 }, (_, i) => day(i)).filter(
+            (d) => d >= p_from && d <= p_to
+          );
+          const facts = {
+            visits: days.map((d) => ({ day: d, src: null, n: 1000 })),
+            subs: days.flatMap((d) => Array.from({ length: 50 }, (_, n) => ({ id: n, day: d }))),
+            money: days.includes(day(2)) ? [{ day: day(2), sid: 1, amount: 25 }] : [],
+            ...{ starts: [], checkouts: [], intro: [], invites: [], quotes: [] },
+          };
+          return { ok: true, status: 200, json: async () => facts };
+        });
         mockAdCost = {
           byDay: new Map(Array.from({ length: 40 }, (_, i) => [day(i), 50] as [string, number])),
           from: day(39),
           to: day(1),
         };
       });
-      afterEach(() => {
-        mockRollup.mockReset();
+      afterEach(async () => {
+        mockSupabaseFetch.mockReset();
         mockAdCost = { byDay: new Map(), from: null, to: null };
+        // The facts are cached for five minutes per range: none may reach another test.
+        (await import("@features/admin/server/ap/facts")).clearFactsCache();
       });
 
       it("answers from the live numbers, over the days the ad data covers", async () => {
@@ -1191,7 +1204,10 @@ describe("/api/mcp", () => {
         expect(r.content[0]!.text).toContain("- Spent EUR 350.00 on Google Ads, EUR 50.00 a day.");
         expect(r.content[0]!.text).toContain("- 7,000 visitors (each person once a day)");
         expect(r.content[0]!.text).toContain("- 1 paid: 0.29% of finishers.");
-        expect(r.content[0]!.text).toContain("Read with care: 1 purchase is too few to trust");
+        expect(r.content[0]!.text).toContain(
+          "Read with care: 1 paying customer is too few to trust"
+        );
+        expect(r.content[0]!.text).toContain("Counted as the AP-Analytics dashboard counts them");
       });
 
       it("takes a what-if as a percentage", async () => {
@@ -1207,8 +1223,8 @@ describe("/api/mcp", () => {
         expect(r.content[0]!.text).toMatch(/percentage from 0 to 100/);
       });
 
-      it("calls an unreadable rollup an outage, not a result", async () => {
-        mockRollup.mockRejectedValue(new Error("down"));
+      it("calls unreadable numbers an outage, not a result", async () => {
+        mockSupabaseFetch.mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
         const r = await call({});
         expect(r.isError).toBe(true);
         expect(r.content[0]!.text).toMatch(/outage, not a result/);

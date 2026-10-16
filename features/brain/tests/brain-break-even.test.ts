@@ -13,13 +13,55 @@ let ad: { byDay: Map<string, number>; from: string | null; to: string | null } =
   from: null,
   to: null,
 };
-const mockRollup = vi.fn(async () => rows);
 vi.mock("@features/brain/server/ingest/analytics", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/ingest/analytics")>()),
-  brainDailyRollup: (...a: unknown[]) => mockRollup(...(a as [])),
   adCostByDay: async () => ad,
 }));
+/**
+ * The dashboard's facts for [from, to], made from the same day rows: the visitors as one
+ * visit row, each finisher a submission, each purchase a payment by a payer of its own.
+ */
+const mockFacts = vi.fn(async (from: string, to: string) => {
+  const days = rows.filter((r) => r.day >= from && r.day <= to);
+  let id = 0;
+  return parseFacts(
+    {
+      visits: days.map((r) => ({
+        day: r.day,
+        arm: "white_video",
+        src: null,
+        n: r.unique_visitors,
+      })),
+      starts: [],
+      subs: days.flatMap((r) =>
+        Array.from({ length: r.submissions }, () => ({
+          id: ++id,
+          day: r.day,
+          at: `${r.day}T10:00:00Z`,
+        }))
+      ),
+      money: days.flatMap((r) =>
+        Array.from({ length: r.reports_paid }, () => ({
+          day: r.day,
+          sid: ++id,
+          amount: Number(r.revenue) / r.reports_paid,
+        }))
+      ),
+      checkouts: [],
+      intro: [],
+      invites: [],
+      quotes: [],
+    },
+    from,
+    to
+  );
+});
+vi.mock("@features/admin/server/ap/facts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/admin/server/ap/facts")>()),
+  fetchFacts: (from: string, to: string) => mockFacts(from, to),
+}));
 
+import { parseFacts } from "@features/admin/server/ap/facts";
 import { breakEven } from "@features/brain/server/break-even";
 
 const NOW = Date.parse("2026-09-26T09:00:00Z");
@@ -77,7 +119,7 @@ const refusal = async (req: Record<string, unknown>) => {
 };
 
 afterEach(() => {
-  mockRollup.mockClear();
+  mockFacts.mockClear();
   rows = [];
   ad = { byDay: new Map(), from: null, to: null };
 });
@@ -102,8 +144,11 @@ describe("break_even: where it stands", () => {
     expect(t).toContain(
       "Revenue per visitor has to grow 10 times, however that is split between the levers."
     );
-    // Enough history for the fallback average order is read in the same call.
-    expect(mockRollup).toHaveBeenCalledWith(181);
+    // The window is read as the dashboard reads it, and nothing more while someone paid.
+    expect(mockFacts.mock.calls).toEqual([["2026-09-16", "2026-09-25"]]);
+    expect(t).toContain(
+      "https://www.loveiq.org/admin/ap/assessment-a?period=custom&from=2026-09-16&to=2026-09-25"
+    );
   });
 
   it("counts spend AND revenue only on the days the ad data covers, never one without the other", async () => {
@@ -120,7 +165,9 @@ describe("break_even: where it stands", () => {
 
   it("says when purchases are too few to trust, and not when there are enough", async () => {
     standard();
-    expect(await text({ days: 10 })).toContain("Read with care: 2 purchases are too few to trust");
+    expect(await text({ days: 10 })).toContain(
+      "Read with care: 2 paying customers are too few to trust"
+    );
     rows = history((day) =>
       day >= "2026-09-16"
         ? { unique_visitors: 1000, submissions: 50, reports_paid: 1, revenue: 25 }
@@ -137,7 +184,7 @@ describe("break_even: where it stands", () => {
         : {}
     );
     const one = await text({ days: 10 });
-    expect(one).toContain("Read with care: 1 purchase is too few to trust");
+    expect(one).toContain("Read with care: 1 paying customer is too few to trust");
     // One purchase is its own average: nothing props the divisor up.
     expect(one).toContain("- They paid EUR 25.00 on average, EUR 25.00 in all.");
   });
@@ -153,7 +200,7 @@ describe("break_even: where it stands", () => {
     ad = spend("2026-09-01", "2026-09-25");
     const t = await text({ days: 10 });
     expect(t).toContain(
-      "Nobody paid in the window, so the average order is from the last 180 days (EUR 20.00 over 2 purchases)."
+      "Nobody paid in the window, so the average order is from the last 180 days (EUR 20.00 over 2 paying customers)."
     );
     expect(t).toContain("- Revenue EUR 0.00.");
     // With nobody paying, finishing more cannot help, and the answer says so plainly.
@@ -224,7 +271,7 @@ describe("break_even: what it refuses", () => {
     expect(await refusal({ visitor_to_finish: -1 })).toMatch(/percentage from 0 to 100/);
     expect(await refusal({ average_order: "abc" })).toMatch(/amount in EUR of 0 or more/);
     expect(await refusal({ cost_per_visitor: -0.1 })).toMatch(/amount in EUR of 0 or more/);
-    expect(mockRollup).not.toHaveBeenCalled();
+    expect(mockFacts).not.toHaveBeenCalled();
   });
 
   it("calls a window the ad data never covered missing data, not zero spend", async () => {
