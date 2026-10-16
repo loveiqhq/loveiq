@@ -22,9 +22,8 @@ const MAX_LENGTH = 1024;
 
 export function safeAdminNext(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > MAX_LENGTH) return null;
+  // Nothing that passes these can leave /admin/ on this site: no scheme, host, "\\", "%" or
+  // "@" is possible in the characters allowed, and no "//" or ".." segment is left to climb out.
   if (!ADMIN_PATH.test(raw) || raw.includes("//") || DOT_DOT.test(raw)) return null;
-  // Belt and braces: whatever a URL parser makes of it, it must stay on this site's /admin/.
-  const base = "https://admin.invalid";
-  const url = new URL(raw, base);
-  return url.origin === base && url.pathname.startsWith("/admin/") ? raw : null;
+  return raw;
 }

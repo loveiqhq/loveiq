@@ -48,7 +48,8 @@ describe("safeAdminNext: where a sign-in may send the admin back to", () => {
     "/admin/ap\n",
     "/admin/\tap",
     "",
-    "x".repeat(2000),
+    // Longer than any link the admin makes.
+    `/admin/ap?${"a".repeat(2000)}`,
   ])("refuses %j", (next) => {
     expect(safeAdminNext(next)).toBeNull();
   });
