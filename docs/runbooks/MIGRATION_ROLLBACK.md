@@ -76,6 +76,7 @@ transaction (no `BEGIN/COMMIT`); everything else is wrapped.
 | `20260911193434_survey_question_16011_paid_for_text.sql`   | 16011 question + subinfo back to prior copy       | No (exact prior strings captured)                       |
 | `20260911193447_retire_survey_questions_03014_16008.sql`   | status 'retired' → 'active'                       | No (flag only)                                          |
 | `20260911215422_recover_lost_marketing_opt_in_answers.sql` | Restored 16015 answers + opt-in flags             | **Yes** — removes restored consent; scoped by audit log |
+| `20261016170000_report_price_quote_arm_history.sql`        | DROP trigger + table; readouts back on the stamp  | **Yes** — changes since; the backfill is in metadata    |
 
 ## Writing a new rollback
 

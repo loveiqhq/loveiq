@@ -26,6 +26,7 @@
  *         - report_access_email
  *         - report_share (+ report_share_view via cascade)
  *         - report_price_quote
+ *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
