@@ -26,6 +26,8 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary } from "@/data/report3-summary";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
@@ -760,6 +762,28 @@ export async function GET(request: Request) {
     };
 
     /**
+     * Part II of the slimmed report (16.10, Figma 1665:3641 / 1665:3796): the archetype
+     * card and the Summary, each half-locked behind the Summary's own gate (Essentials).
+     * A locked reader receives every dimension's first sentence, the Summary's first two
+     * paragraphs and its third's first sentence verbatim; the rest of each dimension and
+     * of that third paragraph, which the page draws under the veil, as lockedBlurCopy.ts
+     * decides; and nothing of the Summary past it. Built for the V4 page only
+     * (isV4Request), from the copy of the archetype on screen.
+     */
+    const summaryUnlocked = isSectionUnlockedForPlan({
+      accessPlan,
+      archetypeTier: contentArchetypeTier,
+      isPremium: true,
+      sectionId: "summary",
+    });
+    const archetypeCard = isV4Request
+      ? buildArchetypeCard(contentArchetype, { locked: !summaryUnlocked })
+      : null;
+    const summaryChapter = isV4Request
+      ? buildSummary(contentArchetype, { locked: !summaryUnlocked })
+      : null;
+
+    /**
      * Report 3.0's Typical Beliefs chapter — Figma 304:256, and 348:213 locked.
      *
      * Rides beside beliefsCopy rather than replacing it, because `?v4=1` is a COPY
@@ -1059,6 +1083,8 @@ export async function GET(request: Request) {
         practiceTendencies: filteredPracticeTendencies,
         snapshotCopy,
         findingsCopy,
+        archetypeCard,
+        summaryChapter,
         beliefsCopy,
         typicalBeliefs,
         typicalBeliefsArticle,

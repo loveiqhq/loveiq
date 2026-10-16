@@ -53,14 +53,14 @@ import V4CoreArchetypeHeading from "./v3/V4CoreArchetypeHeading";
 import V4PartHeading from "./v3/V4PartHeading";
 import V4SummaryChapter from "./v3/V4SummaryChapter";
 import V4TopThreeSection from "./v3/V4TopThreeSection";
-import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import type { Report3CardView } from "@/data/report3-archetype-card";
+import type { Report3SummaryView } from "@/data/report3-summary";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
   REPORT_V4_DESIGNED_CHAPTER_IDS,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_PART_FRAME_BY_SECTION,
   REPORT_V4_REWARD_INTRO,
-  REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
 } from "@/data/report3-archetype-page";
 import V3EndSummary from "./v3/V3EndSummary";
@@ -181,6 +181,7 @@ import {
 } from "@features/analytics/client";
 import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
+import { FIRST_PAYWALL_SELECTOR } from "../logic/paywallSelector";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import {
   captureUnlockAnchor,
@@ -491,6 +492,10 @@ interface ReportExperienceProps {
   snapshotCopy: SnapshotCopy | null;
   findingsCopy: FindingsCopy | null;
   beliefsCopy: BeliefsCopy | null;
+  /** Part II's archetype card, half-locked behind the Summary's gate (slimmed, 16.10). */
+  archetypeCard: Report3CardView | null;
+  /** Part II's Summary, half-locked behind its own gate (slimmed, 16.10). */
+  summaryChapter: Report3SummaryView | null;
   /** Report 3.0's Typical Beliefs chapter; null until the archetype is scaled. */
   typicalBeliefs: Report3TypicalBeliefsView | null;
   /** The "Go deeper & learn more" article that closes that chapter. */
@@ -608,6 +613,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   snapshot,
   snapshotCopy,
   findingsCopy,
+  archetypeCard,
+  summaryChapter,
   typicalBeliefs,
   typicalBeliefsArticle,
   beliefsCopy,
@@ -814,6 +821,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // not the primary. Otherwise a buyer who already owns essentials/full on
     // primary X would see the modal flag both cards as "Your current plan"
     // when they're trying to upgrade Y.
+    onOpenPricingModal(viewArchetype || null);
+  };
+
+  // Part II's two locks since the slimmed report (16.10): the archetype card's and the
+  // Summary's. Both sit behind the Summary's own gate, which Essentials opens; `chapterId`
+  // is where the click was, so the chapter stats count it there.
+  const unlockPart2 = (chapterId: "core_archetype" | "summary") => () => {
+    trackLockClick("summary", "essentials", chapterId);
     onOpenPricingModal(viewArchetype || null);
   };
 
@@ -1220,26 +1235,32 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           {/* 15:815. V2's hero is a different card entirely — it
                            * has no dimension deck, which is the whole middle of
                            * the frame. Falls back to V2's whenever the archetype
-                           * has no Report 3.0 card copy. */}
-                          {isV4 && report3ArchetypeCard[viewArchetype] ? (
-                            <>
-                              {/* 1:576 — "Core Archetype" + its lede, which the
-                               * frame draws immediately above the card. It was
-                               * built for the V4 shell (V4Part2) and never
-                               * swapped into the live report, so this ran from
-                               * the top-three list straight into the card. */}
-                              <V4CoreArchetypeHeading />
-                              <V3ArchetypeCard
-                                archetype={viewArchetype as ArchetypeName}
-                                matchStrength={matchScore}
-                                copy={report3ArchetypeCard[viewArchetype]!}
-                              />
-                            </>
+                           * has no Report 3.0 card copy. The copy arrives with the
+                           * payload since the slimmed report half-locks it, so for
+                           * the moment an archetype switch is refetching it draws
+                           * nothing rather than another archetype's card. */}
+                          {isV4 && archetypeCard ? (
+                            viewArchetype === contentArchetype ? (
+                              <>
+                                {/* 1:576 — "Core Archetype" + its lede, which the
+                                 * frame draws immediately above the card. It was
+                                 * built for the V4 shell (V4Part2) and never
+                                 * swapped into the live report, so this ran from
+                                 * the top-three list straight into the card. */}
+                                <V4CoreArchetypeHeading />
+                                <V3ArchetypeCard
+                                  archetype={viewArchetype as ArchetypeName}
+                                  matchStrength={matchScore}
+                                  copy={archetypeCard}
+                                  onUnlock={unlockPart2("core_archetype")}
+                                />
+                              </>
+                            ) : null
                           ) : (
                             <CoreArchetypeSection matchScore={matchScore} theme={theme} />
                           )}
                         </ReportSection>
-                        {isV4 && REPORT_V4_SUMMARY[viewArchetype] ? (
+                        {isV4 && summaryChapter ? (
                           /* 1:736 — V4's Summary Chapter IN PLACE OF V2's "What
                            * this means for you", never beside it: both are titled
                            * "Summary of the <archetype>", so rendering the two
@@ -1253,14 +1274,17 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             sectionId="summary"
                             title=""
                           >
-                            <V4SummaryChapter
-                              archetype={viewArchetype}
-                              summary={REPORT_V4_SUMMARY[viewArchetype]!}
-                              feedback={renderFeedback(
-                                "summary",
-                                `Summary of the ${viewArchetype}`
-                              )}
-                            />
+                            {viewArchetype === contentArchetype ? (
+                              <V4SummaryChapter
+                                archetype={viewArchetype}
+                                summary={summaryChapter}
+                                onUnlock={unlockPart2("summary")}
+                                feedback={renderFeedback(
+                                  "summary",
+                                  `Summary of the ${viewArchetype}`
+                                )}
+                              />
+                            ) : null}
                           </ReportSection>
                         ) : (
                           /* "What this means for you" (Figma 8719:8865). Part I's
@@ -3043,8 +3067,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
     // reporting it again later is a no-op.
     // V4's in-flow paywall card (.rv4-premium) counts too — whichever offer comes
-    // first in the page.
-    const firstOfferCard = document.querySelector(".report-premium-overlay, .rv4-premium");
+    // first in the page. Not Part II's Summary gate: the leave offer's own selector.
+    const firstOfferCard = document.querySelector(FIRST_PAYWALL_SELECTOR);
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {
       cardObserver = new IntersectionObserver(
@@ -3573,6 +3597,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             snapshotCopy={data.snapshotCopy ?? null}
             findingsCopy={data.findingsCopy ?? null}
             beliefsCopy={v2Copies.beliefsCopy}
+            archetypeCard={data.archetypeCard ?? null}
+            summaryChapter={data.summaryChapter ?? null}
             typicalBeliefs={data.typicalBeliefs ?? null}
             typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
             attachmentCopy={v2Copies.attachmentCopy}

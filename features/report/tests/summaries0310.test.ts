@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REPORT_V4_SUMMARY, missingReport3Summary } from "@/data/report3-archetype-page";
+import { REPORT_V4_SUMMARY, missingReport3Summary } from "@/data/report3-summary";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
 /**

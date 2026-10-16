@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V3ArchetypeCard from "@features/report/ui/v3/V3ArchetypeCard";
-import { missingReport3CardCopy, report3ArchetypeCard } from "@/data/report3-archetype-card";
+import {
+  buildArchetypeCard,
+  missingReport3CardCopy,
+  report3ArchetypeCard,
+} from "@/data/report3-archetype-card";
 
 /**
  * Report V4 archetype card + dimension deck — Figma 15:815 / 15:194.
@@ -15,7 +19,8 @@ import { missingReport3CardCopy, report3ArchetypeCard } from "@/data/report3-arc
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
 
-const copy = report3ArchetypeCard["Spark Seeker"];
+// A paying reader's card: every dimension whole (the locked one: v4Slim1610.test.tsx).
+const copy = buildArchetypeCard("Spark Seeker");
 if (!copy) throw new Error("Spark Seeker card copy is required by these tests");
 
 const renderCard = (initialDeckIndex = 0) =>
@@ -31,12 +36,13 @@ const renderCard = (initialDeckIndex = 0) =>
 afterEach(cleanup);
 
 describe("V3ArchetypeCard", () => {
-  it("renders the archetype, the match strength and the tagline", () => {
-    renderCard();
+  it("renders the archetype and the match strength, and no motto since the slimmed report", () => {
+    const { container } = renderCard();
     expect(screen.getByRole("heading", { name: "Spark Seeker" })).toBeInTheDocument();
     expect(screen.getByText("Match Strength")).toBeInTheDocument();
     expect(screen.getByText("43%")).toBeInTheDocument();
-    expect(screen.getByText(copy.tagline)).toBeInTheDocument();
+    // Mark, 14.10: "I took the motto out" (1665:3642).
+    expect(container.querySelector(".rv3-arch__tagline")).toBeNull();
   });
 
   it("fills the match bar to the match strength, not to a hardcoded width", () => {
@@ -66,7 +72,7 @@ describe("V3ArchetypeCard", () => {
       <V3ArchetypeCard
         archetype="Quiet Withdrawer"
         matchStrength={43}
-        copy={report3ArchetypeCard["Quiet Withdrawer"]!}
+        copy={buildArchetypeCard("Quiet Withdrawer")!}
       />
     );
     const card = container.querySelector<HTMLElement>(".rv3-arch");
@@ -580,19 +586,15 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     ).toMatch(/text-transform: uppercase/);
   });
 
-  it("holds the header at 15:816's fixed 191px, the match row taking the slack", () => {
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__head")).toMatch(/min-height: 191px/);
+  it("holds the header at the slimmed frame's 111px, the match row taking the slack", () => {
+    // 1665:3642: 15:816's 191 less the motto's 70px box (15:828) and its gap.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__head")).toMatch(/min-height: 111px/);
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__match")).toMatch(/flex-grow: 1/);
-    // 15:828, the tagline's fixed 70px box.
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline")).toMatch(/min-height: 70px/);
   });
 
-  // Mark, 28.09 (1943978527): "Decreased Font size here". 15:829 is Lora 16/24.
-  it("sets the tagline in Lora 16/24 inside 15:828's 70px box", () => {
-    const tagline = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline");
-    expect(tagline).toMatch(/font-size: 16px/);
-    expect(tagline).toMatch(/line-height: 24px/);
-    expect(tagline).toMatch(/letter-spacing: 0/);
+  it("keeps no V4 rule for the motto line it no longer draws", () => {
+    expect(V3_CSS).not.toContain(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline");
+    expect(V3_CSS).not.toContain(".rv3.rv4 .rv3-arch__tagline");
   });
 
   // Mark, 30.09 (1947975917): "We have update the Core Motivation card". 870:7166 is a
@@ -675,13 +677,11 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
   });
 
   it("keeps the frame's widths at 393 but narrows instead of clipping on smaller phones", () => {
-    // At 360 the fixed 323px rows lost the end of "43%" and the tagline, and the deck's
-    // last indicator bar; at 320 the core motivation body ran out of its panel. 100% + 8
-    // is the frame's 323 at 393 (the head's 315 plus 8 into its right padding).
+    // At 360 the fixed 323px rows lost the end of "43%" (and the motto, while there was
+    // one), and the deck's last indicator bar; at 320 the core motivation body ran out of
+    // its panel. 100% + 8 is the frame's 323 at 393 (the head's 315 plus 8 into its right
+    // padding).
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__match")).toMatch(
-      /width: min\(323px, calc\(100% \+ 8px\)\)/
-    );
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline")).toMatch(
       /width: min\(323px, calc\(100% \+ 8px\)\)/
     );
     for (const part of [

@@ -72,6 +72,14 @@ const PREMIUM_DATA_MODULES = [
   // V2 and V4 maps import only its types (final review 2).
   "@features/report/server/fantasyMap",
   "@features/report/server/fantasyCopy",
+  // Added 2026-10-16. The slimmed report (Figma 1665:3278) half-locks Part II: each
+  // archetype card's dimension past its first sentence (1665:9806…) and the Summary past
+  // its third paragraph's first sentence (1665:3796). Both modules held free copy a
+  // client component could import; a client component importing them now would hand
+  // over exactly what the two walls withhold. They reach the page through
+  // buildArchetypeCard and buildSummary.
+  "@/data/report3-archetype-card",
+  "@/data/report3-summary",
 ];
 
 /**

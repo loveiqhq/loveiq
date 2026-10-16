@@ -98,26 +98,22 @@ type Report3Para = Extract<Report3Block, { kind: "para" }>;
 const SENTENCE_END = /[.!?][”’"')\]]*(?=\s|$)/;
 
 /**
- * A paragraph cut after its first sentence, run by run: that sentence, and the rest with
- * the space between them dropped, or null for a paragraph that is one sentence. Null when
- * the block is not a paragraph or no sentence ends in it, so the caller can fail closed.
- *
- * Fantasy vs. Reality's wall falls here (Sanjin, 05.10: "the paywall starts at the second
- * sentence of the text, as in the docs").
+ * Runs cut after their first sentence: that sentence, and the rest with the space between
+ * them dropped (empty for a passage that is one sentence). Null when no sentence ends in
+ * them, so the caller can fail closed. Any run that carries `text`: a chapter block's, or
+ * Part II's weighted runs (the Summary's ramp, a dimension card's body).
  */
-export const splitFirstSentence = (
-  block: Report3Block
-): readonly [Report3Para, Report3Para | null] | null => {
-  if (block.kind !== "para") return null;
-  const text = block.runs.map((run) => run.text).join("");
+export const splitRunsAtFirstSentence = <T extends { text: string }>(
+  runs: readonly T[]
+): readonly [T[], T[]] | null => {
+  const text = runs.map((run) => run.text).join("");
   const end = SENTENCE_END.exec(text);
   if (!end) return null;
   const cut = end.index + end[0].length;
-  if (!text.slice(cut).trim()) return [block, null];
-  const head: Report3Para["runs"][number][] = [];
-  const tail: Report3Para["runs"][number][] = [];
+  const head: T[] = [];
+  const tail: T[] = [];
   let start = 0;
-  for (const run of block.runs) {
+  for (const run of runs) {
     const from = start;
     start += run.text.length;
     if (start <= cut) head.push(run);
@@ -130,6 +126,25 @@ export const splitFirstSentence = (
   // The space between the two sentences goes with the cut.
   while (tail.length && !tail[0]!.text.trim()) tail.shift();
   if (tail.length) tail[0] = { ...tail[0]!, text: tail[0]!.text.trimStart() };
+  return [head, tail];
+};
+
+/**
+ * A paragraph cut after its first sentence, run by run: that sentence, and the rest with
+ * the space between them dropped, or null for a paragraph that is one sentence. Null when
+ * the block is not a paragraph or no sentence ends in it, so the caller can fail closed.
+ *
+ * Fantasy vs. Reality's wall falls here (Sanjin, 05.10: "the paywall starts at the second
+ * sentence of the text, as in the docs").
+ */
+export const splitFirstSentence = (
+  block: Report3Block
+): readonly [Report3Para, Report3Para | null] | null => {
+  if (block.kind !== "para") return null;
+  const split = splitRunsAtFirstSentence(block.runs);
+  if (!split) return null;
+  const [head, tail] = split;
+  if (!tail.length) return [block, null];
   return [
     { ...block, runs: head },
     { ...block, runs: tail },

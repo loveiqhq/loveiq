@@ -4,7 +4,8 @@ import {
   REPORT_V4_PART5_CHAPTERS,
   REPORT_V4_PART6_CHAPTERS,
 } from "@/data/report3-archetype-page";
-import type { Report3CardCopy } from "@/data/report3-archetype-card";
+import type { Report3CardView } from "@/data/report3-archetype-card";
+import type { Report3SummaryView } from "@/data/report3-summary";
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
@@ -31,7 +32,9 @@ import V4ReportChrome from "./V4ReportChrome";
 interface Props {
   archetype: ArchetypeName;
   matchStrength: number;
-  card: Report3CardCopy;
+  card: Report3CardView;
+  /** Part II's Summary, built on the server (buildSummary). */
+  summary?: Report3SummaryView | null;
   initialDeckIndex?: number;
   /** Built once at the host by `buildLearnMoreForReader`, keyed by chapter id. */
   learnMore?: V4LearnMoreByChapter;
@@ -51,6 +54,7 @@ const V4Report: FC<Props> = ({
   archetype,
   matchStrength,
   card,
+  summary,
   initialDeckIndex = 0,
   learnMore,
   onUnlock,
@@ -69,7 +73,9 @@ const V4Report: FC<Props> = ({
         archetype={archetype}
         matchStrength={matchStrength}
         card={card}
+        summary={summary ?? null}
         initialDeckIndex={initialDeckIndex}
+        onUnlock={onUnlock}
       />
       <V4ChapterPart
         archetype={archetype}

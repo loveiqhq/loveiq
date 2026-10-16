@@ -1340,9 +1340,18 @@ export const trackDeadClick = (params: {
 /**
  * What `cta_seen` names: a locked report chapter's unlock offer, the landing hero's media
  * in each arm of the landing test (the presenter video or question 1), or the landing's
- * sticky bar sliding in. The arm is not a param: it rides on `landing_variant`.
+ * sticky bar sliding in. The arm is not a param: it rides on `landing_variant`. Since the
+ * slimmed report (16.10) Part II has two offers of its own, counted apart so
+ * `locked_chapter` still means a chapter's: the Summary's gate card and the archetype
+ * card's dimension lock.
  */
-export type CtaSeen = "locked_chapter" | "hero_video" | "hero_card" | "sticky_bar";
+export type CtaSeen =
+  | "locked_chapter"
+  | "summary_gate"
+  | "archetype_card_lock"
+  | "hero_video"
+  | "hero_card"
+  | "sticky_bar";
 
 /**
  * A call to action came into view: half of it inside the viewport, the first time on this

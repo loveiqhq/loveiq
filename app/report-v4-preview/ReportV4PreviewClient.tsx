@@ -8,7 +8,8 @@ import { v4InkStyle } from "@features/report/ui/v3/v4ArchetypeColors";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
-import type { Report3CardCopy } from "@/data/report3-archetype-card";
+import type { Report3CardView } from "@/data/report3-archetype-card";
+import type { Report3SummaryView } from "@/data/report3-summary";
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
@@ -27,7 +28,9 @@ import "@features/report/ui/report.css";
 interface Props {
   archetype: ArchetypeName;
   matchStrength: number;
-  copy: Report3CardCopy;
+  copy: Report3CardView;
+  /** Part II's Summary, half-locked on the server since the slimmed report. */
+  summary: Report3SummaryView | null;
   /** Already gated and stripped on the server — see page.tsx. */
   learnMore: V4LearnMoreByChapter;
   /** What `?plan=` resolved to. */
@@ -75,6 +78,7 @@ const ReportV4PreviewClient: FC<Props> = ({
   archetype,
   matchStrength,
   copy,
+  summary,
   learnMore,
   accessPlan,
   accessPlanLabel,
@@ -108,6 +112,7 @@ const ReportV4PreviewClient: FC<Props> = ({
             archetype={archetype}
             matchStrength={matchStrength}
             card={copy}
+            summary={summary}
             learnMore={learnMore}
             onUnlock={() => setPaywallOpen(true)}
             typicalBeliefs={typicalBeliefs}

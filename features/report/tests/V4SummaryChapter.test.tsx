@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import V4SummaryChapter from "@features/report/ui/v3/V4SummaryChapter";
-import type { Report3Summary } from "@/data/report3-archetype-page";
+import type { Report3SummaryView } from "@/data/report3-summary";
 
 /**
  * Mark, 29.09 (1945263585): "Lets have the Summary text fade + CTA please" — his own
@@ -16,7 +16,10 @@ import type { Report3Summary } from "@/data/report3-archetype-page";
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
 
-const SUMMARY: Report3Summary = {
+/** A paying reader's: the whole copy, unlocked (the locked state: v4Slim1610.test.tsx). */
+const SUMMARY: Report3SummaryView = {
+  locked: false,
+  ramp: null,
   paragraphs: [
     [{ text: "First paragraph." }],
     [{ text: "Second paragraph." }],
