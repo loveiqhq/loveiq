@@ -332,7 +332,8 @@ export async function POST(request: Request) {
   }
 
   // F-04: reject new submissions while the survey is paused/closed. Admins
-  // toggle `survey.status` via /admin/survey-status; isSurveyClosed() reads it
+  // set `survey.status` in the database (the admin's switch was removed with the old admin
+  // on 16 Oct 2026); isSurveyClosed() reads it
   // (30s in-process cache, fails OPEN on Supabase trouble so infra blips never
   // block real users).
   if (await isSurveyClosed()) {

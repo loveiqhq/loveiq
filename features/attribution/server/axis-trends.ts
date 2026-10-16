@@ -269,7 +269,7 @@ function verdictShort(aN: number, aConv: number, bN: number, bConv: number): str
   const signal = twoProportionSignal(bN, bConv, aN, aConv);
   if (signal.significance === "insufficient-data") return "too early to call";
   if (signal.significance === "inconclusive") return "no clear winner yet";
-  return "a real difference — see /admin";
+  return "a real difference — see AP-Analytics";
 }
 
 type ArmTotals = { arm: string; completions: number; checkouts: number; paid: number };

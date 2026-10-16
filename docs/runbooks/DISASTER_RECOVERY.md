@@ -46,7 +46,7 @@ DB schema is **not** rolled back by `vercel rollback` — for that, see [MIGRATI
 
 ## 3. Kill switches (instant feature disable)
 
-Three flags in `system_flags` table. Toggle via admin UI or curl:
+Three flags in `system_flags` table. Toggle with curl (there is no screen for them):
 
 ```bash
 curl -X PATCH https://loveiq.org/api/admin/system-flags \

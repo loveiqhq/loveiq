@@ -62,7 +62,8 @@ const templates = Object.entries(modules).flatMap(([path, mod]) =>
 
 describe("email plain-text parts", () => {
   it("finds the templates", () => {
-    expect(templates.length).toBeGreaterThanOrEqual(25);
+    // 24 since the post-call coupon email went with its admin grant (16 Oct 2026).
+    expect(templates.length).toBeGreaterThanOrEqual(24);
   });
 
   it.each(templates)("$name carries the unsubscribe link", ({ render }) => {

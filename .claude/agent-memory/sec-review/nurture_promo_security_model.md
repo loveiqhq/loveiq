@@ -42,12 +42,12 @@ expiry). The per-submission ownership check still governs the auto-apply `?promo
 link path; it no longer prevents manual entry. This intentionally re-opens audit
 finding L6.
 
-## post_call (100%-off) grant path
+## post_call (100%-off) grant path — REMOVED 2026-10-16
 
-`app/api/admin/submissions/[id]/grant-call-coupon/route.ts`: full guard stack
-(verifyAdminSession → hasRole "editor" → CSRF → rate-limit) + one-time 409 guard
-(reads existing `nurturePromoCodes.post_call.code`, returns it instead of re-minting).
-Coupon id from `STRIPE_COUPON_100`; 14-day expiry. logAdminAction records it.
+The admin grant route (`app/api/admin/submissions/[id]/grant-call-coupon`), its email and
+`insertBookingEvent` went with the old admin (the admin is AP-Analytics only). It never
+minted a code on production (no `nurturePromoCodes.post_call` on any quote, checked
+2026-10-16). `STRIPE_COUPON_100` still backs the tier-3 partner code.
 
 ## Calendly webhook — REMOVED 2026-09-14
 
@@ -56,8 +56,7 @@ The receiver (`app/api/calendly/webhook`), `features/booking/server/calendly.ts`
 it was registered against the apex `loveiq.org`, which 308-redirects to `www` and drops
 the signature headers. Do not review or reintroduce it from an older copy. What remains
 is `booking_event` (234 historical rows, read and erased by the GDPR paths in
-`features/admin/server/data-subject.ts`) and `insertBookingEvent` in
-`features/booking/server/events.ts`, written only by the admin post-call coupon grant.
+`features/admin/server/data-subject.ts`), which nothing writes any more.
 
 ## New tables RLS
 

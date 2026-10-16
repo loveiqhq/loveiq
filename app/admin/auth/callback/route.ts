@@ -52,8 +52,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/login?error=missing_code", origin));
   }
 
-  // Create redirect response first — auth cookies will be set on this object
-  const redirectToAdmin = NextResponse.redirect(new URL("/admin", origin));
+  // Create redirect response first — auth cookies will be set on this object. The admin is
+  // AP-Analytics only (16 Oct 2026), so a sign-in lands on its Dashboard.
+  const redirectToAdmin = NextResponse.redirect(new URL("/admin/ap", origin));
   const supabase = createCallbackClient(request, redirectToAdmin);
 
   // verifyOtp with token_hash does not require PKCE code_verifier,

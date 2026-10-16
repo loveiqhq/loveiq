@@ -3,8 +3,9 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
+let search = "";
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(search),
 }));
 
 vi.mock("@shared/http/csrf-client", () => ({
@@ -20,9 +21,20 @@ beforeEach(() => {
   globalThis.fetch = mockFetch;
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  search = "";
+});
 
 describe("AdminLoginForm", () => {
+  it("says why when the idle timeout signed the admin out", () => {
+    search = "error=idle_timeout";
+    render(<AdminLoginForm />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "You were signed out after 30 minutes without activity. Sign in again below."
+    );
+  });
+
   it("renders email input and submit button", () => {
     render(<AdminLoginForm />);
     expect(screen.getByPlaceholderText(/enter your email/i)).toBeInTheDocument();

@@ -43,17 +43,17 @@ export default class DashboardErrorBoundary extends Component<Props, State> {
     const digest = (error as Error & { digest?: string }).digest;
     return (
       <div
-        className="rounded-xl border border-red-500/20 bg-red-500/5 p-5 text-sm text-red-300"
+        className="rounded-[20px] border border-ap-bad/25 bg-white p-5 text-sm text-ap-bad-ink shadow-ap"
         role="alert"
       >
-        <p className="font-medium">{this.props.label} could not be displayed.</p>
-        <p className="mt-2 break-words font-mono text-xs text-red-200/90">
+        <p className="font-bold">{this.props.label} could not be displayed.</p>
+        <p className="mt-2 break-words font-mono text-xs text-ap-body">
           {error.name}: {error.message}
         </p>
-        {digest && <p className="mt-1 font-mono text-xs text-red-200/70">digest: {digest}</p>}
-        <p className="mt-3 text-xs text-red-200/70">
-          The rest of the admin panel still works — the sidebar links are unaffected. Please send
-          this message on so it can be fixed.
+        {digest && <p className="mt-1 font-mono text-xs text-ap-muted">digest: {digest}</p>}
+        <p className="mt-3 text-xs text-ap-muted">
+          The rest of AP-Analytics still works — the sidebar links are unaffected. Please send this
+          message on so it can be fixed.
         </p>
       </div>
     );

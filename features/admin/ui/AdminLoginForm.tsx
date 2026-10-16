@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
+import { Mark } from "@features/admin/ui/ap/ApSidebar";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
@@ -13,6 +13,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     "That link has already been used or has expired. Sign-in links work once only — request a new one below and open it in this same browser.",
   missing_code: "Invalid login link. Please request a new one.",
   no_email: "Unable to verify your email. Please try again.",
+  idle_timeout: "You were signed out after 30 minutes without activity. Sign in again below.",
 };
 
 function getInitialError(searchParams: URLSearchParams): string {
@@ -28,6 +29,15 @@ export default function AdminLoginForm() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState(() => getInitialError(searchParams));
+
+  // The site's body is dark; the admin is AP-Analytics' light design, past the page's edges too.
+  useEffect(() => {
+    const before = document.body.style.background;
+    document.body.style.background = "#f5f6f8";
+    return () => {
+      document.body.style.background = before;
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,27 +69,25 @@ export default function AdminLoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-page px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface p-8 shadow-card">
-        <div className="mb-8 text-center">
-          <div className="mb-3 flex items-center justify-center gap-2">
-            <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
-            <LoveIQWordmark className="text-2xl" />
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+    <div className="flex min-h-screen items-center justify-center bg-ap-ground px-4 font-sans text-ap-ink">
+      <div className="w-full max-w-sm rounded-[20px] border border-ap-line bg-white p-6 shadow-ap sm:p-8">
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          <span className="flex items-center gap-2">
+            <Mark />
+            <span className="font-serif text-xl font-bold">AP-Analytics</span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-label">
               Admin
             </span>
-          </div>
-          <p className="text-sm text-text-muted">Admin access only</p>
+          </span>
+          <p className="text-sm text-ap-muted">Admin access only</p>
         </div>
 
         {status === "sent" ? (
-          <div className="text-center">
-            <div className="mb-4 text-3xl">&#9993;</div>
-            <h2 className="mb-2 text-lg font-semibold text-text-primary">Check your email</h2>
-            <p className="mb-6 text-sm text-text-muted">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <h1 className="font-serif text-xl font-bold">Check your email</h1>
+            <p className="text-sm text-ap-body">
               If your email is registered, we sent a magic link to{" "}
-              <span className="font-medium text-text-primary">{email}</span>. Click the link to sign
-              in.
+              <span className="font-bold text-ap-ink">{email}</span>. Click the link to sign in.
             </p>
             <button
               type="button"
@@ -87,17 +95,19 @@ export default function AdminLoginForm() {
                 setStatus("idle");
                 setEmail("");
               }}
-              className="text-sm text-accent-purple transition hover:text-accent-purple/80"
+              className="min-h-11 cursor-pointer text-sm font-bold text-ap-plum underline-offset-2 hover:underline"
             >
               Try a different email
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="admin-email" className="sr-only">
-                Email
-              </label>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <h1 className="sr-only">Sign in to AP-Analytics</h1>
+            <label
+              htmlFor="admin-email"
+              className="flex flex-col gap-1 text-xs font-bold text-ap-muted"
+            >
+              Email
               <input
                 id="admin-email"
                 type="email"
@@ -107,16 +117,20 @@ export default function AdminLoginForm() {
                 required
                 autoFocus
                 autoComplete="email"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none transition focus:border-white/20 focus:ring-1 focus:ring-white/20"
+                className="min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 font-sans text-sm font-normal text-ap-ink placeholder:text-ap-quiet"
               />
-            </div>
+            </label>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && (
+              <p role="alert" className="text-sm text-ap-bad-ink">
+                {error}
+              </p>
+            )}
 
             <button
               type="submit"
               disabled={status === "sending"}
-              className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-white shadow-pill transition hover:-translate-y-[1px] disabled:opacity-60"
+              className="min-h-11 w-full cursor-pointer rounded-full border-0 bg-black px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {status === "sending" ? "Sending..." : "Send magic link"}
             </button>

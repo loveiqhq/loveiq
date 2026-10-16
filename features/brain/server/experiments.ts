@@ -205,9 +205,9 @@ async function liveLine(
   load: (since: string) => Promise<ArmOutcomes>
 ): Promise<string> {
   if (!e.axis) {
-    return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was entered in /admin.";
+    return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was recorded with it.";
   }
-  // From the start of its first day in Berlin, as the registry and /admin read a day: the
+  // From the start of its first day in Berlin, as the registry reads a day: the
   // landing test's restart (LANDING_TEST_START_AT) is 22:00 UTC the evening before.
   const outcomes = await load(
     reportingDayStart(e.start_date ?? isoDay(now - 30 * DAY_MS)).toISOString()
@@ -414,7 +414,7 @@ export async function recordExperiment(
       `${existing ? "Updated" : "Registered"} experiment #${id}: ${name} (${nextStatus}` +
       `${(axis ?? existing?.axis) ? `, ${AXIS_TITLES[(axis ?? existing?.axis) as ExperimentAxis]}` : ""}).\n` +
       `Hypothesis: ${hypothesis}\nDecided by: ${metric}\n` +
-      "It is saved in the admin panel's own experiment table. " +
+      "It is saved in the experiment registry. " +
       (nextStatus === "completed"
         ? "Record the decision it led to with record_decision, if you have not."
         : "When it ends, set its status to completed with the outcome, and record the decision with record_decision."),

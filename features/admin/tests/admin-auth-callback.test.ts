@@ -47,7 +47,7 @@ describe("GET /admin/auth/callback", () => {
   it("stamps fresh activity on a sign-in, so an old stamp cannot bounce it to 'idle timeout'", async () => {
     const before = Date.now();
     const res = await callback();
-    expect(res.headers.get("location")).toBe("http://localhost/admin");
+    expect(res.headers.get("location")).toBe("http://localhost/admin/ap");
     const stamp = res.cookies.get("__admin_activity");
     expect(Number(stamp?.value)).toBeGreaterThanOrEqual(before);
     expect(stamp).toMatchObject({ httpOnly: true, path: "/", maxAge: 7 * 24 * 60 * 60 });

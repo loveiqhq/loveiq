@@ -1132,7 +1132,7 @@ describe("checkout fulfillment", () => {
       expect(all).not.toContain("survey\\_invite");
       // The paywall arm is no longer listed: that experiment concluded, so
       // presenting it as one the buyer "was in" was wrong. It is still stored
-      // and still shown in /admin's concluded section.
+      // in the experiment registry.
       expect(all).not.toContain("Forced paywall");
       expect(all).not.toContain("Paywall style");
       // The landing row is the survey's own stamp. This survey carried none, so the
