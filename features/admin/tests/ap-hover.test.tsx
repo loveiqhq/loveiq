@@ -370,6 +370,10 @@ describe("IndexHover", () => {
       );
     }
     expect(document.querySelectorAll("[data-ap-hover]")).toHaveLength(2);
+    // A bubble on an edge line hangs half outside the plot: the bubbles' area reaches past it.
+    expect(document.querySelectorAll("[data-ap-hover]")[1]!.className.split(" ")).toContain(
+      "after:-inset-7"
+    );
   });
 });
 

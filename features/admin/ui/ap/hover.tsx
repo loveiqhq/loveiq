@@ -524,7 +524,9 @@ export function PointHover({
       role="group"
       aria-roledescription="chart"
       aria-label={`${label}. Use the left and right arrow keys to read each point.`}
-      className={`${className} z-[2] ${TOUCH} ${open ? "cursor-pointer" : ""}`}
+      // The area reaches past the plot by the default reach (::after, which hit-tests as the
+      // box but leaves its own measure alone): half a bubble on an edge line still reads.
+      className={`${className} z-[2] ${TOUCH} after:absolute after:-inset-7 after:content-[''] ${open ? "cursor-pointer" : ""}`}
       onPointerMove={(e) => {
         if (e.pointerType === "mouse" || e.buttons) pick(e);
       }}
