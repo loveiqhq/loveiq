@@ -5808,13 +5808,6 @@ describe("/api/mcp", () => {
        */
       it.each([
         ["a rename", "id,e:email", { id: 1, e: "someone@example.com" }, "e"],
-        ["a cast", "id,email::text", { id: 1, email: "someone@example.com" }, "email"],
-        [
-          "a rename with a cast",
-          "id,who:email::text",
-          { id: 1, who: "someone@example.com" },
-          "who",
-        ],
         [
           "a jsonb key that is private",
           "id,from:metadata->>requestIp",
@@ -5849,19 +5842,100 @@ describe("/api/mcp", () => {
         );
       });
 
-      it("passes a rename or cast of an ordinary column through untouched, and unmasked", async () => {
+      it("passes a rename of an ordinary column through untouched, and unmasked", async () => {
         wire([{ id: 1, arm: "email_first", amount: "14.99" }]);
         const r = await call({
           table: "payment",
-          select: "id,arm:utm_tracker->>contact_question_arm,amount::text",
+          select: "id,arm:utm_tracker->>contact_question_arm,amount",
         });
         expect(r.isError).toBeFalsy();
         expect(r.content[0].text).toContain('"arm":"email_first"');
         expect(r.content[0].text).not.toMatch(/Masked as private/);
         const [path] = toolCalls().at(-1) as [string];
         expect(decodeURIComponent(/select=([^&]+)/.exec(path)![1]!)).toBe(
-          "id,arm:utm_tracker->>contact_question_arm,amount::text"
+          "id,arm:utm_tracker->>contact_question_arm,amount"
         );
+      });
+
+      /**
+       * A CAST MADE A WHOLE JSONB COLUMN ONE STRING, and the mask reads keys, not strings
+       * (review, 2026-10-16): `metadata::text` would have carried `requestIp` and `email`
+       * out inside it. Refused again, with the rewrite.
+       */
+      it.each([
+        ["a cast of a jsonb column", "id,metadata::text"],
+        ["a renamed cast", "id,x:metadata::text"],
+        ["a cast of an ordinary column", "id,amount::text"],
+        ["a cast of a jsonb field", "id,metadata->>plan::int"],
+      ])("refuses %s, and says ->> already gives text", async (_what, select) => {
+        wire(ROWS);
+        const r = await call({ table: "payment", select });
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toContain("`select` may not cast a column (`::`)");
+        expect(r.content[0].text).toContain("`->>` already gives it as text");
+        expect(toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/payment"))).toHaveLength(
+          0
+        );
+      });
+
+      /** The rendered rows, parsed back: the body after the header is a JSON array. */
+      const rowsOf = (text: string) =>
+        JSON.parse(text.slice(text.indexOf("\n\n[") + 2)) as Array<Record<string, unknown>>;
+
+      /**
+       * JSON TEXT IS MASKED BY ITS KEYS. `metadata->>contact` returns an object as one string,
+       * so the walk parses it, masks what is private inside, and writes it back.
+       */
+      it("masks the private keys inside JSON text, and keeps the rest", async () => {
+        wire([
+          {
+            id: 1,
+            x: '{"requestIp":"1.2.3.4","email":"a@b.co","plan":"x"}',
+            list: '[{"email":"c@d.co","n":2}]',
+            // Strings inside an array: JSON text, and a report link carrying its token.
+            texts: ['{"email":"e@f.co"}', "https://www.loveiq.org/report/rpt_abcdefghij0123456789"],
+          },
+        ]);
+        const r = await call({
+          table: "payment",
+          select: "id,x:metadata->>contact,list:metadata->>list",
+        });
+        expect(r.isError).toBeFalsy();
+        const text = r.content[0].text;
+        for (const secret of [
+          "1.2.3.4",
+          "a@b.co",
+          "c@d.co",
+          "e@f.co",
+          "rpt_abcdefghij0123456789",
+        ]) {
+          expect(text).not.toContain(secret);
+        }
+        const [row] = rowsOf(text);
+        const x = JSON.parse(String(row!.x)) as Record<string, unknown>;
+        expect(x.plan).toBe("x");
+        expect(x.requestIp).toMatch(/^\[private #[0-9a-f]{4}\]$/);
+        expect(x.email).toMatch(/^\[private #[0-9a-f]{4}\]$/);
+        const list = JSON.parse(String(row!.list)) as Array<Record<string, unknown>>;
+        expect(list[0]!.n).toBe(2);
+        expect(list[0]!.email).toMatch(/^\[private #[0-9a-f]{4}\]$/);
+        expect(text).toMatch(
+          /Masked as private, so the value is never pasted into a prompt: email, requestIp\./
+        );
+      });
+
+      it("leaves a string that is not JSON, or JSON with nothing private, exactly as it was", async () => {
+        const kept = {
+          id: 1,
+          a: "{not json",
+          b: "[draft] the plan",
+          c: '{"plan": "x", "n": 1}',
+          d: "  [1, 2, 3]",
+        };
+        wire([kept]);
+        const r = await call({ table: "payment", select: "id,a,b,c,d" });
+        expect(rowsOf(r.content[0].text)[0]).toEqual(kept);
+        expect(r.content[0].text).not.toMatch(/Masked as private/);
       });
 
       it.each([
@@ -5879,7 +5953,7 @@ describe("/api/mcp", () => {
           /cannot count or add up/,
         ],
         ["an empty entry", "id,,amount", /could not be read at ""/],
-        ["a cast it cannot read", "id,amount::text;drop", /could not be read/],
+        ["a name it cannot read", "id,amount;drop", /could not be read/],
         ["a quoted key", 'id,metadata->>"plan"', /could not be read/],
       ])(
         "refuses %s before asking the database, and says how to rewrite it",

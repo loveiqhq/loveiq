@@ -1765,11 +1765,11 @@ export const TOOLS = [
           description:
             "PostgREST select list, e.g. 'id,created_date_time,amount'. Default '*'. " +
             "Naming columns rather than '*' keeps large tables inside the result cap. Renames " +
-            "('arm:utm_tracker->>contact_question_arm'), casts ('amount::text') and jsonb fields " +
-            "('metadata->>plan') work, and a private column stays masked whatever it is called. " +
-            "Two things do not: embedding a related table ('payment_item(…)'), so read that " +
-            "table in its own call, and count()/sum()/avg(), which this database switches off, so " +
-            "count with limit 1 and read how many match on the first line.",
+            "('arm:utm_tracker->>contact_question_arm') and jsonb fields ('metadata->>plan', " +
+            "already text) work, and a private column stays masked whatever it is called. Three " +
+            "things do not: a cast ('::text'), embedding a related table ('payment_item(…)'), so " +
+            "read that table in its own call, and count()/sum()/avg(), which this database " +
+            "switches off, so count with limit 1 and read how many match on the first line.",
         },
         filters: {
           type: "array",
@@ -3359,18 +3359,21 @@ const SELECT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * A `select` THE PRIVACY GATE CAN FOLLOW: every output column traced back to the column it
  * reads, so a private column stays masked whatever the caller names it.
  *
- * Renames and casts used to be refused outright, because the mask matched the KEY a row
- * came back under and `e:email` renamed the key past it (measured 2026-09-10: the real
- * address, with no notice). That refusal also cost every legitimate rename: 11-16 Oct 2026,
- * `arm:utm_tracker->>contact_question_arm` and four other selects were refused, and two
- * casts in filters failed besides. Now each item is read here, a private SOURCE (the column,
- * or any jsonb key on the way into it) marks its output key private, and that item is sent
- * under an alias chosen here, so the key the mask looks for is the key PostgREST returns.
+ * Renames used to be refused outright, because the mask matched the KEY a row came back
+ * under and `e:email` renamed the key past it (measured 2026-09-10: the real address, with
+ * no notice). That refusal also cost every legitimate rename: 11-16 Oct 2026,
+ * `arm:utm_tracker->>contact_question_arm` and four other selects were refused. Now each item
+ * is read here, a private SOURCE (the column, or any jsonb key on the way into it) marks its
+ * output key private, and that item is sent under an alias chosen here, so the key the mask
+ * looks for is the key PostgREST returns.
  *
- * Embedding stays refused: a related table's rows arrive nested and unannounced. And
- * count()/sum() are refused with the way round them, because PostgREST's aggregates are off
- * on this database (no `pgrst.db_aggregates_enabled` on any role, checked 2026-10-16) and
- * the call could only fail. Anything this cannot read is refused, never guessed at.
+ * A CAST STAYS REFUSED. `metadata::text` turns a whole jsonb column into one string, and a
+ * mask that reads keys cannot see inside a string (found in review, 2026-10-16). No real call
+ * that week cast in a select, and `->>` already gives a field as text. Embedding stays
+ * refused: a related table's rows arrive nested and unannounced. And count()/sum() are refused
+ * with the way round them, because PostgREST's aggregates are off on this database (no
+ * `pgrst.db_aggregates_enabled` on any role, checked 2026-10-16) and the call could only
+ * fail. Anything this cannot read is refused, never guessed at.
  *
  * Exported for test, in the house style of `parseFiltersForTest`.
  */
@@ -3399,6 +3402,14 @@ export function planSelectForTest(
         "table's columns.",
     };
   }
+  if (select.includes("::")) {
+    return {
+      refusal:
+        "`select` may not cast a column (`::`): a cast turns a jsonb column into one string, and " +
+        "the privacy mask cannot see inside a string. Ask for the column plainly; for one field " +
+        "of a jsonb column, `->>` already gives it as text (metadata->>plan).",
+    };
+  }
   const out: string[] = [];
   const privateKeys = new Set<string>();
   for (const raw of select.split(",")) {
@@ -3406,19 +3417,15 @@ export function planSelectForTest(
     const unreadable = {
       refusal:
         `\`select\` could not be read at ${JSON.stringify(item)}. Write each column as name, ` +
-        "alias:name, name::type or a jsonb field such as metadata->>plan, separated by commas. " +
-        "Refused rather than guessed at, because a column the privacy mask cannot trace " +
-        "could come back unmasked.",
+        "alias:name or a jsonb field such as metadata->>plan, separated by commas. Refused " +
+        "rather than guessed at, because a column the privacy mask cannot trace could come " +
+        "back unmasked.",
     };
-    const castAt = item.indexOf("::");
-    const cast = castAt >= 0 ? item.slice(castAt + 2) : null;
-    if (cast !== null && !/^[A-Za-z_][A-Za-z0-9_]*(\[\])?$/.test(cast)) return unreadable;
-    let source = castAt >= 0 ? item.slice(0, castAt) : item;
-    const aliased = /^([A-Za-z_][A-Za-z0-9_]*):(.+)$/.exec(source);
-    if (aliased) source = aliased[2]!;
+    const aliased = /^([A-Za-z_][A-Za-z0-9_]*):(.+)$/.exec(item);
+    const source = aliased ? aliased[2]! : item;
     const [column = "", ...keys] = source.split(/->>?/);
     if (column === "*") {
-      if (keys.length || aliased || cast !== null) return unreadable;
+      if (keys.length || aliased) return unreadable;
       out.push(item);
       continue;
     }
@@ -3437,7 +3444,7 @@ export function planSelectForTest(
       .find((k) => !/^[+-]?\d+$/.test(k));
     const key = aliased?.[1] ?? (last && SELECT_NAME.test(last) ? last : column);
     privateKeys.add(key);
-    out.push(`${key}:${source}${cast !== null ? `::${cast}` : ""}`);
+    out.push(`${key}:${source}`);
   }
   return { select: out.join(","), privateKeys: [...privateKeys] };
 }
@@ -3467,9 +3474,35 @@ function redactPrivateColumns(
    * Depth-limited because a cycle is impossible in JSON but a pathological nesting is
    * not, and this runs on every row of every page.
    */
+  /**
+   * JSON TEXT IS WALKED AS THE STRUCTURE IT HOLDS.
+   *
+   * `metadata->>contact` hands back an object as one string, and so would a cast, so its
+   * keys (`requestIp`, `email`, `reportToken`) reached the reader past a mask that reads
+   * names (found in review, 2026-10-16). A string that parses to an object or array is
+   * masked as one; it is written back only when something in it was masked, so an
+   * untouched value keeps its own spelling, and anything that does not parse is left alone.
+   */
+  const walkText = (text: string, depth: number): string => {
+    const t = text.trim();
+    if (!t.startsWith("{") && !t.startsWith("[")) return text;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(t);
+    } catch {
+      return text;
+    }
+    if (parsed === null || typeof parsed !== "object") return text;
+    const masked = JSON.stringify(walk(parsed, depth + 1));
+    return masked === JSON.stringify(parsed) ? text : masked;
+  };
   const walk = (value: unknown, depth: number): unknown => {
     if (depth > 8 || value === null || typeof value !== "object") return value;
-    if (Array.isArray(value)) return value.map((v) => walk(v, depth + 1));
+    if (Array.isArray(value)) {
+      return value.map((v) =>
+        typeof v === "string" ? redactUrlSecrets(walkText(v, depth)) : walk(v, depth + 1)
+      );
+    }
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
     for (const key of Object.keys(copy)) {
       if (copy[key] === null || copy[key] === undefined) continue;
@@ -3490,11 +3523,11 @@ function redactPrivateColumns(
        * brain now recognise the same secrets.
        */
       if (typeof copy[key] === "string") {
-        const masked = redactUrlSecrets(copy[key] as string);
-        if (masked !== copy[key]) {
-          hit.add(key);
-          copy[key] = masked;
-        }
+        // The keys masked inside JSON text name themselves; a secret in plain text names its column.
+        const structured = walkText(copy[key] as string, depth);
+        const masked = redactUrlSecrets(structured);
+        if (masked !== structured) hit.add(key);
+        copy[key] = masked;
         continue;
       }
       copy[key] = walk(copy[key], depth + 1);
@@ -5510,8 +5543,7 @@ async function callTool(
           ? "\n\nA filter cannot cast a column (`utm_tracker::text`): PostgREST reads `::` there " +
             "as a syntax error. Inside a jsonb column `->>` already gives text, so match the " +
             'field itself: "utm_tracker->>utm_source=ilike.*gpt*", or in an or-list ' +
-            '"or=(utm_tracker->>utm_source.ilike.*gpt*,utm_tracker->>utm_medium.ilike.*gpt*)". ' +
-            "A cast in `select` works."
+            '"or=(utm_tracker->>utm_source.ilike.*gpt*,utm_tracker->>utm_medium.ilike.*gpt*)".'
           : "";
       const segmentHint = SEGMENT_FUNCTIONS.has(table) ? `\n\n${SEGMENT_RULES}` : "";
       return textResult(
