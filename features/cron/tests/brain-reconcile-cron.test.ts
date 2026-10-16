@@ -104,10 +104,22 @@ function routeFetch(over: Record<string, unknown> = {}) {
           ? over.serverSignal
           : [{ paywall_reached_at: `${PAYWALL_SIGNAL_DAY}T12:00:00Z` }]
       );
-    // The submission count for the conservation reading (count=exact header).
+    // The finished surveys for the conservation reading, each with its owner's email so
+    // the route can leave out our own test runs the way the chart does.
     if (path.includes("/survey_submission?select=id")) {
       const n = (over.submissionCount as number | undefined) ?? 417;
-      return { ok: true, json: async () => [], headers: { get: () => `0-0/${n}` } };
+      const staff = (over.staffSubmissions as number | undefined) ?? 0;
+      return ok([
+        ...Array.from({ length: n }, (_, i) => ({
+          id: i + 1,
+          // One survey with no account at all: the chart counts it, so the route must too.
+          app_user: i === 0 ? null : { email: `reader${i}@example.com` },
+        })),
+        ...Array.from({ length: staff }, (_, i) => ({
+          id: n + i + 1,
+          app_user: { email: `tester${i}@LoveIQ.org` },
+        })),
+      ]);
     }
     if (path.includes("get_landing_arm_funnel_daily"))
       return ok("arm" in over ? over.arm : { visitors: [{ n: 12308 }] });
@@ -498,6 +510,28 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { reconcile } = await import("@features/brain/server/reconcile");
     const gaps = reconcile((await buildReadings()).readings);
     expect(gaps.map((g) => g.what)).toContain("submissions charted vs submissions that exist");
+  });
+
+  it("leaves our own test runs out of the count, as the chart does", async () => {
+    // What it reported every day from 7 to 16 Oct 2026: the RPC leaves out surveys owned
+    // by an @loveiq.org address and this side counted them, so the gap was exactly the
+    // staff surveys in the window (10 on 16 Oct) while no row was off the axis.
+    supabaseFetch.mockImplementation(routeFetch({ submissionCount: 417, staffSubmissions: 10 }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    const reading = readings.find(
+      (r) => r.what === "submissions charted vs submissions that exist"
+    );
+    expect(reading?.right.value).toBe(417);
+    expect(reconcile(readings).map((g) => g.what)).not.toContain(
+      "submissions charted vs submissions that exist"
+    );
+    // Finished surveys only, like the chart's `status = 'completed'`.
+    const asked = supabaseFetch.mock.calls.map((c) => String(c[0]));
+    expect(
+      asked.some((p) => p.includes("/survey_submission?") && p.includes("status=eq.completed"))
+    ).toBe(true);
   });
 
   it("reports the contract sources as UNREAD when they cannot be read", async () => {

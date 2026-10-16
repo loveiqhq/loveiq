@@ -19,7 +19,13 @@ import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { sheetTabsWithRows } from "@features/brain/server/ingest/drive";
-import { DRIVE_SCOPE, getDelegatedToken, readVercelOidcToken } from "@shared/http/google-oauth";
+import {
+  DIRECTORY_SCOPE,
+  DRIVE_SCOPE,
+  getDelegatedToken,
+  readVercelOidcToken,
+} from "@shared/http/google-oauth";
+import { loadPeople, nameKey } from "@features/brain/server/people";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -472,21 +478,33 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
         "a bare ::date on a Berlin-midnight bound resolves in the pooler's UTC zone and cuts the series a day short, so the most recent day reads as zero rather than missing",
     });
 
-    // And the series must CONSERVE rows: every submission in the window has to
+    // And the series must CONSERVE rows: every submission the chart counts has to
     // land on a day the series generates. It did not when the buckets moved to
     // Berlin days while the axis did not.
+    //
+    // COUNTED BY THE CHART'S OWN RULE: finished, and not one of our own test runs. Since
+    // 2026-10-06 the RPC leaves out surveys owned by an address matching
+    // `~* '@loveiq\.org$'`, and this side kept counting every row. So from 7 Oct the check
+    // reported a gap every day (10 to 15) that was exactly the staff surveys in the window,
+    // while no row was ever off the axis. The regex is the RPC's literal, not
+    // `isStaffEmail`: an env override there would make the two sides disagree again.
     const charted = cvrDays.reduce((t, d) => t + Number(d.completions ?? 0), 0);
-    const actual = await countRows(
-      `/rest/v1/survey_submission?select=id&created_date_time=gte.${range.since_ts}` +
-        `&created_date_time=lt.${range.until_ts}`
+    const submissions = await fetchAllRows<{ app_user: { email: string | null } | null }>(
+      `/rest/v1/survey_submission?select=id,app_user!fk_survey_submission_user(email)` +
+        `&status=eq.completed&created_date_time=gte.${range.since_ts}` +
+        `&created_date_time=lt.${range.until_ts}&order=id.asc`
     );
+    const actual =
+      submissions === null
+        ? null
+        : submissions.filter((s) => !/@loveiq\.org$/i.test(s.app_user?.email ?? "")).length;
     if (actual === null) {
       unread.push("survey_submission count for the series check");
     } else {
       readings.push({
         what: "submissions charted vs submissions that exist",
         left: { source: "summed across the RPC's days", value: charted },
-        right: { source: "counted in the window", value: actual },
+        right: { source: "counted in the window, our own test runs left out", value: actual },
         tolerance: 0,
         because:
           "a row whose Berlin day falls outside the generated axis is dropped from the chart with no error — the window total stays right, so only this comparison sees it",
@@ -637,6 +655,73 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
   };
 }
 
+/**
+ * EVERY WORKSPACE ACCOUNT ON JARVIS'S PEOPLE LIST, as a person or as a shared account.
+ *
+ * A colleague missing from `brain_person` is invisible to every filter by name: nothing
+ * carries them in `meta.people`. Ajna's account was created on 2026-10-01 and was still
+ * missing on 2026-10-16, when 5 of the 9 searches that found nothing that week had filtered
+ * by her name. The list is kept by hand, so this says who to add; null when the directory
+ * or the list cannot be read, which is "not checked", not "fine".
+ */
+export async function directoryPeopleReading(request: Request): Promise<Reading | null> {
+  const admin = process.env.GOOGLE_WORKSPACE_ADMIN?.trim();
+  if (!admin) return null;
+  const token = await getDelegatedToken(
+    admin,
+    DIRECTORY_SCOPE,
+    Date.now(),
+    readVercelOidcToken(request)
+  );
+  if (!token) return null;
+  const byAlias = await loadPeople();
+  if (!byAlias) return null;
+
+  const accounts: Array<{ email: string; name: string }> = [];
+  let pageToken = "";
+  for (let page = 0; page < 10; page++) {
+    const res = await fetchWithTimeout(
+      "https://admin.googleapis.com/admin/directory/v1/users" +
+        // The whole customer, not one domain: a secondary domain's accounts count too.
+        // eslint-disable-next-line no-secrets/no-secrets -- query string, not a secret
+        `?customer=my_customer&maxResults=200&query=isSuspended=false` +
+        `&fields=${encodeURIComponent("nextPageToken,users(primaryEmail,name(fullName),archived,suspended)")}` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
+      { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 15_000 }
+    );
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => null)) as {
+      users?: Array<{
+        primaryEmail?: string;
+        name?: { fullName?: string };
+        archived?: boolean;
+        suspended?: boolean;
+      }>;
+      nextPageToken?: string;
+    } | null;
+    if (!json) return null;
+    for (const u of json.users ?? []) {
+      if (u.primaryEmail && !u.archived && !u.suspended)
+        accounts.push({ email: u.primaryEmail, name: u.name?.fullName?.trim() || "no name" });
+    }
+    pageToken = json.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  // More than ten pages: a list cut short could hide the missing account, so it is unread.
+  if (pageToken) return null;
+  const missing = accounts.filter((a) => !byAlias.has(nameKey(a.email)));
+  return {
+    what: "Workspace accounts on Jarvis's people list",
+    left: { source: "the Google directory", value: accounts.length },
+    right: { source: "brain_person", value: accounts.length - missing.length },
+    tolerance: 0,
+    because: missing.length
+      ? `Not on the list: ${missing.map((a) => `${a.email} (${a.name})`).join(", ")}. ` +
+        `Add each to brain_person, as a person or as a shared account`
+      : undefined,
+  };
+}
+
 export async function GET(request: Request) {
   // Returns a boolean, not a response — the same shape every other cron checks.
   if (!verifyCronAuth(request)) {
@@ -664,6 +749,14 @@ export async function GET(request: Request) {
     } catch (err) {
       logger.warn({ err }, "brain-reconcile: the spreadsheet tab check could not run");
       unread.push("spreadsheet tabs");
+    }
+    try {
+      const people = await directoryPeopleReading(request);
+      if (people) readings.push(people);
+      else unread.push("people list (no directory or registry)");
+    } catch (err) {
+      logger.warn({ err }, "brain-reconcile: the people-list check could not run");
+      unread.push("people list");
     }
     checked = readings.length;
     const found = reconcile(readings);
