@@ -1,0 +1,18 @@
+{
+  "criterion": "C1",
+  "label": "clipped or covered content",
+  "session_id": "01a12d71-72ac-7586-a051-45cf932a6afa",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a12d71-72ac-7586-a051-45cf932a6afa",
+  "viewport": {
+    "min": 390,
+    "max": 390,
+    "os": "iOS"
+  },
+  "probes": [
+    {
+      "file": "verify-narrow-viewport.mjs",
+      "output": "0/1 widths: nothing overflows |  | FAIL (1)"
+    }
+  ],
+  "reproduced": true
+}
