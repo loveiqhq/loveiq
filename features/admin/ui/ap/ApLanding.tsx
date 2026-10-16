@@ -4,31 +4,24 @@ import { useMemo, useState } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
-import type {
-  ArmRow,
-  ArmStatus,
-  Comparison,
-  LandingPayload,
-} from "@features/admin/server/ap/landing";
+import type { ArmRow, ArmStatus, LandingPayload } from "@features/admin/server/ap/landing";
 import type { Table } from "@features/admin/server/ap/common";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getTrustpilotConfig } from "@shared/ui/trustpilot/config";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
 import {
   FilterIcon,
-  Bar,
   BlackButton,
   Busy,
   Card,
   Failed,
+  KpiTileV2,
   Loading,
-  NotTracked,
   PageHeader,
-  Pills,
   SectionHead,
   SortIcon,
+  TileGrid,
   useHashScroll,
   RangeLine,
 } from "./kit";
@@ -41,24 +34,33 @@ const STATUS: Record<ArmStatus, string> = {
 };
 
 type MetricKey =
-  "visits" | "startCvr" | "submitCvr" | "paymentCvr" | "perVisit" | "bounce" | "meanSeconds";
+  | "visits"
+  | "startCvr"
+  | "submitCvr"
+  | "preCvr"
+  | "fullCvr"
+  | "perVisit"
+  | "bounce"
+  | "meanSeconds";
 
 /** The heat columns: unit, and whether lower is better. */
 const COLUMNS: Array<{ key: MetricKey; label: string; heat: boolean; lower?: boolean }> = [
   { key: "visits", label: "Visits", heat: false },
   { key: "startCvr", label: "Start CVR", heat: true },
   { key: "submitCvr", label: "Submit CVR", heat: true },
-  { key: "paymentCvr", label: "Payment CVR", heat: true },
+  { key: "preCvr", label: "Pre-unlock CVR", heat: true },
+  { key: "fullCvr", label: "Full-unlock CVR", heat: true },
   { key: "perVisit", label: "€ / visit", heat: true },
   { key: "bounce", label: "Bounce", heat: true, lower: true },
   { key: "meanSeconds", label: "Avg. time", heat: true },
 ];
 
-/** Percentages as the design writes them here: "5.4%", payment CVR "0.19%", bounce "61%". */
+/** Percentages as the design writes them here: "5.4%", unlocks "0.19%", bounce "61%". */
 const DIGITS: Partial<Record<MetricKey, number>> = {
   startCvr: 1,
   submitCvr: 1,
-  paymentCvr: 2,
+  preCvr: 2,
+  fullCvr: 2,
   bounce: 0,
 };
 
@@ -140,12 +142,11 @@ function TestsTable({ data }: { data: LandingPayload }) {
     </button>
   );
   // The design's columns: on a phone the test and status leave part of Visits in view.
-  const gtc = "minmax(200px, 2fr) minmax(90px, 0.8fr) repeat(7, minmax(84px, 1fr))";
+  const gtc = "minmax(200px, 2fr) minmax(90px, 0.8fr) repeat(8, minmax(84px, 1fr))";
   return (
     <Card id="tests" labelledBy="h-tests">
       <SectionHead
         id="h-tests"
-        eyebrow="Landing page · Performance per test"
         title="Tests and variants"
         description="Each column is shaded from best (green) to worst (red) among the variants shown. Lower is better for bounce."
       />
@@ -185,7 +186,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
         <p className="m-0 text-sm text-ap-muted">No landing test ran in this range.</p>
       ) : (
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-          <div role="table" aria-label="Landing tests and variants" style={{ minWidth: 980 }}>
+          <div role="table" aria-label="Landing tests and variants" style={{ minWidth: 1080 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <span
                 role="columnheader"
@@ -303,7 +304,9 @@ function TestsTable({ data }: { data: LandingPayload }) {
               a visitor saw. Avg. time counts each view up to 30 minutes; the export has the median
               too. Start CVR needs to know which version each unfinished starter saw; only their
               saved progress records it (from 20 Sep 2026), and that is deleted after 30 days, so
-              older days show no start CVR.
+              older days show no start CVR. Unlocks are per visit: Full unlock counts Full, Full All
+              and Core; the Initial plan (pre-unlock) isn&rsquo;t on sale yet, so its column is
+              blank.
             </p>
             {data.footnotes.map((n) => (
               <p key={n} className="m-0">
@@ -317,316 +320,153 @@ function TestsTable({ data }: { data: LandingPayload }) {
   );
 }
 
-function lift(m: Comparison["metrics"][number]) {
-  if (m.a === null || m.b === null || m.a === 0) return null;
-  const pct = ((m.b - m.a) / m.a) * 100;
-  const better = m.lowerIsBetter ? pct < 0 : pct > 0;
-  return {
-    text: `B ${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct).toFixed(1)}%`,
-    tone: Math.abs(pct) < 0.05 ? "text-ap-muted" : better ? "text-ap-good" : "text-ap-bad",
-  };
+/** The design's engagement columns: Bounce, Avg. time, CTA clicks, then scroll depth. */
+const ENG_COLUMNS = ["Bounce", "Avg. time", "CTA clicks", "25%", "50%", "75%", "100%"];
+
+/** One row's values in those columns: shares 0..1, seconds for the time; null where unread. */
+function engagementValues(r: ArmRow): Array<number | null> {
+  return [r.bounce, r.meanSeconds, r.cta, ...(r.scroll ?? [null, null, null, null])];
 }
 
-function CompareSection({ data }: { data: LandingPayload }) {
-  const [key, setKey] = useState<string | null>(null);
-  if (data.comparisons.length === 0) {
-    return (
-      <Card id="compare" labelledBy="h-compare">
-        <SectionHead
-          id="h-compare"
-          eyebrow="Landing page · Performance compare"
-          title="No test to compare"
-          description="No landing test ran in these days. Pick a range that covers one (see the tests above)."
-        />
-      </Card>
-    );
-  }
-  const cmp = data.comparisons.find((c) => c.key === key) ?? data.comparisons[0]!;
-  return (
-    <Card id="compare" labelledBy="h-compare">
-      <SectionHead
-        id="h-compare"
-        eyebrow="Landing page · Performance compare"
-        title={cmp.name}
-        description={`${cmp.window}. ${cmp.outcome}`}
-        right={
-          data.comparisons.length > 1 ? (
-            // One row on a phone: the tabs scroll sideways rather than wrap.
-            <div className="min-w-0 max-w-full overflow-x-auto">
-              <div className="w-max">
-                <Pills
-                  label="Test to compare"
-                  value={cmp.key}
-                  onChange={setKey}
-                  options={data.comparisons.map((c) => ({ value: c.key, label: c.code }))}
-                />
-              </div>
-            </div>
-          ) : undefined
-        }
-      />
-      <div className="flex flex-wrap gap-4 text-[13px] text-ap-body">
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden="true" className="h-3 w-3 rounded bg-ap-lavender" />
-          {cmp.a}
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden="true" className="h-3 w-3 rounded bg-ap-violet" />
-          {cmp.b}
-        </span>
-      </div>
-      <div
-        className="grid gap-3.5"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))" }}
-      >
-        {cmp.metrics.map((m) => {
-          const l = lift(m);
-          const max = Math.max(m.a ?? 0, m.b ?? 0) || 1;
-          return (
-            <div key={m.label} className="flex flex-col gap-2.5 rounded-[14px] bg-ap-ground p-4">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[13px] font-bold text-ap-ink">{m.label}</span>
-                {l && <span className={`text-[13px] font-bold ${l.tone}`}>{l.text}</span>}
-              </div>
-              <div
-                className="grid items-center gap-2 text-xs"
-                style={{ gridTemplateColumns: "22px minmax(0, 1fr) 64px" }}
-              >
-                <span className="font-bold text-ap-muted">A</span>
-                <Bar
-                  pct={m.a === null ? null : m.a / max}
-                  color="#9d8ad7"
-                  height={10}
-                  track="#ffffff"
-                />
-                <span className="text-right font-semibold tabular-nums text-ap-ink">
-                  {fmt(m.unit, m.a, DIGITS[m.key])}
-                </span>
-                <span className="font-bold text-ap-muted">B</span>
-                <Bar
-                  pct={m.b === null ? null : m.b / max}
-                  color="#4000b6"
-                  height={10}
-                  track="#ffffff"
-                />
-                <span className="text-right font-semibold tabular-nums text-ap-ink">
-                  {fmt(m.unit, m.b, DIGITS[m.key])}
-                </span>
-              </div>
-              <span className="text-xs text-ap-muted">{m.verdict}</span>
-            </div>
-          );
-        })}
-      </div>
-      {cmp.note && <p className="m-0 text-xs leading-relaxed text-ap-muted">{cmp.note}</p>}
-    </Card>
-  );
+/** As the design writes them: "61%", "0:41", "8.6%", "80%" (the average row a tenth more). */
+function engagementText(i: number, v: number | null, average = false): string {
+  if (i === 1) return fmt("mmss", v === null ? null : v * 1000);
+  return fmt("pct", v, i === 2 || (average && i === 0) ? 1 : 0);
 }
 
-function EngagementCard({ data }: { data: LandingPayload }) {
+function EngagementTable({ data }: { data: LandingPayload }) {
+  const rows = data.rows;
+  // Shaded among the variants, best green to worst red; lower is better for bounce.
+  const ranges = ENG_COLUMNS.map((_, i) => {
+    const vs = rows
+      .map((r) => engagementValues(r)[i])
+      .filter((v): v is number => v !== null && v !== undefined)
+      .map((v) => shown(engagementText(i, v)));
+    return vs.length ? ([Math.min(...vs), Math.max(...vs)] as const) : null;
+  });
   const e = data.engagement;
+  const avg: Array<number | null> | null =
+    e && e.ok
+      ? [e.value.bounce, e.value.meanSeconds, e.value.cta, ...e.value.scroll.map((x) => x.share)]
+      : null;
+  const gtc = "minmax(220px, 2fr) repeat(7, minmax(80px, 1fr))";
+  const tests = [...new Set(rows.map((r) => r.testKey))];
+  const unreadArms = rows.filter((r) => r.phSessions === null).length;
   return (
     <Card labelledBy="h-engage">
       <SectionHead
         id="h-engage"
-        title="Engagement"
-        level={3}
-        description="Everyone on the landing page in the range, both arms (PostHog)."
+        title="Engagement per landing page"
+        description="Bounce, time on page, CTA clicks and how far visitors scroll. Each column is shaded from best (green) to worst (red)."
       />
-      {!e ? (
-        <NotTracked>PostHog starts on 23 Aug 2026</NotTracked>
-      ) : !e.ok ? (
-        <p className="m-0 text-sm text-ap-bad-ink">{e.error}</p>
+      {rows.length === 0 && !avg ? (
+        <p className="m-0 text-sm text-ap-muted">No landing test ran in this range.</p>
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2.5">
-            {[
-              { label: "Bounce", value: fmt("pct", e.value.bounce, 1) },
-              {
-                label: "Avg. time",
-                value: fmt(
-                  "mmss",
-                  e.value.meanSeconds === null ? null : e.value.meanSeconds * 1000
-                ),
-              },
-              { label: "CTA clicks", value: fmt("pct", e.value.cta, 1) },
-            ].map((s) => (
-              // The design's 22px where the box has room. A narrow box (on a phone, or with the
-              // two cards side by side on a tablet or a small laptop) scales it down: "100.0%",
-              // the widest value, is about 3.7 times its font size wide, so a quarter fits.
-              <div
-                key={s.label}
-                className="flex min-w-0 flex-col gap-1 rounded-[14px] bg-ap-ground p-3 [container-type:inline-size]"
+        <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+          <div role="table" aria-label="Engagement per landing page" style={{ minWidth: 900 }}>
+            <div
+              role="row"
+              className="grid border-b border-ap-line bg-white"
+              style={{ gridTemplateColumns: gtc }}
+            >
+              <span role="columnheader" className="col-span-4 px-3 py-2" aria-hidden="true" />
+              <span
+                role="columnheader"
+                className="col-span-4 border-l border-ap-line px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-plum"
               >
-                <span className="text-xs text-ap-muted">{s.label}</span>
-                <span className="font-serif text-[length:min(22px,25cqi)] font-semibold tabular-nums text-ap-ink">
-                  {s.value}
-                </span>
-              </div>
-            ))}
-          </div>
-          <span className="text-[13px] font-bold text-ap-body">Scroll depth reached</span>
-          <div className="flex h-[120px] items-end gap-3 border-b border-ap-line">
-            {e.value.scroll.map((d) => (
-              <div
-                key={d.label}
-                className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-              >
-                <span className="text-xs font-bold tabular-nums">{fmt("pct", d.share, 0)}</span>
-                <span
-                  className="w-full max-w-[56px] rounded-t-md rounded-b-sm bg-ap-purple"
-                  style={{ height: `${Math.round((d.share ?? 0) * 90)}px` }}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            {e.value.scroll.map((d) => (
-              <span key={d.label} className="flex-1 text-center text-xs text-ap-muted">
-                {d.label}
+                Scroll depth reached
               </span>
-            ))}
-          </div>
-          <p className="m-0 text-xs leading-relaxed text-ap-muted">
-            {fmt("count", e.value.sessions)} PostHog visits. Bounce: left without a click or another
-            page. CTA clicks: pressed a button to the survey. Time and scroll: until the page was
-            left or the next page opened. Avg. time counts each view up to 30 minutes; median{" "}
-            {fmt("mmss", e.value.medianSeconds === null ? null : e.value.medianSeconds * 1000)}.
-          </p>
-        </>
-      )}
-    </Card>
-  );
-}
-
-function ReviewsCard({ data }: { data: LandingPayload }) {
-  const s = data.sections;
-  const t = s && s.ok && s.value ? s.value.testimonials : null;
-  // The site's own Trustpilot numbers, shown only when both are set (never made up).
-  const tp = getTrustpilotConfig();
-  const rating = tp.score && tp.reviewCount ? tp : null;
-  return (
-    <Card labelledBy="h-reviews">
-      <SectionHead id="h-reviews" title="Reviews" level={3} />
-      {rating ? (
-        <div className="flex flex-wrap items-baseline gap-2.5">
-          <span className="font-serif text-[40px] font-semibold leading-none">{rating.score}</span>
-          <span className="text-[13px] text-ap-muted">
-            out of 5 · {rating.reviewCount} reviews on Trustpilot
-            {rating.profileUrl && (
-              <>
-                {" · "}
-                <a
-                  href={rating.profileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-ap-plum hover:text-ap-violet"
+            </div>
+            <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+              {["Landing page · variant", ...ENG_COLUMNS].map((label, i) => (
+                <span
+                  key={label}
+                  role="columnheader"
+                  className={`px-3 py-2.5 text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted ${i ? "text-right" : "text-left"}`}
                 >
-                  Open the profile
-                </a>
-              </>
-            )}
-          </span>
-        </div>
-      ) : (
-        <>
-          <NotTracked>No reviews collected yet</NotTracked>
-          <p className="m-0 text-sm leading-relaxed text-ap-body">
-            Trustpilot is switched off on the site until enough customers have reviewed us (decision
-            of 13 Jun 2026), so there is no rating to show. The page shows curated field reports
-            instead.
-          </p>
-        </>
-      )}
-      <div className="flex flex-col gap-1.5 border-t border-ap-line pt-3">
-        <span className="text-[13px] font-bold text-ap-ink">Review block on page</span>
-        {t ? (
-          <>
-            <span className="text-[13px] text-ap-muted">
-              Seen by {fmt("pct", t.seen, 0)} of visitors · start CVR after seeing{" "}
-              {fmt("pct", t.startedSeen, 1)} vs {fmt("pct", t.startedNotSeen, 1)} without
-            </span>
-            <span className="text-xs leading-relaxed text-ap-muted">
-              The block is the field reports, which scroll by themselves and have nothing to click.
-              People who scroll that far are not like those who start from the top, so this is not
-              the block&rsquo;s effect.
-            </span>
-          </>
-        ) : s && !s.ok ? (
-          <span className="text-[13px] text-ap-bad-ink">{s.error}</span>
-        ) : (
-          <span className="text-[13px] text-ap-muted">
-            Recorded from 14 Oct 2026: from then on the page reports which sections are seen.
-          </span>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-/** "14s", as the design writes a section's time. */
-const secs = (v: number | null) => (v === null ? EMPTY : `${Math.round(v)}s`);
-
-function SectionTime({ data }: { data: LandingPayload }) {
-  const t = data.sectionTime;
-  const s = data.sections;
-  const time = t && t.ok ? t.value : null;
-  const reach = s && s.ok ? s.value : null;
-  // From the day the time in view is recorded; before it, the reach alone.
-  const view =
-    time ?? (reach && { ...reach, rows: reach.rows.map((r) => ({ ...r, seconds: null })) });
-  const failed = t && !t.ok ? t.error : !view && s && !s.ok ? s.error : null;
-  // The bar is the time, against the longest section's, as the design draws it.
-  const longest = Math.max(0, ...(view?.rows ?? []).map((r) => r.seconds ?? 0));
-  return (
-    <Card labelledBy="h-sections">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id="h-sections" className="m-0 font-serif text-lg font-semibold">
-          Section time
-        </h3>
-        <span className="text-[13px] text-ap-muted">
-          Avg. seconds in view · share of visitors who reach the section
-        </span>
-      </div>
-      {failed && <p className="m-0 text-sm text-ap-bad-ink">{failed}</p>}
-      {view ? (
-        <>
-          {!time && !failed && (
-            <NotTracked>
-              Recorded from {rangeLabel(data.sectionTimeFrom, data.sectionTimeFrom)}
-            </NotTracked>
-          )}
-          <div className="flex flex-col gap-2.5">
-            {view.rows.map((r) => (
-              // The design's columns; on a phone they would leave the bar no room, so a
-              // narrower name and time column there.
-              <div
-                key={r.section}
-                className="grid grid-cols-[minmax(0,104px)_minmax(0,1fr)_40px_70px] items-center gap-3 text-[13px] sm:grid-cols-[minmax(120px,180px)_minmax(0,1fr)_60px_70px]"
-              >
-                <span className="font-semibold text-ap-ink">{r.name}</span>
-                <Bar
-                  pct={r.seconds === null || !longest ? null : r.seconds / longest}
-                  height={12}
-                />
-                <span className="text-right font-bold tabular-nums">{secs(r.seconds)}</span>
-                <span className="justify-self-end whitespace-nowrap tabular-nums text-ap-muted">
-                  {fmt("pct", r.reach, 0)} reach
+                  {label}
                 </span>
-              </div>
-            ))}
+              ))}
+            </div>
+            {rows.map((r) => {
+              const values = engagementValues(r);
+              return (
+                <div
+                  key={`${r.testKey}-${r.arm}`}
+                  role="row"
+                  className={`grid border-t border-ap-line ${tests.indexOf(r.testKey) % 2 ? "bg-white" : "bg-[#fcfbfe]"}`}
+                  style={{ gridTemplateColumns: gtc }}
+                >
+                  <span role="cell" className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
+                    <span className="truncate text-[13px] font-bold text-ap-ink" title={r.test}>
+                      {r.test}
+                    </span>
+                    <span className="text-xs text-ap-muted">{r.label}</span>
+                  </span>
+                  {values.map((v, i) => {
+                    const text = engagementText(i, v);
+                    const range = ranges[i];
+                    let style = {};
+                    if (v !== null && range) {
+                      const [mn, mx] = range;
+                      let t = mx === mn ? 0.5 : (shown(text) - mn) / (mx - mn);
+                      if (i === 0) t = 1 - t;
+                      style = heat(t);
+                    }
+                    return (
+                      <span
+                        key={ENG_COLUMNS[i]}
+                        role="cell"
+                        className={`flex items-center justify-end px-2 py-1.5 text-[13px] tabular-nums ${v === null ? "text-ap-muted" : "text-ap-ink"}`}
+                      >
+                        <span className="rounded-lg px-2 py-1.5" style={style}>
+                          {text}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            <div
+              role="row"
+              className="grid border-t border-ap-line bg-ap-ground"
+              style={{ gridTemplateColumns: gtc }}
+            >
+              <span role="cell" className="flex flex-col gap-0.5 px-3 py-2.5">
+                <span className="text-[13px] font-bold text-ap-ink">All landing pages</span>
+                <span className="text-xs text-ap-muted">Weighted average</span>
+              </span>
+              {ENG_COLUMNS.map((label, i) => (
+                <span
+                  key={label}
+                  role="cell"
+                  className="flex items-center justify-end px-2 py-1.5 text-[13px] font-bold tabular-nums text-ap-ink"
+                >
+                  <span className="px-2 py-1.5">
+                    {engagementText(i, avg ? (avg[i] ?? null) : null, true)}
+                  </span>
+                </span>
+              ))}
+            </div>
           </div>
-          <p className="m-0 text-xs leading-relaxed text-ap-muted">
-            {fmt("count", view.sessions)} PostHog visits, {rangeLabel(view.from, view.to)}.{" "}
-            {time
-              ? "In view: at least half of the section on screen, or the section filling half the screen, while the page is showing; a visit counts up to 10 minutes per section. Reach: part of it came into the top half of the screen, or it was in view."
-              : "Reach: part of it came into the top half of the screen."}{" "}
-            The hero is where every visit starts.
-          </p>
-        </>
-      ) : (
-        !failed && <NotTracked>Recorded from 14 Oct 2026: pick a range from that day on</NotTracked>
+        </div>
       )}
+      <div className="flex flex-col gap-1.5 text-xs leading-relaxed text-ap-muted">
+        {e && !e.ok && <p className="m-0 text-ap-bad-ink">{e.error}</p>}
+        <p className="m-0">
+          From PostHog, which records about half of all visits.
+          {e && e.ok
+            ? ` The average row is all ${fmt("count", e.value.sessions)} landing visits it recorded in the range.`
+            : ""}{" "}
+          Bounce: left without a click or another page. CTA clicks: pressed a button to the survey.
+          Time and scroll: until the page was left or the next page opened; time counts each view up
+          to 30 minutes.
+          {unreadArms > 0
+            ? " A version shows no figures where PostHog saw too few of its visits (under 30), or, before 7 Oct 2026, could not tell the versions apart."
+            : ""}
+        </p>
+      </div>
     </Card>
   );
 }
@@ -644,7 +484,9 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
       { label: "Revenue", unit: "eur" },
       { label: "Start CVR", unit: "pct" },
       { label: "Submit CVR", unit: "pct" },
-      { label: "Payment CVR", unit: "pct" },
+      { label: "Payment CVR (anyone who paid)", unit: "pct" },
+      { label: "Pre-unlock CVR", unit: "pct" },
+      { label: "Full-unlock CVR", unit: "pct" },
       { label: "€ / visit", unit: "eur3" },
       { label: "Bounce (PostHog)", unit: "pct" },
       { label: "Avg. time (PostHog)", unit: "mmss" },
@@ -663,6 +505,8 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
         r.startCvr,
         r.submitCvr,
         r.paymentCvr,
+        r.preCvr,
+        r.fullCvr,
         r.perVisit,
         r.bounce,
         r.meanSeconds === null ? null : r.meanSeconds * 1000,
@@ -670,85 +514,54 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
       ],
     })),
   };
-  const out = [{ name: "Tests and variants", table: tests }];
-  for (const c of data.comparisons) {
-    out.push({
-      name: `Compare: ${c.name} (${c.window})`,
+  const out = [
+    {
+      name: "Headline figures",
       table: {
         columns: [
-          { label: "Metric", unit: "text" },
-          { label: "A", unit: "text" },
-          { label: "B", unit: "text" },
-          { label: "Verdict", unit: "text" },
+          { label: "Figure", unit: "text" as const },
+          { label: "Value", unit: "text" as const },
+          { label: "Previous period", unit: "text" as const },
         ],
-        rows: c.metrics.map((m) => ({
-          label: m.label,
-          values: [fmt(m.unit, m.a), fmt(m.unit, m.b), m.verdict],
+        rows: data.tiles.map((t) => ({
+          label: t.label,
+          values: [
+            t.blocked ? `blank: ${t.blocked}` : fmt(t.unit, t.value),
+            t.note ?? fmt(t.unit, t.prev),
+          ],
         })),
       },
-    });
-  }
-  const e = data.engagement;
-  if (e && e.ok) {
-    out.push({
-      name: "Engagement (PostHog)",
-      table: {
-        columns: [
-          { label: "Figure", unit: "text" },
-          { label: "Value", unit: "text" },
-        ],
-        rows: [
-          { label: "Visits", values: [fmt("count", e.value.sessions)] },
-          { label: "Bounce", values: [fmt("pct", e.value.bounce, 1)] },
-          {
-            label: "Avg. time",
-            values: [fmt("mmss", e.value.meanSeconds === null ? null : e.value.meanSeconds * 1000)],
-          },
-          {
-            label: "Median time",
-            values: [
-              fmt("mmss", e.value.medianSeconds === null ? null : e.value.medianSeconds * 1000),
-            ],
-          },
-          { label: "CTA clicks", values: [fmt("pct", e.value.cta, 1)] },
-          ...e.value.scroll.map((d) => ({
-            label: `Scrolled ${d.label}`,
-            values: [fmt("pct", d.share, 0)],
-          })),
-        ],
-      },
-    });
-  }
-  const s = data.sections;
-  if (s && s.ok && s.value) {
-    out.push({
-      name: "Section reach (PostHog)",
-      table: {
-        columns: [
-          { label: "Section", unit: "text" },
-          { label: "Reach", unit: "pct" },
-        ],
-        rows: s.value.rows.map((r) => ({ label: r.name, values: [r.reach] })),
-      },
-    });
-  }
-  const t = data.sectionTime;
-  if (t && t.ok && t.value) {
-    out.push({
-      name: "Section time (PostHog)",
-      table: {
-        columns: [
-          { label: "Section", unit: "text" },
-          { label: "Avg. time in view", unit: "mmss" },
-          { label: "Reach", unit: "pct" },
-        ],
-        rows: t.value.rows.map((r) => ({
-          label: r.name,
-          values: [r.seconds === null ? null : r.seconds * 1000, r.reach],
+    },
+    { name: "Tests and variants", table: tests },
+  ];
+  out.push({
+    name: "Engagement per landing page (PostHog)",
+    table: {
+      columns: [
+        { label: "Landing page · variant", unit: "text" },
+        ...ENG_COLUMNS.map((label) => ({ label, unit: "text" as const })),
+      ],
+      rows: [
+        ...data.rows.map((r) => ({
+          label: `${r.test} · ${r.label}`,
+          values: engagementValues(r).map((v, i) => engagementText(i, v)),
         })),
-      },
-    });
-  }
+        ...(data.engagement && data.engagement.ok
+          ? [
+              {
+                label: "All landing pages · weighted average",
+                values: [
+                  data.engagement.value.bounce,
+                  data.engagement.value.meanSeconds,
+                  data.engagement.value.cta,
+                  ...data.engagement.value.scroll.map((x) => x.share),
+                ].map((v, i) => engagementText(i, v, true)),
+              },
+            ]
+          : []),
+      ],
+    },
+  });
   return out;
 }
 
@@ -786,27 +599,23 @@ export default function ApLanding() {
       {data && (
         <Busy busy={loading}>
           <RangeLine data={data} sources="Production database and PostHog" />
+          <TileGrid min={170}>
+            {data.tiles.map((t) => (
+              <KpiTileV2
+                key={t.key}
+                tile={t}
+                digits={t.key === "rev-visit" ? 4 : t.key === "rev-sub" ? 2 : undefined}
+              />
+            ))}
+          </TileGrid>
           <TestsTable data={data} />
-          <CompareSection data={data} />
+          {/* Assessment A starts on the landing page: its assessment page is this page. */}
           <section
             id="assessment-page"
-            aria-labelledby="h-ap"
-            className="flex scroll-mt-20 lg:scroll-mt-6 flex-col gap-4"
+            aria-labelledby="h-engage"
+            className="flex scroll-mt-20 flex-col gap-4 lg:scroll-mt-6"
           >
-            <SectionHead
-              id="h-ap"
-              eyebrow="Assessment A · Assessment page"
-              title="Assessment page"
-              description="Assessment A starts on the landing page, so its assessment page is the landing page."
-            />
-            <div
-              className="grid items-start gap-5"
-              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
-            >
-              <ReviewsCard data={data} />
-              <EngagementCard data={data} />
-            </div>
-            <SectionTime data={data} />
+            <EngagementTable data={data} />
           </section>
         </Busy>
       )}

@@ -1,29 +1,31 @@
 /**
- * The landing page of AP-Analytics (Marcus's "Landing page & assessment page" artboard):
- * every landing test arm by arm, from our own visit log and the people each arm brought;
- * A against B with how likely the difference is real; and the page's engagement from
- * PostHog. For Assessment A the landing page is its assessment page, so the assessment
- * page section reads the same page.
+ * The landing page of AP-Analytics (Marcus's "Landing page & assessment page" artboard, as
+ * updated on 16 Oct 2026): six headline figures against the period before, every landing test
+ * arm by arm from our own visit log and the people each arm brought, and each version's
+ * engagement from PostHog. For Assessment A the landing page is its assessment page.
  */
 import { addDays } from "./days";
-import { MIN_CELL_COUNT, normalCdf, twoProportionSignal } from "@features/admin/server/statistics";
 import { armLabel } from "@features/attribution/server/labels";
 import {
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
-import { classifySource, type Facts } from "./facts";
-import { rangeLabel, type ApFilters } from "./filters";
-import { fmt } from "./format";
-import { armStartsComplete, ratio } from "./metrics";
-import { head, type PageHead } from "./common";
+import { classifySource, FULL_PLANS, PRE_PLANS, type Facts } from "./facts";
+import { rangeLabel, trendBuckets, type ApFilters } from "./filters";
+import {
+  armStartsComplete,
+  comparableStarts,
+  ratio,
+  salesIn,
+  startsComplete,
+  totals,
+  type Scope,
+} from "./metrics";
+import { head, type PageHead, type Tile } from "./common";
 import {
   POSTHOG_FROM,
-  SECTION_TIME_FROM,
   type LandingArmEngagement,
-  type LandingSections,
-  type LandingSectionTime,
   type LandingTime,
   type PostHogResult,
 } from "./posthog";
@@ -114,6 +116,7 @@ export function engagementWindows(
   });
 }
 
+
 export type ArmStatus = "Running" | "Winner" | "Ended";
 
 export interface ArmRow {
@@ -134,7 +137,12 @@ export interface ArmRow {
   revenueSq: number;
   startCvr: number | null;
   submitCvr: number | null;
+  /** Anyone who paid, per visit (the export keeps it). */
   paymentCvr: number | null;
+  /** Pre-unlocks (the Initial plan) per visit: null while it isn't on sale. */
+  preCvr: number | null;
+  /** Full unlocks (Full, Full All, Core) per visit. */
+  fullCvr: number | null;
   perVisit: number | null;
   /** PostHog, by its own arm tag; null where it cannot be read per arm. */
   phSessions: number | null;
@@ -143,32 +151,12 @@ export interface ArmRow {
   medianSeconds: number | null;
   /** Average seconds on the page, each view up to 30 minutes. */
   meanSeconds: number | null;
-  /** The views behind that average and the sum of their squared seconds, for its chance. */
+  /** The views behind that average and the sum of their squared seconds. */
   phTimed: number | null;
   phTimeSq: number | null;
-}
-
-export interface CompareMetric {
-  /** The tests table's column for the same figure. */
-  key: "startCvr" | "submitCvr" | "paymentCvr" | "perVisit" | "bounce" | "meanSeconds";
-  label: string;
-  unit: "pct" | "eur3" | "mmss";
-  a: number | null;
-  b: number | null;
-  lowerIsBetter: boolean;
-  verdict: string;
-}
-
-export interface Comparison {
-  key: string;
-  name: string;
-  code: string;
-  window: string;
-  outcome: string;
-  note?: string;
-  a: string;
-  b: string;
-  metrics: CompareMetric[];
+  /** Visits that clicked a call to action, and scrolled 25/50/75/100% before leaving. */
+  cta: number | null;
+  scroll: Array<number | null> | null;
 }
 
 export interface LandingEngagement {
@@ -180,113 +168,21 @@ export interface LandingEngagement {
   scroll: Array<{ label: string; share: number | null }>;
 }
 
-export interface SectionsView {
-  from: string;
-  to: string;
-  sessions: number;
-  rows: Array<{ section: string; name: string; reach: number | null }>;
-  testimonials: { seen: number | null; startedSeen: number | null; startedNotSeen: number | null };
-}
-
-export interface SectionTimeView {
-  from: string;
-  to: string;
-  sessions: number;
-  /** Average seconds in view over the visits that reached the section, and its reach. */
-  rows: Array<{ section: string; name: string; seconds: number | null; reach: number | null }>;
-}
-
 export interface LandingPayload extends PageHead {
+  /** The six headline figures, against the period before (all traffic). */
+  tiles: Tile[];
   rows: ArmRow[];
   /** Tests with no days in the range. */
   outside: string[];
   /** Why a test's bounce and time are blank: its PostHog read failed. */
   unread: string[];
-  comparisons: Comparison[];
+  /** Every landing visit in the range together: the engagement table's average row. */
   engagement: PostHogResult<LandingEngagement> | null;
-  sections: PostHogResult<SectionsView | null> | null;
-  /** Null value for a range before sectionTimeFrom. */
-  sectionTime: PostHogResult<SectionTimeView | null> | null;
-  /** The first day the time in view was recorded. */
-  sectionTimeFrom: string;
   footnotes: string[];
-}
-
-/** The landing's sections top to bottom, as `data-landing-section` names them. */
-export const SECTION_NAMES: Array<[string, string]> = [
-  ["trust_strip", "Trust strip"],
-  ["discover", "Discover"],
-  ["vocab", "Vocabulary"],
-  ["find_out", "Find out"],
-  ["wow_stats", "Numbers"],
-  ["result_teaser", "Result teaser"],
-  ["archetypes", "14 archetypes"],
-  ["testimonials", "Field reports"],
-  ["foundation", "The science"],
-  ["faq", "FAQ"],
-  ["closing_cta", "Final CTA"],
-  ["footer", "Footer"],
-];
-
-/** "86% chance B is better" from a z-score oriented so that positive favours B (never 100%). */
-function chanceText(z: number): string {
-  if (!Number.isFinite(z)) return "Too few to call";
-  const p = normalCdf(z);
-  const shown = (x: number) => `${Math.min(99, Math.round(x * 100))}%`;
-  return p >= 0.5 ? `${shown(p)} chance B is better` : `${shown(1 - p)} chance A is better`;
-}
-
-/**
- * How likely B beats A on a rate: the normal approximation to the difference of two
- * proportions, read as a probability. Refuses where the team's readouts refuse
- * (twoProportionSignal: under 50 people, or fewer than 5 of either outcome in an arm).
- */
-export function rateVerdict(
-  kA: number,
-  nA: number,
-  kB: number,
-  nB: number,
-  lowerIsBetter = false,
-  few = "Too few to call"
-): string {
-  if (twoProportionSignal(nA, kA, nB, kB).significance === "insufficient-data") return few;
-  const pA = kA / nA;
-  const pB = kB / nB;
-  const se = Math.sqrt((pA * (1 - pA)) / nA + (pB * (1 - pB)) / nB);
-  if (se === 0) return "No difference";
-  return chanceText((lowerIsBetter ? pA - pB : pB - pA) / se);
-}
-
-/** The same for revenue per visit: a visit earns 0 or what its reader paid. */
-export function revenueVerdict(a: ArmRow, b: ArmRow): string {
-  if (a.visits === 0 || b.visits === 0) return "Too few to call";
-  if (a.paid < MIN_CELL_COUNT || b.paid < MIN_CELL_COUNT) return "Too few payments to call";
-  const variance = (r: ArmRow) => Math.max(0, r.revenueSq / r.visits - (r.revenue / r.visits) ** 2);
-  const se = Math.sqrt(variance(a) / a.visits + variance(b) / b.visits);
-  if (se === 0) return "No difference";
-  return chanceText((b.revenue / b.visits - a.revenue / a.visits) / se);
 }
 
 /** Under this many PostHog visits (or timed views) in an arm, its bounce and time are noise. */
 const PH_MIN = 30;
-
-/**
- * The same for the average time on the page (Welch): each view's seconds, capped as the
- * average caps them, so z = (mean B − mean A) / √(sA²/nA + sB²/nB).
- */
-export function timeVerdict(a: ArmRow, b: ArmRow): string {
-  // s²/n with s² the sample variance: the sum of squares gives the spread about the mean.
-  const err = (r: ArmRow) =>
-    r.meanSeconds === null || r.phTimed === null || r.phTimeSq === null || r.phTimed < PH_MIN
-      ? null
-      : Math.max(0, r.phTimeSq / r.phTimed - r.meanSeconds ** 2) / (r.phTimed - 1);
-  const ea = err(a);
-  const eb = err(b);
-  if (ea === null || eb === null) return "Too few to call";
-  const se = Math.sqrt(ea + eb);
-  if (se === 0) return "No difference";
-  return chanceText((b.meanSeconds! - a.meanSeconds!) / se);
-}
 
 function armRow(
   facts: Facts,
@@ -334,6 +230,9 @@ function armRow(
     startCvr: complete ? ratio(starts, visits) : null,
     submitCvr: ratio(subs.length, visits),
     paymentCvr: ratio(payers.length, visits),
+    // The Initial plan (pre-unlock) isn't on sale: no arm has a rate for it yet.
+    preCvr: null,
+    fullCvr: ratio(subs.filter((s) => s.full).length, visits),
     perVisit: ratio(revenue, visits),
     phSessions: phOk ? ph.sessions : null,
     phBounced: phOk ? ph.bounced : null,
@@ -342,107 +241,11 @@ function armRow(
     meanSeconds: phOk ? ph.meanSeconds : null,
     phTimed: phOk ? ph.timed : null,
     phTimeSq: phOk ? ph.sqSeconds : null,
+    cta: phOk ? ratio(ph.cta, ph.sessions) : null,
+    scroll: phOk ? ph.scroll.map((n) => ratio(n, ph.leaves)) : null,
   };
 }
 
-const ms = (seconds: number | null) => (seconds === null ? null : seconds * 1000);
-
-function compare(
-  test: LandingTest,
-  w: { from: string; to: string },
-  a: ArmRow,
-  b: ArmRow,
-  /** Why PostHog's read for the test failed; null when it was read. */
-  phError: string | null
-): Comparison {
-  const posthog = test.from >= POSTHOG_ARMS_FROM;
-  const phVerdict = (x: number | null, y: number | null) =>
-    !posthog
-      ? "Before 7 Oct 2026 PostHog did not reliably know which version a visitor saw"
-      : (phError ?? (x === null || y === null ? "PostHog saw too few visits" : null));
-  // An ended test reads as its decision, as the design writes it, with the chance kept after it.
-  const kept = test.winner ? (test.winner === test.arms[0] ? "A" : "B") : null;
-  const decided = (verdict: string) =>
-    kept && verdict.includes("chance") ? `Ended · ${kept} kept · ${verdict}` : verdict;
-  return {
-    key: test.key,
-    name: test.name,
-    code: test.code,
-    window: rangeLabel(w.from, w.to),
-    outcome: test.outcome,
-    note: test.note,
-    a: a.label,
-    b: b.label,
-    metrics: [
-      {
-        key: "startCvr",
-        label: "Survey start CVR",
-        unit: "pct",
-        a: a.startCvr,
-        b: b.startCvr,
-        lowerIsBetter: false,
-        verdict:
-          a.starts === null || b.starts === null
-            ? "Not recorded for these days: see the note under the tests"
-            : decided(rateVerdict(a.starts, a.visits, b.starts, b.visits)),
-      },
-      {
-        key: "submitCvr",
-        label: "Survey submission CVR",
-        unit: "pct",
-        a: a.submitCvr,
-        b: b.submitCvr,
-        lowerIsBetter: false,
-        verdict: decided(rateVerdict(a.subs, a.visits, b.subs, b.visits)),
-      },
-      {
-        key: "paymentCvr",
-        label: "Payment CVR",
-        unit: "pct",
-        a: a.paymentCvr,
-        b: b.paymentCvr,
-        lowerIsBetter: false,
-        verdict: decided(
-          rateVerdict(a.paid, a.visits, b.paid, b.visits, false, "Too few payments to call")
-        ),
-      },
-      {
-        key: "perVisit",
-        label: "€ rev. per visit",
-        unit: "eur3",
-        a: a.perVisit,
-        b: b.perVisit,
-        lowerIsBetter: false,
-        verdict: decided(revenueVerdict(a, b)),
-      },
-      {
-        key: "bounce",
-        label: "Bounce rate",
-        unit: "pct",
-        a: a.bounce,
-        b: b.bounce,
-        lowerIsBetter: true,
-        verdict:
-          phVerdict(a.bounce, b.bounce) ??
-          decided(
-            rateVerdict(a.phBounced!, a.phSessions!, b.phBounced!, b.phSessions!, true) +
-              " (PostHog)"
-          ),
-      },
-      {
-        key: "meanSeconds",
-        label: "Avg. time on page",
-        unit: "mmss",
-        a: ms(a.meanSeconds),
-        b: ms(b.meanSeconds),
-        lowerIsBetter: false,
-        verdict:
-          phVerdict(a.meanSeconds, b.meanSeconds) ??
-          `${decided(`${timeVerdict(a, b)} (PostHog)`)} · medians: A ${fmt("mmss", ms(a.medianSeconds))}, B ${fmt("mmss", ms(b.medianSeconds))}`,
-      },
-    ],
-  };
-}
 
 function pageEngagement(
   all: LandingArmEngagement[],
@@ -471,47 +274,11 @@ function pageEngagement(
   };
 }
 
-function sectionsView(s: LandingSections): SectionsView {
-  const reach = new Map(s.reach.map((r) => [r.section, r.sessions]));
-  const notSeen = s.sessions - s.testimonials.seen;
-  return {
-    from: s.from,
-    to: s.to,
-    sessions: s.sessions,
-    rows: SECTION_NAMES.map(([section, name]) => ({
-      section,
-      name,
-      reach: ratio(reach.get(section) ?? 0, s.sessions),
-    })),
-    testimonials: {
-      seen: ratio(s.testimonials.seen, s.sessions),
-      startedSeen: ratio(s.testimonials.started, s.testimonials.seen),
-      startedNotSeen: ratio(s.started - s.testimonials.started, notSeen),
-    },
-  };
-}
-
-function sectionTimeView(t: LandingSectionTime): SectionTimeView {
-  const by = new Map(t.sections.map((s) => [s.section, s]));
-  return {
-    from: t.from,
-    to: t.to,
-    sessions: t.sessions,
-    // The hero is timed but has no section_seen: every view starts there.
-    rows: [["hero", "Hero"] as [string, string], ...SECTION_NAMES].map(([section, name]) => {
-      const s = by.get(section);
-      return {
-        section,
-        name,
-        seconds: s ? ratio(s.ms / 1000, s.sessions) : null,
-        reach: ratio(s?.sessions ?? 0, t.sessions),
-      };
-    }),
-  };
-}
 
 export function buildLanding(input: {
   facts: Facts;
+  /** The period before, for the headline figures; null when there is none. */
+  previous: Facts | null;
   filters: ApFilters;
   today: string;
   now: Date;
@@ -520,14 +287,11 @@ export function buildLanding(input: {
   engagement: PostHogResult<LandingArmEngagement[]> | null;
   /** The page's time on page over the range, every version together. */
   pageTime?: PostHogResult<LandingTime> | null;
-  sections: PostHogResult<LandingSections | null> | null;
-  sectionTime?: PostHogResult<LandingSectionTime | null> | null;
 }): LandingPayload {
-  const { facts, filters: f, today, now } = input;
+  const { facts, previous, filters: f, today, now } = input;
   const rows: ArmRow[] = [];
   const outside: string[] = [];
   const unread: string[] = [];
-  const comparisons: Comparison[] = [];
   for (const test of LANDING_TESTS) {
     const w = testWindow(test, facts.from, facts.to, today);
     if (!w) {
@@ -542,59 +306,151 @@ export function buildLanding(input: {
       armRow(facts, test, w, arm, i === 0 ? "A" : "B", today, byArm.get(arm))
     ) as [ArmRow, ArmRow];
     rows.push(a, b);
-    // A failed read is not a small sample: the verdicts and the table say which it was.
-    const phError = ph && !ph.ok ? ph.error : null;
-    if (phError) unread.push(`${test.name}: bounce and avg. time are blank. ${phError}`);
-    comparisons.push(compare(test, w, a, b, phError));
+    // A failed read is not a small sample: the table says which it was.
+    if (ph && !ph.ok)
+      unread.push(`${test.name}: bounce, avg. time, CTA clicks and scroll are blank. ${ph.error}`);
   }
 
-  // The page fixes the comparison and the narrowing filters (all traffic, arm against arm):
-  // its notes must not describe filters a shared link carried in from another page.
-  const pageHead = head(
-    { ...f, source: "all", device: "all", tier: "all", visitor: "all" },
-    today,
-    now
-  );
+  // The page reads every visit (the visit log has no source, device, tier or visitor
+  // history): its notes must not describe filters a shared link carried in from another page.
+  const all: ApFilters = { ...f, source: "all", device: "all", tier: "all", visitor: "all" };
+  const pageHead = head(all, today, now);
   const notes = [...pageHead.notes];
   if (facts.from < POSTHOG_FROM)
     notes.push(
-      `Bounce, time, scroll and section reach come from PostHog, which starts on ${POSTHOG_FROM}.`
+      `Bounce, time, CTA clicks and scroll come from PostHog, which starts on ${POSTHOG_FROM}.`
     );
 
   return {
     ...pageHead,
-    // Nothing here compares periods: a test's arms are compared with each other.
-    compare: null,
+    tiles: landingTiles(facts, previous, all, today),
     notes,
     rows,
     outside,
     unread,
-    comparisons,
     engagement:
       input.engagement === null
         ? null
         : input.engagement.ok
           ? { ok: true, value: pageEngagement(input.engagement.value, input.pageTime ?? null) }
           : input.engagement,
-    sections:
-      input.sections === null
-        ? null
-        : input.sections.ok
-          ? { ok: true, value: input.sections.value ? sectionsView(input.sections.value) : null }
-          : input.sections,
-    sectionTime: !input.sectionTime
-      ? null
-      : input.sectionTime.ok
-        ? {
-            ok: true,
-            value: input.sectionTime.value ? sectionTimeView(input.sectionTime.value) : null,
-          }
-        : input.sectionTime,
-    sectionTimeFrom: SECTION_TIME_FROM,
     footnotes: [
       "Visits: our own visit log, one per browser per day, by the arm the visitor was shown. Starts: answered at least one question; submissions and payments: the people of that arm, paid whenever.",
       "Round 1 (dark vs white, June 2026) is left out: the records from then cannot reliably tell its two pages' visitors apart.",
-      "The chances count each daily visit as one try and are read every day, so they look surer than they are: decide at the test's planned end, not on one day's reading.",
     ],
   };
+}
+
+/**
+ * The design's six figures over every visit, against the period before: survey start and
+ * completion, pre-unlock and full-unlock purchases per finished survey, and revenue per
+ * visitor and per finished survey. Starts that aren't all recorded leave their rates blank.
+ */
+function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today: string): Tile[] {
+  const scope: Scope = { assessment: "a", source: "all", device: "all", tier: "all", visitor: "all" };
+  const t = totals(facts, scope);
+  const p = comparableStarts(
+    previous ? totals(previous, scope) : null,
+    facts.from,
+    previous?.from ?? null,
+    today
+  );
+  const startsWhy = startsComplete(facts.from, today)
+    ? null
+    : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared.";
+  const fullSales = (x: Facts, from = x.from, to = x.to) =>
+    salesIn(x, scope, from, to).filter((m) => FULL_PLANS.has(m.plan ?? "")).length;
+  const points = trendBuckets(facts.from, facts.to);
+  const spark = (pick: (from: string, to: string) => number | null) =>
+    points.map((b) => pick(b.from, b.to));
+  const startsOk = (from: string) => startsComplete(from, today);
+  const tile = (
+    key: string,
+    label: string,
+    unit: Tile["unit"],
+    value: number | null,
+    prev: number | null,
+    sparkline: Array<number | null>,
+    blocked: string | null = null,
+    note?: string
+  ): Tile => ({
+    key,
+    label,
+    unit,
+    value,
+    prev,
+    goodWhen: "up",
+    spark: sparkline,
+    foot: "",
+    blocked,
+    trend: "",
+    ...(note !== undefined ? { note } : {}),
+  });
+  const prevFull = previous && p ? fullSales(previous) : null;
+  return [
+    tile(
+      "start-cvr",
+      "Survey start CVR",
+      "pct",
+      ratio(t.starts, t.visits),
+      p ? ratio(p.starts, p.visits) : null,
+      spark((from, to) => {
+        const x = totals(facts, scope, from, to);
+        return startsOk(from) ? ratio(x.starts, x.visits) : null;
+      }),
+      startsWhy
+    ),
+    tile(
+      "complete-cvr",
+      "Survey complete CVR",
+      "pct",
+      ratio(t.subs, t.starts),
+      p ? ratio(p.subs, p.starts) : null,
+      spark((from, to) => {
+        const x = totals(facts, scope, from, to);
+        return startsOk(from) ? ratio(x.subs, x.starts) : null;
+      }),
+      startsWhy
+    ),
+    tile(
+      "pre-cvr",
+      "Pre-unlock CVR",
+      "pct",
+      null,
+      null,
+      [],
+      null,
+      PRE_PLANS.size ? undefined : "Initial plan not on sale yet"
+    ),
+    tile(
+      "full-cvr",
+      "Full-unlock CVR",
+      "pct",
+      ratio(fullSales(facts), t.subs),
+      p && prevFull !== null ? ratio(prevFull, p.subs) : null,
+      spark((from, to) => ratio(fullSales(facts, from, to), totals(facts, scope, from, to).subs))
+    ),
+    tile(
+      "rev-visit",
+      "Revenue / visitor",
+      "eur3",
+      ratio(t.revenue, t.visits),
+      p ? ratio(p.revenue, p.visits) : null,
+      spark((from, to) => {
+        const x = totals(facts, scope, from, to);
+        return ratio(x.revenue, x.visits);
+      })
+    ),
+    tile(
+      "rev-sub",
+      "Revenue / survey complete",
+      "eur3",
+      ratio(t.revenue, t.subs),
+      p ? ratio(p.revenue, p.subs) : null,
+      spark((from, to) => {
+        const x = totals(facts, scope, from, to);
+        return ratio(x.revenue, x.subs);
+      })
+    ),
+  ];
 }
