@@ -430,6 +430,22 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(rollupDown.text).toBe(outage("a result"));
   });
 
+  it("gives the outage, not a failed lookup, when a read answers what is not a table", async () => {
+    // The series cannot be built from it, so it throws past the reads' own catches.
+    mockRollup.mockReset().mockResolvedValue({} as never);
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    const outage = (what: string) =>
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+      `give, and none counted another way in their place. This is an outage, not ${what}. Ask ` +
+      "again in a few minutes.";
+    const explained = await callTool("explain_change", {});
+    expect(explained.isError).toBe(true);
+    expect(explained.text).toBe(outage("a quiet day"));
+    const charted = await callTool("show_chart", { metrics: ["visitors"] });
+    expect(charted.isError).toBe(true);
+    expect(charted.text).toBe(outage("a flat line"));
+  });
+
   it("takes the dashboard's Berlin day, not UTC's, between midnight in Berlin and in London", async () => {
     // 22:30 UTC on the 16th is 00:30 on the 17th in Berlin: the 17th is today, the 16th whole.
     vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
