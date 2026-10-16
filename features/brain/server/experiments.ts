@@ -230,7 +230,7 @@ export function priceStretches(
   const closing = moments.find((m) => m >= lastDayStart && m > start);
   const until = Math.min(end, closing ?? Infinity);
   const cuts = [start, ...moments.filter((m) => m > start && m < until), until];
-  return cuts.slice(1).map((b, i) => [cuts[i]!, b] as [number, number]);
+  return cuts.slice(1).map((b, i) => [cuts.at(i)!, b] as [number, number]);
 }
 
 /** "Pricing A was full_report €9.99, core €19.99", each arm's list as it stood at `at`. */
