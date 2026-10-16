@@ -20,7 +20,7 @@ If you only know the product problem, start with [`docs/admin/domains/AGENT_READ
 
 ## Key entry files
 
-- `ap/`: AP-Analytics, its own light shell (`ApShell.tsx`, `ApSidebar.tsx`, `ApFilterBar.tsx`) and one component per page; the page list is `ap/nav.ts` and the building blocks are in `ap/kit.tsx`. It imports only browser-safe server modules (`format`, `filters`, `days`, `explorer-spec`, `traffic-math`) and the others' types
+- `ap/`: AP-Analytics, its own light shell (`ApShell.tsx`, `ApSidebar.tsx`, `ApFilterBar.tsx`) and one component per page; the page list is `ap/nav.ts`, the building blocks are in `ap/kit.tsx`, and every chart's read-out (the card on hover, tap and arrow keys, and the shaded stretches with no figures) is in `ap/hover.tsx`. It imports only browser-safe server modules (`format`, `filters`, `days`, `explorer-spec`, `traffic-math`) and the others' types
 - `AdminLoginForm.tsx`: the sign-in form at `/admin/login`, in AP's light design; it says why after the 30-minute idle sign-out
 - `DashboardErrorBoundary.tsx`: wraps each AP page so a failing page shows its own error
 - `hooks/useAdminFetch.ts`: the client-side data loader every AP page uses
