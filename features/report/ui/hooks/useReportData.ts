@@ -109,6 +109,12 @@ export interface ReportData {
    */
   summaryChapter?: import("@/data/report3-summary").Report3SummaryView | null;
   /**
+   * Each V4 chapter's reading time in minutes, by section id (the slimmed report, 16.10):
+   * counted on the server from the chapter's full copy, the same for every plan. NULL
+   * outside `?v4=1`.
+   */
+  chapterReadingTimes?: Readonly<Record<string, number>> | null;
+  /**
    * Report 3.0's Typical Beliefs chapter, for `?v4=1`. NULL for any archetype the
    * content has not been scaled to yet, which is what ReportPage falls back on.
    */

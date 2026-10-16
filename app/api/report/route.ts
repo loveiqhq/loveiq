@@ -28,6 +28,7 @@ import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
 import { buildArchetypeCard } from "@/data/report3-archetype-card";
 import { buildSummary } from "@/data/report3-summary";
+import { buildChapterReadingTimes } from "@features/report/server/chapterReadingTimes";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
@@ -782,6 +783,9 @@ export async function GET(request: Request) {
     const summaryChapter = isV4Request
       ? buildSummary(contentArchetype, { locked: !summaryUnlocked })
       : null;
+    // "Reading time: ~N min." over each chapter's title (the slimmed report, 16.10):
+    // counted from the full copy on the server, the same for every plan.
+    const chapterReadingTimes = isV4Request ? buildChapterReadingTimes(contentArchetype) : null;
 
     /**
      * Report 3.0's Typical Beliefs chapter — Figma 304:256, and 348:213 locked.
@@ -1087,6 +1091,7 @@ export async function GET(request: Request) {
         findingsCopy,
         archetypeCard,
         summaryChapter,
+        chapterReadingTimes,
         beliefsCopy,
         typicalBeliefs,
         typicalBeliefsArticle,

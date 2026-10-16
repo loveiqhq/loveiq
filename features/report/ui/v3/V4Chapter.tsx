@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useState, type FC, type ReactNode } from "react";
-import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
+import { V4ChapterChevron, V4ChapterTitle, useV4ReadingMinutes } from "./V4ChapterHead";
 import { useOnV4OpenChapter } from "./v4OpenChapter";
 
 /**
@@ -91,6 +91,7 @@ const V4Chapter: FC<Props> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
+  const readingMinutes = useV4ReadingMinutes(sectionId);
   // Part II's nudges open a chapter by its section id (v4OpenChapter).
   useOnV4OpenChapter(
     sectionId,
@@ -145,7 +146,7 @@ const V4Chapter: FC<Props> = ({
         data-chapter-action="open"
         onClick={() => setIsOpen((v) => !v)}
       >
-        <V4ChapterTitle title={title ?? ""} archetype={archetype} />
+        <V4ChapterTitle title={title ?? ""} archetype={archetype} readingMinutes={readingMinutes} />
         <V4ChapterChevron />
       </button>
 
