@@ -574,6 +574,7 @@ export function useRowTip() {
   }, []);
   useTapAway(touch && open !== null, row, close);
   const bind = (tip: () => Tip) => ({
+    "data-ap-row-tip": "",
     onPointerEnter: (e: PointerEvent<HTMLElement>) => {
       if (e.pointerType !== "mouse") return;
       row.current = e.currentTarget;

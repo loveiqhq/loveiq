@@ -24,17 +24,18 @@ import {
   Busy,
   Card,
   Failed,
+  ICON_BTN,
   KpiTileV2,
   LiveBadge,
   Loading,
   NotTracked,
   PageHeader,
+  RangeLine,
   SectionHead,
   SortIcon,
   Spark,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -1026,7 +1027,7 @@ function Th<K extends string>({
               dir: dir === null ? (text ? 1 : -1) : dir === 1 ? -1 : 1,
             })
           }
-          className={`ml-1 inline-flex cursor-pointer border-0 bg-transparent p-0 align-[-1px] ${dir ? "text-ap-violet" : "text-ap-muted"}`}
+          className={`ml-0.5 ${ICON_BTN} ${dir ? "text-ap-violet" : "text-ap-muted"}`}
         >
           <SortIcon dir={dir} />
         </button>

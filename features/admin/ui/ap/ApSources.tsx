@@ -15,7 +15,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 import { AP_BASE } from "./nav";
-import { Failed, FilterIcon, HeaderFilter, Loading, PageHeader, SortIcon } from "./kit";
+import { Failed, FilterIcon, HeaderFilter, ICON_BTN, Loading, PageHeader, SortIcon } from "./kit";
 import { useApRole, useApStatus, type ApStatus } from "./status";
 
 const PRIVACY_TAG: Record<"masked" | "partly", { label: string; title: string }> = {
@@ -31,8 +31,7 @@ const FIELD_COLUMNS =
   "minmax(170px,1.2fr) minmax(100px,0.7fr) minmax(260px,2.4fr) minmax(90px,0.6fr)";
 const HEAD =
   "flex items-center gap-1 px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted";
-const headButton = (on: boolean) =>
-  `inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${on ? "text-ap-violet" : "text-ap-muted"}`;
+const headButton = (on: boolean) => `${ICON_BTN} ${on ? "text-ap-violet" : "text-ap-muted"}`;
 
 /**
  * PostHog's card from the live check the sidebar makes (its last event), not from whether a

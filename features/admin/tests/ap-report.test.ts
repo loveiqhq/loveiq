@@ -1188,6 +1188,38 @@ describe("report page, on screen", () => {
     expect(
       screen.getByRole("img", { name: /^Readers by how far they got: 0–9% \d, / })
     ).toBeInTheDocument();
+
+    // Hovering a column reads its groups: the last band's two readers, one per group.
+    if (!("PointerEvent" in window)) {
+      class PE extends MouseEvent {
+        pointerType: string;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerType = init.pointerType ?? "mouse";
+        }
+      }
+      vi.stubGlobal("PointerEvent", PE);
+    }
+    const box = screen.getByRole("group", { name: /^How far into the report readers got\./ });
+    vi.spyOn(box, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 600,
+      bottom: 260,
+      width: 600,
+      height: 260,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.pointerMove(box, { clientX: 560, clientY: 100, pointerType: "mouse" });
+    const card = document.querySelector("[data-ap-tip]")!;
+    expect(card).toHaveTextContent("95–100% of the report");
+    expect(card).toHaveTextContent("10 min+1 · 50%");
+    expect(card).toHaveTextContent("Time not recorded1 · 50%");
+    expect(card).toHaveTextContent("< 1 min0 · 0%");
+    expect(card).toHaveTextContent("Readers2");
+    vi.unstubAllGlobals();
   });
 
   it("how far readers got: says so before any reading per chapter was recorded", () => {

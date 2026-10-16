@@ -21,17 +21,18 @@ import {
   Failed,
   FilterIcon,
   HeaderFilter,
+  ICON_BTN,
   KpiTile,
   LiveBadge,
   Loading,
   NotTracked,
   PageHeader,
   Pills,
+  RangeLine,
   SectionHead,
   SortIcon,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { ASSESSMENT_A } from "./nav";
 import { useApFilters } from "./useApFilters";
@@ -475,7 +476,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                           if (open === k) setFilter((f) => ({ ...f, [k]: "" }));
                           setOpen(open === k ? null : k);
                         }}
-                        className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || filter[k] ? "text-ap-violet" : "text-ap-muted"}`}
+                        className={`${ICON_BTN} ${open === k || filter[k] ? "text-ap-violet" : "text-ap-muted"}`}
                       >
                         <FilterIcon />
                       </button>
@@ -492,7 +493,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                           : { key, dir: key === "planLabel" ? 1 : -1 }
                       )
                     }
-                    className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${sort?.key === key ? "text-ap-violet" : "text-ap-muted"}`}
+                    className={`${ICON_BTN} ${sort?.key === key ? "text-ap-violet" : "text-ap-muted"}`}
                   >
                     <SortIcon dir={sort?.key === key ? sort.dir : null} />
                   </button>

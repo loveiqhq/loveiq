@@ -23,17 +23,18 @@ import {
   Card,
   Failed,
   FilterIcon,
+  ICON_BTN,
   KpiTileV2,
   Loading,
   NotTracked,
   PageHeader,
   Pills,
+  RangeLine,
   SectionHead,
   SectionNav,
   SortIcon,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -159,7 +160,7 @@ function Th<K extends string>({
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(col)}
-          className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${dir ? "text-ap-violet" : "text-ap-muted"}`}
+          className={`${ICON_BTN} ${dir ? "text-ap-violet" : "text-ap-muted"}`}
         >
           <SortIcon dir={dir} />
         </button>
@@ -202,7 +203,7 @@ function useColumnFilters<T, F extends string>(
       aria-label={`Filter ${labels[k]}`}
       aria-expanded={open === k}
       onClick={() => setOpen(open === k ? null : k)}
-      className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
+      className={`${ICON_BTN} ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
     >
       <FilterIcon />
     </button>

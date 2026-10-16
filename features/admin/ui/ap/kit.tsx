@@ -20,6 +20,13 @@ import {
 
 import { IndexHover } from "./hover";
 
+/**
+ * A table heading's sort or filter icon: a 24 × 24 target (WCAG 2.2's minimum) around the
+ * 11px icon, its margin pulled in so the heading keeps its height.
+ */
+export const ICON_BTN =
+  "-my-[5px] inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 align-middle";
+
 const TONE_TEXT: Record<Tone, string> = {
   good: "text-ap-good",
   bad: "text-ap-bad",
@@ -664,7 +671,7 @@ export function DataTable({
                         if (filtering) setFilter("");
                         setFiltering(!filtering);
                       }}
-                      className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
+                      className={`ml-0.5 ${ICON_BTN} ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
                     >
                       <FilterIcon />
                     </button>
@@ -680,7 +687,7 @@ export function DataTable({
                             : { col: i, dir: i ? -1 : 1 }
                         )
                       }
-                      className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
+                      className={`ml-0.5 ${ICON_BTN} ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
                     >
                       <SortIcon dir={sort?.col === i ? sort.dir : null} />
                     </button>

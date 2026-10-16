@@ -40,6 +40,7 @@ import {
   Card,
   Eyebrow,
   Failed,
+  ICON_BTN,
   KpiTileV2,
   Loading,
   NotTracked,
@@ -953,7 +954,7 @@ function Performance({
             type="button"
             aria-label={`Sort by ${label}`}
             onClick={() => sortBy(k, better)}
-            className="inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] text-inherit"
+            className={`ml-0.5 ${ICON_BTN} text-inherit`}
           >
             <SortIcon dir={on ? (dir === "asc" ? 1 : -1) : null} />
           </button>

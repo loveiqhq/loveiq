@@ -12,19 +12,20 @@ import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
 import { periodTitle } from "./hover";
 import {
-  FilterIcon,
   BlackButton,
   Busy,
   Card,
   Failed,
+  FilterIcon,
+  ICON_BTN,
   KpiTileV2,
   Loading,
   PageHeader,
+  RangeLine,
   SectionHead,
   SortIcon,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -135,7 +136,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
       aria-label={`Filter ${label}`}
       aria-expanded={filtering}
       onClick={() => setFiltering(!filtering)}
-      className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${
+      className={`${ICON_BTN} ${
         filtering || test !== "all" || statusFilter !== "all" ? "text-ap-violet" : "text-ap-muted"
       }`}
     >
@@ -223,7 +224,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
                           : { key: c.key, dir: -1 }
                       )
                     }
-                    className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${sort?.key === c.key ? "text-ap-violet" : "text-ap-muted"}`}
+                    className={`${ICON_BTN} ${sort?.key === c.key ? "text-ap-violet" : "text-ap-muted"}`}
                   >
                     <SortIcon dir={sort?.key === c.key ? sort.dir : null} />
                   </button>
