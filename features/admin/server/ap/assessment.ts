@@ -9,16 +9,18 @@ import { askedQuestions } from "@features/admin/server/dropoff-weekly";
 import { classifySource, deviceClass, type Facts } from "./facts";
 import { bucketCaption, grainOf, trendBuckets, type ApFilters } from "./filters";
 import { shortDate } from "./days";
-import type { Unit } from "./format";
+import { fmt, type GoodWhen, type Unit } from "./format";
 import {
   launched,
+  LATE_SOURCES,
+  lateSourceNote,
   ratio,
   spend,
-  spendBlocked,
   startsBlocked,
   comparableStarts,
   startsComplete,
   subsIn,
+  tabletBlocked,
   totals,
   trend,
   visitsBlocked,
@@ -32,11 +34,12 @@ import {
   readMedianMs,
   SOURCE_ROWS,
   spendCoverage,
+  visitorSplit,
   type PageHead,
   type Table,
   type Tile,
-} from "./overview";
-import type { NewReturning, PostHogResult } from "./posthog";
+} from "./common";
+import type { NewReturning, PostHogResult, SessionTags } from "./posthog";
 
 export interface ScoreRow {
   group: string;
@@ -76,19 +79,19 @@ export interface DashboardPayload extends PageHead {
   scorecard: ScoreRow[];
   journey: JourneyStep[];
   sources: Table;
-  performance: Array<{
-    label: string;
-    completion: number | null;
-    paymentCvr: number | null;
-    perSub: number | null;
-  }>;
+  /** Per source, over its estimated visitors (blank with sources' note when they are). */
+  performance: Array<{ label: string; surveyCvr: number | null; perVisit: number | null }>;
   newReturning: PostHogResult<NewReturning> | null;
+  /** Payments in the range by each of newReturning's groups, for € per visit. */
+  newReturningRevenue: PostHogResult<{ new: number; returning: number }> | null;
   prices: PriceRow[];
+  /** Why the prices table is empty under the filters, or null. */
+  pricesBlocked: string | null;
 }
 
 const PLAN_LABELS: Record<string, string> = {
-  full_report: "Full report",
-  all_reports: "All 14 archetypes",
+  full_report: "Full",
+  all_reports: "Full All",
   essentials: "Essentials (retired)",
   core: "Core (retired)",
 };
@@ -100,6 +103,7 @@ export function assessmentScope(f: ApFilters): Scope {
     source: f.source,
     device: f.device,
     tier: f.tier,
+    visitor: f.visitor,
   };
 }
 
@@ -111,12 +115,23 @@ export function buildDashboard(input: {
   today: string;
   now: Date;
   newReturning: PostHogResult<NewReturning> | null;
+  /** PostHog's visits by first-page tracking, for visitors per source (null: not read). */
+  sessions?: PostHogResult<SessionTags[]> | null;
+  /** fetchVisitorGroups for the range's payments: whose visitors each payment counts with. */
+  visitorGroups?: PostHogResult<Map<string, "new" | "returning">> | null;
 }): DashboardPayload {
   const { facts, previous, ad, filters: f, today, now } = input;
   const scope = assessmentScope(f);
   const t = totals(facts, scope);
+  // The tablet filter before tablets were told apart: nobody counts as one, so every figure about
+  // people is blank with the reason rather than a false zero, and such a period is not compared.
+  const tablet = tabletBlocked(scope, facts.from);
+  const known = (v: number) => (tablet ? null : v);
   // The earlier period at the same age as this one, so "so far" rates compare like with like.
-  const prevAged = previous ? ageMatched(previous, sameAge(facts, previous, now)) : null;
+  const prevAged =
+    previous && !tabletBlocked(scope, previous.from)
+      ? ageMatched(previous, sameAge(facts, previous, now))
+      : null;
   const pRaw = prevAged ? totals(prevAged, scope) : null;
   const startsOk = startsComplete(facts.from, today, scope);
   const p: Totals | null = comparableStarts(pRaw, facts.from, previous?.from ?? null, today, scope);
@@ -129,7 +144,6 @@ export function buildDashboard(input: {
   const caption = bucketCaption(facts.from, facts.to);
   const vB = visitsBlocked(scope);
   const stB = startsBlocked(scope, facts.from, today);
-  const spB = spendBlocked(scope);
   const cac = (s: { eur: number | null }, x: Totals) =>
     s.eur === null ? null : ratio(s.eur, x.payers);
   const prevCac = sPrev && p ? cac(sPrev, p) : null;
@@ -141,7 +155,7 @@ export function buildDashboard(input: {
     foot: (x: Totals) => string,
     opts: {
       blocked?: string | null;
-      goodWhen?: "up" | "down";
+      goodWhen?: GoodWhen;
       spark?: Array<number | null>;
       value?: number | null;
       prev?: number | null;
@@ -157,7 +171,8 @@ export function buildDashboard(input: {
     goodWhen: opts.goodWhen ?? "up",
     spark: opts.spark ?? trend(facts, scope, (x) => pick(x)),
     foot: foot(t),
-    blocked: opts.blocked ?? null,
+    // Every tile counts people or visits: blank under the tablet filter too, unless already blank.
+    blocked: opts.blocked ?? tablet,
     trend: opts.trend ?? caption,
     ...(opts.deltaAs ? { deltaAs: opts.deltaAs } : {}),
   });
@@ -215,7 +230,7 @@ export function buildDashboard(input: {
       "€ rev. per visit",
       "eur3",
       (x) => ratio(x.revenue, x.visits),
-      () => (p ? `vs ${eur(ratio(p.revenue, p.visits), 3)}` : ""),
+      () => (p ? `vs ${fmt("eur3", ratio(p.revenue, p.visits))}` : ""),
       {
         blocked: vB,
       }
@@ -227,7 +242,7 @@ export function buildDashboard(input: {
       (x) => ratio(x.revenue, x.subs),
       (x) =>
         p
-          ? `vs ${eur(ratio(p.revenue, p.subs), 3)} · ${count(x.subs)} submissions`
+          ? `vs ${fmt("eur3", ratio(p.revenue, p.subs))} · ${count(x.subs)} submissions`
           : `${count(x.subs)} submissions`
     ),
     tile(
@@ -270,7 +285,8 @@ export function buildDashboard(input: {
           ? "Google Ads spend ÷ paying customers"
           : `${prevCac !== null ? `vs ${eur(prevCac)} · ` : ""}spend ${eur(sNow.eur, 0)}${partialSpend}`,
       {
-        blocked: spB,
+        // Blank spend says why: a filter that can't split it, no figure for these days, or no read.
+        blocked: sNow.why,
         goodWhen: "down",
         deltaAs: "abs",
         value: cac(sNow, t),
@@ -287,7 +303,9 @@ export function buildDashboard(input: {
       "Report open rate",
       "pct",
       (x) => ratio(x.opened, x.subs),
-      (x) => `${count(x.opened)} of ${count(x.subs)}`
+      (x) => `${count(x.opened)} of ${count(x.subs)}`,
+      // A health check (almost everyone opens their report), so its change is grey, as drawn.
+      { goodWhen: "either" }
     ),
   ];
   // The CAC tile's line is spend per submission (a sale is too rare to draw), so its caption says so.
@@ -322,21 +340,29 @@ export function buildDashboard(input: {
       label: "CAC",
       unit: "eur",
       value: cac(sNow, t),
-      note: `Google Ads spend ÷ paying customers${partialSpend}`,
+      note: sNow.why ?? `Google Ads spend ÷ paying customers${partialSpend}`,
     },
     {
       group: "Economics",
       label: "ROAS",
       unit: "ratio",
       value: sNow.eur ? ratio(t.revenue, sNow.eur) : null,
-      note: `revenue ÷ ad spend (1.0 = break-even on the first purchase)${partialSpend}`,
+      note:
+        sNow.why ?? `revenue ÷ ad spend (1.0 = break-even on the first purchase)${partialSpend}`,
     },
     {
       group: "Economics",
       label: "CLV",
       unit: "eur",
       value: ratio(t.revenue, t.payers),
-      note: "revenue per paying customer; one purchase each so far, so it equals the average order",
+      // It equals the average order only while nobody has bought twice.
+      note: `revenue per paying customer${
+        t.payers === 0
+          ? ""
+          : t.sales === t.payers
+            ? "; one purchase each so far, so it equals the average order"
+            : `; ${t.sales} purchases by ${t.payers} customer${t.payers === 1 ? "" : "s"} so far`
+      }`,
     },
     {
       group: "Engagement",
@@ -416,78 +442,94 @@ export function buildDashboard(input: {
     {
       n: 4,
       label: "Submitted",
-      value: t.subs,
-      step: `${pct(ratio(t.startsFinished, t.starts))} of starts finish`,
+      value: known(t.subs),
+      step: `${pct(ratio(t.startsFinished, t.starts))} of starts`,
       href: "survey",
     },
     {
       n: 5,
       label: "Report opened",
-      value: t.opened,
+      value: known(t.opened),
       step: `${pct(ratio(t.opened, t.subs))} of submits`,
       href: "report",
     },
     {
       n: 6,
       label: "Paywall reached",
-      value: t.paywall,
+      value: known(t.paywall),
       step: `${pct(ratio(t.paywall, t.opened))} of opens`,
       href: "report",
     },
     {
       n: 7,
       label: "Paid",
-      value: t.paidCohort,
+      value: known(t.paidCohort),
       step: `${pct(ratio(t.paidCohort, t.paywall))} of paywall`,
       href: "#payment",
     },
   ];
 
-  const bySource = SOURCE_ROWS.map((s) => {
-    const sc = { ...scope, source: s.value };
-    const x = totals(facts, sc);
-    return { ...s, x };
-  }).filter((s) => (s.x.starts ?? 0) > 0 || s.x.subs > 0);
-  const allStarts = t.starts;
-  const maxStarts = Math.max(1, ...bySource.map((s) => s.x.starts ?? 0));
+  // Every source, its visitors estimated as the Overview's are (sample split, totals live).
+  const split = visitorSplit(f, t.visits, input.sessions ?? null);
+  const bySource = SOURCE_ROWS.map((s) => ({
+    ...s,
+    x: totals(facts, { ...scope, source: s.value }),
+    visitors: split.bySource.get(s.value)?.visitors ?? null,
+  }));
+  const maxVisitors = Math.max(0, ...bySource.map((s) => s.visitors ?? 0));
+  // What a source's people are divided by: none for a late source in a range before its day.
+  const late = split.ok ? lateSourceNote(f.from) : null;
+  const perVisitor = (s: (typeof bySource)[number]) =>
+    late && LATE_SOURCES.has(s.value) ? null : s.visitors;
   const sources: Table = {
-    barLabel: "Share of starts",
+    sample: split.ok,
+    barLabel: "Share of visits",
+    // The design's decimals: a share in tenths, a CVR in hundredths.
     columns: [
       { label: "Source", unit: "text" },
-      { label: "Starts", unit: "count" },
-      { label: "Share", unit: "pct" },
+      { label: "Visitors", unit: "count" },
+      { label: "Share", unit: "pct", digits: 1 },
       { label: "Submissions", unit: "count" },
-      { label: "Completion", unit: "pct" },
-      { label: "Paid", unit: "count" },
-      { label: "€ / submission", unit: "eur3" },
+      { label: "Survey CVR", unit: "pct", digits: 2 },
+      { label: "€ / visit", unit: "eur3" },
     ],
     rows: bySource.map((s) => ({
       label: s.label,
       values: [
-        s.x.starts,
-        f.source === "all" ? ratio(s.x.starts, allStarts) : null,
-        s.x.subs,
-        ratio(s.x.startsFinished, s.x.starts),
-        s.x.paidCohort,
-        ratio(s.x.revenue, s.x.subs),
+        s.visitors,
+        split.bySource.get(s.value)?.share ?? null,
+        known(s.x.subs),
+        ratio(s.x.subs, perVisitor(s)),
+        ratio(s.x.revenue, perVisitor(s)),
       ],
-      bar: (s.x.starts ?? 0) / maxStarts,
+      // No bars while the visitors are blank: an empty track would read as none.
+      ...(split.ok ? { bar: maxVisitors ? (s.visitors ?? 0) / maxVisitors : 0 } : {}),
     })),
-    note: `Visits are not split by source: the visit log misses most ad clicks. ${startsBlocked({ ...scope, source: "google_ads" }, facts.from, today) ?? "Starts, submissions and payments carry the source the survey recorded; revenue by payment day."}`,
+    note: `${split.note} Survey CVR: submissions ÷ visitors. Submissions and payments carry the source the survey recorded; revenue by payment day.${late ? ` ${late}` : ""}${tablet ? ` ${tablet}` : ""}`,
   };
 
   const performance = bySource.map((s) => ({
     label: s.label,
-    completion: ratio(s.x.startsFinished, s.x.starts),
-    paymentCvr: ratio(s.x.paidCohort, s.x.subs),
-    perSub: ratio(s.x.revenue, s.x.subs),
+    surveyCvr: ratio(s.x.subs, perVisitor(s)),
+    perVisit: ratio(s.x.revenue, perVisitor(s)),
   }));
 
+  // € per visit for each of PostHog's visitor groups: the range's payments, each with the
+  // group of the person who made it (fetchVisitorGroups). All traffic, as the panel is.
+  const groups = input.visitorGroups ?? null;
+  const newReturningRevenue: DashboardPayload["newReturningRevenue"] =
+    groups === null
+      ? null
+      : groups.ok
+        ? { ok: true, value: revenueByGroup(facts, groups.value) }
+        : groups;
+
   // Sales per plan and price: of the prices quoted in the range, the checkouts and sales on
-  // them. The narrowing filters apply by the reader's own source, device and tier.
+  // them. The narrowing filters apply by the reader's own source, device and tier; quotes are
+  // counted per price, not per person, so new and returning can't split them.
   const priceMap = new Map<string, PriceRow>();
   for (const qf of facts.quotes) {
-    if (!launched(scope)) break;
+    if (!launched(scope) || scope.visitor !== "all") break;
     if (scope.source !== "all" && classifySource(qf) !== scope.source) continue;
     if (scope.device !== "all" && deviceClass(qf.device) !== scope.device) continue;
     if (scope.tier !== "all" && qf.tier !== scope.tier) continue;
@@ -513,9 +555,10 @@ export function buildDashboard(input: {
     row.revenue = Math.round((row.revenue + qf.revenue) * 100) / 100;
     priceMap.set(key, row);
   }
+  // By the plan's name, then price, as the design lists them.
   const prices = [...priceMap.values()]
     .map((r) => ({ ...r, cvr: ratio(r.sales, r.quoted) }))
-    .sort((a, b) => a.plan.localeCompare(b.plan) || (a.price ?? 0) - (b.price ?? 0));
+    .sort((a, b) => a.planLabel.localeCompare(b.planLabel) || (a.price ?? 0) - (b.price ?? 0));
 
   return {
     ...head(f, today, now),
@@ -527,8 +570,33 @@ export function buildDashboard(input: {
     sources,
     performance,
     newReturning: input.newReturning,
+    newReturningRevenue,
     prices,
+    pricesBlocked:
+      scope.visitor !== "all"
+        ? "Prices are counted per price, not per person, so new and returning can't split them."
+        : tablet,
   };
+}
+
+/**
+ * The range's sales (money in, by payment day; our probes out) by the payer's PostHog group,
+ * found through the visit they finished the survey in. One PostHog never saw is in neither.
+ */
+export function revenueByGroup(
+  facts: Facts,
+  groups: Map<string, "new" | "returning">
+): { new: number; returning: number } {
+  let fresh = 0;
+  let back = 0;
+  for (const m of facts.money) {
+    const g = m.ph ? groups.get(m.ph.toLowerCase()) : undefined;
+    if (!g || m.amount <= 0 || m.day < facts.from || m.day > facts.to) continue;
+    if (classifySource(m) === "test") continue;
+    if (g === "new") fresh += m.amount;
+    else back += m.amount;
+  }
+  return { new: Math.round(fresh * 100) / 100, returning: Math.round(back * 100) / 100 };
 }
 
 function pct(v: number | null): string {

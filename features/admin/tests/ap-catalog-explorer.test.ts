@@ -32,7 +32,13 @@ import {
   signUnlock,
   type ExplorerQuery,
 } from "@features/admin/server/ap/explorer";
-import { berlinTime } from "@features/admin/server/ap/explorer-spec";
+import {
+  berlinTime,
+  defaultColumns,
+  headerFilters,
+  isIdColumn,
+  msDuration,
+} from "@features/admin/server/ap/explorer-spec";
 import { columnPrivacy, masker, MASKED } from "@features/admin/server/team-export";
 
 const DEFS = {
@@ -99,8 +105,8 @@ describe("data catalog", () => {
   it("reads the schema the export copies, with types, keys and joins", () => {
     expect(catalog.filter((t) => t.source === "production").map((t) => t.name)).toEqual([
       "survey_submission_answer",
-      "payment",
       "funnel_event",
+      "payment",
       "app_user",
     ]);
     const answer = table("survey_submission_answer");
@@ -119,11 +125,47 @@ describe("data catalog", () => {
     ).toBe("");
   });
 
+  it("lists the design's tables first, in its order, then the rest by name", () => {
+    const names = buildCatalog(
+      schemaOf(
+        Object.fromEntries(
+          [
+            "report_section_feedback",
+            "admin_audit_log",
+            "payment",
+            "analytics_event",
+            "survey_submission_answer",
+            "report_price_quote",
+            "funnel_event",
+            "app_user",
+            "survey_submission",
+          ].map((name) => [name, { properties: { id: { format: "bigint" } } }])
+        )
+      ),
+      []
+    )
+      .filter((t) => t.source === "production")
+      .map((t) => t.name);
+    expect(names).toEqual([
+      "survey_submission",
+      "survey_submission_answer",
+      "funnel_event",
+      "payment",
+      "report_price_quote",
+      "report_section_feedback",
+      "admin_audit_log",
+      "analytics_event",
+      "app_user",
+    ]);
+  });
+
   it("groups tables and picks the date a range filters on", () => {
     expect(groupOf("report_price_quote")).toBe("Revenue");
     expect(groupOf("report_session")).toBe("Report");
     expect(groupOf("survey_partial_save")).toBe("Survey");
     expect(groupOf("admin_users")).toBe("Admin & tools");
+    expect(groupOf("funnel_event")).toBe("Traffic");
+    expect(groupOf("analytics_event")).toBe("Traffic");
     expect(
       dateFieldsOf([
         { name: "saved_at", type: "timestamptz" },
@@ -171,7 +213,7 @@ describe("data catalog", () => {
     expect(table("survey_submission_answer")).toMatchObject({ origin: "draft" });
   });
 
-  it("lists a table's joins both ways: the tables it points to and those pointing to it", () => {
+  it("lists the tables a table's own fields point to, as the design does: three at most", () => {
     const fk = (table: string) => ({
       format: "bigint",
       description: `<fk table='${table}' column='id'/>`,
@@ -179,7 +221,17 @@ describe("data catalog", () => {
     const joined = buildCatalog(
       schemaOf({
         app_user: { properties: { id: { format: "bigint", description: "<pk/>" } } },
-        payment: { properties: { id: { format: "bigint" }, user_id: fk("app_user") } },
+        payment: {
+          properties: {
+            id: { format: "bigint" },
+            user_id: fk("app_user"),
+            personal_report_id: fk("personal_report"),
+            buyer_id: fk("app_user"),
+            reviewed_by: fk("admin_users"),
+            pricing_quote_id: fk("report_price_quote"),
+            refund_id: fk("refund"),
+          },
+        },
         survey_submission: {
           properties: {
             id: { format: "bigint" },
@@ -191,8 +243,10 @@ describe("data catalog", () => {
       []
     );
     const joins = (name: string) => joined.find((t) => t.name === name)?.joins;
-    expect(joins("app_user")).toEqual(["payment", "survey_submission"]);
-    expect(joins("payment")).toEqual(["app_user"]);
+    // Not the tables pointing back at it.
+    expect(joins("app_user")).toEqual([]);
+    // In field order, each once, no admin table, and the first three only.
+    expect(joins("payment")).toEqual(["app_user", "personal_report", "report_price_quote"]);
     // A key to its own table is not a join to another.
     expect(joins("survey_submission")).toEqual(["app_user"]);
     expect(table("survey_submission_answer").joins).toEqual(["survey_question"]);
@@ -405,6 +459,117 @@ describe("explorer query checks", () => {
   });
 });
 
+describe("explorer columns, as the design shows them", () => {
+  const col = (format: string, description = "") => ({ format, description });
+  // The submission facts view, its columns in the order the database lists them.
+  const facts = buildCatalog(
+    schemaOf({
+      admin_submission_facts: {
+        properties: {
+          submission_id: col("bigint"),
+          session_id: col("text"),
+          user_id: col("bigint"),
+          email: col("text"),
+          status: col("text"),
+          duration_ms: col("bigint"),
+          created_date_time: col("timestamp with time zone"),
+          archetype: col("text"),
+          v5_archetype: col("text"),
+          gender: col("text"),
+          sexual_orientation: col("text"),
+          relationship_status: col("text"),
+          country: col("text"),
+          utm_source: col("text"),
+          utm_medium: col("text"),
+          has_report: col("boolean"),
+          has_payment: col("boolean"),
+          was_resumed: col("boolean"),
+        },
+      },
+    }),
+    []
+  )[0]!;
+  const DESIGN = [
+    "submission_id",
+    "created_date_time",
+    "status",
+    "duration_ms",
+    "archetype",
+    "country",
+    "utm_source",
+    "has_report",
+    "has_payment",
+  ];
+
+  it("opens the submission facts on the design's nine columns, other tables on their first nine", () => {
+    expect(defaultColumns(facts)).toEqual(DESIGN);
+    const submission = buildCatalog(
+      schemaOf({
+        survey_submission: {
+          properties: {
+            id: col("bigint", "<pk/>"),
+            user_id: col("bigint", "<fk table='app_user' column='id'/>"),
+            survey_id: col("bigint"),
+            utm_tracker: col("text"),
+            regeneration_url: col("text"),
+            status: col("text"),
+            start_date_time: col("timestamp with time zone"),
+            duration_ms: col("bigint"),
+            created_date_time: col("timestamp with time zone"),
+          },
+        },
+      }),
+      []
+    )[0]!;
+    // What survey_submission holds itself: utm_source is inside utm_tracker.
+    expect(defaultColumns(submission)).toEqual([
+      "id",
+      "created_date_time",
+      "status",
+      "duration_ms",
+      "utm_tracker",
+    ]);
+    const wide = {
+      name: "payment",
+      fields: Array.from({ length: 14 }, (_, i) => ({ name: `f${i}`, type: "text" })),
+    };
+    expect(defaultColumns(wide)).toEqual(wide.fields.slice(0, 9).map((f) => f.name));
+  });
+
+  it("puts a filter in the header of the words and yes-or-no columns only, not on ids", () => {
+    expect(
+      facts.fields.filter((f) => DESIGN.includes(f.name) && headerFilters(f)).map((f) => f.name)
+    ).toEqual(["status", "archetype", "country", "utm_source", "has_report", "has_payment"]);
+    for (const f of [
+      { name: "id", type: "bigint", pk: true },
+      { name: "visitor_id", type: "text" },
+      { name: "$session_id", type: "text" },
+      { name: "uuid", type: "uuid" },
+      { name: "parent", type: "text", joins: "survey_submission.id" },
+      { name: "metadata", type: "jsonb" },
+      { name: "tags", type: "text[]" },
+      { name: "amount", type: "numeric" },
+      { name: "created_at", type: "timestamptz" },
+    ])
+      expect(headerFilters(f), f.name).toBe(false);
+    // A key that is not an id stays a category: funnel_event's step, GA4's channel.
+    expect(headerFilters({ name: "event_type", type: "text", pk: true })).toBe(true);
+    expect(headerFilters({ name: "channel", type: "text", pk: true })).toBe(true);
+    // An id is not an amount: it stays left, as the design's does.
+    expect(isIdColumn({ name: "submission_id", type: "bigint" })).toBe(true);
+    expect(isIdColumn({ name: "duration_ms", type: "bigint" })).toBe(false);
+  });
+
+  it("writes duration_ms as the design does", () => {
+    expect(msDuration(521_000)).toBe("8m 41s");
+    expect(msDuration(662_400)).toBe("11m 02s");
+    expect(msDuration(41_000)).toBe("41s");
+    expect(msDuration(3_456)).toBe("3.5s");
+    expect(msDuration(59_999)).toBe("1m 00s");
+    expect(msDuration(3_723_000)).toBe("1h 02m 03s");
+  });
+});
+
 describe("explorer unlock", () => {
   beforeEach(() => vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key"));
   afterEach(() => vi.unstubAllEnvs());
@@ -597,6 +762,54 @@ describe("explorer masking", () => {
     });
     const r = await productionRows(t, q({ columns: ["id", "phone_hint"] }), true, new Date());
     expect(r.rows).toEqual([{ id: 1, phone_hint: MASKED }]);
+  });
+
+  it("lists PostHog's event id and its properties, the properties masked whole until unlocked", async () => {
+    const events = catalog.find((t) => t.source === "posthog" && t.name === "events")!;
+    // The key the Key chip names is a field the page lists.
+    expect(events.key).toEqual(["uuid"]);
+    expect(events.fields.find((f) => f.name === "uuid")).toMatchObject({ pk: true, privacy: null });
+    expect(events.fields.find((f) => f.name === "properties")).toMatchObject({
+      type: "jsonb",
+      privacy: "masked",
+    });
+    const props = JSON.stringify({
+      $set: { email: "ana@example.com", first_name: "Ana" },
+      $current_url: "https://www.loveiq.org/report/rpt_secretToken123",
+    });
+    const read = () =>
+      mockHogql
+        .mockResolvedValueOnce({
+          ok: true,
+          cut: false,
+          rows: [["2026-10-12T21:00:00+02:00", "0192a7c4-0000-7000-8000-000000000001", props]],
+        })
+        .mockResolvedValueOnce({ ok: true, cut: false, rows: [[1]] });
+    const query = q({ dateField: "timestamp", columns: ["uuid", "properties"] });
+    read();
+    const masked = await posthogRows(events, query, true, new Date());
+    expect(mockHogql.mock.calls[0]![0]).toContain("SELECT timestamp, uuid, properties FROM events");
+    expect(masked.rows).toEqual([
+      { uuid: "0192a7c4-0000-7000-8000-000000000001", properties: MASKED },
+    ]);
+    expect(JSON.stringify(masked)).not.toContain("ana@example.com");
+    // Unlocked (an admin, with a logged reason), as stored, like the other personal fields.
+    read();
+    expect((await posthogRows(events, query, false, new Date())).rows[0]?.properties).toBe(props);
+    // While masked nothing filters on it; JSON only ever filters on empty or not.
+    const on = (op: "notnull" | "eq", masked: boolean) => () =>
+      checkQuery(
+        events,
+        q({
+          dateField: "timestamp",
+          columns: ["uuid"],
+          filters: [{ column: "properties", op, value: op === "eq" ? "x" : "" }],
+        }),
+        masked
+      );
+    expect(on("notnull", true)).toThrow(/unlocked/);
+    expect(on("eq", false)).toThrow(/empty or not empty/);
+    expect(on("notnull", false)).not.toThrow();
   });
 
   it("masks the PostHog session id whole while masked, and keeps filters off it", async () => {

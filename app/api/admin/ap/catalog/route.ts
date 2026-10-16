@@ -66,8 +66,11 @@ export async function GET(request: Request) {
         name: "Google Analytics",
         status: gaDay ? "Synced" : "No data",
         ok: Boolean(gaDay),
-        description: "GA4 sessions and users by day, for visitors who accepted cookies.",
-        fresh: gaDay ? `Nightly, last day ${shortDate(gaDay)} ${gaDay.slice(0, 4)}` : "Nightly",
+        description:
+          "GA4 sessions, users and engagement by day and channel, for visitors who accepted cookies.",
+        fresh: gaDay
+          ? `Every 15 minutes, last day ${shortDate(gaDay)} ${gaDay.slice(0, 4)}`
+          : "Every 15 minutes",
         tables: count("ga4"),
       },
       {
@@ -75,8 +78,11 @@ export async function GET(request: Request) {
         name: "Google Ads",
         status: adsDay ? "Synced" : "No data",
         ok: Boolean(adsDay),
-        description: "Ad spend, clicks and impressions by day, through Google Analytics.",
-        fresh: adsDay ? `Nightly, last day ${shortDate(adsDay)} ${adsDay.slice(0, 4)}` : "Nightly",
+        description:
+          "Spend, clicks, impressions and conversions by day and campaign, from the Ads account.",
+        fresh: adsDay
+          ? `Every 15 minutes, last day ${shortDate(adsDay)} ${adsDay.slice(0, 4)}`
+          : "Every 15 minutes",
         tables: count("ads"),
       },
     ];

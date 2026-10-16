@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ph = vi.hoisted(() => ({ capture: vi.fn(), register: vi.fn() }));
 vi.mock("posthog-js", () => ({ default: ph }));
-// GA4's gates open: production, with analytics consent.
+// Every gate open: production, and analytics consent (the dataLayer push needs it).
 vi.mock("@shared/env/is-non-prod-deploy", async (orig) => ({
   ...(await orig<object>()),
   isProductionSite: () => true,

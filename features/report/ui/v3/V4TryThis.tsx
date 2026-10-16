@@ -160,6 +160,7 @@ const V4TryThis: FC<Props> = ({
         className="rv4-try__button"
         aria-expanded={isOpen}
         aria-controls={bodyId}
+        data-chapter-action="try_this"
         onClick={() => setIsOpen((v) => !v)}
       >
         {/* 185:265 — Mark's rehaul (28.09) drops the lightbulb chip. */}
@@ -187,6 +188,7 @@ const V4TryThis: FC<Props> = ({
               type="button"
               className="rv4-try__open"
               aria-label="Read all of the practice"
+              data-chapter-action="try_this"
               onClick={() => setIsOpen(true)}
             >
               Read all

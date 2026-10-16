@@ -5,8 +5,8 @@
 **Entry:** Routes inline at `app/api/cron/<job>/route.ts`. Tests in `tests/`.
 
 **`vercel.json` and `brain-daily.yml` are the source of truth for WHICH of them run** — a
-route on disk is not a scheduled job, and the difference has hidden a dead job before. 40
-routes exist: 27 are scheduled in `vercel.json`, 6 run in GitHub Actions, 1 is started on demand
+route on disk is not a scheduled job, and the difference has hidden a dead job before. 41
+routes exist: 28 are scheduled in `vercel.json`, 6 run in GitHub Actions, 1 is started on demand
 by Jarvis, and 6 do not run at all (a test in `tests/cron-stall.test.ts` keeps these lists true):
 
 - _Product & ops_ — invite-reminders, survey-paused, nurture-sequence,
@@ -15,7 +15,8 @@ by Jarvis, and 6 do not run at all (a test in `tests/cron-stall.test.ts` keeps t
   kpi-weekly
 - _Company brain_ — brain-fast, brain-ingest, brain-drive, brain-meeting-notes, brain-gmail,
   brain-notion, brain-calendar, brain-clarity, brain-crm, brain-evidence, brain-papers,
-  brain-reconcile, brain-notion-reach
+  brain-reconcile, brain-notion-reach, brain-ga4-backfill (once a year, else by hand with
+  `vercel crons run`: GA4's whole history after a change to its day chunks)
 - _Company brain, in GitHub Actions_ (`brain-daily.yml` runs them through
   `scripts/brain-cron.ts`, because they need the `claude` binary) — brain-brief,
   brain-mine, brain-radar, brain-night-shift, brain-health, brain-slack-media

@@ -7,7 +7,6 @@ import { fmt } from "@features/admin/server/ap/format";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
-import { RangeLine } from "./ApOverview";
 import { exportTables } from "./csv";
 import {
   AllTraffic,
@@ -30,6 +29,7 @@ import {
   SortIcon,
   TileGrid,
   useHashScroll,
+  RangeLine,
 } from "./kit";
 import { ASSESSMENT_A } from "./nav";
 import { useApFilters } from "./useApFilters";
@@ -101,7 +101,7 @@ export default function ApDashboard() {
                         { label: "Revenue", unit: "eur" },
                       ],
                       rows: data.prices.map((r) => ({
-                        label: `${r.planLabel} · ${fmt("eur", r.price, 2)}${r.priceArm ? ` · ${r.priceArm}` : ""}`,
+                        label: `${r.planLabel} · ${priceText(r)}`,
                         values: [r.quoted, r.checkouts, r.sales, r.cvr, r.revenue],
                       })),
                     },
@@ -134,7 +134,7 @@ export default function ApDashboard() {
             </h2>
             <TileGrid min={200}>
               {data.tiles.map((t) => (
-                <KpiTile key={t.key} tile={t} size="md" />
+                <KpiTile key={t.key} tile={t} size="md" level />
               ))}
             </TileGrid>
 
@@ -144,7 +144,7 @@ export default function ApDashboard() {
                   Journey, step by step
                 </h3>
                 <span className="text-[13px] text-ap-muted">
-                  Each step links to its report · % = of the step before
+                  Each step links to its report · % = of previous step
                 </span>
               </div>
               <ol
@@ -205,18 +205,20 @@ export default function ApDashboard() {
               />
             </div>
             <Card>
+              {/* As drawn, above the heading; not over New & returning, which is PostHog's own. */}
+              {tab !== "new" && data.sources.sample && (
+                <NotTracked>Sample split · totals are live</NotTracked>
+              )}
               {tab === "sources" && (
                 <>
                   <h3 className="m-0 font-serif text-lg font-semibold">Sources</h3>
-                  <NotTracked>Split by the survey&apos;s source · visits not split</NotTracked>
-                  <DataTable table={data.sources} minWidth={760} />
+                  <DataTable table={data.sources} minWidth={760} sortFirst={false} />
                 </>
               )}
               {tab === "new" && <NewReturningPanel data={data} />}
               {tab === "perf" && (
                 <>
                   <h3 className="m-0 font-serif text-lg font-semibold">Performance by source</h3>
-                  <NotTracked>Split by the survey&apos;s source · visits not split</NotTracked>
                   <div
                     className="grid gap-6"
                     style={{
@@ -224,26 +226,21 @@ export default function ApDashboard() {
                     }}
                   >
                     <SourceBars
-                      title="Survey completion"
-                      rows={data.performance.map((r) => ({ label: r.label, value: r.completion }))}
+                      title="Survey complete CVR"
+                      rows={data.performance.map((r) => ({ label: r.label, value: r.surveyCvr }))}
                       unit="pct"
+                      digits={2}
                     />
                     <SourceBars
-                      title="Payment CVR (of submissions)"
-                      rows={data.performance.map((r) => ({ label: r.label, value: r.paymentCvr }))}
-                      unit="pct"
-                    />
-                    <SourceBars
-                      title="€ revenue per submission"
-                      rows={data.performance.map((r) => ({ label: r.label, value: r.perSub }))}
+                      title="€ revenue per visit"
+                      rows={data.performance.map((r) => ({ label: r.label, value: r.perVisit }))}
                       unit="eur3"
                       color="#fe6839"
                     />
                   </div>
-                  <p className="m-0 text-xs text-ap-muted">
-                    Per submission, not per visit: visits can&rsquo;t be split by source (the visit
-                    log misses most ad clicks).
-                  </p>
+                  {data.sources.note && (
+                    <p className="m-0 text-xs leading-relaxed text-ap-muted">{data.sources.note}</p>
+                  )}
                 </>
               )}
             </Card>
@@ -254,7 +251,7 @@ export default function ApDashboard() {
               id="h-pay"
               eyebrow="Assessment A · Payment"
               title="Prices"
-              description="Sales per plan and price point for the prices quoted in the range · comps (€0 unlocks) are not counted as sales"
+              description="Sales per plan and price point for the selected period · comps (€0 unlocks) are not counted as sales"
               align="end"
               right={
                 <a
@@ -265,7 +262,11 @@ export default function ApDashboard() {
                 </a>
               }
             />
-            <PricesTable rows={data.prices} />
+            {data.pricesBlocked ? (
+              <p className="m-0 text-sm text-ap-muted">{data.pricesBlocked}</p>
+            ) : (
+              <PricesTable rows={data.prices} />
+            )}
             <p className="m-0 text-xs text-ap-muted">
               Quoted and checkouts come from report_price_quote; sales and revenue from payment, on
               those quotes. Payment CVR = sales ÷ quoted. A reader is quoted every plan, so the rows
@@ -282,11 +283,14 @@ function SourceBars({
   title,
   rows,
   unit,
+  digits,
   color = "#795fc8",
 }: {
   title: string;
   rows: Array<{ label: string; value: number | null }>;
   unit: "pct" | "eur3";
+  /** Decimals where the design fixes them (a CVR in hundredths, as the Sources table). */
+  digits?: number;
   color?: string;
 }) {
   const max = Math.max(0, ...rows.map((r) => r.value ?? 0)) || 1;
@@ -301,7 +305,7 @@ function SourceBars({
         >
           <span>{r.label}</span>
           <Bar pct={r.value === null ? null : r.value / max} color={color} />
-          <span className="text-right font-bold tabular-nums">{fmt(unit, r.value)}</span>
+          <span className="text-right font-bold tabular-nums">{fmt(unit, r.value, digits)}</span>
         </div>
       ))}
     </div>
@@ -315,13 +319,16 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
       <>
         <h3 className="m-0 font-serif text-lg font-semibold">New &amp; returning visitors</h3>
         <p className="m-0 text-sm text-ap-muted">
-          PostHog could not be read: {nr && !nr.ok ? nr.error : "no answer"}
+          {nr && !nr.ok ? nr.error : "PostHog could not be read just now. Try again in a minute."}
         </p>
       </>
     );
   }
   const total = nr.value.new.visitors + nr.value.returning.visitors;
   const share = (n: number) => (total ? n / total : null);
+  const revenue = data.newReturningRevenue;
+  const perVisit = (group: "new" | "returning", visitors: number) =>
+    revenue?.ok && visitors ? revenue.value[group] / visitors : null;
   return (
     <div className="flex flex-col gap-4">
       <h3 className="m-0 font-serif text-lg font-semibold">New &amp; returning visitors</h3>
@@ -344,10 +351,10 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
       >
         {(
           [
-            ["New", nr.value.new, "#795fc8"],
-            ["Returning", nr.value.returning, "#fe6839"],
+            ["New", "new", nr.value.new, "#795fc8"],
+            ["Returning", "returning", nr.value.returning, "#fe6839"],
           ] as const
-        ).map(([label, g, color]) => (
+        ).map(([label, key, g, color]) => (
           <div key={label} className="flex flex-col gap-1.5 rounded-[14px] bg-ap-ground p-4">
             <span className="flex items-center gap-2 text-[13px] font-bold">
               <span
@@ -359,17 +366,18 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
             </span>
             <span className="font-serif text-2xl font-semibold">{fmt("count", g.visitors)}</span>
             <span className="text-[13px] text-ap-muted">
-              Survey CVR {fmt("pct", g.visitors ? g.completed / g.visitors : null)} · started{" "}
-              {fmt("pct", g.visitors ? g.started / g.visitors : null)}
+              Survey CVR {fmt("pct", g.visitors ? g.completed / g.visitors : null, 1)} · € / visit{" "}
+              {fmt("eur3", perVisit(key, g.visitors))}
             </span>
           </div>
         ))}
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
         A visitor is new when PostHog had not seen their browser before the range. Survey CVR:
-        finished the survey ÷ visitors. Revenue per visit is not split here: our payments cannot be
-        tied to PostHog&apos;s visitors, and its own purchase event comes from the browser and
-        misses sales.
+        finished the survey ÷ visitors. € / visit: the range&apos;s payments by the group&apos;s
+        people, found through the visit they finished the survey in, ÷ the group&apos;s visitors; a
+        payment whose visit PostHog did not see is in neither group.
+        {revenue && !revenue.ok && <> € / visit is blank: {revenue.error}</>}
       </p>
     </div>
   );
@@ -377,14 +385,20 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
 
 type PriceKey = "planLabel" | "price" | "quoted" | "checkouts" | "sales" | "cvr" | "revenue";
 
+type PriceFilter = "plan" | "price";
+
+const priceText = (r: DashboardPayload["prices"][number]) =>
+  `${fmt("eur", r.price, 2)}${r.priceArm ? ` · ${r.priceArm}` : ""}`;
+
 function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
   const [sort, setSort] = useState<{ key: PriceKey; dir: 1 | -1 } | null>(null);
-  const [filtering, setFiltering] = useState(false);
-  const [filter, setFilter] = useState("");
+  const [open, setOpen] = useState<PriceFilter | null>(null);
+  const [filter, setFilter] = useState<Record<PriceFilter, string>>({ plan: "", price: "" });
   if (all.length === 0)
     return <p className="m-0 text-sm text-ap-muted">No price was quoted in this range.</p>;
-  const needle = filter.trim().toLowerCase();
-  const kept = needle ? all.filter((r) => r.planLabel.toLowerCase().includes(needle)) : all;
+  const has = (text: string, k: PriceFilter) =>
+    text.toLowerCase().includes(filter[k].trim().toLowerCase());
+  const kept = all.filter((r) => has(r.planLabel, "plan") && has(priceText(r), "price"));
   const rows = sort
     ? [...kept].sort((a, b) => {
         const x = a[sort.key];
@@ -406,7 +420,13 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
   const gtc = "minmax(130px,1.2fr) minmax(110px,0.9fr) repeat(5, minmax(90px,1fr))";
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
-      {filtering && <HeaderFilter label="Plan" value={filter} onChange={setFilter} />}
+      {open && (
+        <HeaderFilter
+          label={open === "plan" ? "Plan" : "Price"}
+          value={filter[open]}
+          onChange={(v) => setFilter((f) => ({ ...f, [open]: v }))}
+        />
+      )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
         <div role="table" aria-label="Prices" style={{ minWidth: 700 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
@@ -420,20 +440,24 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                 className={`flex items-center gap-1 px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${i > 1 ? "justify-end text-right" : ""}`}
               >
                 {h}
-                {i === 0 && (
-                  <button
-                    type="button"
-                    aria-label="Filter Plan"
-                    aria-expanded={filtering}
-                    onClick={() => {
-                      if (filtering) setFilter("");
-                      setFiltering(!filtering);
-                    }}
-                    className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
-                  >
-                    <FilterIcon />
-                  </button>
-                )}
+                {i < 2 &&
+                  (() => {
+                    const k: PriceFilter = i === 0 ? "plan" : "price";
+                    return (
+                      <button
+                        type="button"
+                        aria-label={`Filter ${h}`}
+                        aria-expanded={open === k}
+                        onClick={() => {
+                          if (open === k) setFilter((f) => ({ ...f, [k]: "" }));
+                          setOpen(open === k ? null : k);
+                        }}
+                        className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || filter[k] ? "text-ap-violet" : "text-ap-muted"}`}
+                      >
+                        <FilterIcon />
+                      </button>
+                    );
+                  })()}
                 {key && (
                   <button
                     type="button"
@@ -464,9 +488,8 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                 {r.planLabel}
               </span>
               <span role="cell" className="px-3.5 py-3 text-sm">
-                <span className="rounded-full bg-ap-purple/10 px-2.5 py-[3px] text-xs font-bold text-ap-plum">
-                  {fmt("eur", r.price, 2)}
-                  {r.priceArm ? ` · ${r.priceArm}` : ""}
+                <span className="whitespace-nowrap rounded-full bg-ap-purple/10 px-2.5 py-[3px] text-xs font-bold text-ap-plum">
+                  {priceText(r)}
                 </span>
               </span>
               <span role="cell" className="px-3.5 py-3 text-right text-sm tabular-nums">
@@ -491,7 +514,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
           ))}
           {rows.length === 0 && (
             <p className="m-0 border-t border-ap-line px-3.5 py-3 text-sm text-ap-muted">
-              No plan matches the filter.
+              No price matches the filter.
             </p>
           )}
         </div>

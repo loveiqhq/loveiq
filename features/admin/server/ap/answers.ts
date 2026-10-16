@@ -27,10 +27,16 @@ export interface AnswerRow {
   src: string | null;
   med: string | null;
   ads: boolean;
+  /** Read once ap_question_answers returns them; absent before. */
+  ref?: string | null;
+  fb?: boolean;
   gender: string | null;
   relationship: string | null;
   device: string | null;
   tier: string | null;
+  /** The visit the survey was finished in (PostHog), and new or returning once marked. */
+  ph: string | null;
+  visitorNew?: boolean | null;
 }
 
 export interface AnswerSplit {
@@ -109,7 +115,15 @@ function segmentsOf(row: AnswerRow, dim: Dimension, otherQid: string | null): st
       return [genderLabel(row.gender)];
     case "device": {
       const d = deviceClass(row.device);
-      return [d === "phone" ? "Phone" : d === "computer" ? "Computer" : "Unknown device"];
+      return [
+        d === "phone"
+          ? "Phone"
+          : d === "computer"
+            ? "Computer"
+            : d === "tablet"
+              ? "Tablet"
+              : "Unknown device",
+      ];
     }
     case "relationship":
       return [relationshipLabel(row.relationship)];
@@ -207,10 +221,13 @@ export async function fetchAnswers(
         src: str(o.src),
         med: str(o.med),
         ads: o.ads === true,
+        ref: str(o.ref),
+        fb: o.fb === true,
         gender: str(o.gender),
         relationship: str(o.relationship),
         device: str(o.device),
         tier: str(o.tier),
+        ph: str(o.ph),
       };
     }),
   };

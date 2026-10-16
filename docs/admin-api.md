@@ -243,8 +243,10 @@ issued; unmasked rows then include full email addresses, as the admin CSV export
 
 | Route                           | Methods             | Minimum access                                         | Source                                                                                      |
 | ------------------------------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `/api/admin/ap/overview`        | `GET`               | `viewer+`                                              | [`app/api/admin/ap/overview/route.ts`](../app/api/admin/ap/overview/route.ts)               |
+| `/api/admin/ap/focus`           | `GET`               | `viewer+`                                              | [`app/api/admin/ap/focus/route.ts`](../app/api/admin/ap/focus/route.ts)                     |
 | `/api/admin/ap/assessment`      | `GET`               | `viewer+`                                              | [`app/api/admin/ap/assessment/route.ts`](../app/api/admin/ap/assessment/route.ts)           |
+| `/api/admin/ap/traffic`         | `GET`               | `viewer+`                                              | [`app/api/admin/ap/traffic/route.ts`](../app/api/admin/ap/traffic/route.ts)                 |
+| `/api/admin/ap/payment`         | `GET`               | `viewer+`                                              | [`app/api/admin/ap/payment/route.ts`](../app/api/admin/ap/payment/route.ts)                 |
 | `/api/admin/ap/landing`         | `GET`               | `viewer+`                                              | [`app/api/admin/ap/landing/route.ts`](../app/api/admin/ap/landing/route.ts)                 |
 | `/api/admin/ap/survey`          | `GET`               | `viewer+`                                              | [`app/api/admin/ap/survey/route.ts`](../app/api/admin/ap/survey/route.ts)                   |
 | `/api/admin/ap/survey/answers`  | `GET`               | `viewer+`                                              | [`app/api/admin/ap/survey/answers/route.ts`](../app/api/admin/ap/survey/answers/route.ts)   |

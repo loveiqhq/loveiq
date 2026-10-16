@@ -92,6 +92,8 @@ vi.mock("@features/analytics/client", () => ({
   trackLockedCardPriceShown: vi.fn(),
   trackLockedChaptersShown: vi.fn(),
   trackExperimentExposure: vi.fn(),
+  // Report 3.0's reading per chapter, saved when the page goes (chapterStats).
+  persistReportChapterStats: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -113,6 +115,19 @@ vi.mock("@features/report/ui/hooks/useReportEngagementTimers", async (importOrig
 // The real V3Chapter, counted: the scroll-spy test below checks that moving the nav's
 // highlight renders no chapter again. Transparent to every other test.
 const v3ChapterRenders = vi.hoisted(() => ({ count: 0 }));
+// The real chapter stats, with whether each render turned them on recorded.
+const chapterStats = vi.hoisted(() => ({ enabled: [] as boolean[] }));
+vi.mock("@features/analytics/chapterStats", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/analytics/chapterStats")>();
+  return {
+    ...actual,
+    useChapterStats: (options: Parameters<typeof actual.useChapterStats>[0]) => {
+      chapterStats.enabled.push(options.enabled);
+      actual.useChapterStats(options);
+    },
+  };
+});
+
 vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/report/ui/v3/V3Chapter")>();
   const { createElement } = await import("react");
@@ -1472,6 +1487,17 @@ describe("ReportPage", () => {
     const precedes = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
+    /** Paywall clicks by chapter, over every save of the reading per chapter. */
+    const savedPaywallClicks = () => {
+      const clicks: Record<string, number> = {};
+      for (const [m] of vi.mocked(analytics.persistReportChapterStats).mock.calls) {
+        for (const [chapter, tally] of Object.entries(m.chapters)) {
+          if (tally.pw_click) clicks[chapter] = (clicks[chapter] ?? 0) + tally.pw_click;
+        }
+      }
+      return clicks;
+    };
+
     it("renders it once, under the Part 5 heading and above Attachment Style", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -1496,7 +1522,7 @@ describe("ReportPage", () => {
       (response.data as Record<string, unknown>).partnershipCopy = LOCKED_PARTNERSHIP;
       mockUseReportData.mockReturnValue(response);
 
-      const { container } = render(<ReportPage />);
+      const { container, unmount } = render(<ReportPage />);
       const chapter = container.querySelector<HTMLElement>("#challenges_in_partnership")!;
       // The plans pop-up opens by itself for a locked reader and hides the report
       // from the accessibility tree, so the chapter toggle is found by its class.
@@ -1507,6 +1533,9 @@ describe("ReportPage", () => {
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
       );
+      // The reading per chapter counts the click for the chapter it was made in.
+      unmount();
+      expect(savedPaywallClicks()).toEqual({ challenges_in_partnership: 1 });
     });
 
     it("leaves ?v3=1 with it after Curiosity", () => {
@@ -1565,12 +1594,15 @@ describe("ReportPage", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withChapter(true));
 
-      const { container } = render(<ReportPage />);
+      const { container, unmount } = render(<ReportPage />);
       await user.click(container.querySelector<HTMLElement>(".rv4-cip__gate")!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
       );
+      // Curiosity grants it, but the click was made in Challenges in Partnerships.
+      unmount();
+      expect(savedPaywallClicks()).toEqual({ challenges_in_partnership: 1 });
     });
 
     it("keeps V2's section for an archetype with no Report 3.0 chapter", () => {
@@ -1934,6 +1966,45 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(view("owner"));
       const owner = render(<ReportPage />);
       expect(owner.container.querySelector(".report-sticky-unlock")).not.toBeNull();
+    });
+
+    // AP-Analytics' chapter reading is the owner's on Report 3.0: a recipient's reading,
+    // or an older report's, would count under the owner's submission.
+    it("saves the owner's chapter reading on Report 3.0, never a recipient's or an older report's", () => {
+      const read = (params: string, viewMode: "owner" | "shared") => {
+        vi.mocked(analytics.persistReportChapterStats).mockClear();
+        chapterStats.enabled.length = 0;
+        mockSearchParams.mockImplementation(() => new URLSearchParams(params));
+        mockUseReportData.mockReturnValue(view(viewMode));
+        const { container, unmount } = render(<ReportPage />);
+        const closed = container.querySelector<HTMLElement>(
+          '[data-chapter-action="open"][aria-expanded="false"]'
+        );
+        if (closed) fireEvent.click(closed);
+        window.dispatchEvent(new Event("pagehide"));
+        unmount();
+        return {
+          opened: closed !== null,
+          saved: vi.mocked(analytics.persistReportChapterStats).mock.calls,
+          on: chapterStats.enabled.at(-1),
+        };
+      };
+
+      const owner = read("v4=1", "owner");
+      expect(owner.on).toBe(true);
+      expect(owner.opened).toBe(true);
+      expect(owner.saved).toHaveLength(1);
+      expect(Object.values(owner.saved[0]![0].chapters)).toContainEqual({ open: 1 });
+
+      const shared = read("v4=1", "shared");
+      expect(shared.on).toBe(false);
+      expect(shared.opened).toBe(true);
+      expect(shared.saved).toHaveLength(0);
+
+      // No chapter there opens closed, so whether it would count shows only in the switch.
+      const older = read("v2=1", "owner");
+      expect(older.on).toBe(false);
+      expect(older.saved).toHaveLength(0);
     });
 
     // Marcus, 09.10, with a recording from production: the bar's "Unlock Full Report →"

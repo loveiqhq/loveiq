@@ -74,14 +74,29 @@ describe("sendGa4PurchaseEvent", () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it("skips when analytics consent was not granted", async () => {
-    await sendGa4PurchaseEvent({ ...baseInput, consentGranted: false });
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  const sentBody = () =>
+    JSON.parse((mockFetchWithTimeout.mock.calls[0]![1] as { body: string }).body) as {
+      client_id: string;
+      consent?: Record<string, string>;
+      events: Array<{ params: Record<string, unknown> }>;
+    };
+
+  it("sends a declining buyer's purchase too, under a one-off id, denied for ad use", async () => {
+    await sendGa4PurchaseEvent({ ...baseInput, consentGranted: false, clientId: null });
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    const body = sentBody();
+    expect(body.client_id).toMatch(/^\d+\.\d+$/);
+    expect(body.consent).toEqual({ ad_user_data: "DENIED", ad_personalization: "DENIED" });
+    expect(body.events[0]!.params).toMatchObject({ transaction_id: baseInput.transactionId });
+    // No session to join it to.
+    expect(body.events[0]!.params.session_id).toBeUndefined();
   });
 
-  it("skips when there is no GA client_id", async () => {
+  it("sends under a one-off id when consent was given but GA left no id (a blocker)", async () => {
     await sendGa4PurchaseEvent({ ...baseInput, clientId: null });
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    const body = sentBody();
+    expect(body.client_id).not.toBe(baseInput.clientId);
+    expect(body.consent).toBeUndefined();
   });
 
   it("posts a well-formed purchase event when secret + consent + client_id are present", async () => {

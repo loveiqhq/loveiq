@@ -27,7 +27,17 @@ export function useApFilters() {
   const write = useCallback(
     (next: ApFilters) => {
       const params = new URLSearchParams(searchParams.toString());
-      for (const k of ["period", "from", "to", "compare", "assessment", "source", "device", "tier"])
+      for (const k of [
+        "period",
+        "from",
+        "to",
+        "compare",
+        "assessment",
+        "source",
+        "device",
+        "tier",
+        "visitor",
+      ])
         params.delete(k);
       for (const [k, v] of Object.entries(filterParams(next))) params.set(k, v);
       const q = params.toString();

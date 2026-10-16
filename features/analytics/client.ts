@@ -1,6 +1,7 @@
-import posthog from "posthog-js";
+import posthog, { type CaptureOptions } from "posthog-js";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { __resetFunnelVisitorForTests, funnelVisitorId } from "./funnelVisitor";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import {
   LANDING_VARIANT_COOKIE,
@@ -93,6 +94,9 @@ const PERSISTED_EVENTS = new Set([
   "experiment_card_flipped",
   // Locked-chapter-card paywall surface (inline price)
   "locked_card_price_shown",
+  // Per-chapter reading and the wizard's Skip Intro (14.10)
+  "report_chapter_stats",
+  "wizard_skipped",
 ]);
 
 /**
@@ -114,7 +118,7 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   if (typeof window === "undefined") return;
   window.__loveiqSurveyVariant = variant;
   if (variant) posthog.register({ survey_variant: variant });
-  if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
+  if (variant && isProductionSite()) {
     gtagSend("set", "user_properties", { survey_variant: variant });
   }
 };
@@ -383,15 +387,15 @@ const getLandingVariant = (): LandingVariant | null => {
 
 /**
  * Mirror the white-landing arm into GA4 as a user-scoped property so every GA4
- * event is segmentable by it in Explorations (no per-event wiring). Consent-
- * gated like all GA4 traffic. Call once on landing-page mount. NOTE: register a
+ * event is segmentable by it in Explorations (no per-event wiring). Sent on
+ * every visit like all GA4 traffic, cookieless without consent. Call once on landing-page mount. NOTE: register a
  * custom dimension "landing_variant" (user-scoped) in GA4 Admin → Custom
  * definitions to surface it in reports (one-time config, not code).
  */
 export const setLandingVariant = (variant: LandingVariant | null) => {
   if (typeof window === "undefined") return;
   if (variant) posthog.register({ landing_variant: variant });
-  if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
+  if (variant && isProductionSite()) {
     gtagSend("set", "user_properties", { landing_variant: variant });
   }
 };
@@ -399,14 +403,14 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
 /**
  * The email question test's arm (`survey-email-anonymous`), set the first time the
  * email question shows. PostHog carries it on every later event and GA4 takes it as a
- * user property (consent-gated like all GA4 traffic; register a user-scoped custom
+ * user property (cookieless without consent, like all GA4 traffic; register a user-scoped custom
  * dimension `contact_question_arm` to see it in GA4 reports). Same key as the server's
  * utm_tracker stamp, so every source groups by one name.
  */
 export const setEmailQuestionArm = (arm: EmailQuestionArm) => {
   if (typeof window === "undefined") return;
   posthog.register({ [EMAIL_QUESTION_ARM_KEY]: arm });
-  if (isProductionSite() && hasCookieYesConsent("analytics")) {
+  if (isProductionSite()) {
     gtagSend("set", "user_properties", { [EMAIL_QUESTION_ARM_KEY]: arm });
   }
 };
@@ -415,7 +419,9 @@ export const track = (
   name: string,
   params?: Record<string, unknown>,
   /** Sent to PostHog only, never to GA4 or the dataLayer (an answer, say). */
-  postHogOnly?: Record<string, unknown>
+  postHogOnly?: Record<string, unknown>,
+  /** PostHog's own capture options (a beacon, say), passed on only when given. */
+  options?: CaptureOptions
 ) => {
   if (typeof window === "undefined") return;
   // PostHog gets every event, and deliberately BEFORE the two GA4 gates below.
@@ -435,7 +441,8 @@ export const track = (
   } catch {
     // The walk loses one event; the visitor loses nothing.
   }
-  posthog.capture(name, toPostHog);
+  if (options) posthog.capture(name, toPostHog, options);
+  else posthog.capture(name, toPostHog);
 
   /**
    * Production gate is BUILD-TIME, not the `__loveiqAnalyticsEnabled` window flag
@@ -462,17 +469,20 @@ export const track = (
    * page load, `window.dataLayer` held nine entries and not one of them was ours.
    * `landing_page_view` never fired at all.
    *
-   * `isProductionSite()` is inlined at build time, so it carries no race. Consent
-   * still gates everything below it.
+   * `isProductionSite()` is inlined at build time, so it carries no race.
    */
   if (!isProductionSite()) return;
-  if (!hasCookieYesConsent("analytics")) return;
 
-  // Both of these are safe before gtag.js has loaded: the shim in layout.tsx makes
-  // `gtag` a dataLayer pusher from `afterInteractive`, and dataLayer is an ordinary
-  // array that GTM and gtag.js each drain on load. Queueing is the designed
-  // behaviour — dropping was not.
+  // Google's own tag gets every event, whatever the banner says (owner decision, 15 Oct
+  // 2026: measure everyone). For a visitor who declined, the banner's "denied" consent
+  // signal makes it a cookieless ping (Google Consent Mode): no cookie, no identifier,
+  // and Google models those visitors. Safe before gtag.js has loaded: the shim in
+  // layout.tsx makes `gtag` a dataLayer pusher from `afterInteractive`, and dataLayer is
+  // an ordinary array that gtag.js drains on load.
   gtagSend("event", name, params);
+  // The tag manager's own tags (any ad pixel in the container) only with consent: they set
+  // their own cookies and have no cookieless mode, so the event is pushed for them only then.
+  if (!hasCookieYesConsent("analytics")) return;
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({ event: name, ...params });
 };
@@ -487,19 +497,22 @@ export const trackLandingPageView = () => {
   track("landing_page_view");
 };
 
+const sentFunnelEvents = new Set<string>();
 /**
  * Durable top-of-funnel ping to `funnel_event` (keyed by visitor_id + day, NOT a
- * survey_submission), mirroring the survey_engine_mount / intro_slide pings. It
- * fires regardless of analytics consent — first-party funnel measurement with no
- * third-party sharing — so pre-payment drop-off is never lost. No-op without a
- * visitor cookie or CSRF token. PK (visitor_id, day, event_type) dedupes server-side.
+ * survey_submission): the survey intro's cards and their Back and Skip, for every visitor
+ * (funnelVisitorId). Without a CSRF token it does nothing and a later call can still send.
+ * PK (visitor_id, day, event_type) dedupes server-side, so each event is sent once per page
+ * and UTC day (the route's day): a card seen again after Back would only spend the route's
+ * rate limit, and a tab still open the next day records that day too.
  */
-const pingFunnelEvent = (event: string) => {
-  if (typeof window === "undefined") return;
-  const visitorId = getCookieValue("__Host-liq_vid") || getCookieValue("__liq_vid");
-  if (!visitorId) return;
+export const pingFunnelEvent = (event: string) => {
+  const once = `${event}|${new Date().toISOString().slice(0, 10)}`;
+  if (typeof window === "undefined" || sentFunnelEvents.has(once)) return;
+  const visitorId = funnelVisitorId();
   const csrf = getCsrfToken();
   if (!csrf) return;
+  sentFunnelEvents.add(once);
   const url = "/api/funnel-event";
   const payload = JSON.stringify({ event, visitor_id: visitorId, _csrf: csrf });
   // Beacon survives the page navigation to Stripe; header-CSRF fallback otherwise.
@@ -515,6 +528,12 @@ const pingFunnelEvent = (event: string) => {
   }).catch(() => {
     /* best-effort */
   });
+};
+
+/** For tests: forget what this page has sent. */
+export const __resetFunnelPingsForTests = () => {
+  sentFunnelEvents.clear();
+  __resetFunnelVisitorForTests();
 };
 
 export const trackStartSurvey = (
@@ -884,7 +903,6 @@ export interface ReportPurchaseParams {
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!isProductionSite()) return;
-  if (!hasCookieYesConsent("analytics")) return;
   /**
    * A `purchase` in the dataLayer becomes a GA4 purchase and then a Google Ads
    * conversion the bidding algorithm optimises on, so one that carried no money
@@ -897,6 +915,20 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
    */
   if (params.isTest) return;
   if (!(params.value > 0)) return;
+
+  // A buyer who declined cookies: the purchase goes to Google's own tag, a cookieless ping
+  // under the banner's denied signal (as track() does), and the ad conversion below. GA4
+  // dedupes on transaction_id, so the server-side copy can never make it two.
+  if (!hasCookieYesConsent("analytics")) {
+    gtagSend("event", "purchase", {
+      transaction_id: params.transaction_id,
+      value: params.value,
+      currency: params.currency,
+      items: [{ item_name: params.item_name || "LoveIQ Report", price: params.value, quantity: 1 }],
+    });
+    trackGoogleAdsPurchaseConversion(params);
+    return;
+  }
 
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({
@@ -932,7 +964,8 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
 export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!isProductionSite()) return;
-  if (!hasCookieYesConsent("advertisement")) return;
+  // Every buyer (owner decision, 15 Oct 2026): without advertising consent the banner's
+  // denied signal makes it a cookieless conversion ping that Google Ads models.
 
   gtagSend("event", "conversion", {
     send_to: GOOGLE_ADS_PURCHASE_SEND_TO,
@@ -1145,6 +1178,25 @@ export const trackWizardMapStep = (params: {
   persistAnalyticsEvent("wizard_map_step", params);
 };
 
+/**
+ * The wizard's Skip Intro, from the slide (0-5) it was pressed on, and on the map (slide
+ * 2) from which of its steps. Its own event: wizard_slide_advanced means "moved to slide
+ * 0-5" to the digests, and a skip goes to no slide.
+ */
+export const trackWizardSkipped = (params: { from_slide: number; map_step?: number }) => {
+  track("wizard_skipped", params);
+  persistAnalyticsEvent("wizard_skipped", params);
+};
+
+/**
+ * Reading per report chapter, saved by chapterStats.ts. To our own table only, never GA4
+ * or PostHog: these rows describe someone reading a report about their sex life.
+ */
+export const persistReportChapterStats = (metadata: {
+  archetype?: string;
+  chapters: Record<string, Record<string, number>>;
+}) => persistAnalyticsEvent("report_chapter_stats", metadata);
+
 export const trackSurveyConfirmationCtaClicked = (params: {
   cta: "view_report" | "back" | string;
 }) => {
@@ -1342,6 +1394,17 @@ export type LandingSection =
  */
 export const trackSectionSeen = (params: { section: LandingSection }) =>
   track("section_seen", params);
+
+/**
+ * How long a landing section was in view (LandingSectionsSeen): at least half of it on screen,
+ * or across the middle of the screen, while the tab showed. `visible_ms` is only the time not
+ * sent before, so a page's events add up to its time. A beacon, because it is often sent as
+ * the page goes, after PostHog has emptied its own queue.
+ */
+export const trackSectionTime = (params: {
+  section: LandingSection | "hero";
+  visible_ms: number;
+}) => track("section_time", params, undefined, { transport: "sendBeacon" });
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);

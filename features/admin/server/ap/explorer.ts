@@ -502,6 +502,7 @@ const hogText = (v: string) => `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")
 
 /** The catalog's PostHog event fields as HogQL reads them. */
 const HOG_FIELDS: Record<string, string> = {
+  uuid: "uuid",
   timestamp: "timestamp",
   event: "event",
   distinct_id: "distinct_id",
@@ -510,6 +511,7 @@ const HOG_FIELDS: Record<string, string> = {
   "properties.$device_type": "properties.$device_type",
   "properties.utm_source": "properties.utm_source",
   "properties.landing_variant": "properties.landing_variant",
+  properties: "properties",
   elements_chain: "elements_chain",
 };
 
@@ -614,31 +616,69 @@ export async function posthogRows(
   };
 }
 
-/** Google Analytics and Google Ads days, from the brain's nightly copy, filtered here. */
-export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<ExplorerResult> {
-  const all = await fetchAllRows<{ meta: Record<string, unknown> }>(
-    `${GA4_DAYS}&select=meta&order=period_end.asc`,
+/**
+ * The Google tables: each is one breakdown of the brain's GA4 day chunks (`google.ts`), and each
+ * of its rows one entry of that breakdown on one day.
+ */
+const GOOGLE_TABLES: Record<
+  string,
+  { breakdown: string; row: (date: string, id: string, v: Record<string, unknown>) => Row }
+> = {
+  sessions_daily: {
+    breakdown: "channels",
+    row: (date, channel, v) => ({
+      date,
+      channel,
+      sessions: v.sessions ?? null,
+      users: v.users ?? null,
+      new_users: v.new_users ?? null,
+      engaged_sessions: v.engaged_sessions ?? null,
+      avg_engagement_time:
+        Number(v.sessions) > 0
+          ? Math.round((Number(v.engagement_s) / Number(v.sessions)) * 10) / 10
+          : null,
+    }),
+  },
+  campaign_daily: {
+    breakdown: "ads_campaigns",
+    row: (date, id, v) => ({
+      date,
+      campaign_id: id,
+      campaign_name: v.name ?? null,
+      impressions: v.impressions ?? null,
+      clicks: v.clicks ?? null,
+      cost_eur: v.cost ?? null,
+      conversions: v.conversions ?? null,
+    }),
+  },
+};
+
+/**
+ * Every row of a Google table, oldest day first; null for a table that is not one. A day
+ * without the breakdown (not read yet, or nothing that day) has no rows.
+ */
+export async function googleRows(table: string): Promise<Row[] | null> {
+  const spec = GOOGLE_TABLES[table];
+  if (!spec) return null;
+  const days = await fetchAllRows<{ date: unknown; breakdown: unknown }>(
+    `${GA4_DAYS}&meta->>${spec.breakdown}=not.is.null&select=date:meta->>day,breakdown:meta->${spec.breakdown}&order=period_end.asc`,
     { maxRows: 5000 }
   );
-  if (!all) throw new Error("ga4 days read failed");
-  const pick: Record<string, string> =
-    table.name === "ads_daily"
-      ? { day: "day", cost_eur: "ad_cost", clicks: "ad_clicks", impressions: "ad_impressions" }
-      : { day: "day", sessions: "sessions", users: "users" };
-  let rows: Row[] = all
-    .map((c) => c.meta)
-    .filter(
-      (m) => typeof m.day === "string" && (table.name !== "ads_daily" || m.ad_cost !== undefined)
-    )
-    .map((m) =>
-      Object.fromEntries(
-        Object.entries(pick).map(([k, src]) => [
-          k,
-          k === "cost_eur" ? Math.round(Number(m[src]) * 100) / 100 : (m[src] ?? null),
-        ])
-      )
-    )
-    .filter((r) => (r.day as string) >= q.from && (r.day as string) <= q.to);
+  if (!days) throw new Error("ga4 days read failed");
+  return days.flatMap(({ date, breakdown }) =>
+    typeof date === "string" && breakdown && typeof breakdown === "object"
+      ? Object.entries(breakdown as Record<string, Record<string, unknown>>).map(([id, v]) =>
+          spec.row(date, id, v ?? {})
+        )
+      : []
+  );
+}
+
+/** A Google table's rows, from the brain's copy of Google Analytics and Ads, filtered here. */
+export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<ExplorerResult> {
+  const all = await googleRows(table.name);
+  if (!all) throw new Refused(`${table.name} is not a Google table.`);
+  let rows = all.filter((r) => (r.date as string) >= q.from && (r.date as string) <= q.to);
   for (const f of q.filters) {
     rows = rows.filter((r) => {
       const v = r[f.column];
@@ -668,15 +708,16 @@ export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<
       }
     });
   }
-  const key = q.sort ?? "day";
+  const key = q.sort ?? "date";
   const dir = q.sort ? (q.dir === "asc" ? 1 : -1) : -1;
-  rows.sort((a, b) =>
-    (a[key] as number | string) > (b[key] as number | string)
-      ? dir
-      : (a[key] as number | string) < (b[key] as number | string)
-        ? -dir
-        : 0
-  );
+  const cmp = (a: Row, b: Row, k: string) =>
+    (a[k] as number | string) > (b[k] as number | string)
+      ? 1
+      : (a[k] as number | string) < (b[k] as number | string)
+        ? -1
+        : 0;
+  // A day holds a row per channel or campaign: ties fall back to the table's key, in order.
+  rows.sort((a, b) => cmp(a, b, key) * dir || table.key.reduce((d, k) => d || cmp(a, b, k), 0));
   const total = rows.length;
   const start = (q.page - 1) * q.size;
   return {
@@ -687,5 +728,6 @@ export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<
     total,
     masked: false,
     sql: readableSql(table, q, false),
+    synced: all.length > 0,
   };
 }

@@ -19,44 +19,64 @@ export const PERIODS = [
 ] as const;
 export type Period = (typeof PERIODS)[number]["value"];
 
-export const COMPARES = [
-  { value: "prev", label: "Previous period" },
-  { value: "yoy", label: "Same period last year" },
-  { value: "none", label: "No comparison" },
-] as const;
-export type Compare = (typeof COMPARES)[number]["value"];
-
 export const ASSESSMENTS = [
   { value: "all", label: "All assessments" },
   { value: "a", label: "Assessment A" },
-  { value: "b", label: "Assessment B (not launched)" },
-  { value: "c", label: "Assessment C (not launched)" },
+  // Not launched: the pages say so (as the design's options, without the remark).
+  { value: "b", label: "Assessment B" },
+  { value: "c", label: "Assessment C" },
 ] as const;
 export type AssessmentFilter = (typeof ASSESSMENTS)[number]["value"];
 
 /**
+ * The first whole day of the survey's new tracking: the intro cards' own steps (the intro,
+ * the consent, Back and Skip), tablets, and the referrer and Meta's click id in the tracker.
+ * They went live mid-morning on 16 Oct 2026, so that day holds only part of them.
+ */
+export const SURVEY_TRACKING_FROM = "2026-10-17";
+
+/**
  * Where a person came from, read off the survey's tracker (the first page they landed on).
- * Google Ads is a click id or google/cpc; the rest is utm_source as the links set it.
+ * Google Ads is a click id or google/cpc, Meta Ads a Meta source with a paid medium, organic
+ * search a search engine tagged organic or, untagged, the referrer (from SURVEY_TRACKING_FROM);
+ * the rest is utm_source as the links set it (classifySource).
  */
 export const SOURCES = [
   { value: "all", label: "All sources" },
   { value: "google_ads", label: "Google Ads" },
-  { value: "ai", label: "AI assistants" },
-  { value: "email", label: "Email" },
-  { value: "social", label: "Social" },
-  { value: "referral", label: "Referral" },
+  { value: "meta_ads", label: "Meta Ads" },
+  { value: "organic_search", label: "Organic search" },
   { value: "direct", label: "Direct / untagged" },
+  { value: "email", label: "Email" },
+  { value: "referral", label: "Referral" },
+  { value: "social", label: "Social" },
+  { value: "ai", label: "AI assistants" },
 ] as const;
 export type SourceFilter = (typeof SOURCES)[number]["value"];
 export type Source = Exclude<SourceFilter, "all">;
 
-/** iOS and Android are mobile; the pricing code reads tablets as one or the other. */
+/**
+ * iOS and Android are mobile. Tablets are told apart from SURVEY_TRACKING_FROM (the survey's
+ * own steps): before, they count as mobile, or as desktop for an iPad sending a Mac User-Agent.
+ */
 export const DEVICES = [
   { value: "all", label: "All devices" },
   { value: "phone", label: "Mobile" },
   { value: "computer", label: "Desktop" },
+  { value: "tablet", label: "Tablet" },
 ] as const;
 export type DeviceFilter = (typeof DEVICES)[number]["value"];
+
+/**
+ * New or returning, from PostHog: whether the person had visited the site before the visit
+ * they finished the survey in. Only finishers, their reports and their payments can be split.
+ */
+export const VISITORS = [
+  { value: "all", label: "New & returning" },
+  { value: "new", label: "New only" },
+  { value: "returning", label: "Returning only" },
+] as const;
+export type VisitorFilter = (typeof VISITORS)[number]["value"];
 
 /** The country price tiers the pricing code assigns (report_price_quote.country_tier). */
 export const TIERS = [
@@ -76,11 +96,11 @@ export interface ApFilters {
   from: string;
   /** Last day, included. */
   to: string;
-  compare: Compare;
   assessment: AssessmentFilter;
   source: SourceFilter;
   device: DeviceFilter;
   tier: TierFilter;
+  visitor: VisitorFilter;
   /** The range includes today, which is still running (set by parseFilters). */
   running?: boolean;
 }
@@ -119,11 +139,11 @@ export function defaultFilters(today: string): ApFilters {
   return {
     period: "30d",
     ...periodRange("30d", today),
-    compare: "prev",
     assessment: "all",
     source: "all",
     device: "all",
     tier: "all",
+    visitor: "all",
   };
 }
 
@@ -156,11 +176,13 @@ export function parseFilters(
     period,
     from: range!.from,
     to: range!.to,
-    compare: oneOf(COMPARES, get("compare"), base.compare),
+    // "compare" (Previous period, Same period last year, None) was retired on 16 Oct 2026:
+    // an older link's is ignored, and every period is compared with the one before it.
     assessment: oneOf(ASSESSMENTS, get("assessment"), base.assessment),
     source: oneOf(SOURCES, get("source"), base.source),
     device: oneOf(DEVICES, get("device"), base.device),
     tier: oneOf(TIERS, get("tier"), base.tier),
+    visitor: oneOf(VISITORS, get("visitor"), base.visitor),
     running: range!.to >= today,
   };
 }
@@ -173,11 +195,11 @@ export function filterParams(f: ApFilters): Record<string, string> {
     out.from = f.from;
     out.to = f.to;
   }
-  if (f.compare !== "prev") out.compare = f.compare;
   if (f.assessment !== "all") out.assessment = f.assessment;
   if (f.source !== "all") out.source = f.source;
   if (f.device !== "all") out.device = f.device;
   if (f.tier !== "all") out.tier = f.tier;
+  if (f.visitor !== "all") out.visitor = f.visitor;
   return out;
 }
 
@@ -187,20 +209,12 @@ export function filterQuery(f: ApFilters): string {
   return q ? `?${q}` : "";
 }
 
-/** The same calendar dates a year earlier; 29 Feb becomes 28 Feb. */
-function yearEarlier(day: string): string {
-  const [y = 1970, m = 1, d = 1] = day.split("-").map(Number);
-  const last = new Date(Date.UTC(y - 1, m, 0)).getUTCDate();
-  return `${y - 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
-}
-
 /**
- * The period the figures are compared with, or null. Never while the range includes today:
- * part of a day against whole days would read as a fall every morning.
+ * The period the figures are compared with: the same number of days just before. Never while
+ * the range includes today: part of a day against whole days would read as a fall every morning.
  */
 export function comparisonRange(f: ApFilters): { from: string; to: string } | null {
-  if (f.compare === "none" || f.period === "today" || f.running) return null;
-  if (f.compare === "yoy") return { from: yearEarlier(f.from), to: yearEarlier(f.to) };
+  if (f.period === "today" || f.running) return null;
   return previousRange(f);
 }
 
@@ -235,30 +249,31 @@ function labelOf(options: readonly { value: string; label: string }[], value: st
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-/** The line under the bar: the range, the comparison and every filter that narrows. */
+/**
+ * The line under the bar, as the design writes it: "13 Sep 2026 – 12 Oct 2026 · vs previous
+ * period · …", the range with both years, the comparison by name, every filter that narrows.
+ */
 export function filterSummary(f: ApFilters, today: string): string {
-  const cmp = comparisonRange(f);
+  const day = (d: string) => `${shortDate(d)} ${year(d)}`;
   const parts = [
-    rangeLabel(f.from, f.to) + (f.to >= today ? " (today so far)" : ""),
-    cmp
-      ? `vs ${rangeLabel(cmp.from, cmp.to)}`
-      : f.period === "today" || f.running
-        ? "no comparison while today runs"
-        : "no comparison",
+    (f.from === f.to ? day(f.from) : `${day(f.from)} – ${day(f.to)}`) +
+      (f.to >= today ? " (today so far)" : ""),
+    comparisonRange(f) ? "vs previous period" : "no comparison while today runs",
   ];
   const narrowing = [
     f.assessment !== "all" ? labelOf(ASSESSMENTS, f.assessment) : null,
     f.source !== "all" ? labelOf(SOURCES, f.source) : null,
     f.device !== "all" ? labelOf(DEVICES, f.device) : null,
     f.tier !== "all" ? labelOf(TIERS, f.tier) : null,
+    f.visitor !== "all" ? labelOf(VISITORS, f.visitor) : null,
   ].filter((x): x is string => x !== null);
   parts.push(narrowing.length ? narrowing.join(" · ") : "all assessments, sources and devices");
   return parts.join(" · ");
 }
 
 /** The narrowing filters that are on, by name, for "this figure ignores …" notes. */
-export function activeNarrowing(f: ApFilters): Array<"source" | "device" | "tier"> {
-  return (["source", "device", "tier"] as const).filter((k) => f[k] !== "all");
+export function activeNarrowing(f: ApFilters): Array<"source" | "device" | "tier" | "visitor"> {
+  return (["source", "device", "tier", "visitor"] as const).filter((k) => f[k] !== "all");
 }
 
 export interface Bucket {
@@ -283,11 +298,10 @@ export function grainOf(from: string, to: string): Grain {
 }
 
 /**
- * The points of a trend line, at grainOf's grain: Monday-to-Sunday weeks and calendar months
- * are cut at the ends of the range.
+ * The points of a trend line, at grainOf's grain (or the one asked for): Monday-to-Sunday
+ * weeks and calendar months are cut at the ends of the range.
  */
-export function buckets(from: string, to: string): Bucket[] {
-  const grain = grainOf(from, to);
+export function buckets(from: string, to: string, grain: Grain = grainOf(from, to)): Bucket[] {
   const out: Bucket[] = [];
   if (grain === "day") {
     for (let d = from; d <= to; d = addDays(d, 1)) {

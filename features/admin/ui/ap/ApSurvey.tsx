@@ -3,13 +3,18 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
+import { rangeLabel, SURVEY_TRACKING_FROM } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
-import type { Benchmark, DemoCard, SurveyPayload } from "@features/admin/server/ap/survey-page";
+import type {
+  Benchmark,
+  DemoCard,
+  IntroCard,
+  SurveyPayload,
+} from "@features/admin/server/ap/survey-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
-import { RangeLine } from "./ApOverview";
 import { exportTables } from "./csv";
 import {
   AllTraffic,
@@ -18,25 +23,46 @@ import {
   Busy,
   Card,
   Failed,
-  FilterIcon,
-  HeaderFilter,
-  KpiTile,
+  KpiTileV2,
   LiveBadge,
   Loading,
+  NotTracked,
   PageHeader,
   SectionHead,
   SortIcon,
   Spark,
   TileGrid,
   useHashScroll,
+  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
 const SEGMENT_COLORS = ["#4000b6", "#fe6839", "#9d8ad7", "#2e7d5b"];
 
+/** The design's bars in a demographic card, darkest first. */
+const DEMO_COLORS = ["#5a42a6", "#795fc8", "#9d8bd8", "#c0b4e6", "#ddd5f2"];
+
+/** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
+const wholePct = (v: number | null) =>
+  v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
+
+/** At least `pct` percent as the whole percentage shows it: the design's highlights. */
+const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 100) >= pct;
+
 /** A question matches a search by its Q-id or its text. */
 const matches = (r: QuestionRow, term: string) =>
   !term || r.id.includes(term) || r.text.toLowerCase().includes(term);
+
+/**
+ * A card's Continue as the table and the CSV show it: before the consent recorded itself,
+ * PostHog's share of survey sessions that agreed.
+ */
+function introCont(data: SurveyPayload, card: IntroCard): number | null {
+  const c = data.intro.clicks;
+  if (card.cont !== null || !data.intro.recordedFrom || card.step !== "consent_view")
+    return card.cont;
+  return c && c.ok && c.value.opened ? c.value.agreed / c.value.opened : null;
+}
 
 export default function ApSurvey() {
   const { params } = useApFilters();
@@ -48,8 +74,6 @@ export default function ApSurvey() {
   );
   useHashScroll(Boolean(data));
   const [selected, setSelected] = useState<string | null>(null);
-  // One search for the page: the questions table and the funnel's Question filter share it.
-  const [search, setSearch] = useState("");
 
   const rows = data?.questions?.rows ?? [];
   // Opens on the countable question most people leave on (a free-text one has no answers to show).
@@ -65,7 +89,7 @@ export default function ApSurvey() {
       <PageHeader
         crumbs={["Assessments", "Assessment A", "Survey"]}
         title="Survey"
-        description="Where people slow down, engage or leave: the intro first, then every question."
+        description="Where people slow down, engage or leave: wizard cards first, then every question."
         actions={
           <BlackButton
             disabled={!data}
@@ -82,7 +106,10 @@ export default function ApSurvey() {
                         { label: "This range", unit: "pct" as const },
                         { label: "Benchmark", unit: "pct" as const },
                       ],
-                      rows: c.rows.map((r) => ({ label: r.label, values: [r.share, r.bench] })),
+                      rows: c.rows.map((r) => ({
+                        label: r.label,
+                        values: r.pending ? [null, null] : [r.share, r.bench],
+                      })),
                     },
                   })),
                   {
@@ -103,18 +130,29 @@ export default function ApSurvey() {
                     },
                   },
                   {
-                    name: "Intro wizard (cookie-accepting visitors)",
+                    name: "Intro wizard",
                     table: {
                       columns: [
-                        { label: "Slide", unit: "text" },
+                        { label: "Card", unit: "text" },
                         { label: "Median time", unit: "mmss" },
                         { label: "Reached", unit: "count" },
-                        { label: "Share of slide 1", unit: "pct" },
-                        { label: "Went on", unit: "pct" },
+                        { label: "Share of the first card", unit: "pct" },
+                        { label: "Continue", unit: "pct" },
+                        { label: "Skip intro", unit: "pct" },
+                        { label: "Back", unit: "pct" },
+                        { label: "Exit", unit: "pct" },
                       ],
-                      rows: data.intro.slides.map((sl) => ({
-                        label: `${sl.n} · ${sl.name}`,
-                        values: [sl.medianMs, sl.reached, sl.reachedShare, sl.cont],
+                      rows: data.intro.cards.map((c, i) => ({
+                        label: `${i + 1} · ${c.name}`,
+                        values: [
+                          c.medianMs,
+                          c.reached,
+                          c.reachedShare,
+                          introCont(data, c),
+                          c.skip,
+                          c.back,
+                          c.exit,
+                        ],
                       })),
                     },
                   },
@@ -135,9 +173,25 @@ export default function ApSurvey() {
           <RangeLine data={data} sources="Production database and PostHog" />
           <TileGrid min={200}>
             {data.tiles.map((t) => (
-              <KpiTile key={t.key} tile={t} size="md" />
+              <KpiTileV2 key={t.key} tile={t} />
             ))}
           </TileGrid>
+
+          <FunnelSection
+            data={data}
+            rows={rows}
+            selected={current?.id ?? null}
+            onSelect={setSelected}
+          />
+
+          {current && data.questions && (
+            <QuestionDetail
+              key={current.id}
+              q={current}
+              total={data.questions.rows.filter((r) => r.n > 0).length}
+              rows={rows}
+            />
+          )}
 
           <Card id="demographics" labelledBy="h-demo">
             <SectionHead
@@ -162,11 +216,11 @@ export default function ApSurvey() {
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-ap-body">
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ap-purple" />
-                This survey · {fmt("count", data.demographics.n)} finished
+                This survey · {fmt("count", data.demographics.n)} completed
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="h-3.5 w-[3px] rounded-sm bg-ap-ink" />
-                Benchmark · {fmt("count", data.demographics.benchN)} finished
+                Benchmark · {fmt("count", data.demographics.benchN)} completed
               </span>
             </div>
             <div
@@ -177,29 +231,9 @@ export default function ApSurvey() {
                 <DemographicCard key={c.title} card={c} />
               ))}
             </div>
-            <p className="m-0 text-xs leading-relaxed text-ap-muted">{data.demographics.note}</p>
           </Card>
 
           <IntroSection data={data} />
-
-          <QuestionsSection
-            data={data}
-            selected={current?.id ?? null}
-            onSelect={setSelected}
-            search={search}
-            onSearch={setSearch}
-          />
-
-          {current && data.questions && (
-            <QuestionDetail
-              key={current.id}
-              q={current}
-              total={data.questions.rows.filter((r) => r.n > 0).length}
-              rows={rows}
-            />
-          )}
-
-          <FunnelSection rows={rows} search={search} onSearch={setSearch} />
         </Busy>
       )}
     </>
@@ -214,7 +248,7 @@ function DemographicCard({ card }: { card: DemoCard }) {
         <h3 className="m-0 font-serif text-lg font-semibold">{card.title}</h3>
         <LiveBadge />
       </div>
-      {card.rows.map((r) => {
+      {card.rows.map((r, ri) => {
         const d = r.bench === null ? null : (r.share - r.bench) * 100;
         const big = d !== null && Math.abs(d) >= 2;
         return (
@@ -226,54 +260,57 @@ function DemographicCard({ card }: { card: DemoCard }) {
             <span className="truncate font-semibold" title={r.label}>
               {r.label}
             </span>
-            <span className="relative h-3.5 rounded-full bg-white">
-              <span
-                className="absolute inset-y-0 left-0 rounded-full bg-ap-purple"
-                style={{ width: `${(r.share / max) * 100}%` }}
-              />
-              {r.bench !== null && (
+            {r.pending ? (
+              <span className="col-span-3 text-xs text-ap-muted">{r.pending}</span>
+            ) : (
+              <>
+                <span className="relative h-3.5 rounded-full bg-white">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{
+                      width: `${(r.share / max) * 100}%`,
+                      background: DEMO_COLORS[ri % DEMO_COLORS.length],
+                    }}
+                  />
+                  {r.bench !== null && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-[3px] -top-[3px] -ml-px w-[3px] rounded-sm bg-ap-ink"
+                      style={{ left: `${(r.bench / max) * 100}%` }}
+                    />
+                  )}
+                </span>
+                <span className="text-right font-bold tabular-nums">{fmt("pct", r.share, 1)}</span>
                 <span
-                  aria-hidden="true"
-                  className="absolute -bottom-[3px] -top-[3px] -ml-px w-[3px] rounded-sm bg-ap-ink"
-                  style={{ left: `${(r.bench / max) * 100}%` }}
-                />
-              )}
-            </span>
-            <span className="text-right font-bold tabular-nums">{fmt("pct", r.share, 1)}</span>
-            <span
-              className={`rounded-md px-1.5 py-0.5 text-right text-xs font-bold tabular-nums ${
-                big && d !== null
-                  ? d > 0
-                    ? "bg-ap-good/10 text-ap-good-ink"
-                    : "bg-ap-bad/10 text-ap-bad-ink"
-                  : "text-ap-muted"
-              }`}
-            >
-              {d === null ? "—" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d).toFixed(1)}`}
-            </span>
+                  className={`rounded-md px-1.5 py-0.5 text-right text-xs font-bold tabular-nums ${
+                    big && d !== null
+                      ? d > 0
+                        ? "bg-ap-good/10 text-ap-good-ink"
+                        : "bg-ap-bad/10 text-ap-bad-ink"
+                      : "text-ap-muted"
+                  }`}
+                >
+                  {d === null ? "—" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d).toFixed(1)}`}
+                </span>
+              </>
+            )}
           </div>
         );
       })}
-      <span className="text-xs text-ap-muted">{card.note}</span>
     </div>
   );
 }
 
-interface IntroCard {
-  n: number;
-  name: string;
-  purpose: string;
-  time: number | null;
-  reached: number | null;
-  reachedN: number | null;
-  cont: number | null;
-  eng: string;
-}
+type IntroRowData = IntroCard & { n: number; time: number | null; eng: string };
 
-const INTRO_GRID = "44px minmax(220px,2.2fr) 80px minmax(160px,1.2fr) 100px minmax(170px,1.3fr)";
+const SURVEY_TRACKING_DAY = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
+
+const INTRO_GRID =
+  "44px minmax(200px,2fr) 72px minmax(150px,1.1fr) 84px 84px 72px 72px minmax(160px,1.2fr)";
 
 function IntroSection({ data }: { data: SurveyPayload }) {
-  const [sort, setSort] = useState<Sort<"time" | "reached" | "cont">>(null);
+  const [sort, setSort] =
+    useState<Sort<"time" | "reachedShare" | "cont" | "skip" | "back" | "exit">>(null);
   const c = data.intro.clicks;
   const ok = c && c.ok ? c.value : null;
   const share = (n: number) => (ok && ok.opened ? n / ok.opened : null);
@@ -282,87 +319,64 @@ function IntroSection({ data }: { data: SurveyPayload }) {
     const v = share(n);
     return fmt("pct", v, v !== null && v < 0.1 ? 1 : 0);
   };
-  const answered = ok ? share(ok.answered) : null;
-  const cards: IntroCard[] = [
-    {
-      name: "Intro · Let’s prepare you",
-      purpose: "Start with Continue or a tap on the silhouette",
-      time: null,
-      reached: null,
-      reachedN: null,
-      cont: null,
-      eng: ok ? `${pct(ok.silhouette)} tap the silhouette` : "—",
-    },
-    ...data.intro.slides.map((s) => ({
-      name: s.name,
-      purpose: s.purpose,
-      time: s.medianMs,
-      reached: s.reachedShare,
-      reachedN: s.reached,
-      cont: s.cont,
-      eng: s.n === 3 && ok ? `${pct(ok.trust)} open the Trust Zone` : "—",
-    })),
-    {
-      name: "Consent · Before we begin",
-      purpose: "18+ confirmation and terms; I agree or Return to site",
-      time: null,
-      reached: null,
-      reachedN: null,
-      cont: ok ? share(ok.agreed) : null,
-      eng: ok ? `Return to site ${pct(ok.returned)} · read the terms ${pct(ok.terms)}` : "—",
-    },
-  ].map((card, i) => ({ ...card, n: i + 1 }));
+  const eng = (step: string) =>
+    !ok
+      ? "—"
+      : step === "intro_view"
+        ? `${pct(ok.silhouette)} tap the silhouette`
+        : step === "intro_slide_3"
+          ? `${pct(ok.trust)} open the Trust Zone`
+          : step === "consent_view"
+            ? `Return to site ${pct(ok.returned)} · read the terms ${pct(ok.terms)}`
+            : "—";
+  const cards: IntroRowData[] = data.intro.cards.map((card, i) => ({
+    ...card,
+    n: i + 1,
+    time: card.medianMs,
+    cont: introCont(data, card),
+    eng: eng(card.step),
+  }));
   return (
     <Card id="wizard" labelledBy="h-wiz">
-      <SectionHead
-        id="h-wiz"
-        title="Intro wizard"
-        description="The screens before question 1: the intro, four slides and the consent."
-      />
+      <SectionHead id="h-wiz" title="Intro wizard" />
       <AllTraffic note={data.narrowed} />
-      {ok ? (
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))" }}
-        >
-          <Figure
-            label="Saw the intro"
-            value={fmt("count", ok.opened)}
-            note="sessions on the survey page"
-          />
-          <Figure
-            label="Agreed to consent"
-            value={fmt("pct", share(ok.agreed))}
-            note={`${fmt("count", ok.agreed)} clicked “I agree”`}
-          />
-          <Figure
-            label="Skipped slides"
-            value={fmt("pct", share(ok.skipped))}
-            note={
-              ok.skipped && data.intro.mostSkipped
-                ? `most skips on slide ${data.intro.mostSkipped}`
-                : `${fmt("count", ok.skipped)} clicked “Skip Intro”`
+      <TileGrid min={200}>
+        {data.intro.tiles.map((t) => (
+          // Whole percentages, as drawn; a share under 1% keeps a tenth so a handful never reads 0%.
+          <KpiTileV2
+            key={t.key}
+            tile={t}
+            digits={
+              t.unit !== "pct"
+                ? undefined
+                : t.value !== null && t.value > 0 && t.value < 0.01
+                  ? 1
+                  : 0
             }
           />
-          <Figure
-            label="Left before Q1"
-            value={fmt("pct", answered === null ? null : 1 - answered)}
-            note={`incl. ${fmt("count", ok.returned)} Return to site`}
-          />
-        </div>
-      ) : (
-        <p className="m-0 text-sm text-ap-muted">
-          PostHog could not be read{c && !c.ok ? `: ${c.error}` : ""}.
-        </p>
+        ))}
+      </TileGrid>
+      {c && !c.ok && (
+        <p className="m-0 text-sm text-ap-bad-ink">The engagement column is blank: {c.error}</p>
+      )}
+      {data.intro.recordedFrom && (
+        <NotTracked>
+          Skip intro, Back, Exit and the intro and consent rows are recorded from{" "}
+          {data.intro.recordedFrom}: pick a range from that day on
+        </NotTracked>
       )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Intro wizard cards" style={{ minWidth: 840 }}>
+        <div role="table" aria-label="Intro wizard cards" style={{ minWidth: 1080 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: INTRO_GRID }}>
             <Th label="#" />
             <Th label="Card" />
             <Th label="Time" sortKey="time" sort={sort} onSort={setSort} right />
-            <Th label="Reached" sortKey="reached" sort={sort} onSort={setSort} />
+            {/* By the share the bar and the figure show, not the count beside them. */}
+            <Th label="Reached" sortKey="reachedShare" sort={sort} onSort={setSort} />
             <Th label="Continue" sortKey="cont" sort={sort} onSort={setSort} right />
+            <Th label="Skip intro" sortKey="skip" sort={sort} onSort={setSort} right />
+            <Th label="Back" sortKey="back" sort={sort} onSort={setSort} right />
+            <Th label="Exit" sortKey="exit" sort={sort} onSort={setSort} right />
             <Th label="Engagement on card" />
           </div>
           {sortRows(cards, sort).map((card) => (
@@ -370,31 +384,43 @@ function IntroSection({ data }: { data: SurveyPayload }) {
           ))}
         </div>
       </div>
-      <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Slides 1 to 4: time, reached and continue come from our own records, which the slides only
-        send for visitors who accepted cookies, so they describe those visitors only. Time is the
-        median from a slide to the next screen; slide 4’s runs to question 1, so it includes the
-        consent card. Most skips: the slide most of those visitors left for question 1 without the
-        next slide. The boxes, the intro and the consent: clicks PostHog recorded on the survey
-        page, as a share of its sessions there (it sees most survey sessions). Not recorded: time on
-        the intro and the consent; Back, Skip and leaving per card; Continue after slide 4 (the next
-        screen has no count of its own).
-      </p>
+      <details className="text-xs leading-relaxed text-ap-muted">
+        <summary className="cursor-pointer font-semibold text-ap-body">
+          How these are counted
+        </summary>
+        <p className="m-0 mt-1.5">
+          The cards: our own records, for every visitor from {SURVEY_TRACKING_DAY} (before it, only
+          for visitors who accepted cookies). Reached: of the visitors on the intro card (on slide 1
+          for a range before {SURVEY_TRACKING_DAY}). People who start from the landing page’s
+          question card skip the intro and land on the consent, so they are left out of the
+          consent’s Reached share. Time: the median from a card to the next one (before{" "}
+          {SURVEY_TRACKING_DAY}, slide 4’s ran to question 1, past the consent). Continue: reached
+          the next card that day. Skip intro: pressed it on that slide. Back: the Back button, the
+          arrow key, a swipe or the browser’s Back (slide 1 and the consent have only the
+          browser’s). Exit: the furthest card that visitor reached that day. In red: Skip intro from
+          15%, Exit from 8%. For a range from {SURVEY_TRACKING_DAY} on, the first two boxes are our
+          own records too: visitors on the intro card, and of everyone who began (on the intro card,
+          or on the consent from the landing page’s card) the share who agreed and went on to
+          question 1. The other boxes and the engagement column: clicks PostHog recorded on the
+          survey page, as a share of its sessions there (it sees most survey sessions), as are the
+          first two boxes and the consent’s continue for an earlier range. The four boxes compare
+          with the period before only when both come from the same records (both ours, or both
+          PostHog&rsquo;s).
+        </p>
+      </details>
     </Card>
   );
 }
 
-function IntroRow({ card }: { card: IntroCard }) {
+function IntroRow({ card }: { card: IntroRowData }) {
   return (
     <div
       role="row"
       className="grid items-center border-t border-ap-line"
       style={{ gridTemplateColumns: INTRO_GRID }}
     >
-      <span role="cell" className="px-3 py-2.5">
-        <span className="inline-flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ap-purple text-xs font-bold text-white">
-          {card.n}
-        </span>
+      <span role="cell" className="px-3 py-2.5 text-xs tabular-nums text-ap-muted">
+        {card.n}
       </span>
       <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
         <span className="text-sm font-bold">{card.name}</span>
@@ -409,153 +435,38 @@ function IntroRow({ card }: { card: IntroCard }) {
         ) : (
           <>
             <span className="flex-1">
-              <Bar pct={card.reached} height={8} />
+              <Bar pct={card.reachedShare} height={8} />
             </span>
-            <span className="text-xs font-bold tabular-nums">{fmt("pct", card.reached, 0)}</span>
-            {card.reachedN != null && (
-              <span className="text-[11px] text-ap-muted tabular-nums">
-                {fmt("count", card.reachedN)}
-              </span>
-            )}
+            <span className="text-xs font-bold tabular-nums">
+              {fmt("pct", card.reachedShare, 0)}
+            </span>
+            <span className="text-[11px] text-ap-muted tabular-nums">
+              {fmt("count", card.reached)}
+            </span>
           </>
         )}
       </span>
-      <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-        {fmt("pct", card.cont, 1)}
-      </span>
+      {/* Whole percentages; the design's red from 15% skipping and 8% leaving. */}
+      {(
+        [
+          [card.cont, false],
+          [card.skip, atLeast(card.skip, 15)],
+          [card.back, false],
+          [card.exit, atLeast(card.exit, 8)],
+        ] as const
+      ).map(([v, red], i) => (
+        <span
+          key={i}
+          role="cell"
+          className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${red ? "font-bold text-ap-bad" : ""}`}
+        >
+          {wholePct(v)}
+        </span>
+      ))}
       <span role="cell" className="px-3 py-2.5 text-xs leading-snug text-ap-body">
         {card.eng}
       </span>
     </div>
-  );
-}
-
-function QuestionsSection({
-  data,
-  selected,
-  onSelect,
-  search,
-  onSearch,
-}: {
-  data: SurveyPayload;
-  selected: string | null;
-  onSelect: (id: string) => void;
-  search: string;
-  onSearch: (v: string) => void;
-}) {
-  const [all, setAll] = useState(true);
-  const q = data.questions;
-  const rows = q?.rows ?? [];
-  const term = search.trim().toLowerCase();
-  const found = rows.filter((r) => matches(r, term));
-  const shown = term || all ? found : found.slice(0, 10);
-  const gtc = "80px minmax(260px,3fr) repeat(3, minmax(80px,0.7fr)) minmax(120px,1.1fr)";
-  return (
-    <Card id="questions" labelledBy="h-q">
-      <SectionHead
-        id="h-q"
-        title="Questions, answers and exits"
-        description={
-          q?.blocked
-            ? `${q.blocked} Showing all traffic.`
-            : "Every question in today's order. Exits: people whose last step was the question and who never finished. Select a question for its answers."
-        }
-        align="end"
-        right={
-          <label className="flex min-w-[220px] flex-[0_1_340px] flex-col gap-1 text-xs font-bold text-ap-muted">
-            <span className="sr-only">Search questions</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => onSearch(e.target.value)}
-              placeholder="Question text or Q-id"
-              className="min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 text-sm text-ap-ink"
-            />
-          </label>
-        }
-      />
-      {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
-      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div style={{ minWidth: 820 }}>
-          <div className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
-            {[
-              "Q-id",
-              "Question",
-              "Exits",
-              "Time",
-              "Drop-out rate",
-              `Exits per ${q?.trendGrain ?? "week"}`,
-            ].map((h, i) => (
-              <span
-                key={h}
-                className={`px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${i >= 2 && i <= 4 ? "text-right" : ""}`}
-              >
-                {h}
-              </span>
-            ))}
-          </div>
-          {shown.map((r) => {
-            const on = r.id === selected;
-            return (
-              <button
-                key={r.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  onSelect(r.id);
-                  document
-                    .getElementById("question-detail")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                className={`grid min-h-12 w-full cursor-pointer items-center border-0 border-t border-solid border-ap-line p-0 text-left font-[inherit] ${on ? "bg-ap-purple/10" : "bg-white hover:bg-ap-ground"}`}
-                style={{ gridTemplateColumns: gtc }}
-              >
-                <span className="px-3.5 py-2.5 text-[13px] font-medium text-ap-muted">{r.id}</span>
-                <span
-                  className={`px-3.5 py-2.5 text-sm font-bold leading-snug ${on ? "text-ap-violet" : "text-ap-ink"}`}
-                >
-                  {r.n === 0 && (
-                    <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
-                      not asked now
-                    </span>
-                  )}
-                  {r.text}
-                </span>
-                <span className="px-3.5 py-2.5 text-right text-sm font-bold tabular-nums">
-                  {fmt("count", r.exits)}
-                </span>
-                <span className="px-3.5 py-2.5 text-right text-sm tabular-nums">
-                  {fmt("mmss", r.medianMs)}
-                </span>
-                <span className="px-3.5 py-2.5 text-right text-sm tabular-nums">
-                  {fmt("pct", r.dropRate, 2)}
-                </span>
-                <span className="px-3.5 py-2.5">
-                  <Spark values={r.exitsTrend} height={28} />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Reached and exits: every survey run, our own test runs included. Time, back and skipped: all
-        traffic, staff left out. Google Ads here means a visit with an ad click id.
-      </p>
-      {term && found.length === 0 && (
-        <p className="m-0 text-sm text-ap-muted">No question matches “{search}”.</p>
-      )}
-      {!term && rows.length > 10 && (
-        <button
-          type="button"
-          onClick={() => setAll((a) => !a)}
-          aria-expanded={all}
-          className="min-h-11 cursor-pointer self-center rounded-full border border-ap-line bg-white px-[22px] text-sm font-bold text-ap-ink"
-        >
-          {all ? "Show the first 10 only" : `See all ${rows.length} questions`}
-        </button>
-      )}
-    </Card>
   );
 }
 
@@ -593,13 +504,13 @@ function QuestionDetail({
     >
       <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-plum">
         Survey · Question detail · {q.id}
-        {q.n ? ` · Question ${q.n} of ${total}` : " · not asked now"}
+        {q.n ? ` · Step ${q.n} of ${total}` : " · not asked now"}
       </span>
       <h2 id="h-qd" className="m-0 font-serif text-2xl font-semibold leading-snug">
         {q.text}
       </h2>
       <p className="m-0 text-sm text-ap-muted">
-        Select a question in the table above to see it here.
+        Select a question in the funnel above to see it here.
       </p>
       <div
         className="grid max-w-[760px] gap-3"
@@ -671,7 +582,7 @@ function QuestionDetail({
           {data && (
             <>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <span className="text-[13px] font-bold">Answers</span>
+                <span className="text-[15px] font-bold text-ap-ink">Answers</span>
                 {data.segments.map((s, i) => (
                   <span
                     key={s.name}
@@ -696,7 +607,7 @@ function QuestionDetail({
                     <div
                       key={a.label}
                       className="grid items-center gap-3 text-[13px]"
-                      style={{ gridTemplateColumns: "minmax(120px, 220px) minmax(0,1fr)" }}
+                      style={{ gridTemplateColumns: "140px minmax(0,1fr)" }}
                     >
                       <span className="font-semibold leading-snug">{a.label}</span>
                       <div className="flex flex-col gap-[3px]">
@@ -747,38 +658,66 @@ function QuestionDetail({
   );
 }
 
-const FUNNEL_GRID = "44px minmax(280px,3fr) 76px minmax(140px,1.6fr) 84px 92px 84px";
+const FUNNEL_GRID =
+  "44px minmax(260px,3fr) 72px minmax(110px,1.2fr) 76px 76px 64px 84px 64px minmax(110px,1fr)";
 
+/**
+ * The design's "Question funnel" (16 Oct 2026): the funnel and the questions table in one.
+ * Each question in today's order with the people who reached it, the share of the first and of
+ * the one before, the people who left there and its median time; a row opens Question detail.
+ */
 function FunnelSection({
+  data,
   rows,
-  search,
-  onSearch,
+  selected,
+  onSelect,
 }: {
+  data: SurveyPayload;
   rows: QuestionRow[];
-  search: string;
-  onSearch: (v: string) => void;
+  selected: string | null;
+  onSelect: (id: string) => void;
 }) {
-  const [sort, setSort] = useState<Sort<"text" | "reached" | "ofStart" | "ofPrev" | "drop">>(null);
-  const [filtering, setFiltering] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] =
+    useState<Sort<"text" | "reached" | "ofStart" | "ofPrev" | "exits" | "drop" | "time">>(null);
+  const q = data.questions;
   const asked = rows.filter((r) => r.n > 0);
   const top = asked[0]?.reached ?? 0;
   const last = asked[asked.length - 1];
   const term = search.trim().toLowerCase();
-  // Each question against the one before it in today's order, however the table is sorted.
-  const steps = asked.map((r, i) => {
-    const prev = i ? asked[i - 1]!.reached : null;
-    const ofPrev = prev ? r.reached / prev : null;
-    return {
-      r,
-      text: r.text,
-      reached: r.reached,
-      ofStart: top ? r.reached / top : null,
-      ofPrev,
-      drop: prev === null ? null : prev - r.reached,
-      // A question first asked during the range was asked for part of it: no one left there.
-      heavy: ofPrev !== null && ofPrev < 0.95 && !r.newInRange,
-    };
-  });
+  // Each question against the one before it in today's order, however the table is sorted;
+  // questions no longer asked come last, without a place in the funnel.
+  const steps = [
+    ...asked.map((r, i) => {
+      const prev = i ? asked[i - 1]!.reached : null;
+      const ofPrev = prev ? r.reached / prev : null;
+      return {
+        r,
+        text: r.text,
+        reached: r.reached,
+        ofStart: top ? r.reached / top : null,
+        ofPrev,
+        exits: r.exits,
+        drop: r.dropRate,
+        time: r.medianMs,
+        // A question first asked during the range was asked for part of it: no one left there.
+        heavy: ofPrev !== null && ofPrev < 0.95 && !r.newInRange,
+      };
+    }),
+    ...rows
+      .filter((r) => r.n === 0)
+      .map((r) => ({
+        r,
+        text: r.text,
+        reached: r.reached,
+        ofStart: null,
+        ofPrev: null,
+        exits: r.exits,
+        drop: r.dropRate,
+        time: r.medianMs,
+        heavy: false,
+      })),
+  ];
   const shown = sortRows(
     steps.filter((x) => matches(x.r, term)),
     sort
@@ -787,109 +726,180 @@ function FunnelSection({
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
         id="h-funnel"
-        title="Survey question funnel"
-        description="People who reached each question, in today's order. Rows in orange lose more than 5% of the step before."
-        align="end"
-        right={
-          last ? (
-            <div className="flex flex-col gap-0.5 rounded-[14px] bg-ap-ground px-3.5 py-2.5">
-              <span className="text-[11px] text-ap-muted">Reached the last question</span>
-              <span className="font-serif text-xl font-semibold">
-                {fmt("pct", top ? last.reached / top : null, 1)} · {fmt("count", last.reached)}
-              </span>
-            </div>
-          ) : null
+        title="Question funnel"
+        description={
+          q?.blocked
+            ? `${q.blocked} Showing all traffic.`
+            : `Survey sessions reaching each question, ${data.range.label}. Click a row to open it in Question detail.`
         }
       />
-      {filtering && <HeaderFilter label="Question" value={search} onChange={onSearch} />}
-      {term && !filtering && (
-        <p className="m-0 text-xs text-ap-muted">Filtered by the search above: “{search}”.</p>
-      )}
+      {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-y border-ap-line py-3">
+        <label className="relative flex max-w-[420px] flex-[1_1_320px]">
+          <span className="sr-only">Search questions</span>
+          <svg
+            viewBox="0 0 16 16"
+            width="15"
+            height="15"
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ap-muted"
+          >
+            <circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M10.5 10.5L14 14"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by question text or Q-id"
+            className="min-h-11 w-full rounded-full border border-ap-ink/[0.18] bg-white pl-[38px] pr-4 text-sm text-ap-ink"
+          />
+        </label>
+        <div className="flex flex-wrap items-baseline gap-6">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
+              First step
+            </span>
+            <span className="font-serif text-xl font-semibold tabular-nums">
+              {fmt("count", asked.length ? top : null)}
+            </span>
+          </span>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
+              Reached last step
+            </span>
+            <span className="font-serif text-xl font-semibold tabular-nums">
+              {last && top
+                ? `${fmt("pct", last.reached / top, 1)} · ${fmt("count", last.reached)}`
+                : "—"}
+            </span>
+          </span>
+        </div>
+      </div>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Survey question funnel" style={{ minWidth: 900 }}>
+        <div role="table" aria-label="Survey question funnel" style={{ minWidth: 1180 }}>
           <div
             role="row"
             className="grid bg-ap-ground"
             style={{ gridTemplateColumns: FUNNEL_GRID }}
           >
             <Th label="#" />
-            <Th label="Question" sortKey="text" text sort={sort} onSort={setSort}>
-              <button
-                type="button"
-                aria-label="Filter Question"
-                aria-expanded={filtering}
-                onClick={() => {
-                  if (filtering) onSearch("");
-                  setFiltering(!filtering);
-                }}
-                className={`ml-1 inline-flex cursor-pointer border-0 bg-transparent p-0 align-[-1px] ${filtering || term ? "text-ap-violet" : "text-ap-muted"}`}
-              >
-                <FilterIcon />
-              </button>
-            </Th>
+            <Th label="Question" sortKey="text" text sort={sort} onSort={setSort} />
             <Th label="Reached" sortKey="reached" sort={sort} onSort={setSort} right />
             <Th label="Funnel" />
             <Th label="% of start" sortKey="ofStart" sort={sort} onSort={setSort} right />
             <Th label="% of prev." sortKey="ofPrev" sort={sort} onSort={setSort} right />
-            <Th label="Drop-outs" sortKey="drop" sort={sort} onSort={setSort} right />
+            <Th label="Exits" sortKey="exits" sort={sort} onSort={setSort} right />
+            <Th label="Drop-out rate" sortKey="drop" sort={sort} onSort={setSort} right />
+            <Th label="Time" sortKey="time" sort={sort} onSort={setSort} right />
+            <Th label={`Exits per ${q?.trendGrain ?? "week"}`} />
           </div>
-          {shown.map((x) => (
-            <div
-              key={x.r.id}
-              role="row"
-              className={`grid items-center border-t border-ap-line ${x.heavy ? "bg-ap-orange/[0.06]" : "bg-white"}`}
-              style={{ gridTemplateColumns: FUNNEL_GRID }}
-            >
-              <span role="cell" className="px-3 py-2 text-xs tabular-nums text-ap-muted">
-                {x.r.n}
-              </span>
-              <span role="rowheader" className="flex flex-col gap-px px-3 py-2">
-                <span className="text-[13px] font-bold leading-snug">{x.text}</span>
-                <span className="text-[11px] text-ap-muted">{x.r.id}</span>
-              </span>
-              <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {fmt("count", x.reached)}
-              </span>
-              <span role="cell" className="px-3 py-2">
-                <Bar pct={x.ofStart} height={12} />
-              </span>
-              <span
-                role="cell"
-                className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums"
+          {shown.map((x) => {
+            const on = x.r.id === selected;
+            const dropRed = x.drop !== null && x.drop > 0.05;
+            // The picked row's purple tint leaves the brighter red under 4.5:1; its ink passes.
+            const red = on ? "text-ap-bad-ink" : "text-ap-bad";
+            return (
+              // The question's button stretches over its row, so a click anywhere on the row
+              // picks it while the table keeps its rows and cells for a screen reader.
+              <div
+                key={x.r.id}
+                role="row"
+                className={`relative grid items-center border-t border-ap-line ${
+                  on
+                    ? "bg-ap-purple/10 shadow-[inset_3px_0_0_#795fc8]"
+                    : x.heavy
+                      ? "bg-ap-orange/[0.06] hover:bg-ap-ground"
+                      : "bg-white hover:bg-ap-ground"
+                }`}
+                style={{ gridTemplateColumns: FUNNEL_GRID }}
               >
-                {fmt("pct", x.ofStart, 1)}
-              </span>
-              <span
-                role="cell"
-                className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? "font-bold text-ap-bad" : "text-ap-body"}`}
-              >
-                {fmt("pct", x.ofPrev, 1)}
-              </span>
-              <span
-                role="cell"
-                className={`px-3 py-2 text-right text-[13px] font-bold tabular-nums ${x.heavy ? "text-ap-bad" : "text-ap-muted"}`}
-              >
-                {x.drop === null
-                  ? "—"
-                  : x.drop > 0
-                    ? `−${x.drop}`
-                    : x.drop < 0
-                      ? `+${-x.drop}`
-                      : "0"}
-              </span>
-            </div>
-          ))}
+                <span role="cell" className="px-3 py-2 text-xs tabular-nums text-ap-muted">
+                  {x.r.n || ""}
+                </span>
+                <span role="rowheader" className="px-3 py-2">
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      onSelect(x.r.id);
+                      document
+                        .getElementById("question-detail")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    className="flex w-full cursor-pointer flex-col gap-px border-0 bg-transparent p-0 text-left font-[inherit] after:absolute after:inset-0"
+                  >
+                    <span
+                      className={`text-[13px] font-bold leading-snug ${on ? "text-ap-violet" : "text-ap-ink"}`}
+                    >
+                      {x.r.n === 0 && (
+                        <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
+                          not asked now
+                        </span>
+                      )}
+                      {x.text}
+                    </span>
+                    <span className="text-[11px] text-ap-muted">{x.r.id}</span>
+                  </button>
+                </span>
+                <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                  {fmt("count", x.reached)}
+                </span>
+                <span role="cell" className="px-3 py-2">
+                  <Bar pct={x.ofStart} height={12} />
+                </span>
+                <span
+                  role="cell"
+                  className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums"
+                >
+                  {fmt("pct", x.ofStart, 1)}
+                </span>
+                <span
+                  role="cell"
+                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? `font-bold ${red}` : "text-ap-body"}`}
+                >
+                  {fmt("pct", x.ofPrev, 1)}
+                </span>
+                <span
+                  role="cell"
+                  className="px-3 py-2 text-right text-[13px] font-bold tabular-nums"
+                >
+                  {fmt("count", x.exits)}
+                </span>
+                <span
+                  role="cell"
+                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${dropRed ? `font-bold ${red}` : "text-ap-body"}`}
+                >
+                  {fmt("pct", x.drop, 2)}
+                </span>
+                <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                  {fmt("mmss", x.time)}
+                </span>
+                <span role="cell" className="px-3 py-2">
+                  <Spark values={x.r.exitsTrend} height={26} />
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
       {term && shown.length === 0 && (
         <p className="m-0 text-sm text-ap-muted">No question matches “{search}”.</p>
       )}
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        A question reached by more people than the one before it was asked in a different order to
-        some of them (the opening-order and email-question tests). A question first asked during the
-        range is not shaded: it was asked for only part of it. The end of the flow may differ
-        between survey versions, so the last rows may not be drop-outs: check before reading them
-        that way. Same people as the Notion drop-off page.
+        Rows in orange lose more than 5% of the previous step. Exits: people whose last step was the
+        question and who never finished; the drop-out rate is those exits over the people who
+        reached it (red above 5%). A question reached by more people than the one before it was
+        asked in a different order to some of them (the opening-order and email-question tests), and
+        one first asked during the range is not shaded: it was asked for only part of it. The end of
+        the flow may differ between survey versions, so check before reading the last rows as
+        drop-outs. Same people as the Notion drop-off page, less our own finished test runs. Time,
+        back and skipped: all traffic, staff left out.
       </p>
     </Card>
   );

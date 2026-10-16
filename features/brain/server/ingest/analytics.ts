@@ -250,6 +250,9 @@ function isEmpty(t: Totals): boolean {
 
 export interface AdCost {
   byDay: Map<string, number>;
+  /** Google Ads clicks and impressions per day (GA4's advertiser metrics). Optional. */
+  clicksByDay?: Map<string, number>;
+  impressionsByDay?: Map<string, number>;
   /**
    * Earliest day GA4 data exists for, or null when there is none.
    *
@@ -278,6 +281,8 @@ export interface AdCost {
 /** Spend per day, read back from the `ga4` chunks written earlier in this run. */
 export async function adCostByDay(): Promise<AdCost> {
   const out = new Map<string, number>();
+  const clicks = new Map<string, number>();
+  const impressions = new Map<string, number>();
   let from: string | null = null;
   let to: string | null = null;
   try {
@@ -297,7 +302,8 @@ export async function adCostByDay(): Promise<AdCost> {
         "/rest/v1/brain_chunk?source=eq.ga4&select=meta&meta->>grain=eq.day" +
           `&order=period_end.asc&limit=1000&offset=${offset}`
       );
-      if (!res.ok) return { byDay: out, from, to };
+      if (!res.ok)
+        return { byDay: out, clicksByDay: clicks, impressionsByDay: impressions, from, to };
       const batch = (await res.json()) as Array<{ meta?: Record<string, unknown> }>;
       rows.push(...batch);
       if (batch.length < 1000) break;
@@ -333,6 +339,10 @@ export async function adCostByDay(): Promise<AdCost> {
       if (!wt && (to === null || day > to)) to = day;
       const cost = Number(r.meta?.ad_cost ?? 0);
       if (Number.isFinite(cost) && cost > 0) out.set(day, cost);
+      const clickCount = Number(r.meta?.ad_clicks ?? 0);
+      if (Number.isFinite(clickCount) && clickCount > 0) clicks.set(day, clickCount);
+      const shown = Number(r.meta?.ad_impressions ?? 0);
+      if (Number.isFinite(shown) && shown > 0) impressions.set(day, shown);
     }
   } catch {
     // Optional enrichment: without GA4 the rollup simply omits the spend lines.
@@ -341,7 +351,7 @@ export async function adCostByDay(): Promise<AdCost> {
   // rather than nulling it. A single global "untrusted" flag meant one bad August
   // chunk withdrew the net figure for June, whose own chunks were fine — a
   // corpus-wide off-switch tripped by one bad night.
-  return { byDay: out, from, to };
+  return { byDay: out, clicksByDay: clicks, impressionsByDay: impressions, from, to };
 }
 
 /** Inclusive day count between two `YYYY-MM-DD`s. */

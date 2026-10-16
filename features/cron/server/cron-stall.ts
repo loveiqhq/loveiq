@@ -180,11 +180,12 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
 };
 
 /**
- * Crons deliberately not watched. `journey-backfill` runs once a year
- * (`0 4 1 1 *`), so "stale" is its normal state for 364 days.
+ * Crons deliberately not watched. `journey-backfill` and `brain-ga4-backfill` run once a
+ * year (`0 4 1 1 *`, `30 4 1 1 *`) and otherwise by hand, so "stale" is their normal state.
  */
 export const UNWATCHED_CRONS = new Set([
   "journey-backfill",
+  "brain-ga4-backfill",
   "purge-old-data",
   // Retired 2026-08-29: the team stopped using chapter nudges, and its schedule has
   // been removed from vercel.json. Kept in this list so that if anyone re-adds the

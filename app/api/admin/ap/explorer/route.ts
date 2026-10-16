@@ -135,11 +135,12 @@ export async function GET(request: Request) {
     const now = new Date();
     if (csv) {
       if (p.source !== "production") {
-        // The other sources are small or capped: export what one large page holds.
+        // PostHog is capped: export what one large page holds. The Google tables hold a row
+        // per channel or campaign per day, so they can pass 1,000: export them like production.
         const r =
           p.source === "posthog"
             ? await posthogRows(table, { ...q, page: 1, size: 200, cursor: null }, masked, now)
-            : await dailyRows(table, { ...q, page: 1, size: 1000 });
+            : await dailyRows(table, { ...q, page: 1, size: EXPORT_MAX });
         return await csvResponse(
           r.rows,
           r.columns,

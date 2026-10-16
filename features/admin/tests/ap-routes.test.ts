@@ -32,7 +32,7 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { PUT as putNote } from "@/app/api/admin/ap/catalog/route";
+import { GET as catalogGet, PUT as putNote } from "@/app/api/admin/ap/catalog/route";
 import { GET as rowsGet } from "@/app/api/admin/ap/catalog/rows/route";
 import { GET as explorerGet } from "@/app/api/admin/ap/explorer/route";
 import { POST as unlockPost } from "@/app/api/admin/ap/explorer/unlock/route";
@@ -41,7 +41,11 @@ import { GET as answersGet } from "@/app/api/admin/ap/survey/answers/route";
 import { clearFactsCache, fetchFacts } from "@features/admin/server/ap/facts";
 import { GET as statusGet } from "@/app/api/admin/ap/status/route";
 import { clearExplorerCaches, signUnlock } from "@features/admin/server/ap/explorer";
-import { fetchSurveyIntroClicks } from "@features/admin/server/ap/posthog";
+import {
+  fetchSessionSources,
+  fetchSurveyIntroClicks,
+  fetchVisitorGroups,
+} from "@features/admin/server/ap/posthog";
 import { countRows, fetchAllRows } from "@features/admin/server/supabase";
 
 const SCHEMA = {
@@ -279,30 +283,213 @@ describe("GET /api/admin/ap/explorer", () => {
     expect(await refused.text()).not.toContain("ana@example.com");
   });
 
+  /** The brain's GA4 days as the Google tables read them: each day's one breakdown. */
+  const CHANNEL_DAYS = [
+    {
+      date: "2026-10-02",
+      breakdown: {
+        "Paid Search": {
+          sessions: 40,
+          users: 38,
+          new_users: 35,
+          engaged_sessions: 20,
+          engagement_s: 2000,
+        },
+        Direct: { sessions: 3, users: 3, new_users: 1, engaged_sessions: 1, engagement_s: 10 },
+      },
+    },
+    // A day the breakdown was never read for: no rows, not zero rows of zeros.
+    { date: "2026-10-03", breakdown: null },
+    {
+      date: "2026-10-04",
+      breakdown: {
+        Direct: { sessions: 0, users: 2, new_users: 0, engaged_sessions: 0, engagement_s: 12 },
+      },
+    },
+  ];
+  const CAMPAIGN_DAYS = [
+    {
+      date: "2026-10-02",
+      breakdown: {
+        "111": { name: "Brand", impressions: 90, clicks: 3, cost: 12.35, conversions: 1.5 },
+        "222": { name: "Generic", impressions: 40, clicks: 1, cost: 2, conversions: 0 },
+      },
+    },
+    { date: "2026-10-03", breakdown: null },
+    {
+      date: "2026-10-04",
+      breakdown: {
+        "111": { name: "Brand", impressions: 70, clicks: 2, cost: 8, conversions: 2 },
+      },
+    },
+    // Outside the range asked for.
+    {
+      date: "2026-10-20",
+      breakdown: { "111": { name: "Brand", impressions: 1, clicks: 1, cost: 1, conversions: 0 } },
+    },
+  ];
+  const google = (extra: Record<string, string>) =>
+    explorerGet(new Request(explorerUrl({ date: "date", ...extra })));
+
+  it("opens sessions_daily as a row per day and channel, newest day first", async () => {
+    database();
+    vi.mocked(fetchAllRows).mockResolvedValue(CHANNEL_DAYS);
+    const res = await google({
+      source: "ga4",
+      table: "sessions_daily",
+      cols: "date,channel,sessions,users,new_users,engaged_sessions,avg_engagement_time",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { rows: unknown[]; total: number; masked: boolean };
+    expect(body).toMatchObject({ total: 3, masked: false, synced: true });
+    expect(body.rows).toEqual([
+      {
+        date: "2026-10-04",
+        channel: "Direct",
+        sessions: 0,
+        users: 2,
+        new_users: 0,
+        engaged_sessions: 0,
+        // No session to share the time out over.
+        avg_engagement_time: null,
+      },
+      {
+        date: "2026-10-02",
+        channel: "Direct",
+        sessions: 3,
+        users: 3,
+        new_users: 1,
+        engaged_sessions: 1,
+        avg_engagement_time: 3.3,
+      },
+      {
+        date: "2026-10-02",
+        channel: "Paid Search",
+        sessions: 40,
+        users: 38,
+        new_users: 35,
+        engaged_sessions: 20,
+        avg_engagement_time: 50,
+      },
+    ]);
+    // Only the channel breakdown is read, and only for the days that hold one.
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain(
+      "meta->>channels=not.is.null&select=date:meta->>day,breakdown:meta->channels"
+    );
+    // In a file too: an empty cell, not NaN or Infinity.
+    const csv = await google({
+      source: "ga4",
+      table: "sessions_daily",
+      cols: "date,channel,sessions,avg_engagement_time",
+      format: "csv",
+    });
+    expect(await csv.text()).toContain("2026-10-04,Direct,0,\n");
+  });
+
+  it("says a Google table has not synced yet until it holds a day, and not after", async () => {
+    database();
+    vi.mocked(fetchAllRows).mockResolvedValue([]);
+    const cols = "date,campaign_id,campaign_name,impressions,clicks,cost_eur,conversions";
+    const before = await google({ source: "ads", table: "campaign_daily", cols });
+    expect(await before.json()).toMatchObject({ rows: [], total: 0, synced: false });
+    // Synced, with no row in these dates: an empty page, not "not synced".
+    vi.mocked(fetchAllRows).mockResolvedValue(CAMPAIGN_DAYS.slice(3));
+    const after = await google({ source: "ads", table: "campaign_daily", cols });
+    expect(await after.json()).toMatchObject({ rows: [], total: 0, synced: true });
+  });
+
+  it("filters campaign_daily by campaign, within the range", async () => {
+    database();
+    vi.mocked(fetchAllRows).mockResolvedValue(CAMPAIGN_DAYS);
+    const res = await google({
+      source: "ads",
+      table: "campaign_daily",
+      cols: "date,campaign_id,campaign_name,impressions,clicks,cost_eur,conversions",
+      filters: JSON.stringify([["campaign_name", "eq", "Brand"]]),
+      sort: "cost_eur",
+      dir: "asc",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { rows: unknown[]; total: number };
+    expect(body.total).toBe(2);
+    expect(body.rows).toEqual([
+      {
+        date: "2026-10-04",
+        campaign_id: "111",
+        campaign_name: "Brand",
+        impressions: 70,
+        clicks: 2,
+        cost_eur: 8,
+        conversions: 2,
+      },
+      {
+        date: "2026-10-02",
+        campaign_id: "111",
+        campaign_name: "Brand",
+        impressions: 90,
+        clicks: 3,
+        cost_eur: 12.35,
+        conversions: 1.5,
+      },
+    ]);
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain(
+      "meta->>ads_campaigns=not.is.null&select=date:meta->>day,breakdown:meta->ads_campaigns"
+    );
+    // The old daily-totals table is gone.
+    expect((await google({ source: "ads", table: "ads_daily", cols: "date" })).status).toBe(400);
+  });
+
   it("names and logs a Google Analytics or Ads file as what it is: no one's details", async () => {
     database();
-    vi.mocked(fetchAllRows).mockResolvedValue([
-      { meta: { day: "2026-10-02", ad_cost: 12.345, ad_clicks: 3, ad_impressions: 90 } },
-    ]);
-    const res = await explorerGet(
-      new Request(
-        explorerUrl({
-          source: "ads",
-          table: "ads_daily",
-          date: "day",
-          cols: "day,cost_eur",
-          format: "csv",
-        })
-      )
-    );
+    vi.mocked(fetchAllRows).mockResolvedValue(CAMPAIGN_DAYS);
+    const res = await google({
+      source: "ads",
+      table: "campaign_daily",
+      cols: "date,campaign_name,cost_eur,conversions",
+      format: "csv",
+    });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toContain(
-      'filename="ads-ads_daily-2026-10-01-2026-10-12.csv"'
+      'filename="ads-campaign_daily-2026-10-01-2026-10-12.csv"'
     );
-    expect(await res.text()).toContain("2026-10-02,12.35");
+    const text = await res.text();
+    expect(text).toContain("2026-10-02,Brand,12.35,1.5");
+    expect(text).toContain("2026-10-02,Generic,2,0");
+    expect(text).not.toContain("2026-10-20");
     expect(mockLogAdminAction).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "ap_explorer_export", resource_id: "ads.ads_daily" })
+      expect.objectContaining({
+        action: "ap_explorer_export",
+        resource_id: "ads.campaign_daily",
+        metadata: expect.objectContaining({ rows: 3 }),
+      })
     );
+  });
+
+  it("exports every row of a Google table, past one page of 1,000", async () => {
+    database();
+    // 400 days of three channels: more rows than the page sizes allow.
+    vi.mocked(fetchAllRows).mockResolvedValue(
+      Array.from({ length: 400 }, (_, i) => ({
+        date: new Date(Date.UTC(2025, 8, 1 + i)).toISOString().slice(0, 10),
+        breakdown: Object.fromEntries(
+          ["Direct", "Paid Search", "Referral"].map((c) => [
+            c,
+            { sessions: 1, users: 1, new_users: 0, engaged_sessions: 0, engagement_s: 1 },
+          ])
+        ),
+      }))
+    );
+    const res = await google({
+      source: "ga4",
+      table: "sessions_daily",
+      cols: "date,channel",
+      from: "2025-09-01",
+      to: "2026-10-12",
+      format: "csv",
+    });
+    expect(res.status).toBe(200);
+    // Header plus 1,200 rows.
+    expect((await res.text()).trim().split("\n")).toHaveLength(1201);
   });
 
   it("exports CSV to admins only, and logs every export", async () => {
@@ -517,9 +704,11 @@ describe("POST /api/admin/ap/saved-filters", () => {
     database([{ id: 7 }]);
     expect((await save({ period: "7d", source: "google_ads" }, "filter")).status).toBe(200);
     expect(inserted()).toBe(true);
+    expect((await save({ visitor: "returning" }, "filter")).status).toBe(200);
     mockSupabaseFetch.mockClear();
     for (const bad of [
       { period: "7d", name: "x" },
+      { visitor: "everyone" },
       { source: "ana@example.com" },
       { period: "custom", from: "2026-10-01", to: "ana@example.com" },
     ]) {
@@ -551,6 +740,39 @@ describe("POST /api/admin/ap/saved-filters", () => {
       (await save(view({ table: "admin_audit_log", cols: "id", date: "created_at" }))).status
     ).toBe(400);
     expect(inserted()).toBe(false);
+  });
+});
+
+describe("GET /api/admin/ap/catalog", () => {
+  it("lists the design's Google tables, refreshed every 15 minutes, Ads by its campaigns", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/") return json(SCHEMA);
+      if (path.startsWith("/rest/v1/admin_field_note")) return json([]);
+      if (path.includes("ads_campaigns"))
+        return json([{ period_end: "2026-10-13T23:59:59+00:00" }]);
+      return json([{ period_end: "2026-10-14T23:59:59+00:00" }]);
+    });
+    const res = await catalogGet(new Request("http://localhost/api/admin/ap/catalog"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sources: Array<{ key: string; fresh: string; description: string }>;
+      tables: Array<{ source: string; name: string; key: string[]; group: string }>;
+    };
+    const source = (k: string) => body.sources.find((x) => x.key === k)!;
+    expect(source("ga4").fresh).toBe("Every 15 minutes, last day 14 Oct 2026");
+    expect(source("ads").fresh).toBe("Every 15 minutes, last day 13 Oct 2026");
+    expect(source("ads").description).toMatch(/conversions by day and campaign/);
+    // The Ads card dates itself by the campaign table, not by GA4's spend.
+    expect(
+      mockSupabaseFetch.mock.calls.some(([p]) =>
+        String(p).includes("meta->>ads_campaigns=not.is.null")
+      )
+    ).toBe(true);
+    const google = body.tables.filter((t) => t.source === "ga4" || t.source === "ads");
+    expect(google.map(({ source: s, name, key, group }) => ({ s, name, key, group }))).toEqual([
+      { s: "ga4", name: "sessions_daily", key: ["date", "channel"], group: "Traffic" },
+      { s: "ads", name: "campaign_daily", key: ["date", "campaign_id"], group: "Spend" },
+    ]);
   });
 });
 
@@ -660,7 +882,7 @@ describe("GET /api/admin/ap/catalog/rows", () => {
     ).toBe(false);
   });
 
-  it("reads PostHog's newest event with its count, and the last Google Ads day", async () => {
+  it("reads PostHog's newest event with its count", async () => {
     mockHogql.mockResolvedValue({
       ok: true,
       cut: null,
@@ -671,10 +893,39 @@ describe("GET /api/admin/ap/catalog/rows", () => {
       newest: "2026-10-14T08:52:00.500Z",
     });
     expect(mockHogql.mock.calls[0]![0]).toContain("max(timestamp)");
+  });
 
-    mockSupabaseFetch.mockResolvedValue(json([{ period_end: "2026-10-13T23:59:59+00:00" }]));
-    vi.mocked(countRows).mockResolvedValue(170);
-    expect(await rows("ads", "ads_daily")).toEqual({ rows: 170, newest: "2026-10-13" });
+  it("counts a Google table's rows, a row per channel or campaign per day", async () => {
+    vi.mocked(fetchAllRows).mockResolvedValue([
+      {
+        date: "2026-10-12",
+        breakdown: { "111": { name: "Brand" }, "222": { name: "Generic" } },
+      },
+      { date: "2026-10-13", breakdown: { "111": { name: "Brand" } } },
+    ]);
+    expect(await rows("ads", "campaign_daily")).toEqual({ rows: 3, newest: "2026-10-13" });
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain("meta->>ads_campaigns=not.is.null");
+
+    vi.mocked(fetchAllRows).mockResolvedValue([
+      { date: "2026-10-14", breakdown: { Direct: { sessions: 4 } } },
+    ]);
+    expect(await rows("ga4", "sessions_daily")).toEqual({ rows: 1, newest: "2026-10-14" });
+    expect(vi.mocked(fetchAllRows).mock.calls[1]![0]).toContain("meta->>channels=not.is.null");
+
+    // Nothing read yet: no rows and no newest day.
+    vi.mocked(fetchAllRows).mockResolvedValue([]);
+    expect(await rows("ga4", "sessions_daily")).toEqual({ rows: 0, newest: null });
+
+    // A table the source does not have, or the old daily totals.
+    for (const [source, table] of [
+      ["ga4", "campaign_daily"],
+      ["ads", "ads_daily"],
+    ]) {
+      const res = await rowsGet(
+        new Request(`http://localhost/api/admin/ap/catalog/rows?source=${source}&table=${table}`)
+      );
+      expect(res.status).toBe(400);
+    }
   });
 });
 
@@ -709,6 +960,7 @@ describe("GET /api/admin/ap/survey/answers", () => {
             finisher(4, "prod-verification"),
           ],
           money: [],
+          checkouts: [],
           intro: [],
           invites: [],
           quotes: [],
@@ -730,6 +982,138 @@ describe("GET /api/admin/ap/survey/answers", () => {
   });
 });
 
+describe("the new/returning filter", () => {
+  const A = "0192f0aa-1111-7000-8000-000000000001";
+  const B = "0192f0aa-2222-7000-8000-000000000002";
+  const finisher = (id: number, ph: string | null) => ({
+    id,
+    day: "2026-10-02",
+    at: "2026-10-02T10:00:00Z",
+    src: "google",
+    med: "cpc",
+    ads: false,
+    ph,
+  });
+  beforeEach(() => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/rpc/ap_question_answers")
+        return json({
+          rows: [
+            { answer: ["Yes"], src: "google", med: "cpc", ph: A },
+            { answer: ["No"], src: "google", med: "cpc", ph: B },
+            { answer: ["No"], src: "google", med: "cpc", ph: "not-a-session'); DROP" },
+          ],
+          finished: 3,
+        });
+      if (path === "/rest/v1/rpc/ap_facts")
+        return json({
+          visits: [],
+          starts: [],
+          // A was new, B had visited before, C's id is no session id, D PostHog never saw.
+          subs: [
+            finisher(1, A),
+            finisher(2, B),
+            finisher(3, "x' OR 1=1 --"),
+            finisher(4, "0192f0aa-4444-7000-8000-000000000004"),
+          ],
+          money: [],
+          checkouts: [],
+          intro: [],
+          invites: [],
+          quotes: [],
+        });
+      return json(null, { status: 404 });
+    });
+    // PostHog: each visit's start and its person's first event (ms). A came on this visit;
+    // B was seen a day before.
+    const visit = Date.parse("2026-10-02T09:50:00Z");
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [
+        [A, visit, visit],
+        [B, visit, visit - 86_400_000],
+      ],
+    });
+  });
+  const get = async (visitor: string) => {
+    clearFactsCache();
+    const res = await answersGet(
+      new Request(
+        `http://localhost/api/admin/ap/survey/answers?q=02001&dim=none&period=custom&from=2026-10-01&to=2026-10-07&visitor=${visitor}`
+      )
+    );
+    expect(res.status).toBe(200);
+    return (await res.json()) as { respondents: number; finished: number };
+  };
+
+  it("splits finishers and their answers by PostHog's first visit; unknown is in neither", async () => {
+    mockHogql.mockClear();
+    expect(await get("new")).toMatchObject({ respondents: 1, finished: 1 });
+    // Only well-formed session ids ever reach the query.
+    const first = mockHogql.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(first).toContain(`'${A}'`);
+    expect(first).toContain(`'${B}'`);
+    expect(first).not.toMatch(/DROP|OR 1=1/);
+    mockHogql.mockClear();
+    expect(await get("returning")).toMatchObject({ respondents: 1, finished: 1 });
+    // A known visit is not asked again; one PostHog never saw is.
+    const again = mockHogql.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(again).not.toContain(A);
+    expect(again).toContain("0192f0aa-4444-7000-8000-000000000004");
+    mockHogql.mockClear();
+    expect(await get("all")).toMatchObject({ respondents: 3, finished: 4 });
+    expect(mockHogql).not.toHaveBeenCalled();
+  });
+
+  it("keeps a first-timer new when a pause mid-survey made PostHog start a second visit", async () => {
+    const P = "0192f0aa-6666-7000-8000-000000000006";
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: unknown) => {
+      if (path !== "/rest/v1/rpc/ap_facts") return facts(path, init);
+      const res = (await facts(path, init)) as Response;
+      const body = (await res.json()) as { subs: Array<Record<string, unknown>> };
+      // Landed 10:00, started the survey 10:02, paused 40 minutes, finished on a new visit.
+      body.subs.push({ ...finisher(6, P), startAt: "2026-10-02T10:02:00Z" });
+      return json(body);
+    });
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [[P, Date.parse("2026-10-02T10:52:00Z"), Date.parse("2026-10-02T10:00:00Z")]],
+    });
+    clearFactsCache();
+    const res = await answersGet(
+      new Request(
+        `http://localhost/api/admin/ap/survey/answers?q=02001&dim=none&period=custom&from=2026-10-01&to=2026-10-07&visitor=new`
+      )
+    );
+    expect(res.status).toBe(200);
+    // A (new), and P: still on their first visit by the survey's start.
+    expect(((await res.json()) as { finished: number }).finished).toBe(2);
+  });
+
+  it("fails the page plainly when PostHog can't be read, instead of showing zeros", async () => {
+    // A visit not asked before (a five-minute cache holds the last answer), and PostHog fails.
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: unknown) => {
+      if (path !== "/rest/v1/rpc/ap_facts") return facts(path, init);
+      const res = (await facts(path, init)) as Response;
+      const body = (await res.json()) as { subs: Array<Record<string, unknown>> };
+      body.subs.push(finisher(5, "0192f0aa-5555-7000-8000-000000000005"));
+      return json(body);
+    });
+    mockHogql.mockResolvedValue({ ok: false, error: "boom" });
+    clearFactsCache();
+    const res = await answersGet(
+      new Request(
+        `http://localhost/api/admin/ap/survey/answers?q=02001&dim=none&period=custom&from=2026-10-01&to=2026-10-07&visitor=returning`
+      )
+    );
+    expect(res.status).toBe(500);
+  });
+});
+
 describe("fetchSurveyIntroClicks", () => {
   it("counts the sessions that tapped the intro's silhouette, by its aria-label", async () => {
     mockHogql.mockResolvedValue({ ok: true, cut: null, rows: [[100, 20, 60, 5, 3, 8, 55, 31]] });
@@ -742,11 +1126,110 @@ describe("fetchSurveyIntroClicks", () => {
   });
 });
 
+describe("fetchSessionSources", () => {
+  it("groups the live site's visits by their first page's tags, read as the tracker reads them", async () => {
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [
+        ["google", "cpc", 1, 0, "", 30],
+        ["", "", 0, 0, "www.google.com", 10],
+        ["", "", 0, 0, "$direct", 50],
+        ["", "", 0, 0, "www.loveiq.org", 5],
+        ["paid%20social", null, 0, 1, "", 2],
+      ],
+    });
+    // Its own range, so the five-minute cache holds nothing for it.
+    const r = await fetchSessionSources("2026-06-01", "2026-06-07");
+    const tag = { src: null, med: null, ads: false, fb: false, ref: null };
+    expect(r).toEqual({
+      ok: true,
+      value: [
+        { ...tag, src: "google", med: "cpc", ads: true, sessions: 30 },
+        { ...tag, ref: "www.google.com", sessions: 10 },
+        // No referrer, or our own page: no site to name, as the tracker keeps it.
+        { ...tag, sessions: 50 },
+        { ...tag, sessions: 5 },
+        { ...tag, src: "paid social", fb: true, sessions: 2 },
+      ],
+    });
+    const [query, cap] = mockHogql.mock.calls[0]!;
+    expect(cap).toBe(1000);
+    expect(String(query)).toMatch(/LIMIT 1000$/);
+    expect(String(query)).toContain("properties.$host = 'www.loveiq.org'");
+    expect(String(query)).toContain("argMin(properties.$current_url, timestamp) AS url");
+    // The referrer only where classifySource reads it, so the groups stay few.
+    expect(String(query)).toContain("if(src = '' AND med = '' AND ads = 0 AND fb = 0, ref, '')");
+    // Berlin's 1 Jun starts at 22:00 UTC the day before.
+    expect(String(query)).toContain("timestamp >= toDateTime('2026-05-31 22:00:00', 'UTC')");
+  });
+
+  it("fails plainly when PostHog cuts the answer short, rather than splitting part of it", async () => {
+    mockHogql.mockResolvedValue({ ok: true, cut: "own_limit", rows: [] });
+    expect(await fetchSessionSources("2026-06-08", "2026-06-14")).toMatchObject({ ok: false });
+  });
+});
+
+describe("fetchVisitorGroups", () => {
+  const A = "0192f0aa-1111-7000-8000-000000000001";
+  const B = "0192f0aa-2222-7000-8000-000000000002";
+
+  it("asks only about real visit ids, and reads each one's group for the range", async () => {
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [
+        [A, "new"],
+        [B, "returning"],
+      ],
+    });
+    const r = await fetchVisitorGroups("2026-06-01", "2026-06-07", [
+      A.toUpperCase(),
+      B,
+      B,
+      null,
+      "x' OR 1=1 --",
+    ]);
+    expect(r.ok && [...r.value]).toEqual([
+      [A, "new"],
+      [B, "returning"],
+    ]);
+    const query = String(mockHogql.mock.calls[0]![0]);
+    expect(query).toContain(`'${A}','${B}')`);
+    expect(query).not.toMatch(/OR 1=1/);
+    // New: first seen in the range, as fetchNewReturning counts its visitors.
+    expect(query).toContain(
+      "if(f.first_seen >= toDateTime('2026-05-31 22:00:00', 'UTC'), 'new', 'returning')"
+    );
+  });
+
+  it("asks nothing when no payment has a visit id, and says when PostHog fails", async () => {
+    expect(await fetchVisitorGroups("2026-06-01", "2026-06-07", [null])).toEqual({
+      ok: true,
+      value: new Map(),
+    });
+    expect(mockHogql).not.toHaveBeenCalled();
+    mockHogql.mockResolvedValue({ ok: false, error: "boom" });
+    expect(
+      await fetchVisitorGroups("2026-06-15", "2026-06-21", ["0192f0aa-9999-7000-8000-000000000009"])
+    ).toMatchObject({ ok: false });
+  });
+});
+
 describe("fetchFacts", () => {
   it("stamps the Berlin day it read the facts on", async () => {
     clearFactsCache();
     mockSupabaseFetch.mockResolvedValue(
-      json({ visits: [], starts: [], subs: [], money: [], intro: [], invites: [], quotes: [] })
+      json({
+        visits: [],
+        starts: [],
+        subs: [],
+        money: [],
+        checkouts: [],
+        intro: [],
+        invites: [],
+        quotes: [],
+      })
     );
     // 22:30 UTC on 13 Oct is already 14 Oct in Berlin.
     const f = await fetchFacts("2026-10-01", "2026-10-07", Date.parse("2026-10-13T22:30:00Z"));

@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 
 import {
   ASSESSMENTS,
-  COMPARES,
   DEVICES,
   PERIODS,
   SOURCES,
+  SURVEY_TRACKING_FROM,
   TIERS,
+  VISITORS,
   filterParams,
   filterSummary,
   parseFilters,
+  rangeLabel,
   type ApFilters,
 } from "@features/admin/server/ap/filters";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
@@ -38,21 +40,17 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
 }
 
 /**
- * The shared filter bar (the design's "Report filters"): saved filters, the period and its
- * comparison, and the narrowing filters. Collapsible; the state lives in the URL.
+ * The shared filter bar (the design's "Report filters"): saved filters, the period (always
+ * compared with the one before it), and the narrowing filters. Collapsible; the state lives in
+ * the URL.
  */
 /** Filters a page cannot apply: shown greyed at their "all" value, with the reason. */
-type Fixed = "compare" | "source" | "device" | "tier";
+type Fixed = "source" | "device" | "tier" | "visitor";
 
 const SAVED_PARAMS = { kind: "filter" };
 
-const WIDE = "(min-width: 1024px)";
-const subscribeWide = (onChange: () => void) => {
-  const m = window.matchMedia(WIDE);
-  m.addEventListener("change", onChange);
-  return () => m.removeEventListener("change", onChange);
-};
-const isWide = () => window.matchMedia(WIDE).matches;
+/** When the referrer and tablets started being recorded, as the note says it. */
+const trackingDay = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
 
 export default function ApFilterBar({
   scope = "overall",
@@ -72,16 +70,13 @@ export default function ApFilterBar({
   const filters = {
     ...chosen,
     ...(assessmentFixed ? { assessment: "a" as const } : {}),
-    ...(off("compare") ? { compare: "none" as const } : {}),
     ...(off("source") ? { source: "all" as const } : {}),
     ...(off("device") ? { device: "all" as const } : {}),
     ...(off("tier") ? { tier: "all" as const } : {}),
+    ...(off("visitor") ? { visitor: "all" as const } : {}),
   };
-  // Open on a wide screen, closed on a phone (where it would fill the first screen), until
-  // the reader chooses.
-  const [chosenOpen, setOpen] = useState<boolean | null>(null);
-  const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
-  const open = chosenOpen ?? wide;
+  // Open at every width until the reader closes it, as the design starts it.
+  const [open, setOpen] = useState(true);
   const [saving, setSaving] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftShared, setDraftShared] = useState(false);
@@ -267,7 +262,7 @@ export default function ApFilterBar({
                   value={draftName}
                   maxLength={80}
                   onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="e.g. Google Ads · phone · 30 days"
+                  placeholder="e.g. Paid search · mobile · 30 days"
                   className={control}
                 />
               </label>
@@ -338,21 +333,6 @@ export default function ApFilterBar({
                 className={control}
               />
             </label>
-            <label className={`${fieldLabel} flex-[1_1_180px]`}>
-              Compare to
-              <select
-                value={filters.period === "today" || filters.running ? "none" : filters.compare}
-                disabled={off("compare") || filters.period === "today" || filters.running}
-                onChange={(e) => update({ compare: e.target.value as ApFilters["compare"] })}
-                className={control}
-              >
-                {COMPARES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -416,13 +396,20 @@ export default function ApFilterBar({
                 ))}
               </select>
             </label>
-            <label
-              className={`${fieldLabel} flex-[1_1_170px]`}
-              title="Our visit log starts a new visitor id every day, so it cannot tell a returning visitor from a new one."
-            >
+            <label className={`${fieldLabel} flex-[1_1_170px]`}>
               Visitor
-              <select disabled value="all" className={control} aria-describedby="ap-visitor-note">
-                <option value="all">New &amp; returning</option>
+              <select
+                value={filters.visitor}
+                disabled={off("visitor")}
+                onChange={(e) => update({ visitor: e.target.value as ApFilters["visitor"] })}
+                className={control}
+                aria-describedby="ap-visitor-note"
+              >
+                {VISITORS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
               </select>
             </label>
             <button
@@ -433,21 +420,30 @@ export default function ApFilterBar({
               Reset
             </button>
           </div>
-          <p id="ap-visitor-note" className="m-0 text-xs text-ap-muted">
-            New vs returning can&rsquo;t filter these figures: the visit log starts a new visitor id
-            every day. The Assessment A dashboard shows the split from PostHog. No Meta Ads or
-            organic search: we run no Meta campaigns (Meta-tagged links count as Social), and
-            organic search can&rsquo;t be told from direct visits, as no referrer is kept. Tablets
-            count as mobile.
-            {assessmentFixed && (
-              <> These pages are Assessment A&rsquo;s; B and C have not launched.</>
-            )}
-            {fixedNote && <> {fixedNote}</>}
-          </p>
+          {/* A page's own reason for the filters it fixes stays in view. */}
+          {fixedNote && <p className="m-0 text-xs text-ap-muted">{fixedNote}</p>}
 
-          <p className="m-0 text-[13px] leading-normal text-ap-body">
-            <strong>Showing</strong> {summary}
-          </p>
+          {/* Not in the design: kept, folded away. */}
+          <details className="text-xs text-ap-muted">
+            <summary className="cursor-pointer font-semibold text-ap-body">
+              How these filters work
+            </summary>
+            <p id="ap-visitor-note" className="m-0 mt-2 text-xs text-ap-muted">
+              New or returning comes from PostHog: whether the person had visited before the visit
+              they finished the survey in. It splits finished surveys, their reports and payments;
+              visits, survey starts and ad spend can&rsquo;t be split that way. Meta Ads: a Meta
+              link tagged as paid; Meta&rsquo;s click id alone counts as Social. Organic search: a
+              search engine tagged organic, or an untagged visit from a search engine, told from
+              direct visits by the site a visit came from, recorded from {trackingDay} (before,
+              those read as Direct). Gmail on the web opens links through Google, so an untagged
+              email click can read as organic search. Tablets are told apart from {trackingDay}:
+              before, they count as Mobile, or as Desktop for newer iPads, which present themselves
+              as Macs.
+              {assessmentFixed && (
+                <> These pages are Assessment A&rsquo;s; B and C have not launched.</>
+              )}
+            </p>
+          </details>
         </div>
       )}
     </section>

@@ -5,11 +5,11 @@ import { buildCatalog, productionSchema } from "@features/admin/server/ap/catalo
 import { DAY, LOOKS_PERSONAL_VALUE, VIEW, viewRefusal } from "@features/admin/server/ap/explorer";
 import {
   ASSESSMENTS,
-  COMPARES,
   DEVICES,
   PERIODS,
   SOURCES,
   TIERS,
+  VISITORS,
 } from "@features/admin/server/ap/filters";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -39,11 +39,14 @@ const FILTER_STATE = z
     period: values(PERIODS).optional(),
     from: DAY.optional(),
     to: DAY.optional(),
-    compare: values(COMPARES).optional(),
+    // Retired on 16 Oct 2026 (every period is compared with the one before): an older saved
+    // filter may still carry it, and it is ignored.
+    compare: z.enum(["prev", "yoy", "none"]).optional(),
     assessment: values(ASSESSMENTS).optional(),
     source: values(SOURCES).optional(),
     device: values(DEVICES).optional(),
     tier: values(TIERS).optional(),
+    visitor: values(VISITORS).optional(),
   })
   .strict();
 

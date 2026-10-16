@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { fetchFacts } from "@features/admin/server/ap/facts";
-import { parseFilters } from "@features/admin/server/ap/filters";
+import { beforeData, comparisonRange, parseFilters } from "@features/admin/server/ap/filters";
 import { buildLanding, engagementWindows } from "@features/admin/server/ap/landing";
 import {
   postHogFailed,
   fetchLandingEngagement,
-  fetchLandingMedian,
-  fetchLandingSections,
+  fetchLandingTime,
   type PostHogResult,
 } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
@@ -21,7 +20,7 @@ export const maxDuration = 60;
 const settle = <T>(p: Promise<PostHogResult<T>>): Promise<PostHogResult<T>> =>
   p.catch(postHogFailed);
 
-/** AP-Analytics, the landing page: the tests arm by arm, A against B, and engagement. */
+/** AP-Analytics, the landing page: six figures, the tests arm by arm, and each version's engagement. */
 export async function GET(request: Request) {
   const admin = await apGuard(request, { bucket: "admin-ap-landing" });
   if (admin instanceof NextResponse) return admin;
@@ -29,26 +28,27 @@ export async function GET(request: Request) {
   const now = new Date();
   const today = reportingDay(now);
   const filters = parseFilters(new URL(request.url).searchParams, today);
+  const cmp = comparisonRange(filters);
   try {
     const windows = engagementWindows(filters.from, filters.to, today);
-    const [facts, engagement, pageMedian, sections, ...perTest] = await Promise.all([
+    const [facts, previous, engagement, pageTime, ...perTest] = await Promise.all([
       fetchFacts(filters.from, filters.to),
+      cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
       settle(fetchLandingEngagement(filters.from, filters.to)),
-      settle(fetchLandingMedian(filters.from, filters.to)),
-      settle(fetchLandingSections(filters.from, filters.to)),
+      settle(fetchLandingTime(filters.from, filters.to)),
       ...windows.map((w) => settle(fetchLandingEngagement(w.from, w.to))),
     ]);
     const armEngagement = Object.fromEntries(windows.map((w, i) => [w.key, perTest[i]!]));
     return NextResponse.json(
       buildLanding({
         facts,
+        previous,
         filters,
         today,
         now,
         armEngagement,
         engagement,
-        pageMedian,
-        sections,
+        pageTime,
       }),
       {
         headers: NO_STORE,

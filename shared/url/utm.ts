@@ -14,6 +14,9 @@
  * And the ValueTrack detail (`matchtype`, `network`) that a Final URL suffix can
  * add. Those are not utm_-prefixed, so an allowlist of utm_* keys silently drops
  * them — which is exactly what happened until it was measured.
+ *
+ * And, as detail, Meta's click id (`fbclid`) and the referring site's hostname
+ * (`referrer_host`), which tell a Meta click and organic search apart from direct.
  */
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
@@ -38,6 +41,33 @@ const CLICK_ID_KEYS = ["gclid", "gbraid", "wbraid"] as const;
  * `classifyTraffic` and escaped before reaching Slack.
  */
 const VALUE_TRACK_KEYS = ["matchtype", "network"] as const;
+
+/**
+ * Meta's click id, on links clicked in Facebook, Instagram and Messenger whether an ad or not
+ * (Meta adds it to ordinary link clicks too). So unlike a Google click id it names no source
+ * and fakes no utm_source (pricing reads that): it is detail, capped, with the referrer below.
+ */
+const META_CLICK_ID_KEY = "fbclid";
+/** Long enough for an fbclid; the whole tracker is dropped past 1,000 characters. */
+const MAX_CLICK_ID = 200;
+const MAX_HOST = 100;
+
+/**
+ * The site the visit came from: the referrer's hostname, never its address (a search page's
+ * own address can carry the words searched). None for our own pages, and none for Stripe's
+ * checkout, which every payment returns from.
+ */
+function referrerHost(): string | null {
+  let host: string;
+  try {
+    host = new URL(document.referrer).hostname.toLowerCase();
+  } catch {
+    return null; // no referrer
+  }
+  host = host.replace(/[^a-z0-9.-]/g, "").slice(0, MAX_HOST);
+  if (!host || host === window.location.hostname) return null;
+  return /(^|\.)(loveiq\.org|stripe\.com)$/.test(host) ? null : host;
+}
 
 /**
  * A path with its campaign and ad-click parameters taken out — the keys this
@@ -81,9 +111,10 @@ export const LEGACY_UTM_KEY = "loveiq-survey-utm";
 
 /**
  * Read UTM params from the current URL and persist them in localStorage.
- * If the URL contains no UTM params, existing stored values are left intact.
+ * If the URL contains no UTM params, existing stored values are left intact;
+ * with nothing stored, the referrer and Meta's click id alone are stored.
  *
- * @returns JSON string of captured UTM params, or `null` if none found in URL.
+ * @returns JSON string of what was stored, or `null` if nothing was.
  */
 export function captureUtmFromUrl(): string | null {
   if (typeof window === "undefined") return null;
@@ -127,9 +158,28 @@ export function captureUtmFromUrl(): string | null {
     if (value) valueTrack.set(key, value);
   }
 
-  if (utm.size === 0) return null;
-  for (const [key, value] of valueTrack) utm.set(key, value);
+  // Where the click came from: Meta's click id and the referring site. Detail too, never a
+  // source of its own: it joins a tagged visit, and an untagged one keeps it only when
+  // nothing is stored yet, so it never replaces a campaign stored before.
+  const detail = new Map<string, string>();
+  const fbclid = params
+    .get(META_CLICK_ID_KEY)
+    ?.replace(/[^\w-]/g, "")
+    .slice(0, MAX_CLICK_ID);
+  if (fbclid) detail.set(META_CLICK_ID_KEY, fbclid);
+  const ref = referrerHost();
+  if (ref) detail.set("referrer_host", ref);
 
+  if (utm.size === 0) {
+    if (detail.size === 0 || getStoredUtm() !== null) return null;
+    return store(detail);
+  }
+  for (const [key, value] of valueTrack) utm.set(key, value);
+  for (const [key, value] of detail) utm.set(key, value);
+  return store(utm);
+}
+
+function store(utm: Map<string, string>): string {
   const json = JSON.stringify(Object.fromEntries(utm));
   try {
     localStorage.setItem(GLOBAL_UTM_KEY, json);

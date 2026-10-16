@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 
 import { assessmentScope } from "@features/admin/server/ap/assessment";
-import { fetchFacts } from "@features/admin/server/ap/facts";
+import { fetchFacts, fetchFactsFor } from "@features/admin/server/ap/facts";
 import {
   DATA_START,
   beforeData,
   comparisonRange,
   parseFilters,
   previousRange,
+  SURVEY_TRACKING_FROM,
 } from "@features/admin/server/ap/filters";
-import { fetchSurveyIntroClicks, postHogFailed } from "@features/admin/server/ap/posthog";
+import {
+  fetchSurveyIntroClicks,
+  POSTHOG_FROM,
+  postHogFailed,
+} from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { fetchSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage, type Benchmark } from "@features/admin/server/ap/survey-page";
@@ -35,9 +40,9 @@ export async function GET(request: Request) {
   const scope = assessmentScope(filters);
 
   try {
-    const [facts, previous, questions, introClicks] = await Promise.all([
-      fetchFacts(filters.from, filters.to),
-      cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
+    const [facts, previous, questions, introClicks, prevIntroClicks] = await Promise.all([
+      fetchFactsFor(filters.from, filters.to, filters),
+      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       fetchSurveyQuestions(filters.from, filters.to, scope).then(
         (q) => ({ q, error: null as string | null }),
         (err: unknown) => {
@@ -46,12 +51,17 @@ export async function GET(request: Request) {
         }
       ),
       fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
+      // The intro tiles' change while they come from PostHog: the same clicks a period earlier,
+      // when PostHog saw all of it.
+      cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
+        ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
+        : Promise.resolve(null),
     ]);
-    // The previous period as the benchmark, whatever the comparison is set to.
+    // The previous period as the benchmark (the comparison's own facts when it has them).
     const prevRange = previousRange(filters);
     const benchmark =
       benchmarkKind === "prev"
-        ? filters.compare === "prev" && previous
+        ? previous
           ? previous
           : beforeData(prevRange)
             ? { ...facts, from: prevRange.from, to: prevRange.to, subs: [] }
@@ -71,6 +81,7 @@ export async function GET(request: Request) {
         questions: questions.q,
         questionsError: questions.error,
         introClicks,
+        prevIntroClicks,
       }),
       { headers: NO_STORE }
     );

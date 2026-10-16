@@ -84,6 +84,7 @@ const V4SummaryChapter: FC<Props> = ({ archetype, summary, feedback }) => {
                   className="rv4-summary__pill"
                   aria-controls={copyId}
                   aria-label="Show all of the summary"
+                  data-chapter-action="show_all"
                   onClick={() => {
                     opened.current = true;
                     setOpen(true);

@@ -30,8 +30,9 @@ export interface QuestionRow {
   /** Exits per point of the trend line (all traffic). */
   exitsTrend: number[];
   /**
-   * First reached after the range's first day (by the earliest run to reach it): added during
-   * the range, so its fall from the question before is not people leaving.
+   * Not asked from the range's start: its earliest runs went through to the survey's last
+   * question without it. Added during the range, so its fall from the question before is not
+   * people leaving.
    */
   newInRange: boolean;
 }
@@ -57,15 +58,25 @@ interface Steps {
     timed: number;
   }>;
   exits: Array<{ q_id: string; day: string; n: number }>;
+  /** Our own finished test runs' sessions; absent from older readers. */
+  staff?: string[];
 }
 
 /** The questions' segment for the filter bar's state, or why there is none. */
-export function questionSegment(f: Pick<ApFilters, "source" | "device" | "tier" | "assessment">): {
+export function questionSegment(
+  f: Pick<ApFilters, "source" | "device" | "tier" | "assessment" | "visitor">
+): {
   segment: Segment;
   blocked: string | null;
 } {
   if (f.tier !== "all")
     return { segment: "All traffic", blocked: "Survey steps don't record the country tier." };
+  if (f.visitor !== "all") {
+    return {
+      segment: "All traffic",
+      blocked: "Survey steps can't be split into new and returning visitors.",
+    };
+  }
   if (f.source !== "all" && f.device !== "all") {
     return {
       segment: "All traffic",
@@ -77,6 +88,12 @@ export function questionSegment(f: Pick<ApFilters, "source" | "device" | "tier" 
     return {
       segment: "All traffic",
       blocked: "Survey steps tell Google Ads apart from everything else, not finer sources.",
+    };
+  }
+  if (f.device === "tablet") {
+    return {
+      segment: "All traffic",
+      blocked: "Survey steps tell phones from computers here, not tablets.",
     };
   }
   if (f.device === "phone") return { segment: "Phone", blocked: null };
@@ -105,7 +122,10 @@ export function buildSurveyQuestions(
   segment: Segment,
   blocked: string | null
 ): SurveyQuestions {
-  const tally = tallyRuns(runs).get(segment) ?? { people: 0, byQuestion: new Map() };
+  // Our own test runs are out, as everywhere on these pages.
+  const staff = new Set(steps.staff ?? []);
+  const kept = runs.filter((r) => !staff.has(r.sessionId));
+  const tally = tallyRuns(kept).get(segment) ?? { people: 0, byQuestion: new Map() };
   const names = surveyQuestionNames(400);
   const meta = new Map(surveyQuestions.map((q) => [q.qId, q]));
   const stepOf = new Map(steps.steps.map((s) => [s.q_id, s]));
@@ -116,12 +136,21 @@ export function buildSurveyQuestions(
         .filter((e) => e.q_id === qId && e.day >= b.from && e.day <= b.to)
         .reduce((n, e) => n + Number(e.n), 0)
     );
-  // A run's start is its first step ever, so this is no later than the question's first day.
-  const firstReached = new Map<string, number>();
-  for (const run of runs)
-    for (const id of run.reached)
-      firstReached.set(id, Math.min(firstReached.get(id) ?? Infinity, run.startedAt));
   const order = askedQuestions(400);
+  // Whether a question was asked from the range's start. Of the runs begun in the range (an
+  // earlier run's first steps fall before it), earliest first, the first that reached either
+  // the question or the survey's last question decides: reaching the end passes every question
+  // asked then, whatever order a test asked them in, so ending without it means it was not
+  // asked yet. A quiet first day, when nobody reached it, is no sign of that.
+  const end = order.at(-1)?.qId;
+  const ownRuns = kept
+    .filter((r) => reportingDay(new Date(r.startedAt)) >= from)
+    .sort((a, b) => a.startedAt - b.startedAt)
+    .map((r) => new Set(r.reached));
+  const addedInRange = (id: string) => {
+    const first = ownRuns.find((r) => r.has(id) || (end !== undefined && r.has(end)));
+    return first !== undefined && !first.has(id);
+  };
   const known = new Set(order.map((q) => q.qId));
   const extra = [...tally.byQuestion.keys()].filter((id) => !known.has(id)).sort();
   const rows: QuestionRow[] = [
@@ -131,7 +160,6 @@ export function buildSurveyQuestions(
     .map(({ id, n }) => {
       const t = tally.byQuestion.get(id) ?? { reached: 0, left: 0 };
       const s = stepOf.get(id);
-      const first = firstReached.get(id);
       return {
         id,
         n,
@@ -145,7 +173,7 @@ export function buildSurveyQuestions(
         wentBack: s ? Number(s.went_back) : 0,
         skipped: s ? Number(s.skipped) : 0,
         exitsTrend: exitsTrend(id),
-        newInRange: first !== undefined && reportingDay(new Date(first)) > from,
+        newInRange: addedInRange(id),
       };
     })
     .filter((r) => r.reached > 0 || r.n > 0);
@@ -165,11 +193,12 @@ const cache = new Map<string, { at: number; value: Promise<SurveyQuestions> }>()
 export function fetchSurveyQuestions(
   from: string,
   to: string,
-  f: Pick<ApFilters, "source" | "device" | "tier" | "assessment"> = {
+  f: Pick<ApFilters, "source" | "device" | "tier" | "assessment" | "visitor"> = {
     source: "all",
     device: "all",
     tier: "all",
     assessment: "all",
+    visitor: "all",
   },
   now = Date.now()
 ): Promise<SurveyQuestions> {

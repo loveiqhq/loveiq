@@ -286,6 +286,7 @@ const Category: FC<CategoryProps> = ({
               type="button"
               className="rv4-fvt__pill"
               aria-label={`Show all ${category.total} fantasies`}
+              data-chapter-action="show_all"
               onClick={() => {
                 revealed.current = true;
                 setShowAll(true);
