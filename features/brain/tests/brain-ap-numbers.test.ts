@@ -142,6 +142,7 @@ function rollupDays(n: number) {
 }
 
 let apFails = false;
+let ga4Fails = false;
 async function call(args: Record<string, unknown>) {
   const res = await POST(
     new Request("https://www.loveiq.org/api/mcp", {
@@ -186,6 +187,7 @@ beforeEach(() => {
   process.env.LOVEIQ_MCP_TOKEN = TOKEN;
   clearFactsCache();
   apFails = false;
+  ga4Fails = false;
   // As the database answers: one row per day, for as many days back as asked, 4,000 at most.
   mockRollup.mockReset().mockImplementation(async (n: number) => rollupDays(Math.min(n, 4000)));
   mockAdCost = { byDay: new Map([["2026-10-14", 40]]), from: "2026-06-01", to: "2026-10-15" };
@@ -195,6 +197,8 @@ beforeEach(() => {
       const { p_from, p_to } = JSON.parse(String(init?.body));
       return { ok: true, status: 200, json: async () => factsJson(p_from, p_to) };
     }
+    if (ga4Fails && path.includes("source=eq.ga4"))
+      return { ok: false, status: 503, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => [] };
   });
 });
@@ -444,6 +448,44 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     const charted = await callTool("show_chart", { metrics: ["visitors"] });
     expect(charted.isError).toBe(true);
     expect(charted.text).toBe(outage("a flat line"));
+  });
+
+  it("gives the dashboard's figures with Google Analytics down, and says GA4's are left out", async () => {
+    ga4Fails = true;
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "a-test-secret-of-some-length";
+    const ga4 =
+      "Google Analytics could not be read just now, so its figures are left out: this is an " +
+      "outage, not zero.";
+    // explain_change: the dashboard's numbers, with the note first.
+    const day = await callTool("explain_change", {});
+    expect(day.isError).toBeFalsy();
+    expect(day.text.startsWith(`${ga4}\n\nNothing on 2026-10-15 was outside its usual range`)).toBe(
+      true
+    );
+    expect(day.text).toContain("- Visitors (our own count): 100 against a usual 100");
+    expect(day.text).not.toContain("GA4 sessions:");
+    // Asked for a GA4 figure itself, or a chart of nothing else: that outage.
+    expect(await callTool("explain_change", { metric: "sessions" })).toEqual({
+      isError: true,
+      text: ga4,
+    });
+    expect(await callTool("show_chart", { metrics: ["sessions"] })).toEqual({
+      isError: true,
+      text: ga4,
+    });
+    // A chart of the dashboard's visitors still draws, and says nothing of GA4.
+    const visitors = await callTool("show_chart", { metrics: ["visitors"] });
+    expect(visitors.isError).toBeFalsy();
+    expect(visitors.text).toContain("Over the 30 days: 3,000, 100 a day.");
+    expect(visitors.text).not.toContain("Google Analytics");
+    // Beside GA4's sessions: visitors drawn, sessions left out and said so, never "no record".
+    const both = await callTool("show_chart", { metrics: ["visitors", "sessions"] });
+    expect(both.isError).toBeFalsy();
+    expect(both.text).toContain("Visitors: 3,000, 100 a day.\nGA4 sessions: could not be read.");
+    expect(both.text).toContain(ga4);
+    expect(both.text).not.toMatch(/nothing recorded/i);
+    delete process.env.STRATEGY_DIGEST_SIGNING_SECRET;
   });
 
   it("takes the dashboard's Berlin day, not UTC's, between midnight in Berlin and in London", async () => {

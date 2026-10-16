@@ -28,6 +28,8 @@ import {
   partialDay,
   renderDay,
   utcNote,
+  GA4_UNREAD,
+  ga4Down,
   type Around,
   type DaySeries,
   type Ga4Day,
@@ -496,17 +498,27 @@ describe("loadSeries", () => {
     expect(s.at(-1)!.ga4).toBeUndefined();
   });
 
-  it("gives no series when any read fails: GA4's day records, the rollup, or every read", async () => {
-    mockRollup.mockResolvedValue([{ day: "2026-09-10", unique_visitors: 300, top_sources: {} }]);
-    // GA4's day records cannot be read.
+  it("keeps the dashboard's figures when only Google Analytics cannot be read, and marks it", async () => {
+    mockRollup.mockResolvedValue([
+      { day: "2026-09-10", unique_visitors: 300, report_opens: 7, top_sources: {} },
+    ]);
     database(factsFor());
     const facts = mockSupabaseFetch.getMockImplementation()!;
     mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
-      String(path).startsWith("/rest/v1/brain_chunk")
+      String(path).includes("source=eq.ga4")
         ? { ok: false, status: 503, json: async () => ({}) }
         : facts(path, init)
     );
-    expect(await loadSeries("2026-09-10")).toBeNull();
+    const s = (await loadSeries("2026-09-10"))!;
+    expect(s.at(-1)!.rollup).toMatchObject({ unique_visitors: 200, report_opens: 7 });
+    // Every day's GA4 is null, an outage, never a day without a record (undefined).
+    expect(s.every((d) => d.ga4 === null)).toBe(true);
+    expect(ga4Down(s)).toBe(true);
+    expect(metric("sessions").count!(s.at(-1)!)).toBeNull();
+  });
+
+  it("gives no series when the rollup or every read fails", async () => {
+    mockRollup.mockResolvedValue([{ day: "2026-09-10", unique_visitors: 300, top_sources: {} }]);
     // The rollup cannot be read.
     clearFactsCache();
     database(factsFor());
@@ -606,6 +618,21 @@ describe("noticeJumps", () => {
     const record = vi.fn();
     expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBe(0);
     expect(record).not.toHaveBeenCalled();
+  });
+
+  it("still notices the dashboard's numbers when Google Analytics cannot be read, and says so", async () => {
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      String(path).includes("source=eq.ga4")
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : facts(path, init)
+    );
+    const record = vi.fn().mockResolvedValue(true);
+    expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBeGreaterThan(0);
+    const input = record.mock.calls[0]![0];
+    expect(input.headline).toBe("Unusual numbers on Wednesday 23 September 2026");
+    expect(input.detail).toContain("Visitors (our own count): 900 against a usual 200");
+    expect(input.detail.endsWith(`\n\n${GA4_UNREAD}`)).toBe(true);
   });
 
   it("says the day could not be checked, with no numbers, when the circuit breaker is open", async () => {

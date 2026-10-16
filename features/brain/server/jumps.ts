@@ -50,8 +50,17 @@ export interface Ga4Day {
 export interface DaySeries {
   day: string;
   rollup?: Rollup;
-  ga4?: Ga4Day;
+  /** Null: Google Analytics could not be read (`GA4_UNREAD`); absent: no record that day. */
+  ga4?: Ga4Day | null;
 }
+
+/** Said wherever a Google Analytics figure would appear and its read failed (loadSeries). */
+export const GA4_UNREAD =
+  "Google Analytics could not be read just now, so its figures are left out: this is an " +
+  "outage, not zero.";
+
+/** True when the series' Google Analytics read failed: its figures are null, not zero. */
+export const ga4Down = (series: DaySeries[]): boolean => series.some((d) => d.ga4 === null);
 
 /**
  * True when the rollup's own figures for `day` (reports opened and paid) are left out because
@@ -133,6 +142,8 @@ export interface Metric {
   segments?: { label: string; of: (d: DaySeries) => Record<string, number> | null };
   /** The rollup's own figure, counted by UTC day (see `utcOpen`), not the dashboard's. */
   utc?: boolean;
+  /** Read from Google Analytics, which is optional: left out, and said so, when it fails. */
+  ga4?: boolean;
 }
 
 // A null figure (starts the dashboard does not hold every one of) is no reading, never a zero.
@@ -150,6 +161,7 @@ export const METRICS: Metric[] = [
   {
     id: "sessions",
     label: "GA4 sessions",
+    ga4: true,
     count: (d) => d.ga4?.sessions ?? null,
     minAbs: 50,
     segments: { label: "GA4 channel", of: (d) => d.ga4?.channels ?? null },
@@ -194,6 +206,7 @@ export const METRICS: Metric[] = [
   {
     id: "engaged_rate",
     label: "Share of GA4 sessions that engage",
+    ga4: true,
     rate: {
       num: (d) => d.ga4?.engaged ?? null,
       den: (d) => d.ga4?.sessions ?? null,
@@ -341,9 +354,10 @@ async function ga4Days(from: string, until: string): Promise<Map<string, Ga4Day>
 
 /**
  * Every day from `until` back far enough for `until` and the day before it to have a full
- * baseline, oldest first. Null when any of its reads fails (the dashboard's facts, the rollup,
- * GA4's day records; an open circuit breaker fails them all): every answer built on it then
- * says the numbers could not be read, rather than serving part of them as if whole.
+ * baseline, oldest first. Null when the dashboard's facts or the rollup cannot be read (an open
+ * circuit breaker fails both): every answer built on it then says the numbers could not be
+ * read, rather than serving part of them as if whole. Google Analytics is optional: when its
+ * read fails, every day's `ga4` is null, and the answers say so (`GA4_UNREAD`).
  */
 export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[] | null> {
   const from = addDays(until, -(BASELINE_DAYS + 1 + extraDays));
@@ -362,7 +376,7 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
     ga4Days(from, until).catch(unread("GA4's day records")),
     fetchFacts(from, until).catch(unread("the dashboard's facts")),
   ]);
-  if (!rows || !ga4 || !facts) return null;
+  if (!rows || !facts) return null;
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), row]));
   const out: DaySeries[] = [];
   for (let d = from; d <= until; d = addDays(d, 1)) {
@@ -376,7 +390,7 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
        * null, no reading rather than zero. The dashboard's figures stand (utcOpen).
        */
       rollup: asDashboard(row && !utcOpen(d) ? row : unreached(d), facts, d),
-      ga4: ga4.get(d),
+      ga4: ga4 ? ga4.get(d) : null,
     });
   }
   return out;
@@ -748,7 +762,9 @@ export async function noticeJumps(
   if (readings.length === 0) return 0;
   await record({
     headline: `Unusual numbers on ${longDate(day)}`,
-    detail: `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}`,
+    detail:
+      `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}` +
+      (ga4Down(series) ? `\n\n${GA4_UNREAD}` : ""),
     kind: "number-watch",
     evidence: `explain_change with day ${day} gives the same breakdown, and any metric in full.`,
   });

@@ -128,6 +128,8 @@ import {
   partialDay,
   renderMetric,
   utcOpen,
+  GA4_UNREAD,
+  ga4Down,
   type Reading,
 } from "@features/brain/server/jumps";
 import {
@@ -7661,7 +7663,13 @@ async function callTool(
     if (!series) return textResult(apUnreadable("a quiet day"), true);
     // Berlin's today, or reports opened and paid on a UTC day not over yet (jumps.ts).
     const partNote = partialDay(day, !metric || metric.utc === true);
-    const partial = partNote ? `${partNote}\n\n` : "";
+    // Google Analytics is optional: when its read failed, its figures are left out, said so.
+    const gaNote = ga4Down(series) ? GA4_UNREAD : "";
+    if (metric?.ga4 && gaNote) return textResult(gaNote, true);
+    const partial = [partNote, gaNote]
+      .filter(Boolean)
+      .map((x) => `${x}\n\n`)
+      .join("");
     if (metric) {
       const reading = readMetric(metric, series, day);
       if (!reading) {

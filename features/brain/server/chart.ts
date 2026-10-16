@@ -18,7 +18,9 @@ import { apUnreadable } from "@features/brain/server/ap-numbers";
 import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
 import {
   BASELINE_DAYS,
+  GA4_UNREAD,
   METRICS,
+  ga4Down,
   loadSeries,
   partialDay,
   utcNote,
@@ -66,7 +68,10 @@ const SHORT: Record<string, string> = {
   engaged_rate: "Sessions that engage",
   paid_rate: "Openers who pay",
 };
-const FROM_GA4 = new Set(["sessions", "engaged_rate"]);
+
+/** Said where Google Ads spend would be drawn and its read failed. */
+export const AD_UNREAD =
+  "Google Ads spend could not be read just now, so it is left out: this is an outage, not zero.";
 
 export const CHART_METRICS: ChartMetric[] = [
   ...METRICS.map((m): ChartMetric => ({
@@ -76,7 +81,7 @@ export const CHART_METRICS: ChartMetric[] = [
     unit: m.rate ? "rate" : "count",
     of: m.rate ? m.rate.num : (m.count ?? (() => null)),
     rate: m.rate && { den: m.rate.den, minDen: m.rate.minDen, denLabel: m.rate.denLabel },
-    ga4: FROM_GA4.has(m.id),
+    ga4: m.ga4,
     utc: m.utc,
   })),
   {
@@ -165,7 +170,8 @@ function windowFigure(m: ChartMetric, pts: Point[]): { brief: string; full: stri
   };
 }
 
-function listDays(m: ChartMetric, pts: Point[]): string {
+function listDays(m: ChartMetric, pts: Point[], lost: boolean): string {
+  if (lost) return `- ${m.short}: left out, as it could not be read just now`;
   const one = (p: Point) => {
     const at = shortDay(p.day);
     if (!m.rate) {
@@ -241,9 +247,19 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     loadSeries(until, Math.max(0, days - BASELINE_DAYS - 1)),
     wantsAds ? adCostByDay().catch(() => null) : null,
   ]);
-  // No ad window at all is a failed read (adCostByDay swallows its errors), as on the dashboard.
-  if (!loaded || (wantsAds && (!ad || ad.from === null || ad.to === null)))
-    return refuse(apUnreadable("a flat line"));
+  if (!loaded) return refuse(apUnreadable("a flat line"));
+  /**
+   * GOOGLE ANALYTICS AND GOOGLE ADS SPEND ARE OPTIONAL. A figure whose own read failed is left
+   * out and said so, never drawn as a day with no record, and never blocking the dashboard's
+   * own figures beside it; a chart of nothing else gives that outage. No ad window at all is a
+   * failed read (adCostByDay swallows its errors), as on the dashboard.
+   */
+  const adDown = wantsAds && (!ad || ad.from === null || ad.to === null);
+  const gaDown = ga4Down(loaded);
+  const why = (m: ChartMetric) =>
+    m.id === "ad_spend" && adDown ? AD_UNREAD : m.ga4 && gaDown ? GA4_UNREAD : "";
+  if (metrics.every((m) => why(m))) return refuse([...new Set(metrics.map(why))].join(" "));
+  const none = (m: ChartMetric) => (why(m) ? "could not be read" : "nothing recorded");
   const series: ChartDay[] = loaded
     .slice(-days)
     .map((d) =>
@@ -259,7 +275,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const title = b ? `${a.short} and ${lowerFirst(b.short)}` : a.label;
   const windowLabel = `${days} days to ${longDay(until)}`;
   const headline = b
-    ? `Over the ${days} days: ${figA?.brief ?? "nothing recorded"} · ${figB?.brief ?? "nothing recorded"}`
+    ? `Over the ${days} days: ${figA?.brief ?? none(a)} · ${figB?.brief ?? none(b)}`
     : figA
       ? `Over the ${days} days: ${figA.full}`
       : "Nothing recorded on these days";
@@ -269,9 +285,9 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     ? series.filter((d) => utcOpen(d.day, at)).map((d) => d.day)
     : [];
   // Only a chart that has a gap explains one: our own counts cover every day.
-  const hasGap = [first, second ?? []].some((pts) =>
-    pts.some((p) => p.value === null && !open.includes(p.day))
-  );
+  const gapIn = (m: ChartMetric, pts: Point[]) =>
+    !why(m) && pts.some((p) => p.value === null && !open.includes(p.day));
+  const hasGap = gapIn(a, first) || (!!b && !!second && gapIn(b, second));
   const gap = !hasGap
     ? ""
     : a.rate
@@ -279,11 +295,12 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
         ? "a gap is a day with too few people to read a share"
         : `a gap is a day with fewer than ${a.rate.minDen} ${a.rate.denLabel}`
       : "a gap is a day with no record";
-  const ga4 = metrics.some((m) => m.ga4);
+  const ga4 = metrics.some((m) => m.ga4 && !why(m));
   const footnote = [
     "daily",
     gap,
     open.length ? "a day not over yet in UTC is left blank" : "",
+    ...metrics.filter((m) => why(m)).map((m) => `${lowerFirst(m.short)} could not be read`),
     a.unit === "money" ? "amounts in EUR" : "",
     ga4 ? "GA4 misses visitors who decline cookies" : "",
   ]
@@ -317,6 +334,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       "by UTC day.",
     partialDay(until, false, at),
     utcNote(open),
+    ...new Set(metrics.map(why)),
     ga4
       ? "GA4 misses visitors who decline cookies, so it reads lower than our own visitor count."
       : "",
@@ -324,9 +342,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const text = [
     `${title}, ${windowLabel}.`,
     b
-      ? [a, b]
-          .map((m, i) => `${m.short}: ${(i === 0 ? figA : figB)?.full ?? "nothing recorded"}.`)
-          .join("\n")
+      ? [a, b].map((m, i) => `${m.short}: ${(i === 0 ? figA : figB)?.full ?? none(m)}.`).join("\n")
       : `${headline}.`,
     `Picture: ${url}`,
     "The link opens in any browser without a login, so anyone you share it with can see this " +
@@ -334,8 +350,8 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     ...notes,
     "",
     "By day, oldest first:",
-    listDays(a, first),
-    ...(b && second ? [listDays(b, second)] : []),
+    listDays(a, first, !!why(a)),
+    ...(b && second ? [listDays(b, second, !!why(b))] : []),
   ].join("\n");
   return { ok: true, url, text };
 }

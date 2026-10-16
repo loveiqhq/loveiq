@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaySeries } from "@features/brain/server/jumps";
 
-type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown> };
+type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown> | null };
 
 /**
  * loadSeries(until, extra) returns every day from `until - (29 + extra)` to `until`, oldest
@@ -260,17 +260,45 @@ describe("show_chart: what gets drawn", () => {
     expect(text).toContain("- Revenue: 19 Sep 250.00 · 20 Sep 250.00");
   });
 
-  it("draws nothing, and says the numbers could not be read, when ad spend cannot be read", async () => {
+  it("says ad spend could not be read, never a chart of blanks, and still draws revenue", async () => {
     const outage =
-      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
-      "give, and none counted another way in their place. This is an outage, not a flat line. " +
-      "Ask again in a few minutes.";
-    // adCostByDay swallows a failed read and returns no window: never a chart of blanks.
+      "Google Ads spend could not be read just now, so it is left out: this is an outage, not zero.";
+    // adCostByDay swallows a failed read and returns no window.
     mockAd.mockResolvedValue({ byDay: new Map(), from: null, to: null });
     expect(await refusal({ metrics: ["ad_spend"], days: 7 })).toBe(outage);
-    expect(await refusal({ metrics: ["revenue", "ad_spend"], days: 7 })).toBe(outage);
     mockAd.mockRejectedValue(new Error("down"));
     expect(await refusal({ metrics: ["ad_spend"], days: 7 })).toBe(outage);
+    // Beside the dashboard's revenue: revenue drawn, spend left out and said so.
+    mockAd.mockResolvedValue({ byDay: new Map(), from: null, to: null });
+    dayOf = () => ({ rollup: { revenue: "10" } });
+    const both = await draw({ metrics: ["revenue", "ad_spend"], days: 7 });
+    expect(both.text).toContain("Revenue: EUR 70.00.\nGoogle Ads spend: could not be read.");
+    expect(both.text).toContain(outage);
+    expect(both.text).toContain("- Google Ads spend: left out, as it could not be read just now");
+    expect(both.payload.footnote).toBe(
+      "daily · Google Ads spend could not be read · amounts in EUR"
+    );
+    expect(both.text).not.toMatch(/nothing recorded/i);
+  });
+
+  it("leaves out Google Analytics when it cannot be read, says so, and keeps our own figures", async () => {
+    const outage =
+      "Google Analytics could not be read just now, so its figures are left out: this is an " +
+      "outage, not zero.";
+    // loadSeries marks every day's GA4 null when its read failed.
+    dayOf = () => ({ rollup: { unique_visitors: 200 }, ga4: null });
+    expect(await refusal({ metrics: ["sessions"], days: 7 })).toBe(outage);
+    expect(await refusal({ metrics: ["engaged_rate"], days: 7 })).toBe(outage);
+    const both = await draw({ metrics: ["visitors", "sessions"], days: 7 });
+    expect(both.text).toContain("Visitors: 1,400, 200 a day.\nGA4 sessions: could not be read.");
+    expect(both.text).toContain(outage);
+    expect(both.text).toContain("- GA4 sessions: left out, as it could not be read just now");
+    expect(both.payload.headline).toBe("Over the 7 days: 1,400 · could not be read");
+    expect(both.payload.footnote).toBe("daily · GA4 sessions could not be read");
+    expect(both.text).not.toMatch(/nothing recorded|no record|decline cookies/i);
+    // A chart of our own figures alone says nothing of it.
+    const visitors = await draw({ metrics: ["visitors"], days: 7 });
+    expect(visitors.text).not.toContain("Google Analytics");
   });
 
   it("does not read ad spend for a chart that does not show it", async () => {

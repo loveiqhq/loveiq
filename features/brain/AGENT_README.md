@@ -46,8 +46,9 @@ Claude Code) is the door people use; the operator's guide is
   (engagement, GA4 against our count, spend, campaigns, shipped, decided). No model writes a cause.
   Visitors, survey starts, finished surveys and revenue are the AP-Analytics dashboard's per Berlin
   day (`asDashboard`); reports opened and paid stay `brain_daily_rollup`'s, which are dated by the event
-  and left out of a UTC day not over yet (`utcOpen`). No series at all when any of its reads fails
-  (an open circuit breaker included): nothing else is served in their place.
+  and left out of a UTC day not over yet (`utcOpen`). No series when the dashboard's facts or the rollup
+  cannot be read (an open circuit breaker included). Google Analytics is optional: when it
+  cannot be read its figures are left out and said so (`GA4_UNREAD`).
 - `server/check-answer.ts` — `check_answer`: every figure, day and quote in a draft looked up in its
   cited documents (rounding-aware, trailing zeros ignored, bare single digits left unchecked). No model.
 - `server/experiments.ts` — `experiments` and `record_experiment`: the `admin_experiment`
