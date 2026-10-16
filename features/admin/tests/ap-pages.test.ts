@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildDashboard, revenueByGroup } from "@features/admin/server/ap/assessment";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { ALL, comparableStarts, totals } from "@features/admin/server/ap/metrics";
-import { head, SOURCE_ROWS } from "@features/admin/server/ap/common";
+import { SOURCE_ROWS } from "@features/admin/server/ap/common";
 import { buildFocus } from "@features/admin/server/ap/focus";
 import type { SessionTags } from "@features/admin/server/ap/posthog";
 import { buildReportPage, type ReportExtras } from "@features/admin/server/ap/report-page";
@@ -658,9 +658,6 @@ describe("visitors per source: a sample split, the totals live", () => {
       tags("prod-verification", null, 100),
     ],
   };
-  const values = (t: { rows: Array<{ label: string; values: unknown[] }> }, label: string) =>
-    t.rows.find((r) => r.label === label)?.values;
-
   it("dashboard: Sources and Performance over the estimated visitors, as drawn", () => {
     const dash = (s: typeof sessions | null) =>
       buildDashboard({
