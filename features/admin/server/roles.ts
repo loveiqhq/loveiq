@@ -15,4 +15,3 @@ const ROLE_HIERARCHY = new Map<AdminRole, number>([
 export function hasRole(userRole: AdminRole, requiredRole: AdminRole): boolean {
   return (ROLE_HIERARCHY.get(userRole) ?? -1) >= (ROLE_HIERARCHY.get(requiredRole) ?? -1);
 }
-
