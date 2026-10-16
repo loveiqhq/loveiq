@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildPartnership,
   PARTNERSHIP_FREE_BLOCKS,
+  PARTNERSHIP_GENERIC_INTRO_BLOCKS,
+  PARTNERSHIP_INTRO,
   PARTNERSHIP_PRACTICE_FREE_BLOCKS,
   PARTNERSHIP_RAMP_THROUGH,
   REPORT_V4_PARTNERSHIP,
@@ -166,9 +168,14 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
 describe("buildPartnership — unlocked", () => {
   const view = buildPartnership("Spark Seeker")!;
 
-  it("hands over every word, nothing split off", () => {
+  it("hands over every word, nothing split off, cut into the slimmed page's sections (16.10)", () => {
     expect(view.locked).toBe(false);
-    expect(view.body).toEqual({ free: SPARK.body, ramp: null, rest: [] });
+    expect(PARTNERSHIP_GENERIC_INTRO_BLOCKS).toBe(2);
+    expect(view.intro).toEqual(PARTNERSHIP_INTRO);
+    expect(view.intro).toEqual(SPARK.body.slice(0, 2));
+    expect(view.archetypeBody).toEqual({ free: SPARK.body.slice(2, 5), ramp: null, rest: [] });
+    expect(view.challengesTitle).toBe("Common Challenges");
+    expect(view.challenges).toEqual({ free: SPARK.body.slice(6), ramp: null, rest: [] });
     expect(view.loop).toEqual(SPARK.loop);
     expect(view.result).toEqual(SPARK.result);
     expect(view.practice).toMatchObject({
@@ -198,31 +205,33 @@ describe("buildPartnership — unlocked", () => {
 describe("buildPartnership — locked", () => {
   const view = buildPartnership("Spark Seeker", { locked: true })!;
 
-  it("keeps paragraphs 1-4 sharp, as 305:359 does", () => {
+  it("keeps paragraphs 1-4 sharp, as 305:359 does: the opening and the archetype's first two", () => {
     expect(view.locked).toBe(true);
     expect(PARTNERSHIP_FREE_BLOCKS).toBe(4);
-    expect(view.body.free).toEqual(SPARK.body.slice(0, 4));
+    expect(view.intro).toEqual(SPARK.body.slice(0, 2));
+    expect(view.archetypeBody.free).toEqual(SPARK.body.slice(2, 4));
   });
 
-  it("ramps into paragraph 5, real only through the fade band", () => {
-    const ramp = textOf(view.body.ramp!);
+  it("samples paragraph 5 through its fade band only: the real head, nothing veiled", () => {
+    const ramp = textOf(view.archetypeBody.ramp!);
     const authored = textOf(SPARK.body[4]!);
     const cut = authored.indexOf(PARTNERSHIP_RAMP_THROUGH);
     expect(cut).toBeGreaterThan(0);
-    const end = cut + PARTNERSHIP_RAMP_THROUGH.length;
-    expect(ramp.slice(0, end)).toBe(authored.slice(0, end));
-    expect(ramp.slice(end)).not.toBe(authored.slice(end));
-    expect(ramp).toHaveLength(authored.length);
+    expect(ramp).toBe(authored.slice(0, cut + PARTNERSHIP_RAMP_THROUGH.length));
+    const block = view.archetypeBody.ramp!;
+    expect(block.kind === "para" && block.runs.some((run) => run.veiled)).toBe(false);
   });
 
-  it("scrambles everything past the ramp, same shape", () => {
-    expect(view.body.rest).toHaveLength(SPARK.body.length - 5);
-    view.body.rest.forEach((block, i) => {
-      const original = SPARK.body[i + 5]!;
-      expect(block.kind).toBe(original.kind);
-      expect(textOf(block)).toHaveLength(textOf(original).length);
-      expect(textOf(block)).not.toBe(textOf(original));
-    });
+  it("sends nothing past the sample: Common Challenges is drawn locked, with no body (16.10)", () => {
+    expect(view.archetypeBody.rest).toEqual([]);
+    expect(view.challengesTitle).toBe("Common Challenges");
+    expect(view.challenges).toBeNull();
+    const sent = payload(true);
+    for (const block of SPARK.body.slice(6)) {
+      const text = textOf(block);
+      // Every paragraph past the heading is long enough that a 40-character slice is its own.
+      expect(sent).not.toContain(text.slice(0, 40));
+    }
   });
 
   it("scrambles the loop and the result, which a locked reader only sees fully blurred", () => {

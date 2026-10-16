@@ -8,7 +8,11 @@ import {
   FANTASY_LOCKED_OPEN_CATEGORIES,
   REPORT_V4_FANTASY,
 } from "@/data/report3-fantasy";
-import { buildPartnership, REPORT_V4_PARTNERSHIP } from "@/data/report3-partnership";
+import {
+  PARTNERSHIP_RAMP_THROUGH,
+  buildPartnership,
+  REPORT_V4_PARTNERSHIP,
+} from "@/data/report3-partnership";
 import {
   buildTypicalBeliefs,
   REPORT_V4_TYPICAL_BELIEFS,
@@ -54,10 +58,11 @@ describe("Accelerators & Brakes, locked — the blurred rows and passages are th
     expect(view.accelerators).toEqual(copy.accelerators);
   });
 
-  it("sends Common challenges and the practice past their ramps as written", () => {
-    expect(texts([view.challenges.ramp!, ...view.challenges.rest])).toEqual(
-      texts(copy.challenges.slice(1))
-    );
+  it("sends Common challenges' ramp and the practice past its ramp as written", () => {
+    // The slimmed page fades the ramp out into "Unlock Full Chapter" and draws nothing of
+    // Common challenges after it (16.10), so nothing after it is sent.
+    expect(texts([view.challenges.ramp!])).toEqual(texts(copy.challenges.slice(1, 2)));
+    expect(view.challenges.rest).toEqual([]);
     expect(texts([view.practice.ramp!, ...view.practice.rest])).toEqual(
       texts(copy.practice.slice(1))
     );
@@ -78,10 +83,16 @@ describe("Typical Beliefs, locked — the rows under the full blur are the real 
     });
   });
 
-  it("sends the gated challenges and practice as written", () => {
-    expect(texts(view.challenges.rest)).toEqual(
-      texts(SPARK_TB.challenges.slice(TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1))
+  it("sends the challenges' ramp and the gated practice as written, nothing past the wall", () => {
+    expect(texts([view.challenges.ramp!])).toEqual(
+      texts(
+        SPARK_TB.challenges.slice(
+          TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
+          TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1
+        )
+      )
     );
+    expect(view.challenges.rest).toEqual([]);
     expect(texts(view.practice.rest)).toEqual(
       texts(SPARK_TB.practice.slice(TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS + 1))
     );
@@ -92,8 +103,14 @@ describe("Challenges in Partnerships, locked — the gated body, loop and closin
   const copy = REPORT_V4_PARTNERSHIP["Spark Seeker"]!;
   const view = buildPartnership("Spark Seeker", { locked: true })!;
 
-  it("sends the body past its ramp, the loop's lines and the closing as written", () => {
-    expect(texts([view.body.ramp!, ...view.body.rest])).toEqual(texts(copy.body.slice(4)));
+  it("sends the ramp's real head, the loop's lines and the closing as written", () => {
+    // The wall's paragraph through its fade band, as written; nothing past it — not even
+    // "Common challenges", which the slimmed page draws locked (16.10).
+    const ramp = texts([view.archetypeBody.ramp!])[0]!;
+    expect(texts(copy.body.slice(4, 5))[0]!.startsWith(ramp)).toBe(true);
+    expect(ramp.endsWith(PARTNERSHIP_RAMP_THROUGH)).toBe(true);
+    expect(view.archetypeBody.rest).toEqual([]);
+    expect(view.challenges).toBeNull();
     expect(view.loop).toEqual(copy.loop);
     expect(view.result).toEqual(copy.result);
   });

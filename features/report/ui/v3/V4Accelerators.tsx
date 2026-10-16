@@ -2,11 +2,12 @@
 
 import type { FC } from "react";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
-import V4PremiumCard from "./V4PremiumCard";
+import V4Fold from "./V4Fold";
+import V4Passage from "./V4Passage";
 import V4Prose from "./V4Prose";
+import V4Section from "./V4Section";
 import V4TriggerCard from "./V4TriggerCard";
 import V4TryThis from "./V4TryThis";
-import { guardedUnlock } from "./v4Unlock";
 
 /**
  * "Chapter — Accelerators & Brakes" — the body of the chapter that opens Part IV
@@ -25,22 +26,29 @@ import { guardedUnlock } from "./v4Unlock";
  * the browser never decides where the wall falls.
  *
  * THE PAYWALLED STATE — 314:211. Both cards keep two rows sharp and lock the rest
- * behind a badge. "Common challenges" keeps its H2 and first paragraph sharp (Mark
- * moved the paywall "right after the first paragraph", 2026-09-22); the blur fades in
- * over the whole next paragraph (314:284, 29.09) and everything after stays under the
- * full blur, with the chapter-body Premium card floating on it. That band owns the
- * click, which is why the card's own CTA carries no handler.
+ * behind a badge. "Common challenges" keeps its first paragraph sharp (Mark moved the
+ * paywall "right after the first paragraph", 2026-09-22).
+ *
+ * THE SLIMMED CHAPTER (1665:6717, 16.10; Sanjin's "Slimmed_Intro_Acc&Brakes"): the short
+ * universal opening (1665:6728), then two sections, each a heading row that folds it away:
+ *   "The <Archetype>" — the archetype's own part of the old opening, folded (1665:6729),
+ *   over the two cards;
+ *   "Common Challenges" — the first paragraph sharp, the rest folded, and for a locked
+ *   reader, whose free copy ends there, the next paragraph fading out into "Unlock Full
+ *   Chapter" straight after it (1665:6780) where the blurred passage and its card were.
  */
 
 interface Props {
   view: Report3AcceleratorsView;
-  /** Opens the paywall — from the locked rows, the gated prose and its card. */
+  /** The archetype on screen, for "The <Archetype>". */
+  archetype: string;
+  /** Opens the paywall — from the locked rows and the wall's sample. */
   onUnlock?: () => void;
 }
 
-const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
+const V4Accelerators: FC<Props> = ({ view, archetype, onUnlock }) => {
   const locked = view.lockedFrom !== null;
-  const { free, ramp, rest } = view.challenges;
+  const archetypeTitle = `The ${archetype}`;
 
   return (
     <>
@@ -49,62 +57,54 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
         data-node-id={locked ? "314:219" : "310:229"}
         data-name="Chapter — Accelerators & Brakes"
       >
-        {/* 310:230 — a 356px box in the 361 column. */}
+        {/* 1665:6728 — a 356px box in the 361 column. */}
         <div className="rv4-ab__intro">
           <V4Prose blocks={view.intro} />
         </div>
 
-        {/* 311:410. Figma's line for Spark Seeker; of Sanjin's docs, only one has a lead. */}
-        {view.brakesLead ? <p className="rv4-ab__lead">{view.brakesLead}</p> : null}
-        <V4TriggerCard
-          tone="brake"
-          rows={view.brakes}
-          lockedFrom={view.lockedFrom}
-          onUnlock={onUnlock}
-        />
+        <V4Section title={archetypeTitle} nodeId="1709:1500">
+          {view.archetypeIntro.length ? (
+            <V4Fold lines={7} label={archetypeTitle} nodeId="1665:6729">
+              <V4Prose blocks={view.archetypeIntro} />
+            </V4Fold>
+          ) : null}
 
-        {/* 311:412 */}
-        {view.acceleratorsLead ? <p className="rv4-ab__lead">{view.acceleratorsLead}</p> : null}
-        <V4TriggerCard
-          tone="accel"
-          rows={view.accelerators}
-          lockedFrom={view.lockedFrom}
-          onUnlock={onUnlock}
-        />
+          {/* 311:410. Figma's line for Spark Seeker; of Sanjin's docs, only one has a lead. */}
+          {view.brakesLead ? <p className="rv4-ab__lead">{view.brakesLead}</p> : null}
+          <V4TriggerCard
+            tone="brake"
+            rows={view.brakes}
+            lockedFrom={view.lockedFrom}
+            onUnlock={onUnlock}
+          />
 
-        {/* What some of Sanjin's docs set after the two lists. No frame draws it. */}
-        {view.afterCards ? (
-          <div className="rv4-ab__after">
-            <V4Prose blocks={view.afterCards} />
-          </div>
-        ) : null}
+          {/* 311:412 */}
+          {view.acceleratorsLead ? <p className="rv4-ab__lead">{view.acceleratorsLead}</p> : null}
+          <V4TriggerCard
+            tone="accel"
+            rows={view.accelerators}
+            lockedFrom={view.lockedFrom}
+            onUnlock={onUnlock}
+          />
 
-        {/* 312:211 open / 314:307 paywalled */}
-        <section className="rv4-ab__challenges" data-node-id={locked ? "314:307" : "312:211"}>
-          <h3 className="rv4-ab__h2">{view.challengesTitle}</h3>
-          <V4Prose blocks={free} />
-          {ramp ? (
-            <div className="rv4-ab__gate" onClick={guardedUnlock(onUnlock)}>
-              <div className="rv4-ab__gated" aria-hidden="true" inert>
-                {/* 314:284 — the blur fades in over the whole paragraph, sharp at its top. */}
-                <div className="rv4-ab__ramp">
-                  <V4Prose blocks={[ramp]} />
-                  <span className="rv4-pblur" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                </div>
-                {/* 314:284 */}
-                <div className="rv4-ab__blurred">
-                  <V4Prose blocks={rest} />
-                </div>
-              </div>
-              {/* 1015:1163 — the chapter-body card, with its features (29.09). */}
-              <V4PremiumCard variant="body" nodeId="1015:1163" />
+          {/* What some of Sanjin's docs set after the two lists. No frame draws it. */}
+          {view.afterCards ? (
+            <div className="rv4-ab__after">
+              <V4Prose blocks={view.afterCards} />
             </div>
           ) : null}
-        </section>
+        </V4Section>
+
+        {/* 1665:6780 */}
+        <V4Section title={view.challengesTitle}>
+          <V4Passage
+            gated={view.challenges}
+            lead={1}
+            lines={6}
+            label={view.challengesTitle}
+            onUnlock={onUnlock}
+          />
+        </V4Section>
       </div>
 
       <V4TryThis

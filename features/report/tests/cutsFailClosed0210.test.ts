@@ -59,7 +59,11 @@ import {
   buildAccelerators,
 } from "@/data/report3-accelerators";
 import { FANTASY_PRACTICE_FREE_BLOCKS, buildFantasy } from "@/data/report3-fantasy";
-import { PARTNERSHIP_FREE_BLOCKS, buildPartnership } from "@/data/report3-partnership";
+import {
+  PARTNERSHIP_FREE_BLOCKS,
+  PARTNERSHIP_GENERIC_INTRO_BLOCKS,
+  buildPartnership,
+} from "@/data/report3-partnership";
 import {
   TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
   TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
@@ -82,8 +86,12 @@ describe("a cut written as undefined takes its default (final review 02.10)", ()
 
   it("Challenges in Partnerships keeps its wall", () => {
     const view = buildPartnership(NAME, { locked: true })!;
-    expect(view.body.free).toHaveLength(PARTNERSHIP_FREE_BLOCKS);
-    expect(view.body.ramp).not.toBeNull();
+    // Counted from the body's start: the universal opening holds its first two blocks
+    // since the slimmed report, and the archetype's part the rest up to the wall.
+    expect(view.archetypeBody.free).toHaveLength(
+      PARTNERSHIP_FREE_BLOCKS - PARTNERSHIP_GENERIC_INTRO_BLOCKS
+    );
+    expect(view.archetypeBody.ramp).not.toBeNull();
   });
 
   it("Fantasy vs. Reality keeps its wall", () => {

@@ -2070,7 +2070,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             bare
                             feedback={feedbackWidget}
                           >
-                            <V4TypicalBeliefs view={typicalBeliefs} onUnlock={unlockBeliefs} />
+                            <V4TypicalBeliefs
+                              view={typicalBeliefs}
+                              archetype={viewArchetype}
+                              onUnlock={unlockBeliefs}
+                            />
                             <V4TryThis
                               practice={typicalBeliefs.practice}
                               onUnlock={unlockBeliefs}
@@ -2132,7 +2136,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             bare
                             feedback={feedbackWidget}
                           >
-                            <V4Accelerators view={accelerators} onUnlock={unlockAccel} />
+                            <V4Accelerators
+                              view={accelerators}
+                              archetype={viewArchetype}
+                              onUnlock={unlockAccel}
+                            />
                             {acceleratorsArticle ? (
                               <V4LearnMore
                                 article={acceleratorsArticle.article}
@@ -2481,6 +2489,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <V4Partnership
                           view={partnership}
+                          archetype={viewArchetype}
                           onUnlock={() =>
                             unlockSection(partnershipGate, "challenges_in_partnership")
                           }

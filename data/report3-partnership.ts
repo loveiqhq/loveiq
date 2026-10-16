@@ -26,6 +26,7 @@
 
 import {
   gate,
+  toSample,
   splitRamp,
   veilBlock,
   veilText,
@@ -352,8 +353,22 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
  */
 export interface Report3PartnershipView {
   locked: boolean;
-  /** 38:1681 open; 305:359 + 305:462 when locked. */
-  body: Report3GatedCopy;
+  /** The universal opening, Sanjin's slimmed one (PARTNERSHIP_INTRO). */
+  intro: readonly Report3Block[];
+  /**
+   * "The <Archetype> Challenges" (1711:1847): the archetype's own paragraphs, from "For the
+   * <Archetype>…" to the inline heading, folded (1711:1857). Gated where the wall falls in
+   * them: for a locked reader the free blocks and the ramp's head, which the page fades out
+   * into "Unlock Full Chapter" (toSample).
+   */
+  archetypeBody: Report3GatedCopy;
+  /** The inline heading's text, "Common Challenges" (1711:1861). */
+  challengesTitle: string;
+  /**
+   * Everything under it for a reader who has paid. Null for a locked reader whose wall
+   * falls before it (every archetype's, 16.10): the page draws the heading locked.
+   */
+  challenges: Report3GatedCopy | null;
   /** Scrambled when locked — 612:862 blurs every card. */
   loop: readonly Report3LoopStage[];
   /** Blurred when locked (659:234): the copy itself, or its decoy (lockedBlurCopy.ts). */
@@ -365,6 +380,32 @@ export interface Report3PartnershipView {
 
 /** 305:359 keeps paragraphs 1-4 sharp; the blur ramps in over paragraph 5. */
 export const PARTNERSHIP_FREE_BLOCKS = 4;
+
+/**
+ * The chapter's opening — Sanjin's "Slimmed_Intro_Challenges_in_partnership" (1Fd3qQK5…,
+ * 16.10), set in the slimmed frame (1665:6952). Thirteen docs open on exactly these two
+ * paragraphs; Sensual Connector's own wording of them gave way to it with the slimmed report.
+ */
+export const PARTNERSHIP_INTRO: readonly Report3Block[] = [
+  p(
+    t(
+      "Relationships do not become difficult simply because two people are different. Difficulties often emerge because "
+    ),
+    b("two perfectly understandable patterns collide"),
+    t(".")
+  ),
+  p(
+    t(
+      "What feels reassuring to one partner may feel restrictive to another. What feels comfortably familiar to one person may feel erotically flat to the other. A partner may ask for more closeness because they feel uncertain, while the other asks for more space because that closeness has started to feel like pressure. Neither person is necessarily doing anything wrong, but each response can unintentionally intensify the other."
+    )
+  ),
+];
+
+/** How many of a body's opening blocks the universal opening replaces. */
+export const PARTNERSHIP_GENERIC_INTRO_BLOCKS = 2;
+
+/** The inline heading's text, should a body ever run without one. */
+export const PARTNERSHIP_CHALLENGES_TITLE = "Common Challenges";
 
 /**
  * Where paragraph 5 stops being real (splitRamp). The blur fades in over its
@@ -435,13 +476,44 @@ export function buildPartnership(
     },
     copy.cuts
   );
-  const body = gate(copy.body, cuts.freeBlocks, locked);
+  // The wall's place stays the archetype's own (cuts.freeBlocks, counted from the body's
+  // start); the slimmed page cuts the body into the archetype's part and "Common
+  // Challenges" around the inline heading, and gates whichever part the wall falls in.
+  const heading = copy.body.findIndex((block) => block.kind === "heading");
+  const end = heading < 0 ? copy.body.length : heading;
+  const archetypeBlocks = copy.body.slice(PARTNERSHIP_GENERIC_INTRO_BLOCKS, end);
+  const challengeBlocks = heading < 0 ? [] : copy.body.slice(heading + 1);
+  const headingBlock = heading < 0 ? undefined : copy.body[heading];
+  const passage = (blocks: readonly Report3Block[], free: number): Report3GatedCopy => {
+    const gated = gate(blocks, free, true);
+    return toSample(
+      gated.ramp && cuts.rampThrough !== null
+        ? { ...gated, ramp: splitRamp(gated.ramp, cuts.rampThrough) }
+        : gated
+    );
+  };
+  const open = (blocks: readonly Report3Block[]): Report3GatedCopy => ({
+    free: blocks,
+    ramp: null,
+    rest: [],
+  });
+  const wallInChallenges = heading >= 0 && cuts.freeBlocks > heading;
   return {
     locked,
-    body:
-      body.ramp && cuts.rampThrough !== null
-        ? { ...body, ramp: splitRamp(body.ramp, cuts.rampThrough) }
-        : body,
+    intro: PARTNERSHIP_INTRO,
+    archetypeBody:
+      !locked || wallInChallenges
+        ? open(archetypeBlocks)
+        : passage(archetypeBlocks, Math.max(0, cuts.freeBlocks - PARTNERSHIP_GENERIC_INTRO_BLOCKS)),
+    challengesTitle:
+      headingBlock?.kind === "heading" ? headingBlock.text : PARTNERSHIP_CHALLENGES_TITLE,
+    challenges: !locked
+      ? heading < 0
+        ? null
+        : open(challengeBlocks)
+      : wallInChallenges
+        ? passage(challengeBlocks, cuts.freeBlocks - heading - 1)
+        : null,
     loop: locked ? copy.loop.map(veilStage) : copy.loop,
     result: locked ? veilBlock(copy.result) : copy.result,
     ...(copy.tail?.length ? { tail: locked ? copy.tail.map(veilBlock) : copy.tail } : {}),

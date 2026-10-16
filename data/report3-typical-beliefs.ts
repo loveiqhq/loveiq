@@ -44,12 +44,9 @@ export interface Report3TypicalBeliefsCuts {
 /** One archetype's chapter: the panels and the prose that is its own. */
 export interface Report3TypicalBeliefsCopy extends Report3BeliefPanels {
   /**
-   * The archetype's own opening, in place of the four universal paragraphs
-   * (TYPICAL_BELIEFS_INTRO). Omitted, the universal four open the chapter. Sanjin's
-   * Curious Apprentice doc (01.10) writes three of its own.
+   * The archetype's own lede, under "The <Archetype>" (the slimmed report) and before the
+   * panels: prose, no heading.
    */
-  intro?: readonly Report3Block[];
-  /** The archetype's own lede, after the intro and before the panels: prose, no heading. */
   lede: readonly Report3Block[];
   /**
    * A paragraph after the sun beliefs, before "Common challenges". No archetype sets one
@@ -141,6 +138,7 @@ const SPARK_PANELS: Report3BeliefPanels = {
 
 import {
   gate,
+  toSample,
   veilText,
   withCuts,
   type Report3GatedCopy,
@@ -158,20 +156,28 @@ const bi = (text: string): Report3Run => ({ text, weight: 700, italic: true });
 const p = (...runs: Report3Run[]): Report3Block => ({ kind: "para", runs });
 
 /**
- * 304:269 through 304:275 — the four paragraphs every archetype's chapter opens on
- * (verbatim in Sanjin's docs for each). The lede follows, each archetype's own.
+ * The chapter's opening — Sanjin's "Slimmed_Intro_Typical_Beliefs" (1jnmOLNe…, 16.10), set in
+ * the slimmed frame (1686:10506). It condenses the four paragraphs every archetype's chapter
+ * opened on (304:269 through 304:275) into one, the same for every archetype: the Curious
+ * Apprentice's own three-paragraph opening (01.10) gave way to it with the slimmed report.
  */
 export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
   p(
     t(
-      "Long before people consciously decide what sex, desire, or intimacy mean to them, they have already absorbed beliefs about how these things are supposed to work. Some come directly from caregivers, previous partners, religion, media, or culture. Others are learned more quietly, by noticing what is praised, discouraged, desired, judged, or treated as normal."
+      "Many of the beliefs around what sex, desire, or intimacy mean to us form before they are consciously examined. They rarely feel like beliefs. They simply feel true. Over time, they shape the mental framework through which we interpret situations."
     )
   ),
-  p(
-    t(
-      "Because many of these beliefs form before they are consciously examined, they rarely feel like beliefs. They simply feel true. Over time, they become part of the mental framework through which situations are interpreted. The event itself matters, but so does the meaning attached to it."
-    )
-  ),
+];
+
+/** The first section's heading (Sanjin's "Sun and shadow beliefs", in the report's heading case). */
+export const TYPICAL_BELIEFS_SUN_SHADOW_TITLE = "Sun and Shadow Beliefs";
+
+/**
+ * Under it, the example and the framework (304:273 / 304:275 before; folded in 1709:1486),
+ * word for word as Sanjin's slimmed doc keeps them. The archetype's own lede follows in a
+ * section of its own, "The <Archetype>".
+ */
+export const TYPICAL_BELIEFS_SUN_SHADOW: readonly Report3Block[] = [
   p(
     t(
       "Imagine two people whose partners have not initiated sex for several days. One believes that being sexually desired is evidence of being attractive and valued. The lack of initiation may quickly become "
@@ -192,8 +198,9 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
 ];
 
 /**
- * 304:279 — Spark Seeker's lede, after the four opening paragraphs. The frame headed it with
- * a belief-map H2 (304:277); Sanjin's doc has none (he removed it, 02.10), so it went.
+ * 304:279 — Spark Seeker's lede. The frame headed it with a belief-map H2 (304:277); Sanjin's
+ * doc has none (he removed it, 02.10). The slimmed report sets it under "The <Archetype>"
+ * (Sanjin's slimmed doc; the frame's "The Spark Seeker belief map", 1686:10559).
  */
 const SPARK_LEDE: readonly Report3Block[] = [
   // Sanjin's doc bolds two runs here (29.09), after the frame was set.
@@ -392,7 +399,13 @@ export type { Report3GatedCopy, Report3PracticeView };
  * in a client bundle, and this module is paid copy.
  */
 export interface Report3TypicalBeliefsView {
+  /** The universal opening (TYPICAL_BELIEFS_INTRO). */
   intro: readonly Report3Block[];
+  /** "Sun and Shadow Beliefs" and the example and framework under it, folded. */
+  sunShadowTitle: string;
+  sunShadow: readonly Report3Block[];
+  /** The archetype's own lede, under "The <Archetype>" and over the panels, folded. */
+  lede: readonly Report3Block[];
   panels: { turns: readonly Report3BeliefTurnView[]; sun: readonly string[] };
   /**
    * Index of the first LOCKED row in both panels, or null when the chapter is
@@ -405,6 +418,10 @@ export interface Report3TypicalBeliefsView {
   /** After the sun panel; absent where the archetype's chapter has none. */
   afterPanels?: readonly Report3Block[];
   challengesTitle: string;
+  /**
+   * "Common challenges": everything for a reader who has paid; for a locked reader the
+   * free blocks and the ramp's head the page fades out into "Unlock Full Chapter" (toSample).
+   */
   challenges: Report3GatedCopy;
   practice: Report3PracticeView;
 }
@@ -440,11 +457,12 @@ export const TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS = 2;
  * `locked` is decided by the caller, from the same gate every other section runs
  * through, so nothing in the V4 tree ever sees an access plan.
  *
- * A locked reader receives: every free block and row verbatim; the ramp block and
- * ramp row verbatim (legible through the light end of the blur); no shift for any
- * locked row, since none is drawn; and everything only ever shown under the full
- * blur as the copy itself since 26.09, decoys in the switch's other position
- * (lockedBlurCopy.ts).
+ * A locked reader receives: every free block and row verbatim; the ramp row verbatim
+ * (legible through the light end of the blur); no shift for any locked row, since none is
+ * drawn; the rows only ever shown under the full blur as the copy itself since 26.09,
+ * decoys in the switch's other position (lockedBlurCopy.ts); and of "Common challenges"
+ * its free blocks and its ramp, which the slimmed page fades out into "Unlock Full
+ * Chapter" (toSample) — nothing after it.
  */
 export function buildTypicalBeliefs(
   archetype: string,
@@ -463,7 +481,10 @@ export function buildTypicalBeliefs(
   const lockedFrom = locked ? cuts.freeRows : null;
   const underFullBlur = (i: number) => lockedFrom !== null && i > lockedFrom;
   return {
-    intro: [...(copy.intro ?? TYPICAL_BELIEFS_INTRO), ...copy.lede],
+    intro: TYPICAL_BELIEFS_INTRO,
+    sunShadowTitle: TYPICAL_BELIEFS_SUN_SHADOW_TITLE,
+    sunShadow: TYPICAL_BELIEFS_SUN_SHADOW,
+    lede: copy.lede,
     panels: {
       turns: copy.turns.map((turn, i) => ({
         shadow: underFullBlur(i) ? veilText(turn.shadow) : turn.shadow,
@@ -474,7 +495,7 @@ export function buildTypicalBeliefs(
     lockedFrom,
     ...(copy.afterPanels?.length ? { afterPanels: copy.afterPanels } : {}),
     challengesTitle: TYPICAL_BELIEFS_CHALLENGES_TITLE,
-    challenges: gate(copy.challenges, cuts.challengesFree, locked),
+    challenges: toSample(gate(copy.challenges, cuts.challengesFree, locked)),
     practice: {
       eyebrow: copy.practiceEyebrow ?? TYPICAL_BELIEFS_PRACTICE_EYEBROW,
       title: TYPICAL_BELIEFS_PRACTICE_TITLE,

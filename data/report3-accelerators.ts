@@ -24,6 +24,7 @@
 
 import {
   gate,
+  toSample,
   splitRamp,
   veilText,
   withCuts,
@@ -318,7 +319,13 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
  * a prop, never imported by the V4 tree.
  */
 export interface Report3AcceleratorsView {
+  /** The universal opening, Sanjin's slimmed one (ACCELERATORS_INTRO). */
   intro: readonly Report3Block[];
+  /**
+   * The archetype's own part of its old opening — from "For the <Archetype>…" on — under
+   * "The <Archetype>", folded (1665:6729).
+   */
+  archetypeIntro: readonly Report3Block[];
   /** Null where the archetype's chapter has no lead line (Report3AcceleratorsCopy). */
   brakesLead: string | null;
   brakes: readonly Report3TriggerRow[];
@@ -334,9 +341,41 @@ export interface Report3AcceleratorsView {
    */
   lockedFrom: number | null;
   challengesTitle: string;
+  /**
+   * "Common challenges": everything for a reader who has paid; for a locked reader the
+   * free blocks and the ramp's head the page fades out into "Unlock Full Chapter" (toSample).
+   */
   challenges: Report3GatedCopy;
   practice: Report3PracticeView;
 }
+
+/**
+ * The chapter's opening — Sanjin's "Slimmed_Intro_Acc&Brakes" (1AcG8Afw…, 16.10), set in the
+ * slimmed frame (1665:6728). It replaces the three paragraphs every archetype's chapter
+ * opened on (the Dual Control Model), the same for all fourteen.
+ */
+export const ACCELERATORS_INTRO: readonly Report3Block[] = [
+  p(
+    t(
+      "Sexual desire is not controlled by a single switch. Sexual response is shaped by two partly independent systems working at the same time."
+    )
+  ),
+  p(
+    t("The "),
+    b("accelerator"),
+    t(" responds to cues that make sex feel appealing, rewarding or exciting. The "),
+    b("brakes"),
+    t(
+      " respond to cues that give the body or mind a reason to slow down, become cautious or disengage. Desire depends on the balance between them."
+    )
+  ),
+];
+
+/**
+ * How many of an archetype's opening paragraphs the universal opening replaces: every doc
+ * opens on the same three (the Dual Control Model) before "For the <Archetype>…".
+ */
+export const ACCELERATORS_GENERIC_INTRO_BLOCKS = 3;
 
 /** 386:416 / 386:444 keep two rows sharp. */
 export const ACCELERATORS_FREE_ROWS = 2;
@@ -409,7 +448,8 @@ export function buildAccelerators(
   const rows = (list: readonly Report3TriggerRow[]) =>
     list.map((row, index) => (lockedFrom !== null && index > lockedFrom ? veilRow(row) : row));
   return {
-    intro: copy.intro,
+    intro: ACCELERATORS_INTRO,
+    archetypeIntro: copy.intro.slice(ACCELERATORS_GENERIC_INTRO_BLOCKS),
     brakesLead: copy.brakesLead ?? null,
     brakes: rows(copy.brakes),
     acceleratorsLead: copy.acceleratorsLead ?? null,
@@ -417,7 +457,7 @@ export function buildAccelerators(
     ...(copy.afterCards?.length ? { afterCards: copy.afterCards } : {}),
     lockedFrom,
     challengesTitle: copy.challengesTitle ?? ACCELERATORS_CHALLENGES_TITLE,
-    challenges: gate(copy.challenges, cuts.challengesFree, locked),
+    challenges: toSample(gate(copy.challenges, cuts.challengesFree, locked)),
     practice: {
       eyebrow: copy.practiceEyebrow ?? ACCELERATORS_PRACTICE_EYEBROW,
       title: copy.practiceTitle ?? ACCELERATORS_PRACTICE_TITLE,

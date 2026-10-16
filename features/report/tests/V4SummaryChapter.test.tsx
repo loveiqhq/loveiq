@@ -126,10 +126,10 @@ describe("reportV3.css — the Summary's fold", () => {
     expect(pill).toContain("left: 50%");
     expect(pill).toContain("transform: translateX(-50%)");
     expect(V3_CSS).toContain(
-      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill {"
+      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill,\n.rv3 .rv4-fold__pill,\n.rv3 .rv4-unlock__pill {"
     );
     expect(V3_CSS).toContain(
-      ".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label,\n.rv3 .rv4-summary__pill-label {"
+      ".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label,\n.rv3 .rv4-summary__pill-label,\n.rv3 .rv4-fold__pill-label,\n.rv3 .rv4-unlock__pill-label {"
     );
   });
 });

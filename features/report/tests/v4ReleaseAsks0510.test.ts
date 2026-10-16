@@ -18,11 +18,15 @@ const rule = (selector: string) => {
 const px = (body: string, prop: string) =>
   Number(body.match(new RegExp(`(?:^|[\\s;{])${prop}:\\s*([\\d.]+)px`))?.[1]);
 
-/** The `@media (min-width: 700px)` block that sets the V4 headings' desktop sizes. */
+/**
+ * The `@media (min-width: 700px)` block that sets the V4 headings' desktop sizes: the one
+ * holding Core Archetype's rule (the top three heading also closes a width list in an
+ * earlier 700px block since its lede went, 16.10).
+ */
 const desktopHeadings = () => {
   const start = css.lastIndexOf(
     "@media (min-width: 700px) {",
-    css.indexOf(".rv3.rv4 .rv4-top3__heading {")
+    css.indexOf(".rv3.rv4 .rv4-corehead__title,")
   );
   expect(start).toBeGreaterThan(-1);
   return css.slice(start, css.indexOf("\n}", start));

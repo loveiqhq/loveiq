@@ -77,39 +77,6 @@ export const CURIOUS_APPRENTICE: Report3ArchetypeCopy = {
       "“I can let confidence grow through experience while still taking initiative before I feel completely certain.”",
       "“My curiosity can help me build a richer sexual life because I am willing to notice, ask, explore, and adapt.”",
     ],
-    // The doc opens on these three, written around this archetype, in place of the four
-    // universal paragraphs the other docs keep.
-    intro: [
-      p(
-        t(
-          "Long before you consciously decide what sex means to you, you begin absorbing beliefs about it. They come from caregivers, previous partners, friends, media, cultural expectations and the countless examples of intimacy you see around you. Some are taught directly. Others are learned so quietly that they never feel like beliefs at all. They simply feel true."
-        )
-      ),
-      p(
-        t("These beliefs matter because they shape "),
-        b("what a situation means to you"),
-        t(
-          ", and meaning changes how you respond. Imagine two people whose partner says, “Tell me what you like.” One has learned, "
-        ),
-        i("“A good lover should already know what to do.”"),
-        t(
-          " The question may feel exposing, almost like a test they have failed. The other believes, "
-        ),
-        i("“Good sex is something people learn together.”"),
-        t(
-          " The same question feels like an invitation. Nothing about the situation changed. The interpretation did."
-        )
-      ),
-      p(
-        t("LoveIQ describes these patterns as "),
-        b("sun beliefs"),
-        t(" and "),
-        b("shadow beliefs"),
-        t(
-          ". Sun beliefs tend to leave room for curiosity, flexibility and choice. Shadow beliefs are more likely to turn uncertainty into pressure, judgment or rigid rules. Shadow does not mean bad or irrational. Many such beliefs were learned for understandable reasons. The useful question is whether they still support the kind of sexual experience you want today."
-        )
-      ),
-    ],
     lede: [
       p(
         t("For the "),
