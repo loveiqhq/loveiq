@@ -7,6 +7,7 @@ import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
 import { buildArchetypeCard } from "@/data/report3-archetype-card";
 import { buildSummary } from "@/data/report3-summary";
+import { buildChapterReadingTimes } from "@features/report/server/chapterReadingTimes";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -167,6 +168,7 @@ export async function GET(request: Request) {
 
     archetypeCard: isV4Request ? buildArchetypeCard(archetype, { locked: !summaryUnlocked }) : null,
     summaryChapter: isV4Request ? buildSummary(archetype, { locked: !summaryUnlocked }) : null,
+    chapterReadingTimes: isV4Request ? buildChapterReadingTimes(archetype) : null,
 
     beliefsCopy: {
       "edu.eyebrow": beliefsSection["edu.eyebrow"] ?? null,

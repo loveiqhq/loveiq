@@ -19,7 +19,12 @@ import {
   type ReportV3Chapter,
 } from "./reportV3Nav";
 import V4ChapterCards, { useV4ChapterCards } from "./V4ChapterCards";
-import { V4ChapterChevron, V4ChapterLockDisc, V4ChapterTitle } from "./V4ChapterHead";
+import {
+  V4ChapterChevron,
+  V4ChapterLockDisc,
+  V4ChapterTitle,
+  useV4ReadingMinutes,
+} from "./V4ChapterHead";
 import { useV4ChapterLock } from "./V4ChapterLock";
 import { useOnV4OpenChapter } from "./v4OpenChapter";
 
@@ -130,6 +135,8 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
   // V4's Try this / Go deeper cards in place of the 2.0 section's own panels (review
   // 27.09). Only V4 provides them.
   const cards = useV4ChapterCards(sectionId);
+  // "Reading time: ~N min." over the title (the slimmed report, 16.10). V4 only.
+  const readingMinutes = useV4ReadingMinutes(sectionId);
   // Part II's nudges open a chapter by its section id — V4 only; V3 has no nudges
   // and its chapters start open. A locked chapter does not open for one.
   useOnV4OpenChapter(
@@ -183,6 +190,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           <V4ChapterTitle
             title={chapter.title}
             archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+            readingMinutes={readingMinutes}
           />{" "}
           <V4ChapterLockDisc />
         </button>
@@ -227,6 +235,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           <V4ChapterTitle
             title={chapter.title}
             archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+            readingMinutes={readingMinutes}
           />
           <V4ChapterChevron />
         </button>
