@@ -818,19 +818,22 @@ export function PageHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-2">
-        <nav
-          aria-label="Breadcrumb"
-          className="flex flex-wrap items-center gap-1.5 text-[13px] text-ap-muted"
-        >
-          {crumbs.map((c, i) => (
-            <span key={c} className="flex items-center gap-1.5">
-              {i > 0 && <span aria-hidden="true">/</span>}
-              <span className={i === crumbs.length - 1 ? "font-semibold text-ap-ink" : ""}>
-                {c}
+        {/* No crumbs, no trail: the Dashboard is drawn without one. */}
+        {crumbs.length > 0 && (
+          <nav
+            aria-label="Breadcrumb"
+            className="flex flex-wrap items-center gap-1.5 text-[13px] text-ap-muted"
+          >
+            {crumbs.map((c, i) => (
+              <span key={c} className="flex items-center gap-1.5">
+                {i > 0 && <span aria-hidden="true">/</span>}
+                <span className={i === crumbs.length - 1 ? "font-semibold text-ap-ink" : ""}>
+                  {c}
+                </span>
               </span>
-            </span>
-          ))}
-        </nav>
+            ))}
+          </nav>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="m-0 text-balance font-serif text-[34px] font-semibold leading-tight tracking-[-0.01em] text-ap-ink">
             {title}
