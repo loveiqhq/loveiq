@@ -82,7 +82,7 @@ export const PROMPTS: BrainPrompt[] = [
       '2. Decisions: browse_context with sources ["decision"] and that since date. Say who decided and what was rejected. ' +
       "Then decision_conflicts: name any pair still waiting for someone to say which stands.\n" +
       '3. What else is new: browse_context with order "recently_learned" and learned_since that date; skim for what matters, not everything.\n' +
-      '4. Numbers: get_business_numbers for the period with compare_to "previous". Lead with paywall conversion, which is the core goal. For a day that jumped, explain_change.\n' +
+      '4. Numbers: get_business_numbers for the period with compare_to "previous": they are the AP-Analytics dashboard\'s, so say so and give its link. Lead with paywall conversion, which is the core goal. For a day that jumped, explain_change.\n' +
       "5. What shipped: what_shipped for the period, in the plain words each change was summarised in.\n" +
       "6. What is waiting on someone: open Notion tasks past their due date.\n\n" +
       HOUSE_RULES,
@@ -99,8 +99,10 @@ export const PROMPTS: BrainPrompt[] = [
     render: ({ since, until }) =>
       `Check our KPIs from ${since} to ${until || "today"} against the period just before.\n\n` +
       `Use get_business_numbers with since ${since}${until ? `, until ${until}` : ""} and compare_to "previous". ` +
-      "Show visits, surveys started and finished, reports opened, paid reports, revenue and ad spend, each with the change. " +
-      'Paywall views and checkouts are not in get_business_numbers: find them with list_product_tables (match "paywall", then ' +
+      "Show visits, surveys started and finished, reports opened, paid reports, revenue and ad spend, each with the change, " +
+      "as the AP-Analytics dashboard's: say so and give the dashboard link it returns. Its journey line's " +
+      '"Paywall reached" is the period\'s finishers who saw the paywall; checkouts are not in get_business_numbers: ' +
+      "find them with list_product_tables (match " +
       '"checkout") and query_product_data, and name the table you used. Paywall conversion first, it is the core goal. ' +
       "For any day where a number moved a lot, run explain_change for that day before calling it " +
       "real: it splits the move by source, channel, engagement, ad spend and what shipped, and says when a rate moved " +
@@ -234,6 +236,7 @@ export const PROMPTS: BrainPrompt[] = [
       return (
         `Write the monthly review of ${span ? `${span.name} (${since} to ${until})` : month} for the team.\n\n` +
         `1. Funnel and money: get_business_numbers with since ${since}, until ${until} and compare_to ${before}. ` +
+        "They are the AP-Analytics dashboard's: say so and give its link. " +
         "Lead with paywall conversion, the core goal. For a day that jumped, explain_change before calling it real.\n" +
         "2. What we paid for tools: cost_watch. Its latest closed month is usually this one; for an older month use its " +
         "trend line. Name any hand-typed line it flags.\n" +

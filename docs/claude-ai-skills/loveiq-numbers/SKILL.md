@@ -11,6 +11,7 @@ Needs the loveiq-brain connector (Jarvis) turned on in this chat.
 
 1. Pin the period. If the question does not say, ask, or use the last full week and say so.
 2. Start with `get_business_numbers` for the funnel, revenue, paid customers and ad spend.
+   Its numbers are the AP-Analytics dashboard's: say so, and give the link it returns.
 3. For a split (country, age, gender, archetype, month), use `user_totals`. Groups under 5
    people are hidden on purpose; say so rather than guessing them.
 4. For "why did this move", use `explain_change`. For "is the site OK", use
