@@ -472,21 +472,33 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
         "a bare ::date on a Berlin-midnight bound resolves in the pooler's UTC zone and cuts the series a day short, so the most recent day reads as zero rather than missing",
     });
 
-    // And the series must CONSERVE rows: every submission in the window has to
+    // And the series must CONSERVE rows: every submission the chart counts has to
     // land on a day the series generates. It did not when the buckets moved to
     // Berlin days while the axis did not.
+    //
+    // COUNTED BY THE CHART'S OWN RULE: finished, and not one of our own test runs. Since
+    // 2026-10-06 the RPC leaves out surveys owned by an address matching
+    // `~* '@loveiq\.org$'`, and this side kept counting every row. So from 7 Oct the check
+    // reported a gap every day (10 to 15) that was exactly the staff surveys in the window,
+    // while no row was ever off the axis. The regex is the RPC's literal, not
+    // `isStaffEmail`: an env override there would make the two sides disagree again.
     const charted = cvrDays.reduce((t, d) => t + Number(d.completions ?? 0), 0);
-    const actual = await countRows(
-      `/rest/v1/survey_submission?select=id&created_date_time=gte.${range.since_ts}` +
-        `&created_date_time=lt.${range.until_ts}`
+    const submissions = await fetchAllRows<{ app_user: { email: string | null } | null }>(
+      `/rest/v1/survey_submission?select=id,app_user!fk_survey_submission_user(email)` +
+        `&status=eq.completed&created_date_time=gte.${range.since_ts}` +
+        `&created_date_time=lt.${range.until_ts}&order=id.asc`
     );
+    const actual =
+      submissions === null
+        ? null
+        : submissions.filter((s) => !/@loveiq\.org$/i.test(s.app_user?.email ?? "")).length;
     if (actual === null) {
       unread.push("survey_submission count for the series check");
     } else {
       readings.push({
         what: "submissions charted vs submissions that exist",
         left: { source: "summed across the RPC's days", value: charted },
-        right: { source: "counted in the window", value: actual },
+        right: { source: "counted in the window, our own test runs left out", value: actual },
         tolerance: 0,
         because:
           "a row whose Berlin day falls outside the generated axis is dropped from the chart with no error — the window total stays right, so only this comparison sees it",
