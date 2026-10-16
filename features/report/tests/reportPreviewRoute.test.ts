@@ -299,37 +299,71 @@ describe("GET /api/report/preview — every Report 2.0 chapter, as the real rout
     "relationshipFit",
     "loveLanguageOrder",
   ] as const;
+  /**
+   * The three chapters the slimmed report took out of V4 (16.10): a V4 page is sent none of
+   * their copy or charts (forV4Page); every other version keeps them.
+   */
+  const NOT_IN_V4 = [
+    "insecuritiesCopy",
+    "insecurityCueFamily",
+    "insecurityGraph",
+    "arousalCopy",
+    "arousalConfig",
+    "confidenceCopy",
+    "confidenceStrip",
+  ] as const;
+  const inV4 = (key: string) => !(NOT_IN_V4 as readonly string[]).includes(key);
 
   it("sends a full-report preview every chapter's copy and chart, unlocked", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=full_report&v4=1");
-    for (const key of COPIES) {
+    for (const key of COPIES.filter(inV4)) {
       expect(json[key], key).toBeTruthy();
       expect(json[key].locked, key).toBe(false);
     }
-    for (const key of CONFIGS) expect(json[key], key).toBeTruthy();
+    for (const key of CONFIGS.filter(inV4)) expect(json[key], key).toBeTruthy();
     const power = getReport2Section("Spark Seeker", "power");
     expect(json.powerCopy["edu.body.p2"]).toBe(power["edu.body.p2"]);
     expect(json.powerCopy.takeaway).toBe(power.takeaway);
-    expect(json.insecuritiesCopy["practical.line1"]).toBeTruthy();
+    expect(json.libidoCopy["practical.line1"]).toBeTruthy();
+  });
+
+  it("sends a V4 page none of the three chapters it no longer draws; older pages keep them", async () => {
+    for (const plan of ["", "essentials", "full_report"]) {
+      const v4 = (await get(`archetype=Spark%20Seeker&plan=${plan}&v4=1`)).json;
+      for (const key of NOT_IN_V4) expect(v4[key], `${plan} ${key}`).toBeNull();
+      const older = (await get(`archetype=Spark%20Seeker&plan=${plan}&v2=1`)).json;
+      for (const key of ["insecuritiesCopy", "arousalCopy", "confidenceCopy"]) {
+        expect(older[key], `${plan} ${key}`).toBeTruthy();
+      }
+    }
+    const full = (await get("archetype=Spark%20Seeker&plan=full_report")).json;
+    expect(full.insecuritiesCopy["practical.line1"]).toBeTruthy();
+    expect(full.arousalConfig).toBeTruthy();
   });
 
   it("gates them for a preview with no plan, exactly as a locked report", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=&v4=1");
-    for (const key of COPIES) expect(json[key].locked, key).toBe(true);
+    for (const key of COPIES.filter(inV4)) expect(json[key].locked, key).toBe(true);
     for (const key of CONFIGS) expect(json[key], key).toBeNull();
     // The "Learn:" bodies come off the wire for a locked section, as on the real route.
     expect(json.powerCopy["edu.body.p2"]).toBeNull();
     expect(json.powerCopy.takeaway).toBeNull();
-    expect(json.insecuritiesCopy["practical.line1"]).toBeNull();
+    expect(json.libidoCopy["practical.line1"]).toBeNull();
+    // A report that still draws Insecurities gets its practical withheld as before.
+    const older = (await get("archetype=Spark%20Seeker&plan=")).json;
+    expect(older.insecuritiesCopy.locked).toBe(true);
+    expect(older.insecuritiesCopy["practical.line1"]).toBeNull();
   });
 
   it("opens only the Essentials chapters for an Essentials preview", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=essentials&v4=1");
-    expect(json.insecuritiesCopy.locked).toBe(false);
-    expect(json.confidenceCopy.locked).toBe(false);
     expect(json.attachmentCopy.locked).toBe(false);
     expect(json.powerCopy.locked).toBe(true);
     expect(json.rewardCopy.locked).toBe(true);
+    // Insecurities and Confidence, Essentials chapters V4 no longer draws, open elsewhere.
+    const older = (await get("archetype=Spark%20Seeker&plan=essentials")).json;
+    expect(older.insecuritiesCopy.locked).toBe(false);
+    expect(older.confidenceCopy.locked).toBe(false);
   });
 
   it("builds the chapters for every archetype", async () => {

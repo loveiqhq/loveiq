@@ -21,9 +21,13 @@ const analytics = vi.hoisted(() => ({
 vi.mock("@features/analytics/client", () => analytics);
 
 import PreReportWizard from "@features/survey/ui/PreReportWizard";
-import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
+import {
+  WIZARD_CHAPTER_COUNT,
+  WIZARD_DRAWER,
+  WIZARD_PART_COUNT,
+} from "@features/survey/ui/wizard/wizardContent";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
-import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
+import { REPORT_V4_CHAPTER_COUNT, REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
 
 /**
  * The 30.09 wizard — Figma 1071:2092, "Pre Report Wizard — Mobile (production, 393)".
@@ -33,7 +37,8 @@ import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
  */
 const HEADINGS = [
   "A note before you explore your report.",
-  "6 Parts, 20 Chapters",
+  // The frame's 20, less the three chapters the slimmed report took out (16.10).
+  "6 Parts, 17 Chapters",
   "Unlocking your report is fully risk free.",
   "Take only what resonates.",
   "Rate each report section.",
@@ -308,6 +313,14 @@ describe("PreReportWizard — the report map (slide 2)", () => {
         rows: p.items.map((i) => ({ id: i.id, label: i.label })),
       }))
     );
+  });
+
+  it("counts the pitch's parts and chapters off the drawer, as the report counts them", () => {
+    // Every row from Part 2 on is a chapter; Part 1 is the report's welcome. The premium
+    // card's "+17 chapters" reads the same number off the report's nav.
+    expect(WIZARD_PART_COUNT).toBe(6);
+    expect(WIZARD_CHAPTER_COUNT).toBe(17);
+    expect(WIZARD_CHAPTER_COUNT).toBe(REPORT_V4_CHAPTER_COUNT);
   });
 
   it("the drawer badges the free chapters FREE and opens the four deep dives' locks", () => {

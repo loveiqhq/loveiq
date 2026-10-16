@@ -143,14 +143,12 @@ describe("V4ChapterPart", () => {
 
   it("shows Sanjin's teasers where they are written, the frame's placeholders elsewhere", () => {
     renderPart3();
-    // 1:860 carries [Chapter Copy]. Core Insecurities, Confidence Level and Power
-    // Orientation carry their teasers (1:871 / 1:882 / 1:893); Importance of
-    // Sexuality, a row only the preview still draws, keeps [Teaser Text].
+    // 1:860 carries [Chapter Copy]. Power Orientation carries its teaser (1:893); Core
+    // Insecurities, Confidence Level (out of V4 since the slimmed report, 16.10) and
+    // Importance of Sexuality, rows only the preview still draws, keep [Teaser Text].
     expect(screen.getByText(CHAPTER_COPY_PLACEHOLDER)).toBeInTheDocument();
-    expect(screen.getAllByText(TEASER_PLACEHOLDER)).toHaveLength(1);
-    for (const id of ["core_insecurities", "confidence_level", "power_orientation"]) {
-      expect(screen.getByText(REPORT_V4_CHAPTER_TEASERS[id]!)).toBeInTheDocument();
-    }
+    expect(screen.getAllByText(TEASER_PLACEHOLDER)).toHaveLength(3);
+    expect(screen.getByText(REPORT_V4_CHAPTER_TEASERS.power_orientation!)).toBeInTheDocument();
     // No part introductions since the 01.10 sync: the 185 box holds only the heading.
     expect(screen.queryByText("[Part Introductory Text]")).toBeNull();
   });
@@ -383,15 +381,17 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
       [...c.querySelectorAll(".rv3-sci__list li")].map((li) => li.textContent),
     ]);
     expect(cards).toEqual([
+      // The slimmed report (16.10) took Arousal Style and Core Insecurities out of V4, so
+      // its tiles name only the chapters it still carries.
       [
         "Neuroscience",
         "What happens in the brain when you feel desire?",
-        ["Reward System", "Arousal Style", "Energy & Risk"],
+        ["Reward System", "Energy & Risk"],
       ],
       [
         "Psychology",
         "Which beliefs about sex do you hold that you never chose?",
-        ["Typical Beliefs", "Core Insecurities"],
+        ["Typical Beliefs"],
       ],
       [
         "Relationship Research",

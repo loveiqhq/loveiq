@@ -16,7 +16,7 @@ import {
 import { isSectionUnlockedForPlan, isReportPurchasePlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
-import { buildReport2ChapterCopies } from "@features/report/server/report2ChapterCopies";
+import { buildReport2ChapterCopies, forV4Page } from "@features/report/server/report2ChapterCopies";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
@@ -128,7 +128,9 @@ export async function GET(request: Request) {
   // Every other Report 2.0 chapter, Attachment Style through Confidence Level, through
   // the real route's own builder. Without them each opened onto an empty body under
   // ?preview=1 — the chapters Mark asked to see in their 2.0 version (review 27.09).
-  const report2Chapters = buildReport2ChapterCopies(archetype, unlocked);
+  // As the real route: a V4 page is sent none of the three chapters it no longer draws.
+  const report2Copies = buildReport2ChapterCopies(archetype, unlocked);
+  const report2Chapters = isV4Request ? forV4Page(report2Copies) : report2Copies;
 
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,

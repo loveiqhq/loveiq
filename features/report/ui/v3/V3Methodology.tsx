@@ -46,6 +46,9 @@ const CARDS: readonly ScienceCard[] = [
     title: "Neuroscience",
     question: "What happens in the brain when you feel desire?",
     chapters: ["Reward System", "Arousal Style", "Energy & Risk"],
+    // The slimmed report (16.10) carries no Arousal Style, Core Insecurities or
+    // Confidence Level, so V4's lists name none of them.
+    chaptersV4: ["Reward System", "Energy & Risk"],
   },
   {
     accent: "#8887f6",
@@ -54,6 +57,7 @@ const CARDS: readonly ScienceCard[] = [
     title: "Psychology",
     question: "Which beliefs about sex do you hold that you never chose?",
     chapters: ["Typical Beliefs", "Core Insecurities"],
+    chaptersV4: ["Typical Beliefs"],
   },
   {
     accent: "#ff3d76",

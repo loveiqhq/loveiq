@@ -5,6 +5,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import V4Fantasy from "@features/report/ui/v3/V4Fantasy";
 import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
+import { REPORT_V4_CHAPTER_COUNT } from "@features/report/ui/v3/reportV3Nav";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import V4TryThis from "@features/report/ui/v3/V4TryThis";
 import { buildFantasy } from "@/data/report3-fantasy";
@@ -96,9 +97,12 @@ describe("V4PremiumCard — the chapter-body card (1015:1163)", () => {
     const feats = [...card.querySelectorAll(".rv4-premium__feats > li")];
     expect(feats.map((li) => li.textContent)).toEqual([
       "Your complete archetype report",
-      "+20 chapters and personalised growth",
+      // The frame's "+20" counts the report's chapters: seventeen since the slimmed
+      // report took three out (16.10), the nav's own count.
+      "+17 chapters and personalised growth",
       "Finally understand old patterns and learn how to move past them",
     ]);
+    expect(REPORT_V4_CHAPTER_COUNT).toBe(17);
     for (const li of feats) {
       const img = li.querySelector("img")!;
       expect(img.getAttribute("src")).toBe("/report/v3/premium/check.svg");
