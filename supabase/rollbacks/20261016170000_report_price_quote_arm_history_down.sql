@@ -5,13 +5,19 @@
 -- every call. Nothing on the paygate reads it: quotes are written as before either way.
 --
 -- Puts get_arm_cohorts and get_axis_funnel_daily back on the quote's current stamp, by the
--- same substitution in reverse, then drops the trigger, its function and the table.
--- Deletes every arm and list-price change recorded since; the backfilled ones can be
--- recovered from metadata.pricing2 and metadata.pricing3b, which the migration left in place.
+-- same substitution in reverse, then drops get_price_list_changes, the trigger, its function
+-- and the table. Deletes every arm and list-price change recorded since; the backfilled ones
+-- can be recovered from metadata.pricing2 and metadata.pricing3b, which the migration left in
+-- place.
+--
+-- Dropping the trigger takes an exclusive lock on report_price_quote, which every paygate
+-- visit writes, so it waits at most 3 seconds and then fails rather than queue those writes
+-- behind it. Re-run it if it does.
 --
 -- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20261016170000_report_price_quote_arm_history_down.sql
 
 BEGIN;
+SET LOCAL lock_timeout = '3s';
 
 DO $rollback$
 DECLARE
@@ -38,6 +44,7 @@ BEGIN
 END
 $rollback$;
 
+DROP FUNCTION IF EXISTS public.get_price_list_changes();
 DROP TRIGGER IF EXISTS report_price_quote_keeps_arm_history ON public.report_price_quote;
 DROP FUNCTION IF EXISTS public.report_price_quote_keep_arm_history();
 DROP TABLE IF EXISTS public.report_price_quote_arm_history;

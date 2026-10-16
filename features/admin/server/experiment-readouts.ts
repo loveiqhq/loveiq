@@ -104,6 +104,28 @@ export function dealtArm(
   );
 }
 
+/** A price list taking effect: from `changed_at`, arm `arm` sold `plan` at `starting_price`. */
+export interface PriceListChange {
+  changed_at: string;
+  arm: string;
+  plan: string;
+  starting_price: number | string;
+}
+
+/**
+ * Every change of a price list, oldest first (get_price_list_changes, 20261016170000): the
+ * 2.x changes from before the arm history, pinned there with where each moment came from,
+ * then every re-sync the history recorded.
+ */
+export async function loadPriceListChanges(): Promise<PriceListChange[]> {
+  const res = await supabaseFetch("/rest/v1/rpc/get_price_list_changes", {
+    method: "POST",
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(`get_price_list_changes: ${res.status}`);
+  return (await res.json()) as PriceListChange[];
+}
+
 interface PaymentRow {
   amount: number | string | null;
   personal_report: { survey_submission_id: number | null } | null;

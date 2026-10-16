@@ -10,7 +10,8 @@
 -- THE FIX. One row per change to a quote's arm or list price, written by a trigger, so it is
 -- kept whoever changes the row and however. A reader puts a quote in the arm it was DEALT:
 -- the old arm of its first change, else the one it carries (features/admin/server/
--- experiment-readouts.ts, and get_arm_cohorts / get_axis_funnel_daily below).
+-- experiment-readouts.ts, and get_arm_cohorts / get_axis_funnel_daily below), and a finished
+-- test is split at every change of a price list (get_price_list_changes below).
 --
 -- THE TRIGGER CANNOT FAIL A QUOTE WRITE. The engine writes the quote on every visit, and a
 -- failed write is "Pricing unavailable" on the paygate for that reader. So:
@@ -158,14 +159,72 @@ CREATE TRIGGER report_price_quote_keeps_arm_history
      OR OLD.starting_price IS DISTINCT FROM NEW.starting_price)
   EXECUTE FUNCTION public.report_price_quote_keep_arm_history();
 
+-- Every change of a price list, oldest first: from `changed_at`, arm `arm` sold `plan` at
+-- `starting_price`. The brain's `experiments` splits a finished pricing test at each one, so
+-- one letter never pools two lists (list A changed its prices on 24 Aug, mid-test).
+--
+-- Before the history the re-syncs kept nothing, so the three 2.x changes are pinned here.
+-- Each moment is the creation of the production deploy that changed the prices (Vercel; the
+-- builds took one to two minutes, and each re-sync was applied right after), and the
+-- price_shown events either side of it agree. Everything later comes from the history: a
+-- re-sync moves many quotes of one arm and plan to one price at one moment, so a change to
+-- a single quote (a hand fix) is not a list change: a group needs more than one quote.
+CREATE OR REPLACE FUNCTION public.get_price_list_changes()
+RETURNS TABLE(changed_at timestamptz, arm text, plan text, starting_price numeric, quotes integer)
+LANGUAGE sql
+STABLE
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+  SELECT v.changed_at, v.arm, v.plan, v.starting_price, NULL::integer
+    FROM (VALUES
+      -- Pricing 2.0 (20260727130000): both lists flat. The first production deploy carrying
+      -- it, 040913fcb after merge 86eb94125. price_shown: the old lists last at 18:20:51 UTC,
+      -- 2.0's first at 23:08:58.
+      (timestamptz '2026-08-03 20:09:45+00', 'A', 'full_report', 9.99),
+      (timestamptz '2026-08-03 20:09:45+00', 'A', 'core', 19.99),
+      (timestamptz '2026-08-03 20:09:45+00', 'A', 'all_reports', 29.99),
+      (timestamptz '2026-08-03 20:09:45+00', 'B', 'full_report', 29.00),
+      (timestamptz '2026-08-03 20:09:45+00', 'B', 'core', 39.00),
+      (timestamptz '2026-08-03 20:09:45+00', 'B', 'all_reports', 49.00),
+      -- Pricing 2.1 raised list A (20260824120000): the deploy of 662bf271d. price_shown:
+      -- list A's old prices last on 23 Aug 05:59:23, its new ones first on 24 Aug 18:42:54,
+      -- and no reader finished between 01:40 and 05:22 that night.
+      (timestamptz '2026-08-24 02:43:12+00', 'A', 'full_report', 39.99),
+      (timestamptz '2026-08-24 02:43:12+00', 'A', 'core', 49.99),
+      (timestamptz '2026-08-24 02:43:12+00', 'A', 'all_reports', 59.00),
+      -- The 2.x test ended: list A retired, its unpaid quotes on list B's prices and every
+      -- new quote B (20260831101238, applied 10:12:38): the deploy of merge 38bfb4346.
+      -- price_shown: list A last at 09:59:32, only list B from 19:13:43.
+      (timestamptz '2026-08-31 10:09:20+00', 'A', 'full_report', 29.00),
+      (timestamptz '2026-08-31 10:09:20+00', 'A', 'core', 39.00),
+      (timestamptz '2026-08-31 10:09:20+00', 'A', 'all_reports', 49.00)
+    ) AS v(changed_at, arm, plan, starting_price)
+  UNION ALL
+  SELECT h.changed_at, h.new_experiment_group, h.plan, h.new_starting_price, count(*)::integer
+    FROM report_price_quote_arm_history h
+   WHERE h.old_starting_price IS NOT NULL
+     AND (h.old_experiment_group, h.old_starting_price)
+         IS DISTINCT FROM (h.new_experiment_group, h.new_starting_price)
+   GROUP BY h.changed_at, h.new_experiment_group, h.plan, h.new_starting_price
+  HAVING count(*) > 1
+   ORDER BY 1, 2, 3
+$function$;
+
+REVOKE ALL ON FUNCTION public.get_price_list_changes() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_price_list_changes() TO service_role;
+
 -- The digest's two arm readouts put a reader in the arm their quote was dealt, not the one it
 -- carries now. Before this, a window from before a re-sync read its readers on the next
 -- test's lists: get_arm_cohorts took the first quote's current stamp, and get_axis_funnel_daily
 -- dropped every re-priced 2.x reader as "plans disagree" (core and essentials were never
--- re-synced, full_report and all_reports were). Over the live test's window nothing changes:
--- a quote dealt A3 or B3 still carries it. By substitution against the live bodies (both have
--- the expression exactly twice, identical on production and staging), so each body is the
--- previous one plus this change; anything else raises and applies nothing.
+-- re-synced, full_report and all_reports were). A window that starts at the 3.0 launch
+-- (2026-10-06 18:18:28 UTC) or later reads exactly as before: every quote made since was dealt
+-- the A3 or B3 it still carries. One that starts earlier reads differently, and correctly:
+-- readers dealt 2.x list B before the launch now count as B, not as the A3/B3 their quotes
+-- were moved to (get_arm_cohorts from 5 Oct, measured 16 Oct: B 18 to 30, A3 77 to 72, B3 81
+-- to 74). By substitution against the live bodies (both have the expression exactly twice,
+-- identical on production and staging), so each body is the previous one plus this change;
+-- anything else raises and applies nothing.
 DO $migration$
 DECLARE
   fn text;

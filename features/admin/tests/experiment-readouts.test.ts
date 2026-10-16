@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
@@ -10,14 +13,18 @@ let tables: Record<string, Page | number> = {};
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: async (path: string) => {
     paths.push(path);
-    const table = /^\/rest\/v1\/(\w+)\?/.exec(path)?.[1] ?? "";
+    const table = /^\/rest\/v1\/(?:rpc\/)?(\w+)/.exec(path)?.[1] ?? "";
     const rows = tables[table];
     if (typeof rows === "number") return { ok: false, status: rows, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => rows ?? [] };
   },
 }));
 
-import { dealtArm, loadArmOutcomes } from "@features/admin/server/experiment-readouts";
+import {
+  dealtArm,
+  loadArmOutcomes,
+  loadPriceListChanges,
+} from "@features/admin/server/experiment-readouts";
 
 const sub = (id: number) => ({
   id,
@@ -121,5 +128,62 @@ describe("loadArmOutcomes: a window's readers in the list they were dealt", () =
     await expect(loadArmOutcomes("2026-08-02T22:00:00.000Z")).rejects.toThrow(
       "report_price_quote: 400"
     );
+  });
+});
+
+describe("loadPriceListChanges: when each price list changed", () => {
+  it("reads get_price_list_changes, and fails loudly rather than reading no changes", async () => {
+    tables = { get_price_list_changes: [] };
+    await expect(loadPriceListChanges()).resolves.toEqual([]);
+    expect(paths).toEqual(["/rest/v1/rpc/get_price_list_changes"]);
+    tables = { get_price_list_changes: 500 };
+    await expect(loadPriceListChanges()).rejects.toThrow("get_price_list_changes: 500");
+  });
+});
+
+describe("20261016170000: the 2.x changes it pins, and its rollback", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const sql = read("supabase/migrations/20261016170000_report_price_quote_arm_history.sql");
+
+  it("pins each 2.x list at exactly the prices the re-sync of the time wrote", () => {
+    // (moment, arm, plan, price) as pinned in get_price_list_changes.
+    const pinned = [...sql.matchAll(/\(timestamptz '([^']+)', '(A|B)', '(\w+)', ([\d.]+)\)/g)].map(
+      ([, at, arm, plan, price]) => `${at} ${arm} ${plan} ${Number(price)}`
+    );
+    // (plan, arm, msrp, starting) rows of a re-sync: its arm's selling prices.
+    const resync = (file: string, arm: string) =>
+      [
+        ...read(`supabase/migrations/${file}`).matchAll(
+          /\('(\w+)'(?:::text)?,\s*(?:'(A|B)'(?:::text)?,\s*)?[\d.]+(?:::numeric)?,\s*([\d.]+)/g
+        ),
+      ]
+        .filter(([, plan, rowArm]) => plan !== "essentials" && (rowArm ?? arm) === arm)
+        .map(([, plan, , starting]) => `${plan} ${Number(starting)}`)
+        .sort();
+    const at = (moment: string, arm: string) =>
+      pinned
+        .filter((p) => p.startsWith(`${moment} ${arm} `))
+        .map((p) => p.split(" ").slice(-2).join(" "))
+        .sort();
+    expect(pinned).toHaveLength(12);
+    // 2.0, both lists; 2.1, list A raised; the retirement, list A on list B's prices.
+    expect(at("2026-08-03 20:09:45+00", "A")).toEqual(
+      resync("20260727130000_pricing_2_resync_quotes.sql", "A")
+    );
+    expect(at("2026-08-03 20:09:45+00", "B")).toEqual(
+      resync("20260727130000_pricing_2_resync_quotes.sql", "B")
+    );
+    expect(at("2026-08-24 02:43:12+00", "A")).toEqual(
+      resync("20260824120000_pricing_2_1_resync_quotes.sql", "A")
+    );
+    expect(at("2026-08-31 10:09:20+00", "A")).toEqual(
+      resync("20260831101238_retire_pricing_bucket_a.sql", "A")
+    );
+  });
+
+  it("rolls back without queueing paygate writes behind its lock", () => {
+    const down = read("supabase/rollbacks/20261016170000_report_price_quote_arm_history_down.sql");
+    expect(down).toMatch(/^BEGIN;\nSET LOCAL lock_timeout = '3s';\n/m);
+    expect(down).toContain("DROP FUNCTION IF EXISTS public.get_price_list_changes();");
   });
 });
