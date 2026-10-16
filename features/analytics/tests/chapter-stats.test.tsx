@@ -76,7 +76,16 @@ const setVisibility = (state: DocumentVisibilityState) => {
   document.dispatchEvent(new Event("visibilitychange"));
 };
 const leave = () => window.dispatchEvent(new Event("pagehide"));
-const saves = () => client.persistReportChapterStats.mock.calls.map(([m]) => m);
+/**
+ * Every save, its layout checked and set aside: chapter stats are counted on V4 alone,
+ * the slimmed report since 16.10, so every save says so.
+ */
+const saves = () =>
+  client.persistReportChapterStats.mock.calls.map(([m]) => {
+    const { report_layout: layout, ...rest } = m as { report_layout?: string };
+    expect(layout).toBe("v4_slim");
+    return rest;
+  });
 
 beforeEach(() => {
   vi.useFakeTimers();

@@ -1,3 +1,4 @@
+import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import { getCsrfToken } from "@shared/http/csrf-client";
@@ -587,11 +588,13 @@ export const trackSurveyComplete = (durationMs: number, totalQuestions?: number)
 
 export const trackReportViewed = (
   reportType: "essentials" | "full_report" | "core" | "all_reports" | "locked",
-  archetype?: string | null
+  archetype?: string | null,
+  layout?: ReportLayout | null
 ) => {
   const params = {
     report_type: reportType,
     ...(archetype ? { archetype } : {}),
+    ...(layout ? { report_layout: layout } : {}),
   };
   track("report_viewed", params);
   persistAnalyticsEvent("report_viewed", params);
@@ -1194,6 +1197,7 @@ export const trackWizardSkipped = (params: { from_slide: number; map_step?: numb
  */
 export const persistReportChapterStats = (metadata: {
   archetype?: string;
+  report_layout?: ReportLayout;
   chapters: Record<string, Record<string, number>>;
 }) => persistAnalyticsEvent("report_chapter_stats", metadata);
 
