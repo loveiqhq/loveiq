@@ -161,13 +161,20 @@ export function linearFit(
 }
 
 /**
- * An axis top, as the design's niceMax: the value rounded up to one of `steps` times a power
- * of ten (1, 2, 2.5, 5 or 10 unless a page asks for others); 1 when there is nothing to show.
+ * An axis top whose quarter lines all land on values the axis writes exactly: four times a
+ * round step (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5 or 8 times a power of ten), a whole number
+ * of `unit`, the smallest figure the axis writes (1 for counts, 0.01 for cents), and at least
+ * `v`. So never 50 with lines written "13" and "38" for 12.5 and 37.5.
  */
-export function niceMax(v: number, steps: readonly number[] = [1, 2, 2.5, 5, 10]): number {
-  if (!Number.isFinite(v) || v <= 0) return 1;
-  const m = 10 ** Math.floor(Math.log10(v));
-  return (steps.find((s) => v / m <= s) ?? 10) * m;
+export function quarterTop(v: number, unit = 1): number {
+  if (!Number.isFinite(v) || v <= 0) return 4 * unit;
+  for (let k = 0; ; k++) {
+    for (const s of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8]) {
+      const q = s * unit * 10 ** k;
+      const whole = Math.abs(q / unit - Math.round(q / unit)) < 1e-6;
+      if (whole && 4 * q >= v - 1e-9) return Number((4 * q).toPrecision(12));
+    }
+  }
 }
 
 /**

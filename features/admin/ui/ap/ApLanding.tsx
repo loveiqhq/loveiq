@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { rangeLabel, trendBuckets } from "@features/admin/server/ap/filters";
+import { rangeLabel } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
 import type { ArmRow, ArmStatus, LandingPayload } from "@features/admin/server/ap/landing";
 import type { Table } from "@features/admin/server/ap/common";
@@ -10,7 +10,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
-import { periodTitle } from "./hover";
+import { bucketTitles } from "./hover";
 import {
   BlackButton,
   Busy,
@@ -612,7 +612,7 @@ export default function ApLanding() {
                 key={t.key}
                 tile={t}
                 digits={t.key === "rev-visit" ? 4 : t.key === "rev-sub" ? 2 : undefined}
-                titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+                titles={bucketTitles(data.range.from, data.range.to)}
               />
             ))}
           </TileGrid>

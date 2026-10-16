@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 
-import { trendBuckets, type Grain } from "@features/admin/server/ap/filters";
+import { type Grain } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type {
   AudienceDim,
@@ -32,7 +32,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
-import { IndexHover, periodTitle, PointHover, ROW_HOVER, type TipRow } from "./hover";
+import { bucketTitles, IndexHover, periodTitle, PointHover, ROW_HOVER, type TipRow } from "./hover";
 import {
   Bar,
   BlackButton,
@@ -183,7 +183,7 @@ export default function ApTraffic() {
                 suffix={spec.suffix}
                 negativeBad={spec.negativeBad}
                 level
-                titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+                titles={bucketTitles(data.range.from, data.range.to)}
               />
             ))}
           </TileGrid>
@@ -753,7 +753,7 @@ function StackFigure({
             if (cost) {
               const c = cost[w];
               rows.push({
-                label: "Avg. cost per submission",
+                label: "Avg. cost per survey submission",
                 value: fmt("eur", c ?? null, 2),
                 color: "#161021",
                 mark: "dotted",
@@ -1143,7 +1143,7 @@ function RankChart({
         return (
           <div
             key={x.r.key}
-            className="-mx-2 grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_72px] items-center gap-3 rounded-lg px-2 py-0.5 text-[13px] hover:bg-ap-ground sm:grid-cols-[220px_minmax(0,1fr)_96px]"
+            className={`grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_72px] items-center gap-3 py-0.5 text-[13px] sm:grid-cols-[220px_minmax(0,1fr)_96px] ${ROW_HOVER}`}
           >
             <span className="break-words font-semibold">{x.r.name}</span>
             <span aria-hidden="true" className="relative h-3.5 rounded-full bg-ap-ground">
@@ -1910,11 +1910,11 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                     },
                     { label: "Click → paid", value: fmt("pct", p.d.clickToPaid, 3) },
                     { label: "Clicks", value: fmt("count", p.d.clicks) },
-                    { label: "Paying users", value: fmt("count", p.d.payers) },
-                    { label: "Spend", value: fmt("eur", p.d.spend, 2), strong: true },
+                    { label: "Purchases", value: fmt("count", p.d.payers) },
+                    { label: "Spend", value: fmt("eur", p.d.spend, 0) },
                     {
                       label: "CAC",
-                      value: p.d.payers ? fmt("eur", p.d.spend / p.d.payers, 2) : EMPTY,
+                      value: p.d.payers ? fmt("eur", p.d.spend / p.d.payers, 0) : EMPTY,
                       muted: !p.d.payers,
                     },
                   ],

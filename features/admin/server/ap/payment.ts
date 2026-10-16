@@ -121,7 +121,17 @@ export interface PricingArmRow {
 
 export interface Elasticity {
   /** The range's months with a full-unlock sale: average price paid and payment CVR. */
-  points: Array<{ label: string; price: number; cvr: number; sales: number; finishers: number }>;
+  points: Array<{
+    label: string;
+    price: number;
+    cvr: number;
+    sales: number;
+    finishers: number;
+    /** The month's days in the range, for its read-out. */
+    from?: string;
+    to?: string;
+    partial: boolean;
+  }>;
   /** ln(cvr) = a + e · ln(price), or null under three points. */
   fit: { a: number; e: number } | null;
   /** The best month's CVR: the model is capped there. */
@@ -694,6 +704,9 @@ export function buildPayment(input: {
         cvr: fin ? xs.length / fin : 0,
         sales: xs.length,
         finishers: fin,
+        from: b.from,
+        to: b.to,
+        partial: !b.full,
       };
     })
     .filter((p) => p.sales > 0 && p.finishers > 0);

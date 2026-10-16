@@ -6,7 +6,7 @@
  */
 import type { Table, Tile } from "@features/admin/server/ap/common";
 import type { Grain } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt, type GoodWhen, type Unit } from "@features/admin/server/ap/format";
+import { EMPTY, fmt, quarterTop, type GoodWhen, type Unit } from "@features/admin/server/ap/format";
 import type {
   IntentRow,
   PerfRow,
@@ -512,7 +512,8 @@ export function stackChart(series: number[][], scale: Scale): StackChart {
   const totals = Array.from({ length: n }, (_, w) =>
     series.reduce((s, row) => s + (row[w] ?? 0), 0)
   );
-  const max = scale === "share" ? 100 : niceMax(Math.max(...totals) * 1.12);
+  // Counts top where every quarter line is a whole number (never 62.5 written "63").
+  const max = scale === "share" ? 100 : quarterTop(Math.max(...totals) * 1.12);
   const val = (i: number, w: number) => {
     const v = series[i]![w] ?? 0;
     return scale === "share" ? (totals[w] ? (v / totals[w]!) * 100 : 0) : v;

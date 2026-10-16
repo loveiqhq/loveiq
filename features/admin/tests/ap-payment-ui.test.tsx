@@ -534,6 +534,19 @@ describe("the Payment page as drawn", () => {
     );
   });
 
+  it("price elasticity: a price picked on the chart is the one its card shows", () => {
+    render(<ApPayment />);
+    const card = region("Price elasticity prediction");
+    const chart = within(card).getByRole("group", { name: /^Price elasticity\./ });
+    fireEvent.focus(chart);
+    fireEvent.keyDown(chart, { key: "Home" });
+    // The read-out stops where the slider does: €3.00, then €3.50.
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €3.50");
+    fireEvent.keyDown(chart, { key: "Enter" });
+    expect(within(card).getByLabelText("Test a price · €3.50")).toBeTruthy();
+  });
+
   it("price elasticity: says why in place of the model when there is no fit", () => {
     view.payload = {
       ...payload,

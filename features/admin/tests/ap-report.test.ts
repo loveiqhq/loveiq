@@ -1130,7 +1130,9 @@ describe("report page, on screen", () => {
     expect(group.getByRole("button", { name: "Average" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Avg. total time by age")).toBeInTheDocument();
     // (1:40 + 6:40 + 2:10) / 3 = 3:30.
-    expect(age().getByText("55+").parentElement!.textContent).toBe("55+, all reports 3:303:30±0:00.0");
+    expect(age().getByText("55+").parentElement!.textContent).toBe(
+      "55+, all reports 3:303:30±0:00.0"
+    );
     // The boxes: no period before, so a grey dash where the change would stand.
     const box = screen.getByText("Avg. total time").parentElement!;
     expect(box.textContent).toBe("Avg. total time3:30—");
@@ -1215,9 +1217,12 @@ describe("report page, on screen", () => {
     fireEvent.pointerMove(box, { clientX: 560, clientY: 100, pointerType: "mouse" });
     const card = document.querySelector("[data-ap-tip]")!;
     expect(card).toHaveTextContent("95–100% of the report");
-    expect(card).toHaveTextContent("10 min+1 · 50%");
-    expect(card).toHaveTextContent("Time not recorded1 · 50%");
-    expect(card).toHaveTextContent("< 1 min0 · 0%");
+    expect(card).toHaveTextContent("10 min+1 · 50.0%");
+    expect(card).toHaveTextContent("Time not recorded1 · 50.0%");
+    expect(card).toHaveTextContent("< 1 min0 · 0.0%");
+    // Top first, as the column stacks them.
+    const text = card!.textContent!;
+    expect(text.indexOf("Time not recorded")).toBeLessThan(text.indexOf("< 1 min"));
     expect(card).toHaveTextContent("Readers2");
     vi.unstubAllGlobals();
   });

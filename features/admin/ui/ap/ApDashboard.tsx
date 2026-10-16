@@ -3,13 +3,12 @@
 import { useState } from "react";
 
 import type { DashboardPayload } from "@features/admin/server/ap/assessment";
-import { trendBuckets } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
-import { periodTitle, ROW_HOVER, useRowTip } from "./hover";
+import { bucketTitles, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -142,7 +141,7 @@ export default function ApDashboard() {
                   tile={t}
                   size="md"
                   level
-                  titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+                  titles={bucketTitles(data.range.from, data.range.to)}
                 />
               ))}
             </TileGrid>

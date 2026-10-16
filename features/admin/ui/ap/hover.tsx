@@ -13,7 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { dayCount, rangeLabel } from "@features/admin/server/ap/filters";
+import { dayCount, rangeLabel, trendBuckets } from "@features/admin/server/ap/filters";
 
 /**
  * Hover, tap and keyboard read-outs for AP-Analytics' charts: one card, in AP's colours, for
@@ -27,9 +27,11 @@ export interface TipRow {
   /** The series' colour, drawn as its legend mark. */
   color?: string;
   mark?: "line" | "dotted" | "dashed" | "square" | "dot";
-  /** A total, set in bold. */
+  /** A square's dashed edge, where the legend draws one ("Time not recorded"). */
+  outline?: string;
+  /** The row to read first (a total, a rate, a difference), in bold. */
   strong?: boolean;
-  /** A figure the point does not have ("—"), in grey. */
+  /** Nothing to read: no figure ("—"), or none of it (a layer at zero). In grey. */
   muted?: boolean;
 }
 
@@ -42,8 +44,8 @@ export interface Tip {
 }
 
 /**
- * A point's period as a card's title: a day with its weekday ("Tue 7 Oct 2026"), a span with
- * its ends ("6 Oct – 12 Oct 2026"); one cut short by the range says so.
+ * A point's period as a card's title: a day with its weekday ("Wed 7 Oct 2026"), a span with
+ * its ends ("5 Oct – 11 Oct 2026"); one cut short by the range says so.
  */
 export function periodTitle(p: { from: string; to: string }, cutShort = false): string {
   if (p.from === p.to) {
@@ -54,6 +56,11 @@ export function periodTitle(p: { from: string; to: string }, cutShort = false): 
     return `${day} ${rangeLabel(p.from, p.to)}`;
   }
   return `${rangeLabel(p.from, p.to)}${cutShort ? " (part)" : ""}`;
+}
+
+/** The titles of a tile's trend points (trendBuckets), one cut short by the range marked so. */
+export function bucketTitles(from: string, to: string): string[] {
+  return trendBuckets(from, to).map((b) => periodTitle(b, !b.full));
 }
 
 /** True when a week or month bucket is cut short by the range (its days under a whole one). */
@@ -107,10 +114,10 @@ export function placeTip(
     Math.min(Math.max(margin, v), Math.max(margin, view.w - margin - size.w));
   const clampY = (v: number) =>
     Math.min(Math.max(margin, v), Math.max(margin, view.h - margin - size.h));
+  const fits = (left: number) => left >= margin && left + size.w <= view.w - margin;
   if (mode === "side") {
-    if (anchor.x + gap + size.w <= view.w - margin)
-      return { left: anchor.x + gap, top: clampY(anchor.y - size.h / 2) };
-    if (anchor.x - gap - size.w >= margin)
+    if (fits(anchor.x + gap)) return { left: anchor.x + gap, top: clampY(anchor.y - size.h / 2) };
+    if (fits(anchor.x - gap - size.w))
       return { left: anchor.x - gap - size.w, top: clampY(anchor.y - size.h / 2) };
   }
   const left = clampX(anchor.x - size.w / 2);
@@ -125,7 +132,10 @@ function Mark({ row }: { row: TipRow }) {
       <span
         aria-hidden="true"
         className={`h-2.5 w-2.5 justify-self-center ${row.mark === "dot" ? "rounded-full" : "rounded-[3px]"}`}
-        style={{ background: row.color }}
+        style={{
+          background: row.color,
+          ...(row.outline ? { border: `1px dashed ${row.outline}` } : {}),
+        }}
       />
     );
   return (
@@ -143,7 +153,8 @@ function Mark({ row }: { row: TipRow }) {
 
 /**
  * The card itself. Read aloud through the chart's live line, so hidden from the tree. It
- * places itself once drawn (it has to know its own size), straight on the element.
+ * places itself once drawn (it has to know its own size), straight on the element, and hides
+ * while its point is out of the window (scrolled away, or off a box that scrolls sideways).
  */
 export function TipCard({
   tip,
@@ -169,7 +180,9 @@ export function TipCard({
     );
     el.style.left = `${at.left}px`;
     el.style.top = `${at.top}px`;
-    el.style.visibility = "visible";
+    const away =
+      anchor.x < 0 || anchor.y < 0 || anchor.x > window.innerWidth || anchor.y > window.innerHeight;
+    el.style.visibility = away ? "hidden" : "visible";
   }, [anchor.x, anchor.y, mode, words]);
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -184,8 +197,8 @@ export function TipCard({
       {tip.sub && <div className="text-[11px] leading-snug text-ap-muted">{tip.sub}</div>}
       {tip.rows.length > 0 && (
         <div className="mt-1.5 grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
-          {tip.rows.map((r) => (
-            <div key={r.label} className="contents">
+          {tip.rows.map((r, k) => (
+            <div key={`${k}-${r.label}`} className="contents">
               <Mark row={r} />
               <span className={`text-xs ${r.muted ? "text-ap-muted" : "text-ap-body"}`}>
                 {r.label}
@@ -226,6 +239,13 @@ function useReflow(on: boolean, measure: () => void) {
     };
   }, [on]);
 }
+
+/**
+ * What a finger does on a chart: up and down scroll the page, a pinch zooms, a sideways drag
+ * reads along it. In a box that scrolls sideways the drag scrolls the box instead (a tap
+ * still reads), or a chart wider than a phone could not be scrolled from its plot.
+ */
+const TOUCH = "touch-pan-y touch-pinch-zoom [.overflow-x-auto_&]:touch-manipulation";
 
 /** Closes a tapped card when the next tap lands elsewhere (a phone has no "mouse leaves"). */
 function useTapAway(on: boolean, box: RefObject<HTMLElement | null>, close: () => void) {
@@ -282,8 +302,12 @@ export function IndexHover({
   const [open, setOpen] = useState<Open | null>(null);
   const [live, setLive] = useState("");
   const [touch, setTouch] = useState(false);
-  // A click focuses the box too: that focus must not jump to the last point.
-  const pressed = useRef(false);
+  // A press focuses the box too, on a phone only after the finger lifts: that focus must not
+  // jump to the last point.
+  const pressedAt = useRef(-Infinity);
+  // A key moved the point: bring it into view (a box that scrolls sideways may hide it).
+  const keyed = useRef(false);
+  const guide = useRef<HTMLSpanElement>(null);
   const n = xs.length;
 
   const place = (i: number, relY: number): Open | null => {
@@ -294,6 +318,11 @@ export function IndexHover({
   };
   const show = (i: number, relY: number) => setOpen(place(i, relY));
   useReflow(open !== null, () => setOpen((o) => (o ? place(o.i, o.relY) : o)));
+  useEffect(() => {
+    if (!keyed.current || !open) return;
+    keyed.current = false;
+    guide.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [open]);
   const close = useCallback(() => {
     setOpen(null);
     setTouch(false);
@@ -310,6 +339,7 @@ export function IndexHover({
   };
   const step = (i: number) => {
     const k = Math.max(0, Math.min(n - 1, i));
+    keyed.current = true;
     show(k, 0.25);
     const t = tip(k);
     setLive(t ? tipText(t) : "");
@@ -330,14 +360,16 @@ export function IndexHover({
     } else if (e.key === "Escape") {
       close();
       setLive("");
-    } else if ((e.key === "Enter" || e.key === " ") && onPick && open) {
+    } else if ((e.key === "Enter" || e.key === " ") && onPick && open && open.i < n) {
       e.preventDefault();
       onPick(open.i);
     }
   };
 
-  const t = open ? tip(open.i) : null;
-  const slot = open && band ? band(open.i) : null;
+  // New figures under an open card (a reload, another grain) may have fewer points.
+  const cur = open && open.i < n ? open : null;
+  const t = cur ? tip(cur.i) : null;
+  const slot = cur && band ? band(cur.i) : null;
   return (
     <div
       ref={box}
@@ -349,55 +381,54 @@ export function IndexHover({
         focusable ? `${label}. Use the left and right arrow keys to read each point.` : undefined
       }
       aria-hidden={focusable ? undefined : true}
-      className={`${className} z-[2] cursor-crosshair touch-pan-y`}
+      className={`${className} z-[2] cursor-crosshair ${TOUCH}`}
       onPointerMove={(e) => {
         if (e.pointerType === "mouse" || e.buttons) at(e);
       }}
       onPointerDown={(e) => {
-        pressed.current = true;
+        pressedAt.current = performance.now();
         at(e);
         setTouch(e.pointerType !== "mouse");
-      }}
-      onPointerUp={() => {
-        pressed.current = false;
       }}
       onPointerLeave={(e) => {
         if (e.pointerType === "mouse") close();
       }}
       onPointerCancel={close}
       onClick={() => {
-        if (onPick && open) onPick(open.i);
+        if (onPick && cur) onPick(cur.i);
       }}
       onKeyDown={focusable ? onKey : undefined}
       onFocus={() => {
-        if (!pressed.current && !open && n) step(n - 1);
+        if (performance.now() - pressedAt.current > 1000 && !open && n) step(n - 1);
       }}
       onBlur={() => {
         close();
         setLive("");
       }}
     >
-      {open && slot && (
+      {cur && slot && (
         <span
+          ref={guide}
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 rounded-md bg-ap-purple/[0.08]"
           style={{ left: `${slot.left}%`, width: `${slot.width}%` }}
         />
       )}
-      {open && !slot && (
+      {cur && !slot && (
         <span
+          ref={guide}
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 w-px -translate-x-1/2 bg-ap-ink/25"
-          style={{ left: `${xs[open.i]}%` }}
+          style={{ left: `${xs[cur.i]}%` }}
         />
       )}
-      {open &&
-        markers?.(open.i).map((m, k) => (
+      {cur &&
+        markers?.(cur.i).map((m, k) => (
           <span
             key={k}
             aria-hidden="true"
             className="pointer-events-none absolute -mb-[5px] -ml-[5px] h-2.5 w-2.5 rounded-full shadow-[0_0_0_2px_#ffffff]"
-            style={{ left: `${xs[open.i]}%`, bottom: `${m.y}%`, background: m.color }}
+            style={{ left: `${xs[cur.i]}%`, bottom: `${m.y}%`, background: m.color }}
           />
         ))}
       {focusable && (
@@ -405,7 +436,7 @@ export function IndexHover({
           {live}
         </span>
       )}
-      {open && t && <TipCard tip={t} anchor={{ x: open.x, y: open.y }} />}
+      {cur && t && <TipCard tip={t} anchor={{ x: cur.x, y: cur.y }} />}
     </div>
   );
 }
@@ -433,7 +464,7 @@ export function PointHover({
   const [open, setOpen] = useState<{ i: number; x: number; y: number } | null>(null);
   const [live, setLive] = useState("");
   const [touch, setTouch] = useState(false);
-  const pressed = useRef(false);
+  const pressedAt = useRef(-Infinity);
   const order = points
     .map((p, i) => ({ p, i }))
     .sort((a, b) => a.p.x - b.p.x || a.p.y - b.p.y)
@@ -482,8 +513,9 @@ export function PointHover({
     setOpen(place(i));
     setLive(tipText(tip(i)));
   };
-  const at = open ? order.indexOf(open.i) : -1;
-  const p = open ? points[open.i] : null;
+  const cur = open && open.i < points.length ? open : null;
+  const at = cur ? order.indexOf(cur.i) : -1;
+  const p = cur ? points[cur.i] : null;
   return (
     <div
       ref={box}
@@ -492,17 +524,14 @@ export function PointHover({
       role="group"
       aria-roledescription="chart"
       aria-label={`${label}. Use the left and right arrow keys to read each point.`}
-      className={`${className} z-[2] touch-pan-y ${open ? "cursor-pointer" : ""}`}
+      className={`${className} z-[2] ${TOUCH} ${open ? "cursor-pointer" : ""}`}
       onPointerMove={(e) => {
         if (e.pointerType === "mouse" || e.buttons) pick(e);
       }}
       onPointerDown={(e) => {
-        pressed.current = true;
+        pressedAt.current = performance.now();
         pick(e);
         setTouch(e.pointerType !== "mouse");
-      }}
-      onPointerUp={() => {
-        pressed.current = false;
       }}
       onPointerLeave={(e) => {
         if (e.pointerType === "mouse") close();
@@ -524,7 +553,8 @@ export function PointHover({
         }
       }}
       onFocus={() => {
-        if (!pressed.current && !open) step(0);
+        // A press (a tap that missed every bubble too) focuses the box: no jump to the first.
+        if (performance.now() - pressedAt.current > 1000 && !open) step(0);
       }}
       onBlur={() => {
         close();
@@ -547,7 +577,7 @@ export function PointHover({
       <span className="sr-only" aria-live="polite">
         {live}
       </span>
-      {open && <TipCard tip={tip(open.i)} anchor={{ x: open.x, y: open.y }} mode="above" />}
+      {cur && <TipCard tip={tip(cur.i)} anchor={{ x: cur.x, y: cur.y }} mode="above" />}
     </div>
   );
 }
@@ -589,6 +619,8 @@ export function useRowTip() {
       setTouch(true);
       setOpen(place(tip(), e.currentTarget));
     },
+    // The touch became a scroll: the card goes with it.
+    onPointerCancel: close,
   });
   return {
     bind,

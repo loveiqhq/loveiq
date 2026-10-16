@@ -3,8 +3,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
-import { rangeLabel, SURVEY_TRACKING_FROM, trendBuckets } from "@features/admin/server/ap/filters";
-import { fmt } from "@features/admin/server/ap/format";
+import { rangeLabel, SURVEY_TRACKING_FROM } from "@features/admin/server/ap/filters";
+import { delta, EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type {
   Benchmark,
@@ -16,7 +16,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
-import { periodTitle, useRowTip } from "./hover";
+import { bucketTitles, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -178,7 +178,7 @@ export default function ApSurvey() {
               <KpiTileV2
                 key={t.key}
                 tile={t}
-                titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+                titles={bucketTitles(data.range.from, data.range.to)}
               />
             ))}
           </TileGrid>
@@ -284,11 +284,9 @@ function DemographicCard({ card }: { card: DemoCard }) {
                     },
                     {
                       label: "Difference",
-                      value:
-                        d === null
-                          ? "—"
-                          : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d).toFixed(1)} pts`,
-                      strong: true,
+                      value: delta("pct", r.share, r.bench, "either")?.text ?? EMPTY,
+                      strong: r.bench !== null,
+                      muted: r.bench === null,
                     },
                   ],
                 })))}
@@ -392,7 +390,7 @@ function IntroSection({ data }: { data: SurveyPayload }) {
                   ? 1
                   : 0
             }
-            titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+            titles={bucketTitles(data.range.from, data.range.to)}
           />
         ))}
       </TileGrid>
@@ -648,12 +646,12 @@ function QuestionDetail({
                   {data.answers.map((a) => (
                     <div
                       key={a.label}
-                      className="-mx-2 grid items-center gap-3 rounded-lg px-2 py-1 text-[13px] hover:bg-white/70"
+                      className="-mx-2 grid items-center gap-3 rounded-lg px-2 py-1 text-[13px] hover:bg-white"
                       style={{ gridTemplateColumns: "140px minmax(0,1fr)" }}
                       {...answerTip.bind(() => ({
                         title: a.label,
                         rows: data.segments.map((sg, i) => ({
-                          label: `${sg.name} (n=${fmt("count", sg.n)})`,
+                          label: `${sg.name} · n=${fmt("count", sg.n)}`,
                           value: fmt("pct", a.shares[i] ?? null, 1),
                           color: SEGMENT_COLORS[i],
                           mark: "square" as const,
@@ -774,7 +772,7 @@ function FunnelSection({
     steps.filter((x) => matches(x.r, term)),
     sort
   );
-  const exitTitles = trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b));
+  const exitTitles = bucketTitles(data.range.from, data.range.to);
   return (
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
@@ -933,20 +931,23 @@ function FunnelSection({
                 <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
                   {fmt("mmss", x.time)}
                 </span>
-                <span role="cell" className="relative z-[1] px-3 py-2">
-                  <Spark
-                    values={x.r.exitsTrend}
-                    height={26}
-                    titles={exitTitles.length === x.r.exitsTrend.length ? exitTitles : undefined}
-                    name="Exits"
-                    focusable={false}
-                    onPick={() => {
-                      onSelect(x.r.id);
-                      document
-                        .getElementById("question-detail")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
-                  />
+                <span role="cell" className="px-3 py-2">
+                  {/* Over the row's button, the line only: the cell's edges still open the row. */}
+                  <span className="relative z-[1] block">
+                    <Spark
+                      values={x.r.exitsTrend}
+                      height={26}
+                      titles={exitTitles.length === x.r.exitsTrend.length ? exitTitles : undefined}
+                      name="Exits"
+                      focusable={false}
+                      onPick={() => {
+                        onSelect(x.r.id);
+                        document
+                          .getElementById("question-detail")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    />
+                  </span>
                 </span>
               </div>
             );

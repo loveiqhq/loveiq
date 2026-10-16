@@ -291,11 +291,10 @@ describe("the Dashboard as drawn", () => {
     const points = () =>
       card.querySelector('polyline[data-series="Survey submissions"]')!.getAttribute("points")!;
     expect(points().split(" ")).toHaveLength(7);
-    // Every day's label on a wide screen; three on a phone, where seven would collide.
-    const xLabels = (only: string) =>
-      [...card.querySelectorAll(`span.${only.replace(":", "\\:")}`)].map((e) => e.textContent);
-    expect(xLabels("max-sm:hidden")).toEqual(DAYS);
-    expect(xLabels("sm:hidden")).toEqual(["1 Oct", "4 Oct", "7 Oct"]);
+    // Every day's label where they fit (jsdom lays nothing out: the row counts as 420px).
+    const xLabels = (c = card) =>
+      [...c.querySelectorAll("[data-ap-ticks] > span")].map((e) => e.textContent);
+    expect(xLabels()).toEqual(DAYS);
     expect(
       within(card).getByText(
         "Survey submissions, per day · thin dashed lines show the linear trend"
@@ -306,13 +305,11 @@ describe("the Dashboard as drawn", () => {
       target: { value: "week" },
     });
     expect(points().split(" ")).toHaveLength(2);
-    expect(xLabels("max-sm:hidden")).toEqual(["Wk 28 Sep", "Wk 5 Oct"]);
+    expect(xLabels()).toEqual(["Wk 28 Sep", "Wk 5 Oct"]);
     expect(within(card).getByText(/Survey submissions, per week/)).toBeTruthy();
     // The other charts keep their own grain.
     const completion = region("Survey completion");
-    expect(
-      [...completion.querySelectorAll("span.max-sm\\:hidden")].map((e) => e.textContent)
-    ).toEqual(DAYS);
+    expect(xLabels(completion)).toEqual(DAYS);
     // Each chart's figures as a table for a screen reader, its drawing hidden.
     const table = within(card).getByRole("table", { name: "Survey submissions" });
     expect(within(table).getAllByRole("row")).toHaveLength(3);
@@ -325,16 +322,17 @@ describe("the Dashboard as drawn", () => {
 
   it("draws axes as drawn: counts left, euros right, a floor of 100% for completion", () => {
     render(<ApFocus />);
-    // Submissions top at 22 × 1.1 → 25; the right axis at €2.60 × 1.1 → €5.
+    // Each top puts every quarter line on a figure written exactly: submissions at 22 × 1.1
+    // → 32 (not 25, whose lines would read 6, 13, 19), the right axis at €2.60 × 1.1 → €3.
     const subs = region("Survey submissions");
-    for (const t of ["0", "6", "13", "19", "25", "€0.00", "€1.25", "€2.50", "€3.75", "€5.00"])
+    for (const t of ["0", "8", "16", "24", "32", "€0.00", "€0.75", "€1.50", "€2.25", "€3.00"])
       expect(within(subs).getAllByText(t).length).toBeGreaterThan(0);
     const completion = region("Survey completion");
     for (const t of ["0%", "25%", "50%", "75%", "100%"])
       expect(within(completion).getAllByText(t).length).toBeGreaterThan(0);
     // A rate under 10% writes a tenth; the unlock chart's euros are whole.
     const full = region("Completion → full unlock");
-    for (const t of ["0.0%", "0.6%", "1.3%", "1.9%", "2.5%", "€0", "€13", "€25", "€38", "€50"])
+    for (const t of ["0.0%", "0.6%", "1.2%", "1.8%", "2.4%", "€0", "€10", "€20", "€30", "€40"])
       expect(within(full).getAllByText(t).length).toBeGreaterThan(0);
     // Every series has its dashed least-squares line; a gap breaks the line into runs.
     expect(subs.querySelectorAll("polyline[data-trend]")).toHaveLength(3);
@@ -445,7 +443,7 @@ describe("the charts read out their points and say where they have none", () => 
   });
   const NOTE =
     "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out.";
-  const gappy = (): FocusPayload => {
+  const gappy = (values = [null, null, null, 0.1, 0.12, 0.14, 0.16]): FocusPayload => {
     const c = chart(
       "start-cvr",
       "Visitor → survey start",
@@ -453,7 +451,7 @@ describe("the charts read out their points and say where they have none", () => 
         s({
           name: "Start CVR",
           unit: "pct",
-          values: [null, null, null, 0.1, 0.12, 0.14, 0.16],
+          values,
           total: 0.13,
         }),
       ],
@@ -516,6 +514,20 @@ describe("the charts read out their points and say where they have none", () => 
     expect(card()).toHaveTextContent(NOTE);
     fireEvent.pointerLeave(box, { pointerType: "mouse" });
     expect(card()).toBeNull();
+  });
+
+  it("the chart's note explains only the points before its first figure", () => {
+    view.payload = gappy([null, null, null, 0.1, null, 0.14, 0.16]);
+    render(<ApFocus />);
+    const box = plot();
+    sized(box);
+    // Day 5 (Mon 5 Oct) has no figure, after the first one: not the early days' reason.
+    fireEvent.pointerMove(box, { clientX: 200, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent("Mon 5 Oct 2026");
+    expect(card()).toHaveTextContent("No figure for this day.");
+    expect(card()).not.toHaveTextContent(NOTE);
+    fireEvent.pointerMove(box, { clientX: 50, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent(NOTE);
   });
 
   it("every chart and trend line can be read with the keyboard", () => {

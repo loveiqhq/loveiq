@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 
 import { addDays } from "@features/admin/server/ap/days";
-import { trendBuckets, type Grain } from "@features/admin/server/ap/filters";
+import type { Grain } from "@features/admin/server/ap/filters";
 import type {
   AssessmentRow,
   ChartColor,
@@ -15,14 +15,22 @@ import {
   EMPTY,
   fmt,
   linearFit,
-  niceMax,
+  quarterTop,
   type Tone,
   type Unit,
 } from "@features/admin/server/ap/format";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
-import { GapBands, gapSpans, IndexHover, isCutShort, periodTitle, type Tip } from "./hover";
+import {
+  bucketTitles,
+  GapBands,
+  gapSpans,
+  IndexHover,
+  isCutShort,
+  periodTitle,
+  type Tip,
+} from "./hover";
 import { Busy, Eyebrow, Failed, KpiTileV2, Loading, PageHeader, RangeLine } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -95,6 +103,52 @@ function axisLabel(unit: Unit, v: number, top: number, wholeEuros: boolean): str
   return fmt("count", v);
 }
 
+/** An axis top whose quarter lines read exactly as axisLabel writes them (never 12.5 as "13"). */
+function axisTop(unit: Unit, v: number, wholeEuros: boolean): number {
+  if (unit === "pct") {
+    const t = quarterTop(v, 0.1);
+    return t < 10 ? t : quarterTop(v, 1);
+  }
+  return quarterTop(v, (unit === "eur" && !wholeEuros) || unit === "ratio" ? 0.01 : 1);
+}
+
+/**
+ * The x labels that fit a row `width` px wide without touching: the first (from the left
+ * edge) and the last (to the right edge) always, one every so many points between (centred),
+ * each at least 8px clear of the next.
+ */
+export function xTicks(labels: string[], width: number): number[] {
+  const n = labels.length;
+  if (n <= 1) return n ? [0] : [];
+  // About 6.6px a character at 11px: never narrower than drawn.
+  const w = (i: number) => labels[i]!.length * 6.6;
+  const widest = Math.max(...labels.map((_, i) => w(i)));
+  // No room for both ends: the last alone.
+  if (w(0) + w(n - 1) + 8 > width) return [n - 1];
+  const px = (i: number) => (i / (n - 1)) * width;
+  // Far enough apart for two centred labels, and for the first (it reaches right of its x).
+  const step = Math.max(1, Math.ceil(((1.5 * widest + 8) / width) * (n - 1)));
+  const out = [0];
+  for (let i = step; i < n - 1; i += step) {
+    // Clear of the last label, which reaches left of its x.
+    if (px(i) + w(i) / 2 + 8 <= width - w(n - 1)) out.push(i);
+  }
+  out.push(n - 1);
+  return out;
+}
+
+/** A box's width in px as it is drawn, kept up to date; `fallback` until measured. */
+function useWidth(fallback: number) {
+  const [width, setWidth] = useState(0);
+  const ref = useCallback((el: HTMLElement | null) => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setWidth(e!.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width || fallback] as const;
+}
+
 /** The polyline's runs: a null breaks the line, and a lone point is drawn as a dot. */
 function runs(values: Array<number | null>, at: (i: number, v: number) => string): string[] {
   const out: string[][] = [[]];
@@ -108,6 +162,7 @@ function runs(values: Array<number | null>, at: (i: number, v: number) => string
 function ChartCard({ chart }: { chart: FocusChart }) {
   const allowed = GRAINS.filter((g) => !chart.grains || chart.grains.includes(g.value));
   const [grain, setGrain] = useState<Grain>(chart.grains?.[0] ?? "day");
+  const [tickRow, tickWidth] = useWidth(chart.wide ? 900 : 420);
   const id = `h-chart-${chart.key}`;
   const view = chart.views[grain];
   const n = view.labels.length;
@@ -117,20 +172,16 @@ function ChartCard({ chart }: { chart: FocusChart }) {
   const rUnit = right[0]?.unit ?? "eur";
   // Euros beside a rate are whole, as drawn on the unlock charts.
   const wholeEuros = rUnit === "eur" && lUnit === "pct";
-  // The design's tops: 10% over the highest point, or the floor (a completion rate's 100%).
-  // An axis of whole numbers tops at 4 at least, so no two of its quarter lines read the same.
-  const lTop = Math.max(
-    lUnit === "count" ? 4 : 0,
+  // The design's tops: 10% over the highest point, or the floor (a completion rate's 100%),
+  // rounded up so every quarter line lands on a figure its label writes exactly.
+  const lTop = axisTop(
+    lUnit,
     chart.leftMin !== undefined
-      ? niceMax(Math.max(chart.leftMin * per(lUnit), ...finite(left)))
-      : niceMax(Math.max(0, ...finite(left)) * 1.1)
+      ? Math.max(chart.leftMin * per(lUnit), ...finite(left))
+      : Math.max(0, ...finite(left)) * 1.1,
+    false
   );
-  const rTop = right.length
-    ? Math.max(
-        rUnit === "count" || wholeEuros ? 4 : 0,
-        niceMax(Math.max(0, ...finite(right)) * 1.1)
-      )
-    : 1;
+  const rTop = right.length ? axisTop(rUnit, Math.max(0, ...finite(right)) * 1.1, wholeEuros) : 1;
   const topOf = (s: ChartSeries) => (s.axis === "right" ? rTop : lTop);
   const x = (i: number) => (n > 1 ? (i / (n - 1)) * 100 : 50);
   /** Height from the bottom in %, inside the axis. */
@@ -141,12 +192,17 @@ function ChartCard({ chart }: { chart: FocusChart }) {
   const gaps = gapSpans(
     view.series.map((s) => s.values),
     xs,
-    view.labels.map((l) => (grain === "week" ? `Wk ${l}` : l))
+    view.labels.map((l) => (grain === "week" ? `the week of ${l}` : l))
   );
   const noun = { day: "day", week: "week", month: "month" }[grain];
+  const has = (i: number) =>
+    view.series.some((s) => s.values[i] !== null && Number.isFinite(s.values[i]!));
+  // The chart's note says why the points before its first figure (or all, with none) are
+  // missing; a later empty point is just one without a figure.
+  const first = view.labels.findIndex((_, i) => has(i));
   const tipAt = (i: number): Tip => {
     const period = view.periods?.[i];
-    const empty = view.series.every((s) => s.values[i] === null || !Number.isFinite(s.values[i]!));
+    const empty = !has(i);
     return {
       title: period
         ? periodTitle(period, isCutShort(period, grain))
@@ -166,19 +222,14 @@ function ChartCard({ chart }: { chart: FocusChart }) {
           muted: !has,
         };
       }),
-      note: empty ? (chart.note ?? `No figure for this ${noun}.`) : null,
+      note: empty
+        ? ((first < 0 || i < first) && chart.note) || `No figure for this ${noun}.`
+        : null,
     };
   };
   const marginRight = right.length ? 52 : 12;
   const height = chart.wide ? 280 : 220;
-  // About seven labels (three on a phone), the last one always; one too close to it gives way.
-  const ticks = (count: number) => {
-    const step = Math.max(1, Math.ceil(n / count));
-    return view.labels
-      .map((label, i) => ({ label, i }))
-      .filter(({ i }) => i % step === 0 || i === n - 1)
-      .filter(({ i }, k) => i === n - 1 || n - 1 - i >= step * 0.6 || k === 0);
-  };
+  const tickLabels = view.labels.map((l) => (grain === "week" ? `Wk ${l}` : l));
 
   return (
     <section
@@ -385,24 +436,25 @@ function ChartCard({ chart }: { chart: FocusChart }) {
               }
             />
           </div>
-          <div aria-hidden="true" className="relative h-4" style={{ marginLeft: 48, marginRight }}>
-            {[
-              { list: ticks(7), only: "max-sm:hidden" },
-              { list: ticks(3), only: "sm:hidden" },
-            ].map(({ list, only }) =>
-              list.map(({ label, i }) => (
-                <span
-                  key={`${only}-${i}`}
-                  className={`absolute whitespace-nowrap text-[11px] text-ap-muted ${only}`}
-                  style={{
-                    left: `${x(i)}%`,
-                    transform: `translateX(${n === 1 ? "-50%" : i === 0 ? "0" : i === n - 1 ? "-100%" : "-50%"})`,
-                  }}
-                >
-                  {grain === "week" ? `Wk ${label}` : label}
-                </span>
-              ))
-            )}
+          <div
+            ref={tickRow}
+            aria-hidden="true"
+            data-ap-ticks=""
+            className="relative h-4"
+            style={{ marginLeft: 48, marginRight }}
+          >
+            {xTicks(tickLabels, tickWidth).map((i) => (
+              <span
+                key={i}
+                className="absolute whitespace-nowrap text-[11px] text-ap-muted"
+                style={{
+                  left: `${x(i)}%`,
+                  transform: `translateX(${n === 1 ? "-50%" : i === 0 ? "0" : i === n - 1 ? "-100%" : "-50%"})`,
+                }}
+              >
+                {tickLabels[i]}
+              </span>
+            ))}
           </div>
           {chart.note && <p className="m-0 text-xs leading-relaxed text-ap-muted">{chart.note}</p>}
         </>
@@ -653,7 +705,7 @@ export default function ApFocus() {
                 key={t.key}
                 tile={t}
                 digits={t.unit === "eur" ? 0 : undefined}
-                titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+                titles={bucketTitles(data.range.from, data.range.to)}
               />
             ))}
           </div>

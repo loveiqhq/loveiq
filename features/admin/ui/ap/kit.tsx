@@ -101,10 +101,9 @@ export function SectionHead({
   );
 }
 
-/** A trend line in a 120 × 36 box. */
 /**
- * A trend line: broken where a point has no figure. Given each point's title, it reads out
- * its point on hover, tap or (when focusable) the arrow keys.
+ * A trend line in a 120 × 36 box, broken where a point has no figure. Given each point's
+ * title, it reads out its point on hover, tap or (when focusable) the arrow keys.
  */
 export function Spark({
   values,
@@ -114,18 +113,21 @@ export function Spark({
   name = "Value",
   unit = "count",
   digits,
+  suffix = "",
   focusable = true,
   onPick,
 }: {
   values: Array<number | null>;
   color?: string;
   height?: number;
-  /** Each point's period ("6 Oct – 12 Oct 2026"), for the read-out; none, no read-out. */
+  /** Each point's period ("5 Oct – 11 Oct 2026"), for the read-out; none, no read-out. */
   titles?: string[];
   /** The figure in the read-out ("Revenue"). */
   name?: string;
   unit?: Unit;
   digits?: number;
+  /** After each value, as the tile writes it ("0.02×"). */
+  suffix?: string;
   /** Off inside a link or a picked row, which keep the keyboard. */
   focusable?: boolean;
   onPick?: (i: number) => void;
@@ -136,6 +138,12 @@ export function Spark({
   const read = Boolean(titles && titles.length === n && n > 0);
   const xs = values.map((_, i) => (g.x(i) / 120) * 100);
   const yPct = (v: number) => ((height - g.y(v)) / height) * 100;
+  // The tile's decimals, unless they round a point to nothing ("0%" for 0.4%): fmt's own then.
+  const show = (v: number) => {
+    if (digits === undefined || v === 0) return fmt(unit, v, digits);
+    const scaled = Math.abs(v) * (unit === "pct" ? 100 : 1) * 10 ** digits;
+    return fmt(unit, v, Math.round(scaled) === 0 ? undefined : digits);
+  };
   return (
     <div className="relative" style={{ height }}>
       <svg
@@ -171,13 +179,13 @@ export function Spark({
               rows: [
                 {
                   label: name,
-                  value: has ? fmt(unit, v, digits) : EMPTY,
+                  value: has ? show(v) + suffix : EMPTY,
                   color,
                   mark: "line",
                   muted: !has,
                 },
               ],
-              note: has ? null : "No figure for this point.",
+              note: has ? null : "No figure for this period.",
             };
           }}
           markers={(i) => {
@@ -237,7 +245,7 @@ export function KpiTile({
         <Spark
           values={tile.blocked ? [] : tile.spark}
           titles={titles}
-          name={tile.label}
+          name={tile.line ?? tile.label}
           unit={tile.unit}
           focusable={!tile.href}
         />
@@ -255,7 +263,7 @@ export function KpiTile({
         <Spark
           values={tile.blocked ? [] : tile.spark}
           titles={titles}
-          name={tile.label}
+          name={tile.line ?? tile.label}
           unit={tile.unit}
           focusable={!tile.href}
         />
@@ -336,9 +344,10 @@ export function KpiTileV2({
       <Spark
         values={tile.blocked ? [] : tile.spark}
         titles={titles}
-        name={tile.label}
+        name={tile.line ?? tile.label}
         unit={tile.unit}
         digits={digits}
+        suffix={suffix}
       />
     </div>
   );

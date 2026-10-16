@@ -2,8 +2,11 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { linearFit, sparkGeometry } from "@features/admin/server/ap/format";
+import type { Tile } from "@features/admin/server/ap/common";
+import { linearFit, quarterTop, sparkGeometry } from "@features/admin/server/ap/format";
+import { xTicks } from "@features/admin/ui/ap/ApFocus";
 import {
+  bucketTitles,
   gapSpans,
   IndexHover,
   isCutShort,
@@ -13,8 +16,9 @@ import {
   PointHover,
   tipText,
   type Tip,
+  useRowTip,
 } from "@features/admin/ui/ap/hover";
-import { Spark } from "@features/admin/ui/ap/kit";
+import { KpiTileV2, Spark } from "@features/admin/ui/ap/kit";
 
 /** jsdom lays nothing out: the hover box gets a 200 × 100 plot at the window's corner. */
 function sized(el: Element, width = 200, height = 100) {
@@ -80,6 +84,66 @@ describe("the read-out's arithmetic", () => {
     });
     // "above" with no room above goes under the point.
     expect(placeTip({ x: 500, y: 40 }, size, view, "above")).toEqual({ left: 400, top: 54 });
+    // A point 832px in, in a box scrolled sideways on a 390px phone: still inside the window.
+    const at = placeTip({ x: 832, y: 300 }, { w: 300, h: 100 }, { w: 390, h: 800 });
+    expect(at.left).toBeGreaterThanOrEqual(8);
+    expect(at.left + 300).toBeLessThanOrEqual(382);
+  });
+
+  it("tops an axis where every quarter line is a figure it writes exactly", () => {
+    // 8, 16, 24, 32: not 25, whose lines 6.25, 12.5 and 18.75 would read "6", "13", "19".
+    expect(quarterTop(24.2)).toBe(32);
+    expect(quarterTop(100)).toBe(100);
+    expect(quarterTop(44)).toBe(48);
+    expect(quarterTop(3)).toBe(4);
+    expect(quarterTop(0)).toBe(4);
+    expect(quarterTop(Number.NaN)).toBe(4);
+    expect(quarterTop(2.2, 0.1)).toBeCloseTo(2.4);
+    expect(quarterTop(2.86, 0.01)).toBeCloseTo(3);
+    expect(quarterTop(0.055, 0.001)).toBeCloseTo(0.06);
+    // Whatever the figures: over them, at most double, each quarter whole in the axis's unit.
+    for (const unit of [1, 0.1, 0.01, 0.001]) {
+      for (let v = unit / 3; v < 5e5 * unit; v *= 1.37) {
+        const t = quarterTop(v, unit);
+        expect(t).toBeGreaterThanOrEqual(v - 1e-9);
+        expect(t).toBeLessThanOrEqual(Math.max(4 * unit, v * 2.01));
+        const q = t / 4 / unit;
+        expect(Math.abs(q - Math.round(q))).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it("titles a tile's points, one cut short by the range marked so", () => {
+    // 30 Sep (Wed) to 14 Oct (Wed): weekly, with one whole week between two cut short.
+    expect(bucketTitles("2026-09-30", "2026-10-14")).toEqual([
+      "30 Sep – 4 Oct 2026 (part)",
+      "5 Oct – 11 Oct 2026",
+      "12 Oct – 14 Oct 2026 (part)",
+    ]);
+  });
+
+  it("spaces the date labels by the row's real width: never touching, the last always", () => {
+    const days = Array.from({ length: 138 }, (_, i) => `${(i % 28) + 1} Sep`);
+    const weeks = Array.from({ length: 20 }, (_, i) => `Wk ${(i % 28) + 1} Sep`);
+    for (const labels of [days, days.slice(0, 30), weeks, ["1 Oct"], ["1 Oct", "2 Oct"]]) {
+      const n = labels.length;
+      for (const width of [120, 240, 300, 372, 420, 640, 900, 1200]) {
+        const t = xTicks(labels, width);
+        expect(t.at(-1)).toBe(n - 1);
+        // Each label as drawn: the first from its x, the last up to it, the others centred.
+        const span = (i: number) => {
+          const w = labels[i]!.length * 6.6;
+          const x = n > 1 ? (i / (n - 1)) * width : width / 2;
+          if (n === 1) return [x - w / 2, x + w / 2];
+          return i === 0 ? [x, x + w] : i === n - 1 ? [x - w, x] : [x - w / 2, x + w / 2];
+        };
+        for (let k = 1; k < t.length; k++)
+          expect(span(t[k]!)[0]!).toBeGreaterThanOrEqual(span(t[k - 1]!)[1]! + 8 - 1e-9);
+      }
+    }
+    // Room to spare: every day of a week.
+    const week = ["1 Oct", "2 Oct", "3 Oct", "4 Oct", "5 Oct", "6 Oct", "7 Oct"];
+    expect(xTicks(week, 420)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it("finds the stretches with no figure: both ends, and inside ones of three or more", () => {
@@ -233,6 +297,80 @@ describe("IndexHover", () => {
     expect(box()).not.toHaveAttribute("tabindex");
     expect(box()).toHaveAttribute("aria-hidden", "true");
   });
+
+  it("hides its card while the point is out of the window", () => {
+    render(<IndexHover xs={[0, 50, 100]} label="Test chart" tip={tip} />);
+    // The chart has scrolled up out of the window.
+    vi.spyOn(box(), "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: -400,
+      right: 200,
+      bottom: -300,
+      width: 200,
+      height: 100,
+      x: 0,
+      y: -400,
+      toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.focus(box());
+    expect(card()).toHaveTextContent("Point 2");
+    expect(card()!.style.visibility).toBe("hidden");
+  });
+
+  it("a key brings its point into view (a box that scrolls sideways may hide it)", () => {
+    const into = vi.fn();
+    // jsdom has no scrollIntoView.
+    Object.defineProperty(Element.prototype, "scrollIntoView", { value: into, configurable: true });
+    try {
+      render(<IndexHover xs={[0, 50, 100]} label="Test chart" tip={tip} />);
+      sized(box());
+      fireEvent.focus(box());
+      fireEvent.keyDown(box(), { key: "Home" });
+      expect(into).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
+      // The pointer needs none: its point is under it.
+      into.mockClear();
+      fireEvent.pointerMove(box(), { clientX: 100, clientY: 50, ...mouse });
+      expect(card()).toHaveTextContent("Point 1");
+      expect(into).not.toHaveBeenCalled();
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it("new figures with fewer points close the card rather than read a point that is gone", () => {
+    const { rerender } = render(<IndexHover xs={[0, 50, 100]} label="Test chart" tip={tip} />);
+    sized(box());
+    fireEvent.pointerMove(box(), { clientX: 199, clientY: 50, ...mouse });
+    expect(card()).toHaveTextContent("Point 2");
+    const gone = (i: number): Tip => {
+      if (i > 1) throw new Error(`asked for point ${i}`);
+      return tip(i);
+    };
+    rerender(<IndexHover xs={[0, 100]} label="Test chart" tip={gone} />);
+    expect(card()).toBeNull();
+  });
+
+  it("lets a finger pinch-zoom from a chart, and swipe a sideways box it sits in", () => {
+    // jsdom applies no CSS: this pins the rule's words. The phone check (a real pinch and a
+    // sideways swipe on each chart) is what proves them.
+    render(
+      <>
+        <IndexHover xs={[0, 100]} label="Test chart" tip={tip} />
+        <PointHover points={[{ x: 50, y: 50, size: 10 }]} tip={tip} label="Bubbles" />
+      </>
+    );
+    for (const layer of document.querySelectorAll("[data-ap-hover]")) {
+      const words = layer.className.split(" ");
+      expect(words).toEqual(
+        expect.arrayContaining([
+          "touch-pan-y",
+          "touch-pinch-zoom",
+          "[.overflow-x-auto_&]:touch-manipulation",
+        ])
+      );
+    }
+    expect(document.querySelectorAll("[data-ap-hover]")).toHaveLength(2);
+  });
 });
 
 describe("PointHover", () => {
@@ -252,6 +390,26 @@ describe("PointHover", () => {
     expect(card()).toBeNull();
   });
 
+  it("a tap that misses every bubble opens nothing, though the box takes focus after it", () => {
+    render(<PointHover points={points} tip={tip} label="Bubbles" />);
+    sized(box());
+    fireEvent.pointerDown(box(), { clientX: 100, clientY: 5, pointerType: "touch" });
+    fireEvent.pointerUp(box(), { pointerType: "touch" });
+    // A phone moves focus once the finger lifts.
+    fireEvent.focus(box());
+    expect(card()).toBeNull();
+    expect(box().querySelector("[aria-live]")).toHaveTextContent("");
+  });
+
+  it("new figures with fewer bubbles close the card", () => {
+    const { rerender } = render(<PointHover points={points} tip={tip} label="Bubbles" />);
+    sized(box());
+    fireEvent.pointerMove(box(), { clientX: 165, clientY: 42, ...mouse });
+    expect(card()).toHaveTextContent("Campaign 1");
+    rerender(<PointHover points={[points[0]!]} tip={tip} label="Bubbles" />);
+    expect(card()).toBeNull();
+  });
+
   it("steps left to right with the arrow keys", () => {
     render(<PointHover points={[points[1]!, points[0]!]} tip={tip} label="Bubbles" />);
     sized(box());
@@ -264,7 +422,79 @@ describe("PointHover", () => {
   });
 });
 
+function Rows() {
+  const t = useRowTip();
+  return (
+    <div>
+      {t.card}
+      <div
+        data-testid="row"
+        {...t.bind(() => ({ title: "Row", rows: [{ label: "A", value: "1" }] }))}
+      >
+        Row
+      </div>
+    </div>
+  );
+}
+
+describe("useRowTip", () => {
+  it("a row's card goes when the finger's touch turns into a scroll", () => {
+    render(<Rows />);
+    const row = screen.getByTestId("row");
+    fireEvent.pointerDown(row, { pointerType: "touch" });
+    expect(card()).toHaveTextContent("RowA1");
+    fireEvent.pointerCancel(row, { pointerType: "touch" });
+    expect(card()).toBeNull();
+  });
+});
+
 describe("Spark", () => {
+  it("writes a point as its tile does, the suffix too, but never a small one as nothing", () => {
+    render(
+      <Spark values={[0.004, 0.25]} name="Open rate" unit="pct" digits={0} titles={["A", "B"]} />
+    );
+    sized(box());
+    fireEvent.pointerMove(box(), { clientX: 1, clientY: 20, ...mouse });
+    expect(card()).toHaveTextContent("Open rate0.40%");
+    fireEvent.pointerMove(box(), { clientX: 199, clientY: 20, ...mouse });
+    expect(card()).toHaveTextContent("Open rate25%");
+    cleanup();
+    render(
+      <Spark
+        values={[0.02, 0.03]}
+        name="ROAS"
+        unit="ratio"
+        digits={2}
+        suffix="×"
+        titles={["A", "B"]}
+      />
+    );
+    sized(box());
+    fireEvent.pointerMove(box(), { clientX: 1, clientY: 20, ...mouse });
+    expect(card()).toHaveTextContent("ROAS0.02×");
+  });
+
+  it("a tile's line is read out by what it draws, and with the tile's suffix", () => {
+    const tile: Tile = {
+      key: "cac",
+      label: "CAC (paid)",
+      unit: "eur",
+      value: 40,
+      prev: null,
+      goodWhen: "down",
+      spark: [2, 3],
+      foot: "",
+      blocked: null,
+      trend: "",
+      line: "Ad spend per submission",
+    };
+    render(<KpiTileV2 tile={tile} titles={["A", "B"]} suffix="!" />);
+    sized(box());
+    fireEvent.pointerMove(box(), { clientX: 199, clientY: 20, ...mouse });
+    expect(card()).toHaveTextContent("Ad spend per submission€3!");
+    expect(card()).not.toHaveTextContent("CAC");
+  });
+
   it("reads out a point only when it knows the points' periods", () => {
     const { rerender } = render(<Spark values={[1, null, 3]} name="Revenue" unit="eur" />);
     expect(box()).toBeNull();
@@ -279,7 +509,7 @@ describe("Spark", () => {
     sized(box());
     fireEvent.pointerMove(box(), { clientX: 100, clientY: 20, ...mouse });
     expect(card()).toHaveTextContent("Week 2");
-    expect(card()).toHaveTextContent("No figure for this point.");
+    expect(card()).toHaveTextContent("No figure for this period.");
     fireEvent.pointerMove(box(), { clientX: 199, clientY: 20, ...mouse });
     expect(card()).toHaveTextContent("Revenue€3");
     // The line breaks at the gap: two runs, the second a lone dot.

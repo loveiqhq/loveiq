@@ -2,8 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 
-import { rangeLabel, trendBuckets } from "@features/admin/server/ap/filters";
-import { delta, deltaRel, fmt, type Tone } from "@features/admin/server/ap/format";
+import { rangeLabel } from "@features/admin/server/ap/filters";
+import { delta, deltaRel, EMPTY, fmt, type Tone } from "@features/admin/server/ap/format";
 import type {
   ChangeBox,
   ReportPayload,
@@ -14,7 +14,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
-import { IndexHover, periodTitle, ROW_HOVER, useRowTip } from "./hover";
+import { bucketTitles, IndexHover, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -65,13 +65,7 @@ const TONE: Record<Tone, string> = {
 
 /** The design's headline tile (KpiTileV2), at the tile's own decimals. */
 function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: string; to: string } }) {
-  return (
-    <KpiTileV2
-      tile={tile}
-      digits={tile.digits}
-      titles={trendBuckets(range.from, range.to).map((b) => periodTitle(b))}
-    />
-  );
+  return <KpiTileV2 tile={tile} digits={tile.digits} titles={bucketTitles(range.from, range.to)} />;
 }
 
 /**
@@ -694,10 +688,9 @@ function TimeSection({ data }: { data: ReportPayload }) {
           band={(i) => ({ left: (i / t.buckets.length) * 100, width: 100 / t.buckets.length })}
           tip={(i) => {
             const b = t.buckets[i]!;
-            const diff = (b.share - b.bench) * 100;
             return {
               title: `${b.label}${b.label.includes("min") ? "" : " min"} of reading`,
-              sub: "Readers' total active reading time",
+              sub: "Readers’ total active reading time",
               rows: [
                 {
                   label: "This report",
@@ -706,14 +699,14 @@ function TimeSection({ data }: { data: ReportPayload }) {
                   mark: "square",
                 },
                 {
-                  label: "All reports",
+                  label: "Benchmark · all reports",
                   value: fmt("pct", b.bench, 1),
                   color: "#161021",
                   mark: "dashed",
                 },
                 {
                   label: "Difference",
-                  value: `${diff > 0.05 ? "+" : diff < -0.05 ? "−" : "±"}${Math.abs(diff).toFixed(1)} pts`,
+                  value: delta("pct", b.share, b.bench, "either")?.text ?? EMPTY,
                   strong: true,
                 },
               ],
@@ -867,13 +860,15 @@ function DepthChart({ data }: { data: ReportPayload }) {
                 return {
                   title: `${b.label}${b.label.endsWith("%") ? "" : "%"} of the report`,
                   sub: "Readers whose deepest chapter is in this band",
+                  // Top first, as the column stacks them.
                   rows: [
-                    ...shown.map(({ g, i: k }) => {
+                    ...[...shown].reverse().map(({ g, i: k }) => {
                       const c = b.counts[k] ?? 0;
                       return {
                         label: g,
-                        value: `${fmt("count", c)} · ${total ? `${Math.round((c / total) * 100)}%` : "—"}`,
-                        color: k === 4 ? "#9c95a3" : DEPTH_COLOURS[k],
+                        value: `${fmt("count", c)} · ${total ? fmt("pct", c / total, 1) : EMPTY}`,
+                        color: DEPTH_COLOURS[k],
+                        ...(k === 4 ? { outline: "#9c95a3" } : {}),
                         mark: "square" as const,
                         muted: c === 0,
                       };
@@ -956,9 +951,16 @@ function TimeSplit({
                   value: fmt("mmss", v),
                   color: GROUP_COLOURS[i % GROUP_COLOURS.length],
                   mark: "square",
+                  muted: v === null,
                 },
-                { label: "All reports", value: fmt("mmss", b), color: "#161021", mark: "line" },
-                { label: "Difference", value: d?.text ?? "—", strong: true },
+                {
+                  label: "All reports",
+                  value: fmt("mmss", b),
+                  color: "#161021",
+                  mark: "line",
+                  muted: b === null,
+                },
+                { label: "Difference", value: d?.text ?? EMPTY, strong: d !== null, muted: !d },
               ],
             }))}
           >
