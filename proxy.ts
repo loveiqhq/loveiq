@@ -11,6 +11,7 @@ import {
 } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
 import { reportingDay } from "@shared/time/reporting-day";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 
 // Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
 // `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
@@ -209,6 +210,9 @@ export function shouldCountVisit(request: NextRequest): boolean {
   const accept = request.headers.get("accept") || "";
   const isDocument = dest === "document" || (dest === null && accept.includes("text/html"));
   if (!isDocument) return false;
+  // Our own site checks are not visitors (shared/http/probe-cookie.ts): they open the
+  // landing page and the survey on several devices a day, and every open wrote a visit.
+  if (isProbeRequest(request.headers.get("cookie"))) return false;
   return !LANDING_BOT_UA_REGEX.test(request.headers.get("user-agent") || "");
 }
 

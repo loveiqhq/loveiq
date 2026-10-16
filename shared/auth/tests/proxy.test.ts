@@ -781,6 +781,7 @@ describe("proxy — consent-independent daily unique-visit count", () => {
       secPurpose?: string;
       liqDv?: string;
       liqDs?: string;
+      cookie?: string;
     } = {}
   ) {
     const url = `http://localhost:3000${opts.path ?? "/"}`;
@@ -789,6 +790,7 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     if (opts.dest !== null) headers.set("sec-fetch-dest", opts.dest ?? "document");
     if (opts.accept) headers.set("accept", opts.accept);
     if (opts.secPurpose) headers.set("sec-purpose", opts.secPurpose);
+    if (opts.cookie) headers.set("cookie", opts.cookie);
     return {
       method: opts.method ?? "GET",
       headers,
@@ -832,6 +834,16 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     expect(shouldCountVisit(makeVisitRequest({ dest: null, accept: "application/json" }))).toBe(
       false
     );
+  });
+
+  it("a probe's open is neither a visit nor a survey-page view", () => {
+    // Our own site checks set loveiq_probe=1 (scripts/probes/staging-cookie.mjs).
+    const probe = "cookieyes-consent=x; loveiq_probe=1";
+    expect(shouldCountVisit(makeVisitRequest({ cookie: probe }))).toBe(false);
+    expect(shouldCountSurveyView(makeVisitRequest({ path: "/survey", cookie: probe }))).toBe(false);
+    // Only that exact cookie: a look-alike is a visitor.
+    expect(shouldCountVisit(makeVisitRequest({ cookie: "not_loveiq_probe=1" }))).toBe(true);
+    expect(shouldCountVisit(makeVisitRequest({ cookie: "loveiq_probe=10" }))).toBe(true);
   });
 
   it("counts a survey-page view by the same rules as a visit", () => {

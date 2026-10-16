@@ -688,8 +688,9 @@ testing on either.
    `gclid`, `gbraid`, `wbraid` or `utm_source=google` lets Google Ads credit the visit to
    a campaign. Without one, in a profile not signed in to Google, it cannot.
 4. **Set the probe cookie** `loveiq_probe=1` on `www.loveiq.org`
-   (`shared/http/probe-cookie.ts`). It turns PostHog off for the visit and skips the
-   `report_session` row. It does nothing else.
+   (`shared/http/probe-cookie.ts`). It turns PostHog off for the visit, skips the
+   `report_session` row and writes no `funnel_event` row (the visit, survey-page and
+   survey-intro counts). It does nothing else.
 5. **Desktop, in a browser Playwright launches:** abort Google, Clarity and PostHog
    requests with `context.route` (let `gtag/js` and `gtm.js` themselves load), and check
    tracking by reading the aborted requests. On 2026-10-06 nothing got through to GA4.
