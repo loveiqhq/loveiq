@@ -59,6 +59,30 @@ describe("peopleIn — one name for a person, whatever the source called them", 
     ]);
   });
 
+  /**
+   * Google names the person behind its notifications "Name (Google Docs)" or "Name (via
+   * Google Drive)": 243 records said "Sanjin Kacevac (Google Docs)" on 2026-10-16, and none
+   * resolved, so a filter by a colleague missed every comment Google mailed about them.
+   */
+  it("reads the person behind a Google notification", () => {
+    expect(
+      peopleIn(
+        { participants: ["Marcus Börner (Google Docs) <comments-noreply@docs.google.com>"] },
+        REG
+      )
+    ).toEqual(["Marcus Börner"]);
+    expect(peopleIn({ participants: ["Mark Oldenburg (via Google Drive)"] }, REG)).toEqual([
+      "Mark Oldenburg",
+    ]);
+    expect(peopleIn({ participants: ["Eman Cickusic (via Google Sheets)"] }, REG)).toEqual([
+      "Eman Cickusic",
+    ]);
+  });
+
+  it("keeps any other bracket as part of the name", () => {
+    expect(peopleIn({ participants: ["Marcus Börner (personal)"] }, REG)).toBeUndefined();
+  });
+
   it("collects across several identity fields at once and de-duplicates", () => {
     expect(peopleIn({ author: "Eman", speakers: ["Eman Cickusic", "Marcus"] }, REG)).toEqual([
       "Eman Cickusic",

@@ -12,7 +12,10 @@
  * phone export that exists on one laptop — so this backfills in place instead.
  *
  * Safe to run against production, and safe to re-run:
- *   - It only reads rows that LACK `meta.people`, so a second run does nothing.
+ *   - It only reads rows that LACK `meta.people`, so a second run does nothing. With
+ *     `--all` it recomputes every row and writes only where the names differ: what a new
+ *     colleague on the registry, or a new spelling it learns, needs, because a row that
+ *     already names somebody else would otherwise never gain them.
  *   - It writes only when the registry resolves a name; an unresolvable author
  *     (a vendor, a shared mailbox, "someone") is left alone rather than stamped empty.
  *   - It does not touch `updated_at`, so source sweeps are unaffected.
@@ -20,6 +23,7 @@
  *
  *   npx tsx scripts/brain-backfill-people.ts --dry
  *   npx tsx scripts/brain-backfill-people.ts
+ *   npx tsx scripts/brain-backfill-people.ts --all --dry
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { loadPeople, peopleIn } from "@features/brain/server/people";
@@ -28,6 +32,7 @@ const PAGE = 500;
 
 async function main() {
   const dry = process.argv.includes("--dry");
+  const all = process.argv.includes("--all");
   const byAlias = await loadPeople();
   // A registry that cannot be read must stop the run, not quietly stamp nothing.
   if (!byAlias) {
@@ -59,10 +64,12 @@ async function main() {
 
       for (const row of rows) {
         const meta = row.meta ?? {};
-        if (meta.people) continue;
+        if (meta.people && !all) continue;
         scanned[source] = (scanned[source] ?? 0) + 1;
         const people = peopleIn(meta, byAlias);
         if (!people) continue;
+        const had = Array.isArray(meta.people) ? [...(meta.people as string[])].sort() : [];
+        if (had.length === people.length && had.every((n, i) => n === people[i])) continue;
         if (!dry) {
           // PATCH replaces the whole jsonb column, so the existing meta is spread back in.
           const put = await supabaseFetch(`/rest/v1/brain_chunk?id=eq.${row.id}`, {
@@ -84,7 +91,7 @@ async function main() {
     if (scanned[source]) {
       console.log(
         `  ${source.padEnd(9)} ${String(written[source] ?? 0).padStart(5)} of ${String(scanned[source]).padStart(5)} ` +
-          `chunks without \`people\` resolved${dry ? " (dry run, nothing written)" : ""}`
+          `chunks ${all ? "whose \`people\` changed" : "without \`people\` resolved"}${dry ? " (dry run, nothing written)" : ""}`
       );
     }
   }

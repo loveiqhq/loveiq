@@ -100,7 +100,11 @@ const MAX_PAGES = 20;
 // force a refetch (absent means unknown, unknown means fetch); what it cannot do is
 // reach the documents nobody thought to delete. Check a run's start time against the
 // action before reading its counters as evidence.
-export const DRIVE_BUILDER_VERSION = 5;
+// v6: v5 cut a spreadsheet at 400,000 characters in all, so a workbook's later tabs were never
+// indexed, and did not record a document's part count on its first part, so a document left
+// with parts missing was never read again (2026-10-16). Bumped so every document is rebuilt
+// once with both; a rewrite of unchanged text keeps its embedding.
+export const DRIVE_BUILDER_VERSION = 6;
 
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
@@ -659,8 +663,42 @@ const clean = (t: string): string =>
 
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 
-/** Same ceiling as a pdf: a spreadsheet is the other easy way to blow up a chunk. */
-const SHEET_TEXT_LIMIT = 400_000;
+/**
+ * 800,000 characters a spreadsheet, SHARED FAIRLY BETWEEN ITS TABS.
+ *
+ * The whole file used to be cut at 400,000, so every tab after the first big one was never
+ * indexed. The "Assessments" workbook holds 3.2 million characters in 22 tabs, 2.3 million of
+ * them in Challenges, and only its first 5 tabs were in the corpus when the team searched for
+ * its Emotions, Areas of life and Life Situations tabs on 2026-10-16. Now a tab smaller than
+ * its fair share goes in whole, what it leaves is shared among the larger ones, and a cut is
+ * said where it is made, so every tab is there.
+ */
+const SHEET_TEXT_LIMIT = 800_000;
+
+const TAB_CUT =
+  "[truncated: this tab is longer than the brain indexes; open the sheet for the rest]";
+
+/** The tabs' texts joined, each cut to its fair share of `budget`. Exported for tests. */
+export function fitTabs(tabs: string[], budget: number = SHEET_TEXT_LIMIT): string {
+  const allow = new Array<number>(tabs.length).fill(0);
+  let left = budget;
+  // Smallest first: a tab under the even share frees the rest for the bigger ones.
+  const bySize = tabs.map((t, i) => [t.length, i] as const).sort((a, b) => a[0] - b[0]);
+  bySize.forEach(([size, i], k) => {
+    const share = Math.floor(left / (tabs.length - k));
+    allow[i] = Math.min(size, share);
+    left -= allow[i]!;
+  });
+  return tabs
+    .map((tab, i) => {
+      if (tab.length <= allow[i]!) return tab;
+      // On a line, so a row is never half shown; the heading always stays.
+      const head = tab.indexOf("\n") + 1 || tab.length;
+      const at = tab.lastIndexOf("\n", allow[i]);
+      return `${tab.slice(0, Math.max(at, head))}\n${TAB_CUT}`;
+    })
+    .join("\n\n");
+}
 
 /**
  * EVERY TAB, not just the first one.
@@ -756,10 +794,7 @@ async function sheetText(token: string, fileId: string): Promise<string> {
     parts.push(`## ${titles[i] ?? `Sheet ${i + 1}`}\n${rows.join("\n")}`);
   });
 
-  const joined = clean(parts.join("\n\n"));
-  return joined.length > SHEET_TEXT_LIMIT
-    ? `${joined.slice(0, SHEET_TEXT_LIMIT)}\n\n[truncated: this spreadsheet is longer than the brain indexes]`
-    : joined;
+  return clean(fitTabs(parts));
 }
 
 async function docText(token: string, fileId: string, mimeType?: string): Promise<string> {
@@ -1158,8 +1193,19 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
           meta: { ...base.meta, illustrative: true },
         }
       : { title: base.title, meta: base.meta };
+    // The first part says how many there are, so a document left with parts missing can be
+    // told from a short one and read again (see the walk).
     return i === 0
-      ? { ...base, title: own.title, body, meta: { ...own.meta, section: sectionOf(0) } }
+      ? {
+          ...base,
+          title: own.title,
+          body,
+          meta: {
+            ...own.meta,
+            section: sectionOf(0),
+            ...(parts.length > 1 ? { parts: parts.length } : {}),
+          },
+        }
       : {
           ...base,
           source_id: `${base.source_id}#${i + 1}`,
@@ -1171,8 +1217,10 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
 }
 
 /** source_id → what is already indexed, for the incremental skip. */
-async function knownDriveEdits(): Promise<Map<string, { edited: string; v: number }>> {
-  const out = new Map<string, { edited: string; v: number }>();
+async function knownDriveEdits(): Promise<
+  Map<string, { edited: string; v: number; parts?: number }>
+> {
+  const out = new Map<string, { edited: string; v: number; parts?: number }>();
   for (let offset = 0; offset < 50_000; offset += 1000) {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
@@ -1181,12 +1229,14 @@ async function knownDriveEdits(): Promise<Map<string, { edited: string; v: numbe
     // keep set is what the sweep deletes against. See chunkPage.
     const batch = await chunkPage<{
       source_id?: string;
-      meta?: { edited?: unknown; v?: unknown } | null;
+      meta?: { edited?: unknown; v?: unknown; parts?: unknown } | null;
     }>("drive", res);
     for (const row of batch) {
       const edited = row.meta?.edited;
       const v = typeof row.meta?.v === "number" ? row.meta.v : 0;
-      if (row.source_id && typeof edited === "string") out.set(row.source_id, { edited, v });
+      const parts = typeof row.meta?.parts === "number" ? row.meta.parts : undefined;
+      if (row.source_id && typeof edited === "string")
+        out.set(row.source_id, { edited, v, ...(parts ? { parts } : {}) });
     }
     if (batch.length < 1000) break;
   }
@@ -1212,7 +1262,7 @@ async function knownDriveEdits(): Promise<Map<string, { edited: string; v: numbe
  * the document for being unread.
  */
 function partIdsOf(
-  known: Map<string, { edited: string; v: number }>,
+  known: Map<string, { edited: string; v: number; parts?: number }>,
   baseId: string,
   atVersion?: number
 ): string[] {
@@ -1541,10 +1591,18 @@ export async function ingestDrive(
     const sourceId = `doc:${file.id}`;
     const edited = file.modifiedTime ?? file.createdTime ?? null;
     const seen = known.get(sourceId);
-    if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION) {
+    const current = partIdsOf(known, sourceId, DRIVE_BUILDER_VERSION);
+    /**
+     * A DOCUMENT MISSING PARTS IS READ AGAIN, though its edit date has not moved. Measured
+     * 2026-10-16: "Scoring Config V5" held 1 of the 46 parts its text makes and "Funnel
+     * Analysis" 1 of 2, and five more were single clipped parts. Nothing read them again,
+     * because nothing about them in Drive changed. The first part now says how many there are.
+     */
+    const whole = !seen?.parts || 1 + current.length >= seen.parts;
+    if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION && whole) {
       // Current version only: an orphan part from a longer previous version must
       // look absent to the sweep, not be confirmed by it.
-      touch.push(sourceId, ...partIdsOf(known, sourceId, DRIVE_BUILDER_VERSION));
+      touch.push(sourceId, ...current);
     } else {
       toFetch.push(file);
     }

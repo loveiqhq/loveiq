@@ -79,6 +79,16 @@ export async function loadPeople(): Promise<Map<string, Person> | null> {
   }
 }
 
+/**
+ * "Sanjin Kacevac (Google Docs)", "Ajna Dizdarevic (via Google Drive)": how Google names the
+ * person behind a notification it sends for them. Measured 2026-10-16: 243 records said
+ * "Sanjin Kacevac (Google Docs)", 152 "Marcus Börner (Google Docs)", 103 "Mark Oldenburg
+ * (Google Docs)", and none matched the person, so a filter by a colleague missed every
+ * comment and share Google mailed about them. Only a trailing "(via …)" or Google product
+ * is cut; any other bracket stays part of the name.
+ */
+const SENT_FOR = /\s*\((?:via\s+[^()]+|google\s+(?:docs|sheets|slides|forms|drive))\)\s*$/i;
+
 /** "Marcus Börner <mb@loveiq.org>" -> both halves; a bare value -> itself. */
 function candidates(raw: string): string[] {
   const out: string[] = [];
@@ -89,7 +99,7 @@ function candidates(raw: string): string[] {
   } else {
     out.push(raw.trim());
   }
-  return out.filter(Boolean);
+  return out.map((name) => name.replace(SENT_FOR, "").trim()).filter(Boolean);
 }
 
 function rawIdentities(meta: Record<string, unknown>): string[] {

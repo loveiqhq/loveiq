@@ -19,7 +19,13 @@ import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { sheetTabsWithRows } from "@features/brain/server/ingest/drive";
-import { DRIVE_SCOPE, getDelegatedToken, readVercelOidcToken } from "@shared/http/google-oauth";
+import {
+  DIRECTORY_SCOPE,
+  DRIVE_SCOPE,
+  getDelegatedToken,
+  readVercelOidcToken,
+} from "@shared/http/google-oauth";
+import { loadPeople, nameKey } from "@features/brain/server/people";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -637,6 +643,70 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
   };
 }
 
+/**
+ * EVERY WORKSPACE ACCOUNT ON JARVIS'S PEOPLE LIST, as a person or as a shared account.
+ *
+ * A colleague missing from `brain_person` is invisible to every filter by name: nothing
+ * carries them in `meta.people`. Ajna's account was created on 2026-10-01 and was still
+ * missing on 2026-10-16, when 5 of the 9 searches that found nothing that week had filtered
+ * by her name. The list is kept by hand, so this says who to add; null when the directory
+ * or the list cannot be read, which is "not checked", not "fine".
+ */
+export async function directoryPeopleReading(request: Request): Promise<Reading | null> {
+  const admin = process.env.GOOGLE_WORKSPACE_ADMIN?.trim();
+  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
+  if (!admin || !domain) return null;
+  const token = await getDelegatedToken(
+    admin,
+    DIRECTORY_SCOPE,
+    Date.now(),
+    readVercelOidcToken(request)
+  );
+  if (!token) return null;
+  const byAlias = await loadPeople();
+  if (!byAlias) return null;
+
+  const accounts: Array<{ email: string; name: string }> = [];
+  let pageToken = "";
+  for (let page = 0; page < 10; page++) {
+    const res = await fetchWithTimeout(
+      "https://admin.googleapis.com/admin/directory/v1/users" +
+        `?domain=${encodeURIComponent(domain)}&maxResults=200&query=isSuspended=false` +
+        `&fields=${encodeURIComponent("nextPageToken,users(primaryEmail,name(fullName),archived,suspended)")}` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
+      { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 15_000 }
+    );
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => null)) as {
+      users?: Array<{
+        primaryEmail?: string;
+        name?: { fullName?: string };
+        archived?: boolean;
+        suspended?: boolean;
+      }>;
+      nextPageToken?: string;
+    } | null;
+    if (!json) return null;
+    for (const u of json.users ?? []) {
+      if (u.primaryEmail && !u.archived && !u.suspended)
+        accounts.push({ email: u.primaryEmail, name: u.name?.fullName?.trim() || "no name" });
+    }
+    pageToken = json.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  const missing = accounts.filter((a) => !byAlias.has(nameKey(a.email)));
+  return {
+    what: "Workspace accounts on Jarvis's people list",
+    left: { source: "the Google directory", value: accounts.length },
+    right: { source: "brain_person", value: accounts.length - missing.length },
+    tolerance: 0,
+    because: missing.length
+      ? `Not on the list: ${missing.map((a) => `${a.email} (${a.name})`).join(", ")}. ` +
+        `Add each to brain_person, as a person or as a shared account`
+      : undefined,
+  };
+}
+
 export async function GET(request: Request) {
   // Returns a boolean, not a response — the same shape every other cron checks.
   if (!verifyCronAuth(request)) {
@@ -664,6 +734,14 @@ export async function GET(request: Request) {
     } catch (err) {
       logger.warn({ err }, "brain-reconcile: the spreadsheet tab check could not run");
       unread.push("spreadsheet tabs");
+    }
+    try {
+      const people = await directoryPeopleReading(request);
+      if (people) readings.push(people);
+      else unread.push("people list (no directory or registry)");
+    } catch (err) {
+      logger.warn({ err }, "brain-reconcile: the people-list check could not run");
+      unread.push("people list");
     }
     checked = readings.length;
     const found = reconcile(readings);
