@@ -316,6 +316,9 @@ describe("show_chart: what gets drawn", () => {
     expect(picture).toContain("GA4 sessions — could not be read");
     expect(picture).toContain("Visitors");
     expect(picture.join(" ")).not.toMatch(/no data/);
+    // Named first, the same.
+    const first = await draw({ metrics: ["sessions", "visitors"], days: 7 });
+    expect(pictureTexts(first.payload)).toContain("GA4 sessions — could not be read");
     expect(both.text).not.toMatch(/nothing recorded|no record|decline cookies/i);
     // A chart of our own figures alone says nothing of it.
     const visitors = await draw({ metrics: ["visitors"], days: 7 });
