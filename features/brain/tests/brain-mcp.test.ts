@@ -5962,69 +5962,104 @@ describe("/api/mcp", () => {
 
       /**
        * FOUND ON PRODUCTION 2026-10-16 (review of #598): names that hold someone's details and
-       * that the list did not match, and spellings it did not read. Each value here would have
-       * come back as it is; the business fields beside them must come back untouched.
+       * that the list did not match. ONE CASE PER NAME, each with its own value and nothing
+       * else private in the row, so deleting any one name from the list fails its own case.
+       * Values are plain words: an address or a token would be masked by its shape anyway.
        */
-      it("masks the names production showed were missed, in any spelling, and keeps business fields", async () => {
-        const row = {
-          id: 1,
-          "request-ip": "10.1.2.3x",
-          $ip: "10.4.5.6x",
-          email_address: "by-name-only",
-          subscriber_emails: ["by-name-only"],
-          email_normalized: "by-name-only",
-          email_sha256: "9f86d081884c7d659a2feaa0c55ad015",
-          card_last4: "4242",
-          card_exp_month: 12,
-          card_exp_year: 2031,
-          card_brand: "visa",
-          posthog_session_id: "019a2b3c-session",
-          hotjar_user_id: "hj-77",
-          email_position: "first",
-          metadata: {
-            promoCode: "LIQ-50-AB12CD",
-            promotionCode: "promo_1Abc",
-            promoStage: "30h_no_unlock",
-            promoPercentOff: 50,
-            couponName: "nurture_50",
+      it.each([
+        ["emails", "subscriber_emails"],
+        ["email_normalized", "email_normalized"],
+        ["email_sha256", "email_sha256"],
+        ["last4", "card_last4"],
+        ["exp_month", "card_exp_month"],
+        ["exp_year", "card_exp_year"],
+        ["regeneration_url", "regeneration_url"],
+        ["address", "address"],
+        ["address, as email_address", "email_address"],
+        ["customer_details", "customer_details"],
+        ["billing_details", "billing_details"],
+        ["shipping_details", "shipping_details"],
+        ["collected_information", "collected_information"],
+        ["individual_name", "individual_name"],
+        ["business_name", "business_name"],
+        ["cardholder_name", "cardholder_name"],
+        ["billing_name", "billing_name"],
+        ["contact_name", "contact_name"],
+        ["partner_name", "partner_name"],
+        ["recipient_name", "recipient_name"],
+        ["sender_name", "sender_name"],
+        ["phone_number", "phone_number"],
+        ["city", "city"],
+        ["street", "street"],
+        ["promo_code, as camelCase", "promoCode"],
+        ["promotion_code, as camelCase", "promotionCode"],
+        ["code, matched whole", "code"],
+        ["ip, spelled with a hyphen", "request-ip"],
+        ["ip, spelled with a dollar", "$ip"],
+        ["address, spelled with a space", "Email Address"],
+      ])("masks %s", async (_name, key) => {
+        const value = `plain-value-of-${key.replace(/\W/g, "")}`;
+        wire([{ id: 1, plan: "full_report", [key]: value }]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain(value);
+        expect(text).toContain(`${JSON.stringify(key)}:"[private #`);
+        expect(text).toContain('"plan":"full_report"');
+      });
+
+      it("masks a Stripe customer's name, and only a customer's", async () => {
+        wire([
+          { id: 1, object: "customer", name: "plain-customer-name" },
+          { id: 2, object: "campaign", name: "Spring sale" },
+        ]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain("plain-customer-name");
+        expect(text).toContain('"name":"Spring sale"');
+      });
+
+      /**
+       * WHAT STAYS READABLE. Reducing analytics is Eman's decision, never a review's: the
+       * answer labels of the lift analysis, each promo stage's terms, the plan, amount, arm and
+       * utm fields, and the ids that join a survey to its recording.
+       */
+      it("keeps the analytics fields beside them readable", async () => {
+        wire([
+          {
+            id: 1,
             plan: "full_report",
-            countryTier: "tier_1",
-            nurtureEmailsSent: ["6h_no_view"],
-            nurturePromoCodes: {
-              "30h_no_unlock": { code: "LIQ-50-ZZ99", stripePromotionCodeId: "promo_9" },
-            },
-            answer: "a changed survey answer",
+            amount: 6.99,
             arm: "white_video",
+            utm_source: "google",
+            utm_medium: "cpc",
+            utm_campaign: "men_25_44",
+            posthog_session_id: "019a2b3c-session",
+            hotjar_user_id: "hj-77",
+            card_brand: "visa",
+            email_position: "first",
+            metadata: {
+              promoStage: "30h_no_unlock",
+              promoPercentOff: 50,
+              couponName: "nurture_50",
+              nurtureEmailsSent: ["6h_no_view"],
+              nurturePromoCodes: {
+                "30h_no_unlock": {
+                  code: "plain-stage-code",
+                  percentOff: 50,
+                  expiresAt: "2026-10-18T10:00:00Z",
+                  stripePromotionCodeId: "promo_9",
+                },
+              },
+            },
           },
-          event_data: {
-            amount_total: 699,
-            customer_details: { name: "Jane Doe", address: { line1: "1 Main St", country: "DE" } },
-            collected_information: { individual_name: "Jane Doe" },
-            discounts: [{ promotion_code: "promo_7" }],
-          },
-        };
-        wire([row]);
-        const r = await call({ table: "payment" });
-        const text = r.content[0].text;
-        for (const secret of [
-          "10.1.2.3x",
-          "10.4.5.6x",
-          "by-name-only",
-          "9f86d081884c7d659a2feaa0c55ad015",
-          "4242",
-          "2031",
-          "LIQ-50-AB12CD",
-          "promo_1Abc",
-          "LIQ-50-ZZ99",
-          "a changed survey answer",
-          "Jane Doe",
-          "1 Main St",
-          "promo_7",
-        ]) {
-          expect(text, secret).not.toContain(secret);
-        }
+        ]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain("plain-stage-code");
         for (const kept of [
-          // Analytics ids are Eman's call (never reduced without his go): readable for now.
+          '"plan":"full_report"',
+          '"amount":6.99',
+          '"arm":"white_video"',
+          '"utm_source":"google"',
+          '"utm_medium":"cpc"',
+          '"utm_campaign":"men_25_44"',
           '"posthog_session_id":"019a2b3c-session"',
           '"hotjar_user_id":"hj-77"',
           '"card_brand":"visa"',
@@ -6032,14 +6067,41 @@ describe("/api/mcp", () => {
           '"promoStage":"30h_no_unlock"',
           '"promoPercentOff":50',
           '"couponName":"nurture_50"',
-          '"plan":"full_report"',
-          '"countryTier":"tier_1"',
           '"nurtureEmailsSent":["6h_no_view"]',
-          '"arm":"white_video"',
-          '"amount_total":699',
+          '"percentOff":50',
+          '"expiresAt":"2026-10-18T10:00:00Z"',
+          '"stripePromotionCodeId":"promo_9"',
         ]) {
           expect(text, kept).toContain(kept);
         }
+      });
+
+      /**
+       * A FUNCTION'S RESULT IS ONE VALUE, read through the same gate. `answer` was a private
+       * name for a day and hid this analysis's answer labels (review of #598, 2026-10-16).
+       */
+      it("keeps get_answer_conversion_lift's answer labels readable", async () => {
+        wire({
+          baseline_pct: 2.1,
+          baseline_n: 900,
+          baseline_paid: 19,
+          pairs: [
+            {
+              q_id: "01002",
+              q_text: "Right now, I feel satisfied",
+              answer: "Strongly agree",
+              n: 40,
+              paid_n: 4,
+              rate_pct: 10,
+              lift_pct: 376,
+            },
+          ],
+        });
+        const r = await call({ table: "rpc/get_report_counts", params: {} });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toContain('"answer":"Strongly agree"');
+        expect(r.content[0].text).toContain('"q_text":"Right now, I feel satisfied"');
+        expect(r.content[0].text).not.toContain("[private");
       });
 
       it("masks an email address inside ordinary text, and keeps the sentence", async () => {
@@ -7444,6 +7506,76 @@ describe("/api/mcp", () => {
         expect(r.content[0].text, path).toMatch(/not a sign the service is unreachable/);
       }
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    /**
+     * STRIPE'S OWN KEY NAMES, through this gateway and in the refund webhooks that store a
+     * whole charge (review of #598): a card's `last4` and expiry, a promotion code's `code`
+     * (100% codes among them) and a customer's `name`. The card's brand and `fingerprint`, the
+     * amount and a coupon's own name stay readable.
+     */
+    it("masks a card's digits, a promotion code and a customer's name in Stripe's payloads", async () => {
+      const payloads: Record<string, unknown> = {
+        "/charges": {
+          object: "list",
+          data: [
+            {
+              object: "charge",
+              amount: 699,
+              payment_method_details: {
+                type: "card",
+                card: {
+                  brand: "visa",
+                  last4: "4111",
+                  exp_month: 11,
+                  exp_year: 2039,
+                  fingerprint: "Fp123",
+                },
+              },
+            },
+          ],
+        },
+        "/customers": {
+          data: [
+            {
+              object: "customer",
+              id: "cus_1",
+              name: "plain-customer-name",
+              metadata: { plan: "full_report" },
+            },
+          ],
+        },
+        "/promotion_codes": {
+          data: [
+            {
+              object: "promotion_code",
+              id: "promo_1",
+              code: "FREE100",
+              coupon: { name: "Partner 100", percent_off: 100 },
+            },
+          ],
+        },
+      };
+      mockFetch.mockImplementation(async (url: string) => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(payloads[new URL(String(url)).pathname.replace(/^\/v1/, "")]),
+      }));
+      const charges = (await call({ service: "stripe", path: "/charges" })).content[0]!.text;
+      expect(charges).not.toMatch(/4111|2039|"exp_month":11/);
+      expect(charges).toMatch(/"last4":"\[private #/);
+      for (const kept of ['"brand":"visa"', '"fingerprint":"Fp123"', '"amount":699']) {
+        expect(charges, kept).toContain(kept);
+      }
+      const customers = (await call({ service: "stripe", path: "/customers" })).content[0]!.text;
+      expect(customers).not.toContain("plain-customer-name");
+      expect(customers).toContain('"id":"cus_1"');
+      expect(customers).toContain('"plan":"full_report"');
+      const codes = (await call({ service: "stripe", path: "/promotion_codes" })).content[0]!.text;
+      expect(codes).not.toContain("FREE100");
+      expect(codes).toContain('"name":"Partner 100"');
+      expect(codes).toContain('"percent_off":100');
     });
 
     it("rejects an unknown service rather than guessing a base URL", async () => {

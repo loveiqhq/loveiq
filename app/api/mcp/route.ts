@@ -3255,18 +3255,20 @@ const PRIVATE_SUFFIXES = [
    * `subscriber_emails`, and the deletion log's `email_normalized` and `email_sha256`:
    * addresses and a hash of one. */
   "emails",
-  "email_address",
   "email_normalized",
   "email_sha256",
-  // `payment`: 31 rows carry the card's last four digits and expiry. `card_brand` stays.
-  "card_last4",
-  "card_exp_month",
-  "card_exp_year",
+  // A card's last four digits and expiry: `payment.card_last4` (31 rows) and Stripe's own
+  // `last4`, `exp_month` and `exp_year` on charges and in refund webhooks, so a suffix.
+  // `card_brand` stays, and so does Stripe's card `fingerprint`, a hash Eman may decide on.
+  "last4",
+  "exp_month",
+  "exp_year",
   // `survey_submission`'s PostHog and Hotjar ids stay readable: they are what joins a survey
   // to its recording, and reducing analytics is Eman's call, not a review's (2026-10-16).
   "regeneration_url",
   // Stripe's checkout payloads in `payment_webhook_event`: the buyer's name, address and
   // phone, under these containers and names (`country` inside them goes with them).
+  // `address` also covers `email_address` and `billing_address`.
   "address",
   "customer_details",
   "billing_details",
@@ -3283,14 +3285,14 @@ const PRIVATE_SUFFIXES = [
   "phone_number",
   "city",
   "street",
-  // A person's own discount code: `payment.metadata.promoCode`, the webhooks' promotion
-  // codes and `report_price_quote.metadata.nurturePromoCodes` (834 rows). `promoStage`,
-  // `promoPercentOff` and `couponName` say which offer it was, and stay.
+  // A person's own discount code: `payment.metadata.promoCode` and the webhooks' promotion
+  // codes. `promoStage`, `promoPercentOff` and `couponName` say which offer it was, and stay;
+  // the bare `code` inside `nurturePromoCodes` and Stripe's promotion codes is PRIVATE_EXACT,
+  // so each stage's `percentOff`, `expiresAt` and promotion id stay readable.
   "promo_code",
   "promotion_code",
-  "nurture_promo_codes",
-  // `admin_audit_log.metadata.answer`: 20 survey answers an admin changed.
-  "answer",
+  // NOT `answer`: it hid the answer labels of `rpc/get_answer_conversion_lift` (which
+  // answers predict a sale), an analysis the team uses; reducing analytics is Eman's call.
 ];
 
 /**
@@ -3304,6 +3306,9 @@ const PRIVATE_SUFFIXES = [
  * credential list already states.
  */
 const PRIVATE_EXACT = [
+  // A promo code, which is all a bare `code` holds in this database (checked 2026-10-16:
+  // the nurture stages' codes and Stripe's promotion codes, 100% codes among them).
+  "code",
   "api_key",
   "apikey",
   "secret_key",
@@ -3827,7 +3832,13 @@ function redactPrivateColumns(
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
     for (const key of Object.keys(copy)) {
       if (copy[key] === null || copy[key] === undefined) continue;
-      if (isPrivateName(key) || (depth === 0 && alsoPrivate.has(key))) {
+      // Stripe names a customer `name` beside `object: "customer"`; elsewhere a `name` is a
+      // thing's (a campaign, a segment), so only that object's is a person's.
+      if (
+        isPrivateName(key) ||
+        (depth === 0 && alsoPrivate.has(key)) ||
+        (key === "name" && copy.object === "customer")
+      ) {
         hit.add(key);
         copy[key] = privateTag(copy[key]);
         continue;

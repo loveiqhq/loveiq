@@ -375,12 +375,16 @@ Since 2026-10-16 (#598) the gate also:
   `e:email` or `from:metadata->>requestIp` is masked under its new name. Casts (`::`) stay refused: a cast
   turns a whole jsonb column into one string. JSON text inside a value (`metadata->>contact`) is masked
   by its keys.
-- **Masks what production showed it missed.** A review found card details on `payment`, PostHog session
-  ids on `survey_submission`, the deletion log's email columns, `subscriber_emails`, Stripe's buyer name
-  and address in `payment_webhook_event`, personal promo codes (`promoCode`, `nurturePromoCodes`) and
-  `admin_audit_log.metadata.answer`, as the team export already masks them. `request-ip`, `$ip` and
-  `Email Address` are read as `request_ip`, `ip` and `email_address`. Plan, amount, arm, `couponName`,
-  `promoStage` and `email_position` stay readable.
+- **Masks what production showed it missed.** A review found card digits and expiry (`payment.card_last4`
+  and Stripe's own `last4`, `exp_month`, `exp_year`), the deletion log's email columns, `subscriber_emails`,
+  Stripe's buyer name and address (`customer_details`, a customer object's `name`) and personal promo
+  codes (`promoCode`, and the bare `code` in `nurturePromoCodes` and Stripe's promotion codes), as the
+  team export already masks them. `request-ip`, `$ip` and `Email Address` are read as `request_ip`,
+  `ip` and `email_address`. Analytics stay readable: answer labels (`get_answer_conversion_lift`), each
+  promo stage's `percentOff` and `expiresAt`, plan, amount, arm, the utm fields, `couponName`,
+  `promoStage`, `email_position`, Stripe's card `fingerprint`, and `survey_submission`'s
+  `posthog_session_id` and `hotjar_user_id`, which join a survey to its recording. Masking any of those
+  is Eman's decision.
 - **Masks an email address inside ordinary text,** for example in 21 `cron_run` error messages, found
   by walking out from each `@`.
 - **Refuses a filter named like PostgREST's own parameters** (`select=`, `order=`, `limit=`, `offset=`,
