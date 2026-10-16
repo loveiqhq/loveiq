@@ -448,6 +448,13 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(compared.text).toMatch(
       /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09 \(6 days, 6 with data\)/
     );
+    // A compared range that reaches today is read to yesterday too.
+    const reaching = await call({
+      since: "2026-10-01",
+      until: "2026-10-07",
+      compare_to: "2026-10-09..2026-10-16",
+    });
+    expect(reaching.text).toMatch(/versus 2026-10-09 to 2026-10-15 \(7 days, 7 with data\)/);
     const today = await call({ since: "2026-10-16", compare_to: "previous" });
     expect(today.text).toContain("No comparison: the dashboard compares whole days");
     expect(today.text).not.toContain(" versus ");
