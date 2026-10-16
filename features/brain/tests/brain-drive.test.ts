@@ -904,6 +904,32 @@ describe("ingestDrive", () => {
     expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
   });
 
+  it("re-exports a document whose part numbers have a gap, though the count adds up", async () => {
+    // Part 1 says 3; #3 and an orphan #4 are stored, #2 is not.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 3 } as never },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#4", meta: { edited: FILE.modifiedTime, v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
+  it("does not confirm a part beyond the count part 1 gives", async () => {
+    files = [FILE];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 2 } as never },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?"))).toHaveLength(0);
+    expect(deletedIds()).toContain("doc:1AbCdEf#3");
+    expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
+  });
+
   it("confirms continuation parts, so the sweep cannot delete them", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [

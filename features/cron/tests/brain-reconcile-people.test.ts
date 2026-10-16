@@ -5,13 +5,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * and was still missing on 2026-10-16, when 5 of the week's 9 empty searches had filtered by
  * her name. Names here are placeholders: the repository is public.
  */
-const directory: { users: unknown[]; ok: boolean } = { users: [], ok: true };
+const directory: { users: unknown[]; ok: boolean; next?: string; urls: string[] } = {
+  users: [],
+  ok: true,
+  urls: [],
+};
 vi.mock("@shared/http/fetch-with-timeout", () => ({
-  fetchWithTimeout: vi.fn(async () => ({
-    ok: directory.ok,
-    status: directory.ok ? 200 : 403,
-    json: async () => ({ users: directory.users }),
-  })),
+  fetchWithTimeout: vi.fn(async (url: string) => {
+    directory.urls.push(url);
+    return {
+      ok: directory.ok,
+      status: directory.ok ? 200 : 403,
+      json: async () => ({ users: directory.users, nextPageToken: directory.next }),
+    };
+  }),
 }));
 const token = { value: "tok" as string | null };
 vi.mock("@shared/http/google-oauth", () => ({
@@ -44,6 +51,8 @@ beforeEach(() => {
   process.env.GOOGLE_WORKSPACE_DOMAIN = "example.test";
   token.value = "tok";
   directory.ok = true;
+  directory.next = undefined;
+  directory.urls = [];
   directory.users = [
     { primaryEmail: "jane@example.test", name: { fullName: "Jane Doe" } },
     { primaryEmail: "team@example.test", name: { fullName: "Team Inbox" } },
@@ -67,6 +76,18 @@ describe("Workspace accounts on Jarvis's people list", () => {
     const [gap] = reconcile([(await directoryPeopleReading(req()))!]);
     expect(gap!.detail).toContain("new@example.test (New Starter)");
     expect(gap!.gap).toBe(1);
+  });
+
+  it("lists the whole Workspace customer, not one domain", async () => {
+    await directoryPeopleReading(req());
+    expect(directory.urls[0]).toContain("customer=my_customer");
+    expect(directory.urls[0]).not.toContain("domain=");
+  });
+
+  it("is not checked when the list goes on past the pages it reads", async () => {
+    directory.next = "more";
+    expect(await directoryPeopleReading(req())).toBeNull();
+    expect(directory.urls).toHaveLength(10);
   });
 
   it("is not checked, rather than fine, when the directory or the list cannot be read", async () => {

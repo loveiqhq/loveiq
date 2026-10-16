@@ -654,8 +654,7 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
  */
 export async function directoryPeopleReading(request: Request): Promise<Reading | null> {
   const admin = process.env.GOOGLE_WORKSPACE_ADMIN?.trim();
-  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
-  if (!admin || !domain) return null;
+  if (!admin) return null;
   const token = await getDelegatedToken(
     admin,
     DIRECTORY_SCOPE,
@@ -671,7 +670,8 @@ export async function directoryPeopleReading(request: Request): Promise<Reading 
   for (let page = 0; page < 10; page++) {
     const res = await fetchWithTimeout(
       "https://admin.googleapis.com/admin/directory/v1/users" +
-        `?domain=${encodeURIComponent(domain)}&maxResults=200&query=isSuspended=false` +
+        // The whole customer, not one domain: a secondary domain's accounts count too.
+        `?customer=my_customer&maxResults=200&query=isSuspended=false` +
         `&fields=${encodeURIComponent("nextPageToken,users(primaryEmail,name(fullName),archived,suspended)")}` +
         (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
       { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 15_000 }
@@ -694,6 +694,8 @@ export async function directoryPeopleReading(request: Request): Promise<Reading 
     pageToken = json.nextPageToken ?? "";
     if (!pageToken) break;
   }
+  // More than ten pages: a list cut short could hide the missing account, so it is unread.
+  if (pageToken) return null;
   const missing = accounts.filter((a) => !byAlias.has(nameKey(a.email)));
   return {
     what: "Workspace accounts on Jarvis's people list",

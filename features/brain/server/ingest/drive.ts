@@ -1603,12 +1603,16 @@ export async function ingestDrive(
      * Analysis" 1 of 2, and five more were single clipped parts. Nothing read them again,
      * because nothing about them in Drive changed. The first part now says how many there are.
      */
-    const whole = !seen?.parts || 1 + current.length >= seen.parts;
+    const expected = seen?.parts
+      ? Array.from({ length: seen.parts - 1 }, (_, i) => `${sourceId}#${i + 2}`)
+      : null;
+    const whole = !expected || expected.every((id) => current.includes(id));
     if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION && whole) {
       // Current version and edit only: an orphan part from a longer previous version, or
       // one a failed run left on an older edit, must look absent to the sweep, not be
       // confirmed by it.
-      touch.push(sourceId, ...current);
+      // Only the parts part 1 names: a surplus one is an orphan the sweep should clear.
+      touch.push(sourceId, ...(expected ?? current));
     } else {
       toFetch.push(file);
     }
