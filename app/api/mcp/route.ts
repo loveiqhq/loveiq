@@ -1577,9 +1577,16 @@ export const TOOLS = [
     title: "Funnel, revenue and ad spend",
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
-      "The funnel, revenue and ad-spend figures per day, straight from the " +
-      "database rather than from the search index. Use when you want exact numbers to " +
-      "compute with; use search_company_context when you want the narrative around them. " +
+      "The funnel, revenue and ad-spend figures per day AS THE AP-ANALYTICS DASHBOARD " +
+      "COUNTS THEM: read through the dashboard's own code, so a period gives the numbers " +
+      "Marcus and Mark see on it. The answer gives the dashboard's headline figures for the " +
+      "period, says they are the dashboard's, and links that view on www.loveiq.org (team " +
+      "sign-in): quote them as the dashboard's, with the link. Days are Berlin days, and " +
+      "staff and our own test traffic are left out, as there. Reports created, invites sent " +
+      "and the top traffic sources have no figure on the dashboard, so they keep the older " +
+      "daily rollup's counting and are labelled not on the dashboard. Use when you want " +
+      "exact numbers to compute with; use search_company_context when you want the " +
+      "narrative around them. " +
       "With `group_by`, it splits a period's sales and revenue instead: by plan, price list " +
       "(the price test's arm), device, traffic source, country price tier, landing arm or " +
       "month, in one call. That is the way to answer 'revenue by plan', 'which price list " +
@@ -1598,8 +1605,12 @@ export const TOOLS = [
           items: { type: "string", enum: [...SALE_GROUPS] },
           description:
             "One or two of plan, price_list, device, source, country_tier, landing, month. " +
-            "Returns the sales, revenue and EUR 0 comps of the period per group, rather than " +
-            "the day rows. Takes `since`/`until` or `days`, not `compare_to` or `granularity`.",
+            "Returns the sales, revenue and EUR 0 comps of the period per group, as the " +
+            "dashboard counts sales (by the Berlin day paid), rather than the day rows. Device, " +
+            "source and country tier are the dashboard's own filters (source as it sorts " +
+            "traffic: Google Ads, Meta Ads, organic search, direct, email, referral, social, AI " +
+            "assistants), so each of those groups links to its Payment page under that filter. " +
+            "Takes `since`/`until` or `days`, not `compare_to` or `granularity`.",
         },
         since: {
           type: "string",
@@ -1615,7 +1626,9 @@ export const TOOLS = [
           description:
             "A second period to compare this one against: a range like " +
             "`2026-08-01..2026-08-31`, or the word `previous` for the equally-long window " +
-            "immediately before `since`. Returns both totals and the difference. " +
+            "immediately before `since`, the one the dashboard compares with. Returns both " +
+            "totals and the difference, by the dashboard's rules: the earlier period's 'so far' " +
+            "figures are read at the same age, and survey starts only when both hold every one. " +
             "Periods of DIFFERENT lengths are allowed and are reported as such — a 31-day " +
             "month against a 30-day one is not a like-for-like percentage and the answer " +
             "says so. Needs `since`, since there must be a period to compare.",
@@ -1623,8 +1636,8 @@ export const TOOLS = [
         granularity: {
           type: "string",
           description:
-            "`day` (default), `week` or `month`. About 165 daily rows fit in one answer, so " +
-            "a two-year question truncates at `day` and fits at `month`. The rows are SUMMED, " +
+            "`day` (default), `week` or `month`. About 120 daily rows fit in one answer, so " +
+            "a long question truncates at `day` and fits at `month`. The rows are SUMMED, " +
             "not sampled. A bucket that is not full — the current week on a Wednesday — is " +
             "labelled partial, and a bucket containing a day GA4 did not cover reports " +
             "`ad_spend` as unknown rather than summing the days it does have.",
@@ -1633,9 +1646,10 @@ export const TOOLS = [
           type: "number",
           description:
             "How many days back, from today. An alternative to `since`/`until`, not a " +
-            "companion — passing both is refused. Default 30; 4000 is the hard ceiling the " +
-            "database function enforces. Days with no activity come back as zeroes rather " +
-            "than being skipped, but only about 165 days fit in one answer — the header " +
+            "companion — passing both is refused. Default 30. The dashboard's figures start on " +
+            "LoveIQ's first records (21 Mar 2026) and cover at most 400 days, and the answer " +
+            "says when a request reached past that. Days with no activity come back as zeroes " +
+            "rather than being skipped, but only about 120 days fit in one answer — the header " +
             "says how many of how many were returned, so read it before treating the last " +
             "day shown as the earliest day there is. `ad_spend` appears only on days GA4 actually covers — its " +
             "absence means unknown, never zero.",
@@ -7047,8 +7061,9 @@ export const MCP_INSTRUCTIONS =
   "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
   "prints which are reachable on this deployment and exactly what each exposes, " +
   "including ids and required parameters you cannot guess. And get_business_numbers " +
-  "returns the funnel, revenue and ad spend per day straight from the database when " +
-  "you want figures to compute with rather than narrative.\n\n" +
+  "returns the funnel, revenue and ad spend per day as the AP-Analytics dashboard counts " +
+  "them, with a link to that view, when you want figures to compute with rather than " +
+  "narrative: quote those as the dashboard's.\n\n" +
   "Which half to reach for: history for why something was decided or what a past " +
   "period looked like; live for what is true right now. Never infer a current number " +
   "from an indexed chunk when query_product_data can read it directly, and never " +
@@ -7106,7 +7121,8 @@ export const MCP_INSTRUCTIONS =
   "those functions is wrapped in a swallow-all exception handler, so a wrong one returns " +
   "a clean-looking answer rather than an error. So: use them to find WHERE to look, and " +
   "when a number is going to be repeated or acted on, confirm it against " +
-  "`get_business_numbers`, whose definition is the one that reconciles to Stripe.\n\n" +
+  "`get_business_numbers`, whose figures are the AP-Analytics dashboard's, the ones the " +
+  "team reads.\n\n" +
   "YOU CAN HELP WITH THE WRITING, NOT ONLY THE NUMBERS. LoveIQ writes the report itself, " +
   "and how it is written is in here. Two sources you will not guess the names of: " +
   '`sources: ["skill"]` holds how the team does its own work — the chapter method, the ' +
