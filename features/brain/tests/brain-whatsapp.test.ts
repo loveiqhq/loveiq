@@ -229,6 +229,9 @@ describe("whatsappRows — one chunk per DAY", () => {
       ],
     });
     expect(rows[0]!.title).toBe("WhatsApp: LoveIQ — 2026-10-14 00:30");
+    // Filed under the Berlin day it was written on; keyed, and swept, by the UTC day.
+    expect(rows[0]!.period_end).toBe("2026-10-14");
+    expect(rows[0]!.meta.day).toBe("2026-10-13");
     expect(rows[0]!.source_id).toBe("wa:test#wa-2026-10-13-2230");
   });
 

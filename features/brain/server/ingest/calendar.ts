@@ -21,6 +21,7 @@ import { domainMailboxes } from "./gmail";
 import { splitBody } from "./notion";
 import {
   chunkPage,
+  dayOfMoment,
   momentOf,
   recordSweep,
   shouldSweep,
@@ -214,7 +215,9 @@ export function eventToRows(e: CalEvent, stampedAt: string, mailbox: string | nu
       mailbox,
     },
     updated_at: stampedAt,
-    period_end: day,
+    // The Berlin day it starts on; the id and "When:" keep the event's own date, which
+    // the meeting linker reads. An all-day event has only its date.
+    period_end: dayOfMoment(at) ?? day,
   };
 
   const parts = splitBody(base.body);

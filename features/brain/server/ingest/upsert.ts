@@ -1,6 +1,7 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { loadPeople, peopleIn } from "@features/brain/server/people";
+import { reportingDay } from "@shared/time/reporting-day";
 
 /**
  * Shared write path for every non-git ingester (Jira, Google analytics).
@@ -38,14 +39,28 @@ export interface BrainRow {
  *
  * `period_end` is a day, so `browse_context` listed one day's meetings, chats and mail
  * in no particular order, and paged through them unstably. The listing orders by this
- * within a day and shows it in Berlin time. Use the same instant `period_end` is the day
- * of, or a record sorts and reads under a day it does not belong to. Absent where a
- * record has no time of day: a Slack day, an all-day event, a decision.
+ * within a day and shows it in Berlin time. File the record under `dayOfMoment(at)`, or it
+ * sorts and reads under a day it does not belong to. Absent where a record has no time of
+ * day: a Slack day, an all-day event, a decision.
  */
 export function momentOf(value: string | number | null | undefined): string | undefined {
   if (value === null || value === undefined || value === "" || value === 0) return undefined;
   const at = new Date(value);
   return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+}
+
+/**
+ * The day a timed record is filed under (`period_end`): the BERLIN day of its moment.
+ *
+ * It was the UTC day, so between midnight and 2 a.m. in Berlin a chat, a mail or a note
+ * counted toward the day before: "what did we agree today" missed it, and a listing put
+ * it above the evening it followed. The business already reports in Berlin days
+ * (`reportingDay`), GA4 included. Ids are not touched: a Slack or WhatsApp id still
+ * carries the UTC day it was keyed on, and a Slack day summary, which has no single
+ * moment, stays a UTC day.
+ */
+export function dayOfMoment(at: string | undefined): string | null {
+  return at ? reportingDay(new Date(at)) : null;
 }
 
 const BATCH = 200;

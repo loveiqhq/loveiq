@@ -5,6 +5,7 @@ import { KPI_NUMBERS_DATABASE_ID } from "@features/admin/server/kpi-notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   chunkPage,
+  dayOfMoment,
   momentOf,
   recordSweep,
   shouldSweep,
@@ -528,7 +529,7 @@ export function taskToRow(
     updated_at: stampedAt,
     // The date this task last MOVED, so a stale backlog item does not outrank a
     // task touched today on a scoring tie.
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 }
 
@@ -613,7 +614,7 @@ export function pageToRow(
       ...(author ? { author } : {}),
     },
     updated_at: stampedAt,
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 }
 
@@ -651,7 +652,8 @@ const ALWAYS_EXCLUDED = [
  * each crawl, 2,500 at most, and these rows were a third of that on day one. This list is
  * the safety net if it is ever shared here anyway: the rows are never read, so they never
  * reach the index, and the database stays a WALKED scope with none, so anything stored
- * from it is swept. Their listing still counts toward the 2,500, so do not share it.
+ * from it is swept. Their listing gets room of its own (see `standalonePages`) but still
+ * costs a request per hundred rows on every crawl, so do not share it.
  */
 const GENERATED_DATABASES = new Set(
   [DROPOFF_DATA_DATABASE_ID, KPI_NUMBERS_DATABASE_ID].map((id) =>
@@ -733,6 +735,15 @@ export async function ingestNotion(
   // ---- standalone pages (not rows of any database) --------------------------
   const pageResult = await standalonePages(token, isOutOfTime);
   if (!pageResult.complete) crawlTruncated = true;
+  /**
+   * Said on every run that lists them, in `cron_run` and in any alert: the rows cost time
+   * on each crawl and will outgrow even the extra room. The fix is in Notion, not here.
+   */
+  const kpiRowsVisible =
+    pageResult.generatedRows > 0
+      ? ` kpiRowsVisible=${pageResult.generatedRows} (this connection can see the KPI ` +
+        `tables' rows: move "KPI report data" out from under any page shared with it)`
+      : "";
   for (const raw of pageResult.items) candidates.push({ raw, dbTitle: null });
 
   // ---- classify first, then do the cheap work before the expensive work ----
@@ -936,15 +947,22 @@ export async function ingestNotion(
    * a paginated crawl on a clock, it self-heals, and treating it as a fault made
    * the rebuild script stop after one pass with 1,004 pages still queued.
    */
+  // Only when there is something to say: an unchanged `detail` keeps `ingestNote`'s line.
+  const detail = kpiRowsVisible
+    ? `rows=${written + touched} swept=${swept}` +
+      (crawlComplete ? "" : " skipped=notion-crawl-incomplete") +
+      kpiRowsVisible
+    : undefined;
   if (!crawlComplete) {
     return {
       source: SOURCE,
       rows: written + touched,
       swept,
       skipped: "notion-crawl-incomplete",
+      ...(detail ? { detail } : {}),
     };
   }
-  return { source: SOURCE, rows: written + touched, swept };
+  return { source: SOURCE, rows: written + touched, swept, ...(detail ? { detail } : {}) };
 }
 
 /**
@@ -1067,11 +1085,24 @@ async function databaseRows(
 async function standalonePages(
   token: string,
   isOutOfTime: () => boolean
-): Promise<{ items: NotionPage[]; complete: boolean }> {
+): Promise<{ items: NotionPage[]; complete: boolean; generatedRows: number }> {
   const out: NotionPage[] = [];
   let complete = true;
   let cursor: string | undefined;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  /**
+   * THE 2,500 IS FOR PAGES PEOPLE WRITE. Search lists every page this connection can see,
+   * database rows included, newest edit first, before a row can be told from a page. Rows
+   * of a job's table (`isGeneratedDatabase`) are rewritten daily, so they head the list
+   * and took the cap from 13 Oct 2026: "KPI report data" had been moved under a page this
+   * connection sees, 1,542 of 2,981 listed pages were the KPI tables' rows, every crawl
+   * was partial and the sweep stopped. Each hundred such rows, or part of a hundred, buys one more request,
+   * up to twice the cap, and the count is reported so the move can be undone.
+   */
+  let generatedRows = 0;
+  // Rounded UP, so the job's rows never take a slot from the 2,500: 150 of them buy two
+  // requests, not one, or 50 pages people write would fall off the end.
+  const limit = () => MAX_PAGES + Math.min(2 * MAX_PAGES, Math.ceil(generatedRows / PAGE_SIZE));
+  for (let page = 0; ; page++) {
     if (isOutOfTime()) {
       complete = false;
       break;
@@ -1084,14 +1115,21 @@ async function standalonePages(
     });
     for (const raw of (json.results as NotionPage[]) ?? []) {
       if (raw.archived || raw.in_trash) continue;
-      if (raw.parent?.type === "database_id") continue;
+      if (raw.parent?.type === "database_id") {
+        if (isGeneratedDatabase(raw.parent.database_id ?? "")) generatedRows += 1;
+        continue;
+      }
       out.push(raw);
     }
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
-    if (page === MAX_PAGES - 1) complete = false;
+    // Out of requests before out of pages.
+    if (page + 1 >= limit()) {
+      complete = false;
+      break;
+    }
   }
-  return { items: out, complete };
+  return { items: out, complete, generatedRows };
 }
 
 /**
