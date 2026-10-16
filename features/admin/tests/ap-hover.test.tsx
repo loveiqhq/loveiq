@@ -348,6 +348,37 @@ describe("IndexHover", () => {
     expect(card()!.style.visibility).toBe("hidden");
   });
 
+  it("keeps the card for a point just past the window's edge (a bubble's top on the top line)", () => {
+    render(<IndexHover xs={[0, 50, 100]} label="Test chart" tip={tip} />);
+    vi.spyOn(box(), "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: -60,
+      right: 200,
+      bottom: 40,
+      width: 200,
+      height: 100,
+      x: 0,
+      y: -60,
+      toJSON: () => ({}),
+    } as DOMRect);
+    // Focused, the card reads at a quarter of the height: 35px above the window.
+    fireEvent.focus(box());
+    expect(card()!.style.visibility).toBe("visible");
+  });
+
+  it("where picking takes the reader away, a tap only reads; a click still picks", () => {
+    const pick = vi.fn();
+    render(<IndexHover xs={[0, 50, 100]} label="Test chart" tip={tip} onPick={pick} tapReads />);
+    sized(box());
+    fireEvent.pointerDown(box(), { clientX: 100, clientY: 50, pointerType: "touch" });
+    fireEvent.click(box());
+    expect(card()).toHaveTextContent("Point 1");
+    expect(pick).not.toHaveBeenCalled();
+    fireEvent.pointerDown(box(), { clientX: 190, clientY: 50, ...mouse });
+    fireEvent.click(box());
+    expect(pick).toHaveBeenCalledWith(2);
+  });
+
   it("a key brings its point into view (a box that scrolls sideways may hide it)", () => {
     const into = vi.fn();
     // jsdom has no scrollIntoView.

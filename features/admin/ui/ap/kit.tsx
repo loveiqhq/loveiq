@@ -116,6 +116,7 @@ export function Spark({
   suffix = "",
   focusable = true,
   onPick,
+  tapReads,
 }: {
   values: Array<number | null>;
   color?: string;
@@ -131,6 +132,8 @@ export function Spark({
   /** Off inside a link or a picked row, which keep the keyboard. */
   focusable?: boolean;
   onPick?: (i: number) => void;
+  /** A tap only reads, where picking takes the reader away. */
+  tapReads?: boolean;
 }) {
   const g = sparkGeometry(values, height);
   if (!g) return <div aria-hidden="true" style={{ height }} />;
@@ -171,6 +174,7 @@ export function Spark({
           label={`${name}, trend`}
           focusable={focusable}
           onPick={onPick}
+          tapReads={tapReads}
           tip={(i) => {
             const v = values[i];
             const has = v !== null && v !== undefined && Number.isFinite(v);

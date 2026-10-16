@@ -180,8 +180,13 @@ export function TipCard({
     );
     el.style.left = `${at.left}px`;
     el.style.top = `${at.top}px`;
+    // Out by more than a bubble's half (a bubble on the top line anchors over its top edge).
+    const off = 48;
     const away =
-      anchor.x < 0 || anchor.y < 0 || anchor.x > window.innerWidth || anchor.y > window.innerHeight;
+      anchor.x < -off ||
+      anchor.y < -off ||
+      anchor.x > window.innerWidth + off ||
+      anchor.y > window.innerHeight + off;
     el.style.visibility = away ? "hidden" : "visible";
   }, [anchor.x, anchor.y, mode, words]);
   if (typeof document === "undefined") return null;
@@ -282,6 +287,7 @@ export function IndexHover({
   label,
   focusable = true,
   onPick,
+  tapReads = false,
   className = "absolute inset-0",
 }: {
   /** Each point's x, in percent of the box's width, ascending. */
@@ -296,6 +302,8 @@ export function IndexHover({
   focusable?: boolean;
   /** A click on a point (test that price, open that row). */
   onPick?: (i: number) => void;
+  /** A tap only reads, where picking takes the reader away (a click or Enter still picks). */
+  tapReads?: boolean;
   className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -305,6 +313,7 @@ export function IndexHover({
   // A press focuses the box too, on a phone only after the finger lifts: that focus must not
   // jump to the last point.
   const pressedAt = useRef(-Infinity);
+  const pointer = useRef("mouse");
   // A key moved the point: bring it into view (a box that scrolls sideways may hide it).
   const keyed = useRef(false);
   const guide = useRef<HTMLSpanElement>(null);
@@ -387,6 +396,7 @@ export function IndexHover({
       }}
       onPointerDown={(e) => {
         pressedAt.current = performance.now();
+        pointer.current = e.pointerType;
         at(e);
         setTouch(e.pointerType !== "mouse");
       }}
@@ -395,7 +405,7 @@ export function IndexHover({
       }}
       onPointerCancel={close}
       onClick={() => {
-        if (onPick && cur) onPick(cur.i);
+        if (onPick && cur && !(tapReads && pointer.current !== "mouse")) onPick(cur.i);
       }}
       onKeyDown={focusable ? onKey : undefined}
       onFocus={() => {

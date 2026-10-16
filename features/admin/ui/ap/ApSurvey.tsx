@@ -940,6 +940,9 @@ function FunnelSection({
                       titles={exitTitles.length === x.r.exitsTrend.length ? exitTitles : undefined}
                       name="Exits"
                       focusable={false}
+                      // A tap reads the line; opening the question (and scrolling to it) is
+                      // the row's own tap, or a click here.
+                      tapReads
                       onPick={() => {
                         onSelect(x.r.id);
                         document
