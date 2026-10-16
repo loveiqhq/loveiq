@@ -1,9 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
-import type { Report3Dimension } from "@/data/report3-archetype-card";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
+import type { Report3DimensionView } from "@/data/report3-archetype-card";
 import PagerChevron from "./PagerChevron";
 import useSciPager from "./useSciPager";
+import { guardedUnlock } from "./v4Unlock";
 
 /**
  * Archetype dimension deck — the four-card swipe deck inside the archetype card.
@@ -44,6 +47,11 @@ import useSciPager from "./useSciPager";
  * once and holds it while the deck glides past the others, so a second click goes on
  * from there; the swipe's own reading takes over when the deck lands or the reader
  * scrolls.
+ *
+ * LOCKED (the slimmed report, 16.10; 1665:9806 / 9830 / 9853 / 9876): for a reader
+ * without the Summary's gate a card shows its first sentence, then the rest on a line of
+ * its own under the veil, with the brand lock (1665:9910, a 38px disc) over it. The whole
+ * blurred block is one "Unlock Report" button, as a chapter's blurred rows are its gate.
  */
 
 /**
@@ -58,16 +66,61 @@ const STEP = 280;
 
 interface Props {
   /** Exactly four, in frame order: communication, initiation, attachment, power. */
-  dimensions: readonly Report3Dimension[];
+  dimensions: readonly Report3DimensionView[];
   /** The archetype's glyph colour (v4ArchetypeColors): #ff6a3d for Spark Seeker, the
    * others' ink. Drives the glyphs, the active indicator and the focus ring. */
   accent: string;
   /** Which card opens focused. The card instance opens on Communication. */
   initialIndex?: number;
+  /** Opens the paywall, from a locked card's blurred rest. */
+  onUnlock?: () => void;
 }
 
+/**
+ * A locked card's rest under the veil, and the lock over it (1665:9806 / 1665:9910). The
+ * focused design's is the button; the peeking design's is the same picture, inert.
+ */
+const DeckLock: FC<{ text: string; interactive: boolean; onUnlock?: () => void }> = ({
+  text,
+  interactive,
+  onUnlock,
+}) => {
+  const ref = useRef<HTMLButtonElement>(null);
+  // An unlock offer on the core archetype's card: counted apart from the chapters' locks.
+  useCtaSeen(ref, "archetype_card_lock");
+  const picture = (
+    <>
+      <span className="rv3-deck__veil" aria-hidden="true">
+        {text}
+      </span>
+      <span className="rv3-deck__disc" aria-hidden="true">
+        <Image src="/report/v3/locks/lock-17.svg" alt="" width={17} height={17} unoptimized />
+      </span>
+    </>
+  );
+  return interactive ? (
+    <button
+      ref={ref}
+      type="button"
+      className="rv3-deck__lock"
+      aria-label="Unlock Report"
+      onClick={guardedUnlock(onUnlock)}
+    >
+      {picture}
+    </button>
+  ) : (
+    <span className="rv3-deck__lock" aria-hidden="true">
+      {picture}
+    </span>
+  );
+};
+
 /** One design of a card — 15:1161 focused or 15:1139 peeking, set by its wrapper. */
-const DeckFace: FC<{ d: Report3Dimension }> = ({ d }) => (
+const DeckFace: FC<{ d: Report3DimensionView; interactive: boolean; onUnlock?: () => void }> = ({
+  d,
+  interactive,
+  onUnlock,
+}) => (
   <div className="rv3-deck__inner">
     <header className="rv3-deck__head">
       <span className="rv3-deck__chip" aria-hidden="true">
@@ -80,14 +133,15 @@ const DeckFace: FC<{ d: Report3Dimension }> = ({ d }) => (
     </header>
 
     <p className="rv3-deck__value">{d.value}</p>
-    <p className="rv3-deck__body">{d.body}</p>
+    <p className={`rv3-deck__body${d.veiled ? " is-lead" : ""}`}>{d.body}</p>
+    {d.veiled ? <DeckLock text={d.veiled} interactive={interactive} onUnlock={onUnlock} /> : null}
     {/* No "Learn more in chapter" link on any card: the body is followed by blank
      * space, as 15:1136 / 15:1236 / 15:1336 draw it. Removed on Fatih's instruction,
      * 2026-09-23. */}
   </div>
 );
 
-const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) => {
+const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0, onUnlock }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const viewportId = useId();
   const [active, setActive] = useState(initialIndex);
@@ -242,10 +296,12 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
                 {/* Both designs, always laid out; the slot's state cross-fades them.
                  * The focused one carries the words for assistive tech. */}
                 <div className="rv3-deck__card is-focused">
-                  <DeckFace d={d} />
+                  {/* A peeking slot shows its peeking design, so its focused design's
+                   * lock leaves the tab order until the card comes forward. */}
+                  <DeckFace d={d} interactive={state !== "is-peeking"} onUnlock={onUnlock} />
                 </div>
                 <div className="rv3-deck__card is-peeking" aria-hidden="true">
-                  <DeckFace d={d} />
+                  <DeckFace d={d} interactive={false} />
                 </div>
               </article>
             );

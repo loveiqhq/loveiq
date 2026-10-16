@@ -2,7 +2,7 @@
 
 import type { CSSProperties, FC } from "react";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
-import type { Report3CardCopy, Report3MeterLevel } from "@/data/report3-archetype-card";
+import type { Report3CardView, Report3MeterLevel } from "@/data/report3-archetype-card";
 import V3DimensionDeck from "./V3DimensionDeck";
 import { v4ArchetypeColors } from "./v4ArchetypeColors";
 import useV4CountUp from "./useV4CountUp";
@@ -15,6 +15,13 @@ import useV4Reveal from "./useV4Reveal";
  * at y = 19 (header), 210 (core motivation), 451 (spacer), 466 (deck), 826 + 852
  * (spacers) and 866 (meters), since Mark's 28.09 update.
  *
+ * THE SLIMMED REPORT (16.10, 1665:3641): the motto line under the match strength is gone
+ * (Mark, 14.10: "I took the motto out … it doesn't read quality"), so the header is 111
+ * tall, not 191. And the deck's four cards are half-locked for a reader without the
+ * Summary's gate (Essentials): each card's first sentence, then the rest under the veil
+ * with a lock over it (1665:9806 / 9830 / 9853 / 9876). The copy arrives from the server
+ * (buildArchetypeCard), split already.
+ *
  * Two sub-frames of 15:815 are `hidden="true"` in the file — 15:848 (a 697px
  * alternative body) and 15:966/967 — so they are deliberately not built here.
  *
@@ -26,8 +33,8 @@ import useV4Reveal from "./useV4Reveal";
  * The entrance (Mark, 28.09, 1943981051: "Also check for V2 animations and build them
  * into this please" / "If there werent any, feel free to be creative"). V2's card
  * animates its match strength alone: the bar widens as the % counts up, over 1800ms.
- * That plays when the header is in view; the tagline and the core motivation panel rise
- * in behind it, and the meters, far lower, fill segment by segment when they are
+ * That plays when the header is in view; the core motivation panel rises in behind it,
+ * and the meters, far lower, fill segment by segment when they are
  * reached — at half the first pace since the 28.09 mobile review asked for the scales
  * to be slower. The timings are in reportV3.css; the deck keeps its own cross-fade.
  */
@@ -50,12 +57,20 @@ interface Props {
   archetype: ArchetypeName;
   /** 0–100. The frame draws 43% as a 138.875px fill inside a 323px track. */
   matchStrength: number;
-  copy: Report3CardCopy;
+  copy: Report3CardView;
   /** Which deck card opens focused; the frame's instance opens on Communication. */
   initialDeckIndex?: number;
+  /** Opens the paywall, from a locked dimension card's lock. */
+  onUnlock?: () => void;
 }
 
-const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDeckIndex = 0 }) => {
+const V3ArchetypeCard: FC<Props> = ({
+  archetype,
+  matchStrength,
+  copy,
+  initialDeckIndex = 0,
+  onUnlock,
+}) => {
   const { accent, deep: accentDeep, glyph } = v4ArchetypeColors(archetype);
   // The frame prints a whole number here ("43%") even where the top-three list
   // beside it prints one decimal ("43.4%"). The bar keeps the exact value.
@@ -83,7 +98,7 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
       }
       aria-label={`${archetype} — your core archetype`}
     >
-      {/* 15:816 — name, match strength, tagline. */}
+      {/* 15:816 — name and match strength (1665:3642: the motto line went, 16.10). */}
       <header ref={headRef} className="rv3-arch__head" data-node-id="15:816">
         <h3 className="rv3-arch__name" data-node-id="15:818">
           {archetype}
@@ -113,10 +128,6 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
             />
           </div>
         </div>
-
-        <p className="rv3-arch__tagline" data-node-id="15:829">
-          {copy.tagline}
-        </p>
       </header>
 
       {/* 15:830 / 15:831 — core motivation panel on the peach gradient: the head (chip,
@@ -152,6 +163,7 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
         dimensions={copy.dimensions}
         accent={glyph}
         initialIndex={initialDeckIndex}
+        onUnlock={onUnlock}
       />
 
       {/* 15:924 + 15:925 — 26px and 14px spacers below the deck. */}

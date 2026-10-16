@@ -48,21 +48,18 @@ describe("V4 desktop touch-up — scoped to the live page from 700px", () => {
 });
 
 describe("the archetype card uses the column", () => {
-  // Since 30.09 (Mark: "Text width should go all the way to the border") neither the
-  // tagline nor the motivation body stops at production's 760 copy measure.
-  it("runs the match row and the tagline across the card", () => {
+  // Since 30.09 (Mark: "Text width should go all the way to the border") the motivation
+  // body does not stop at production's 760 copy measure. (The motto line it named too
+  // went with the slimmed report, 16.10.)
+  it("runs the match row across the card", () => {
     expect(ruleIn(".rv3.rv4 .rv3-arch__match")).toContain("width: 100%");
-    const tagline = ruleIn(".rv3.rv4 .rv3-arch__tagline");
-    expect(tagline).toContain("width: 100%");
-    expect(tagline).not.toContain("max-width");
   });
 
-  // The phone's fixed 191 header and 197 panel left white under a one-line tagline and
-  // a one-line body here; the card sizes to its content (1031 is the phone frame's).
+  // The phone's fixed header and 197 panel left white under a one-line body here; the
+  // card sizes to its content (1031 is the phone frame's).
   it("sizes the header and the motivation panel to their content", () => {
     expect(ruleIn(".rv3.rv4 .rv3-arch__head")).toContain("min-height: 0");
     expect(ruleIn(".rv3.rv4 .rv3-arch__motive")).toContain("min-height: 0");
-    expect(ruleIn(".rv3.rv4 .rv3-arch__tagline")).toContain("min-height: 0");
   });
 
   it("lets the motivation body run across the card, not the phone's 281", () => {
