@@ -241,7 +241,9 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     loadSeries(until, Math.max(0, days - BASELINE_DAYS - 1)),
     wantsAds ? adCostByDay().catch(() => null) : null,
   ]);
-  if (!loaded) return refuse(apUnreadable("a flat line"));
+  // No ad window at all is a failed read (adCostByDay swallows its errors), as on the dashboard.
+  if (!loaded || (wantsAds && (!ad || ad.from === null || ad.to === null)))
+    return refuse(apUnreadable("a flat line"));
   const series: ChartDay[] = loaded
     .slice(-days)
     .map((d) =>
@@ -315,7 +317,6 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       "by UTC day.",
     partialDay(until, false, at),
     utcNote(open),
-    wantsAds && !ad ? "Google Ads spend could not be read just now, so it is left blank." : "",
     ga4
       ? "GA4 misses visitors who decline cookies, so it reads lower than our own visitor count."
       : "",

@@ -38,6 +38,7 @@ import { addDays } from "@features/admin/server/ap/days";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
+import { CircuitOpenError } from "@shared/http/circuit-breaker";
 
 const TOKEN = "test-token-ap-numbers";
 const NOW = new Date("2026-10-16T10:00:00Z");
@@ -390,6 +391,43 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
       expect(r.isError, tool).toBe(true);
       expect(r.text, tool).toBe(outage(what));
     }
+  });
+
+  it("reads an open circuit breaker as the outage in every tool, never as no data", async () => {
+    // The breaker refuses every read before it is made; adCostByDay swallows it into no window.
+    mockSupabaseFetch.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    mockRollup.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    mockAdCost = { byDay: new Map(), from: null, to: null };
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    const outage = (what: string) =>
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+      `give, and none counted another way in their place. This is an outage, not ${what}. Ask ` +
+      "again in a few minutes.";
+    for (const [tool, args, what] of [
+      ["get_business_numbers", { days: 7 }, "a result"],
+      ["get_business_numbers", { group_by: ["plan"], days: 7 }, "a result"],
+      ["explain_change", {}, "a quiet day"],
+      ["explain_change", { metric: "report_opens" }, "a quiet day"],
+      ["show_chart", { metrics: ["visitors"] }, "a flat line"],
+      ["show_chart", { metrics: ["ad_spend"] }, "a flat line"],
+      ["break_even", { days: 7 }, "a result"],
+    ] as const) {
+      const r = await callTool(tool, args);
+      expect(r.isError, `${tool} ${JSON.stringify(args)}`).toBe(true);
+      expect(r.text, `${tool} ${JSON.stringify(args)}`).toBe(outage(what));
+    }
+    // The dashboard read, the rollup's failed: the outage too, never a row of missing figures.
+    vi.setSystemTime(NOW);
+    clearFactsCache();
+    mockSupabaseFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path !== "/rest/v1/rpc/ap_facts") return { ok: true, status: 200, json: async () => [] };
+      const { p_from, p_to } = JSON.parse(String(init?.body));
+      return { ok: true, status: 200, json: async () => factsJson(p_from, p_to) };
+    });
+    mockRollup.mockReset().mockRejectedValue(new Error("brain_daily_rollup failed (500)"));
+    const rollupDown = await call({ since: "2026-10-13", until: "2026-10-15" });
+    expect(rollupDown.isError).toBe(true);
+    expect(rollupDown.text).toBe(outage("a result"));
   });
 
   it("takes the dashboard's Berlin day, not UTC's, between midnight in Berlin and in London", async () => {

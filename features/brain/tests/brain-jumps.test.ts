@@ -33,6 +33,7 @@ import {
   type Ga4Day,
 } from "@features/brain/server/jumps";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
+import { CircuitOpenError } from "@shared/http/circuit-breaker";
 
 const metric = (id: string) => METRICS.find((m) => m.id === id)!;
 const dayN = (i: number) =>
@@ -413,6 +414,15 @@ describe("explainDay", () => {
     );
     expect(evidence).toContain("What shipped could not be read from GitHub.");
   });
+
+  it("says the decisions could not be read rather than implying nothing was decided", () => {
+    const { evidence } = explainDay(
+      build(() => ({})),
+      LAST,
+      { shipped: [], decisions: null }
+    );
+    expect(evidence).toContain("What was decided could not be read just now.");
+  });
 });
 
 describe("renderDay", () => {
@@ -469,19 +479,12 @@ describe("loadSeries", () => {
     mockRollup.mockReset();
   });
 
-  it("merges the rollup with the GA4 days, oldest first, and survives GA4 being unreadable", async () => {
+  it("merges the rollup with the dashboard's days and the GA4 days, oldest first", async () => {
     mockRollup.mockResolvedValue([
       { day: "2026-09-10", unique_visitors: 300, report_opens: 7, top_sources: {} },
       { day: "2026-09-09", unique_visitors: 250, report_opens: 6, top_sources: {} },
     ]);
     database(factsFor());
-    // GA4's day records cannot be read.
-    const facts = mockSupabaseFetch.getMockImplementation()!;
-    mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
-      String(path).startsWith("/rest/v1/brain_chunk")
-        ? { ok: false, status: 503, json: async () => ({}) }
-        : facts(path, init)
-    );
     const s = (await loadSeries("2026-09-10"))!;
     // The day before `until` needs its own 28 days, so the series starts 29 days back.
     expect(s[0]!.day).toBe("2026-08-12");
@@ -489,7 +492,31 @@ describe("loadSeries", () => {
     expect(s).toHaveLength(30);
     expect(s.at(-1)!.rollup?.unique_visitors).toBe(200);
     expect(s.at(-1)!.rollup?.report_opens).toBe(7);
+    // No GA4 record for the day: no GA4 figures for it, the rest standing.
     expect(s.at(-1)!.ga4).toBeUndefined();
+  });
+
+  it("gives no series when any read fails: GA4's day records, the rollup, or every read", async () => {
+    mockRollup.mockResolvedValue([{ day: "2026-09-10", unique_visitors: 300, top_sources: {} }]);
+    // GA4's day records cannot be read.
+    database(factsFor());
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      String(path).startsWith("/rest/v1/brain_chunk")
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : facts(path, init)
+    );
+    expect(await loadSeries("2026-09-10")).toBeNull();
+    // The rollup cannot be read.
+    clearFactsCache();
+    database(factsFor());
+    mockRollup.mockRejectedValue(new Error("brain_daily_rollup failed (500)"));
+    expect(await loadSeries("2026-09-10")).toBeNull();
+    // An open circuit breaker refuses every read before it is made.
+    clearFactsCache();
+    mockSupabaseFetch.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    mockRollup.mockRejectedValue(new CircuitOpenError("supabase"));
+    expect(await loadSeries("2026-09-10")).toBeNull();
   });
 
   it("gives no series, never the rollup's alone, when the dashboard's facts cannot be read", async () => {
@@ -581,6 +608,17 @@ describe("noticeJumps", () => {
     expect(record).not.toHaveBeenCalled();
   });
 
+  it("says the day could not be checked, with no numbers, when the circuit breaker is open", async () => {
+    mockSupabaseFetch.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    mockRollup.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    const record = vi.fn().mockResolvedValue(true);
+    expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBe(0);
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0]![0].headline).toBe(
+      "The numbers for Wednesday 23 September 2026 could not be checked"
+    );
+  });
+
   it("says the day could not be checked, with no numbers, when the dashboard cannot be read", async () => {
     database();
     const record = vi.fn().mockResolvedValue(true);
@@ -635,8 +673,7 @@ describe("loadSeries counts as the AP-Analytics dashboard does", () => {
       }))
     );
     mockSupabaseFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path !== "/rest/v1/rpc/ap_facts")
-        return { ok: false, status: 503, json: async () => ({}) };
+      if (path !== "/rest/v1/rpc/ap_facts") return { ok: true, status: 200, json: async () => [] };
       const { p_from, p_to } = JSON.parse(String(init?.body));
       return { ok: true, status: 200, json: async () => facts(p_from, p_to) };
     });

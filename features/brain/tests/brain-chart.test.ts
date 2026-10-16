@@ -260,11 +260,17 @@ describe("show_chart: what gets drawn", () => {
     expect(text).toContain("- Revenue: 19 Sep 250.00 · 20 Sep 250.00");
   });
 
-  it("leaves ad spend blank, and says why, when it cannot be read", async () => {
+  it("draws nothing, and says the numbers could not be read, when ad spend cannot be read", async () => {
+    const outage =
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+      "give, and none counted another way in their place. This is an outage, not a flat line. " +
+      "Ask again in a few minutes.";
+    // adCostByDay swallows a failed read and returns no window: never a chart of blanks.
+    mockAd.mockResolvedValue({ byDay: new Map(), from: null, to: null });
+    expect(await refusal({ metrics: ["ad_spend"], days: 7 })).toBe(outage);
+    expect(await refusal({ metrics: ["revenue", "ad_spend"], days: 7 })).toBe(outage);
     mockAd.mockRejectedValue(new Error("down"));
-    const { payload, text } = await draw({ metrics: ["ad_spend"], days: 7 });
-    expect(payload.first).toEqual([null, null, null, null, null, null, null]);
-    expect(text).toContain("Google Ads spend could not be read just now");
+    expect(await refusal({ metrics: ["ad_spend"], days: 7 })).toBe(outage);
   });
 
   it("does not read ad spend for a chart that does not show it", async () => {

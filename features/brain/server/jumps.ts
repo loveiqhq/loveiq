@@ -341,8 +341,9 @@ async function ga4Days(from: string, until: string): Promise<Map<string, Ga4Day>
 
 /**
  * Every day from `until` back far enough for `until` and the day before it to have a full
- * baseline, oldest first. GA4 is optional: a failed read leaves the funnel metrics standing.
- * Null when the dashboard's facts cannot be read: no other counting stands in for them.
+ * baseline, oldest first. Null when any of its reads fails (the dashboard's facts, the rollup,
+ * GA4's day records; an open circuit breaker fails them all): every answer built on it then
+ * says the numbers could not be read, rather than serving part of them as if whole.
  */
 export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[] | null> {
   const from = addDays(until, -(BASELINE_DAYS + 1 + extraDays));
@@ -352,15 +353,16 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
   const span =
     Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) +
     1;
+  const unread = (what: string) => (err: unknown) => {
+    logger.warn({ err }, `brain: ${what} could not be read for the series`);
+    return null;
+  };
   const [rows, ga4, facts] = await Promise.all([
-    brainDailyRollup(span),
-    ga4Days(from, until).catch(() => new Map<string, Ga4Day>()),
-    fetchFacts(from, until).catch((err) => {
-      logger.warn({ err }, "brain: the dashboard's facts could not be read for the series");
-      return null;
-    }),
+    brainDailyRollup(span).catch(unread("the daily rollup")),
+    ga4Days(from, until).catch(unread("GA4's day records")),
+    fetchFacts(from, until).catch(unread("the dashboard's facts")),
   ]);
-  if (!facts) return null;
+  if (!rows || !ga4 || !facts) return null;
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), row]));
   const out: DaySeries[] = [];
   for (let d = from; d <= until; d = addDays(d, 1)) {
@@ -667,6 +669,7 @@ export function explainDay(
     evidence.push(
       `(${shipped.length - 4} more changes shipped those days: what_shipped lists them.)`
     );
+  if (around.decisions === null) evidence.push("What was decided could not be read just now.");
   for (const d of (around.decisions ?? []).slice(0, 3))
     evidence.push(`Decided ${d.date}: ${d.title} (${d.id})`);
   return { likely, evidence };

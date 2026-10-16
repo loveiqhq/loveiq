@@ -6045,7 +6045,11 @@ async function callTool(
      * paged correctly, rather than a second copy of that query.
      */
     const [rows, ad, apRead] = await Promise.all([
-      brainDailyRollup(fetchDays),
+      // Unreadable (an open circuit breaker reads nothing), the answer is the outage, below.
+      brainDailyRollup(fetchDays).catch((err) => {
+        logger.warn({ err }, "brain: the daily rollup could not be read");
+        return null;
+      }),
       // NON-FATAL. The funnel and revenue figures are the point; spend is an addition,
       // and a spend read that fails must not cost the caller the numbers it did get.
       // Days then carry no `ad_spend`, which already means "unknown".
@@ -6072,7 +6076,7 @@ async function callTool(
     // Before LoveIQ's first records there is nothing to serve, and it must not read as zeroes.
     if (apRead === null) return textResult(beforeRecords(since, until || today));
     // Unreadable, that is all that is said: no other counting stands in for the dashboard's.
-    if (apRead === undefined) return textResult(apUnreadable(), true);
+    if (apRead === undefined || rows === null) return textResult(apUnreadable(), true);
     const ap = apView(apRead, rows, ad);
     const lead = ap.header;
     /**
@@ -6099,7 +6103,9 @@ async function callTool(
       ad.from && ad.to
         ? `Ad spend is known for ${ad.from} to ${ad.to}; days outside that carry no ` +
           `ad_spend field, which means unknown, not zero.`
-        : `No ad-spend data is available, so no day carries an ad_spend field.`;
+        : // No window at all is a failed read, as the dashboard says it (`spend` in metrics.ts).
+          `Ad spend could not be read just now, so no day carries an ad_spend field: unknown, ` +
+          `not zero.`;
 
     // No whole day to compare (the period is only today): the day rows, and the header says why.
     if (ap.other) {
@@ -7278,10 +7284,7 @@ async function callTool(
       outcome = await drawChart({ metrics: args.metrics, days: args.days, until: args.until });
     } catch (err) {
       logger.error({ err }, "brain: show_chart failed");
-      return textResult(
-        "The daily numbers could not be read right now. This is an outage, not a flat line.",
-        true
-      );
+      return textResult(apUnreadable("a flat line"), true);
     }
     if (!outcome.ok) return textResult(outcome.message, true);
     stats.sourceCount = 1;
@@ -7650,15 +7653,11 @@ async function callTool(
         true
       );
     }
-    let series;
-    try {
-      series = await loadSeries(day);
-    } catch {
-      return textResult(
-        "The daily numbers could not be read right now. This is an outage, not a quiet day.",
-        true
-      );
-    }
+    // Null for any failed read, an open circuit breaker included (jumps.ts): the one outage message.
+    const series = await loadSeries(day).catch((err) => {
+      logger.error({ err }, "brain: explain_change could not load the series");
+      return null;
+    });
     if (!series) return textResult(apUnreadable("a quiet day"), true);
     // Berlin's today, or reports opened and paid on a UTC day not over yet (jumps.ts).
     const partNote = partialDay(day, !metric || metric.utc === true);

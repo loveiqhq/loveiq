@@ -16,7 +16,7 @@
  * and the spend is covered when that reaches the cost per visitor.
  */
 import { fetchFacts } from "@features/admin/server/ap/facts";
-import { apFilters, apLink } from "@features/brain/server/ap-numbers";
+import { apFilters, apLink, apUnreadable } from "@features/brain/server/ap-numbers";
 import { dayCount } from "@features/admin/server/ap/filters";
 import { ALL, spend, totals } from "@features/admin/server/ap/metrics";
 import { adCostByDay } from "@features/brain/server/ingest/analytics";
@@ -179,10 +179,13 @@ export async function breakEven(
       revenue: t.revenue,
     };
   };
+  // No window at all is a failed read (adCostByDay swallows its errors), as the dashboard reads
+  // it (`spend` in metrics.ts): an outage, never missing data.
+  if (ad.from === null || ad.to === null) return refuse(apUnreadable());
   // The days of the window the ad data covers, which is one unbroken stretch.
-  const lo = ad.from !== null && ad.from > from ? ad.from : from;
-  const hi = ad.to !== null && ad.to < until ? ad.to : until;
-  if (ad.from === null || ad.to === null || lo > hi) {
+  const lo = ad.from > from ? ad.from : from;
+  const hi = ad.to < until ? ad.to : until;
+  if (lo > hi) {
     return refuse(
       `The Google Ads data covers none of the ${days} days to ${longDay(until)}, so there is no ` +
         "spend to break even against. That is missing data, not zero spend."

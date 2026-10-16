@@ -8437,7 +8437,11 @@ describe("/api/mcp", () => {
       );
       const text = (await res.json()).result.content[0].text as string;
       expect(text).toContain(`"day":"${berlinDay(1)}","unique_visitors":200`);
-      expect(text).toMatch(/No ad-spend data is available/);
+      // A read that failed is said as that, never as no data (the dashboard's own words).
+      expect(text).toContain(
+        "Ad spend could not be read just now, so no day carries an ad_spend field: unknown, not zero."
+      );
+      expect(text).not.toMatch(/no ad-spend data|missing data/i);
     });
 
     it("calls an empty rollup a fault, not zero, beside the dashboard's own numbers", async () => {

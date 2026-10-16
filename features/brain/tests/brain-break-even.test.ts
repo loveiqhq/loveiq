@@ -284,9 +284,22 @@ describe("break_even: what it refuses", () => {
 
   it("calls a window the ad data never covered missing data, not zero spend", async () => {
     standard();
-    ad = { byDay: new Map(), from: null, to: null };
+    ad = spend("2026-08-01", "2026-08-31");
     expect(await refusal({ days: 10 })).toMatch(
       /covers none of the 10 days to 25 Sep 2026.*missing data, not zero spend/s
     );
+  });
+
+  it("calls an ad read that failed an outage, never missing data", async () => {
+    standard();
+    // What adCostByDay returns when its read fails (an open circuit breaker included): no window.
+    ad = { byDay: new Map(), from: null, to: null };
+    const message = await refusal({ days: 10 });
+    expect(message).toBe(
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+        "give, and none counted another way in their place. This is an outage, not a result. Ask " +
+        "again in a few minutes."
+    );
+    expect(mockFacts).not.toHaveBeenCalled();
   });
 });
