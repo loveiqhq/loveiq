@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, type FC } from "react";
+import { createContext, useContext, useRef, type FC, type ReactNode } from "react";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
 
 /**
@@ -24,26 +24,66 @@ const Chevron: FC = () => (
 );
 
 /**
+ * Each chapter's reading time, in minutes by section id: counted on the server from the
+ * chapter's full copy (chapterReadingTimes.ts) and provided by ReportPage under V4 only.
+ */
+const V4ReadingTimesContext = createContext<Readonly<Record<string, number>> | null>(null);
+
+export const V4ReadingTimesProvider: FC<{
+  value: Readonly<Record<string, number>> | null;
+  children: ReactNode;
+}> = ({ value, children }) => (
+  <V4ReadingTimesContext.Provider value={value}>{children}</V4ReadingTimesContext.Provider>
+);
+
+/** A chapter's reading time in minutes, or null where none is provided. */
+export function useV4ReadingMinutes(sectionId: string | undefined): number | null {
+  const times = useContext(V4ReadingTimesContext);
+  return (sectionId && times?.[sectionId]) || null;
+}
+
+/**
  * The chapter title, with "of the <Archetype>" under it when `archetype` is set —
  * always on a line of its own and with no dash, as Mark redrew every head on 25.09
  * (1:862 / 1942042395; Fatih: the open chapters too). Each line is its own block, so
  * each sits its own height under the last, the way Figma stacks mixed-size lines.
  * The space between the two runs is only for assistive tech: blocks swallow it.
+ *
+ * The slimmed report (16.10) sets "Reading time: ~5 min." over it (1686:10030, and over
+ * every closed row, 1709:1799): "Reading time:" in Light, set in title case, the minutes
+ * in Bold capitals, as the Learn more card's eyebrow splits them. Title and time stack in
+ * one column beside the disc, which keeps to the top of the row.
  */
-export const V4ChapterTitle: FC<{ title: string; archetype?: string }> = ({ title, archetype }) => (
-  <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
-    {archetype ? (
-      <>
-        <span className="rv4-chapter__name">{title}</span>{" "}
-        <span className="rv4-chapter__of">
-          of the <span className="rv4-chapter__archetype">{archetype}</span>
-        </span>
-      </>
-    ) : (
-      title
-    )}
-  </h3>
-);
+export const V4ChapterTitle: FC<{
+  title: string;
+  archetype?: string;
+  readingMinutes?: number | null;
+}> = ({ title, archetype, readingMinutes }) => {
+  const heading = (
+    <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
+      {archetype ? (
+        <>
+          <span className="rv4-chapter__name">{title}</span>{" "}
+          <span className="rv4-chapter__of">
+            of the <span className="rv4-chapter__archetype">{archetype}</span>
+          </span>
+        </>
+      ) : (
+        title
+      )}
+    </h3>
+  );
+  if (!readingMinutes) return heading;
+  return (
+    <span className="rv4-chapter__text">
+      <span className="rv4-chapter__time" data-node-id="1686:10030">
+        <span className="rv4-chapter__time-label">Reading time:</span>{" "}
+        <span className="rv4-chapter__time-value">~{readingMinutes} min.</span>
+      </span>
+      {heading}
+    </span>
+  );
+};
 
 /** 1:867 / 304:261 — "Control / Disc". */
 export const V4ChapterChevron: FC = () => (

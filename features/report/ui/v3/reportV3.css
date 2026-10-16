@@ -8927,6 +8927,37 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   align-items: flex-start;
 }
 
+/* 1686:10029 — a chapter head's text: "Reading time: ~5 min." in its 25px box, then the
+ * title, in one column beside the disc, which keeps to the row's top (1686:10028). Plus
+ * Jakarta Sans 10/12 in the sun panel's green: "Reading time:" Light in title case, the
+ * minutes Bold in capitals, as the frame sets them. */
+.rv3 .rv4-chapter__text {
+  display: flex;
+  flex: 330 0 0;
+  flex-direction: column;
+  min-width: 0;
+}
+.rv3 .rv4-chapter__text > .rv4-chapter__title {
+  flex: none;
+}
+.rv3 .rv4-chapter__time {
+  color: #2e7d5b;
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 12px;
+  min-height: 25px;
+}
+.rv3 .rv4-chapter__time-label {
+  text-transform: capitalize;
+}
+.rv3 .rv4-chapter__time-value {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
  * properly to not have these huge gaps and spaces". Production's column (991cb18c) is

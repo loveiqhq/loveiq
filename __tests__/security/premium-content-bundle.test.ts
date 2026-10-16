@@ -80,6 +80,9 @@ const PREMIUM_DATA_MODULES = [
   // buildArchetypeCard and buildSummary.
   "@/data/report3-archetype-card",
   "@/data/report3-summary",
+  // Added 2026-10-16. Each chapter's "Reading time" is counted from its full copy, so the
+  // module reads every chapter's paid copy; the page receives the minutes, never the words.
+  "@features/report/server/chapterReadingTimes",
 ];
 
 /**

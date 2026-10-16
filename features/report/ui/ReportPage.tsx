@@ -46,6 +46,7 @@ import {
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
 import { V4ChapterCardsProvider } from "./v3/V4ChapterCards";
+import { V4ReadingTimesProvider } from "./v3/V4ChapterHead";
 import { V4ChapterLockProvider } from "./v3/V4ChapterLock";
 import { v4CardsFromV2 } from "./v3/v4CardsFromV2";
 import V3Intro from "./v3/V3Intro";
@@ -3625,104 +3626,112 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       ? v4CardsFromV2(reportV2Copies)
       : null;
   const v2Copies = v4Chapters?.copies ?? reportV2Copies;
+  // Each chapter's "Reading time: ~N min." (the slimmed report, 16.10), on the same terms
+  // as the cards: V4, and only while the payload is the archetype on screen.
+  const readingTimes =
+    isV4 && effectiveViewArchetype === (data.contentArchetype ?? primaryArchetype)
+      ? (data.chapterReadingTimes ?? null)
+      : null;
 
   return (
     <>
       {v4ThemeColor}
       {showReportV2 ? (
         <V4ChapterCardsProvider value={v4Chapters?.cards ?? null}>
-          <ReportExperience
-            key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
-            isV3={isV3}
-            isV4={isV4}
-            submissionId={data.submissionId ?? null}
-            devParam={devParam}
-            accessPlan={data.accessPlan}
-            archetypeTiers={data.archetypeTiers ?? {}}
-            unlockedArchetypes={unlockedArchetypes}
-            feedbacks={feedbacks}
-            isPricingModalOpen={isPricingModalOpen}
-            isShareModalOpen={isShareModalOpen}
-            isLeaveOfferOpen={leaveOffer.open}
-            matchScore={matchScore}
-            onBeginCheckout={beginCheckout}
-            onClosePricingModal={closePricingModal}
-            onCloseShareModal={closeShareModal}
-            onOpenShareModal={openShareModal}
-            onOpenPricingModal={openPricingModal}
-            onUnlockArchetype={handleUnlockArchetype}
-            ownerFirstName={ownerFirstName}
-            ownerToken={ownerToken}
-            percentages={percentages}
-            placeholderValues={placeholderValues}
-            primaryArchetype={primaryArchetype}
-            priceShownFiredRef={priceShownFiredRef}
-            pricingQuotes={pricingQuotes}
-            archetypeContent={data.archetypeContent ?? {}}
-            practiceTendencies={data.practiceTendencies ?? {}}
-            pricingTargetArchetype={pricingTargetArchetype}
-            pricingVariant={pricingVariant}
-            ranking={ranking}
-            reportDate={reportDate}
-            resolvedSections={resolvedSections}
-            snapshot={snapshot}
-            snapshotCopy={data.snapshotCopy ?? null}
-            findingsCopy={data.findingsCopy ?? null}
-            beliefsCopy={v2Copies.beliefsCopy}
-            archetypeCard={data.archetypeCard ?? null}
-            summaryChapter={data.summaryChapter ?? null}
-            typicalBeliefs={data.typicalBeliefs ?? null}
-            typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
-            attachmentCopy={v2Copies.attachmentCopy}
-            attachmentFamily={data.attachmentFamily ?? null}
-            attachmentPlane={data.attachmentPlane ?? null}
-            accelCopy={v2Copies.accelCopy}
-            accelerators={data.accelerators ?? null}
-            acceleratorsArticle={data.acceleratorsArticle ?? null}
-            insecuritiesCopy={v2Copies.insecuritiesCopy}
-            insecurityCueFamily={data.insecurityCueFamily ?? null}
-            insecurityGraph={data.insecurityGraph ?? null}
-            rewardCopy={v2Copies.rewardCopy}
-            rewardConfig={data.rewardConfig ?? null}
-            energyCopy={v2Copies.energyCopy}
-            energyConfig={data.energyConfig ?? null}
-            arousalCopy={v2Copies.arousalCopy}
-            arousalConfig={data.arousalConfig ?? null}
-            initiationCopy={v2Copies.initiationCopy}
-            initiationConfig={data.initiationConfig ?? null}
-            libidoCopy={v2Copies.libidoCopy}
-            libidoConfig={data.libidoConfig ?? null}
-            growthCopy={v2Copies.growthCopy}
-            growthRungs={data.growthRungs ?? null}
-            readingCopy={v2Copies.readingCopy}
-            partnershipCopy={v2Copies.partnershipCopy}
-            partnershipLoop={data.partnershipLoop ?? null}
-            partnership={data.partnership ?? null}
-            enjoyCopy={data.enjoyCopy ?? null}
-            powerCopy={v2Copies.powerCopy}
-            fantasyCopy={v2Copies.fantasyCopy}
-            fantasyDots={data.fantasyDots ?? null}
-            fantasy={data.fantasy ?? null}
-            fantasyArticle={data.fantasyArticle ?? null}
-            curiosityCopy={v2Copies.curiosityCopy}
-            relationshipFit={data.relationshipFit ?? null}
-            lovelangCopy={v2Copies.lovelangCopy}
-            loveLanguageOrder={data.loveLanguageOrder ?? null}
-            confidenceCopy={v2Copies.confidenceCopy}
-            confidenceStrip={data.confidenceStrip ?? null}
-            mapCopy={data.mapCopy ?? null}
-            stageCopy={data.stageCopy ?? null}
-            constellationMottos={data.constellationMottos ?? {}}
-            rateSection={rateSection}
-            submitFeedback={submitFeedback}
-            submitted={submitted}
-            theme={theme}
-            userEmail={data.userEmail}
-            userName={data.userName}
-            contentArchetype={data.contentArchetype ?? primaryArchetype}
-            viewArchetype={effectiveViewArchetype}
-            viewMode={viewMode}
-          />
+          <V4ReadingTimesProvider value={readingTimes}>
+            <ReportExperience
+              key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+              isV3={isV3}
+              isV4={isV4}
+              submissionId={data.submissionId ?? null}
+              devParam={devParam}
+              accessPlan={data.accessPlan}
+              archetypeTiers={data.archetypeTiers ?? {}}
+              unlockedArchetypes={unlockedArchetypes}
+              feedbacks={feedbacks}
+              isPricingModalOpen={isPricingModalOpen}
+              isShareModalOpen={isShareModalOpen}
+              isLeaveOfferOpen={leaveOffer.open}
+              matchScore={matchScore}
+              onBeginCheckout={beginCheckout}
+              onClosePricingModal={closePricingModal}
+              onCloseShareModal={closeShareModal}
+              onOpenShareModal={openShareModal}
+              onOpenPricingModal={openPricingModal}
+              onUnlockArchetype={handleUnlockArchetype}
+              ownerFirstName={ownerFirstName}
+              ownerToken={ownerToken}
+              percentages={percentages}
+              placeholderValues={placeholderValues}
+              primaryArchetype={primaryArchetype}
+              priceShownFiredRef={priceShownFiredRef}
+              pricingQuotes={pricingQuotes}
+              archetypeContent={data.archetypeContent ?? {}}
+              practiceTendencies={data.practiceTendencies ?? {}}
+              pricingTargetArchetype={pricingTargetArchetype}
+              pricingVariant={pricingVariant}
+              ranking={ranking}
+              reportDate={reportDate}
+              resolvedSections={resolvedSections}
+              snapshot={snapshot}
+              snapshotCopy={data.snapshotCopy ?? null}
+              findingsCopy={data.findingsCopy ?? null}
+              beliefsCopy={v2Copies.beliefsCopy}
+              archetypeCard={data.archetypeCard ?? null}
+              summaryChapter={data.summaryChapter ?? null}
+              typicalBeliefs={data.typicalBeliefs ?? null}
+              typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
+              attachmentCopy={v2Copies.attachmentCopy}
+              attachmentFamily={data.attachmentFamily ?? null}
+              attachmentPlane={data.attachmentPlane ?? null}
+              accelCopy={v2Copies.accelCopy}
+              accelerators={data.accelerators ?? null}
+              acceleratorsArticle={data.acceleratorsArticle ?? null}
+              insecuritiesCopy={v2Copies.insecuritiesCopy}
+              insecurityCueFamily={data.insecurityCueFamily ?? null}
+              insecurityGraph={data.insecurityGraph ?? null}
+              rewardCopy={v2Copies.rewardCopy}
+              rewardConfig={data.rewardConfig ?? null}
+              energyCopy={v2Copies.energyCopy}
+              energyConfig={data.energyConfig ?? null}
+              arousalCopy={v2Copies.arousalCopy}
+              arousalConfig={data.arousalConfig ?? null}
+              initiationCopy={v2Copies.initiationCopy}
+              initiationConfig={data.initiationConfig ?? null}
+              libidoCopy={v2Copies.libidoCopy}
+              libidoConfig={data.libidoConfig ?? null}
+              growthCopy={v2Copies.growthCopy}
+              growthRungs={data.growthRungs ?? null}
+              readingCopy={v2Copies.readingCopy}
+              partnershipCopy={v2Copies.partnershipCopy}
+              partnershipLoop={data.partnershipLoop ?? null}
+              partnership={data.partnership ?? null}
+              enjoyCopy={data.enjoyCopy ?? null}
+              powerCopy={v2Copies.powerCopy}
+              fantasyCopy={v2Copies.fantasyCopy}
+              fantasyDots={data.fantasyDots ?? null}
+              fantasy={data.fantasy ?? null}
+              fantasyArticle={data.fantasyArticle ?? null}
+              curiosityCopy={v2Copies.curiosityCopy}
+              relationshipFit={data.relationshipFit ?? null}
+              lovelangCopy={v2Copies.lovelangCopy}
+              loveLanguageOrder={data.loveLanguageOrder ?? null}
+              confidenceCopy={v2Copies.confidenceCopy}
+              confidenceStrip={data.confidenceStrip ?? null}
+              mapCopy={data.mapCopy ?? null}
+              stageCopy={data.stageCopy ?? null}
+              constellationMottos={data.constellationMottos ?? {}}
+              rateSection={rateSection}
+              submitFeedback={submitFeedback}
+              submitted={submitted}
+              theme={theme}
+              userEmail={data.userEmail}
+              userName={data.userName}
+              contentArchetype={data.contentArchetype ?? primaryArchetype}
+              viewArchetype={effectiveViewArchetype}
+              viewMode={viewMode}
+            />
+          </V4ReadingTimesProvider>
         </V4ChapterCardsProvider>
       ) : (
         <ReportExperienceV1
