@@ -60,7 +60,7 @@ const passageWords = (gated: Report3GatedCopy | null | undefined): number =>
  * The four chapters V4 designed, from the views a reader who has paid receives: their
  * prose, panels, cards, loop and table, without the practice and the article.
  */
-const DESIGNED: Readonly<Record<string, (archetype: string) => number | null>> = {
+const DESIGNED_WORDS: Readonly<Record<string, (archetype: string) => number | null>> = {
   typical_beliefs: (archetype) => {
     const view = buildTypicalBeliefs(archetype);
     if (!view) return null;
@@ -131,7 +131,7 @@ const DESIGNED: Readonly<Record<string, (archetype: string) => number | null>> =
  * Try this card), "What you will learn" (`learn.*`, taken out on 28.09) and the locked
  * section's hook (`gate.*`).
  */
-const REPORT2_SECTIONS: Readonly<Record<string, string>> = {
+const REPORT2_SECTION_KEYS: Readonly<Record<string, string>> = {
   power_orientation: "power",
   libido_challenges_in_relationships: "libido",
   biochemical_reward_system_dynamics: "reward",
@@ -165,11 +165,14 @@ const otherArchetypesWords = (): number =>
  * Minutes for each chapter V4 draws, keyed by its section id. A chapter whose copy is not
  * written for the archetype is left out, and its head shows no time.
  */
+const DESIGNED = new Map(Object.entries(DESIGNED_WORDS));
+const REPORT2_SECTIONS = new Map(Object.entries(REPORT2_SECTION_KEYS));
+
 export function buildChapterReadingTimes(archetype: string): Record<string, number> {
-  const out: Record<string, number> = {};
+  const out = new Map<string, number>();
   for (const { id } of REPORT_V4_CHAPTERS) {
-    const designed = DESIGNED[id];
-    const section = REPORT2_SECTIONS[id];
+    const designed = DESIGNED.get(id);
+    const section = REPORT2_SECTIONS.get(id);
     const words = designed
       ? designed(archetype)
       : section
@@ -177,7 +180,7 @@ export function buildChapterReadingTimes(archetype: string): Record<string, numb
         : id === "constellation"
           ? otherArchetypesWords()
           : null;
-    if (words) out[id] = readingMinutes(words);
+    if (words) out.set(id, readingMinutes(words));
   }
-  return out;
+  return Object.fromEntries(out);
 }
