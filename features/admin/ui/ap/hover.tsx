@@ -43,7 +43,7 @@ export interface Tip {
 
 /**
  * A point's period as a card's title: a day with its weekday ("Tue 7 Oct 2026"), a span with
- * its ends ("6 – 12 Oct 2026"); one cut short by the range says so.
+ * its ends ("6 Oct – 12 Oct 2026"); one cut short by the range says so.
  */
 export function periodTitle(p: { from: string; to: string }, cutShort = false): string {
   if (p.from === p.to) {

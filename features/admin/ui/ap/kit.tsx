@@ -113,7 +113,7 @@ export function Spark({
   values: Array<number | null>;
   color?: string;
   height?: number;
-  /** Each point's period ("6 – 12 Oct 2026"), for the read-out; none, no read-out. */
+  /** Each point's period ("6 Oct – 12 Oct 2026"), for the read-out; none, no read-out. */
   titles?: string[];
   /** The figure in the read-out ("Revenue"). */
   name?: string;

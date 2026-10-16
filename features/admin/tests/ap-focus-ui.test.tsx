@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChartSeries, FocusChart, FocusPayload } from "@features/admin/server/ap/focus";
 
@@ -11,6 +11,7 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 
+import { fmt } from "@features/admin/server/ap/format";
 import ApFocus, { trendText } from "@features/admin/ui/ap/ApFocus";
 
 const DAYS = ["1 Oct", "2 Oct", "3 Oct", "4 Oct", "5 Oct", "6 Oct", "7 Oct"];
@@ -421,5 +422,108 @@ describe("the Dashboard as drawn", () => {
     expect(trendText(5, 5, [5, 5])).toEqual({ text: "→ flat", tone: "flat" });
     // Lower is better: a fall is good.
     expect(trendText(4, 2, [4, 2], true)).toEqual({ text: "↘ −50% trend", tone: "good" });
+  });
+});
+
+describe("the charts read out their points and say where they have none", () => {
+  beforeEach(() => {
+    // jsdom has no PointerEvent: one that carries its pointerType and position, as a browser's.
+    if (!("PointerEvent" in window)) {
+      class PE extends MouseEvent {
+        pointerType: string;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerType = init.pointerType ?? "mouse";
+        }
+      }
+      vi.stubGlobal("PointerEvent", PE);
+    }
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  const NOTE =
+    "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out.";
+  const gappy = (): FocusPayload => {
+    const c = chart(
+      "start-cvr",
+      "Visitor → survey start",
+      [
+        s({
+          name: "Start CVR",
+          unit: "pct",
+          values: [null, null, null, 0.1, 0.12, 0.14, 0.16],
+          total: 0.13,
+        }),
+      ],
+      { note: NOTE }
+    );
+    const periods = DAYS.map((_, i) => ({ from: `2026-10-0${i + 1}`, to: `2026-10-0${i + 1}` }));
+    return {
+      ...payload,
+      charts: [{ ...c, views: { ...c.views, day: { ...c.views.day, periods } } }],
+    };
+  };
+  const plot = () =>
+    within(region("Visitor → survey start")).getByRole("group", {
+      name: /^Visitor → survey start\./,
+    });
+  const sized = (el: Element) =>
+    vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 300,
+      bottom: 100,
+      width: 300,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+  const card = () => document.querySelector("[data-ap-tip]");
+
+  it("shades the empty start and names it, and draws the trend over the points that exist", () => {
+    view.payload = gappy();
+    render(<ApFocus />);
+    const r = region("Visitor → survey start");
+    const gap = r.querySelector("[data-ap-gap]") as HTMLElement;
+    expect(gap).toHaveTextContent("No figures before 4 Oct");
+    // From the left edge to half way between the last empty day and the first with a figure.
+    expect(gap.style.left).toBe("0%");
+    expect(parseFloat(gap.style.width)).toBeCloseTo(41.67, 1);
+    // The trend runs from the first point with a figure (x = 50%) to the last.
+    const trend = r.querySelector('[data-trend="Start CVR"]')!.getAttribute("points")!;
+    expect(trend.startsWith("50.00,")).toBe(true);
+    expect(trend.split(" ")[1]!.startsWith("100.00,")).toBe(true);
+    // And its change is read over those points: 10% to 16%, not "rising" from nothing.
+    expect(legend("Visitor → survey start", "Start CVR")).toHaveTextContent("↗ +60% trend");
+  });
+
+  it("a point reads its day and figure; the empty stretch says why it has none", () => {
+    view.payload = gappy();
+    render(<ApFocus />);
+    const box = plot();
+    sized(box);
+    // Day 5 (Mon 5 Oct) sits at two thirds of the 300px plot.
+    fireEvent.pointerMove(box, { clientX: 200, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent("Mon 5 Oct 2026");
+    expect(card()).toHaveTextContent(`Start CVR${fmt("pct", 0.12)}`);
+    // Day 2 (Fri 2 Oct, no figure) sits at a sixth of it.
+    fireEvent.pointerMove(box, { clientX: 50, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent("Fri 2 Oct 2026");
+    expect(card()).toHaveTextContent("Start CVR—");
+    expect(card()).toHaveTextContent(NOTE);
+    fireEvent.pointerLeave(box, { pointerType: "mouse" });
+    expect(card()).toBeNull();
+  });
+
+  it("every chart and trend line can be read with the keyboard", () => {
+    // A tile's line has a point per day of the range, as the server builds it.
+    view.payload = { ...payload, tiles: payload.tiles.map((t) => ({ ...t, spark: line(1, 1) })) };
+    render(<ApFocus />);
+    // Five charts (one is blocked), the 30-day trend, and each tile's line.
+    const groups = screen.getAllByRole("group", { name: /Use the left and right arrow keys/ });
+    expect(groups.length).toBe(5 + 1 + payload.tiles.length);
   });
 });
