@@ -211,6 +211,7 @@
 | Nonce provider (CSP)   | `shared/ui/NonceProvider.tsx`                                                       |
 | Hydration marker       | `shared/ui/HydrationMarker.tsx`                                                     |
 | Smooth scroll          | `shared/ui/SmoothScroll.tsx`                                                        |
+| Report guided tour     | `features/report/ui/v3/V4GuidedTour.tsx`, `features/report/logic/guidedTour.ts`     |
 | Favicon / icons        | `public/favicon.svg`, `public/apple-touch-icon.png`, `public/images/LoveiqLogo.svg` |
 
 ## Documentation
