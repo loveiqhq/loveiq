@@ -34,6 +34,7 @@ class FakeObserver {
 }
 
 let useCtaSeen: typeof import("@features/analytics/useCtaSeen").useCtaSeen;
+let setGuidedTourActive: typeof import("@shared/ui/guided-tour-state").setGuidedTourActive;
 
 function Card() {
   const ref = useRef<HTMLButtonElement>(null);
@@ -50,6 +51,7 @@ beforeEach(async () => {
   vi.stubGlobal("IntersectionObserver", FakeObserver);
   window.history.replaceState(null, "", "/report/rpt_one");
   ({ useCtaSeen } = await import("@features/analytics/useCtaSeen"));
+  ({ setGuidedTourActive } = await import("@shared/ui/guided-tour-state"));
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -61,6 +63,19 @@ describe("cta_seen", () => {
     io!.show(0.3);
     expect(seenEvents()).toHaveLength(0);
     io!.show(0.6);
+    expect(seenEvents()).toEqual([["cta_seen", { cta: "locked_chapter" }]]);
+  });
+
+  it("ignores a lock the guided tour scrolls past, and counts it when the reader gets there", () => {
+    render(<Card />);
+    const [io] = FakeObserver.all;
+    setGuidedTourActive(true);
+    io!.show(1);
+    expect(seenEvents()).toHaveLength(0);
+    expect(io!.disconnected, "still watched, for the reader's own visit").toBe(false);
+    io!.show(0);
+    setGuidedTourActive(false);
+    io!.show(0.8);
     expect(seenEvents()).toEqual([["cta_seen", { cta: "locked_chapter" }]]);
   });
 

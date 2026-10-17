@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
+
 /**
  * How far above the viewport's middle a row's top must reach before it counts as
  * past the line. Figma puts the line at the middle exactly (368:5482's dashed
@@ -20,6 +22,11 @@ export const MIDLINE_MARGIN_PX = 12;
  * scrolled back below the line leaves it again. Rows from `count` on are never
  * counted: they sit behind the paywall. A scroll handler writes no styles; the caller
  * turns the set into a class and CSS transitions do the rest, off the compositor.
+ *
+ * Held still while the guided tour moves the page (shared/ui/guided-tour-state.ts): a row
+ * turning grows from 61 to 126px, so rows turning under the tour's scroll moved the very
+ * controls it was landing on, and played an animation meant for the reader's own
+ * scrolling. Read again the moment the tour ends.
  */
 export function useMidlineRows(
   rowsRef: RefObject<readonly (Element | null)[]>,
@@ -31,6 +38,7 @@ export function useMidlineRows(
 
   useEffect(() => {
     const read = () => {
+      if (isGuidedTourActive()) return;
       const line = window.innerHeight / 2;
       const next = new Set<number>();
       let laidOut = false;
@@ -61,9 +69,11 @@ export function useMidlineRows(
     read();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
+    const unsubscribe = subscribeGuidedTour(onScroll);
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      unsubscribe();
       if (frame.current) window.cancelAnimationFrame(frame.current);
     };
   }, [count, rowsRef]);
