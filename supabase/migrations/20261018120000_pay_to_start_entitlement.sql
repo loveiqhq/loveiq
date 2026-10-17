@@ -7,7 +7,7 @@
 -- at which point the usual payment row, report link and tier are written.
 --
 -- Additive only. New nullable columns (is_test has a default), the status CHECK gains
--- 'expired', and three indexes. June's nine rows keep offer NULL, so the partial unique
+-- 'expired', three indexes, and the system_flags row for the checkout's kill switch. June's nine rows keep offer NULL, so the partial unique
 -- index and every journey lookup (which filter on offer) leave them alone.
 --
 --   offer             what was sold: 'full' (survey + full report) or 'pre' (reserved for
@@ -93,6 +93,13 @@ BEGIN
   END IF;
 END
 $migration$;
+
+-- The kill switch: when false, /api/stripe/pay-to-start sells nothing. isFeatureEnabled()
+-- fails open, so a missing row means on; the row is what puts it in the admin panel.
+INSERT INTO system_flags (key, enabled, description) VALUES
+  ('pay_to_start_checkout', true,
+    'Gates the pay-to-start checkout on /sexual-archetype (Pay to start the survey). Off: the page stays up and its buttons say checkout is paused; nothing is charged. Payments already made are unaffected.')
+ON CONFLICT (key) DO NOTHING;
 
 COMMIT;
 
