@@ -188,6 +188,7 @@ import { FIRST_PAYWALL_SELECTOR } from "../logic/paywallSelector";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import { useGuidedTour } from "./hooks/useGuidedTour";
 import V4GuidedTour from "./v3/V4GuidedTour";
+import type { TourReplaySource } from "../logic/guidedTour";
 import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
 import {
   captureUnlockAnchor,
@@ -454,6 +455,8 @@ interface ReportExperienceProps {
   isShareModalOpen: boolean;
   /** The guided tour runs over the report, which is inert under it (no blur). */
   isTourRunning?: boolean;
+  /** "Replay the Tour" in the chapter menu; only where the tour can run. */
+  onReplayTour?: (source: TourReplaySource, returnTo: HTMLElement | null) => void;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
@@ -599,6 +602,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   isPricingModalOpen,
   isShareModalOpen,
   isTourRunning = false,
+  onReplayTour,
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
@@ -1130,6 +1134,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     }
                   : undefined
               }
+              onReplayTour={
+                onReplayTour ? (returnTo) => onReplayTour("drawer", returnTo) : undefined
+              }
             />
           )}
         </WithActiveSection>
@@ -1159,6 +1166,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           onOpenShareModal();
                         }
                       : undefined
+                  }
+                  onReplayTour={
+                    onReplayTour ? (returnTo) => onReplayTour("sidebar", returnTo) : undefined
                   }
                 />
               )}
@@ -3641,6 +3651,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               isPricingModalOpen={isPricingModalOpen}
               isShareModalOpen={isShareModalOpen}
               isTourRunning={tour.running}
+              onReplayTour={tour.available ? tour.replay : undefined}
               matchScore={matchScore}
               onBeginCheckout={beginCheckout}
               onClosePricingModal={closePricingModal}

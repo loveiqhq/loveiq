@@ -2903,6 +2903,7 @@ describe("ReportPage", () => {
           }) as DOMRect
       );
       vi.mocked(analytics.trackTourStarted).mockClear();
+      vi.mocked(analytics.trackTourReplayed).mockClear();
     });
 
     afterEach(() => {
@@ -3003,6 +3004,34 @@ describe("ReportPage", () => {
       settle();
       notStarted("back from checkout");
       expect(analytics.trackTourStarted).not.toHaveBeenCalled();
+    });
+
+    it("replays from the chapter menu for a reader who has seen it", () => {
+      window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeNull();
+
+      // The desktop sidebar's item (both menus are in the page; CSS shows one).
+      const replay = document.querySelector<HTMLButtonElement>(
+        ".report-sidebar .report-tour-replay"
+      )!;
+      fireEvent.click(replay);
+      settle();
+
+      expect(tourBubble()).toBeInTheDocument();
+      expect(analytics.trackTourReplayed).toHaveBeenCalledWith({ source: "sidebar" });
+      expect(analytics.trackTourStarted).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "replay" })
+      );
+    });
+
+    it("offers no replay where the tour cannot run: a shared view", () => {
+      tourV4("", { viewMode: "shared" });
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(document.querySelector(".report-tour-replay")).toBeNull();
     });
 
     it("gives way to a reader who has already started scrolling", () => {
