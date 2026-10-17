@@ -230,14 +230,14 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     const jump = (y: number) =>
       window.scrollTo({ top: Math.round(y), left: 0, behavior: "instant" as ScrollBehavior });
     const holeOf = (a: TourAnchor) => {
-      const box = a.el.getBoundingClientRect();
+      const box = a.box();
       return holeFor({ x: box.left, y: box.top, w: box.width, h: box.height }, anchorRadius);
     };
     const currentId = () => steps[index] ?? "chapter_menu";
     const motion = () => stepMotion(currentId(), { sidebar: anchor?.sidebar ?? false });
     const targetFor = (a: TourAnchor) => {
       if (motion().toTop) return 0;
-      const box = a.el.getBoundingClientRect();
+      const box = a.box();
       return scrollTargetFor({
         anchor: { top: box.top, height: box.height },
         scrollY: window.scrollY,
@@ -265,7 +265,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
         edge.hidden = true;
       }
       if (shimmering && anchor) {
-        const box = anchor.el.getBoundingClientRect();
+        const box = anchor.box();
         shimmer.style.left = `${box.left}px`;
         shimmer.style.top = `${box.top}px`;
         shimmer.style.width = `${box.width}px`;
@@ -504,6 +504,9 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     const onKey = (event: KeyboardEvent) => {
       const api = apiRef.current;
       if (!api) return;
+      // From now on the focused button shows its ring (guidedTour.css): a reader on the
+      // keyboard needs it, and a reader who only taps never sees it.
+      layerRef.current?.setAttribute("data-keys", "");
       const inBubble =
         event.target instanceof Element && Boolean(bubbleRef.current?.contains(event.target));
       if (event.key === "Escape") {

@@ -291,7 +291,14 @@
   color: #fff;
 }
 
+/* Each stop puts focus on Next, so Enter carries on. A browser rings a button the
+   page focuses before the reader has pressed anything, and Figma draws none: the
+   ring waits for the first key (V4GuidedTour sets data-keys). */
 .rv4-tour__bubble button:focus-visible {
+  outline: none;
+}
+
+.rv4-tour[data-keys] .rv4-tour__bubble button:focus-visible {
   outline: 2px solid #6e56cf;
   outline-offset: 2px;
 }

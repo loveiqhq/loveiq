@@ -189,7 +189,7 @@ import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import { useGuidedTour } from "./hooks/useGuidedTour";
 import V4GuidedTour from "./v3/V4GuidedTour";
 import type { TourReplaySource } from "../logic/guidedTour";
-import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
+import { isGuidedTourActive } from "@shared/ui/guided-tour-state";
 import {
   captureUnlockAnchor,
   parseUnlockAnchor,
@@ -930,9 +930,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
     function updateActive() {
       if (Date.now() < clickLockUntilRef.current) return;
-      // The guided tour scrolls the page to its stops; the pill keeps the reader's chapter,
-      // and is brought up to date when the tour ends (subscribed below).
-      if (isGuidedTourActive()) return;
       // Measured on every update, not once at mount: the page keeps changing height
       // after it — Typical Beliefs' rows grow ~759px as they turn, chapters open and
       // close, the fonts land — and tops measured at mount ran the highlight ahead of
@@ -960,13 +957,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
-    const unsubscribeTour = subscribeGuidedTour(onScroll);
     updateActive();
 
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
-      unsubscribeTour();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
     // `navIds` is one of two module constants; `resolvedSections` only matters
