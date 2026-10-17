@@ -79,6 +79,11 @@ const ALLOWED_EVENTS = [
   "leave_offer_shown",
   "leave_offer_clicked",
   "leave_offer_dismissed",
+  // The report's guided tour: a first run's start and how it ended, and each replay
+  "tour_started",
+  "tour_completed",
+  "tour_skipped",
+  "tour_replayed",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -104,6 +109,10 @@ function entityTypeFor(event: AllowedEvent): string {
     case "refer_friend_opened":
     case "chapter_feedback_submitted":
     case "report_chapter_stats":
+    case "tour_started":
+    case "tour_completed":
+    case "tour_skipped":
+    case "tour_replayed":
       return "report";
     case "paywall_view":
     case "paywall_initiated":

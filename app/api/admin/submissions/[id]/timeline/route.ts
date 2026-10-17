@@ -393,6 +393,11 @@ const ANALYTICS_LABELS: Record<string, string> = {
   leave_offer_shown: "Founder-call offer shown",
   leave_offer_clicked: "Founder-call booking page opened",
   leave_offer_dismissed: "Founder-call offer dismissed",
+  // The guided tour on the report's first open: seen through, or left at which stop.
+  tour_started: "Report tour started",
+  tour_completed: "Report tour finished",
+  tour_skipped: "Report tour skipped",
+  tour_replayed: "Report tour replayed",
 };
 
 function buildAnalyticsDetail(
@@ -439,6 +444,21 @@ function buildAnalyticsDetail(
       const trigger = typeof m.trigger === "string" ? m.trigger : null;
       const source = typeof m.source === "string" ? m.source : null;
       return [trigger, source].filter(Boolean).join(" · ") || undefined;
+    }
+    case "tour_started":
+    case "tour_completed": {
+      return typeof m.steps === "number" ? `${m.steps} stops` : undefined;
+    }
+    case "tour_skipped": {
+      const at =
+        typeof m.at === "number" && typeof m.steps === "number"
+          ? `at stop ${m.at} of ${m.steps}`
+          : null;
+      const source = typeof m.source === "string" ? m.source : null;
+      return [at, source].filter(Boolean).join(" · ") || undefined;
+    }
+    case "tour_replayed": {
+      return typeof m.source === "string" ? m.source : undefined;
     }
   }
   return undefined;

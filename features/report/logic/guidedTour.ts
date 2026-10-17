@@ -27,6 +27,10 @@ export type TourPlacement = "below" | "above" | "right";
 export type TourGesture = "nudge" | "shimmer" | "turn";
 /** How a run ended, for the event and for the page. */
 export type TourOutcome = "completed" | "skipped";
+/** How a reader left before the end: the bubble's link, Escape, or the back button. */
+export type TourSkipSource = "skip_button" | "escape" | "browser_back";
+/** Where "Replay the Tour" was tapped: the phone's chapter drawer or the desktop sidebar. */
+export type TourReplaySource = "drawer" | "sidebar";
 
 /** Every stop, in order. The last is only for readers who have not paid. */
 export const TOUR_STEP_IDS: readonly TourStepId[] = [
