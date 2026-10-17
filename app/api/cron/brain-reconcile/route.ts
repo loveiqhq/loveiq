@@ -626,29 +626,59 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
 
   // Every part of the sampled documents, so a tab heading cannot be missed for
   // sitting in a chunk the check never fetched.
-  const byDoc = new Map<string, string>();
+  const byDoc = new Map<string, { name: string; text: string }>();
   for (const base of sample) {
-    const rows = await fetchAllRows<{ source_id: string; body: string }>(
-      `/rest/v1/brain_chunk?select=source_id,body&source=eq.drive` +
+    const rows = await fetchAllRows<{ source_id: string; title: string | null; body: string }>(
+      `/rest/v1/brain_chunk?select=source_id,title,body&source=eq.drive` +
         `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc`
     );
     if (!rows) return null;
-    byDoc.set(base, rows.map((r) => r.body ?? "").join("\n"));
+    const name = (rows[0]?.title ?? "")
+      .replace(/^Drive: /, "")
+      .replace(/ \(part \d+ of \d+\)$/, "");
+    byDoc.set(base, { name: name || base, text: rows.map((r) => r.body ?? "").join("\n") });
   }
 
+  /**
+   * A SHEET THIS ACCOUNT CANNOT READ IS SKIPPED, NOT THE WHOLE READING. One colleague's
+   * personal spreadsheet answering 403 made the reading "could not read" every day from 13
+   * Oct 2026, so no sheet was compared at all. A 403 or 404 skips that sheet and names it;
+   * the rest are compared, and the reading stays unread only when none could be read.
+   */
   let expected = 0;
   let found = 0;
+  const skipped: string[] = [];
   for (const base of sample) {
-    const fileId = base.replace(/^doc:/, "");
-    // Only tabs that HOLD something: the reader skips an empty tab, so expecting a
-    // heading for one is a gap the corpus can never close.
-    const titles = await sheetTabsWithRows(token, fileId);
-    const text = byDoc.get(base) ?? "";
+    const doc = byDoc.get(base)!;
+    let titles: string[];
+    try {
+      // Only tabs that HOLD something: the reader skips an empty tab, so expecting a
+      // heading for one is a gap the corpus can never close.
+      titles = await sheetTabsWithRows(token, base.replace(/^doc:/, ""));
+    } catch (err) {
+      const status = /^sheets-(?:meta|values) (403|404)$/.exec(
+        String((err as Error)?.message)
+      )?.[1];
+      if (!status) throw err;
+      skipped.push(`"${doc.name}" (${status})`);
+      continue;
+    }
     expected += titles.length;
-    found += tabsPresentInText(text, titles);
+    found += tabsPresentInText(doc.text, titles);
   }
+  if (skipped.length) {
+    logger.info({ skipped }, "brain-reconcile: spreadsheets this account cannot read were skipped");
+  }
+  if (skipped.length === sample.length) {
+    throw new Error(
+      `none of the ${sample.length} sampled spreadsheets could be read: ${skipped.join(", ")}`
+    );
+  }
+  const read = sample.length - skipped.length;
   return {
-    what: `spreadsheet tabs present in the corpus (${sample.length} sampled)`,
+    what:
+      `spreadsheet tabs present in the corpus (${read} of ${sample.length} sampled read` +
+      (skipped.length ? `; skipped, not readable by this account: ${skipped.join(", ")})` : ")"),
     left: { source: "google sheets", value: expected },
     right: { source: "brain_chunk", value: found },
     tolerance: 0,
