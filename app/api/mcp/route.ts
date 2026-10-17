@@ -3659,9 +3659,7 @@ export function encodedLinesForTest(haystack: string, needle: string, max: numbe
   for (const run of new Set(haystack.split(/\s+/))) {
     if (!run.includes("%")) continue;
     const decoded = urlDecodedForTest(run);
-    const lower = decoded.text.toLowerCase();
-    // A case mapping that changes the length leaves no position to map back.
-    const at = lower.length === decoded.text.length ? lower.indexOf(n) : -1;
+    const at = decoded.text.toLowerCase().indexOf(n);
     if (at < 0) continue;
     const raw = run.slice(decoded.from[at], decoded.to[at + n.length - 1]);
     for (const line of linesWithForTest(haystack, raw, max)) {
