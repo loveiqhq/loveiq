@@ -9,6 +9,7 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import {
+  angledForTest,
   canonicalPeople,
   clearPeopleCache,
   peopleIn,
@@ -79,8 +80,57 @@ describe("peopleIn — one name for a person, whatever the source called them", 
     ]);
   });
 
+  /**
+   * EVERY "(Google …)" AND "(via …)" SUFFIX ON PRODUCTION'S SENDERS, checked 2026-10-17. A
+   * calendar invite Google sent as "<address> (Google Calendar)" was not tagged with the person.
+   */
+  it.each([
+    "mo@loveiq.org (Google Calendar)",
+    "Mark Oldenburg (Google Docs)",
+    "Mark Oldenburg (Google Sheets)",
+    "Mark Oldenburg (via Slack)",
+    "Mark Oldenburg (via Google Docs)",
+    "Mark Oldenburg (via Google Drive)",
+    "Mark Oldenburg (via Google Sheets)",
+    "Mark Oldenburg (via Google Forms)",
+    "Mark Oldenburg (via Google Meet)",
+  ])("reads the person behind %s", (sender) => {
+    expect(peopleIn({ participants: [sender] }, REG)).toEqual(["Mark Oldenburg"]);
+  });
+
+  /** A sender's display name is anyone's to write: an unclosed "(google" must stay quick. */
+  it("reads a long crafted display name in linear time", () => {
+    const n = 4000;
+    const tail = `(google${" ".repeat(n)}${"a".repeat(n)}`;
+    // Leading spaces for the address split; a letter first for the suffix rule, which runs
+    // on the trimmed name.
+    for (const crafted of [`${" ".repeat(n)}${tail}`, `a${" ".repeat(n)}${tail}`]) {
+      const started = performance.now();
+      expect(peopleIn({ participants: [crafted] }, REG)).toBeUndefined();
+      expect(performance.now() - started).toBeLessThan(250);
+    }
+  });
+
+  it("splits a name from its angled address only when that is the whole value", () => {
+    expect(angledForTest("Marcus Börner <mb@loveiq.org>")).toEqual([
+      "Marcus Börner",
+      "mb@loveiq.org",
+    ]);
+    expect(angledForTest(' "Mark Oldenburg" <mark@x.test> ')).toEqual([
+      "Mark Oldenburg",
+      "mark@x.test",
+    ]);
+    expect(angledForTest("<only@x.test>")).toEqual(["", "only@x.test"]);
+    expect(angledForTest("Name <>")).toBeNull();
+    expect(angledForTest("Name <a@x.test> extra")).toBeNull();
+    expect(angledForTest('A "B" <c@x.test>')).toBeNull();
+    expect(angledForTest("plain name")).toBeNull();
+  });
+
   it("keeps any other bracket as part of the name", () => {
     expect(peopleIn({ participants: ["Marcus Börner (personal)"] }, REG)).toBeUndefined();
+    expect(peopleIn({ participants: ["Marcus Börner (Google)"] }, REG)).toBeUndefined();
+    expect(peopleIn({ participants: ["Marcus Börner (Google Docs) team"] }, REG)).toBeUndefined();
   });
 
   it("collects across several identity fields at once and de-duplicates", () => {
