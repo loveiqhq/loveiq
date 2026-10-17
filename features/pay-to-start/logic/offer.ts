@@ -1,0 +1,102 @@
+/**
+ * Pay to start the survey (Notion "RFD > Pay to start survey", Figma Report-3.0 1741:3820):
+ * what is sold before the survey, and how its price reads.
+ *
+ * Pure: no environment, no I/O. The server decides the price (`server/offer.ts`), and the
+ * landing page and the Stripe session both read that one offer, so the price a visitor is
+ * shown is the price they are charged.
+ */
+
+export type PayToStartOfferId = "full" | "pre";
+
+export interface PayToStartOffer {
+  id: PayToStartOfferId;
+  /** What paying unlocks once the survey is submitted. */
+  grant: { kind: "report_plan"; plan: "full_report" } | { kind: "pre_unlock" };
+  /** The Stripe line item, the receipt line and the payment_item name (Figma receipt 1475:2114). */
+  productName: string;
+  defaultPriceCents: number;
+  /** The pre-report wizard a buyer of this offer gets. */
+  wizard: "pay_to_start" | "standard";
+  /**
+   * Whether it can be sold. The EUR 1.99 Pre-Payments offer (Figma 1741:5587) unlocks
+   * part of the report and needs that partial-unlock state to exist first.
+   */
+  enabled: boolean;
+  /** Where its landing page lives (the search ad's URL in Figma 1706:1627). */
+  landingPath: string;
+}
+
+const FULL_OFFER: PayToStartOffer = {
+  id: "full",
+  grant: { kind: "report_plan", plan: "full_report" },
+  productName: "LoveIQ Survey & Report",
+  defaultPriceCents: 2900,
+  wizard: "pay_to_start",
+  enabled: true,
+  landingPath: "/sexual-archetype",
+};
+
+/** Registered so rows, metadata and readouts can name it; not on sale (see `enabled`). */
+const PRE_OFFER: PayToStartOffer = {
+  id: "pre",
+  grant: { kind: "pre_unlock" },
+  productName: "LoveIQ Survey & Report",
+  defaultPriceCents: 199,
+  wizard: "standard",
+  enabled: false,
+  landingPath: "/sexual-archetype",
+};
+
+export function getOfferDefinition(id: PayToStartOfferId): PayToStartOffer {
+  switch (id) {
+    case "full":
+      return FULL_OFFER;
+    case "pre":
+      return PRE_OFFER;
+  }
+}
+
+export function isPayToStartOfferId(value: unknown): value is PayToStartOfferId {
+  return value === "full" || value === "pre";
+}
+
+/**
+ * The prices a setting may hold, in cents. Below EUR 5 a Stripe fee eats most of it and a
+ * typo like "29" (EUR 0.29) is caught; above EUR 99 is not a price anyone has proposed.
+ */
+export const MIN_PRICE_CENTS = 500;
+export const MAX_PRICE_CENTS = 9900;
+
+/** A price setting, or null when it is missing or not a whole number of cents in range. */
+export function parsePriceCents(raw: string | null | undefined): number | null {
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) return null;
+  const cents = Number(raw.trim());
+  return Number.isSafeInteger(cents) && cents >= MIN_PRICE_CENTS && cents <= MAX_PRICE_CENTS
+    ? cents
+    : null;
+}
+
+/**
+ * "€29" for whole euros (as every price on the Figma page reads), "€19.99" otherwise.
+ * en-IE puts the euro sign first, as the rest of the site does (`formatReportPurchasePrice`).
+ */
+export function formatOfferPrice(cents: number): string {
+  const whole = cents % 100 === 0;
+  return new Intl.NumberFormat("en-IE", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+/** "€29.00", for the places that show cents whatever the price (the confirmation email). */
+export function formatOfferAmount(cents: number): string {
+  return new Intl.NumberFormat("en-IE", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
