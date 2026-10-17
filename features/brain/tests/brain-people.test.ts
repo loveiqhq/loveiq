@@ -9,6 +9,7 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import {
+  angledForTest,
   canonicalPeople,
   clearPeopleCache,
   peopleIn,
@@ -108,6 +109,22 @@ describe("peopleIn — one name for a person, whatever the source called them", 
       expect(peopleIn({ participants: [crafted] }, REG)).toBeUndefined();
       expect(performance.now() - started).toBeLessThan(250);
     }
+  });
+
+  it("splits a name from its angled address only when that is the whole value", () => {
+    expect(angledForTest("Marcus Börner <mb@loveiq.org>")).toEqual([
+      "Marcus Börner",
+      "mb@loveiq.org",
+    ]);
+    expect(angledForTest(' "Mark Oldenburg" <mark@x.test> ')).toEqual([
+      "Mark Oldenburg",
+      "mark@x.test",
+    ]);
+    expect(angledForTest("<only@x.test>")).toEqual(["", "only@x.test"]);
+    expect(angledForTest("Name <>")).toBeNull();
+    expect(angledForTest("Name <a@x.test> extra")).toBeNull();
+    expect(angledForTest('A "B" <c@x.test>')).toBeNull();
+    expect(angledForTest("plain name")).toBeNull();
   });
 
   it("keeps any other bracket as part of the name", () => {

@@ -13,9 +13,10 @@
  * ingester holds; a failed batch is tried again, and after three failures the run stops
  * and prints where to resume.
  *
- * RUN IT BETWEEN INGEST RUNS (e.g. :43 to :49 past the hour). A batch and an ingest upsert
- * that lock the same rows in opposite orders can deadlock, and Postgres may cancel the
- * ingest's write instead of the batch (8 of 24 overlapping runs in the review of #605).
+ * RUN IT WHILE NO INGEST JOB IS WRITING: no `cron_run` row started in the last two minutes
+ * and none due in the next three (vercel.json, features/cron/server/github-jobs.ts). A batch
+ * and an ingest upsert that lock the same rows in opposite orders can deadlock, and Postgres
+ * may cancel the ingest's write instead of the batch (8 of 24 overlapping runs, #605 review).
  *
  * Safe to stop and re-run: a batch that is already filled writes nothing.
  *

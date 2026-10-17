@@ -9840,7 +9840,7 @@ describe("find_text — every record holding an exact text", () => {
    */
   it("splits runs at the whitespace Postgres splits them at", () => {
     const link = "https://x.test/b?to=m%C3%BCller%40x.test";
-    for (const sep of ["\u0085", "\u001c", "\u001f"]) {
+    for (const sep of ["\u0085", "\u001c", "\u001d", "\u001e", "\u001f", "\u00a0"]) {
       expect(encodedLinesForTest(`n=caf%E9${sep}${link}`, "müller@x.test", 3)).toHaveLength(1);
     }
     // U+FEFF splits nothing in Postgres, so the run stays whole there as here.

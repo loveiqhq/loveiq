@@ -2078,9 +2078,10 @@ where it differs, so a second run writes nothing. Title, body, `updated_at` and 
 embedding are never written, so `brain_chunk_embedding_follows_text` keeps every vector
 (proved on staging: 3,013 rows, none changed but `exact_terms`). It waits at most 2 seconds
 for a row an ingester holds; a failed batch is tried three times, then the run stops and
-prints the `--after` to resume from. Run it between ingest runs, for example from :43 to :49 past the
-hour, when no scheduled job writes: a batch and an ingest upsert that lock the same rows in
-opposite orders can deadlock, and Postgres may cancel the ingest's write rather than the
+prints the `--after` to resume from. Run it while no ingest job is writing: no `cron_run` row started in
+the last two minutes and none due in the next three (the schedules are in `vercel.json` and
+`features/cron/server/github-jobs.ts`). A batch and an ingest upsert that lock the same rows
+in opposite orders can deadlock, and Postgres may cancel the ingest's write rather than the
 batch (8 of 24 overlapping runs in the #605 review). On staging a batch took 0.7 to 1.2 seconds. Each row
 it fills is a new row version, so every index of the table gets an entry for it, as a
 source rebuild does. Until it finishes, `find_text` sees inside the links of new and
