@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +8,7 @@ import {
   BUBBLE_GAP,
   BUBBLE_MAX_WIDTH,
   CONSENT_GRACE_MS,
+  GUIDED_TOUR_KEY,
   HOLE_PAD,
   TOUR_STEP_IDS,
   bubbleWidth,
@@ -256,6 +259,12 @@ describe("when the tour starts by itself", () => {
     expect(tourWaitingOn({ ...clear, hidden: true, consentSettled: false })).toBe("hidden");
     expect(tourWaitingOn({ ...clear, consentSettled: false, anchorsReady: false })).toBe("consent");
     expect(tourWaitingOn({ ...clear, anchorsReady: false })).toBe("anchors");
+  });
+
+  it("is remembered under the key the e2e specs seed, so theirs never meet it", () => {
+    expect(readFileSync("e2e/fixtures/report.ts", "utf8")).toContain(
+      `GUIDED_TOUR_KEY = "${GUIDED_TOUR_KEY}"`
+    );
   });
 
   it("gives way to a reader who already started scrolling", () => {
