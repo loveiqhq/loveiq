@@ -12,6 +12,7 @@ vi.mock("@shared/http/csrf-client", () => ({
 }));
 
 import { useReportEngagementTimers } from "@features/report/ui/hooks/useReportEngagementTimers";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 const setVisibility = (state: "visible" | "hidden") => {
   Object.defineProperty(document, "visibilityState", {
@@ -47,6 +48,7 @@ describe("useReportEngagementTimers", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    __resetGuidedTourForTests();
   });
 
   it("does not start until reportType is non-null", () => {
@@ -177,6 +179,28 @@ describe("useReportEngagementTimers", () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(mockTrackReportEngagement).toHaveBeenCalledWith(60, "full_report", "Sage", 50);
+  });
+
+  it("leaves the guided tour's own trip down the page out of scroll_depth_pct", () => {
+    setScrollGeometry({ scrollY: 0, innerHeight: 800, scrollHeight: 1600 });
+    renderHook(() => useReportEngagementTimers({ reportType: "full_report", archetype: "Sage" }));
+
+    setGuidedTourActive(true);
+    setScrollGeometry({ scrollY: 600, innerHeight: 800, scrollHeight: 1600 });
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    setGuidedTourActive(false);
+    // The tour ends at the top; the reader then reads a quarter of the way down.
+    setScrollGeometry({ scrollY: 200, innerHeight: 800, scrollHeight: 1600 });
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(mockTrackReportEngagement).toHaveBeenCalledWith(60, "full_report", "Sage", 25);
   });
 
   it("clamps scroll_depth_pct to 100 even when scrollable height is 0", () => {
