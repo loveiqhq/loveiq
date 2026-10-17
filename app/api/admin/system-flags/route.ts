@@ -34,7 +34,12 @@ const patchSchema = z.object({
 // the +2 EUR urgency surcharge shipped in August 2026: live pricing with no kill
 // switch anyone could reach short of a hand-written database write. Any flag with
 // a money consequence belongs in this set on the day it ships.
-const ALLOWED_KEYS = new Set(["survey_submissions", "nurture_sequence", "report_paywall_enforced"]);
+const ALLOWED_KEYS = new Set([
+  "survey_submissions",
+  "nurture_sequence",
+  "report_paywall_enforced",
+  "pay_to_start_checkout",
+]);
 
 export async function GET() {
   const admin = await verifyAdminSession();
