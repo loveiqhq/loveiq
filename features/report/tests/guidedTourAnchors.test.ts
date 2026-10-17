@@ -39,9 +39,9 @@ describe("the tour's controls", () => {
     const nav = document.querySelector(".report-sidebar__nav");
     sized(pill);
     sized(nav, 240, 600);
-    expect(findTourAnchor("chapter_menu")).toEqual({ el: pill, sidebar: false });
+    expect(findTourAnchor("chapter_menu")).toMatchObject({ el: pill, sidebar: false });
     sized(pill, 0, 0); // `xl:hidden` from 1280px
-    expect(findTourAnchor("chapter_menu")).toEqual({ el: nav, sidebar: true });
+    expect(findTourAnchor("chapter_menu")).toMatchObject({ el: nav, sidebar: true });
   });
 
   it("never takes the drawer's own pill for the menu", () => {
@@ -72,6 +72,25 @@ describe("the tour's controls", () => {
     sized(document.querySelector(".rv4-try__label"), 260, 32);
     expect(findTourAnchor("chapter_toggle")?.el.className).toBe("rv4-chapter__chev");
     expect(findTourAnchor("try_this")?.el.className).toBe("rv4-try__label");
+  });
+
+  it("frames Try This's words, not the row its label stretches across", () => {
+    document.body.innerHTML = `
+      <section id="typical_beliefs"><span class="rv4-try__label">Try This &amp; See What Shifts</span></section>`;
+    const label = document.querySelector(".rv4-try__label");
+    sized(label, 780, 32);
+    const words = { top: 0, left: 0, width: 260, height: 32, right: 260, bottom: 32, x: 0, y: 0 };
+    const createRange = document.createRange.bind(document);
+    document.createRange = () => {
+      const range = createRange();
+      Object.defineProperty(range, "getBoundingClientRect", { value: () => words });
+      return range;
+    };
+    try {
+      expect(findTourAnchor("try_this")?.box().width).toBe(260);
+    } finally {
+      document.createRange = createRange;
+    }
   });
 
   it("takes the lock of the first locked chapter after Typical Beliefs, not a badge inside it", () => {

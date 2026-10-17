@@ -27,6 +27,8 @@ export interface TourAnchor {
   el: HTMLElement;
   /** The chapter menu as a desktop's sidebar: its bubble goes beside it, its copy says left. */
   sidebar: boolean;
+  /** What the spotlight frames, now: the element's box, or its words' (Try This). */
+  box: () => DOMRect;
 }
 
 /** In the layout: a box with a size, under no `hidden` ancestor. */
@@ -34,6 +36,20 @@ export function isShown(el: Element | null): el is HTMLElement {
   if (!(el instanceof HTMLElement) || el.closest("[hidden]")) return false;
   const box = el.getBoundingClientRect();
   return box.width > 0 && box.height > 0;
+}
+
+/**
+ * The box of an element's words. Try This's label stretches across its row, so on a wide
+ * column its own box ran ~780px past "See What Shifts"; Figma frames the words.
+ */
+function wordsBox(el: HTMLElement): DOMRect {
+  const own = el.getBoundingClientRect();
+  if (typeof document.createRange !== "function") return own;
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const words =
+    typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
+  return words && words.width > 0 && words.height > 0 ? words : own;
 }
 
 function firstShown(root: ParentNode, selector: string): HTMLElement | null {
@@ -45,19 +61,22 @@ function firstShown(root: ParentNode, selector: string): HTMLElement | null {
 
 export function findTourAnchor(id: TourStepId, doc: Document = document): TourAnchor | null {
   const tb = doc.querySelector(TYPICAL_BELIEFS);
-  const found = (el: HTMLElement | null, sidebar = false) => (el ? { el, sidebar } : null);
+  const found = (el: HTMLElement | null, sidebar = false): TourAnchor | null =>
+    el ? { el, sidebar, box: () => el.getBoundingClientRect() } : null;
   switch (id) {
     case "chapter_menu": {
       const pill = doc.querySelector(MENU_PILL);
-      if (isShown(pill)) return { el: pill, sidebar: false };
+      if (isShown(pill)) return found(pill);
       return found(firstShown(doc, MENU_SIDEBAR), true);
     }
     case "show_all":
       return found((tb && firstShown(tb, FOLD_PILL)) ?? firstShown(doc, FOLD_PILL));
     case "chapter_toggle":
       return found(tb && firstShown(tb, ".rv4-chapter__chev"));
-    case "try_this":
-      return found(tb && firstShown(tb, ".rv4-try__label"));
+    case "try_this": {
+      const label = tb && firstShown(tb, ".rv4-try__label");
+      return label ? { el: label, sidebar: false, box: () => wordsBox(label) } : null;
+    }
     case "unlock":
       return found(
         firstShown(doc, `${TYPICAL_BELIEFS} ~ .rv4-chapter.is-locked .rv4-chapter__lock`)

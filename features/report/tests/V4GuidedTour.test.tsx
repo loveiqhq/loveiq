@@ -353,6 +353,17 @@ describe("the guided tour", () => {
     expect(swipe.defaultPrevented).toBe(false);
   });
 
+  it("rings the focused button only once the reader uses the keyboard", () => {
+    // Each stop focuses Next; a browser rings a button the page focuses before any input,
+    // and Figma draws none (guidedTour.css shows it under data-keys).
+    render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);
+    arrive();
+    const layer = document.querySelector(".rv4-tour")!;
+    expect(layer.hasAttribute("data-keys")).toBe(false);
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(layer.hasAttribute("data-keys")).toBe(true);
+  });
+
   it("keeps Tab going round the bubble's buttons", () => {
     render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);
     arrive();
