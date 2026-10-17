@@ -201,6 +201,27 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       entity_type: "experiment",
       metadata: { to: "pricing", forced_paywall_arm: "treatment" },
     },
+    // The report's guided tour: report events, beside the chapters' reading stats.
+    {
+      event_type: "tour_started",
+      entity_type: "report",
+      metadata: { trigger: "auto", steps: 5 },
+    },
+    {
+      event_type: "tour_completed",
+      entity_type: "report",
+      metadata: { trigger: "auto", steps: 5, duration_ms: 12000 },
+    },
+    {
+      event_type: "tour_skipped",
+      entity_type: "report",
+      metadata: { trigger: "auto", at: 2, id: "show_all", steps: 5, source: "skip_button" },
+    },
+    {
+      event_type: "tour_replayed",
+      entity_type: "report",
+      metadata: { source: "drawer" },
+    },
   ];
 
   it.each(cases)(

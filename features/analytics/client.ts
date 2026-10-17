@@ -1,6 +1,12 @@
 import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
+import type {
+  TourReplaySource,
+  TourSkipSource,
+  TourStepId,
+  TourTrigger,
+} from "@features/report/logic/guidedTour";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { __resetFunnelVisitorForTests, funnelVisitorId } from "./funnelVisitor";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
@@ -98,6 +104,11 @@ const PERSISTED_EVENTS = new Set([
   // Per-chapter reading and the wizard's Skip Intro (14.10)
   "report_chapter_stats",
   "wizard_skipped",
+  // The report's guided tour: a first run's start and how it ended, and each replay
+  "tour_started",
+  "tour_completed",
+  "tour_skipped",
+  "tour_replayed",
 ]);
 
 /**
@@ -1029,6 +1040,84 @@ export const trackScrollPaywallDismissed = (params: {
   };
   track("scroll_paywall_dismissed", payload);
   persistAnalyticsEvent("scroll_paywall_dismissed", payload, payload.view_duration_ms);
+};
+
+/**
+ * The report's guided tour (features/report/logic/guidedTour.ts). Figma's spec card
+ * (1755:1276) names the events: started, each stop viewed, back, skipped, completed and
+ * replayed. Every one goes to PostHog. Only a FIRST run's start and outcome are stored
+ * against the submission, with each replay: the route stores at most 20 events a minute
+ * per submission, shared with `begin_checkout`, and a reader clicking through five stops
+ * would spend a quarter of that on step views. A first run's `tour_skipped` already says
+ * at which stop it stopped; PostHog keeps every step of every run.
+ */
+export const trackTourStarted = (params: { trigger: TourTrigger; steps: number }) => {
+  const payload = { trigger: params.trigger, steps: params.steps };
+  track("tour_started", payload);
+  if (params.trigger === "auto") persistAnalyticsEvent("tour_started", payload);
+};
+
+export const trackTourStepViewed = (params: {
+  trigger: TourTrigger;
+  n: number;
+  id: TourStepId;
+  steps: number;
+}) => {
+  track("tour_step_viewed", {
+    trigger: params.trigger,
+    n: params.n,
+    id: params.id,
+    steps: params.steps,
+  });
+};
+
+export const trackTourBack = (params: { trigger: TourTrigger; to: number; steps: number }) => {
+  track("tour_back", { trigger: params.trigger, to: params.to, steps: params.steps });
+};
+
+export const trackTourSkipped = (params: {
+  trigger: TourTrigger;
+  at: number;
+  id: TourStepId;
+  steps: number;
+  source: TourSkipSource;
+  duration_ms: number;
+}) => {
+  const payload = {
+    trigger: params.trigger,
+    at: params.at,
+    id: params.id,
+    steps: params.steps,
+    source: params.source,
+    duration_ms: Math.max(0, Math.round(params.duration_ms)),
+  };
+  track("tour_skipped", payload);
+  if (params.trigger === "auto") {
+    persistAnalyticsEvent("tour_skipped", payload, payload.duration_ms);
+  }
+};
+
+export const trackTourCompleted = (params: {
+  trigger: TourTrigger;
+  steps: number;
+  duration_ms: number;
+}) => {
+  const payload = {
+    trigger: params.trigger,
+    steps: params.steps,
+    duration_ms: Math.max(0, Math.round(params.duration_ms)),
+  };
+  track("tour_completed", payload);
+  if (params.trigger === "auto") {
+    persistAnalyticsEvent("tour_completed", payload, payload.duration_ms);
+  }
+};
+
+/** "Replay the Tour" tapped in the chapter menu. The run it starts logs its own events. */
+export const trackTourReplayed = (params: { source: TourReplaySource }) => {
+  const payload = { source: params.source };
+  track("tour_replayed", payload);
+  persistAnalyticsEvent("tour_replayed", payload);
 };
 
 /**
