@@ -1609,7 +1609,10 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     ),
     P("an-cac", "what does a paying customer cost us", bodyHas(/[Cc]ost per paying customer/)),
     P("an-cps", "what does one signup cost in ad spend", bodyHas(/[Cc]ost per signup/)),
-    P("an-net", "are we profitable or losing money", bodyHas(/Net: EUR/)),
+    // Both of the numbers record's wordings: "Net: EUR …" when ad spend covers the whole
+    // period, "Net over the N day(s) ad data covers (…): EUR …" when it does not, which is
+    // every open period until today's spend arrives (red each morning, 17 Oct 2026).
+    P("an-net", "are we profitable or losing money", bodyHas(/Net(?: over [^:\n]*)?: EUR/)),
 
     // ── GA4 ──────────────────────────────────────────────────────────────────
     /**
