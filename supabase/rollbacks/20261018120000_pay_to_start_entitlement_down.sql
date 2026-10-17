@@ -10,6 +10,8 @@ BEGIN;
 
 UPDATE public.prepaid_report_access SET status = 'pending' WHERE status = 'expired';
 
+DELETE FROM system_flags WHERE key = 'pay_to_start_checkout';
+
 ALTER TABLE public.prepaid_report_access
   DROP CONSTRAINT IF EXISTS prepaid_report_access_status_check;
 ALTER TABLE public.prepaid_report_access
