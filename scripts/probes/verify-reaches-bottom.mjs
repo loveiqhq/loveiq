@@ -14,6 +14,7 @@
  * section is really rendered, not an empty spacer.
  */
 import { chromium, webkit, devices } from "playwright";
+import { stagingCookies } from "./staging-cookie.mjs";
 
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
 const TOKEN = process.env.QA_TOKEN_FULL ?? "rpt_FW1ueobP1gU8YFZcIcpg";
@@ -32,6 +33,10 @@ for (const name of CASES) {
   const engine = d.includes("iphone") || d.includes("ipad") ? "webkit" : "chromium";
   const browser = await (engine === "webkit" ? webkit : chromium).launch();
   const ctx = await browser.newContext({ ...devices[name], locale: "en-US" });
+  // The probe marker, and the staging session where a password is set: a probe is not a
+  // reader. The report's guided tour holds the page still on a first open and never starts
+  // for a probe, so without it this sweep would meet the tour instead of the report.
+  await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
   const page = await ctx.newPage();
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e.message).slice(0, 60)));
