@@ -512,8 +512,8 @@ member one sign-in code email.
   (`brain-reconcile`) compares the list with the Google Workspace directory and names any
   active account missing from it, as a person or as a shared account. After adding someone,
   run `npx tsx scripts/brain-backfill-people.ts --all` so records that already name somebody
-  else gain them too. Google's notification senders ("Name (Google Docs)", "Name (via Google
-  Drive)") count as that person.
+  else gain them too. Google's notification senders ("Name (Google Docs)", "Name (Google
+  Calendar)", "Name (via Google Drive)") count as that person.
 - **Offboarding** is `update brain_person set active = false where canonical = '…'`.
   Every client they connected stops working within a minute, because membership is
   checked on each call, not once at sign-in.

@@ -79,8 +79,28 @@ describe("peopleIn — one name for a person, whatever the source called them", 
     ]);
   });
 
+  /**
+   * EVERY "(Google …)" AND "(via …)" SUFFIX ON PRODUCTION'S SENDERS, checked 2026-10-17. A
+   * calendar invite Google sent as "<address> (Google Calendar)" was not tagged with the person.
+   */
+  it.each([
+    "mo@loveiq.org (Google Calendar)",
+    "Mark Oldenburg (Google Docs)",
+    "Mark Oldenburg (Google Sheets)",
+    "Mark Oldenburg (via Slack)",
+    "Mark Oldenburg (via Google Docs)",
+    "Mark Oldenburg (via Google Drive)",
+    "Mark Oldenburg (via Google Sheets)",
+    "Mark Oldenburg (via Google Forms)",
+    "Mark Oldenburg (via Google Meet)",
+  ])("reads the person behind %s", (sender) => {
+    expect(peopleIn({ participants: [sender] }, REG)).toEqual(["Mark Oldenburg"]);
+  });
+
   it("keeps any other bracket as part of the name", () => {
     expect(peopleIn({ participants: ["Marcus Börner (personal)"] }, REG)).toBeUndefined();
+    expect(peopleIn({ participants: ["Marcus Börner (Google)"] }, REG)).toBeUndefined();
+    expect(peopleIn({ participants: ["Marcus Börner (Google Docs) team"] }, REG)).toBeUndefined();
   });
 
   it("collects across several identity fields at once and de-duplicates", () => {
