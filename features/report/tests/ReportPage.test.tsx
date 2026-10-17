@@ -94,6 +94,13 @@ vi.mock("@features/analytics/client", () => ({
   trackExperimentExposure: vi.fn(),
   // Report 3.0's reading per chapter, saved when the page goes (chapterStats).
   persistReportChapterStats: vi.fn(),
+  // The guided tour on a V4 report's first open (V4GuidedTour, useGuidedTour).
+  trackTourStarted: vi.fn(),
+  trackTourStepViewed: vi.fn(),
+  trackTourBack: vi.fn(),
+  trackTourSkipped: vi.fn(),
+  trackTourCompleted: vi.fn(),
+  trackTourReplayed: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -141,6 +148,7 @@ vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
 import ReportPage from "@features/report/ui/ReportPage";
 import { UNLOCK_ANCHOR_REGEX } from "@features/checkout/server/reportPurchase";
 import * as analytics from "@features/analytics/client";
+import { GUIDED_TOUR_KEY } from "@features/report/logic/guidedTour";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
@@ -376,6 +384,9 @@ describe("ReportPage", () => {
     mockTrackReportViewed.mockReset();
     mockTrackPaywallView.mockReset();
     mockTrackBeginCheckout.mockReset();
+    // A V4 report's first open starts the guided tour over the page. These cases are about
+    // the page itself, so this browser has seen it; the tour's own block clears this.
+    window.localStorage.setItem(GUIDED_TOUR_KEY, "seen");
 
     vi.stubGlobal(
       "IntersectionObserver",
@@ -2854,6 +2865,156 @@ describe("ReportPage", () => {
 
   // Fatih, 03.10: each archetype's own colours. The live root is the only place a V4 reader
   // gets the inks, so the page is what this pins.
+  describe("V4 — the guided tour on the first open", () => {
+    const TOUR_TOKEN = "rpt_guided_tour";
+    let rects: { mockRestore: () => void } | null = null;
+
+    beforeEach(() => {
+      vi.useFakeTimers({
+        toFake: [
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval",
+          "requestAnimationFrame",
+          "cancelAnimationFrame",
+          "performance",
+          "Date",
+        ],
+      });
+      // This browser's first open.
+      window.localStorage.removeItem(GUIDED_TOUR_KEY);
+      // The reader has answered the cookie banner, and is at the top of the page.
+      document.cookie = "cookieyes-consent=consent:yes,action:yes; path=/";
+      Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+      // jsdom lays nothing out: every element gets a box, so the tour finds its controls.
+      rects = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+        () =>
+          ({
+            top: 300,
+            bottom: 334,
+            left: 20,
+            right: 140,
+            width: 120,
+            height: 34,
+            x: 20,
+            y: 300,
+            toJSON: () => ({}),
+          }) as DOMRect
+      );
+      vi.mocked(analytics.trackTourStarted).mockClear();
+    });
+
+    afterEach(() => {
+      rects?.mockRestore();
+      vi.useRealTimers();
+      document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      document.cookie = "loveiq_probe=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    /** A locked V4 reader, with nothing opening by itself over the report. */
+    function tourV4(query = "", data: Record<string, unknown> = {}) {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(`v4=1&popup=off${query}`));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue({
+        ...response,
+        data: { ...response.data, submissionId: 3011, ...data },
+      });
+    }
+
+    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+    /**
+     * Two steps: `act` renders what a timer set only once it returns, so the tour the hook
+     * starts is mounted after the first, and its frames run in the second.
+     */
+    const settle = () => {
+      advance(4_000);
+      advance(2_000);
+    };
+    const tourBubble = () => screen.queryByRole("dialog", { name: "Easily Navigate Your Report" });
+
+    it("starts by itself on a V4 owner's first open, over a page held inert but not blurred", () => {
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+
+      expect(tourBubble()).toBeInTheDocument();
+      expect(analytics.trackTourStarted).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "auto" })
+      );
+      expect(
+        window.localStorage.getItem(GUIDED_TOUR_KEY),
+        "remembered once started"
+      ).not.toBeNull();
+      const shell = document.querySelector(".report-page__shell-wrap")!;
+      expect(shell.parentElement!.hasAttribute("inert")).toBe(true);
+      expect(shell.className).not.toContain("report-page__shell-wrap--obscured");
+      expect(document.querySelector(".report-sticky-unlock")?.getAttribute("aria-hidden")).toBe(
+        "true"
+      );
+    });
+
+    it("lets go of the page when the reader ends it", () => {
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      advance(100);
+
+      expect(tourBubble()).toBeNull();
+      const shell = document.querySelector(".report-page__shell-wrap")!;
+      expect(shell.parentElement!.hasAttribute("inert")).toBe(false);
+    });
+
+    it("does not start again on a browser that has seen it", () => {
+      window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeNull();
+      expect(analytics.trackTourStarted).not.toHaveBeenCalled();
+    });
+
+    it("does not start for a probe, a shared view or a return from checkout", () => {
+      const notStarted = (why: string) => {
+        expect(tourBubble(), why).toBeNull();
+        expect(window.localStorage.getItem(GUIDED_TOUR_KEY), why).toBeNull();
+      };
+      document.cookie = "loveiq_probe=1; path=/";
+      tourV4();
+      const probe = render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      notStarted("a probe (the persona walks)");
+      probe.unmount();
+      document.cookie = "loveiq_probe=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+
+      tourV4("", { viewMode: "shared" });
+      const shared = render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      notStarted("a shared view");
+      shared.unmount();
+
+      tourV4("&anchor=c-typical_beliefs");
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      notStarted("back from checkout");
+      expect(analytics.trackTourStarted).not.toHaveBeenCalled();
+    });
+
+    it("gives way to a reader who has already started scrolling", () => {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: 640 });
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeNull();
+      expect(window.localStorage.getItem(GUIDED_TOUR_KEY), "kept for their next open").toBeNull();
+    });
+  });
+
   describe("V4 — the report root carries the archetype's own inks", () => {
     afterEach(() => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));

@@ -52,6 +52,22 @@ describe("plans pop-up trigger", () => {
     expect(SOURCE).toMatch(/cardObserver\?\.disconnect\(\)/);
   });
 
+  it("stands down while the guided tour scrolls the page, still watching for the reader", () => {
+    // The tour's trip down the page (V4GuidedTour) is not the reader arriving, and the
+    // pop-up fires once a visit. Each path returns BEFORE stop() or disconnect(), so it
+    // still fires when the reader gets there themselves.
+    const card = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
+    expect(card.slice(0, card.indexOf("cardObserver?.disconnect();"))).toContain(
+      "if (isGuidedTourActive()) return;"
+    );
+    const io = SOURCE.slice(SOURCE.indexOf("const observer = new IntersectionObserver("));
+    expect(io.slice(0, io.indexOf("stop();"))).toContain("if (isGuidedTourActive()) return;");
+    expect(SOURCE).toContain("if (!isGuidedTourActive() && hasReachedTrigger())");
+    expect(SOURCE).toContain("if (isGuidedTourActive() || !hasReachedTrigger()) return;");
+    // And the leave offer is off while it runs, so the wall it passes cannot arm it.
+    expect(SOURCE).toContain('mode: tour.running ? "off" : leaveOfferMode');
+  });
+
   it("waits until the section has risen into the viewport, not merely touched its edge", () => {
     // A ratio threshold cannot work here: the section is 620px tall on desktop
     // but 1089px against a 900px viewport on mobile, so it can never exceed 83%

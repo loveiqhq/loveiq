@@ -76,11 +76,29 @@ export function buildReportFixture(discountStep: number, overrides: Record<strin
   };
 }
 
+/**
+ * The guided tour runs over a V4 report on its first open in a browser, and every test
+ * starts in a fresh one. Specs about the page under it start as a reader who has seen it;
+ * the tour's own spec asks for it with `{ tour: true }`. The key is the tour's own
+ * (features/report/logic/guidedTour.ts, GUIDED_TOUR_KEY).
+ */
+export const GUIDED_TOUR_KEY = "loveiq-report-tour-v1";
+
 export async function mockReport(
   page: Page,
   discountStep: number,
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
+  { tour = false }: { tour?: boolean } = {}
 ) {
+  if (!tour) {
+    await page.addInitScript((key) => {
+      try {
+        window.localStorage.setItem(key, "seen");
+      } catch {
+        // No storage: then the tour cannot remember itself and never starts either.
+      }
+    }, GUIDED_TOUR_KEY);
+  }
   await page.route("**/api/report?**", async (route) => {
     await route.fulfill({
       status: 200,
