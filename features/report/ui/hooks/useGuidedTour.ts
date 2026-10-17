@@ -36,6 +36,8 @@ export interface UseGuidedTourArgs {
 }
 
 export interface GuidedTour {
+  /** The tour can run on this page: the chapter menu offers "Replay the Tour". */
+  available: boolean;
   run: GuidedTourRun | null;
   /** On screen now: the page holds still, the paywall prompts wait, the report is inert. */
   running: boolean;
@@ -205,5 +207,5 @@ export function useGuidedTour({ enabled, autoStart, blocked }: UseGuidedTourArgs
     setRun(null);
   }, []);
 
-  return { run, running: enabled && run !== null, replay, done };
+  return { available: enabled, run, running: enabled && run !== null, replay, done };
 }

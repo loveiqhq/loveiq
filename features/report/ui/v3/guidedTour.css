@@ -296,6 +296,34 @@
   outline-offset: 2px;
 }
 
+/* "Replay the Tour": the chapter menu's last item (spec card 1755:1276), below
+   the list in the phone's drawer and in the desktop's sidebar. The prototype's:
+   violet, semibold, a hairline above, aligned with the rows' 6px inset. */
+.report-tour-replay {
+  flex-shrink: 0;
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px 6px 2px;
+  border: 0;
+  border-top: 1px solid #ece9f3;
+  background: none;
+  color: #6e56cf;
+  cursor: pointer;
+  font: 600 14px/20px var(--font-jakarta);
+  text-align: left;
+}
+
+.report-tour-replay:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.report-tour-replay:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #6e56cf;
+  outline-offset: 2px;
+}
+
 /* Reduced motion (spec card): the page jumps, the spotlight neither travels nor
    pulses, nothing moves; the dim and the bubble only fade. V4GuidedTour holds the
    moves back too; this is the stylesheet's half. */

@@ -10,6 +10,7 @@ import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
 import { useIsV3, useIsV4 } from "./v3/V3Chapter";
+import { TOUR_LABELS } from "./v3/guidedTourContent";
 import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS } from "./v3/reportV3Nav";
 
 interface Props {
@@ -21,6 +22,11 @@ interface Props {
   onShareClick?: () => void;
   /** Fired each time the chapter drawer opens (for analytics). */
   onDrawerOpened?: () => void;
+  /**
+   * "Replay the Tour", the menu's last item (the guided tour's spec card, 1755:1276).
+   * Called once the drawer has closed, with what focus goes back to when the tour ends.
+   */
+  onReplayTour?: (returnTo: HTMLElement | null) => void;
 }
 
 // Flat id → label lookup for the floating "Chapter: …" pill, from the same
@@ -63,6 +69,7 @@ const ReportMobileNav: FC<Props> = ({
   onSectionClick,
   onShareClick,
   onDrawerOpened,
+  onReplayTour,
 }) => {
   const isV3 = useIsV3();
   const isV4 = useIsV4();
@@ -205,6 +212,21 @@ const ReportMobileNav: FC<Props> = ({
         .getElementById(target)
         ?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
     });
+  }, [phase]);
+
+  /**
+   * "Replay the Tour" starts it once the menu has let go of the page, for the same reason a
+   * chapter jumps then: the tour scrolls the page itself, and the menu's lock would undo it.
+   */
+  const pendingReplayRef = useRef(false);
+  const onReplayRef = useRef(onReplayTour);
+  useEffect(() => {
+    onReplayRef.current = onReplayTour;
+  }, [onReplayTour]);
+  useEffect(() => {
+    if (phase !== "closed" || !pendingReplayRef.current) return;
+    pendingReplayRef.current = false;
+    afterOverlayEntryGone(() => onReplayRef.current?.(pillButtonRef.current));
   }, [phase]);
 
   // Body-scroll lock active for the full mount lifetime (open + closing) so
@@ -416,6 +438,19 @@ const ReportMobileNav: FC<Props> = ({
                 </div>
               ))}
             </nav>
+            {/* After the list, not in it: the walks and paywall-back count its rows. */}
+            {onReplayTour && (
+              <button
+                type="button"
+                className="report-tour-replay"
+                onClick={() => {
+                  pendingReplayRef.current = true;
+                  closeDrawer();
+                }}
+              >
+                {TOUR_LABELS.replay}
+              </button>
+            )}
           </div>
         </div>
       )}
