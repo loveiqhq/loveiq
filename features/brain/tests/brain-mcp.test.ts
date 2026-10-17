@@ -9786,14 +9786,25 @@ describe("find_text — every record holding an exact text", () => {
   });
 
   it("cuts a URL-encoded line to the raw span that encodes the text, at most max", () => {
-    const long = `${"a".repeat(300)} <https://t.example.test/r?url=https%3A%2F%2Fbook.example.test%2Fteam> ${"b".repeat(300)}`;
-    const [w] = encodedLinesForTest(`title\n${long}\nnext`, "book.example.test/team", 3);
+    // A tracking link is long, and the text is at its end: the window is around the text.
+    const link = `<https://t.example.test/r?t=${"Q".repeat(400)}&url=https%3A%2F%2Fbook.example.test%2Fteam>`;
+    const [w] = encodedLinesForTest(
+      `title\n${"a".repeat(300)} ${link} ${"b".repeat(300)}\nnext`,
+      "book.example.test/team",
+      3
+    );
     expect(w).toMatch(
-      /^…a+ <https:\/\/t\.example\.test\/r\?url=https%3A%2F%2Fbook\.example\.test%2Fteam> b+… \(URL-encoded on this line\)$/
+      /^…Q+&url=https%3A%2F%2Fbook\.example\.test%2Fteam> b+… \(URL-encoded on this line\)$/
     );
     expect(w!.length).toBeLessThan(300);
     expect(encodedLinesForTest("x%40y.test one\nx%40y.test two", "x@y.test", 1)).toEqual([
       "x%40y.test one (URL-encoded on this line)",
+    ]);
+    // Two links that each hold it, written differently, and one line asked for.
+    const both = "u=x%40y.test one\nu=x%40%79.test two";
+    expect(encodedLinesForTest(both, "x@y.test", 3)).toHaveLength(2);
+    expect(encodedLinesForTest(both, "x@y.test", 1)).toEqual([
+      "u=x%40y.test one (URL-encoded on this line)",
     ]);
     expect(encodedLinesForTest("x@y.test, no escapes", "x@y.test", 3)).toEqual([]);
     expect(encodedLinesForTest("nothing%20here", "x@y.test", 3)).toEqual([]);
