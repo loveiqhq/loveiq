@@ -14,6 +14,7 @@ import {
 } from "@features/analytics/chapterStats";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
 import { __resetBodyScrollLockForTests, lockBodyScroll } from "@shared/ui/body-scroll-lock";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 /** The chapters in nav order; `summary` is a section of its own with no nav row. */
 const CHAPTERS = ["intro", "core", "beliefs"];
@@ -101,6 +102,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   __resetBodyScrollLockForTests();
+  __resetGuidedTourForTests();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -130,6 +132,19 @@ describe("reading time", () => {
     leave();
     // Nothing counted, and an empty save is no save.
     expect(saves()).toEqual([]);
+  });
+
+  it("stops while the guided tour moves the page, and runs again once it ends", () => {
+    render(<Page />);
+    setGuidedTourActive(true);
+    current = "beliefs";
+    advance(8000);
+    setGuidedTourActive(false);
+    current = "intro";
+    advance(1000);
+    leave();
+    // The tour's stop in Typical Beliefs is not reading time there.
+    expect(saves()).toEqual([{ archetype: "Spark Seeker", chapters: { intro: { ms: 1000 } } }]);
   });
 });
 

@@ -33,6 +33,7 @@
  */
 
 import { withoutTrackingParams } from "@shared/url/utm";
+import { isGuidedTourActive } from "@shared/ui/guided-tour-state";
 import {
   trackDeadClick,
   trackRageClick,
@@ -264,6 +265,8 @@ export function installUxSignals(): void {
     scrollRafScheduled = true;
     requestAnimationFrame(() => {
       scrollRafScheduled = false;
+      // The report's guided tour scrolls the page itself; the depth is the reader's own.
+      if (isGuidedTourActive()) return;
       const state = ensureState();
       const doc = document.documentElement;
       const total = Math.max(1, doc.scrollHeight - window.innerHeight);
@@ -288,6 +291,10 @@ export function installUxSignals(): void {
   const onPointerDown = (event: PointerEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    // While the report's guided tour runs, the page under its dim is meant not to answer:
+    // a tap there is no defect, and the control beneath it would be named as one. Its
+    // bubble (a dialog) is watched as ever.
+    if (isGuidedTourActive() && !target.closest('[role="dialog"]')) return;
     const state = ensureState();
 
     /**
