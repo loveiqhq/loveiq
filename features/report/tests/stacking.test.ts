@@ -32,4 +32,20 @@ describe("what sits on top of what on the report", () => {
     expect(offer).toBeLessThan(zIndex(css, ".report-share-modal"));
     expect(offer).toBeLessThan(zIndex(css, ".report-checkout-handoff"));
   });
+
+  it("dims the bar and the chapter list under the guided tour, and keeps every window above it", () => {
+    // The page opens none of these while the tour runs; one that did must still be usable.
+    const tour = zIndex(readFileSync("features/report/ui/v3/guidedTour.css", "utf8"), ".rv4-tour");
+    expect(tour).toBeGreaterThan(zIndex(css, ".report-sticky-unlock"));
+    expect(tour).toBeGreaterThan(zIndex(css, ".report-chapter-drawer-root"));
+    expect(tour).toBeLessThan(zIndex(css, ".report-pricing-modal"));
+    expect(tour).toBeLessThan(
+      zIndex(
+        readFileSync("features/booking/ui/founderCallDialog.css", "utf8"),
+        ".report-leave-offer"
+      )
+    );
+    expect(tour).toBeLessThan(zIndex(css, ".report-share-modal"));
+    expect(tour).toBeLessThan(zIndex(css, ".report-checkout-handoff"));
+  });
 });
