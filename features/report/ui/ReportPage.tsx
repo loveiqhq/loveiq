@@ -196,6 +196,9 @@ import {
 import { plansOfferedKey } from "../logic/plansOffer";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import { useLeaveIntent } from "./hooks/useLeaveIntent";
+import { useGuidedTour } from "./hooks/useGuidedTour";
+import V4GuidedTour from "./v3/V4GuidedTour";
+import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
 import {
   captureUnlockAnchor,
   parseUnlockAnchor,
@@ -461,6 +464,8 @@ interface ReportExperienceProps {
   isShareModalOpen: boolean;
   /** The founder-call leave offer is open over the report. */
   isLeaveOfferOpen?: boolean;
+  /** The guided tour runs over the report, which is inert under it (no blur). */
+  isTourRunning?: boolean;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
@@ -606,6 +611,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   isPricingModalOpen,
   isShareModalOpen,
   isLeaveOfferOpen = false,
+  isTourRunning = false,
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
@@ -933,6 +939,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
     function updateActive() {
       if (Date.now() < clickLockUntilRef.current) return;
+      // The guided tour scrolls the page to its stops; the pill keeps the reader's chapter,
+      // and is brought up to date when the tour ends (subscribed below).
+      if (isGuidedTourActive()) return;
       // Measured on every update, not once at mount: the page keeps changing height
       // after it — Typical Beliefs' rows grow ~759px as they turn, chapters open and
       // close, the fonts land — and tops measured at mount ran the highlight ahead of
@@ -960,11 +969,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
+    const unsubscribeTour = subscribeGuidedTour(onScroll);
     updateActive();
 
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      unsubscribeTour();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
     // `navIds` is one of two module constants; `resolvedSections` only matters
@@ -1102,10 +1113,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           modal opens. The desktop sidebar stays inside the shell grid.
           The outer div groups all of them so inert/aria-hidden still scopes
           correctly when a modal is open — no filter/transform here, so the
-          containing-block bug stays gone. */}
+          containing-block bug stays gone. The guided tour holds the page here
+          too, without the shell's blur: its spotlight shows the page as it is. */}
       <div
-        aria-hidden={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen}
-        inert={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen}
+        aria-hidden={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen || isTourRunning}
+        inert={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen || isTourRunning}
       >
         <WithActiveSection store={activeSection}>
           {(activeSectionId) => (
@@ -2962,8 +2974,30 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     }),
     isProbe,
   });
+
+  /**
+   * The guided tour (features/report/logic/guidedTour.ts), on a V4 report's first open
+   * on this browser and from the chapter menu. Its owner's or a preview's, never a shared
+   * view's; never a probe's (the persona walks carry the cookie); never on a return from
+   * checkout, which restores the reader's place instead. While it runs the leave offer is
+   * off, so the paywall the tour scrolls past does not arm it.
+   */
+  // Read once: the page drops `?anchor=` from the address as soon as it has restored it.
+  const [arrivedFromCheckout] = useState(() => searchParams.get("anchor") !== null);
+  const tour = useGuidedTour({
+    enabled:
+      isV4 &&
+      status === "success" &&
+      viewMode === "owner" &&
+      Boolean(data) &&
+      (viewArchetype || data?.primaryArchetype) ===
+        (data?.contentArchetype ?? data?.primaryArchetype),
+    autoStart: !isProbe && !arrivedFromCheckout,
+    blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
+  });
+
   const leaveOffer = useLeaveIntent({
-    mode: leaveOfferMode,
+    mode: tour.running ? "off" : leaveOfferMode,
     submissionId: data?.submissionId ?? null,
     overlayOpen: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
     plansOpen: isPricingModalOpen,
@@ -3151,6 +3185,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       cardObserver = new IntersectionObserver(
         (entries) => {
           if (!entries.some((entry) => entry.isIntersecting)) return;
+          if (isGuidedTourActive()) return;
           cardObserver?.disconnect();
           cardObserver = null;
           notifyPaywallReached();
@@ -3186,9 +3221,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // never fire on mobile. The inset instead waits until the section's top has
     // risen past three quarters of the viewport, which reads as "arrived" at
     // every width.
+    // While the guided tour scrolls the page, nothing here fires and nothing is let go of:
+    // its trip down the page is not the reader arriving, and the pop-up fires once.
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
+        if (isGuidedTourActive()) return;
         stop();
         openPlans();
       },
@@ -3208,7 +3246,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // once here so such a reader still gets the offer. It cannot misfire at the top
     // of the report: everything above this chapter is far taller than three quarters
     // of a viewport.
-    if (hasReachedTrigger()) {
+    if (!isGuidedTourActive() && hasReachedTrigger()) {
       openPlans();
     }
 
@@ -3218,7 +3256,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (!hasReachedTrigger()) return;
+        if (isGuidedTourActive() || !hasReachedTrigger()) return;
         stop();
         openPlans();
       });
@@ -3662,6 +3700,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               isPricingModalOpen={isPricingModalOpen}
               isShareModalOpen={isShareModalOpen}
               isLeaveOfferOpen={leaveOffer.open}
+              isTourRunning={tour.running}
               matchScore={matchScore}
               onBeginCheckout={beginCheckout}
               onClosePricingModal={closePricingModal}
@@ -3824,6 +3863,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           onBook={leaveOffer.book}
         />
       )}
+      {/* The guided tour: the unlock stop only for a reader who has not paid for the
+          report on screen (Fatih, 17.10: Essentials buyers count as paid). */}
+      {tour.running && tour.run && (
+        <V4GuidedTour
+          key={tour.run.id}
+          trigger={tour.run.trigger}
+          includeUnlock={viewedReportPlan === null}
+          onDone={tour.done}
+        />
+      )}
       {/* The bar unlocks the full report, so the question is whether the reader's plan
           already covers that tier — not whether it equals one of two named plans.
           `core` buys the top-3 archetypes AT full_report tier, so listing plans
@@ -3837,7 +3886,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <ReportStickyUnlockBar
             quote={pricingQuotes?.full_report ?? null}
             onUnlock={() => openPricingModal(effectiveViewArchetype)}
-            hidden={isPricingModalOpen || isShareModalOpen || leaveOffer.open}
+            hidden={isPricingModalOpen || isShareModalOpen || leaveOffer.open || tour.running}
             archetype={effectiveViewArchetype}
             v4={isV4}
           />
