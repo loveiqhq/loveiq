@@ -9762,6 +9762,7 @@ describe("find_text — every record holding an exact text", () => {
     ["two characters", { text: "ab" }],
     ["too long a text", { text: "x".repeat(301) }],
     ["a star", { text: "5* review" }],
+    ["punctuation alone, which no index can narrow", { text: "://" }],
     ["sources as a string", { text: "calendar.app.google", sources: "gmail" }],
     ["an impossible date", { text: "calendar.app.google", since: "2026-09-31" }],
   ])("refuses %s before reading anything", async (_what, args) => {

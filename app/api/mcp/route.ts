@@ -1011,8 +1011,9 @@ export const TOOLS = [
         text: {
           type: "string",
           description:
-            "The exact text, 3 to 300 characters, e.g. 'calendar.app.google', " +
-            "'jane@example.test', '+49 151 2345678', 'INV-2026-0042' or 'Jane Doe'.",
+            "The exact text, 3 to 300 characters with a letter or digit, e.g. " +
+            "'calendar.app.google', 'jane@example.test', '+49 151 2345678', 'INV-2026-0042' or " +
+            "'Jane Doe'.",
         },
         sources: {
           type: "array",
@@ -3654,8 +3655,7 @@ function decodeEscapes(run: string, escape: RegExp) {
  * THE LINES THAT HOLD IT URL-ENCODED, for a record `exact_terms` matched only in a decoded
  * link, such as a booking link inside a redirect's `url=` with its `:` and `/` written as
  * %3A and %2F: the raw span that encodes the text is found like any other text, and each
- * line says it is encoded.
- * Exported for test.
+ * line says it is encoded. Exported for test.
  */
 export function encodedLinesForTest(haystack: string, needle: string, max: number): string[] {
   const n = needle.toLowerCase();
@@ -4844,6 +4844,15 @@ async function callTool(
         true
       );
     }
+    // Neither index can narrow a text with no letter or digit ("://"): the trigram index
+    // would hand back every link in the corpus to be checked one by one.
+    if (!/[\p{L}\p{N}]/u.test(text)) {
+      return textResult(
+        "`text` needs at least one letter or digit: punctuation alone (://, @@) is in too many " +
+          "links to look up. Pass the word or number it belongs to.",
+        true
+      );
+    }
     const badFilter = malformedFilterMessage(args);
     if (badFilter) return textResult(badFilter, true);
     const sources = asStrings(args.sources);
@@ -4966,11 +4975,11 @@ async function callTool(
       return textResult(
         `Nothing indexed holds "${text}" (${applied}). It is matched as written, in any case: ` +
           "check the spelling, or try a shorter distinctive part (the host of a link, the digits " +
-          "of a number). Any part of a link, an address or a file name is found; part of a " +
-          "longer word or code elsewhere is not, nor a word too common to be indexed alone (the, " +
-          "with) outside one. Books, papers and the corporate website are left out unless named " +
-          "in sources. Not the same as LoveIQ having no record of it: search_company_context " +
-          "matches meaning and wording."
+          "of a number). A text without spaces is found anywhere inside a link, an address or a " +
+          "file name; part of a longer word or code elsewhere is not, nor a word too common to " +
+          "be indexed alone (the, with) outside one. Books, papers and the corporate website are " +
+          "left out unless named in sources. Not the same as LoveIQ having no record of it: " +
+          "search_company_context matches meaning and wording."
       );
     }
     // Paged by position, not by date: one day can hold more matches than a page shows.
