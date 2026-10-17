@@ -2049,7 +2049,7 @@ seconds of backoff on every question whenever the edge worker is cold.
 The word index keeps a link, an email address, a host or a file name as ONE token, so
 `find_text`, which takes its candidates from `fts`, could not see a text inside one. On
 17 Oct 2026 that missed an address inside a Google Docs sharing link, an address run into
-the next one ("…@loveiq.orgmb@loveiq.org"), a URL-encoded booking link inside a redirect
+the next one (`…@loveiq.orgmb@loveiq.org`), a URL-encoded booking link inside a redirect
 and an invoice number inside "Invoice-<number>.pdf".
 
 `brain_chunk.exact_terms` holds only the whitespace-separated runs of title and body that
