@@ -201,13 +201,16 @@ export async function createPendingEntitlement({
 /**
  * Point a still-pending row at its (new) Stripe session. Also used when an expired session
  * is replaced under the same token, so a cookie never ends up pointing at an unpaid token
- * while the visitor paid a different session.
+ * while the visitor paid a different session. A new session at a new price carries that
+ * price onto the row (`listPriceCents`), so the readout groups it where it was sold.
  */
 export async function setEntitlementSession({
   id,
+  listPriceCents,
   stripeSessionId,
 }: {
   id: number;
+  listPriceCents?: number;
   stripeSessionId: string;
 }): Promise<boolean> {
   const response = await serviceFetch(
@@ -218,6 +221,7 @@ export async function setEntitlementSession({
       body: JSON.stringify({
         stripe_session_id: stripeSessionId,
         status: "pending",
+        ...(typeof listPriceCents === "number" ? { list_price_cents: listPriceCents } : {}),
         updated_at: new Date().toISOString(),
       }),
     }
@@ -383,22 +387,32 @@ export async function bindEntitlement({
   return rows.length === 1;
 }
 
-/** Stamp the payment row the claim wrote. Applying twice is then refused by the bind filter. */
+/**
+ * Stamp the payment row the claim wrote: the entitlement is then applied, and the bind
+ * filter refuses it to any other submission. Returns whether THIS call stamped it, so the
+ * "survey finished, report unlocked" notices go out once.
+ */
 export async function setEntitlementPaymentId({
   id,
   paymentId,
 }: {
   id: number;
   paymentId: number;
-}): Promise<void> {
-  const response = await serviceFetch(`/rest/v1/prepaid_report_access?id=eq.${id}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ payment_id: paymentId, updated_at: new Date().toISOString() }),
-  });
+}): Promise<boolean> {
+  const response = await serviceFetch(
+    `/rest/v1/prepaid_report_access?id=eq.${id}&payment_id=is.null&select=id`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ payment_id: paymentId, updated_at: new Date().toISOString() }),
+    }
+  );
   if (!response.ok) {
     logger.warn({ id, paymentId }, "pay-to-start: failed to stamp payment_id on the entitlement");
+    return false;
   }
+  const rows = (await response.json().catch(() => [])) as unknown;
+  return Array.isArray(rows) && rows.length === 1;
 }
 
 /**
@@ -427,16 +441,17 @@ export async function voidEntitlementByPaymentIntent(
 }
 
 /**
- * A dispute won before the survey was claimed: the money came back, so the entitlement
- * works again. A claimed one is restored through its payment row instead.
+ * A dispute won: the money came back, so the entitlement counts as paid again. Before a
+ * claim that is what lets it unlock the report; after one, access comes back through the
+ * payment row and this only keeps the entitlement's status true for readouts.
  */
-export async function restoreUnclaimedEntitlement(
+export async function restoreDisputedEntitlement(
   paymentIntentId: string | null
 ): Promise<Entitlement[]> {
   if (!paymentIntentId) return [];
   try {
     const response = await serviceFetch(
-      `/rest/v1/prepaid_report_access?stripe_payment_intent_id=eq.${encodeURIComponent(paymentIntentId)}&offer=not.is.null&status=eq.refunded&consumed_submission_id=is.null&select=${SELECT}`,
+      `/rest/v1/prepaid_report_access?stripe_payment_intent_id=eq.${encodeURIComponent(paymentIntentId)}&offer=not.is.null&status=eq.refunded&select=${SELECT}`,
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },

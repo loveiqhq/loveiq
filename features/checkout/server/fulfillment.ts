@@ -24,6 +24,20 @@ import {
 } from "./reportPurchase";
 import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
 import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
+import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import { getOfferDefinition, isPayToStartOfferId } from "@features/pay-to-start/logic/offer";
+import {
+  confirmPayToStartSession,
+  type ConfirmResult,
+  type ConfirmSource,
+} from "@features/pay-to-start/server/confirm";
+import {
+  findEntitlementByPaymentIntent,
+  restoreDisputedEntitlement,
+  setEntitlementPaymentId,
+  voidEntitlementByPaymentIntent,
+  type Entitlement,
+} from "@features/pay-to-start/server/entitlement";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -366,6 +380,7 @@ async function sendPurchaseEmail({
 import {
   STRIPE_CHECKOUT_SESSION_EXPAND,
   getStripeCheckoutPromotionSummary,
+  getStripeServerClient,
 } from "./stripeCheckout";
 import {
   ensurePersonalReportForSubmission,
@@ -1077,6 +1092,12 @@ async function syncCheckoutSessionPayment({
   session: Stripe.Checkout.Session;
   stripe: Stripe;
 }) {
+  // Pay to start the survey: paid before any survey exists, settled on its entitlement.
+  if (session.metadata?.journey === PAY_TO_START_JOURNEY) {
+    await syncPayToStartCheckoutSession({ event, eventStatus, session, stripe });
+    return;
+  }
+
   // Legacy white "pay-first" prepaid sessions (feature removed 2026-06-16) keep
   // emitting lifecycle webhooks as the in-flight ones expire. They carry a
   // `prepaidToken` + `plan` but were created BEFORE any survey/report exists, so
@@ -1793,6 +1814,8 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
   });
 
   if (!existingPayment?.id) {
+    // A pay-to-start payment whose survey has not claimed it has no payment row yet.
+    if (await syncPayToStartRefundBeforeClaim({ charge, event })) return;
     await upsertWebhookEventRecord({
       event,
       processed: false,
@@ -1845,6 +1868,9 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
     });
     await changeAccessOrAlert("revoke", existingPayment.id, existingPayment.personal_report_id);
   }
+  // A claimed pay-to-start payment: its entitlement stops counting as paid too.
+  if (!isPartialRefund)
+    await voidEntitlementByPaymentIntent(paymentIntentIdOf(charge.payment_intent));
   if (existingPayment.personal_report_id) {
     await alertIfAll14CreditedPayment(existingPayment.id, existingPayment.personal_report_id);
   }
@@ -1895,6 +1921,9 @@ async function syncDisputeEvent({
   });
 
   if (!existingPayment?.id) {
+    if (await syncPayToStartDisputeBeforeClaim({ dispute, event, outcome, paymentIntentId })) {
+      return;
+    }
     await upsertWebhookEventRecord({
       event,
       processed: false,
@@ -1940,6 +1969,9 @@ async function syncDisputeEvent({
       await changeAccessOrAlert("regrant", existingPayment.id, existingPayment.personal_report_id);
     }
   }
+  // A claimed pay-to-start payment: keep its entitlement's status in step for readouts.
+  if (outcome === "opened") await voidEntitlementByPaymentIntent(paymentIntentId);
+  else if (restoreToSucceeded) await restoreDisputedEntitlement(paymentIntentId);
 
   await upsertWebhookEventRecord({
     event,
@@ -1967,6 +1999,423 @@ async function syncDisputeEvent({
       username: "ops_alerts",
     });
   }
+}
+
+// ─── Pay to start the survey ──────────────────────────────────────────────────
+// A visitor pays on /sexual-archetype before any survey, user or report exists, so the
+// money lives on a prepaid_report_access entitlement until a submitted survey claims it
+// (features/pay-to-start). Whether a session is paid is decided in
+// features/pay-to-start/server/confirm.ts; turning a claimed, paid entitlement into the
+// usual payment row, report link and tier happens here, beside the code that writes them
+// for every other purchase.
+
+/** Stripe's id for the PaymentIntent behind a charge or dispute. */
+function paymentIntentIdOf(value: Stripe.Charge["payment_intent"]): string | null {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.id;
+}
+
+/**
+ * The payment row's metadata for a pay-to-start purchase. `plan` and `archetype` drive
+ * access exactly as a full report bought after the survey; `journey` and `prepaid` let
+ * readouts tell the two apart (the money arrived on `paidAt`, not on this row's day).
+ */
+function payToStartPaymentMetadata({
+  archetype,
+  entitlement,
+  promotion,
+  reportToken,
+  risk,
+  stripePaymentStatus,
+}: {
+  archetype: string | null;
+  entitlement: Entitlement;
+  promotion?: ReturnType<typeof getStripeCheckoutPromotionSummary>;
+  reportToken: string | null;
+  risk?: { level: string | null; score: number | null };
+  stripePaymentStatus?: string | null;
+}): Record<string, unknown> {
+  const amount = toAmount(entitlement.amount_cents);
+  const listPrice = toAmount(entitlement.list_price_cents);
+  return {
+    plan: "full_report",
+    archetype,
+    checkoutSessionId: entitlement.stripe_session_id,
+    journey: PAY_TO_START_JOURNEY,
+    offer: entitlement.offer,
+    prepaid: "true",
+    prepaidEntitlementId: entitlement.id,
+    paidAt: entitlement.paid_at,
+    currentPrice: amount !== null ? amount.toFixed(2) : null,
+    listPrice: listPrice !== null ? listPrice.toFixed(2) : null,
+    reportToken,
+    ...(stripePaymentStatus !== undefined && { stripePaymentStatus }),
+    ...(promotion && {
+      promotionCode: promotion.promotionCode,
+      couponId: promotion.couponId,
+      couponName: promotion.couponName,
+      couponPercentOff: promotion.couponPercentOff,
+      couponAmountOff: promotion.couponAmountOff !== null ? promotion.couponAmountOff / 100 : null,
+      discountAmount: promotion.discountAmount,
+    }),
+    ...(risk && { riskLevel: risk.level, riskScore: risk.score }),
+  };
+}
+
+/**
+ * The payment row, item, report link and tier for an entitlement that is paid and bound
+ * to a submission: the report then opens exactly as one bought after the survey. Returns
+ * the payment id, or null when the entitlement is not ready (unpaid, unclaimed, refunded).
+ *
+ * Idempotent: an existing payment row for the session or intent is reused as it stands,
+ * and the entitlement is stamped last, so a failure part-way leaves it for the sweep
+ * (`listBoundUnapplied`) to finish. No Stripe call: this runs inside the survey submit,
+ * and the card and receipt details follow after the response.
+ */
+export async function applyPayToStartEntitlement({
+  entitlement,
+  reportToken,
+  stripe,
+}: {
+  entitlement: Entitlement;
+  reportToken?: string | null;
+  stripe?: Stripe | null;
+}): Promise<number | null> {
+  const submissionId = entitlement.consumed_submission_id;
+  if (entitlement.status !== "succeeded" || !submissionId) return null;
+  if (entitlement.payment_id) return entitlement.payment_id;
+
+  const context = await resolveSubmissionAccessContext({ submissionId });
+  if (!context?.userId) throw new Error("pts_apply_missing_user");
+  const personalReport = await ensurePersonalReportForSubmission({
+    reportToken: reportToken ?? null,
+    submissionId,
+  });
+  if (!personalReport?.id) throw new Error("pts_apply_missing_personal_report");
+
+  const archetype = await lookupPrimaryArchetypeForSubmission(submissionId);
+  if (!archetype) throw new Error("pts_apply_missing_archetype");
+  const token = reportToken ?? (await lookupReportTokenForSubmission(submissionId));
+  const offer = getOfferDefinition(
+    isPayToStartOfferId(entitlement.offer) ? entitlement.offer : "full"
+  );
+  const amount = toAmount(entitlement.amount_cents);
+
+  const existing = await fetchExistingPayment({
+    checkoutSessionId: entitlement.stripe_session_id,
+    stripePaymentIntentId: entitlement.stripe_payment_intent_id,
+  });
+  const paymentId =
+    existing?.id ??
+    (await upsertPaymentRecord({
+      amount,
+      // Stripe's address decides is_test; the survey's covers a checkout that had none.
+      buyerEmail: entitlement.customer_email ?? context.userEmail ?? null,
+      cardBrand: null,
+      cardExpMonth: null,
+      cardExpYear: null,
+      cardLast4: null,
+      currency: entitlement.currency,
+      description: offer.productName,
+      failureCode: null,
+      failureMessage: null,
+      ipAddress: null,
+      metadata: payToStartPaymentMetadata({ archetype, entitlement, reportToken: token }),
+      paymentDateTime: entitlement.paid_at ?? new Date().toISOString(),
+      paymentId: null,
+      paymentMethodId: null,
+      paymentMethodType: null,
+      personalReportId: personalReport.id,
+      pricingQuoteId: null,
+      receiptUrl: null,
+      status: "succeeded",
+      stripeChargeId: null,
+      stripeCustomerId: null,
+      stripePaymentIntentId: entitlement.stripe_payment_intent_id,
+      userAgent: null,
+      userId: context.userId,
+    }));
+  if (!paymentId) throw new Error("pts_apply_payment_persist_failed");
+
+  await ensurePaymentItem({ amount, itemName: offer.productName, paymentId });
+  await updatePersonalReportPayment({
+    amount,
+    paymentId,
+    personalReportId: personalReport.id,
+    status: "succeeded",
+  });
+  await upsertArchetypeTierForPersonalReport({
+    archetype,
+    personalReportId: personalReport.id,
+    tier: "full_report",
+  });
+
+  const stampedNow = await setEntitlementPaymentId({ id: entitlement.id, paymentId });
+  if (stampedNow) {
+    const applied = { ...entitlement, payment_id: paymentId };
+    const internalTag = isStaffEmail(applied.customer_email) ? ":test_tube: [internal] " : "";
+    scheduleAfterResponse("pts-applied", async () => {
+      await fillPayToStartPaymentDetails({
+        archetype,
+        entitlement: applied,
+        paymentId,
+        reportToken: token,
+        stripe: stripe ?? getStripeServerClient(),
+      }).catch((err) =>
+        logger.warn({ err: sanitizeError(err), paymentId }, "pay-to-start: payment details failed")
+      );
+      await notifySlack({
+        channel: "payments",
+        kind: "pts_claimed",
+        text: `${internalTag}:white_check_mark: Pay to start: survey finished and the full report unlocked (entitlement #${applied.id}, payment #${paymentId}, submission #${submissionId}).`,
+        username: "payment_notification",
+        context: { entitlementId: applied.id, paymentId, submissionId },
+      });
+      await refreshJourneyMessage(submissionId, "paid");
+    });
+  }
+  return paymentId;
+}
+
+/**
+ * The card, receipt and promotion details Stripe holds, written onto the payment row
+ * after the survey response has gone. Best-effort: the row already unlocks the report.
+ */
+async function fillPayToStartPaymentDetails({
+  archetype,
+  entitlement,
+  paymentId,
+  reportToken,
+  stripe,
+}: {
+  archetype: string;
+  entitlement: Entitlement;
+  paymentId: number;
+  reportToken: string | null;
+  stripe: Stripe | null;
+}): Promise<void> {
+  if (!stripe || !entitlement.stripe_session_id) return;
+  const session = await stripe.checkout.sessions.retrieve(entitlement.stripe_session_id, {
+    expand: [...STRIPE_CHECKOUT_SESSION_EXPAND, "payment_intent.latest_charge"],
+  });
+  const intent =
+    session.payment_intent && typeof session.payment_intent !== "string"
+      ? session.payment_intent
+      : null;
+  const charge =
+    intent?.latest_charge && typeof intent.latest_charge !== "string" ? intent.latest_charge : null;
+  const details = getChargeDetails(charge);
+  const response = await supabaseServiceFetch(`/rest/v1/payment?id=eq.${paymentId}`, {
+    body: JSON.stringify({
+      card_brand: details.cardBrand,
+      card_exp_month: details.cardExpMonth,
+      card_exp_year: details.cardExpYear,
+      card_last4: details.cardLast4,
+      metadata: payToStartPaymentMetadata({
+        archetype,
+        entitlement,
+        promotion: getStripeCheckoutPromotionSummary(session),
+        reportToken,
+        risk: { level: details.riskLevel, score: details.riskScore },
+        stripePaymentStatus: session.payment_status ?? null,
+      }),
+      payment_method_type: details.paymentMethodType,
+      receipt_url: details.receiptUrl,
+      stripe_charge_id: charge?.id ?? null,
+      stripe_customer_id:
+        typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null),
+      stripe_payment_method_id:
+        typeof intent?.payment_method === "string"
+          ? intent.payment_method
+          : (intent?.payment_method?.id ?? null),
+      updated_date_time: new Date().toISOString(),
+    }),
+    headers: { Prefer: "return=minimal" },
+    method: "PATCH",
+  });
+  if (!response.ok) {
+    logger.warn(
+      { paymentId, status: response.status },
+      "pay-to-start: payment details update failed"
+    );
+  }
+}
+
+/**
+ * Confirm a session, then apply its entitlement if a survey has already claimed it (the
+ * survey finished before the money settled). For the webhook, the status page, the
+ * checkout route and the sweep. An apply failure is reported, never thrown: the payment
+ * is confirmed either way, and the sweep finishes the apply.
+ */
+export async function settlePayToStartSession({
+  sessionId,
+  source,
+  stripe,
+}: {
+  sessionId: string;
+  source: ConfirmSource;
+  stripe: Stripe;
+}): Promise<ConfirmResult & { paymentId: number | null }> {
+  const outcome = await confirmPayToStartSession({ sessionId, source, stripe });
+  let paymentId = outcome.entitlement?.payment_id ?? null;
+  const entitlement = outcome.entitlement;
+  if (
+    outcome.state === "paid" &&
+    entitlement?.status === "succeeded" &&
+    entitlement.consumed_submission_id &&
+    !entitlement.payment_id
+  ) {
+    try {
+      paymentId = await applyPayToStartEntitlement({ entitlement, stripe });
+    } catch (err) {
+      await reportPayToStartApplyFailure(entitlement, err, source);
+    }
+  }
+  return { ...outcome, paymentId };
+}
+
+/** #ops: a paid, claimed entitlement whose report did not unlock. The sweep retries it. */
+export async function reportPayToStartApplyFailure(
+  entitlement: Entitlement,
+  err: unknown,
+  source: ConfirmSource
+): Promise<void> {
+  logger.error(
+    { err: sanitizeError(err), entitlementId: entitlement.id, source },
+    "pay-to-start: apply failed"
+  );
+  await notifySlack({
+    channel: "ops",
+    kind: "pts_apply_failed",
+    text: `:rotating_light: Pay to start: entitlement #${entitlement.id} is paid and claimed by submission #${entitlement.consumed_submission_id ?? "?"}, but unlocking the report failed (${escapeSlack(
+      err instanceof Error ? err.message : "unknown"
+    )}, seen by ${source}). The payment sweep retries it every run; check it went through.`,
+    username: "ops_alerts",
+  }).catch(() => undefined);
+}
+
+async function syncPayToStartCheckoutSession({
+  event,
+  eventStatus,
+  session,
+  stripe,
+}: {
+  event: Stripe.Event;
+  eventStatus: PaymentStatus;
+  session: Stripe.Checkout.Session;
+  stripe: Stripe;
+}) {
+  const outcome = await settlePayToStartSession({
+    sessionId: session.id,
+    source: "webhook",
+    stripe,
+  });
+  const entitlement = outcome.entitlement;
+
+  if (eventStatus === "failed" && entitlement && outcome.state !== "paid") {
+    await notifySlack({
+      channel: "ops",
+      kind: "pts_async_payment_failed",
+      text: `:credit_card: Pay to start: a delayed payment failed for entitlement #${entitlement.id}${
+        entitlement.consumed_submission_id
+          ? `, after the buyer finished the survey (submission #${entitlement.consumed_submission_id}); the report stays locked`
+          : ""
+      }.`,
+      username: "ops_alerts",
+    });
+  }
+
+  logger.info(
+    { eventId: event.id, entitlementId: entitlement?.id ?? null, state: outcome.state },
+    "pay-to-start: webhook settled"
+  );
+  await upsertWebhookEventRecord({
+    event,
+    paymentId: outcome.paymentId,
+    processed: true,
+    processingError: null,
+    stripePaymentIntentId: entitlement?.stripe_payment_intent_id ?? null,
+  });
+}
+
+/**
+ * A refund on a pay-to-start payment no survey has claimed yet, so there is no payment
+ * row to find. A full refund voids the entitlement; a partial one keeps it working, as a
+ * partial refund keeps a report unlocked. Returns false when it is not one of ours.
+ */
+async function syncPayToStartRefundBeforeClaim({
+  charge,
+  event,
+}: {
+  charge: Stripe.Charge;
+  event: Stripe.Event;
+}): Promise<boolean> {
+  const paymentIntentId = paymentIntentIdOf(charge.payment_intent);
+  const entitlement = paymentIntentId
+    ? await findEntitlementByPaymentIntent(paymentIntentId)
+    : null;
+  if (!entitlement) return false;
+
+  const captured = charge.amount_captured ?? charge.amount ?? 0;
+  const refunded = charge.amount_refunded ?? 0;
+  const isPartialRefund = refunded > 0 && refunded < captured;
+  if (!isPartialRefund) await voidEntitlementByPaymentIntent(paymentIntentId);
+
+  await upsertWebhookEventRecord({
+    event,
+    processed: true,
+    processingError: null,
+    stripePaymentIntentId: paymentIntentId,
+  });
+  const amount = toAmount(refunded);
+  await notifySlack({
+    channel: "ops",
+    kind: "pts_refund",
+    text: `:money_with_wings: ${isPartialRefund ? "Partial refund" : "Refund"} on pay to start, entitlement #${entitlement.id}, ${(charge.currency ?? "eur").toUpperCase()} ${amount?.toFixed(2) ?? "?"}, before any survey claimed it: ${
+      isPartialRefund ? "it still unlocks the report." : "it no longer unlocks anything."
+    }`,
+    username: "ops_alerts",
+  });
+  return true;
+}
+
+/** A dispute on a pay-to-start payment no survey has claimed yet. False when not ours. */
+async function syncPayToStartDisputeBeforeClaim({
+  dispute,
+  event,
+  outcome,
+  paymentIntentId,
+}: {
+  dispute: Stripe.Dispute;
+  event: Stripe.Event;
+  outcome: "opened" | "closed";
+  paymentIntentId: string | null;
+}): Promise<boolean> {
+  const entitlement = paymentIntentId
+    ? await findEntitlementByPaymentIntent(paymentIntentId)
+    : null;
+  if (!entitlement) return false;
+
+  const won = outcome === "closed" && dispute.status === "won";
+  if (outcome === "opened") await voidEntitlementByPaymentIntent(paymentIntentId);
+  else if (won) await restoreDisputedEntitlement(paymentIntentId);
+
+  await upsertWebhookEventRecord({
+    event,
+    processed: true,
+    processingError: null,
+    stripePaymentIntentId: paymentIntentId,
+  });
+  await notifySlack({
+    channel: "ops",
+    kind: outcome === "opened" ? "stripe_dispute_opened" : "stripe_dispute_resolved",
+    text:
+      outcome === "opened"
+        ? `:rotating_light: Dispute opened on pay to start, entitlement #${entitlement.id}, before any survey claimed it; it no longer unlocks anything. Reason: ${escapeSlack(dispute.reason ?? "unknown")}`
+        : `Dispute resolved (${won ? ":trophy: WON" : `:no_entry: ${escapeSlack(dispute.status)}`}) on pay to start, entitlement #${entitlement.id}: ${won ? "it unlocks the report again." : "it stays void."}`,
+    username: "ops_alerts",
+  });
+  return true;
 }
 
 export async function processStripeWebhookEvent({

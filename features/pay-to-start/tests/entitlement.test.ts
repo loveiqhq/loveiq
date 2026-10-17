@@ -30,7 +30,8 @@ import {
   markEntitlementExpired,
   markEntitlementSucceeded,
   prepaidCookieOptions,
-  restoreUnclaimedEntitlement,
+  restoreDisputedEntitlement,
+  setEntitlementPaymentId,
   setEntitlementSession,
   voidEntitlementByPaymentIntent,
   type Entitlement,
@@ -333,11 +334,27 @@ describe("refunds and disputes", () => {
     expect(await voidEntitlementByPaymentIntent("pi_test_1")).toEqual([]);
   });
 
-  it("restores an unclaimed row after a won dispute, never a claimed one", async () => {
+  it("restores a refunded row after a won dispute", async () => {
     routeFetch(() => respond([row({ status: "succeeded" })]));
-    await restoreUnclaimedEntitlement("pi_test_1");
-    expect(calls[0]?.url).toContain("status=eq.refunded&consumed_submission_id=is.null");
+    await restoreDisputedEntitlement("pi_test_1");
+    expect(calls[0]?.url).toContain("offer=not.is.null&status=eq.refunded");
     expect(calls[0]?.body).toMatchObject({ status: "succeeded" });
+  });
+});
+
+describe("setEntitlementPaymentId", () => {
+  it("stamps only an unapplied row and says whether this call did", async () => {
+    routeFetch(() => respond([{ id: 7 }]));
+    expect(await setEntitlementPaymentId({ id: 7, paymentId: 99 })).toBe(true);
+    expect(calls[0]?.url).toContain("id=eq.7&payment_id=is.null");
+    expect(calls[0]?.body).toMatchObject({ payment_id: 99 });
+  });
+
+  it("says no when another call stamped it first, or the write failed", async () => {
+    routeFetch(() => respond([]));
+    expect(await setEntitlementPaymentId({ id: 7, paymentId: 99 })).toBe(false);
+    routeFetch(() => respond({}, false));
+    expect(await setEntitlementPaymentId({ id: 7, paymentId: 99 })).toBe(false);
   });
 });
 
