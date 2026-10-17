@@ -125,7 +125,9 @@ import { clearPeopleCache } from "@features/brain/server/people";
 import { recordToolCall } from "@features/brain/server/log";
 import { forgetSignIns } from "@features/brain/server/sign-in";
 import {
+  encodedLinesForTest,
   exactTokensForTest,
+  findTextFilterForTest,
   linesWithForTest,
   outrankingHeldBack,
   maskEmailsInTextForTest,
@@ -136,6 +138,7 @@ import {
   SOURCES_FOR_TEST,
   TOOLS,
   UNFILTERED_BUDGET_MS,
+  urlDecodedForTest,
 } from "@/app/api/mcp/route";
 import { atomsIn } from "@features/brain/server/check-answer";
 import { citesSources } from "@features/brain/server/night-shift";
@@ -9483,15 +9486,27 @@ describe("find_text — every record holding an exact text", () => {
     expect(tool?.inputSchema.required).toEqual(["text"]);
   });
 
-  it("narrows through the word index and decides by the literal text, on title and body", async () => {
+  /** "Every record" only with what it still cannot see, each checked on staging 17 Oct. */
+  it("says in its description what it finds and what it cannot see", () => {
+    const d = TOOLS.find((t) => t.name === "find_text")!.description;
+    expect(d).toContain("as any part of a link, an email or web address or a file name");
+    expect(d).toContain("URL-encoded ones too, so a domain finds the addresses at it");
+    expect(d).toContain("A text with spaces is found as words");
+    expect(d).toContain("Neither finds part of a longer word or code elsewhere");
+    expect(d).not.toContain("stored whole");
+  });
+
+  it("narrows through the word index or the runs it keeps whole, and decides by the literal text", async () => {
     wire([part({})]);
     await call({ text: "calendar.app.google/AbC123" });
     const [[q, init]] = reads() as [
       [URLSearchParams, { headers?: Record<string, string>; breaker?: string }],
     ];
-    expect(q.get("fts")).toBe("plfts(english).calendar.app.google/AbC123");
+    expect(q.get("fts")).toBeNull();
     expect(q.get("or")).toBe(
-      '(title.ilike."*calendar.app.google/AbC123*",body.ilike."*calendar.app.google/AbC123*")'
+      '(and(fts.plfts(english)."calendar.app.google/AbC123",' +
+        'or(title.ilike."*calendar.app.google/AbC123*",body.ilike."*calendar.app.google/AbC123*")),' +
+        'exact_terms.ilike."*calendar.app.google/AbC123*")'
     );
     expect(q.getAll("source")).toEqual(["neq.book", "neq.paper", "neq.corporate"]);
     expect(q.get("order")).toBe("period_end.desc.nullslast,id.desc");
@@ -9509,22 +9524,111 @@ describe("find_text — every record holding an exact text", () => {
     wire([]);
     await call({ text: 'a_b 100% "x" c\\d, (e)' });
     const [[q]] = reads() as [[URLSearchParams]];
+    // The words are quoted as well: a bare `,` or `)` would end them inside or=(…).
     expect(q.get("or")).toBe(
-      '(title.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*",' +
-        'body.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*")'
+      '(and(fts.plfts(english)."a_b 100% \\"x\\" c\\\\d, (e)",' +
+        'or(title.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*",' +
+        'body.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*")))'
+    );
+    expect(findTextFilterForTest("Smith,(J)")).toBe(
+      '(and(fts.plfts(english)."Smith,(J)",or(title.ilike."*Smith,(J)*",body.ilike."*Smith,(J)*")),' +
+        'exact_terms.ilike."*Smith,(J)*")'
     );
   });
 
-  it("looks a bare host up as it is and with www., and says how email addresses are stored", async () => {
-    wire([part({ body: "Visit https://www.acme-co.example/x" })]);
+  /**
+   * A RUN HOLDS NO WHITESPACE, so a text with a space cannot be inside one: it is matched as
+   * words, and asking exact_terms would only add a match across two runs that were never
+   * next to each other.
+   */
+  it("matches a text with a space as words only", () => {
+    expect(findTextFilterForTest("Kind regards, Jane")).not.toContain("exact_terms");
+    expect(findTextFilterForTest("+49\t151")).not.toContain("exact_terms");
+    expect(findTextFilterForTest("jane@example.test")).toContain(
+      ',exact_terms.ilike."*jane@example.test*")'
+    );
+  });
+
+  /**
+   * A HOST NEEDS NO www. FORM ANY MORE: every run holding `www.`, `://` or `@` is in
+   * exact_terms, so a domain finds the web addresses and the email addresses at it alike.
+   */
+  it("looks a bare host up like any text, with no note about email addresses", async () => {
+    wire([part({ body: "Visit https://www.acme-co.example/x or write to jane@acme-co.example" })]);
     const r = await call({ text: "acme-co.example" });
     const [[q]] = reads() as [[URLSearchParams]];
-    expect(q.get("fts")).toBe("fts(english).acme-co.example | www.acme-co.example");
-    expect(r.content[0]!.text).toContain("addresses are stored whole, so mail that names it");
-    // A link with a path is no bare host.
-    wire([]);
-    await call({ text: "https://calendar.app.google/AbC123" });
-    expect(reads().at(-1)![0].get("fts")).toBe("plfts(english).https://calendar.app.google/AbC123");
+    expect(q.get("or")).toBe(findTextFilterForTest("acme-co.example"));
+    expect(q.get("or")).toContain('exact_terms.ilike."*acme-co.example*"');
+    expect(r.content[0]!.text).not.toContain("stored whole");
+    expect(r.content[0]!.text).toContain(
+      "• Visit https://www.acme-co.example/x or write to jane@acme-co.example"
+    );
+  });
+
+  /**
+   * THE FOUR SHAPES PRODUCTION MISSED (17 Oct 2026), as the rows the database now returns
+   * for them: each is shown with the line that holds it.
+   */
+  it.each([
+    [
+      "an address inside a sharing link in a task title",
+      "jo@example.test",
+      {
+        source: "notion",
+        source_id: "task:aaaa",
+        title:
+          "Share https://docs.example.test/document/d/1Ab/edit?userstoinvite=jo@example.test&role=writer",
+        body: "Status: open",
+      },
+      "• Share https://docs.example.test/document/d/1Ab/edit?userstoinvite=jo@example.test&role=writer",
+    ],
+    [
+      "two addresses run together",
+      "jane.doe@example.test",
+      {
+        source: "drive",
+        source_id: "doc:bbbb",
+        body: "Owners\njane.doe@example.testjd@example.test",
+      },
+      "• jane.doe@example.testjd@example.test",
+    ],
+    [
+      "a link inside a URL-encoded redirect",
+      "booking.example.test/team",
+      {
+        body: "Book: <https://track.example.test/r?url=https%3A%2F%2Fbooking.example.test%2Fteam%2F30> now",
+      },
+      "• Book: <https://track.example.test/r?url=https%3A%2F%2Fbooking.example.test%2Fteam%2F30> now (URL-encoded on this line)",
+    ],
+    [
+      "an invoice number inside a file name",
+      "ZX81QQ-0001",
+      { body: "Your receipt\nInvoice-ZX81QQ-0001.pdf" },
+      "• Invoice-ZX81QQ-0001.pdf",
+    ],
+  ])("shows %s with its line", async (_what, text, row, line) => {
+    wire([part(row)]);
+    const r = await call({ text });
+    expect(r.isError).toBeFalsy();
+    expect(reads()[0]![0].get("or")).toContain(`exact_terms.ilike.`);
+    expect(r.content[0]!.text).toContain(`"${text}" is in 1 document`);
+    expect(r.content[0]!.text).toContain(`${line}\n`);
+  });
+
+  it("says a line holds the text URL-encoded only when it does", async () => {
+    wire([
+      part({
+        source_id: "thread:enc",
+        body: "unsubscribe: https://lists.example.test/u?email=jane%40example.test",
+      }),
+      part({ source_id: "thread:plain", body: "write to jane@example.test" }),
+    ]);
+    const text = (await call({ text: "jane@example.test" })).content[0]!.text;
+    expect(text).toContain(
+      "• unsubscribe: https://lists.example.test/u?email=jane%40example.test (URL-encoded on this line)"
+    );
+    expect(text).toContain("• write to jane@example.test\n");
+    expect(text).not.toContain("jane@example.test (URL-encoded");
   });
 
   it("gives one entry per document, newest first, with the lines and the true totals", async () => {
@@ -9657,6 +9761,42 @@ describe("find_text — every record holding an exact text", () => {
     ]);
     expect(linesWithForTest("same one\nsame one", "one", 3)).toEqual(["same one"]);
     expect(linesWithForTest("nothing here", "one", 3)).toEqual([]);
+  });
+
+  /**
+   * THE SAME DECODING AS POSTGRES'S brain_url_decode, which writes exact_terms: every %XX as
+   * its byte read as UTF-8, or the printable ASCII escapes alone when that is not UTF-8. A
+   * line can be found for a decoded match only if both read a link alike.
+   */
+  it("decodes a run as exact_terms does, with the raw span of each character", () => {
+    expect(urlDecodedForTest("https%3A%2F%2Fx.test%2Fa").text).toBe("https://x.test/a");
+    expect(urlDecodedForTest("m%C3%BCller%40x.test").text).toBe("müller@x.test");
+    expect(urlDecodedForTest("%e2%82%ac").text).toBe("€");
+    // Not UTF-8 once decoded: a Latin-1 é, a NUL, a lone surrogate. Only ASCII escapes then.
+    expect(urlDecodedForTest("caf%E9%40x.test").text).toBe("caf%E9@x.test");
+    expect(urlDecodedForTest("a%00b%40x").text).toBe("a%00b@x");
+    expect(urlDecodedForTest("%ED%A0%80x%40y").text).toBe("%ED%A0%80x@y");
+    // A % that starts no escape stays as it is.
+    expect(urlDecodedForTest("100%").text).toBe("100%");
+    expect(urlDecodedForTest("%%41%zz%2").text).toBe("%A%zz%2");
+    const d = urlDecodedForTest("a%40b%C3%BCc");
+    expect(d.text).toBe("a@büc");
+    expect(d.from).toEqual([0, 1, 4, 5, 11]);
+    expect(d.to).toEqual([1, 4, 5, 11, 12]);
+  });
+
+  it("cuts a URL-encoded line to the raw span that encodes the text, at most max", () => {
+    const long = `${"a".repeat(300)} <https://t.example.test/r?url=https%3A%2F%2Fbook.example.test%2Fteam> ${"b".repeat(300)}`;
+    const [w] = encodedLinesForTest(`title\n${long}\nnext`, "book.example.test/team", 3);
+    expect(w).toMatch(
+      /^…a+ <https:\/\/t\.example\.test\/r\?url=https%3A%2F%2Fbook\.example\.test%2Fteam> b+… \(URL-encoded on this line\)$/
+    );
+    expect(w!.length).toBeLessThan(300);
+    expect(encodedLinesForTest("x%40y.test one\nx%40y.test two", "x@y.test", 1)).toEqual([
+      "x%40y.test one (URL-encoded on this line)",
+    ]);
+    expect(encodedLinesForTest("x@y.test, no escapes", "x@y.test", 3)).toEqual([]);
+    expect(encodedLinesForTest("nothing%20here", "x@y.test", 3)).toEqual([]);
   });
 });
 

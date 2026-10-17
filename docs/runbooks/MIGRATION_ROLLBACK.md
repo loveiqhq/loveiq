@@ -77,6 +77,7 @@ transaction (no `BEGIN/COMMIT`); everything else is wrapped.
 | `20260911193447_retire_survey_questions_03014_16008.sql`   | status 'retired' → 'active'                       | No (flag only)                                          |
 | `20260911215422_recover_lost_marketing_opt_in_answers.sql` | Restored 16015 answers + opt-in flags             | **Yes** — removes restored consent; scoped by audit log |
 | `20261016170000_report_price_quote_arm_history.sql`        | DROP trigger + table; readouts back on the stamp  | **Yes** — changes since; the backfill is in metadata    |
+| `20261017120000_brain_chunk_exact_terms.sql`               | DROP trgm index, trigger, 4 functions, column     | No — derived from title + body; the backfill rebuilds   |
 
 ## Writing a new rollback
 
