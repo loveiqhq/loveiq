@@ -1,0 +1,340 @@
+/* ════════════════════════════════════════════════════════════════════════
+   THE GUIDED TOUR — V4GuidedTour (Figma 1713:1071 › 1755:1275, Ready for Dev
+   16.10; Mark's prototype, tab "Guided tour"). Measurements are the Tour / Step
+   component's (1754:1404) and the Spotlight edge's (1754:1421).
+
+   A layer of its own on <body>, outside the report, so none of `.rv3.rv4`'s
+   tokens reach it: the face is --font-jakarta (app/fonts.css, on :root) and the
+   colours are Figma's own.
+
+   z-index 78: above the sticky unlock bar (70) and the chapter drawer (75),
+   which it dims with the rest of the page; below the plans pop-up and the leave
+   offer (80), share (85), the Stripe hand-off (90) and the cookie banner. The
+   page opens none of those while the tour runs, and any that did open would
+   stay usable above it.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.rv4-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 78;
+  font-family: var(--font-jakarta);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Takes every tap and swipe meant for the page; V4GuidedTour cancels the swipe. */
+.rv4-tour__blocker {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+/* The dim: #120C22 at 58%, the screen minus the hole, as one path. */
+.rv4-tour__scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  forced-color-adjust: none;
+  transition: opacity 300ms ease;
+}
+
+.rv4-tour__scrim path {
+  fill: rgba(18, 12, 34, 0.58);
+}
+
+/* After Finish the dim fades out while the page goes back to the top. */
+.rv4-tour[data-finishing] .rv4-tour__scrim {
+  opacity: 0;
+}
+
+/* The hole's edge: 2px #9B7BF4 outside it, glowing coral. It pulses twice as the
+   spotlight arrives (Tooltip / Focus ring 1713:1121: 1.4s ease-out, the coral
+   glow from 0 to 14px, fading out). */
+.rv4-tour__edge {
+  position: absolute;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 2px #9b7bf4,
+    0 0 14px rgba(240, 112, 79, 0.4);
+}
+
+.rv4-tour__edge[data-pulse] {
+  animation: rv4-tour-pulse 1.4s ease-out 2;
+}
+
+@keyframes rv4-tour-pulse {
+  0% {
+    box-shadow:
+      0 0 0 2px #9b7bf4,
+      0 0 0 0 rgba(240, 113, 79, 0.55);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px #9b7bf4,
+      0 0 0 14px rgba(240, 113, 79, 0);
+  }
+}
+
+/* A light sweeping across "Show All" and the lock (the prototype's shimmer),
+   drawn on this layer over the control rather than on the control itself. */
+.rv4-tour__shimmer {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rv4-tour__shimmer > span {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.95) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+}
+
+.rv4-tour__shimmer[data-run] > span {
+  animation: rv4-tour-shimmer 1.1s ease-in-out 0.3s 2;
+}
+
+@keyframes rv4-tour-shimmer {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+/* The page's own controls move once on arrival: the menu's caret nudges and
+   Typical Beliefs' chevron turns. Through `translate` and `rotate`, never
+   `transform`: the chevrons already set theirs (the open chapter's points up),
+   and these add to it. */
+[data-rv4-tour-gesture="nudge"] .report-chapter-pill__chevron svg {
+  animation: rv4-tour-nudge 0.5s ease-in-out 0.25s 3;
+}
+
+@keyframes rv4-tour-nudge {
+  50% {
+    translate: 0 3px;
+  }
+}
+
+[data-rv4-tour-gesture="turn"] svg {
+  animation: rv4-tour-turn 1s cubic-bezier(0.5, 0, 0.3, 1) 0.3s 1;
+}
+
+@keyframes rv4-tour-turn {
+  40%,
+  60% {
+    rotate: 180deg;
+  }
+}
+
+/* ── The bubble (Tour / Step 1754:1404) ──────────────────────────────────────
+   292 wide; a 1.5px border from #F0714F to #9B7BF4, drawn as the wrapper's own
+   gradient round a white card: a 1.5px border is snapped to whole pixels and
+   drew 1px. Padding 12/14/11 inside it, rows 4px apart. Placed by
+   V4GuidedTour, which also writes its width. */
+.rv4-tour__bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  padding: 1.5px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #f0714f, #9b7bf4);
+  box-shadow: 0 14px 36px rgba(60, 30, 110, 0.22);
+  opacity: 0;
+}
+
+/* Fade and an 8px rise, 200ms; from above when it sits above the control. */
+.rv4-tour__bubble[data-state="in"] {
+  opacity: 1;
+  animation: rv4-tour-in 200ms ease-out;
+}
+
+.rv4-tour__bubble[data-state="in"][data-placement="above"] {
+  animation-name: rv4-tour-in-above;
+}
+
+.rv4-tour__bubble[data-state="out"] {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+@keyframes rv4-tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes rv4-tour-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* The arrow: a 16×9 triangle on the edge facing the control, 9px out. */
+.rv4-tour__arrow {
+  position: absolute;
+  width: 16px;
+  height: 9px;
+  background: #b38bea;
+}
+
+.rv4-tour__bubble[data-placement="below"] .rv4-tour__arrow {
+  top: -9px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.rv4-tour__bubble[data-placement="above"] .rv4-tour__arrow {
+  bottom: -9px;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.rv4-tour__bubble[data-placement="right"] .rv4-tour__arrow {
+  left: -9px;
+  width: 9px;
+  height: 16px;
+  clip-path: polygon(100% 0, 100% 100%, 0 50%);
+}
+
+.rv4-tour__card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 11px;
+  border-radius: 12.5px;
+  background: #fff;
+}
+
+.rv4-tour__step {
+  margin: 0;
+  padding-bottom: 4px;
+  color: #6e56cf;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  line-height: 12.6px;
+  text-transform: uppercase;
+}
+
+.rv4-tour__title {
+  margin: 0;
+  color: #2a2638;
+  font-family: var(--font-jakarta);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 17px;
+}
+
+.rv4-tour__body {
+  margin: 0;
+  color: #5f5a70;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 18.75px;
+}
+
+/* "Skip Tour" on the left, Back and Next on the right, 6px apart. With no Skip
+   (the last stop), Back and Finish keep to the right, as Figma draws them. */
+.rv4-tour__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+}
+
+.rv4-tour__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* A link's size on screen, a finger's size to hit: 24px tall with its margin. */
+.rv4-tour__skip {
+  margin: -5px 0;
+  padding: 5px 0;
+  border: 0;
+  background: none;
+  color: #9a95ab;
+  cursor: pointer;
+  font: 500 11.5px/14.5px var(--font-jakarta);
+}
+
+.rv4-tour__back,
+.rv4-tour__next {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font: 600 12px/15px var(--font-jakarta);
+  white-space: nowrap;
+}
+
+/* Figma's 1px stroke sits inside the 56×29 pill: an inset shadow, so it takes no room. */
+.rv4-tour__back {
+  padding: 7px 13px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #ece9f3;
+  color: #2a2638;
+}
+
+.rv4-tour__next {
+  padding: 6px 14px;
+  background: linear-gradient(90deg, #f0714f, #9b7bf4);
+  color: #fff;
+}
+
+.rv4-tour__bubble button:focus-visible {
+  outline: 2px solid #6e56cf;
+  outline-offset: 2px;
+}
+
+/* Reduced motion (spec card): the page jumps, the spotlight neither travels nor
+   pulses, nothing moves; the dim and the bubble only fade. V4GuidedTour holds the
+   moves back too; this is the stylesheet's half. */
+@media (prefers-reduced-motion: reduce) {
+  .rv4-tour__edge[data-pulse],
+  .rv4-tour__shimmer[data-run] > span,
+  [data-rv4-tour-gesture] svg {
+    animation: none;
+  }
+
+  .rv4-tour__shimmer {
+    display: none;
+  }
+
+  .rv4-tour__bubble[data-state="in"],
+  .rv4-tour__bubble[data-state="in"][data-placement="above"] {
+    animation-name: rv4-tour-fade;
+  }
+}
+
+@keyframes rv4-tour-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* High contrast: the gradients go, so the bubble and the buttons draw their own
+   lines, and the hole keeps a visible edge. */
+@media (forced-colors: active) {
+  .rv4-tour__bubble {
+    border: 1px solid CanvasText;
+  }
+
+  .rv4-tour__back,
+  .rv4-tour__next {
+    border: 1px solid ButtonText;
+  }
+
+  .rv4-tour__edge {
+    outline: 2px solid Highlight;
+  }
+}

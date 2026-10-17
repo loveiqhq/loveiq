@@ -28,6 +28,7 @@ import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import { V4_ARTICLE_LABEL, V4_PRACTICE_TITLE } from "@features/report/ui/v3/v4CardsFromV2";
 import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
+import { TOUR_COPY, TOUR_LABELS } from "@features/report/ui/v3/guidedTourContent";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 
 /**
@@ -266,5 +267,15 @@ describe("Report 2.0's headings that V4 shows follow the 02.10 heading rule", ()
     follows(ATTACHMENT_PATTERNS_TITLE);
     expect(ATTACHMENT_FAMILY_CARDS).toHaveLength(5);
     for (const card of ATTACHMENT_FAMILY_CARDS) follows(card.title);
+  });
+});
+
+describe("the guided tour follows the 02.10 heading rule", () => {
+  it("in every stop's title, its buttons and the menu's Replay the Tour", () => {
+    // Figma (1755:1275) keeps sentence case; the rule puts the case here.
+    const titles = Object.values(TOUR_COPY).map((copy) => copy.title);
+    expect(titles).toHaveLength(5);
+    titles.forEach(follows);
+    Object.values(TOUR_LABELS).forEach(follows);
   });
 });
