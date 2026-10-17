@@ -34,6 +34,8 @@ countdown).
   pay pop-up test's point (`logic/plansOffer.ts` shares that test's key). Never on a return
   visit. Off without `NEXT_PUBLIC_FOUNDER_CALL_URL`;
   `?leave=on|off|show` previews it off production.
+- `logic/guidedTour.ts` + `ui/hooks/useGuidedTour.ts` + `ui/v3/V4GuidedTour.tsx` — the guided
+  tour (see "The guided tour" below).
 - `ui/ShareReportModal.tsx`, `ui/SharedViewerBanner.tsx`, `ui/ShareVerifyGate.tsx` — share flow.
 - `ui/hooks/` — `useReportData`, `useSectionFeedback` (a thumb saves the rating at once; the
   message is optional), `useReportShares`, `useReportEngagementTimers`, `useRevealOnView` (2.0's
@@ -94,6 +96,37 @@ Slimmed" (`1665:3278` in the Report 3.0 file), behaviour Mark's clickable protot
   (`features/analytics/reportLayout.ts`).
 - **Tests.** `tests/v4Slim1610.test.tsx`, `tests/v4SlimRoutes1610.test.ts`,
   `tests/v4SlimChapters1610.test.tsx` and `tests/chapterReadingTimes1610.test.tsx`.
+
+**The guided tour (2026-10-17).** A click-through tour on a V4 report's first open in a browser
+(Figma `1713:1071` › "Guided tour in context" `1755:1275`, Ready for Dev 16.10; behaviour from
+Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the report").
+
+- **Stops.** The chapter menu (the pill below 1280px, the sidebar from there, whose copy says "on
+  the left"), Typical Beliefs' first "Show All", its chapter toggle, its "Try This" header and,
+  for a reader who has not paid for the report on screen, the first locked chapter's lock
+  (Power Orientation). Essentials buyers count as paid (Fatih, 17.10). Copy in
+  `ui/v3/guidedTourContent.ts`, Title Case; what each stop points at in
+  `ui/v3/guidedTourAnchors.ts`.
+- **When.** Owners and previews, never a shared view, a probe (the persona walks' cookie) or a
+  checkout return. It waits for any open window, the cookie banner's answer and its controls,
+  and gives way to a reader who has already scrolled. Remembered once started in
+  `localStorage["loveiq-report-tour-v1"]` (`GUIDED_TOUR_KEY`); "Replay the Tour" ends the chapter
+  menu, below its list (the walks count the list's rows).
+- **While it runs.** A layer of its own on `<body>` (z-index 78, `ui/v3/guidedTour.css`) draws the
+  dim with a hole and the bubble; the report under it is inert, without the shell's blur. The
+  page is held without the body lock (which would stop the tour's own scrolling): the root's
+  overflow, Lenis stopped, swipes cancelled. `shared/ui/guided-tour-state.ts` tells the
+  scroll-driven signals the scrolling is the tour's: the plans pop-up trigger, the paywall ping,
+  chapter time, `cta_seen`, scroll depth and Typical Beliefs' midline rows stand down without
+  letting go, and the leave offer is off.
+- **Analytics.** `tour_started`, `tour_step_viewed {n, id}`, `tour_back {to}`,
+  `tour_skipped {at, source}`, `tour_completed` and `tour_replayed` go to PostHog; a first run's
+  start and outcome, and each replay, are also stored (`analytics_event`, the submission
+  timeline).
+- **Tests.** `tests/guidedTour.test.ts`, `tests/guidedTourAnchors.test.ts`,
+  `tests/V4GuidedTour.test.tsx`, `tests/hooks/useGuidedTour.test.tsx`, the tour block of
+  `tests/ReportPage.test.tsx`, and `e2e/report-guided-tour.spec.ts`. The other report e2e specs
+  start as a browser that has seen it (`mockReport` seeds the key).
 
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 
