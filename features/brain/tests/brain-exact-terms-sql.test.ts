@@ -43,8 +43,13 @@ describe("brain_chunk.exact_terms, in SQL", () => {
       /regexp_matches\(\s*lower\(coalesce\(p_title, ''\) \|\| ' ' \|\| coalesce\(p_body, ''\)\),\s*'([^']+)',\s*'g'\)/.exec(
         fn("brain_exact_terms")
       )![1]!;
-    expect(pattern.startsWith("(\\S*(?:@|://|www\\.|%40|%3a)\\S*|\\S*\\.(?:pdf|docx?|")).toBe(true);
-    expect(pattern.endsWith(")[^a-z0-9[:space:]]*(?=\\s|$))")).toBe(true);
+    // The whole pattern, so a dropped extension or a widened run is a failing test.
+    expect(pattern).toBe(
+      "(\\S*(?:@|://|www\\.|%40|%3a)\\S*|\\S*\\.(?:pdf|docx?|xlsx?|xlsm|pptx?|od[tsp]|rtf|txt|csv|tsv|md|json|xml|ya?ml|html?|sql|ics|eml|png|jpe?g|gif|svg|webp|heic|mp[34]|m4a|mov|wav|zip|[jt]sx?|mjs|css|sh|py)[^a-z0-9[:space:]]*(?=\\s|$))"
+    );
+    // Runs are joined by a space: joined by nothing, a text with no spaces could match
+    // across the end of one run and the start of the next.
+    expect(fn("brain_exact_terms")).toContain("SELECT string_agg(DISTINCT v.t, ' ')");
     expect(fn("brain_exact_terms")).toMatch(
       /CASE WHEN strpos\(r\.m\[1\], '%'\) > 0 THEN public\.brain_url_decode\(r\.m\[1\]\) END/
     );
@@ -54,6 +59,8 @@ describe("brain_chunk.exact_terms, in SQL", () => {
     const decode = fn("brain_url_decode");
     expect(decode).toContain("'%([0-9a-f]{2})|([^%]+|%)', 'gi'");
     expect(decode).toMatch(/EXCEPTION WHEN character_not_in_repertoire THEN/);
+    // The bytes are read as UTF-8, as the route's TextDecoder reads them.
+    expect(decode).toMatch(/''::bytea ORDER BY n\)[\s\S]*?\),\s*'UTF8'\);/);
     expect(decode).toContain("'%([2-7][0-9a-f])|([^%]+|%)', 'gi'");
     expect(ROUTE).toContain(
       "decodeEscapes(run, /%[0-9a-f]{2}/iy) ?? decodeEscapes(run, /%[2-7][0-9a-f]/iy)"

@@ -89,16 +89,36 @@ export async function loadPeople(): Promise<Map<string, Person> | null> {
  * checked 2026-10-17: Google Docs, Google Sheets, Google Calendar (a calendar invite Google
  * sent for Mark was not tagged with him), and via Slack, Google Docs, Drive, Sheets, Forms
  * and Meet.
+ *
+ * One `\s` and no leading `\s*`: the earlier `\s*\((?:via|google)\s+[^()]+\)` let three runs
+ * claim the same spaces, so a display name of spaces and an unclosed "(google" took 1.3 s at
+ * 800 characters and grew with the cube (review of #605, 17 Oct 2026). The caller trims.
  */
-const SENT_FOR = /\s*\((?:via|google)\s+[^()]+\)\s*$/i;
+const SENT_FOR = /\((?:via|google)\s[^()]*\)\s*$/i;
+
+/**
+ * `Name <address>` (the name optionally quoted) as its two halves, else null. Found with
+ * indexOf rather than `^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$`, which matched the same names but
+ * took 0.7 s on an 800-character display name and grew with the cube, and a display name is
+ * anyone's to write (review of #605, 17 Oct 2026).
+ */
+export function angledForTest(raw: string): [string, string] | null {
+  const lt = raw.indexOf("<");
+  const gt = raw.indexOf(">", lt + 1);
+  if (lt < 0 || gt < lt + 2 || raw.slice(gt + 1).trim()) return null;
+  let name = raw.slice(0, lt).trim();
+  if (name.startsWith('"')) name = name.slice(1);
+  if (name.endsWith('"')) name = name.slice(0, -1);
+  return name.includes('"') ? null : [name, raw.slice(lt + 1, gt)];
+}
 
 /** "Marcus Börner <mb@loveiq.org>" -> both halves; a bare value -> itself. */
 function candidates(raw: string): string[] {
   const out: string[] = [];
-  const angled = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(raw);
+  const angled = angledForTest(raw);
   if (angled) {
-    if (angled[1]?.trim()) out.push(angled[1].trim());
-    if (angled[2]?.trim()) out.push(angled[2].trim());
+    if (angled[0].trim()) out.push(angled[0].trim());
+    if (angled[1].trim()) out.push(angled[1].trim());
   } else {
     out.push(raw.trim());
   }

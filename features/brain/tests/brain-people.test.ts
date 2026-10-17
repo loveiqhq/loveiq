@@ -97,6 +97,19 @@ describe("peopleIn — one name for a person, whatever the source called them", 
     expect(peopleIn({ participants: [sender] }, REG)).toEqual(["Mark Oldenburg"]);
   });
 
+  /** A sender's display name is anyone's to write: an unclosed "(google" must stay quick. */
+  it("reads a long crafted display name in linear time", () => {
+    const n = 4000;
+    const tail = `(google${" ".repeat(n)}${"a".repeat(n)}`;
+    // Leading spaces for the address split; a letter first for the suffix rule, which runs
+    // on the trimmed name.
+    for (const crafted of [`${" ".repeat(n)}${tail}`, `a${" ".repeat(n)}${tail}`]) {
+      const started = performance.now();
+      expect(peopleIn({ participants: [crafted] }, REG)).toBeUndefined();
+      expect(performance.now() - started).toBeLessThan(250);
+    }
+  });
+
   it("keeps any other bracket as part of the name", () => {
     expect(peopleIn({ participants: ["Marcus Börner (personal)"] }, REG)).toBeUndefined();
     expect(peopleIn({ participants: ["Marcus Börner (Google)"] }, REG)).toBeUndefined();

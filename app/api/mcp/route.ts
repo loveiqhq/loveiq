@@ -3652,6 +3652,13 @@ function decodeEscapes(run: string, escape: RegExp) {
 }
 
 /**
+ * Whitespace as Postgres's `\S` in `brain_exact_terms` splits runs, so a run here is the run
+ * it decoded: JavaScript's `\s` also counts U+FEFF, and Postgres also counts U+001C-U+001F and
+ * U+0085. Splitting with `\s` listed such a record with no line (review of #605, 17 Oct 2026).
+ */
+const PG_SPACE = /(?:[^\S﻿]|[\u001c-\u001f\u0085])+/u;
+
+/**
  * THE LINES THAT HOLD IT URL-ENCODED, for a record `exact_terms` matched only in a decoded
  * link, such as a booking link inside a redirect's `url=` with its `:` and `/` written as
  * %3A and %2F: the raw span that encodes the text is found like any other text, and each
@@ -3660,7 +3667,7 @@ function decodeEscapes(run: string, escape: RegExp) {
 export function encodedLinesForTest(haystack: string, needle: string, max: number): string[] {
   const n = needle.toLowerCase();
   const out: string[] = [];
-  for (const run of new Set(haystack.split(/\s+/))) {
+  for (const run of new Set(haystack.split(PG_SPACE))) {
     if (!run.includes("%")) continue;
     const decoded = urlDecodedForTest(run);
     const at = decoded.text.toLowerCase().indexOf(n);

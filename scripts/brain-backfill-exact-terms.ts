@@ -13,6 +13,10 @@
  * ingester holds; a failed batch is tried again, and after three failures the run stops
  * and prints where to resume.
  *
+ * RUN IT BETWEEN INGEST RUNS (e.g. :43 to :49 past the hour). A batch and an ingest upsert
+ * that lock the same rows in opposite orders can deadlock, and Postgres may cancel the
+ * ingest's write instead of the batch (8 of 24 overlapping runs in the review of #605).
+ *
  * Safe to stop and re-run: a batch that is already filled writes nothing.
  *
  *   npx tsx --env-file-if-exists=.env.local scripts/brain-backfill-exact-terms.ts

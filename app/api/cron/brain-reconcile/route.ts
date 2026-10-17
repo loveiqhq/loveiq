@@ -667,7 +667,7 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
     found += tabsPresentInText(doc.text, titles);
   }
   if (skipped.length) {
-    logger.info({ skipped }, "brain-reconcile: spreadsheets this account cannot read were skipped");
+    logger.warn({ skipped }, "brain-reconcile: spreadsheets this account cannot read were skipped");
   }
   if (skipped.length === sample.length) {
     throw new Error(

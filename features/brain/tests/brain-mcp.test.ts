@@ -9832,6 +9832,20 @@ describe("find_text — every record holding an exact text", () => {
     expect(encodedLinesForTest("x@y.test, no escapes", "x@y.test", 3)).toEqual([]);
     expect(encodedLinesForTest("nothing%20here", "x@y.test", 3)).toEqual([]);
   });
+
+  /**
+   * RUNS SPLIT WHERE POSTGRES SPLITS THEM. A Latin-1 escape (%E9) makes a run fall back to
+   * ASCII-only decoding, so a run boundary Postgres sees and JavaScript did not (U+0085) left
+   * the record listed with no line.
+   */
+  it("splits runs at the whitespace Postgres splits them at", () => {
+    const link = "https://x.test/b?to=m%C3%BCller%40x.test";
+    for (const sep of ["\u0085", "\u001c", "\u001f"]) {
+      expect(encodedLinesForTest(`n=caf%E9${sep}${link}`, "müller@x.test", 3)).toHaveLength(1);
+    }
+    // U+FEFF splits nothing in Postgres, so the run stays whole there as here.
+    expect(encodedLinesForTest(`n=caf%E9﻿${link}`, "müller@x.test", 3)).toEqual([]);
+  });
 });
 
 describe("search_company_context — an exact text it did not return", () => {
