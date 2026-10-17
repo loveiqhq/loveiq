@@ -2984,9 +2984,13 @@ export const EXTERNAL_SERVICES: Record<
  * (hogqlTable POSTs that endpoint and works), /insights/trend, /funnel and /retention answer
  * 404 (re-checked 2026-10-16), and the `@current` form, refused by the path check, came back
  * as a 404 once rewritten. Matched before that check, so `@current` gets this answer too.
+ *
+ * Matched on the path alone: `/query#x` reached PostHog and came back 403 (17 Oct 2026),
+ * because a `#` was no end of the route here. The fragment and the query string are cut
+ * off first, so `/query#x`, `/query?refresh=1` and `/query%23x` read as `/query`.
  */
 const POSTHOG_QUERY_PATH =
-  /^\/(?:projects|environments)\/[^/?]+\/(?:query|insights\/(?:trends?|funnels?|paths?|retention|stickiness|lifecycle))(?:[/?]|$)/i;
+  /^\/(?:projects|environments)\/[^/]+\/(?:query|insights\/(?:trends?|funnels?|paths?|retention|stickiness|lifecycle))(?:\/|$)/i;
 
 const POSTHOG_USE_HOGQL =
   "Not sent to PostHog: its query endpoint and the trend, funnel and retention insight " +
@@ -6659,7 +6663,7 @@ async function callTool(
     } catch {
       return textResult("path must be a simple path inside that service's API.", true);
     }
-    if (key === "posthog" && POSTHOG_QUERY_PATH.test(decodedPath)) {
+    if (key === "posthog" && POSTHOG_QUERY_PATH.test(decodedPath.replace(/[?#][\s\S]*$/, ""))) {
       return textResult(POSTHOG_USE_HOGQL, true);
     }
     /**

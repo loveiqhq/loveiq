@@ -7768,6 +7768,17 @@ describe("/api/mcp", () => {
         "a retired funnel, with the base's /api written twice",
         "/api/projects/244778/insights/funnel",
       ],
+      // A fragment or a query string is no part of the route: `/query#x` reached PostHog
+      // and came back 403 (17 Oct 2026).
+      ["the query endpoint with a fragment", "/projects/244778/query#x"],
+      ["the query endpoint with a query string", "/projects/244778/query?refresh=blocking"],
+      ["the query endpoint, slash and fragment", "/projects/244778/query/#results"],
+      ["the query endpoint with an encoded fragment", "/projects/244778/query%23x"],
+      ["the query endpoint with an empty query and fragment", "/environments/244778/query?#"],
+      ["the query endpoint, no leading slash", "projects/244778/query#x"],
+      ["the query endpoint, /api twice and a query string", "/api/projects/244778/query?x=1"],
+      ["a retired trend with a query string", '/projects/244778/insights/trend?events=[{"id":1}]'],
+      ["a retired retention with a fragment", "/projects/244778/insights/retention#top"],
     ])(
       "answers PostHog's %s with query_product_analytics, without asking PostHog",
       async (_what, path) => {
@@ -7792,6 +7803,17 @@ describe("/api/mcp", () => {
         "https://eu.posthog.com/api/projects/244778/insights/42/",
       ],
       ["events", "/projects/244778/events", "https://eu.posthog.com/api/projects/244778/events"],
+      // The word "query" in a query string, or a longer last segment, is not the endpoint.
+      [
+        "saved insights searched for a query",
+        "/projects/244778/insights/?search=query",
+        "https://eu.posthog.com/api/projects/244778/insights/?search=query",
+      ],
+      [
+        "a path that only starts like the query endpoint",
+        "/projects/244778/queryx",
+        "https://eu.posthog.com/api/projects/244778/queryx",
+      ],
     ])("still reads PostHog's %s", async (_what, path, url) => {
       process.env.POSTHOG_API_KEY = "phx_test";
       const r = await call({ service: "posthog", path });
