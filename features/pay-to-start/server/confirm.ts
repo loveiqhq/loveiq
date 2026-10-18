@@ -304,6 +304,8 @@ export async function runFirstPaymentEffects({
         origin: metadata.origin ?? null,
         productName: offer.productName,
         token: entitlement.prepaid_token,
+        // Paid after the survey was finished: the report is what unlocks now.
+        variant: entitlement.consumed_submission_id ? "report" : "survey",
       })
     );
   } else {
@@ -433,7 +435,11 @@ function paidLine({
   const traffic = classifyTraffic(entitlement.utm_tracker);
   const via = [traffic.source, traffic.campaign].filter(Boolean).map((v) => escapeSlack(v ?? ""));
   const parts = [
-    `${internalTag}:moneybag: Pay to start: *${amountText}* paid, survey not started yet`,
+    `${internalTag}:moneybag: Pay to start: *${amountText}* paid, ${
+      entitlement.consumed_submission_id
+        ? `survey already finished (submission #${entitlement.consumed_submission_id})`
+        : "survey not started yet"
+    }`,
     email ? escapeSlack(maskEmail(email)) : "no email",
     via.length > 0 ? `${traffic.bucket} (${via.join(" / ")})` : traffic.bucket,
   ];

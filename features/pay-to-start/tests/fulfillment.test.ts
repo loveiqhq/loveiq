@@ -336,6 +336,18 @@ describe("applyPayToStartEntitlement", () => {
     expect(captured.urls).toHaveLength(0);
   });
 
+  it("never applies an offer that grants anything but the full report", async () => {
+    // The reserved EUR 1.99 pre-unlock is registered, not on sale: if it ever were, its
+    // EUR 1.99 must not write a full report's payment row and tier.
+    const captured = routeSupabase();
+    await expect(
+      applyPayToStartEntitlement({ entitlement: row({ offer: "pre" }), stripe })
+    ).rejects.toThrow("pts_apply_offer_not_a_full_report");
+    expect(captured.paymentPost).toBeNull();
+    expect(captured.urls.filter((u) => !u.startsWith("GET "))).toEqual([]);
+    expect(setEntitlementPaymentId).not.toHaveBeenCalled();
+  });
+
   it("stops before stamping when no archetype is scored yet, so the sweep retries", async () => {
     routeSupabase({ primary: null });
     await expect(applyPayToStartEntitlement({ entitlement: row(), stripe })).rejects.toThrow(

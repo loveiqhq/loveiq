@@ -2099,6 +2099,11 @@ export async function applyPayToStartEntitlement({
   const offer = getOfferDefinition(
     isPayToStartOfferId(entitlement.offer) ? entitlement.offer : "full"
   );
+  // What is written below is a full report. An offer that grants anything else (the
+  // reserved EUR 1.99 pre-unlock) needs its own apply before it can ever be sold.
+  if (offer.grant.kind !== "report_plan" || offer.grant.plan !== "full_report") {
+    throw new Error("pts_apply_offer_not_a_full_report");
+  }
   const amount = toAmount(entitlement.amount_cents);
 
   const existing = await fetchExistingPayment({

@@ -314,6 +314,7 @@ describe("the first confirmation", () => {
       origin: "https://www.loveiq.org",
       productName: "LoveIQ Survey & Report",
       token: TOKEN,
+      variant: "survey",
     });
     const paid = mockNotifySlack.mock.calls.find(([input]) => input.kind === "pts_paid");
     expect(paid?.[0]).toMatchObject({ channel: "payments" });
@@ -341,6 +342,28 @@ describe("the first confirmation", () => {
         plan: "full_report",
       })
     );
+  });
+
+  it("says the report is unlocked when the survey was finished before the money settled", async () => {
+    // A checkout left open and paid later, or a delayed method: the buyer already has a
+    // report, so "start my survey" would be wrong in the email and in #payments.
+    vi.mocked(findEntitlementById).mockResolvedValue(row({ consumed_submission_id: 42 }));
+    vi.mocked(markEntitlementSucceeded).mockImplementation(async (input) =>
+      row({
+        status: "succeeded",
+        consumed_submission_id: 42,
+        amount_cents: input.amountCents,
+        customer_email: input.customerEmail,
+        paid_at: input.paidAt,
+      })
+    );
+    await confirm(checkoutSession());
+    expect(sendPayToStartConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "report" })
+    );
+    const paid = mockNotifySlack.mock.calls.find(([input]) => input.kind === "pts_paid");
+    expect(paid?.[0].text).toContain("survey already finished (submission #42)");
+    expect(paid?.[0].text).not.toContain("survey not started yet");
   });
 
   it("does nothing more when another path flipped it first", async () => {

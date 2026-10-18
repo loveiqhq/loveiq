@@ -63,11 +63,17 @@ interface Seen {
   rpcBody: Record<string, unknown> | null;
 }
 
-function routeSupabase({ existingSubmission = null }: { existingSubmission?: number | null } = {}) {
+function routeSupabase({
+  existingSubmission = null,
+  suppressed = false,
+}: { existingSubmission?: number | null; suppressed?: boolean } = {}) {
   const seen: Seen = { rpcBody: null };
   mockFetchWithTimeout.mockImplementation(
     async (url: string, options: { body?: string; method?: string } = {}) => {
       const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+      if (url.includes("/rest/v1/email_suppression?")) {
+        return ok(suppressed ? [{ email: "alice@example.com" }] : []);
+      }
       if (url.includes("/rest/v1/survey_submission?session_id=eq.")) {
         return ok(existingSubmission ? [{ id: existingSubmission, status: "completed" }] : []);
       }
@@ -207,6 +213,28 @@ describe("a survey submitted by a buyer who paid before it", () => {
       { name: "journey", value: "pay_to_start" },
       { name: "email", value: "pts_report_unlocked" },
     ]);
+  });
+
+  it("sends a buyer's report email even to an address on the suppression list", async () => {
+    // It confirms a purchase, like a report purchase's email, which always goes.
+    routeSupabase({ suppressed: true });
+    await submit({}, cookie);
+    await flushAfterResponse();
+    expect(mockEmailsSend).toHaveBeenCalledTimes(1);
+    expect((mockEmailsSend.mock.calls[0]?.[0] as { subject: string }).subject).toBe(
+      "Your full report is ready, Alice"
+    );
+  });
+
+  it("still sends nothing to a suppressed address whose report did not unlock", async () => {
+    routeSupabase({ suppressed: true });
+    vi.mocked(claimPayToStartForSubmission).mockResolvedValue({
+      outcome: "unpaid",
+      entitlementId: 7,
+    });
+    await submit({}, cookie);
+    await flushAfterResponse();
+    expect(mockEmailsSend).not.toHaveBeenCalled();
   });
 
   it("sends the survey email's A copy, untagged for the test, when not unlocked", async () => {

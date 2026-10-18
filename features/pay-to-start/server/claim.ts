@@ -88,6 +88,26 @@ export async function claimPayToStartForSubmission({
   }
 }
 
+/**
+ * Apply, and once more if that throws: a reader whose apply fails sees the free report
+ * until the sweep (half-hourly) finishes it, and in between the report's own paywall would
+ * sell it to them a second time. A passing blip should not cost that. Idempotent.
+ */
+async function applyWithRetry(
+  entitlement: Entitlement,
+  reportToken: string | null
+): Promise<number | null> {
+  try {
+    return await applyPayToStartEntitlement({ entitlement, reportToken });
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err, entitlementId: entitlement.id },
+      "pay-to-start: apply failed once; trying again"
+    );
+    return await applyPayToStartEntitlement({ entitlement, reportToken });
+  }
+}
+
 /** Apply a bound entitlement, or say why it does not unlock (yet). */
 async function applyClaimed(
   entitlement: Entitlement,
@@ -99,7 +119,7 @@ async function applyClaimed(
   }
   switch (entitlement.status) {
     case "succeeded": {
-      const paymentId = await applyPayToStartEntitlement({ entitlement, reportToken });
+      const paymentId = await applyWithRetry(entitlement, reportToken);
       return paymentId
         ? { outcome: "unlocked", entitlementId, paymentId }
         : { outcome: "error", entitlementId, error: new Error("pts_apply_returned_nothing") };
