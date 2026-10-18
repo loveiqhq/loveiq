@@ -296,9 +296,14 @@ describe("its checkout", () => {
 
   it("counts a checkout started only when one opens", async () => {
     // GA4's begin_checkout (Google Ads reads it) and the durable funnel row mean a
-    // checkout: never a browser sent to its survey, a changed price, or a paused one.
+    // checkout: never a browser sent to its survey, a changed price, a paused one, or a
+    // payment still settling, which goes to our own status page.
     for (const answer of [
       reply({ state: "paid" }),
+      reply({
+        state: "redirect",
+        url: "https://www.loveiq.org/sexual-archetype/checkout?session_id=cs_test_1",
+      }),
       reply({ state: "used", reportPath: null }),
       reply({ state: "price_changed", priceCents: 1999 }, 409),
       reply({ state: "unavailable", message: "Checkout is paused." }, 503),

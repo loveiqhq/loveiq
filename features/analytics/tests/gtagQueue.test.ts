@@ -161,6 +161,49 @@ describe("gtag delivery queue", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("settles once a queued purchase has gone to gtag.js, so the page may leave", async () => {
+    // A full-page navigation throws the queue away. Pay to start's status page leaves for
+    // the survey right after the purchase, on a page where gtag.js loads late.
+    const gtag = vi.fn();
+    const { track, gtagQueueSettled } = await import("@features/analytics/client");
+    stubWindowBeforeGtagJs(gtag);
+    track("purchase_like_event");
+    let settled = false;
+    void gtagQueueSettled(3_000).then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(settled).toBe(false);
+
+    gtagJsLoads();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(gtag).toHaveBeenCalledWith("event", "purchase_like_event", undefined);
+    expect(settled).toBe(true);
+  });
+
+  it("settles at once with nothing queued, and at the cap when gtag.js never comes", async () => {
+    const gtag = vi.fn();
+    const { track, gtagQueueSettled } = await import("@features/analytics/client");
+    stubWindowBeforeGtagJs(gtag);
+    let first = false;
+    void gtagQueueSettled(3_000).then(() => {
+      first = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first).toBe(true);
+
+    track("blocked_event");
+    let capped = false;
+    void gtagQueueSettled(3_000).then(() => {
+      capped = true;
+    });
+    await vi.advanceTimersByTimeAsync(2_900);
+    expect(capped).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(capped).toBe(true);
+    expect(gtag).not.toHaveBeenCalled();
+  });
+
   it("still pushes to dataLayer immediately, which is GTM's path not gtag's", async () => {
     // The queue is specifically about gtag.js. GTM is present from the page's own
     // script, so the dataLayer object push has never had this problem and must not
