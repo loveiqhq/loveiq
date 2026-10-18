@@ -524,5 +524,27 @@ describe("ops lines", () => {
     await confirm(checkoutSession());
     expect(sendGa4PurchaseEvent).toHaveBeenCalled();
     expect(sendPosthogPurchaseEvent).toHaveBeenCalled();
+    expect(mockNotifySlack).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "ops", kind: "pts_confirmation_failed" })
+    );
+  });
+
+  it("asks #ops to send the continue link when the confirmation email did not go", async () => {
+    // For a buyer who paid and closed the tab, that email is the only way back in.
+    vi.mocked(sendPayToStartConfirmationEmail).mockResolvedValue(false);
+    await confirm(checkoutSession());
+    const alert = mockNotifySlack.mock.calls.find(
+      ([input]) => input.kind === "pts_confirmation_failed"
+    )?.[0];
+    expect(alert).toMatchObject({ channel: "ops", context: { entitlementId: 7 } });
+    expect(alert?.text).toContain("entitlement #7");
+    expect(alert?.text).not.toContain("buyer@example.com");
+  });
+
+  it("raises no alert when the confirmation email went", async () => {
+    await confirm(checkoutSession());
+    expect(mockNotifySlack).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "pts_confirmation_failed" })
+    );
   });
 });

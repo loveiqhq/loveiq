@@ -59,7 +59,7 @@ export function utmForMetadata(utmTracker: string | null): {
 
 /**
  * How long a checkout stays open. Stripe's default is 24 hours, and every abandoned one
- * stays `pending` that long, so the hourly sweep kept re-asking about the same oldest 25
+ * stays `pending` that long, so the sweep (twice an hour) kept re-asking about the same 25
  * and never reached a paid one whose webhook was missed. An hour covers a wallet, a bank
  * redirect or a 3DS step; a visitor back later gets a new session under the same token.
  */

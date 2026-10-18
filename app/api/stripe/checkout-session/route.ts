@@ -218,6 +218,37 @@ export async function POST(request: Request) {
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.reportToken ?? null,
     });
+
+    // Resolve the submission once — reused by the already-owns precheck AND by
+    // per-user promo ownership below, so session-only checkouts (not just token
+    // ones) can resolve a user's own nurture code. [Audit L6]
+    let accessContext: Awaited<ReturnType<typeof resolveSubmissionAccessContext>> = null;
+    try {
+      accessContext = await resolveSubmissionAccessContext({
+        reportSessionId: parsed.data.reportSessionId ?? null,
+        reportToken: parsed.data.reportToken ?? null,
+      });
+    } catch (err) {
+      logger.warn({ err }, "checkout-session: access-context resolve failed; continuing");
+    }
+
+    // Pay to start: paid before the survey and claimed by it, but the payment row not
+    // written yet (an apply that failed; the sweep retries it). Apply it now, before the
+    // quote (that payment is upgrade credit) and the check below (which then sees the
+    // report as bought, rather than sell it a second time). On its own: a failure here
+    // must never skip that check.
+    if (accessContext && stripe) {
+      const submissionId = accessContext.submissionId;
+      try {
+        const prepaid = await findEntitlementByConsumedSubmission(submissionId);
+        if (prepaid?.status === "succeeded" && !prepaid.payment_id) {
+          await applyPayToStartEntitlement({ entitlement: prepaid, stripe });
+        }
+      } catch (err) {
+        logger.warn({ err, submissionId }, "checkout-session: prepaid apply failed");
+      }
+    }
+
     const quote = await getReportPriceQuoteForContext({
       plan: parsed.data.plan,
       pricingSessionId: parsed.data.pricingSessionId ?? null,
@@ -238,35 +269,6 @@ export async function POST(request: Request) {
     // archetype X does NOT block buying the same tier on archetype Y.
     // Best-effort: a Supabase blip drops to a warn-log and lets checkout
     // proceed (webhook idempotency is the secondary defense).
-    // Resolve the submission once — reused by the already-owns precheck AND by
-    // per-user promo ownership below, so session-only checkouts (not just token
-    // ones) can resolve a user's own nurture code. [Audit L6]
-    let accessContext: Awaited<ReturnType<typeof resolveSubmissionAccessContext>> = null;
-    try {
-      accessContext = await resolveSubmissionAccessContext({
-        reportSessionId: parsed.data.reportSessionId ?? null,
-        reportToken: parsed.data.reportToken ?? null,
-      });
-    } catch (err) {
-      logger.warn({ err }, "checkout-session: access-context resolve failed; continuing");
-    }
-
-    // Pay to start: paid before the survey and claimed by it, but the payment row not
-    // written yet (an apply that failed; the sweep retries it). Apply it now, so the check
-    // below sees the report as bought, rather than sell it a second time. On its own: a
-    // failure here must never skip that check.
-    if (accessContext) {
-      const submissionId = accessContext.submissionId;
-      try {
-        const prepaid = await findEntitlementByConsumedSubmission(submissionId);
-        if (prepaid?.status === "succeeded" && !prepaid.payment_id) {
-          await applyPayToStartEntitlement({ entitlement: prepaid, stripe });
-        }
-      } catch (err) {
-        logger.warn({ err, submissionId }, "checkout-session: prepaid apply failed");
-      }
-    }
-
     try {
       if (accessContext) {
         const access = await getReportAccessPlanForSubmission(accessContext.submissionId);

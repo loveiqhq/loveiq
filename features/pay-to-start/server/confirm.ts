@@ -296,18 +296,33 @@ export async function runFirstPaymentEffects({
   };
 
   if (email) {
-    await step("email", () =>
-      sendPayToStartConfirmationEmail({
-        amountText,
-        email,
-        entitlementId: entitlement.id,
-        origin: metadata.origin ?? null,
-        productName: offer.productName,
-        token: entitlement.prepaid_token,
-        // Paid after the survey was finished: the report is what unlocks now.
-        variant: entitlement.consumed_submission_id ? "report" : "survey",
-      })
-    );
+    await step("email", async () => {
+      let sent = false;
+      try {
+        sent = await sendPayToStartConfirmationEmail({
+          amountText,
+          email,
+          entitlementId: entitlement.id,
+          origin: metadata.origin ?? null,
+          productName: offer.productName,
+          token: entitlement.prepaid_token,
+          // Paid after the survey was finished: the report is what unlocks now.
+          variant: entitlement.consumed_submission_id ? "report" : "survey",
+        });
+      } finally {
+        // The email is the buyer's way back in (the continue link): someone who paid and
+        // closed the tab has nothing else, so one that did not go needs a person.
+        if (!sent) {
+          await notifySlack({
+            channel: "ops",
+            kind: "pts_confirmation_failed",
+            text: `${internalTag}:warning: Pay to start: the confirmation email for entitlement #${entitlement.id} (${escapeSlack(maskEmail(email))}) was not sent. Send them their continue link (docs/runbooks/PAY_TO_START.md).`,
+            username: "ops_alerts",
+            context: { entitlementId: entitlement.id },
+          });
+        }
+      }
+    });
   } else {
     logger.warn({ entitlementId: entitlement.id }, "pay-to-start: no buyer email, nothing sent");
   }

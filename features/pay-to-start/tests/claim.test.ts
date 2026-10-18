@@ -269,14 +269,14 @@ describe("what the reply carries", () => {
     });
   });
 
-  it("clears the cookie unless the claim failed, or bound a checkout still unpaid", () => {
+  it("clears the cookie unless the claim failed", () => {
     expect(claimSettlesCookie({ outcome: "unlocked", entitlementId: 7, paymentId: 41 })).toBe(true);
     expect(claimSettlesCookie({ outcome: "pending", entitlementId: 7 })).toBe(true);
     expect(claimSettlesCookie({ outcome: "refused", reason: "refunded" })).toBe(true);
     expect(claimSettlesCookie({ outcome: "error", error: new Error("x") })).toBe(false);
-    // Kept, so a later checkout from the page reuses this token and its payment unlocks
-    // the report this survey already has.
-    expect(claimSettlesCookie({ outcome: "unpaid", entitlementId: 7 })).toBe(false);
+    // Cleared: kept, the next purchase in this browser (someone else's, or a second one
+    // for a report already bought) would pay for this survey.
+    expect(claimSettlesCookie({ outcome: "unpaid", entitlementId: 7 })).toBe(true);
   });
 });
 

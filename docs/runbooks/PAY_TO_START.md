@@ -67,10 +67,10 @@ order by created_at desc;
 - `succeeded` and consumed: their report is the one the submission's token opens.
 - `pending` for more than an hour: the payment never completed at Stripe (a checkout closes
   after an hour), or a delayed method still settles; the sweep (twice an hour) asks Stripe
-  about every checkout pending under 48 hours.
-- `pending` with a `consumed_submission_id`: they left checkout and took the survey. Paying
-  from the page in the same browser unlocks that report; elsewhere, send the continue link
-  once it is paid.
+  about checkouts pending under 48 hours, the 25 waiting longest each run.
+- `pending` with a `consumed_submission_id`: they left checkout and took the survey. The
+  checkout they left open still unlocks that report if they pay it within its hour; after
+  that, their report's own paywall sells it, and a purchase from the page is a new one.
 
 ## Refunds and disputes
 
@@ -91,6 +91,7 @@ payment; either entitlement works on its own.
 | #payments | `pts_paid`                     | A payment confirmed (the line says whether the survey is done yet)          |
 | #payments | `pts_claimed`                  | The survey claimed it; the report is unlocked                               |
 | #ops      | `pts_checkout_failure`         | Opening checkout failed: visitors may be unable to pay                      |
+| #ops      | `pts_confirmation_failed`      | A buyer's confirmation email did not go: send their continue link (above)   |
 | #ops      | `pts_price_setting_invalid`    | `PAY_TO_START_PRICE_CENTS` is out of range; EUR 29 is charged               |
 | #ops      | `pts_paid_without_entitlement` | Stripe says paid, but no row matches: find the buyer, attach by hand        |
 | #ops      | `pts_second_paid_session`      | A second paid session for one entitlement: refund one                       |

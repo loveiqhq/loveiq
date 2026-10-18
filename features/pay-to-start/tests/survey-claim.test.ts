@@ -218,6 +218,19 @@ describe("a survey submitted by a buyer who paid before it", () => {
     expect(json).toMatchObject({ journey: "pay_to_start", unlocked: false, unlockPending: true });
   });
 
+  it("clears the cookie after a claim on a checkout left unpaid", async () => {
+    // Kept, the next purchase in this browser would pay for this survey: someone else's
+    // on a shared device, or a second payment for a report already bought.
+    routeSupabase();
+    vi.mocked(claimPayToStartForSubmission).mockResolvedValue({
+      outcome: "unpaid",
+      entitlementId: 7,
+    });
+    const response = await submit({}, cookie);
+    expect(await response.json()).toMatchObject({ journey: "pay_to_start", unlocked: false });
+    expect(response.headers.get("set-cookie")).toMatch(/__liq_pp=;.*Max-Age=0/i);
+  });
+
   it("keeps the cookie after an error, so a retry can claim, and reports it", async () => {
     routeSupabase();
     const claim: ClaimOutcome = { outcome: "error", entitlementId: 7, error: new Error("db") };
