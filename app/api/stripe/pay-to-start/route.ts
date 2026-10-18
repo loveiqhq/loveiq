@@ -29,7 +29,7 @@ import {
   type Entitlement,
 } from "@features/pay-to-start/server/entitlement";
 import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
+import { claimedReportPathForPayer } from "@features/pay-to-start/server/reportLink";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -79,11 +79,6 @@ async function alertCheckoutFailure(detail: string): Promise<void> {
     text: `:rotating_light: Pay to start checkout FAILED: visitors on the assessment page may be unable to pay. ${escapeSlack(detail)}`,
     username: "ops_alerts",
   }).catch(() => undefined);
-}
-
-async function reportPathFor(submissionId: number): Promise<string | null> {
-  const token = await lookupReportTokenBySubmissionId(submissionId);
-  return token ? `/report/${encodeURIComponent(token)}` : null;
 }
 
 export async function POST(request: Request) {
@@ -157,9 +152,10 @@ export async function POST(request: Request) {
     // Paid and claimed: the report is theirs. A claim on a checkout left unpaid is not
     // "used": paying it now (below) unlocks the report that submission already has.
     if (existing?.consumed_submission_id && existing.status === "succeeded") {
+      // Only the payer's own report: the cookie can be in someone else's browser.
       const response = reply({
         state: "used",
-        reportPath: await reportPathFor(existing.consumed_submission_id),
+        reportPath: await claimedReportPathForPayer(existing),
       });
       response.cookies.set(PREPAID_COOKIE, "", clearedPrepaidCookieOptions());
       return response;

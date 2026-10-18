@@ -23,6 +23,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
 vi.mock("@features/checkout/server/fulfillment", () => ({ settlePayToStartSession: vi.fn() }));
 vi.mock("@features/report/server/personalReport", () => ({
   lookupReportTokenBySubmissionId: vi.fn(),
+  resolveSubmissionAccessContext: vi.fn(),
 }));
 vi.mock("@features/pay-to-start/server/entitlement", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/pay-to-start/server/entitlement")>();
@@ -47,7 +48,10 @@ import {
   type Entitlement,
 } from "@features/pay-to-start/server/entitlement";
 import { PAY_TO_START_PRICE_ENV } from "@features/pay-to-start/server/offer";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
+import {
+  lookupReportTokenBySubmissionId,
+  resolveSubmissionAccessContext,
+} from "@features/report/server/personalReport";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -313,14 +317,30 @@ describe("a browser that already holds a token", () => {
     expect(sessionsCreate).not.toHaveBeenCalled();
   });
 
-  it("sends a used token to its report and clears the cookie", async () => {
+  it("sends a used token to the payer's own report and clears the cookie", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(
-      row({ status: "succeeded", consumed_submission_id: 42 })
+      row({ status: "succeeded", consumed_submission_id: 42, customer_email: "buyer@example.com" })
     );
     vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: "buyer@example.com",
+    } as never);
     const response = await post(VALID, cookie);
     expect(await response.json()).toEqual({ state: "used", reportPath: "/report/rpt_x" });
     expect(response.headers.get("set-cookie")).toMatch(/Max-Age=0/i);
+  });
+
+  it("never sends a used token to a report someone else's survey claimed", async () => {
+    // The cookie can sit in another person's browser (a gift, a shared computer).
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      row({ status: "succeeded", consumed_submission_id: 42, customer_email: "buyer@example.com" })
+    );
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: "partner@example.com",
+    } as never);
+    const response = await post(VALID, cookie);
+    expect(await response.json()).toEqual({ state: "used", reportPath: null });
   });
 
   it("hands back a session that is still open", async () => {
