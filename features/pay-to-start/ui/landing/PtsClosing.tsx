@@ -2,7 +2,7 @@ import type { FC } from "react";
 import { PTS_FAQ, PTS_FINAL_CTA, PTS_FOOTER } from "./payToStartContent";
 import { PtsCtaButton, PtsCtaStatus } from "./PtsCheckout";
 import { ShieldIcon, Stars } from "./ptsIcons";
-import { PTS_H2, PTS_SECTION } from "./ptsStyles";
+import { PTS_H2, PTS_REVEAL, PTS_SECTION, ptsRevealItem } from "./ptsStyles";
 
 /**
  * The questions (1706:1951), the closing call (1706:2019) and the footer (1706:2030).
@@ -14,12 +14,16 @@ import { PTS_H2, PTS_SECTION } from "./ptsStyles";
  */
 export const PtsFaq: FC = () => (
   <section aria-labelledby="pts-faq" className={PTS_SECTION}>
-    <h2 id="pts-faq" className={PTS_H2}>
+    <h2 id="pts-faq" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_FAQ.title}
     </h2>
     <div className="mt-[26px] border-t border-[#e9e6ee]">
-      {PTS_FAQ.items.map((item) => (
-        <details key={item.question} open className="group border-b border-[#e9e6ee]">
+      {PTS_FAQ.items.map((item, i) => (
+        <details
+          key={item.question}
+          open
+          className={`group border-b border-[#e9e6ee] ${ptsRevealItem(i, 3)}`}
+        >
           <summary className="focus-visible-ring flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm px-1 py-[22px] [&::-webkit-details-marker]:hidden">
             <span className="font-sans text-[16px] font-bold leading-[21.86px] text-[#161021]">
               {item.question}
@@ -38,7 +42,9 @@ export const PtsFaq: FC = () => (
         </details>
       ))}
     </div>
-    <div className="mt-6 flex items-start gap-3.5 rounded-[18px] bg-[#f5f6f8] py-[18px] pl-[22px] pr-5">
+    <div
+      className={`mt-6 flex items-start gap-3.5 rounded-[18px] bg-[#f5f6f8] py-[18px] pl-[22px] pr-5 ${PTS_REVEAL}`}
+    >
       <ShieldIcon check={false} color="#2E7D5B" className="h-5 w-5" />
       <p className="font-sans text-[13.5px] leading-[21px] text-[#3f3a4d]">
         {PTS_FAQ.disclaimerBefore}
@@ -49,22 +55,27 @@ export const PtsFaq: FC = () => (
   </section>
 );
 
-/** The closing band across the whole page width; the phone frame shortens its button. */
+/**
+ * The closing band across the whole page width; the phone frame shortens its button. Its
+ * words fly in; the button and its status line never wait on a reveal.
+ */
 export const PtsFinalCta: FC<{ price: string }> = ({ price }) => (
   <section
     aria-labelledby="pts-final"
     className="mt-16 rounded-[32px] border border-[#f0eef4] bg-[#faf7ff] px-5 py-10 text-center sm:px-10 sm:py-[52px]"
   >
-    <div className="flex justify-center">
+    <div className={`flex justify-center ${PTS_REVEAL}`}>
       <Stars size={16} spacing={3} />
     </div>
     <h2
       id="pts-final"
-      className="mt-3 font-serif text-[30px] font-medium leading-[33.6px] tracking-[-0.4px] text-[#161021] sm:text-[42px] sm:leading-[47px] sm:tracking-[-0.6px]"
+      className={`${PTS_REVEAL} stagger-1 mt-3 font-serif text-[30px] font-medium leading-[33.6px] tracking-[-0.4px] text-[#161021] sm:text-[42px] sm:leading-[47px] sm:tracking-[-0.6px]`}
     >
       {PTS_FINAL_CTA.title}
     </h2>
-    <p className="mt-3 font-sans text-[16px] leading-[21.86px] text-[#6b6678]">
+    <p
+      className={`${PTS_REVEAL} stagger-2 mt-3 font-sans text-[16px] leading-[21.86px] text-[#6b6678]`}
+    >
       {PTS_FINAL_CTA.leadBefore}
       <span className="whitespace-nowrap">{PTS_FINAL_CTA.leadPrice(price)}</span>
     </p>
@@ -78,7 +89,9 @@ export const PtsFinalCta: FC<{ price: string }> = ({ price }) => (
       </PtsCtaButton>
       <PtsCtaStatus location="final_cta" className="mt-2" />
     </div>
-    <ul className="mt-[18px] flex flex-wrap justify-center gap-x-6 gap-y-1.5 font-sans text-[13px] leading-[17.76px] text-[#6b6678]">
+    <ul
+      className={`mt-[18px] flex flex-wrap justify-center gap-x-6 gap-y-1.5 font-sans text-[13px] leading-[17.76px] text-[#6b6678] ${PTS_REVEAL}`}
+    >
       {PTS_FINAL_CTA.badges.map((badge) => (
         <li key={badge}>{badge}</li>
       ))}

@@ -40,6 +40,11 @@ landing test arm.
   counts every press as `pts_nav_click`, never the landing test's `cta_click`. Its other links
   leave for the site's pages, whose "Start test now" is the free survey: `pts_nav_click` says how
   many go.
+- **Fly-ins never hold back the way to pay.** The page reuses the landing's reveal
+  (`animate-on-scroll` + `ScrollAnimator`, the hero `animate-on-load`; `PTS_REVEAL` in
+  `ui/landing/ptsStyles.ts`), but never on or around a price, a checkout button, a status line,
+  the price card or the sticky bar (`tests/landing.test.tsx` holds this). Under reduced motion
+  the page has no fade at all (`.pts-page`, `app/globals.css`).
 - **Never in a landing arm or the free funnel's numbers.** Visits are labelled
   `pay_to_start` (`proxy.ts`), so are a buyer's survey steps (`app/api/funnel-event`), the
   survey's tracker gets `journey` and no arm (`stampLandingArm(..., { arm: false })`). The
