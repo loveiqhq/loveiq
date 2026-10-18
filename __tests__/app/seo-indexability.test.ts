@@ -31,6 +31,8 @@ const PRIVATE_ROUTES = [
   "login",
   "admin/login",
   "admin/submissions",
+  // Pay to start: an ad's landing page, sold to, never searched for.
+  "sexual-archetype",
 ];
 
 describe("legal pages are indexable", () => {
@@ -55,7 +57,14 @@ describe("private pages stay out of the index", () => {
 
   it("keeps per-user and transactional routes out of the sitemap", () => {
     const urls = sitemap().map((e) => new URL(e.url).pathname);
-    for (const route of ["/report", "/survey", "/checkout", "/login", "/admin"]) {
+    for (const route of [
+      "/report",
+      "/survey",
+      "/checkout",
+      "/login",
+      "/admin",
+      "/sexual-archetype",
+    ]) {
       expect(urls).not.toContain(route);
     }
   });
