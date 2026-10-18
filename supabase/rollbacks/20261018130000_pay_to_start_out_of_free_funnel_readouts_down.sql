@@ -4,6 +4,8 @@
 --
 -- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20261018130000_pay_to_start_out_of_free_funnel_readouts_down.sql
 
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.get_arm_cohorts(since_ts timestamp with time zone, until_ts timestamp with time zone)
  RETURNS json
  LANGUAGE plpgsql
@@ -711,3 +713,5 @@ END;
 $function$;
 
 DROP FUNCTION IF EXISTS public.pay_to_start_submission(bigint, text);
+
+COMMIT;

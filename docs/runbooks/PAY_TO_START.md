@@ -113,6 +113,8 @@ payment; either entitlement works on its own.
 - Stripe → Settings → Public details: a Terms of Service URL, in test and in live mode. The
   checkout requires the terms checkbox and cannot open without it.
 - The price setting matches the ad.
-- A decision on how AP-Analytics, Jarvis and the KPI week show this journey: until then they
-  count its visits, finishers and buyers inside the free funnel's (the digests do not).
+- A decision on how the numbers show this journey. The digests leave its visits and survey
+  views out of the free funnel's, and its buyers out of the arms and the price test, but keep
+  its finishers, payments and revenue in their totals, so their rates per visit read high
+  while the page sells. AP-Analytics, Jarvis and the KPI week count all of it, visits too.
 - Marcus's copy flags answered (questions count, minutes, chapters).

@@ -11,8 +11,9 @@
 --                                            (their report mints quotes for All 14)
 --   get_landing_arm_funnel_daily,            the page's visits as free-funnel visits
 --   get_landing_start_funnel_daily,          (the conversion digest's Visits, the
---   get_funnel_cvr_sparklines,               "reach the survey" line, the drop-off funnel)
---   get_dropoff_everywhere
+--   get_funnel_cvr_sparklines,               "reach the survey" line, the drop-off funnel,
+--   get_dropoff_everywhere                   whose first survey step counts the buyers'
+--                                            survey views as the TypeScript digest does not)
 --   get_wizard_funnel, get_dropoff_everywhere   a 4-slide reader at slide 3 but never 1 or 2
 --
 -- Each body is production's live pg_get_functiondef (2026-10-18) with lines added and none
@@ -21,8 +22,11 @@
 -- white_checkout / white_paid (June's pay-first test, read by no code today) keep to June's
 -- rows (offer IS NULL), which is what they meant.
 --
+-- What stays: its finishers, payments and revenue in the digests' totals and later stages,
+-- as in the TypeScript digest, so rates per visit read slightly high while the page sells.
 -- Left for a decision on how AP-Analytics, Jarvis and the KPI week should show this journey
--- (ap_facts, get_kpi_week, brain_daily_rollup): they see it as before.
+-- (ap_facts, get_kpi_week, brain_daily_rollup): they see it as before, visits included, so
+-- their visits run above the digests' by the page's.
 -- Rollback: supabase/rollbacks/20261018130000_pay_to_start_out_of_free_funnel_readouts_down.sql
 
 -- Whether a submission was bought before it was taken: it claimed a pay-to-start entitlement
@@ -89,7 +93,7 @@ BEGIN
        -- Not our own test runs (owner @loveiq.org), by get_report_friction's rule.
        AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.id = ss.user_id AND u.email ~* '@loveiq\.org$')
        -- Not a survey bought before it was taken (pay to start): its buyer is in no arm,
-       -- and its EUR 29 is no arm's sale. The TypeScript readout leaves it out the same way.
+       -- and its EUR 29 is no arm's sale. The TypeScript readout leaves claimed surveys out too.
        AND NOT pay_to_start_submission(ss.id, ss.utm_tracker)
   ),
   unpivoted AS (
@@ -136,7 +140,7 @@ AS $function$
        -- Not our own test runs (owner @loveiq.org), by get_report_friction's rule.
        AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.id = ss.user_id AND u.email ~* '@loveiq\.org$')
        -- Not a survey bought before it was taken (pay to start): its buyer is in no arm,
-       -- and its EUR 29 is no arm's sale. The TypeScript readout leaves it out the same way.
+       -- and its EUR 29 is no arm's sale. The TypeScript readout leaves claimed surveys out too.
        AND NOT pay_to_start_submission(ss.id, ss.utm_tracker)
   ),
   quote AS (
@@ -703,6 +707,7 @@ BEGIN
       json_build_object('name', 'saw_q1', 'count', (
         SELECT COUNT(DISTINCT visitor_id)::int FROM funnel_event
         WHERE event_type = 'survey_engine_mount' AND day >= since_day AND day < until_day
+          AND landing_variant IS DISTINCT FROM 'pay_to_start'
       )),
       json_build_object('name', 'survey_started', 'count', (
         SELECT COUNT(DISTINCT session_id)::int FROM survey_partial_save
