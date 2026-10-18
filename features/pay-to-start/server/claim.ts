@@ -139,14 +139,28 @@ async function applyClaimed(
 /**
  * A replayed submit (a lost response, a reload) without the cookie: the entitlement this
  * submission already claimed, so the reply still says it is unlocked. Null when none.
+ *
+ * Almost every replay is a free reader's, so a lookup that fails is "none known", never a
+ * claim error: an error would put the journey in the reply (the paid wizard for a reader
+ * who did not pay) and report a failed claim to #ops for them. Only applying an entitlement
+ * that was found can fail as a claim; its buyer's report is finished by the sweep.
  */
 export async function claimedEntitlementFor(submissionId: number): Promise<ClaimOutcome | null> {
+  let entitlement: Entitlement | null;
   try {
-    const entitlement = await findEntitlementByConsumedSubmission(submissionId);
-    if (!entitlement) return null;
+    entitlement = await findEntitlementByConsumedSubmission(submissionId);
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err, submissionId },
+      "pay-to-start: claimed-entitlement lookup failed on a replay; treated as none"
+    );
+    return null;
+  }
+  if (!entitlement) return null;
+  try {
     return await applyClaimed(entitlement, null);
   } catch (error) {
-    return { outcome: "error", error };
+    return { outcome: "error", entitlementId: entitlement.id, error };
   }
 }
 
