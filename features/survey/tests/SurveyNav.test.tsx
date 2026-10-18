@@ -7,19 +7,56 @@ import SurveyNav from "@features/survey/ui/SurveyNav";
 afterEach(cleanup);
 
 describe("SurveyNav", () => {
-  it("disables navigation buttons when movement is not allowed", () => {
+  it("disables Previous, and marks Next unavailable while still taking the tap", async () => {
+    // A blocked Next used to be disabled, so a tap did nothing at all. The engine now
+    // gets the tap and says what is missing (SurveyEngine's goNext refuses to move on).
+    const user = userEvent.setup();
+    const onNext = vi.fn();
     render(
       <SurveyNav
         canGoBack={false}
         canGoNext={false}
         hasAnswer={false}
         onPrevious={vi.fn()}
-        onNext={vi.fn()}
+        onNext={onNext}
       />
     );
 
     expect(screen.getByRole("button", { name: /previous/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
+    const next = screen.getByRole("button", { name: /next/i });
+    expect(next).toHaveAttribute("aria-disabled", "true");
+    expect(next).toHaveClass("opacity-40");
+    await user.click(next);
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the hint while Next is blocked, and only then", () => {
+    const { rerender } = render(
+      <SurveyNav
+        canGoBack
+        canGoNext={false}
+        hasAnswer={false}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        nextHintId="hint"
+      />
+    );
+    expect(screen.getByRole("button", { name: /next/i })).toHaveAttribute(
+      "aria-describedby",
+      "hint"
+    );
+
+    rerender(
+      <SurveyNav
+        canGoBack
+        canGoNext
+        hasAnswer
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        nextHintId="hint"
+      />
+    );
+    expect(screen.getByRole("button", { name: /next/i })).not.toHaveAttribute("aria-describedby");
   });
 
   it("fires previous and next callbacks when enabled", async () => {

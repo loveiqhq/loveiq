@@ -87,6 +87,10 @@ const is =
   (e: UxEvent) =>
     names.includes(e.event);
 
+/** The survey refusing an answer, not a tap on Next with the answer still blank. */
+const refused = (v: UxVisit): UxEvent[] =>
+  v.filter((e) => is("survey_form_error")(e) && e.props.error_kind !== "required");
+
 export function median(xs: number[]): number | null {
   if (xs.length === 0) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -450,12 +454,13 @@ export const SIGNALS: readonly SignalDef[] = [
     kind: "count",
     measures: "How many times the survey refused an answer (an invalid email, too many choices).",
     from: ["survey_form_error", "survey_started"],
-    measure: (v) =>
-      v.some(is("survey_started", "survey_answer"))
-        ? v.filter(is("survey_form_error")).length
-        : null,
+    // A refused answer, not a blank one: since the blocked Next took taps (Oct 2026) a tap on
+    // an unanswered question also sends survey_form_error, error_kind "required". Counting it
+    // would change what this has always measured, and the proof walks' planted tap on the
+    // blocked Next would make every such walk disagree.
+    measure: (v) => (v.some(is("survey_started", "survey_answer")) ? refused(v).length : null),
     positive: (t) => Number(t) > 0,
-    where: (v) => v.filter(is("survey_form_error")).map((e) => text(e.props.question_id) ?? "?"),
+    where: (v) => refused(v).map((e) => text(e.props.question_id) ?? "?"),
   },
   {
     name: "Progress sensitivity",
@@ -632,6 +637,7 @@ export const SIGNAL_PROPS = [
   "status",
   "hidden_ms",
   "cta",
+  "error_kind",
 ] as const;
 
 /** Every signal's value for one visit; null where the visit never reached it. */

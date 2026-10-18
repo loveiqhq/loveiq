@@ -301,6 +301,18 @@ describe("each measure", () => {
     expect(measure("Form errors", [ev(0, "report_viewed")])).toBeNull();
   });
 
+  it("form errors: a tap on Next with the answer still blank is not a refusal", () => {
+    // Since #612 the blocked Next takes taps and reports them as error_kind "required";
+    // the proof walks plant one such tap and record no form error for it.
+    expect(
+      measure("Form errors", [
+        ev(0, "survey_started"),
+        ev(1, "survey_form_error", { error_kind: "required", question_id: "00001" }),
+        ev(2, "survey_form_error", { error_kind: "invalid_email", question_id: "00000" }),
+      ])
+    ).toBe(1);
+  });
+
   it("progress sensitivity: where the bar stood when the visit left", () => {
     const at = (pct: number) => [ev(0, "survey_progress", { progress_pct: String(pct) })];
     expect(measure("Progress sensitivity", at(38))).toBe(25);
