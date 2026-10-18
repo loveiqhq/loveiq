@@ -107,11 +107,16 @@ vi.mock("@features/survey/ui/questions/ScaleQuestion", () => ({
 }));
 
 vi.mock("@features/survey/ui/questions/OpenResponseQuestion", () => ({
-  default: (props: { question: { question: string; placeholder?: string }; emailArm?: string }) => (
+  default: (props: {
+    question: { question: string; placeholder?: string };
+    emailArm?: string;
+    forceValidation?: boolean;
+  }) => (
     <div
       data-testid="open-response"
       data-email-arm={props.emailArm ?? ""}
       data-placeholder={props.question.placeholder ?? ""}
+      data-validated={String(!!props.forceValidation)}
     >
       {props.question.question}
     </div>
@@ -154,7 +159,12 @@ vi.mock("@features/survey/ui/SurveyNav", () => ({
         Previous
       </button>
       {props.progress}
-      <button data-testid="survey-nav-next" onClick={props.onNext} disabled={!props.canGoNext}>
+      <button
+        data-testid="survey-nav-next"
+        onClick={props.onNext}
+        aria-disabled={!props.canGoNext || undefined}
+        aria-describedby={!props.canGoNext ? props.nextHintId : undefined}
+      >
         Next
       </button>
     </div>
@@ -300,7 +310,9 @@ describe("SurveyEngine", () => {
     // survey. q3 is the fixture's optional open question.
     mockCurrentIndex = 2;
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+    expect(screen.getByTestId("survey-nav-next")).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(3);
   });
 
   it("draws Next as ready on an empty optional question, not in its greyed 'answer first' style", () => {
@@ -314,6 +326,55 @@ describe("SurveyEngine", () => {
   it("still fades Next on an empty required question", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("survey-nav")).toHaveAttribute("data-ready", "false");
+  });
+
+  // Oct 2026: 24% of survey sessions tapped the blocked Next and nothing happened, because
+  // it was a disabled button. The tap now reaches the engine, which stays put and says why.
+  it("a tap on Next with a required question unanswered stays put and says what is missing", async () => {
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    vi.mocked(trackSurveyFormError).mockClear();
+    const push = vi.spyOn(window.history, "pushState");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.queryByText("Answer this question to continue.")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByText("Answer this question to continue.")).toBeInTheDocument();
+    // Next names the line, so a screen reader reads it with the button.
+    const hintId = screen.getByTestId("survey-nav-next").getAttribute("aria-describedby");
+    expect(document.getElementById(hintId ?? "")).toHaveTextContent(
+      "Answer this question to continue."
+    );
+    expect(trackSurveyFormError).toHaveBeenCalledWith({
+      question_id: "q1",
+      error_kind: "required",
+    });
+    push.mockRestore();
+  });
+
+  it("drops the hint once the question is answered", () => {
+    const { rerender } = render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+    expect(screen.getByText("Answer this question to continue.")).toBeInTheDocument();
+
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q1" ? "A" : null));
+    rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(screen.queryByText("Answer this question to continue.")).toBeNull();
+  });
+
+  it("keeps the hint to a missing answer: too many picks are explained at the field", () => {
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C", "D"] : null));
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByText("Q4? (validated)")).toBeInTheDocument();
+    expect(screen.queryByText("Answer this question to continue.")).toBeNull();
   });
 
   it("renders multiple choice question component for answerType multiple", () => {
@@ -362,7 +423,7 @@ describe("SurveyEngine", () => {
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
-    expect(screen.getByTestId("survey-nav-next")).toBeDisabled();
+    expect(screen.getByTestId("survey-nav-next")).toHaveAttribute("aria-disabled", "true");
 
     fireEvent.keyDown(window, { key: "Enter" });
 
@@ -432,7 +493,7 @@ describe("SurveyEngine", () => {
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
-    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+    expect(screen.getByTestId("survey-nav-next")).not.toHaveAttribute("aria-disabled");
 
     fireEvent.click(screen.getByTestId("survey-nav-next"));
 
@@ -1229,12 +1290,37 @@ describe("SurveyEngine — the email question test", () => {
     expect(question).toHaveAttribute("data-email-arm", "control");
   });
 
+  it("asks for the address on a tap with the box empty, without as-you-type errors", () => {
+    // Review of #612: the blank tap turned on the field's own checks, so its first letter
+    // read as an invalid email and the untouched confirm box went red.
+    emailStep();
+    preview("control");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(screen.getByText("Answer this question to continue.")).toBeInTheDocument();
+    expect(screen.getByTestId("open-response")).toHaveAttribute("data-validated", "false");
+  });
+
+  it("turns the field's checks on for an address it rejects, with no blank-answer line", () => {
+    emailStep();
+    preview("control");
+    mockGetAnswer.mockReturnValue("jane@example.com"); // typed, not yet confirmed
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(screen.getByTestId("open-response")).toHaveAttribute("data-validated", "true");
+    expect(screen.queryByText("Answer this question to continue.")).toBeNull();
+  });
+
   it("lets the anonymous arm go on with a valid address and no confirm box", () => {
     emailStep();
     preview("anonymous");
     mockGetAnswer.mockReturnValue("jane@example.com");
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+    expect(screen.getByTestId("survey-nav-next")).not.toHaveAttribute("aria-disabled");
   });
 
   it("still asks the control arm to confirm the address", () => {
@@ -1242,7 +1328,7 @@ describe("SurveyEngine — the email question test", () => {
     preview("control");
     mockGetAnswer.mockReturnValue("jane@example.com");
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.getByTestId("survey-nav-next")).toBeDisabled();
+    expect(screen.getByTestId("survey-nav-next")).toHaveAttribute("aria-disabled", "true");
   });
 
   it("still refuses an address the server would refuse, in either arm", () => {
@@ -1250,7 +1336,7 @@ describe("SurveyEngine — the email question test", () => {
     preview("anonymous");
     mockGetAnswer.mockReturnValue("na..me@gmail.com");
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.getByTestId("survey-nav-next")).toBeDisabled();
+    expect(screen.getByTestId("survey-nav-next")).toHaveAttribute("aria-disabled", "true");
   });
 
   it("draws the arm from the session id when no preview applies", () => {

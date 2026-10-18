@@ -8,6 +8,8 @@ interface SurveyNavProps {
   hasAnswer: boolean;
   onPrevious: () => void;
   onNext: () => void;
+  /** The line that says what a blocked Next is missing, read out with it when it takes focus. */
+  nextHintId?: string;
   /** The progress strip, drawn between the two buttons (Figma 11303:219). */
   progress?: ReactNode;
 }
@@ -42,6 +44,7 @@ const SurveyNav: FC<SurveyNavProps> = ({
   hasAnswer,
   onPrevious,
   onNext,
+  nextHintId,
   progress,
 }) => (
   <nav className="flex items-center gap-3 border-t border-[rgba(22,16,33,0.09)] px-[18.4px] pb-[max(17.6px,env(safe-area-inset-bottom))] pt-[15px] sm:gap-5 sm:px-[35px] sm:pb-[16.6px]">
@@ -57,14 +60,20 @@ const SurveyNav: FC<SurveyNavProps> = ({
 
     <div className="min-w-0 flex-1">{progress}</div>
 
+    {/* Blocked, Next still takes the tap, so the engine can say what is missing. As a
+        disabled button it swallowed the tap in silence: 24% of survey sessions tapped
+        it, Oct 2026. aria-disabled still announces it as unavailable. */}
     <button
       type="button"
       onClick={onNext}
-      disabled={!canGoNext}
-      className={`flex shrink-0 items-center gap-[7.2px] rounded-full bg-[#e8511f] px-6 py-[11.5px] font-sans text-[15px] font-bold leading-[21px] text-white transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none max-[390px]:px-4 ${
-        hasAnswer
-          ? "shadow-[0_8px_28px_rgba(232,81,31,0.4)] hover:shadow-[0_10px_32px_rgba(232,81,31,0.5)]"
-          : "opacity-60"
+      aria-disabled={!canGoNext || undefined}
+      aria-describedby={!canGoNext ? nextHintId : undefined}
+      className={`flex shrink-0 items-center gap-[7.2px] rounded-full bg-[#e8511f] px-6 py-[11.5px] font-sans text-[15px] font-bold leading-[21px] text-white transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white max-[390px]:px-4 ${
+        !canGoNext
+          ? "cursor-default opacity-40 shadow-none"
+          : hasAnswer
+            ? "shadow-[0_8px_28px_rgba(232,81,31,0.4)] hover:shadow-[0_10px_32px_rgba(232,81,31,0.5)]"
+            : "opacity-60"
       }`}
     >
       Next

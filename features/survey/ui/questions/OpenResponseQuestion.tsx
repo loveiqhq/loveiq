@@ -3,6 +3,7 @@
 import { useState, type FC, type KeyboardEvent } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import { isMultiline } from "@features/survey/questionFlags";
+import AlertCircleIcon from "./AlertCircleIcon";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
@@ -18,23 +19,6 @@ interface OpenResponseQuestionProps {
   /** The email question test's arm: "anonymous" draws Figma 11600:15119's single field. */
   emailArm?: EmailQuestionArm;
 }
-
-const AlertCircleIcon: FC = () => (
-  <svg
-    aria-hidden
-    className="h-4 w-4 shrink-0"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="12" />
-    <line x1="12" y1="16" x2="12.01" y2="16" />
-  </svg>
-);
 
 const MAX_LENGTH = 500;
 // Multi-line boxes (`isMultiline`) take a list or a few sentences. 1,000 is the most a
