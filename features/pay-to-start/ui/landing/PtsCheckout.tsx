@@ -139,7 +139,10 @@ async function requestCheckout(
 
   switch (state.state) {
     case "redirect":
-      trackPtsCheckoutOpened({ location, offer, priceCents });
+      // Stripe's page. Our own status page (a payment still settling) is no checkout.
+      if (new URL(state.url, window.location.href).origin !== window.location.origin) {
+        trackPtsCheckoutOpened({ location, offer, priceCents });
+      }
       loadPage(state.url);
       return { kind: "navigating" };
     case "paid":

@@ -329,6 +329,22 @@ const gtagSend = (...args: GtagCall) => {
   if (!flushGtagQueue()) scheduleFlush();
 };
 
+/**
+ * Resolves once nothing waits in the gtag queue (sent, or dropped when gtag.js never
+ * came), or after `maxMs`. The queue lives in this page's memory and a full-page
+ * navigation throws it away, so a page that leaves right after a purchase waits on this
+ * first, or Google Ads never hears of the sale.
+ */
+export const gtagQueueSettled = (maxMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    const deadline = Date.now() + maxMs;
+    const check = () => {
+      if (!gtagQueue?.length || Date.now() >= deadline) resolve();
+      else setTimeout(check, FLUSH_INTERVAL_MS);
+    };
+    check();
+  });
+
 export const hasCookieYesConsent = (category: ConsentCategory) => {
   const consentValue = getCookieValue(COOKIEYES_CONSENT_COOKIE);
   if (!consentValue) return false;
