@@ -622,8 +622,12 @@ async function fetchFunnelEventCount(
 ): Promise<number> {
   const sinceDay = sinceIso.slice(0, 10);
   const untilDay = untilIso.slice(0, 10);
+  // Not the visits of pay to start's ad page (labelled pay_to_start in proxy.ts): a
+  // campaign there would move the free funnel's first number by itself. Its handful of
+  // starts, completions and purchases stay in the later stages.
   return fetchExactCount(
-    `/rest/v1/funnel_event?select=visitor_id&event_type=eq.${eventType}&day=gte.${sinceDay}&day=lt.${untilDay}`
+    `/rest/v1/funnel_event?select=visitor_id&event_type=eq.${eventType}&day=gte.${sinceDay}&day=lt.${untilDay}` +
+      `&or=(landing_variant.is.null,landing_variant.neq.pay_to_start)`
   );
 }
 

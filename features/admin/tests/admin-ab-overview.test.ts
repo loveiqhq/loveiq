@@ -67,10 +67,14 @@ function routeData(
   submissions: unknown[],
   quotes: unknown[],
   payments: unknown[] = [],
-  intro = 300
+  intro = 300,
+  /** Submissions that claimed a pay-to-start entitlement. */
+  prepaidClaims: number[] = []
 ) {
   mockSupabaseFetch.mockImplementation(async (path: string) => {
     if (path.includes("/survey_submission?")) return page(submissions);
+    if (path.includes("/prepaid_report_access?"))
+      return page(prepaidClaims.map((id) => ({ consumed_submission_id: id })));
     if (path.includes("/report_price_quote?")) return page(quotes);
     if (path.includes("/payment?")) return page(payments);
     if (path.includes("/rpc/get_dropout_funnel"))
@@ -301,6 +305,7 @@ describe("GET /api/admin/ab-overview", () => {
     // legitimately show MORE sessions than an earlier one.
     mockSupabaseFetch.mockImplementation(async (path: string) => {
       if (path.includes("/survey_submission?")) return page([submission(1, "white", null)]);
+      if (path.includes("/prepaid_report_access?")) return page([]);
       if (path.includes("/report_price_quote?")) return page([]);
       if (path.includes("/payment?")) return page([]);
       if (path.includes("/rpc/get_dropout_funnel"))
@@ -456,6 +461,32 @@ describe("GET /api/admin/ab-overview", () => {
     expect(step("Finished the survey").count).toBe(1);
     expect(step("Started checkout").count).toBe(0);
     expect(step("Paid").count).toBe(0);
+  });
+
+  it("leaves surveys bought before they were taken out of every experiment", async () => {
+    // Pay to start: a buyer's EUR 29 counted as a purchase in whatever arm their session
+    // fell into. Known by the entitlement they claimed (3), or by the server's tracker
+    // label when the claim is not readable (4).
+    const after = new Date(Date.parse(PRICE_TEST_START_AT) + 3_600_000).toISOString();
+    const labelled = {
+      ...submission(4, null, null, after),
+      utm_tracker: JSON.stringify({ utm_source: "google", journey: "pay_to_start" }),
+    };
+    routeData(
+      [submission(1, "white", null, after), submission(3, "white", null, after), labelled],
+      [quote(1, "A3", false, 29.99)],
+      [payment(3, 29), payment(4, 29)],
+      300,
+      [3]
+    );
+    const body = await (await GET(req())).json();
+    expect(body.totals.submissions).toBe(1);
+    const step = (name: string) => body.funnel.find((f: { step: string }) => f.step === name);
+    expect(step("Paid").count).toBe(0);
+    const prepaidRead = mockSupabaseFetch.mock.calls
+      .map(([path]) => String(path))
+      .find((path) => path.includes("/prepaid_report_access?"));
+    expect(prepaidRead).toContain("consumed_submission_id=gte.1");
   });
 
   it("counts a sale only where money settled, at the amount paid", async () => {
