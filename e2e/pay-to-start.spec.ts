@@ -30,10 +30,25 @@ async function openPage(page: Page, path = PAGE) {
   await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
 }
 
-/** The checkout API answers with the status page, as Stripe's success_url would land. */
-async function stubCheckout(page: Page, onPost?: () => void) {
+interface CheckoutPost {
+  method: string;
+  csrf: string | null;
+  body: Record<string, unknown>;
+}
+
+/**
+ * The checkout API answers with the status page, as Stripe's success_url would land. Each
+ * request is handed to `onPost` as sent, so a test can hold the page to what the real
+ * route checks (the CSRF header, the offer, the price it showed).
+ */
+async function stubCheckout(page: Page, onPost?: (post: CheckoutPost) => void) {
   await page.route("**/api/stripe/pay-to-start", (route) => {
-    onPost?.();
+    const request = route.request();
+    onPost?.({
+      method: request.method(),
+      csrf: request.headers()["x-csrf-token"] ?? null,
+      body: (request.postDataJSON() ?? {}) as Record<string, unknown>,
+    });
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -73,15 +88,17 @@ test.describe("pay to start: the assessment page", () => {
   });
 
   test("goes from the button to the survey through the status page", async ({ page }) => {
-    let posts = 0;
-    await stubCheckout(page, () => (posts += 1));
-    await page.route("**/api/stripe/pay-to-start/status**", (route) =>
-      route.fulfill({
+    const posts: CheckoutPost[] = [];
+    const polled: string[] = [];
+    await stubCheckout(page, (post) => posts.push(post));
+    await page.route("**/api/stripe/pay-to-start/status**", (route) => {
+      polled.push(new URL(route.request().url()).searchParams.get("session_id") ?? "");
+      return route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ state: "paid", purchase }),
-      })
-    );
+      });
+    });
     await page.route("**/survey", (route) =>
       route.fulfill({ status: 200, contentType: "text/html", body: "<h1>Survey</h1>" })
     );
@@ -94,7 +111,16 @@ test.describe("pay to start: the assessment page", () => {
     // The session id leaves the address once read.
     await expect(page).toHaveURL(/\/sexual-archetype\/checkout$/);
     await page.waitForURL(/\/survey$/);
-    expect(posts).toBe(1);
+    // What the real route checks: a POST with the CSRF header, the offer and the price shown.
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      method: "POST",
+      body: { offer: "full", displayedPriceCents: 2900 },
+    });
+    expect(posts[0]!.csrf).toBeTruthy();
+    // The status page asks about the session Stripe sent back, and nothing else.
+    expect(polled.length).toBeGreaterThan(0);
+    expect(new Set(polled)).toEqual(new Set([SESSION]));
   });
 
   test("sends one request however often the button is pressed", async ({ page }) => {
@@ -107,9 +133,17 @@ test.describe("pay to start: the assessment page", () => {
     });
     await openPage(page);
     const cta = await primaryCta(page);
-    await cta.click();
+    const selector = `[data-pts-cta="${await cta.getAttribute("data-pts-cta")}"]`;
+    // Three presses in one task, before React can disable the button: only the in-flight
+    // guard stands between them and three checkouts.
+    await page.evaluate((sel) => {
+      const button = document.querySelector<HTMLButtonElement>(sel)!;
+      button.click();
+      button.click();
+      button.click();
+    }, selector);
     await expect(cta).toBeDisabled();
-    await cta.click({ force: true });
+    await page.waitForTimeout(500);
     expect(posts).toBe(1);
   });
 
