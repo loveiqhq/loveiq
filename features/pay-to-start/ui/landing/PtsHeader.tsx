@@ -9,17 +9,11 @@ import { PTS_BREADCRUMB, PTS_HEADER } from "./payToStartContent";
 export const PtsHeader: FC = () => (
   <header className="border-b border-[#e9e6ee] bg-white">
     <div className="mx-auto flex h-[70px] max-w-[1288px] items-center px-6">
-      <p aria-label={`${PTS_HEADER.wordmark}, by Applied Psychometrics`}>
-        <span
-          aria-hidden
-          className="block font-serif text-[28px] font-normal leading-[28px] tracking-[-0.4px] text-[#161021]"
-        >
+      <p>
+        <span className="block font-serif text-[28px] font-normal leading-[28px] tracking-[-0.4px] text-[#161021]">
           {PTS_HEADER.wordmark}
         </span>
-        <span
-          aria-hidden
-          className="mt-1 block font-sans text-[9px] font-bold leading-[9px] tracking-[0.9px] text-[#6b6678]"
-        >
+        <span className="mt-1 block font-sans text-[9px] font-bold leading-[9px] tracking-[0.9px] text-[#6b6678]">
           {PTS_HEADER.byline}
         </span>
       </p>
