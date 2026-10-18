@@ -13,6 +13,8 @@ vi.mock("posthog-js", () => ({ default: { register_for_session: vi.fn() } }));
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "csrf-token" }));
 vi.mock("@shared/url/utm", () => ({ getStoredUtm: () => null }));
 
+import { PAY_TO_START_PAUSED_MESSAGE } from "@features/pay-to-start/logic/api";
+import { STATUS_PREVIEWS, type StatusPreview } from "@features/pay-to-start/logic/statusPreview";
 import { PtsCheckoutProvider } from "@features/pay-to-start/ui/landing/PtsCheckout";
 import { PTS_STATUS } from "@features/pay-to-start/ui/landing/payToStartContent";
 import {
@@ -256,5 +258,62 @@ describe("the checkout status page", () => {
     }
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(copy()).toBe(PTS_STATUS.error);
+  });
+});
+
+describe("the checkout status page's preview (off production)", () => {
+  function renderPreview(preview: StatusPreview) {
+    return render(
+      <PtsCheckoutProvider offer="full" priceCents={2900} price="€29">
+        <PayToStartStatusPage preview={preview} />
+      </PtsCheckoutProvider>
+    );
+  }
+
+  it("shows every state without asking, reporting or redirecting", async () => {
+    const expected: Record<StatusPreview, string> = {
+      verifying: PTS_STATUS.verifying,
+      received: PTS_STATUS.received,
+      complete: `${PTS_STATUS.completeLead}${PTS_STATUS.completeRest}`,
+      used: `${PTS_STATUS.completeLead}${PTS_STATUS.usedRest}`,
+      used_no_report: PTS_STATUS.usedNoReport,
+      failed: PTS_STATUS.failed,
+      refunded: PTS_STATUS.refunded,
+      slow: PTS_STATUS.slow,
+      unknown: PTS_STATUS.unknown,
+      error: PTS_STATUS.error,
+      missing: PTS_STATUS.missing,
+      paused: PAY_TO_START_PAUSED_MESSAGE,
+    };
+    for (const [state] of STATUS_PREVIEWS) {
+      renderPreview(state);
+      await flush();
+      expect(copy(), state).toBe(expected[state]);
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+      cleanup();
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(analytics.track).not.toHaveBeenCalled();
+    expect(analytics.trackReportPurchase).not.toHaveBeenCalled();
+  });
+
+  it("links every state, marking the one shown", () => {
+    renderPreview("refunded");
+    const nav = screen.getByRole("navigation", { name: "Status previews" });
+    const links = [...nav.querySelectorAll("a")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(
+      STATUS_PREVIEWS.map(([state]) => `?preview=${state}`)
+    );
+    expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe("Refunded");
+  });
+
+  it("draws no switcher outside a preview", () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    renderStatus();
+    expect(screen.queryByRole("navigation", { name: "Status previews" })).toBeNull();
   });
 });
