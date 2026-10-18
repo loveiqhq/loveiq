@@ -39,8 +39,9 @@ landing test arm.
   survey's tracker gets `journey` and no arm (`stampLandingArm(..., { arm: false })`). The
   experiment readouts leave claimed submissions out (`features/admin/server/experiment-readouts.ts`,
   and in SQL `pay_to_start_submission()`, 20261018130000), and the digests' visit counts and
-  wizard funnels leave the page's visits and the 4-slide wizard out. AP-Analytics, Jarvis and
-  the KPI week still show the journey mixed in: how they should show it is an open decision.
+  wizard funnels leave the page's visits and the 4-slide wizard out; its finishers, payments
+  and revenue stay in the digests' totals. AP-Analytics, Jarvis and the KPI week still show
+  the journey mixed in: how all of them should show it is an open decision.
 - **A purchase never opens someone else's report.** The continue link and the checkout route
   open a used purchase's report only when the survey was taken under the address Stripe took
   (`server/reportLink.ts`); the status route never sends a report's address, because a
