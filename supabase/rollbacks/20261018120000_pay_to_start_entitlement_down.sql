@@ -4,9 +4,20 @@
 -- list price, buyer email, test flag, paid and claimed times, attribution). Expired rows
 -- are set back to pending, because June's CHECK has no 'expired'.
 --
+-- Roll back 20261018130000 first: its readouts read `offer`, and a function body records no
+-- column dependency, so dropping it here would succeed and break them at their next call.
+--
 -- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20261018120000_pay_to_start_entitlement_down.sql
 
 BEGIN;
+
+DO $$
+BEGIN
+  IF to_regprocedure('public.pay_to_start_submission(bigint,text)') IS NOT NULL THEN
+    RAISE EXCEPTION 'Roll back 20261018130000_pay_to_start_out_of_free_funnel_readouts first';
+  END IF;
+END
+$$;
 
 UPDATE public.prepaid_report_access SET status = 'pending' WHERE status = 'expired';
 

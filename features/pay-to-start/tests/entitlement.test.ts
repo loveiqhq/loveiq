@@ -21,13 +21,18 @@ import {
   bindEntitlement,
   clearedPrepaidCookieOptions,
   createPendingEntitlement,
+  findEntitlementById,
+  findEntitlementByConsumedSubmission,
+  findEntitlementByPaymentIntent,
   findEntitlementBySessionId,
   findEntitlementByToken,
+  findRecentPaidDuplicate,
   generatePrepaidToken,
   hasBoundEntitlement,
   listBoundUnapplied,
   listPendingForReconcile,
   markEntitlementExpired,
+  markEntitlementRefundedUnconfirmed,
   markEntitlementSucceeded,
   prepaidCookieOptions,
   restoreDisputedEntitlement,
@@ -359,7 +364,9 @@ describe("setEntitlementPaymentId", () => {
 });
 
 describe("sweep lists", () => {
-  it("lists journey rows still pending inside the window, oldest first", async () => {
+  it("lists journey rows still pending inside the window, by their last change", async () => {
+    // updated_at, not created_at: a token re-used days later for a new session (the
+    // cookie lasts 30 days) is as fresh as that session, and must still be swept.
     routeFetch(() => respond([row()]));
     await listPendingForReconcile({
       newerThan: new Date("2026-10-16T10:00:00.000Z"),
@@ -367,9 +374,24 @@ describe("sweep lists", () => {
     });
     const url = calls[0]?.url ?? "";
     expect(url).toContain("status=eq.pending&offer=not.is.null&stripe_session_id=not.is.null");
-    expect(url).toContain("created_at=lt.2026-10-18T09%3A50%3A00.000Z");
-    expect(url).toContain("created_at=gt.2026-10-16T10%3A00%3A00.000Z");
-    expect(url).toContain("order=created_at.asc&limit=50");
+    expect(url).toContain("updated_at=lt.2026-10-18T09%3A50%3A00.000Z");
+    expect(url).toContain("updated_at=gt.2026-10-16T10%3A00%3A00.000Z");
+    expect(url).toContain("order=updated_at.asc&limit=50");
+    expect(url).not.toContain("created_at=");
+  });
+
+  it("marks a payment refunded before any confirmation, only while it is unconfirmed", async () => {
+    routeFetch(() => respond([{ id: 7 }]));
+    expect(await markEntitlementRefundedUnconfirmed({ id: 7, paymentIntentId: "pi_1" })).toBe(true);
+    const call = calls[0]!;
+    expect(call.url).toContain("id=eq.7&status=in.(pending,expired)");
+    expect(call.method).toBe("PATCH");
+    expect(call.body).toMatchObject({
+      status: "refunded",
+      stripe_payment_intent_id: "pi_1",
+    });
+    routeFetch(() => respond([]));
+    expect(await markEntitlementRefundedUnconfirmed({ id: 7, paymentIntentId: null })).toBe(false);
   });
 
   it("lists paid, claimed rows whose payment never got written", async () => {
@@ -378,5 +400,22 @@ describe("sweep lists", () => {
     const url = calls[0]?.url ?? "";
     expect(url).toContain("status=eq.succeeded");
     expect(url).toContain("consumed_submission_id=not.is.null&payment_id=is.null");
+    expect(url).toContain("offer=not.is.null");
+  });
+
+  it("reads journey rows only, never June's pay-first rows (offer null), on every lookup", async () => {
+    // June's nine rows share the table: a refund, a replay or a duplicate check that
+    // matched one would act on a test that ended in June.
+    routeFetch(() => respond([]));
+    await findEntitlementById(7);
+    await findEntitlementByPaymentIntent("pi_1");
+    await findEntitlementByConsumedSubmission(42);
+    await findRecentPaidDuplicate({
+      customerEmail: "a@example.com",
+      excludeId: 7,
+      since: new Date("2026-10-16T00:00:00.000Z"),
+    });
+    expect(calls).toHaveLength(4);
+    for (const call of calls) expect(call.url).toContain("offer=not.is.null");
   });
 });

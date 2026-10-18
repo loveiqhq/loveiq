@@ -6,6 +6,7 @@ const analytics = vi.hoisted(() => ({
   track: vi.fn(),
   pingFunnelEvent: vi.fn(),
   trackReportPurchase: vi.fn(),
+  gtagQueueSettled: vi.fn(() => Promise.resolve()),
   getGaMeasurementContext: vi.fn(() => ({ clientId: null, sessionId: null, consent: false })),
 }));
 vi.mock("@features/analytics/client", () => analytics);
@@ -160,6 +161,30 @@ describe("the checkout status page", () => {
     act(() => {
       vi.advanceTimersByTime(1_200);
     });
+    await flush();
+    expect(replace).toHaveBeenCalledWith("https://www.loveiq.org/survey");
+  });
+
+  it("leaves for the survey only once Google's tag has taken the purchase", async () => {
+    // gtag.js loads late on a page Stripe just returned to; until then the purchase waits
+    // in the page's memory, and a full-page load throws it away with the Ads sale.
+    let sent!: () => void;
+    analytics.gtagQueueSettled.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        sent = resolve;
+      })
+    );
+    fetchMock.mockReturnValue(json({ state: "paid", purchase }));
+    renderStatus();
+    await flush();
+    act(() => {
+      vi.advanceTimersByTime(1_200);
+    });
+    await flush();
+    expect(analytics.gtagQueueSettled).toHaveBeenCalledWith(3_000);
+    expect(replace).not.toHaveBeenCalled();
+    sent();
+    await flush();
     expect(replace).toHaveBeenCalledWith("https://www.loveiq.org/survey");
   });
 
@@ -235,6 +260,15 @@ describe("the checkout status page", () => {
       vi.advanceTimersByTime(5_000);
     });
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("offers no new checkout once the purchase was used, when it cannot open the report", async () => {
+    fetchMock.mockReturnValue(json({ state: "used", reportPath: null, purchase }));
+    renderStatus();
+    await flush();
+    expect(copy()).toBe(PTS_STATUS.usedNoReport);
+    expect(screen.queryByRole("button", { name: PTS_STATUS.startAgain })).toBeNull();
+    expect(screen.getByRole("link", { name: PTS_STATUS.returnToLanding })).toBeTruthy();
   });
 
   it("says a refund no longer unlocks anything", async () => {

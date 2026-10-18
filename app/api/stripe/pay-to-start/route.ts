@@ -16,6 +16,7 @@ import { readPrepaidToken } from "@features/pay-to-start/logic/journey";
 import {
   PAY_TO_START_LANDING_VARIANT,
   buildPayToStartSessionParams,
+  payToStartSessionExpiresAt,
 } from "@features/pay-to-start/server/checkout";
 import {
   PREPAID_COOKIE,
@@ -28,7 +29,7 @@ import {
   type Entitlement,
 } from "@features/pay-to-start/server/entitlement";
 import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
+import { claimedReportPathForPayer } from "@features/pay-to-start/server/reportLink";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -63,6 +64,8 @@ const bodySchema = z.object({
   gaClientId: z.string().max(64).nullable().optional(),
   gaSessionId: z.string().max(64).nullable().optional(),
   gaConsent: z.boolean().nullable().optional(),
+  /** The browser's anonymous PostHog id, joined to the buyer by the purchase event. */
+  posthogDistinctId: z.string().max(200).nullable().optional(),
   /** The page's attribution snapshot (shared/url/utm.ts); over 1,000 characters is dropped. */
   utmTracker: z.string().nullable().optional(),
 });
@@ -78,11 +81,6 @@ async function alertCheckoutFailure(detail: string): Promise<void> {
     text: `:rotating_light: Pay to start checkout FAILED: visitors on the assessment page may be unable to pay. ${escapeSlack(detail)}`,
     username: "ops_alerts",
   }).catch(() => undefined);
-}
-
-async function reportPathFor(submissionId: number): Promise<string | null> {
-  const token = await lookupReportTokenBySubmissionId(submissionId);
-  return token ? `/report/${encodeURIComponent(token)}` : null;
 }
 
 export async function POST(request: Request) {
@@ -153,12 +151,12 @@ export async function POST(request: Request) {
     const existingToken = readPrepaidToken(request.headers.get("cookie"));
     const existing = existingToken ? await findEntitlementByToken(existingToken) : null;
 
-    // Paid and claimed: the report is theirs. A claim on a checkout left unpaid is not
-    // "used": paying it now (below) unlocks the report that submission already has.
+    // Paid and claimed: the report is theirs.
     if (existing?.consumed_submission_id && existing.status === "succeeded") {
+      // Only the payer's own report: the cookie can be in someone else's browser.
       const response = reply({
         state: "used",
-        reportPath: await reportPathFor(existing.consumed_submission_id),
+        reportPath: await claimedReportPathForPayer(existing),
       });
       response.cookies.set(PREPAID_COOKIE, "", clearedPrepaidCookieOptions());
       return response;
@@ -168,9 +166,14 @@ export async function POST(request: Request) {
       response.cookies.set(PREPAID_COOKIE, existing.prepaid_token, prepaidCookieOptions());
       return response;
     }
-    if (existing?.status === "pending" && existing.stripe_session_id) {
+    // Bound to a survey but never paid (a checkout left, then the survey): its own open
+    // session can still be paid and unlocks that report. Anything bought here is a new
+    // purchase: sold again under this token, it would pay for that survey, someone else's
+    // on a shared device.
+    const reusable = existing?.consumed_submission_id ? null : existing;
+    if (reusable?.status === "pending" && reusable.stripe_session_id) {
       const settled = await settlePayToStartSession({
-        sessionId: existing.stripe_session_id,
+        sessionId: reusable.stripe_session_id,
         source: "checkout",
         stripe,
       });
@@ -181,29 +184,29 @@ export async function POST(request: Request) {
           // Paid with a method that is still settling: the status page waits for it.
           return reply({
             state: "redirect",
-            url: `${origin}${offer.landingPath}/checkout?session_id=${encodeURIComponent(existing.stripe_session_id)}`,
+            url: `${origin}${offer.landingPath}/checkout?session_id=${encodeURIComponent(reusable.stripe_session_id)}`,
           });
         case "open":
           // The same session again, unless the price changed since it opened.
           if (settled.session?.url && settled.session.amount_subtotal === offer.priceCents) {
             return reply({ state: "redirect", url: settled.session.url });
           }
-          await stripe.checkout.sessions.expire(existing.stripe_session_id).catch((err) => {
+          await stripe.checkout.sessions.expire(reusable.stripe_session_id).catch((err) => {
             logger.warn({ err }, "pay-to-start: expiring a stale-priced session failed");
           });
-          reuse = existing;
+          reuse = reusable;
           break;
         case "expired":
         case "failed":
-          reuse = existing;
+          reuse = reusable;
           break;
         default:
           // Refunded or unknown: a fresh token below.
           break;
       }
-    } else if (existing?.status === "expired" || existing?.status === "pending") {
+    } else if (reusable?.status === "expired" || reusable?.status === "pending") {
       // Expired, or pending with no session (an earlier create failed): same token.
-      reuse = existing;
+      reuse = reusable;
     }
 
     const utmTracker =
@@ -227,13 +230,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
+    // One clock for the idempotency minute and the expiry, so both fall in the same minute.
+    const nowMs = Date.now();
     const params = buildPayToStartSessionParams({
       offer,
       entitlementId: entitlement.id,
       origin,
+      expiresAt: payToStartSessionExpiresAt(nowMs),
       gaClientId: parsed.data.gaClientId ?? null,
       gaSessionId: parsed.data.gaSessionId ?? null,
       gaConsent: parsed.data.gaConsent === true,
+      posthogDistinctId: parsed.data.posthogDistinctId ?? null,
       utmTracker: entitlement.utm_tracker ?? utmTracker,
       requestIp: ip,
       userAgent: request.headers.get("user-agent"),
@@ -241,7 +248,7 @@ export async function POST(request: Request) {
     // A double click inside the same minute gets the same session back. The key covers
     // everything sent, because Stripe refuses a reused key whose parameters differ.
     const idempotencyKey = createHash("sha256")
-      .update(`pts|${token}|${Math.floor(Date.now() / 60_000)}|${JSON.stringify(params)}`)
+      .update(`pts|${token}|${Math.floor(nowMs / 60_000)}|${JSON.stringify(params)}`)
       .digest("hex");
     const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
 

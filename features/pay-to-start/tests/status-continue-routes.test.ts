@@ -15,6 +15,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
 vi.mock("@features/checkout/server/fulfillment", () => ({ settlePayToStartSession: vi.fn() }));
 vi.mock("@features/report/server/personalReport", () => ({
   lookupReportTokenBySubmissionId: vi.fn(),
+  resolveSubmissionAccessContext: vi.fn(),
 }));
 vi.mock("@features/pay-to-start/server/entitlement", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/pay-to-start/server/entitlement")>();
@@ -32,7 +33,10 @@ import {
   findEntitlementByToken,
   type Entitlement,
 } from "@features/pay-to-start/server/entitlement";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
+import {
+  lookupReportTokenBySubmissionId,
+  resolveSubmissionAccessContext,
+} from "@features/report/server/personalReport";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
 const TOKEN = `rpp_${"f".repeat(32)}`;
@@ -57,7 +61,7 @@ function row(overrides: Partial<Entitlement> = {}): Entitlement {
     currency: "EUR",
     customer_email: "buyer@example.com",
     is_test: false,
-    paid_at: "2026-10-18T10:05:00.000Z",
+    paid_at: new Date().toISOString(),
     utm_tracker: null,
     created_at: new Date().toISOString(),
     ...overrides,
@@ -126,18 +130,41 @@ describe("GET /api/stripe/pay-to-start/status", () => {
     expect(response.headers.get("set-cookie")).toContain(`__liq_pp=${TOKEN}`);
   });
 
-  it("never hands over an entitlement that is used, unpaid or old", async () => {
+  it("hands it over while a wallet's payment still settles, too", async () => {
+    settled("processing", row({ status: "pending", paid_at: null }));
+    const response = await status(SESSION);
+    expect(await response.json()).toEqual({ state: "processing" });
+    expect(response.headers.get("set-cookie")).toContain(`__liq_pp=${TOKEN}`);
+  });
+
+  it("never hands over an entitlement that is used, unpaid, or paid over two hours ago", async () => {
     settled("open", row({ status: "pending" }));
     expect((await status(SESSION)).headers.get("set-cookie")).toBeNull();
 
-    settled("paid", row({ created_at: "2026-01-01T00:00:00.000Z" }));
+    // The session id is no secret (GA4, Ads and PostHog get it as the transaction id), so
+    // the handover is for the return right after paying, measured from the payment.
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    settled("paid", row({ paid_at: threeHoursAgo }));
     expect((await status(SESSION)).headers.get("set-cookie")).toBeNull();
+    settled("paid", row({ paid_at: new Date(Date.now() - 60 * 60 * 1000).toISOString() }));
+    expect((await status(SESSION)).headers.get("set-cookie")).toContain(`__liq_pp=${TOKEN}`);
 
-    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
     settled("paid", row({ consumed_submission_id: 42 }));
     const used = await status(SESSION);
     expect(used.headers.get("set-cookie")).toBeNull();
-    expect(await used.json()).toMatchObject({ state: "used", reportPath: "/report/rpt_x" });
+    expect(await used.json()).toMatchObject({ state: "used" });
+  });
+
+  it("never opens the report a used entitlement unlocked, even for the payer", async () => {
+    // Anyone holding the session id would otherwise read the survey taker's report.
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: "buyer@example.com",
+    } as never);
+    settled("paid", row({ consumed_submission_id: 42 }));
+    const body = await (await status(SESSION)).json();
+    expect(body).toMatchObject({ state: "used", reportPath: null });
+    expect(JSON.stringify(body)).not.toContain("rpt_");
   });
 
   it("passes the other states through", async () => {
@@ -179,12 +206,42 @@ describe("GET /sexual-archetype/continue", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  it("opens the report once the entitlement is used", async () => {
+  it("opens the payer's own report once the entitlement is used", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
     vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: " Buyer@Example.com ",
+    } as never);
     const response = await open(TOKEN);
     expect(response.headers.get("location")).toBe(`${ORIGIN}/report/rpt_x?from=email`);
     expect(response.headers.get("set-cookie")).toBeNull();
+    expect(resolveSubmissionAccessContext).toHaveBeenCalledWith({ submissionId: 42 });
+  });
+
+  it("never opens a report someone else's survey claimed with the purchase", async () => {
+    // A gift, a forwarded email, a shared browser: the report is the survey taker's.
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: "someone-else@example.com",
+    } as never);
+    const response = await open(TOKEN);
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/sexual-archetype?continue=used`);
+    expect(response.headers.get("location")).not.toContain("rpt_");
+    expect(response.headers.get("set-cookie")).toBeNull();
+
+    // No payer address, or a lookup that fails: the same.
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      row({ consumed_submission_id: 42, customer_email: null })
+    );
+    expect((await open(TOKEN)).headers.get("location")).toBe(
+      `${ORIGIN}/sexual-archetype?continue=used`
+    );
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
+    vi.mocked(resolveSubmissionAccessContext).mockRejectedValue(new Error("db down"));
+    expect((await open(TOKEN)).headers.get("location")).toBe(
+      `${ORIGIN}/sexual-archetype?continue=used`
+    );
   });
 
   it("explains a refunded, unknown or malformed link on the landing page", async () => {
@@ -201,10 +258,12 @@ describe("GET /sexual-archetype/continue", () => {
     );
   });
 
-  it("sends a payment still settling to the status page", async () => {
+  it("never sets the cookie for a checkout still pending", async () => {
+    // The email goes out only once a payment is confirmed: a link to a pending one is not
+    // ours, and setting its cookie would plant that checkout in someone else's browser.
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ status: "pending" }));
-    expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype/checkout?session_id=${SESSION}`
-    );
+    const response = await open(TOKEN);
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/sexual-archetype?continue=unpaid`);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 });

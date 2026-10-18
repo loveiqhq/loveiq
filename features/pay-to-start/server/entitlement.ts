@@ -150,7 +150,9 @@ async function readRows(response: Response, failure: string): Promise<Entitlemen
 
 /**
  * The first row a query returns. Callers spell out the whole path, `select` and `limit=1`
- * included, so `npm run check:postgrest-columns` sees every column they filter on.
+ * included. `npm run check:postgrest-columns` reads literal filters only: it cannot see
+ * `${SELECT}` or a filter on a continuation line, so the migration must be applied before
+ * this code deploys (PostgREST refuses an unknown column).
  */
 async function findOne(path: string): Promise<Entitlement | null> {
   const response = await serviceFetch(path);
@@ -468,6 +470,10 @@ export async function restoreDisputedEntitlement(
 /**
  * Journey rows still pending a while after their checkout, for the sweep to settle with
  * Stripe: a webhook that never came, from a buyer who also closed the tab.
+ *
+ * By `updated_at`, which the session stamp moves: a token re-used days later for a new
+ * session (the cookie lasts 30 days) is as fresh as that session, where `created_at`
+ * would have left it outside the window for good.
  */
 export async function listPendingForReconcile({
   limit = 50,
@@ -480,11 +486,40 @@ export async function listPendingForReconcile({
 }): Promise<Entitlement[]> {
   const response = await serviceFetch(
     `/rest/v1/prepaid_report_access?status=eq.pending&offer=not.is.null&stripe_session_id=not.is.null` +
-      `&created_at=lt.${encodeURIComponent(olderThan.toISOString())}` +
-      `&created_at=gt.${encodeURIComponent(newerThan.toISOString())}` +
-      `&select=${SELECT}&order=created_at.asc&limit=${limit}`
+      `&updated_at=lt.${encodeURIComponent(olderThan.toISOString())}` +
+      `&updated_at=gt.${encodeURIComponent(newerThan.toISOString())}` +
+      `&select=${SELECT}&order=updated_at.asc&limit=${limit}`
   );
   return readRows(response, "prepaid_entitlement_list_failed");
+}
+
+/**
+ * Pending (or expired) → refunded, for a payment Stripe already refunded or saw disputed
+ * before any path confirmed it. The refund event found nothing to void then: the
+ * PaymentIntent is only stamped at confirmation. Stamped here, so a later dispute event
+ * finds the row. Returns whether this call changed it.
+ */
+export async function markEntitlementRefundedUnconfirmed({
+  id,
+  paymentIntentId,
+}: {
+  id: number;
+  paymentIntentId: string | null;
+}): Promise<boolean> {
+  const response = await serviceFetch(
+    `/rest/v1/prepaid_report_access?id=eq.${id}&status=in.(pending,expired)&select=id`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        status: "refunded",
+        ...(paymentIntentId ? { stripe_payment_intent_id: paymentIntentId } : {}),
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+  const rows = await readRows(response, "prepaid_entitlement_refund_failed");
+  return rows.length === 1;
 }
 
 /** Paid and claimed, but the payment row never got written (a failure mid-claim). */

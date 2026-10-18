@@ -129,6 +129,16 @@ const PREPAID_EXPORT_COLUMNS =
   "landing_variant,stripe_session_id,stripe_payment_intent_id,payment_id," +
   "consumed_submission_id,created_at,paid_at,consumed_at";
 
+/**
+ * An entitlement found through a survey, not through the person's own address: the payer
+ * may be someone else (a gift), so their address and their visit's attribution are theirs,
+ * neither exported to nor erased for the survey's taker. The by-address pass covers a
+ * payer who is the same person.
+ */
+const PREPAID_BY_SUBMISSION_COLUMNS =
+  "id,offer,plan,status,amount_cents,list_price_cents,currency,landing_variant," +
+  "payment_id,consumed_submission_id,created_at,paid_at,consumed_at";
+
 async function pseudonymizePrepaid(path: string, ctx: string, result: DsrResult): Promise<number> {
   try {
     const res = await supabaseFetch(path, {
@@ -246,7 +256,7 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   );
   // An entitlement this person's survey claimed, though Stripe took another address.
   result.exportData!.prepaid_report_access_by_submission = await fetchRows(
-    `/rest/v1/prepaid_report_access?consumed_submission_id=${subFilter}&select=${PREPAID_EXPORT_COLUMNS}`,
+    `/rest/v1/prepaid_report_access?consumed_submission_id=${subFilter}&select=${PREPAID_BY_SUBMISSION_COLUMNS}`,
     "prepaid-sub"
   );
 
@@ -435,14 +445,10 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
       "be-sub",
       result
     );
-    // Before the submissions go: consumed_submission_id is ON DELETE SET NULL, and the
-    // entitlement would keep the visit's tracker with nothing left to find it by.
-    result.rowsAffected.prepaid_report_access_by_submission_pseudonymized =
-      await pseudonymizePrepaid(
-        `/rest/v1/prepaid_report_access?consumed_submission_id=${subFilter}`,
-        "prepaid-sub",
-        result
-      );
+    // No by-submission pass for pay-to-start entitlements: what such a row holds about a
+    // person (the address Stripe took, the visit's attribution) is the payer's, erased by
+    // the by-address pass above when the payer asks. The survey's link to it goes with the
+    // submission (consumed_submission_id is ON DELETE SET NULL).
 
     // Personal report sub-cascade (must precede survey_submission delete).
     const reports = await fetchRows<PersonalReportRow>(

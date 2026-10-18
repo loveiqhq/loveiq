@@ -178,4 +178,16 @@ describe("readPrepaidToken", () => {
       TOKEN
     );
   });
+
+  it("reads only the __Host- name in production, which no sibling subdomain can plant", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(readPrepaidToken(`${PREPAID_COOKIE_DEV}=${TOKEN}`)).toBeNull();
+      expect(
+        readPrepaidToken(`${PREPAID_COOKIE_DEV}=${TOKEN}; ${PREPAID_COOKIE_PROD}=${TOKEN}`)
+      ).toBe(TOKEN);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

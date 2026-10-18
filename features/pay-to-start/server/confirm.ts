@@ -21,6 +21,7 @@ import {
   findEntitlementById,
   findRecentPaidDuplicate,
   markEntitlementExpired,
+  markEntitlementRefundedUnconfirmed,
   markEntitlementSucceeded,
   setEntitlementSession,
   type Entitlement,
@@ -76,6 +77,18 @@ function sessionExpand(): string[] {
 /** A second paid entitlement for one address inside this window is reported to #ops. */
 const DUPLICATE_WINDOW_MS = 48 * 60 * 60 * 1000;
 
+/**
+ * Every Stripe call here is bounded: the SDK's defaults are an 80 s timeout and two
+ * retries, and the sweep that calls this runs inside a 50 s function (its cron_run row is
+ * written only if it ends). A webhook or a poll that fails here is simply asked again.
+ */
+const STRIPE_REQUEST = { timeout: 8_000, maxNetworkRetries: 1 } as const;
+
+/** A PaymentIntent that will not complete without the buyer starting over. */
+function intentGaveUp(intent: Stripe.PaymentIntent | null): boolean {
+  return intent?.status === "requires_payment_method" || intent?.status === "canceled";
+}
+
 function paymentIntentOf(session: Stripe.Checkout.Session): {
   id: string | null;
   intent: Stripe.PaymentIntent | null;
@@ -116,9 +129,11 @@ export async function confirmPayToStartSession({
   source: ConfirmSource;
   stripe: Stripe;
 }): Promise<ConfirmResult> {
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {
-    expand: sessionExpand(),
-  });
+  const session = await stripe.checkout.sessions.retrieve(
+    sessionId,
+    { expand: sessionExpand() },
+    STRIPE_REQUEST
+  );
   if (session.metadata?.journey !== PAY_TO_START_JOURNEY) {
     return result("unknown", null, session);
   }
@@ -146,15 +161,28 @@ export async function confirmPayToStartSession({
   if (session.status === "open") {
     return result(settledState(entitlement) ?? "open", entitlement, session);
   }
-  // Complete but unpaid: a delayed method still settling.
+  let { id: paymentIntentId, intent } = paymentIntentOf(session);
+  const readIntent = async () => {
+    if (paymentIntentId && !intent) {
+      intent = await stripe.paymentIntents.retrieve(
+        paymentIntentId,
+        { expand: ["latest_charge"] },
+        STRIPE_REQUEST
+      );
+    }
+  };
+
+  // Complete but unpaid: a delayed method still settling, or one that failed. A session
+  // never expires once complete, so a failure read as "processing" would send every later
+  // click to the status page for good; as "failed", the checkout route opens a new one.
   if (!sessionPaid) {
-    return result(settledState(entitlement) ?? "processing", entitlement, session);
+    const settled = settledState(entitlement);
+    if (settled) return result(settled, entitlement, session);
+    await readIntent();
+    return result(intentGaveUp(intent) ? "failed" : "processing", entitlement, session);
   }
 
-  let { id: paymentIntentId, intent } = paymentIntentOf(session);
-  if (paymentIntentId && !intent) {
-    intent = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ["latest_charge"] });
-  }
+  await readIntent();
   if (intent && intent.status !== "succeeded") {
     const pending = intent.status === "processing" || intent.status === "requires_action";
     return result(
@@ -165,6 +193,26 @@ export async function confirmPayToStartSession({
   }
 
   if (entitlement.status === "refunded") return result("refunded", entitlement, session);
+
+  // Refunded in full, or disputed, before anything confirmed it (staff refunding a buyer
+  // whose confirmation failed, or Stripe redelivering `charge.refunded` before
+  // `completed`). The refund event found no row to void, because the PaymentIntent is
+  // stamped only at confirmation, so this is the one place left to stop the unlock. A
+  // partial refund still unlocks, as it does after a report purchase.
+  const earlyCharge = chargeOf(intent);
+  if (
+    entitlement.status !== "succeeded" &&
+    earlyCharge &&
+    (earlyCharge.refunded || earlyCharge.disputed)
+  ) {
+    await markEntitlementRefundedUnconfirmed({ id: entitlement.id, paymentIntentId });
+    logger.warn(
+      { entitlementId: entitlement.id, sessionId: session.id, source },
+      "pay-to-start: refunded or disputed before it was confirmed; not unlocking"
+    );
+    return result("refunded", { ...entitlement, status: "refunded" }, session);
+  }
+
   if (entitlement.status === "succeeded") {
     const samePayment =
       entitlement.stripe_session_id === session.id ||
@@ -248,16 +296,33 @@ export async function runFirstPaymentEffects({
   };
 
   if (email) {
-    await step("email", () =>
-      sendPayToStartConfirmationEmail({
-        amountText,
-        email,
-        entitlementId: entitlement.id,
-        origin: metadata.origin ?? null,
-        productName: offer.productName,
-        token: entitlement.prepaid_token,
-      })
-    );
+    await step("email", async () => {
+      let sent = false;
+      try {
+        sent = await sendPayToStartConfirmationEmail({
+          amountText,
+          email,
+          entitlementId: entitlement.id,
+          origin: metadata.origin ?? null,
+          productName: offer.productName,
+          token: entitlement.prepaid_token,
+          // Paid after the survey was finished: the report is what unlocks now.
+          variant: entitlement.consumed_submission_id ? "report" : "survey",
+        });
+      } finally {
+        // The email is the buyer's way back in (the continue link): someone who paid and
+        // closed the tab has nothing else, so one that did not go needs a person.
+        if (!sent) {
+          await notifySlack({
+            channel: "ops",
+            kind: "pts_confirmation_failed",
+            text: `${internalTag}:warning: Pay to start: the confirmation email for entitlement #${entitlement.id} (${escapeSlack(maskEmail(email))}) was not sent. Send them their continue link (docs/runbooks/PAY_TO_START.md).`,
+            username: "ops_alerts",
+            context: { entitlementId: entitlement.id },
+          });
+        }
+      }
+    });
   } else {
     logger.warn({ entitlementId: entitlement.id }, "pay-to-start: no buyer email, nothing sent");
   }
@@ -305,6 +370,7 @@ export async function runFirstPaymentEffects({
   await step("posthog", () =>
     sendPosthogPurchaseEvent({
       email,
+      anonDistinctId: metadata.posthogDistinctId || null,
       transactionId: session.id,
       value: amountCents / 100,
       currency,
@@ -385,7 +451,11 @@ function paidLine({
   const traffic = classifyTraffic(entitlement.utm_tracker);
   const via = [traffic.source, traffic.campaign].filter(Boolean).map((v) => escapeSlack(v ?? ""));
   const parts = [
-    `${internalTag}:moneybag: Pay to start: *${amountText}* paid, survey not started yet`,
+    `${internalTag}:moneybag: Pay to start: *${amountText}* paid, ${
+      entitlement.consumed_submission_id
+        ? `survey already finished (submission #${entitlement.consumed_submission_id})`
+        : "survey not started yet"
+    }`,
     email ? escapeSlack(maskEmail(email)) : "no email",
     via.length > 0 ? `${traffic.bucket} (${via.join(" / ")})` : traffic.bucket,
   ];

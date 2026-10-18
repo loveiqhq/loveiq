@@ -9,6 +9,7 @@ import {
   CHECKOUT_SESSION_ID_REGEX,
   PAY_TO_START_RETURN_PATH,
 } from "@features/pay-to-start/logic/journey";
+import { gtagQueueSettled } from "@features/analytics/client";
 import { STATUS_PREVIEWS, type StatusPreview } from "@features/pay-to-start/logic/statusPreview";
 import { trackPtsPurchase, trackPtsStatusViewed } from "../analytics";
 import { PTS_STATUS } from "../landing/payToStartContent";
@@ -24,7 +25,8 @@ import { PtsCtaStatus, usePtsCheckout } from "../landing/PtsCheckout";
  *   10 complete    → the purchase is reported once (GA4, Ads) and the survey opens
  *
  * The session id leaves the address bar once read (it is kept for this tab, so a reload
- * still works): with it, the status route hands the entitlement to any browser for a week.
+ * still works): with it, the status route hands the entitlement to any browser for two
+ * hours after the payment.
  *
  * Off production, `?preview=<state>` shows any state without a payment (the route's page
  * decides, on the server, whether a preview is allowed): some cannot be produced on demand
@@ -36,6 +38,8 @@ const POLL_DELAY_MS = 2_000;
 const MAX_POLLS = 15;
 const MAX_ERRORS = 3;
 const REDIRECT_DELAY_MS = 1_200;
+/** The longest the page waits, after that, for Google's tag to take the purchase. */
+const GTAG_WAIT_MS = 3_000;
 
 type View =
   | { kind: "verifying" }
@@ -217,7 +221,11 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
           if (body.state === "paid") {
             finish({ kind: "complete" }, "paid");
             timer = setTimeout(() => {
-              if (!cancelled) replacePage("/survey");
+              // gtag.js loads late on a page Stripe just returned to, and until then the
+              // purchase waits in this page's memory: leaving earlier loses the Ads sale.
+              void gtagQueueSettled(GTAG_WAIT_MS).then(() => {
+                if (!cancelled) replacePage("/survey");
+              });
             }, REDIRECT_DELAY_MS);
           } else {
             finish({ kind: "used", reportPath: body.reportPath }, "used");
@@ -302,6 +310,15 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
             ) : shown.kind === "used" && shown.reportPath ? (
               <a href={shown.reportPath} className="checkout-submit checkout-submit--secondary">
                 {PTS_STATUS.openReport}
+              </a>
+            ) : shown.kind === "used" ? (
+              // Paid, and its survey is done: a new checkout here would sell the same
+              // thing again, so there is none to start.
+              <a
+                href={PAY_TO_START_RETURN_PATH}
+                className="checkout-submit checkout-submit--secondary"
+              >
+                {PTS_STATUS.returnToLanding}
               </a>
             ) : (
               <>

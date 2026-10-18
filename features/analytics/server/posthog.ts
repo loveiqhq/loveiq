@@ -31,6 +31,12 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 export interface PosthogPurchaseInput {
   /** Buyer email — becomes distinct_id, so it must match the client identify. */
   email: string | null;
+  /**
+   * The buyer's anonymous browser id, when the purchase happened before PostHog knew who
+   * they were (pay to start pays before the survey that identifies them). Linked to the
+   * email first, so the purchase joins that visit's history: the ad, the landing page.
+   */
+  anonDistinctId?: string | null;
   /** Stripe checkout session id. Used as the idempotency/reference property. */
   transactionId: string;
   /** Revenue in major currency units (e.g. EUR), not cents. */
@@ -113,6 +119,25 @@ export async function sendPosthogPurchaseEvent(input: PosthogPurchaseInput): Pro
       $set: { email: distinctId, last_plan_purchased: input.plan },
     },
   };
+
+  const anon = input.anonDistinctId?.trim();
+  if (anon && anon !== distinctId) {
+    // PostHog merges an anonymous id into the identified person only while that id is
+    // still anonymous; one already tied to someone else is left alone. Best-effort.
+    await fetchWithTimeout(`${host.replace(/\/+$/, "")}/i/v0/e/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: token,
+        event: "$identify",
+        distinct_id: distinctId,
+        properties: { $anon_distinct_id: anon, $lib: "loveiq-server" },
+      }),
+      timeoutMs: 5000,
+    }).catch((err: unknown) =>
+      logger.warn({ err, transactionId: input.transactionId }, "PostHog $identify send failed")
+    );
+  }
 
   try {
     const res = await fetchWithTimeout(`${host.replace(/\/+$/, "")}/i/v0/e/`, {

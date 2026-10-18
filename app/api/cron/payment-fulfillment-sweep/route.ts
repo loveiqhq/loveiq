@@ -260,7 +260,13 @@ export async function GET(request: Request) {
   let payToStart: PayToStartSweepSummary | null = null;
   const stripe = getStripeServerClient();
   if (stripe) {
-    payToStart = await sweepPayToStart({ stripe, shouldStop: () => terminated });
+    // Its own 10 s, checked between rows, so the stuck-payment loop below always runs and
+    // the cron_run row is written (50 s ceiling, 40 s of tail, cron-budgets.test.ts).
+    const startedAtMs = Date.now();
+    payToStart = await sweepPayToStart({
+      stripe,
+      shouldStop: () => terminated || Date.now() - startedAtMs > 10_000,
+    });
     if (payToStart.paid > 0 || payToStart.applied > 0) {
       logger.warn(
         payToStart,

@@ -55,9 +55,23 @@ export function trackPtsCtaClick(params: {
   offer: PayToStartOfferId;
   priceCents: number;
 }): void {
+  track("pts_cta_click", { location: params.location, price_cents: params.priceCents });
+}
+
+/**
+ * The checkout the click asked for is opening: GA4's ecommerce `begin_checkout` (which
+ * Google Ads reads) and the durable `prepaid_checkout_started` row. Only when the server
+ * answers with a checkout to go to, never for a browser it sends to its survey or report
+ * because it already paid, a price that changed, or a paused checkout: none of those is a
+ * checkout started. Sent before the page leaves; the funnel ping is a beacon.
+ */
+export function trackPtsCheckoutOpened(params: {
+  location: PtsCtaLocation;
+  offer: PayToStartOfferId;
+  priceCents: number;
+}): void {
   const value = params.priceCents / 100;
   const itemName = getOfferDefinition(params.offer).productName;
-  track("pts_cta_click", { location: params.location, price_cents: params.priceCents });
   track("begin_checkout", {
     journey: PAY_TO_START_JOURNEY,
     currency: "EUR",
@@ -65,6 +79,7 @@ export function trackPtsCtaClick(params: {
     items: [
       { item_id: `pay_to_start_${params.offer}`, item_name: itemName, price: value, quantity: 1 },
     ],
+    location: params.location,
   });
   pingFunnelEvent("prepaid_checkout_started");
 }
