@@ -16,6 +16,7 @@ import { readPrepaidToken } from "@features/pay-to-start/logic/journey";
 import {
   PAY_TO_START_LANDING_VARIANT,
   buildPayToStartSessionParams,
+  payToStartSessionExpiresAt,
 } from "@features/pay-to-start/server/checkout";
 import {
   PREPAID_COOKIE,
@@ -227,10 +228,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
+    // One clock for the idempotency minute and the expiry, so both fall in the same minute.
+    const nowMs = Date.now();
     const params = buildPayToStartSessionParams({
       offer,
       entitlementId: entitlement.id,
       origin,
+      expiresAt: payToStartSessionExpiresAt(nowMs),
       gaClientId: parsed.data.gaClientId ?? null,
       gaSessionId: parsed.data.gaSessionId ?? null,
       gaConsent: parsed.data.gaConsent === true,
@@ -241,7 +245,7 @@ export async function POST(request: Request) {
     // A double click inside the same minute gets the same session back. The key covers
     // everything sent, because Stripe refuses a reused key whose parameters differ.
     const idempotencyKey = createHash("sha256")
-      .update(`pts|${token}|${Math.floor(Date.now() / 60_000)}|${JSON.stringify(params)}`)
+      .update(`pts|${token}|${Math.floor(nowMs / 60_000)}|${JSON.stringify(params)}`)
       .digest("hex");
     const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
 
