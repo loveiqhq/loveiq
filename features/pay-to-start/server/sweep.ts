@@ -8,16 +8,19 @@ import logger from "@shared/observability/logger";
 import { listBoundUnapplied, listPendingForReconcile } from "./entitlement";
 
 /**
- * The hourly payment sweep's two pay-to-start steps (app/api/cron/payment-fulfillment-sweep).
- * A payment is normally confirmed within seconds, by the webhook or the status page; this
- * catches what both missed:
+ * The payment sweep's two pay-to-start steps (app/api/cron/payment-fulfillment-sweep, twice
+ * an hour). A payment is normally confirmed within seconds, by the webhook or the status
+ * page; this catches what both missed:
  *
- *   1. checkouts still pending 10 minutes to 48 hours after they started: a tab closed
- *      on Stripe before the redirect, with the webhook down. Stripe is asked; a paid one
- *      runs the first-payment effects (the confirmation email among them) and an expired
- *      one is marked so. Older than 48 hours, every session has long expired.
- *   2. entitlements paid and claimed by a survey whose report was never unlocked (a
- *      failure between the claim's two steps). Applied again: idempotent.
+ *   1. entitlements paid and claimed by a survey whose report was never unlocked (a
+ *      failure between the claim's two steps). Applied again: idempotent. First, because
+ *      these buyers are reading a locked report now, and a run that stops early (the
+ *      cron's time budget) must not stop before them.
+ *   2. checkouts pending 10 minutes to 48 hours since the row last changed: a tab closed
+ *      on Stripe before the redirect, with the webhook down. Stripe is asked, oldest
+ *      first, `limit` a run; a paid one runs the first-payment effects (the confirmation
+ *      email, and the unlock when a survey already claimed it) and an expired one is
+ *      marked so. Older than 48 hours, every session has long expired.
  *
  * Never throws; each row's failure is counted and logged, an apply failure also alerted.
  */
@@ -45,6 +48,25 @@ export async function sweepPayToStart({
   shouldStop?: () => boolean;
 }): Promise<PayToStartSweepSummary> {
   const summary: PayToStartSweepSummary = { reconciled: 0, paid: 0, applied: 0, errors: 0 };
+
+  try {
+    const unapplied = await listBoundUnapplied(limit);
+    for (const row of unapplied) {
+      if (shouldStop()) return summary;
+      try {
+        if (await applyPayToStartEntitlement({ entitlement: row, stripe })) summary.applied += 1;
+      } catch (err) {
+        summary.errors += 1;
+        await reportPayToStartApplyFailure(row, err, "sweep");
+      }
+    }
+  } catch (err) {
+    summary.errors += 1;
+    logger.error(
+      { err: err instanceof Error ? err.message : err },
+      "pay-to-start sweep: listing unapplied entitlements failed"
+    );
+  }
 
   try {
     const pending = await listPendingForReconcile({
@@ -76,25 +98,6 @@ export async function sweepPayToStart({
     logger.error(
       { err: err instanceof Error ? err.message : err },
       "pay-to-start sweep: listing pending checkouts failed"
-    );
-  }
-
-  try {
-    const unapplied = await listBoundUnapplied(limit);
-    for (const row of unapplied) {
-      if (shouldStop()) return summary;
-      try {
-        if (await applyPayToStartEntitlement({ entitlement: row, stripe })) summary.applied += 1;
-      } catch (err) {
-        summary.errors += 1;
-        await reportPayToStartApplyFailure(row, err, "sweep");
-      }
-    }
-  } catch (err) {
-    summary.errors += 1;
-    logger.error(
-      { err: err instanceof Error ? err.message : err },
-      "pay-to-start sweep: listing unapplied entitlements failed"
     );
   }
 

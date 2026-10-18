@@ -117,6 +117,18 @@ describe("the payment sweep's pay-to-start steps", () => {
     expect(summary.errors).toBe(1);
   });
 
+  it("reconciles checkouts when the claimed list cannot be read", async () => {
+    vi.mocked(listBoundUnapplied).mockRejectedValue(new Error("db down"));
+    vi.mocked(listPendingForReconcile).mockResolvedValue([row()]);
+    vi.mocked(settlePayToStartSession).mockResolvedValue({ state: "paid" } as never);
+    expect(await sweepPayToStart({ stripe, now: NOW })).toEqual({
+      reconciled: 1,
+      paid: 1,
+      applied: 0,
+      errors: 1,
+    });
+  });
+
   it("runs the second step when the first cannot list", async () => {
     vi.mocked(listPendingForReconcile).mockRejectedValue(new Error("db down"));
     vi.mocked(listBoundUnapplied).mockResolvedValue([
@@ -137,7 +149,23 @@ describe("the payment sweep's pay-to-start steps", () => {
     let calls = 0;
     const summary = await sweepPayToStart({ stripe, now: NOW, shouldStop: () => ++calls > 1 });
     expect(settlePayToStartSession).toHaveBeenCalledTimes(1);
-    expect(listBoundUnapplied).not.toHaveBeenCalled();
     expect(summary.reconciled).toBe(1);
+  });
+
+  it("unlocks claimed reports before the checkouts use up the run's time", async () => {
+    // The cron stops starting rows after 10 s. A backlog of abandoned checkouts, each a
+    // Stripe call, used to spend it all before the buyers already reading a locked report.
+    const claimed = row({ id: 9, status: "succeeded", consumed_submission_id: 42 });
+    vi.mocked(listBoundUnapplied).mockResolvedValue([claimed]);
+    vi.mocked(listPendingForReconcile).mockResolvedValue(
+      Array.from({ length: 25 }, (_, i) => row({ id: 100 + i }))
+    );
+    vi.mocked(settlePayToStartSession).mockResolvedValue({ state: "open" } as never);
+    vi.mocked(applyPayToStartEntitlement).mockResolvedValue(901);
+    let calls = 0;
+    const summary = await sweepPayToStart({ stripe, now: NOW, shouldStop: () => ++calls > 3 });
+    expect(applyPayToStartEntitlement).toHaveBeenCalledWith({ entitlement: claimed, stripe });
+    expect(summary.applied).toBe(1);
+    expect(settlePayToStartSession).toHaveBeenCalledTimes(2);
   });
 });

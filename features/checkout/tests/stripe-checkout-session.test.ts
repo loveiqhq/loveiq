@@ -870,6 +870,22 @@ describe("a report already paid for before the survey (pay to start)", () => {
     expect(res.status).toBe(409);
   });
 
+  it("applies it before quoting, so the payment counts as upgrade credit", async () => {
+    vi.mocked(findEntitlementByConsumedSubmission).mockResolvedValue({
+      id: 9,
+      status: "succeeded",
+      payment_id: null,
+      consumed_submission_id: 42,
+    } as never);
+    vi.mocked(applyPayToStartEntitlement).mockResolvedValue(77);
+    await POST(makeRequest(body));
+    const applied = vi.mocked(applyPayToStartEntitlement).mock.invocationCallOrder[0];
+    const quoted = vi.mocked(getReportPriceQuoteForContext).mock.invocationCallOrder[0];
+    expect(applied).toBeDefined();
+    expect(quoted).toBeDefined();
+    expect(applied!).toBeLessThan(quoted!);
+  });
+
   it("still refuses a plan owned when the entitlement lookup fails", async () => {
     vi.mocked(findEntitlementByConsumedSubmission).mockRejectedValue(new Error("db down"));
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({

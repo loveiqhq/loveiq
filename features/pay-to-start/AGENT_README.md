@@ -55,9 +55,10 @@ landing test arm.
   purchase); a payment refunded before anything confirmed it is turned `refunded` at
   confirmation. After the claim, the payment row's refund re-locks the report as for any
   purchase, and the entitlement's status follows.
-- **An unpaid claim keeps the cookie.** A visitor who left checkout and then took the survey
-  has their pending row bound to it; paying later from the page reuses the token and unlocks
-  that report.
+- **An unpaid claim clears the cookie.** A visitor who left checkout and then took the survey
+  has their pending row bound to it: the checkout left open still unlocks that report if it
+  is paid within its hour. A later purchase in that browser starts fresh, so it can never pay
+  for that survey (a shared device, or a report already bought from its own paywall).
 
 ## Kill switch and runbook
 

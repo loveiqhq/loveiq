@@ -199,13 +199,16 @@ export function claimResponseFields(claim: ClaimOutcome): {
 
 /**
  * Whether the browser's cookie has done its job. Cleared once the entitlement is bound
- * and paid (or on its way), or can never be claimed. Kept after an error, so a retry can
- * claim, and after an unpaid claim: the cookie is how a checkout from the page later
- * reuses this same token, so paying then unlocks the report this survey already has
- * (without it the page mints a new token, and the buyer would have to retake the survey).
+ * to this submission or can never be claimed; kept after an error, so a retry can claim.
+ *
+ * An unpaid claim clears it too. The row is bound, so the checkout left open still
+ * unlocks this report if it is paid. Kept, the cookie would hand this survey to the next
+ * purchase in the browser: someone else's on a shared device, a second payment for a
+ * report already bought from its paywall, and every later survey here labelled pay to
+ * start.
  */
 export function claimSettlesCookie(claim: ClaimOutcome): boolean {
-  return claim.outcome !== "error" && claim.outcome !== "unpaid";
+  return claim.outcome !== "error";
 }
 
 /**
