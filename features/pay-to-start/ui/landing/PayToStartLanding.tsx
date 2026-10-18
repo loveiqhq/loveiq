@@ -1,0 +1,72 @@
+import type { FC } from "react";
+import { formatOfferPrice, type PayToStartOfferId } from "@features/pay-to-start/logic/offer";
+import { PtsCheckoutProvider } from "./PtsCheckout";
+import { PtsFaq, PtsFinalCta, PtsFooter } from "./PtsClosing";
+import { PtsBreadcrumb, PtsHeader } from "./PtsHeader";
+import { PtsHero } from "./PtsHero";
+import { PtsNotice } from "./PtsNotice";
+import { PtsOnePrice, PtsPriceCard } from "./PtsPricing";
+import {
+  PtsFindOut,
+  PtsHowItWorks,
+  PtsInsideReport,
+  PtsPersonalities,
+  PtsResearch,
+  PtsTestimonials,
+} from "./PtsSections";
+import { PtsStickyBar } from "./PtsStickyBar";
+
+/**
+ * The assessment page a visitor pays on before the survey (Figma Report-3.0 "Pay to start >
+ * Full Payments", desktop 1706:1699, phone 1706:2034): Facets-branded, its own header and
+ * footer, no way into the free funnel.
+ *
+ * From 1280 wide it is Figma's desktop: an 850 column and the 342 price card beside it,
+ * which stays in view. Narrower, the column stands alone (850 at most) and the price is
+ * pinned to the bottom, as on the phone. The tablet widths between are extrapolated.
+ *
+ * `priceCents` is the server's price (PAY_TO_START_PRICE_CENTS); every price on the page
+ * is printed from it.
+ */
+export const PayToStartLanding: FC<{ offer: PayToStartOfferId; priceCents: number }> = ({
+  offer,
+  priceCents,
+}) => {
+  const price = formatOfferPrice(priceCents);
+  return (
+    <PtsCheckoutProvider offer={offer} priceCents={priceCents} price={price}>
+      <div className="min-h-screen bg-white font-sans text-[#161021]">
+        {/* The global body is dark (var(--color-bg)) and shows through an overscroll
+            bounce; the landing paints it white the same way. */}
+        <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
+        <PtsHeader />
+        <main id="main-content" className="mx-auto w-full max-w-[1288px] px-4 pb-24 sm:px-6">
+          <PtsBreadcrumb />
+          <PtsNotice />
+          <div className="xl:flex xl:items-start xl:gap-12">
+            <div className="mx-auto w-full max-w-[850px] xl:mx-0 xl:min-w-0 xl:flex-1">
+              <PtsHero />
+              <PtsFindOut />
+              <PtsInsideReport price={price} />
+              <PtsPersonalities />
+              <PtsHowItWorks price={price} />
+              <PtsTestimonials />
+              <PtsResearch />
+              <PtsOnePrice price={price} />
+              <PtsFaq />
+            </div>
+            <aside
+              aria-label="Price"
+              className="hidden xl:sticky xl:top-6 xl:block xl:w-[342px] xl:shrink-0"
+            >
+              <PtsPriceCard price={price} />
+            </aside>
+          </div>
+          <PtsFinalCta price={price} />
+        </main>
+        <PtsFooter />
+        <PtsStickyBar />
+      </div>
+    </PtsCheckoutProvider>
+  );
+};
