@@ -16,7 +16,7 @@ import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
  * site ignores the parameter.
  */
 export const metadata: Metadata = {
-  title: "Checkout status | Facets",
+  title: "Checkout status | LoveIQ",
   robots: { index: false, follow: false },
 };
 

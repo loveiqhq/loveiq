@@ -1,21 +1,65 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { FC } from "react";
+import type { FC, MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 import { restoreScroll } from "@shared/ui/restore-scroll";
 
+/** What was pressed in the nav, for a page that counts where its visitors go. */
+export type WNavItem = "logo" | "home" | "about" | "glossary" | "trust_center" | "cta";
+
+/**
+ * The "Start test now" button. On the site it starts the free survey; a page that sells
+ * before the survey (pay to start) points it at its own price with an in-page `#…` link.
+ */
+export interface WNavCta {
+  href: string;
+  /** Runs on a press, before the browser follows `href`. */
+  onPress?: () => void;
+}
+
+interface WNavSectionProps {
+  /** Defaults to the free survey, counted as the landing's `cta_click` from "nav". */
+  cta?: WNavCta;
+  onNavigate?: (item: WNavItem, place: "bar" | "menu") => void;
+  /** The bar's inner width: the landing's `content-shell` unless the page has its own grid. */
+  shellClassName?: string;
+}
+
+const SURVEY_CTA: WNavCta = { href: "/survey", onPress: () => trackStartSurvey("nav") };
+
 // White-landing nav. Links point to the existing (dark) sub-pages — only the
 // landing page has a white variant. Labels follow the Figma design
 // ("About us", "Trust Center").
-const navLinks = [
-  { label: "Home", href: "/" },
-  { label: "About us", href: "/about" },
-  { label: "Glossary", href: "/glossary" },
-  { label: "Trust Center", href: "/trust-zone" },
+const navLinks: { label: string; href: string; item: WNavItem }[] = [
+  { label: "Home", href: "/", item: "home" },
+  { label: "About us", href: "/about", item: "about" },
+  { label: "Glossary", href: "/glossary", item: "glossary" },
+  { label: "Trust Center", href: "/trust-zone", item: "trust_center" },
 ];
+
+const isInPageHref = (href: string) => href.startsWith("#");
+
+/**
+ * The button's link. An in-page `#…` one is a plain anchor, which the browser (or Lenis,
+ * whose `anchors` option reads the target's scroll-margin) scrolls to, as the report's
+ * chapter links do; any other is a client-side Link.
+ */
+const CtaLink: FC<{
+  href: string;
+  className: string;
+  ariaLabel: string;
+  tabIndex?: number;
+  onClick: (event: MouseEvent<HTMLAnchorElement>) => void;
+  children: ReactNode;
+}> = ({ href, ariaLabel, ...rest }) =>
+  isInPageHref(href) ? (
+    <a href={href} aria-label={ariaLabel} {...rest} />
+  ) : (
+    <Link href={href} aria-label={ariaLabel} {...rest} />
+  );
 
 const SCROLL_THRESHOLD = 15;
 const MOBILE_BREAKPOINT = 640;
@@ -85,7 +129,11 @@ const arrowPath = (
   </>
 );
 
-const WNavSection: FC = () => {
+const WNavSection: FC<WNavSectionProps> = ({
+  cta = SURVEY_CTA,
+  onNavigate,
+  shellClassName = "content-shell",
+}) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { isHidden, isMobile } = useScrollDirection();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -150,8 +198,31 @@ const WNavSection: FC = () => {
     };
   }, [menuOpen]);
 
+  // An in-page button pressed in the menu jumps once the menu has let go of the page:
+  // closing it puts the page back where it was (restoreScroll above, whose cleanup React
+  // runs before this), which would undo a jump made during the tap. As the report's
+  // chapter drawer does (ReportMobileNav's pendingJumpRef).
+  const pendingJumpRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (menuOpen || !pendingJumpRef.current) return;
+    const id = pendingJumpRef.current;
+    pendingJumpRef.current = null;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [menuOpen]);
+
   const closeMenu = () => setMenuOpen(false);
   const shouldHide = isHidden && isMobile;
+
+  const pressCta = (place: "bar" | "menu", event: MouseEvent<HTMLAnchorElement>) => {
+    cta.onPress?.();
+    onNavigate?.("cta", place);
+    if (place === "bar") return;
+    if (isInPageHref(cta.href)) {
+      event.preventDefault();
+      pendingJumpRef.current = cta.href.slice(1);
+    }
+    closeMenu();
+  };
 
   return (
     <header
@@ -163,13 +234,14 @@ const WNavSection: FC = () => {
         onClick={closeMenu}
       />
       <div className="pointer-events-auto border-b border-black/[0.08] bg-white/90 backdrop-blur">
-        <div className="content-shell">
+        <div className={shellClassName}>
           <nav className="relative flex h-[64px] items-center justify-between gap-3">
             {/* Logo */}
             <Link
               href="/"
               className="focus-visible-ring flex items-center gap-2"
               onClick={(e) => {
+                onNavigate?.("logo", "bar");
                 if (window.location.pathname === "/") {
                   e.preventDefault();
                   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -187,6 +259,7 @@ const WNavSection: FC = () => {
                   key={item.href}
                   href={item.href}
                   className="focus-visible-ring rounded text-sm font-bold text-[#3f3a4d] transition hover:text-black"
+                  onClick={() => onNavigate?.(item.item, "bar")}
                 >
                   {item.label}
                 </Link>
@@ -195,11 +268,11 @@ const WNavSection: FC = () => {
 
             {/* Right: CTA + hamburger */}
             <div className="flex items-center gap-2">
-              <Link
-                href="/survey"
-                aria-label="Start test now - navigation"
+              <CtaLink
+                href={cta.href}
+                ariaLabel="Start test now - navigation"
                 className="focus-visible-ring group inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
-                onClick={() => trackStartSurvey("nav")}
+                onClick={(event) => pressCta("bar", event)}
               >
                 <span>Start test now</span>
                 <svg
@@ -214,7 +287,7 @@ const WNavSection: FC = () => {
                 >
                   {arrowPath}
                 </svg>
-              </Link>
+              </CtaLink>
               <button
                 type="button"
                 className={`focus-visible-ring flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.03] text-gray-700 transition-colors hover:border-black/20 hover:text-black sm:hidden ${menuOpen ? "hamburger-open" : ""}`}
@@ -247,7 +320,10 @@ const WNavSection: FC = () => {
                 href={item.href}
                 tabIndex={menuOpen ? 0 : -1}
                 className="focus-visible-ring flex w-full items-center rounded-[14px] px-4 py-3 text-[15px] font-semibold text-gray-800 transition-all duration-200 hover:translate-x-1 hover:bg-black/[0.04] hover:text-black active:scale-[0.98]"
-                onClick={closeMenu}
+                onClick={() => {
+                  onNavigate?.(item.item, "menu");
+                  closeMenu();
+                }}
               >
                 {item.label}
               </Link>
@@ -255,15 +331,12 @@ const WNavSection: FC = () => {
           ))}
           <div className="mx-4 my-2 h-px bg-black/[0.08]" />
           <div className="mobile-menu-link" style={{ transitionDelay: menuOpen ? "320ms" : "0ms" }}>
-            <Link
-              href="/survey"
+            <CtaLink
+              href={cta.href}
               tabIndex={menuOpen ? 0 : -1}
-              aria-label="Start test now"
+              ariaLabel="Start test now"
               className="focus-visible-ring mx-2 mt-1 flex items-center justify-center gap-2 rounded-full bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-              onClick={() => {
-                trackStartSurvey("nav");
-                closeMenu();
-              }}
+              onClick={(event) => pressCta("menu", event)}
             >
               <span>Start test now</span>
               <svg
@@ -278,7 +351,7 @@ const WNavSection: FC = () => {
               >
                 {arrowPath}
               </svg>
-            </Link>
+            </CtaLink>
           </div>
         </div>
       </div>

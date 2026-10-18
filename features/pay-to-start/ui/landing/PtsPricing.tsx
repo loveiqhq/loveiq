@@ -11,9 +11,12 @@ import { PTS_H2, PTS_SECTION } from "./ptsStyles";
  * screens, is PtsStickyBar). Every button is the same checkout (PtsCheckout.tsx).
  */
 
-/** 1706:1918: the band with the price and the button, what is included, the guarantee. */
+/**
+ * 1706:1918: the band with the price and the button, what is included, the guarantee.
+ * `#price` is where the header's "Start test now" takes the visitor, at every width.
+ */
 export const PtsOnePrice: FC<{ price: string }> = ({ price }) => (
-  <section aria-labelledby="pts-one-price" className={PTS_SECTION}>
+  <section id="price" aria-labelledby="pts-one-price" className={PTS_SECTION}>
     <h2 id="pts-one-price" className={PTS_H2}>
       {PTS_ONE_PRICE.title}
     </h2>
