@@ -27,7 +27,7 @@ import { sanitizeUtmSource } from "@shared/url/utm";
 import { cookies } from "next/headers";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
-import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import { PAY_TO_START_JOURNEY, readPrepaidToken } from "@features/pay-to-start/logic/journey";
 
 // Top-of-funnel signals that all predate survey_submission, so analytics_event
 // can't host them — see funnel_event migrations for the table-level CHECK
@@ -151,7 +151,11 @@ export async function POST(request: Request) {
         // arm it wanted, with no matching visit row. The fetch is same-origin, so
         // the cookie arrives anyway — reading it here is both the smaller diff
         // and one trust boundary fewer.
-        ...(PAY_TO_START_EVENTS.has(event)
+        // Pay to start: its own two steps, and every step of a survey opened by a browser
+        // that paid before it (its entitlement cookie), as proxy.ts labels that survey's
+        // page view. Otherwise an arm cookie from an earlier visit to "/" credited that arm
+        // with a buyer's survey start that no visit of the arm led to.
+        ...(PAY_TO_START_EVENTS.has(event) || readPrepaidToken(request.headers.get("cookie"))
           ? { landing_variant: PAY_TO_START_JOURNEY }
           : isLandingVariant(armFromCookie)
             ? { landing_variant: armFromCookie }

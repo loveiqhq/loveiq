@@ -355,6 +355,7 @@ export async function runFirstPaymentEffects({
   await step("posthog", () =>
     sendPosthogPurchaseEvent({
       email,
+      anonDistinctId: metadata.posthogDistinctId || null,
       transactionId: session.id,
       value: amountCents / 100,
       currency,

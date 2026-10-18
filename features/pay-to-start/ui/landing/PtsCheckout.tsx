@@ -11,12 +11,18 @@ import {
   type FC,
   type ReactNode,
 } from "react";
+import posthog from "posthog-js";
 import { getGaMeasurementContext } from "@features/analytics/client";
 import type { PayToStartCheckoutResponse } from "@features/pay-to-start/logic/api";
 import type { PayToStartOfferId } from "@features/pay-to-start/logic/offer";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { getStoredUtm } from "@shared/url/utm";
-import { trackPtsCheckoutFailed, trackPtsCtaClick, type PtsCtaLocation } from "../analytics";
+import {
+  trackPtsCheckoutFailed,
+  trackPtsCheckoutOpened,
+  trackPtsCtaClick,
+  type PtsCtaLocation,
+} from "../analytics";
 import { PTS_NOTICES } from "./payToStartContent";
 import { ArrowGlyph, Spinner } from "./ptsIcons";
 import { PTS_CTA_GRADIENT } from "./ptsStyles";
@@ -73,7 +79,26 @@ type Outcome = { kind: "navigating" } | { kind: "failed"; message: string; reaso
  */
 const loadPage = (url: string) => window.location.assign(new URL(url, window.location.origin).href);
 
-async function requestCheckout(offer: PayToStartOfferId, priceCents: number): Promise<Outcome> {
+/**
+ * The visitor's anonymous PostHog id, so the server's purchase event can join this visit's
+ * history (the ad, the page) to the buyer. Only while anonymous: an identified browser's id
+ * is an email, which has no place in Stripe's metadata.
+ */
+function anonymousPosthogId(): string | null {
+  try {
+    if (posthog.get_property("$user_state") !== "anonymous") return null;
+    const id = posthog.get_distinct_id();
+    return typeof id === "string" && id.length > 0 && id.length <= 200 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestCheckout(
+  offer: PayToStartOfferId,
+  priceCents: number,
+  location: PtsCtaLocation
+): Promise<Outcome> {
   const ga = getGaMeasurementContext();
   let response: Response;
   try {
@@ -86,6 +111,7 @@ async function requestCheckout(offer: PayToStartOfferId, priceCents: number): Pr
         gaClientId: ga.clientId,
         gaSessionId: ga.sessionId,
         gaConsent: ga.consent,
+        posthogDistinctId: anonymousPosthogId(),
         utmTracker: getStoredUtm(),
       }),
     });
@@ -113,6 +139,7 @@ async function requestCheckout(offer: PayToStartOfferId, priceCents: number): Pr
 
   switch (state.state) {
     case "redirect":
+      trackPtsCheckoutOpened({ location, offer, priceCents });
       loadPage(state.url);
       return { kind: "navigating" };
     case "paid":
@@ -153,7 +180,7 @@ export const PtsCheckoutProvider: FC<{
       inFlight.current = true;
       setState({ status: "starting", location });
       trackPtsCtaClick({ location, offer, priceCents });
-      void requestCheckout(offer, priceCents).then((outcome) => {
+      void requestCheckout(offer, priceCents, location).then((outcome) => {
         if (outcome.kind === "navigating") return;
         inFlight.current = false;
         trackPtsCheckoutFailed({ location, reason: outcome.reason });

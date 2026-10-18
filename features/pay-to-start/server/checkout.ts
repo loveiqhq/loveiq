@@ -84,6 +84,7 @@ export interface PayToStartSessionInput {
   gaClientId: string | null;
   gaSessionId: string | null;
   gaConsent: boolean;
+  posthogDistinctId?: string | null;
   utmTracker: string | null;
   requestIp: string | null;
   userAgent: string | null;
@@ -136,6 +137,7 @@ export function buildPayToStartSessionParams(
       gaClientId: toMetadataValue(input.gaClientId),
       gaSessionId: toMetadataValue(input.gaSessionId),
       gaAnalyticsConsent: input.gaConsent ? "1" : "0",
+      posthogDistinctId: toMetadataValue(input.posthogDistinctId),
       utmSource,
       utmCampaign,
       requestIp: toMetadataValue(input.requestIp),
