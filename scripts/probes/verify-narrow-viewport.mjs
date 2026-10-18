@@ -11,7 +11,7 @@
  * at — 123px past the edge on a 262px viewport.
  *
  *   REPORT_ORIGIN=https://www.loveiq.org node scripts/probes/verify-narrow-viewport.mjs
- *   MUTATE=1 ...   # removes the wrapping — narrow widths must FAIL
+ *   MUTATE=1 ...   # puts paragraphs on one line — narrow widths must FAIL
  *
  * TWO MEASUREMENT TRAPS, both of which produced a wrong answer first:
  *
@@ -70,23 +70,60 @@ for (const width of WIDTHS) {
     await page.waitForTimeout(2500);
 
     if (process.env.MUTATE === "1") {
+      // Report 3.0 prints no citation URLs, so unwrapping .report-prose alone no longer
+      // overflowed anything: the self-check passed on a page it could not break. One-line
+      // paragraphs run past the edge in the current layout too.
       await page.addStyleTag({
-        content: ".report-prose, .report-prose a { overflow-wrap: normal !important; }",
+        content:
+          ".report-prose, .report-prose a { overflow-wrap: normal !important; }" +
+          " .report-content p { white-space: nowrap !important; }",
       });
       await page.waitForTimeout(400);
     }
 
     const result = await page.evaluate(() => {
       const vw = window.innerWidth;
+      /**
+       * Inside a horizontal scroller, a card past the edge is reached by scrolling it, not
+       * lost. Listing scrollers by class let Report 3.0's science carousel (`.rv3-sci__track`)
+       * read as overflow at every width and open two draft PRs (#556, #568) for a page that
+       * does not scroll sideways. Only a scroller that scrolls sideways alone: a panel that
+       * scrolls down reports overflow-x auto too (the pricing modal's scroll region), and
+       * would have hidden everything in it. A decoration a parent clips (`.rv4-turn__blob`,
+       * `.rv4-sun__blob`, empty aria-hidden spans under `overflow-x: clip`) never shows past
+       * the edge either. Decorative means marked AND empty: the report root clips sideways
+       * (`.report-page`), so "has no text" exempted every image and icon, and "aria-hidden"
+       * alone exempted the locked chapters' text and the whole report behind an open modal.
+       * The scroller itself is still measured.
+       */
+      const scrolledOrClipped = (el) => {
+        const hidden = el.closest("[aria-hidden='true']");
+        const decorative =
+          (!!hidden && !(hidden.textContent ?? "").trim()) || el.matches("[role='presentation']");
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+          const ox = getComputedStyle(a).overflowX;
+          const sideways =
+            a.scrollWidth > a.clientWidth + 1 && a.scrollHeight <= a.clientHeight + 1;
+          if ((ox === "auto" || ox === "scroll") && sideways) return true;
+          if ((ox === "hidden" || ox === "clip") && decorative) return true;
+        }
+        return false;
+      };
       const offenders = [...document.querySelectorAll("body *")]
         .filter((el) => {
           const box = el.getBoundingClientRect();
           if (box.width < 2 || box.height < 2) return false;
           const cs = getComputedStyle(el);
           if (cs.position === "fixed") return false;
+          // Not what is hidden: the fantasy map's tap readouts are visibility: hidden, 6-10px
+          // past the edge at 262px, until a dot is tapped. Opacity is not hiding here: sections
+          // below the fold wait at opacity 0 for their scroll reveal, in the place they show.
+          if (!el.checkVisibility({ visibilityProperty: true })) return false;
           // Horizontal scrollers and the decorative bleed are outside the
           // viewport by design.
-          if (el.closest(".stage-explorer__carousel, .rpm-tm__track")) return false;
+          if (el.closest(".stage-explorer__carousel, .rpm-tm__track") || scrolledOrClipped(el)) {
+            return false;
+          }
           if (/orb|carousel|stage-card|marquee/.test(String(el.className))) return false;
           if (cs.display === "inline") {
             return [...el.getClientRects()].some((r) => r.right > vw + 2 || r.left < -2);

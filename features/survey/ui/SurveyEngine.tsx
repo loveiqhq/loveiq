@@ -82,6 +82,9 @@ function entriesAboveBase(currentIndex: number): number {
   return Math.max(0, q - base);
 }
 
+/** How long a page that loaded mid-submit waits before sending the run again. */
+const RESUME_AFTER_MS = 2000;
+
 /** Where a touch never starts a swipe between questions. */
 const NO_SWIPE = "input, textarea, select, [contenteditable], [data-no-swipe]";
 
@@ -102,6 +105,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     retryPending,
     clearPendingCompletion,
     hasPendingCompletion,
+    pendingSentMomentsAgo,
     reportToken,
     submissionId,
     status: submitStatus,
@@ -228,11 +232,32 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // nothing is in flight (it landed while the reader was elsewhere), so the screens that
   // lead to the report. "processing" here waited for a submit that would never come, at
   // 95%, with no button.
+  /**
+   * Mounting onto a finished run whose submit was sent moments ago: the page loaded again
+   * while it was in flight. In a restored tab (a reopened tab, or a phone bringing the
+   * browser back) the finish's step back through history loads the survey anew, and 2 of
+   * 195 finishers (1-15 Oct 2026) met "Submission Interrupted" for answers the server had
+   * already saved. Sent again, it gets that submission back, so the reader carries on.
+   */
+  const [resumesSubmit] = useState(
+    () => currentIndex >= totalQuestions && hasPendingCompletion && pendingSentMomentsAgo
+  );
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() => {
     if (currentIndex < totalQuestions) return "processing";
-    if (hasPendingCompletion) return "done";
+    if (hasPendingCompletion) return resumesSubmit ? "processing" : "done";
     return submitStatus === "idle" ? "wizard" : "processing";
   });
+  const retryRef = useRef(retryPending);
+  useEffect(() => {
+    retryRef.current = retryPending;
+  }, [retryPending]);
+  useEffect(() => {
+    if (!resumesSubmit) return;
+    // Not at once: a repeat that beats the original's insert meets the email cooldown
+    // ("Almost There") instead of the submission it would have found.
+    const timer = window.setTimeout(() => void retryRef.current(), RESUME_AFTER_MS);
+    return () => window.clearTimeout(timer);
+  }, [resumesSubmit]);
 
   // Track survey start once
   useEffect(() => {

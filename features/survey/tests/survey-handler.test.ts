@@ -1016,6 +1016,49 @@ describe("POST /api/survey — a finished survey is never stranded", () => {
     expect(mockResendEmailsSend).not.toHaveBeenCalled();
   });
 
+  it("deletes the run's draft once a submission lands", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+
+    await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+
+    await vi.waitFor(() =>
+      expect(
+        mockFetchWithTimeout.mock.calls.some(
+          (c) =>
+            (c[0] as string).includes(`/survey_partial_save?session_id=eq.${SESSION}`) &&
+            (c[1] as Init | undefined)?.method === "DELETE"
+        )
+      ).toBe(true)
+    );
+  });
+
+  it("deletes the draft a replayed submit saved again on its way here", async () => {
+    // A repeat (Retry, a page that loaded mid-submit and resent) re-saves the draft first,
+    // after the first submit's delete has run: the answers and IP then sat there 30 days.
+    routeFetch({
+      "/survey_submission?session_id=": () => ({
+        ok: true,
+        json: async () => [{ id: 77, status: "completed" }],
+      }),
+      "/report_access_token?survey_submission_id=eq.77": () => ({
+        ok: true,
+        json: async () => [{ token: "rpt_existing" }],
+      }),
+    });
+
+    await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+
+    await vi.waitFor(() =>
+      expect(
+        mockFetchWithTimeout.mock.calls.some(
+          (c) =>
+            (c[0] as string).includes(`/survey_partial_save?session_id=eq.${SESSION}`) &&
+            (c[1] as Init | undefined)?.method === "DELETE"
+        )
+      ).toBe(true)
+    );
+  });
+
   it("gives a replayed submit whose submission never got a link a new one", async () => {
     routeFetch({
       "/survey_submission?session_id=": () => ({

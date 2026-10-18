@@ -121,6 +121,35 @@ async function reportTokenFor(submissionId: number): Promise<string | null> {
 }
 
 /**
+ * Once the submission is persisted, the partial-save row is dead weight and contains PII
+ * (raw answers). Delete it so we don't retain drafts past the point of need. A pg_cron job
+ * sweeps any stragglers (e.g. session_id mismatch or pre-cleanup-deploy rows).
+ */
+function scheduleDraftCleanup(sessionId: string, submissionId: number): void {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return;
+  scheduleAfterResponse("survey-partial-cleanup", async () => {
+    try {
+      await fetchWithTimeout(
+        `${supabaseUrl}/rest/v1/survey_partial_save?session_id=eq.${encodeURIComponent(sessionId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            Prefer: "return=minimal",
+          },
+          timeoutMs: 5000,
+        }
+      );
+    } catch (err) {
+      logger.warn({ err, sessionId, submissionId }, "Failed to delete partial save");
+    }
+  });
+}
+
+/**
  * The reply for a submit whose session already has a submission (see POST). Sends
  * nothing: the email and the Slack post went out with the first one.
  */
@@ -140,6 +169,10 @@ async function replyWithExistingSubmission(body: unknown): Promise<NextResponse 
       await ensurePersonalReportForSubmission({ reportToken, submissionId: existing.id });
     });
   }
+  // A repeat re-saves the draft on its way here (the client's recovery snapshot): Retry, a
+  // page that loaded mid-submit and resent, an admin recovery. The first submit's delete
+  // has run already, so without this one the answers and IP sat in it for 30 days.
+  scheduleDraftCleanup(sessionId, existing.id);
   return NextResponse.json(
     { success: true, submissionId: existing.id, ...(reportToken ? { reportToken } : {}) },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
@@ -638,36 +671,7 @@ export async function POST(request: Request) {
       });
     });
 
-    // Once the submission is persisted, the partial-save row is dead weight
-    // and contains PII (raw answers). Delete it so we don't retain abandoned
-    // drafts past the point of need. A pg_cron job sweeps any stragglers
-    // (e.g. session_id mismatch or pre-cleanup-deploy rows).
-    if (sessionId) {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (supabaseUrl && serviceKey) {
-        scheduleAfterResponse("survey-partial-cleanup", async () => {
-          try {
-            await fetchWithTimeout(
-              `${supabaseUrl}/rest/v1/survey_partial_save?session_id=eq.${encodeURIComponent(
-                sessionId
-              )}`,
-              {
-                method: "DELETE",
-                headers: {
-                  apikey: serviceKey,
-                  Authorization: `Bearer ${serviceKey}`,
-                  Prefer: "return=minimal",
-                },
-                timeoutMs: 5000,
-              }
-            );
-          } catch (err) {
-            logger.warn({ err, sessionId, submissionId }, "Failed to delete partial save");
-          }
-        });
-      }
-    }
+    if (sessionId) scheduleDraftCleanup(sessionId, submissionId);
 
     scheduleAfterResponse("survey-complete-email", async () => {
       if (isExisting) return;

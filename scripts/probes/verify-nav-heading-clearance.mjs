@@ -70,7 +70,13 @@ for (const name of DEVICE_NAMES) {
       .catch(() => {});
     await p.waitForTimeout(3000);
     if (process.env.MUTATE === "1") {
-      await p.addStyleTag({ content: ".report-section--welcome { padding-top: 0 !important; }" });
+      // Report 3.0 clears the bar with the shell's, the content's and the lead part's top
+      // padding; v1 with the welcome section's. Without them the heading starts under it.
+      await p.addStyleTag({
+        content:
+          ".report-section--welcome, .report-shell, .report-content, .rv4-part--lead" +
+          " { padding-top: 0 !important; }",
+      });
       await p.waitForTimeout(300);
     }
     const r = await p.evaluate(() => {
@@ -83,10 +89,13 @@ for (const name of DEVICE_NAMES) {
           r: Math.round(b.right),
         };
       };
-      // the sticky chapter selector and the first visible heading
+      // the sticky chapter selector and the first visible heading. Report 3.0's pill
+      // shows the chapter's name alone ("Introduction") and says "Chapter:" only in its
+      // aria-label, so the text test found no bar and this exited 3 from 2026-10-06.
       const nav = [...document.querySelectorAll("button,div,nav")].find(
         (e) =>
-          /^\s*Chapter:/.test(e.textContent || "") &&
+          (/^\s*Chapter:/.test(e.textContent || "") ||
+            /^Chapter:/.test(e.getAttribute("aria-label") || "")) &&
           e.getBoundingClientRect().height > 20 &&
           e.getBoundingClientRect().height < 120
       );
