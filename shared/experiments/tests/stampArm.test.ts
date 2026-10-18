@@ -54,6 +54,22 @@ describe("stampLandingArm", () => {
     expect(out).not.toContain("landing_variant");
   });
 
+  it("with arm:false (pay to start) stamps no arm, cookie or not, and still strips a claim", async () => {
+    // A buyer who paid before the survey may hold a cookie from an earlier visit to the
+    // home page; that arm must not be credited with their purchase.
+    cookie("white_card");
+    expect(await stampLandingArm('{"utm_source":"google"}', { arm: false })).toBe(
+      '{"utm_source":"google"}'
+    );
+    expect(
+      parse(
+        await stampLandingArm('{"utm_source":"google","landing_variant":"white"}', { arm: false })
+      )
+    ).toEqual({ utm_source: "google" });
+    expect(await stampLandingArm(null, { arm: false })).toBeNull();
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
   it("the cookie overrules a conflicting claim in the body", async () => {
     cookie("white_prev");
     const out = await stampLandingArm('{"landing_variant":"white"}');

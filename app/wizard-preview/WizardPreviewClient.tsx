@@ -2,13 +2,21 @@
 
 import { useState } from "react";
 import PreReportWizard from "@features/survey/ui/PreReportWizard";
+import type { WizardVariant } from "@features/survey/ui/wizard/wizardContent";
 
 /**
  * The wizard as a survey finisher meets it, with two differences: it tracks nothing,
  * so a reviewer's clicks never reach the funnel's events, and where the real flow
  * would open the report (CONTINUE on the last slide, or SKIP INTRO) it starts over.
  */
-export default function WizardPreviewClient() {
+export default function WizardPreviewClient({ variant = "standard" }: { variant?: WizardVariant }) {
   const [run, setRun] = useState(0);
-  return <PreReportWizard key={run} track={false} onComplete={() => setRun((r) => r + 1)} />;
+  return (
+    <PreReportWizard
+      key={run}
+      track={false}
+      variant={variant}
+      onComplete={() => setRun((r) => r + 1)}
+    />
+  );
 }

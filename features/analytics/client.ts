@@ -1251,6 +1251,8 @@ export const trackWizardSlideAdvanced = (params: {
   from_slide: number;
   to_slide: number;
   direction: "next" | "previous";
+  /** Only on the pay-to-start wizard (four of the six slides); absent means the six. */
+  wizard_variant?: "pay_to_start";
 }) => {
   track("wizard_slide_advanced", params);
   persistAnalyticsEvent("wizard_slide_advanced", params);
@@ -1275,7 +1277,12 @@ export const trackWizardMapStep = (params: {
  * 2) from which of its steps. Its own event: wizard_slide_advanced means "moved to slide
  * 0-5" to the digests, and a skip goes to no slide.
  */
-export const trackWizardSkipped = (params: { from_slide: number; map_step?: number }) => {
+export const trackWizardSkipped = (params: {
+  from_slide: number;
+  map_step?: number;
+  /** Only on the pay-to-start wizard; absent means the six. */
+  wizard_variant?: "pay_to_start";
+}) => {
   track("wizard_skipped", params);
   persistAnalyticsEvent("wizard_skipped", params);
 };

@@ -17,6 +17,11 @@ export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
  * a report token is an access credential that should not outlive the tab.
  */
 export const COMPLETED_REPORT_KEY = "loveiq-completed-report";
+/**
+ * Set when this tab's finished run was paid for before the survey (pay to start), so a
+ * reload during the pre-report wizard still shows the four-slide one.
+ */
+export const PAID_WIZARD_KEY = "loveiq-paid-wizard";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -158,6 +163,7 @@ export function getSessionId(): string {
 
 /** The finished report, for a browser that refuses storage: remembered for this page load. */
 let inMemoryCompleted: string | null = null;
+let inMemoryPaidWizard = false;
 
 /** Drop the draft's saved id (the run it belonged to is over). */
 export function forgetSessionMirror(): void {
@@ -382,12 +388,35 @@ export function completedReportToken(): string | null {
 export function forgetCompletedReport(): void {
   inMemoryCompleted = null;
   inMemorySessionId = null;
+  inMemoryPaidWizard = false;
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
+    sessionStorage.removeItem(PAID_WIZARD_KEY);
     forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+/** Remember that this tab's finished run was paid for before the survey (pay to start). */
+export function rememberPaidWizard(): void {
+  inMemoryPaidWizard = true;
+  if (!canUseStorage()) return;
+  try {
+    sessionStorage.setItem(PAID_WIZARD_KEY, "1");
+  } catch {
+    /* kept in memory for this page load */
+  }
+}
+
+/** Whether this tab's finished run was paid for before the survey. */
+export function paidWizardRemembered(): boolean {
+  if (!canUseStorage()) return inMemoryPaidWizard;
+  try {
+    return sessionStorage.getItem(PAID_WIZARD_KEY) === "1" || inMemoryPaidWizard;
+  } catch {
+    return inMemoryPaidWizard;
   }
 }

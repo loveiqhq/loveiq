@@ -46,6 +46,24 @@ import {
 import { describeQuestionCount, dropBlankOptionalAnswers } from "@features/survey/server/utils";
 import { SURVEY_EMAIL_RE, tidySurveyEmail } from "@features/survey/email";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
+import {
+  JOURNEY_TRACKER_KEY,
+  PAY_TO_START_JOURNEY,
+  readPrepaidToken,
+} from "@features/pay-to-start/logic/journey";
+import {
+  claimPayToStartForSubmission,
+  claimResponseFields,
+  claimSettlesCookie,
+  claimedEntitlementFor,
+  reportClaimProblem,
+  type ClaimOutcome,
+} from "@features/pay-to-start/server/claim";
+import {
+  PREPAID_COOKIE,
+  clearedPrepaidCookieOptions,
+} from "@features/pay-to-start/server/entitlement";
+import { reportFullEmail } from "@features/report/server/emails/report-full";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -152,8 +170,15 @@ function scheduleDraftCleanup(sessionId: string, submissionId: number): void {
 /**
  * The reply for a submit whose session already has a submission (see POST). Sends
  * nothing: the email and the Slack post went out with the first one.
+ *
+ * Pay to start: it claims what the browser's cookie holds (the first reply may have
+ * died before its claim), or reports the claim that submission already made, so a lost
+ * reply never leaves a paid report locked or the wizard asking for nothing.
  */
-async function replyWithExistingSubmission(body: unknown): Promise<NextResponse | null> {
+async function replyWithExistingSubmission(
+  body: unknown,
+  prepaidToken: string | null
+): Promise<NextResponse | null> {
   const sessionId = (body as { sessionId?: unknown } | null)?.sessionId;
   if (typeof sessionId !== "string" || !UUID_RE.test(sessionId)) return null;
   const existing = await fetchSubmissionBySessionId(sessionId).catch(() => null);
@@ -173,10 +198,29 @@ async function replyWithExistingSubmission(body: unknown): Promise<NextResponse 
   // page that loaded mid-submit and resent, an admin recovery. The first submit's delete
   // has run already, so without this one the answers and IP sat in it for 30 days.
   scheduleDraftCleanup(sessionId, existing.id);
-  return NextResponse.json(
-    { success: true, submissionId: existing.id, ...(reportToken ? { reportToken } : {}) },
+  const claim = prepaidToken
+    ? await claimPayToStartForSubmission({
+        reportToken,
+        submissionId: existing.id,
+        token: prepaidToken,
+      })
+    : await claimedEntitlementFor(existing.id);
+  if (claim) {
+    scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, existing.id));
+  }
+  const response = NextResponse.json(
+    {
+      success: true,
+      submissionId: existing.id,
+      ...(reportToken ? { reportToken } : {}),
+      ...(claim ? claimResponseFields(claim) : {}),
+    },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
   );
+  if (prepaidToken && claim && claimSettlesCookie(claim)) {
+    response.cookies.set(PREPAID_COOKIE, "", clearedPrepaidCookieOptions());
+  }
+  return response;
 }
 
 const surveySchema = z.object({
@@ -386,12 +430,16 @@ export async function POST(request: Request) {
 
   const body: unknown = await request.json().catch(() => ({}));
 
+  // Pay to start: the entitlement this browser paid for before the survey, if any. Its
+  // httpOnly cookie is the only link between the payment and these answers.
+  const prepaidToken = readPrepaidToken(request.headers.get("cookie"));
+
   // A replay of a submission that already landed gets that submission back instead of a
   // refusal: a reply lost to the network, a reload mid-submit, or a draft an admin
   // recovered. Re-checking its payload or its email cooldown could only strand the
   // reader (a Retry inside the cooldown was refused for five minutes, shown as "we lost
   // connection").
-  const replay = await replyWithExistingSubmission(body);
+  const replay = await replyWithExistingSubmission(body, prepaidToken);
   if (replay) return replay;
 
   const parsed = surveySchema.safeParse(body);
@@ -466,7 +514,16 @@ export async function POST(request: Request) {
    */
   const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
 
-  let mergedUtmTracker = await stampLandingArm(utmTracker);
+  // A visitor who paid before the survey is in no landing arm (stampLandingArm), and is
+  // labelled by the server, never the browser: `journey` is stripped from everyone
+  // else's tracker. Like every stamp here it never creates a tracker; the entitlement's
+  // consumed_submission_id is the record, the label a convenience for grouping.
+  let mergedUtmTracker = await stampLandingArm(utmTracker, { arm: !prepaidToken });
+  mergedUtmTracker = mergeTrackerArm(
+    mergedUtmTracker,
+    JOURNEY_TRACKER_KEY,
+    prepaidToken ? PAY_TO_START_JOURNEY : null
+  );
   /**
    * NEVER CREATE A TRACKER JUST FOR THE ARM.
    *
@@ -641,6 +698,20 @@ export async function POST(request: Request) {
       reportTokenPromise,
     ]);
 
+    // Pay to start: claim what this browser paid for, before the reply, so the report
+    // opens unlocked. After scoring, which the full-report tier needs (the primary
+    // archetype). Never throws; a problem is reported after the reply.
+    const claim: ClaimOutcome | null = prepaidToken
+      ? await claimPayToStartForSubmission({
+          reportToken: reportToken ?? null,
+          submissionId,
+          token: prepaidToken,
+        })
+      : null;
+    if (claim) {
+      scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, submissionId));
+    }
+
     // End of user-blocking work. Everything below is fire-and-forget via
     // scheduleAfterResponse and does not affect response latency.
     const tPost = performance.now();
@@ -707,22 +778,34 @@ export async function POST(request: Request) {
           )
         : undefined;
 
-      const experiment = "survey-complete";
-      const variant = pickEmailVariant(normalizedEmail, experiment);
+      /**
+       * Pay to start: a reader whose report is unlocked gets the full-report email (its A
+       * copy, as a purchase does), and any other reader who came that way the survey
+       * email's A copy. Neither carries the A/B tags: these readers are in neither test.
+       */
+      const experiment = claim ? null : "survey-complete";
+      const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
       const tpl =
-        variant === "b"
-          ? surveyCompleteBEmail({
+        claim?.outcome === "unlocked"
+          ? reportFullEmail({
               firstName: normalizedFirstName,
               reportUrl,
               siteUrl,
               unsubscribeUrl,
             })
-          : surveyCompleteEmail({
-              firstName: normalizedFirstName,
-              reportUrl,
-              siteUrl,
-              unsubscribeUrl,
-            });
+          : variant === "b"
+            ? surveyCompleteBEmail({
+                firstName: normalizedFirstName,
+                reportUrl,
+                siteUrl,
+                unsubscribeUrl,
+              })
+            : surveyCompleteEmail({
+                firstName: normalizedFirstName,
+                reportUrl,
+                siteUrl,
+                unsubscribeUrl,
+              });
 
       try {
         const { error } = await Promise.race([
@@ -734,7 +817,16 @@ export async function POST(request: Request) {
             html: tpl.html,
             text: tpl.text,
             // Echoed back on every Resend webhook, which is how the A/B result is read.
-            tags: emailExperimentTags(experiment, variant),
+            tags: experiment
+              ? emailExperimentTags(experiment, variant)
+              : [
+                  { name: "journey", value: PAY_TO_START_JOURNEY },
+                  {
+                    name: "email",
+                    value:
+                      claim?.outcome === "unlocked" ? "pts_report_unlocked" : "pts_report_ready",
+                  },
+                ],
             headers: {
               "X-LoveIQ-Variant": variant,
               ...(unsubscribeUrl && {
@@ -771,7 +863,7 @@ export async function POST(request: Request) {
       `post-submit;dur=${(tPost - tSubmit).toFixed(1)}`,
     ].join(", ");
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         // submissionId lets the client pre-set the analytics_event submission
@@ -790,6 +882,8 @@ export async function POST(request: Request) {
                 : {}),
             }
           : {}),
+        // Pay to start: whether the report is unlocked (the wizard shows four slides).
+        ...(claim ? claimResponseFields(claim) : {}),
       },
       {
         // The response carries a fresh report access token + the user's
@@ -800,6 +894,12 @@ export async function POST(request: Request) {
         },
       }
     );
+    // Holding the cookie means holding an unused entitlement: once it is claimed (or can
+    // never be), it goes. Kept after an error, so a retry can still claim it.
+    if (claim && claimSettlesCookie(claim)) {
+      response.cookies.set(PREPAID_COOKIE, "", clearedPrepaidCookieOptions());
+    }
+    return response;
   } catch (err) {
     // An attempt that failed gives the cooldown back, so Retry works at once. One whose
     // outcome is unknown keeps it: the insert may still land, and an immediate Retry

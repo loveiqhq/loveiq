@@ -1,4 +1,5 @@
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
+import { PAY_TO_START_WIZARD_SLIDES } from "@features/pay-to-start/logic/journey";
 
 /**
  * Content of the pre-report wizard — Figma 1071:2092, "Pre Report Wizard — Mobile
@@ -9,6 +10,23 @@ import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
  * wizard_slide_advanced keeps counting 0-5, as the admin digests read it).
  */
 export const WIZARD_SLIDE_COUNT = 6;
+
+/**
+ * Which wizard a reader gets. `pay_to_start`: a reader who paid before the survey (Figma
+ * Report-3.0 1477:3920), whose report opens fully unlocked, sees slides 1, 4, 5 and 6 of
+ * the six; the report map ("your free chapters") and "Unlocking your report is fully risk
+ * free" have nothing left to say to them. Figma draws those four with the six-slide bar
+ * and counters (1/6, 2/6, 3/6, 5/6); the bar here has four segments, "n / 4" (Fatih,
+ * 18.10).
+ */
+export type WizardVariant = "standard" | "pay_to_start";
+
+const STANDARD_ORDER: readonly number[] = Array.from({ length: WIZARD_SLIDE_COUNT }, (_, i) => i);
+
+/** The slides a variant shows, by their index in the six (what the analytics record). */
+export function wizardSlideOrder(variant: WizardVariant): readonly number[] {
+  return variant === "pay_to_start" ? PAY_TO_START_WIZARD_SLIDES : STANDARD_ORDER;
+}
 
 /** Slide 1's three research tiles (1049:1191). The report's methodology has its own. */
 export const WIZARD_PROOF_CARDS: readonly { title: string; body: string; icon: string }[] = [
