@@ -26,7 +26,41 @@ export interface PayToStartConfirmationParams {
   productName: string;
   siteUrl: string;
   unsubscribeUrl?: string;
+  /**
+   * `report` when the survey was finished before the payment settled (a checkout left
+   * open, then paid; a delayed method): the report is what unlocks now, and asking them
+   * to start the survey would be wrong. The same continue link opens it.
+   */
+  variant?: "survey" | "report";
 }
+
+/** The copy that differs between the two versions. Proposals, flagged for Marcus. */
+const CONFIRMATION_COPY = {
+  survey: {
+    subject: "Payment received: your survey is ready",
+    previewText: "Finish the survey and your full report unlocks straight away.",
+    heading: "Payment received. Your survey is ready.",
+    body: "Take the survey whenever you&rsquo;re ready. When you finish it, your full report unlocks straight away, with nothing more to pay.",
+    bodyText:
+      "Take the survey whenever you're ready. When you finish it, your full report unlocks straight away, with nothing more to pay.",
+    returnHtml:
+      "This button always brings you back to it. If you stop halfway, open it again on the same device to carry on where you left off.",
+    returnText:
+      "This link always brings you back to it. If you stop halfway, open it again on the same device to carry on where you left off.",
+    cta: "Start my survey",
+  },
+  report: {
+    subject: "Payment received: your report is unlocked",
+    previewText: "Your survey is already done, so your full report is open now.",
+    heading: "Payment received. Your report is unlocked.",
+    body: "Your survey is already done, so your full report is unlocked now, with nothing more to pay.",
+    bodyText:
+      "Your survey is already done, so your full report is unlocked now, with nothing more to pay.",
+    returnHtml: "This button always brings you back to it.",
+    returnText: "This link always brings you back to it.",
+    cta: "Open my report",
+  },
+} as const;
 
 export function payToStartConfirmationEmail({
   amountText,
@@ -34,19 +68,21 @@ export function payToStartConfirmationEmail({
   productName,
   siteUrl,
   unsubscribeUrl,
+  variant = "survey",
 }: PayToStartConfirmationParams) {
-  const subject = "Payment received: your survey is ready";
-  const previewText = "Finish the survey and your full report unlocks straight away.";
+  const copy = CONFIRMATION_COPY[variant];
+  const subject = copy.subject;
+  const previewText = copy.previewText;
   const safeAmount = escapeHtml(amountText);
   const safeProduct = escapeHtml(productName);
-  const ctaLabel = "Start my survey";
+  const ctaLabel = copy.cta;
   const paragraph = `margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;`;
 
   const bodyHtml = `
   <tr>
     <td style="padding:24px 32px 8px;">
       <h1 style="margin:0; font-family:${EMAIL_FONT}; font-size:26px; font-weight:600; line-height:1.35; color:#000000; letter-spacing:-0.3px;">
-        Payment received. Your survey is ready.
+        ${copy.heading}
       </h1>
     </td>
   </tr>
@@ -57,10 +93,10 @@ export function payToStartConfirmationEmail({
         Thank you for your purchase: <strong style="font-weight:700;">${safeAmount}</strong> for the <strong style="font-weight:700;">${safeProduct}</strong>.
       </p>
       <p style="${paragraph}">
-        Take the survey whenever you&rsquo;re ready. When you finish it, your full report unlocks straight away, with nothing more to pay.
+        ${copy.body}
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        This button always brings you back to it. If you stop halfway, open it again on the same device to carry on where you left off.
+        ${copy.returnHtml}
       </p>
     </td>
   </tr>
@@ -90,9 +126,9 @@ export function payToStartConfirmationEmail({
     "",
     `Thank you for your purchase: ${amountText} for the ${productName}.`,
     "",
-    "Take the survey whenever you're ready. When you finish it, your full report unlocks straight away, with nothing more to pay.",
+    copy.bodyText,
     "",
-    "This link always brings you back to it. If you stop halfway, open it again on the same device to carry on where you left off.",
+    copy.returnText,
     "",
     `${ctaLabel}: ${continueUrl}`,
     "",
@@ -154,6 +190,7 @@ export async function sendPayToStartConfirmationEmail({
   origin,
   productName,
   token,
+  variant = "survey",
 }: {
   amountText: string;
   email: string;
@@ -162,6 +199,7 @@ export async function sendPayToStartConfirmationEmail({
   origin: string | null;
   productName: string;
   token: string;
+  variant?: "survey" | "report";
 }): Promise<boolean> {
   const resend = getResend();
   if (!resend) {
@@ -181,6 +219,7 @@ export async function sendPayToStartConfirmationEmail({
     productName,
     siteUrl,
     unsubscribeUrl,
+    variant,
   });
 
   try {
@@ -194,7 +233,10 @@ export async function sendPayToStartConfirmationEmail({
         text: tpl.text,
         tags: [
           { name: "journey", value: PAY_TO_START_JOURNEY },
-          { name: "email", value: "pts_confirmation" },
+          {
+            name: "email",
+            value: variant === "report" ? "pts_confirmation_report" : "pts_confirmation",
+          },
         ],
         headers: unsubscribeUrl
           ? {

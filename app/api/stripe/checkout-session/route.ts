@@ -11,7 +11,11 @@ import {
   UNLOCK_ANCHOR_REGEX,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/fulfillment";
+import {
+  applyPayToStartEntitlement,
+  lookupPrimaryArchetypeForSubmission,
+} from "@features/checkout/server/fulfillment";
+import { findEntitlementByConsumedSubmission } from "@features/pay-to-start/server/entitlement";
 import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
@@ -245,6 +249,22 @@ export async function POST(request: Request) {
       });
     } catch (err) {
       logger.warn({ err }, "checkout-session: access-context resolve failed; continuing");
+    }
+
+    // Pay to start: paid before the survey and claimed by it, but the payment row not
+    // written yet (an apply that failed; the sweep retries it). Apply it now, so the check
+    // below sees the report as bought, rather than sell it a second time. On its own: a
+    // failure here must never skip that check.
+    if (accessContext) {
+      const submissionId = accessContext.submissionId;
+      try {
+        const prepaid = await findEntitlementByConsumedSubmission(submissionId);
+        if (prepaid?.status === "succeeded" && !prepaid.payment_id) {
+          await applyPayToStartEntitlement({ entitlement: prepaid, stripe });
+        }
+      } catch (err) {
+        logger.warn({ err, submissionId }, "checkout-session: prepaid apply failed");
+      }
     }
 
     try {

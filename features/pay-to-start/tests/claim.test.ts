@@ -152,6 +152,22 @@ describe("unlocking", () => {
     expect(applyPayToStartEntitlement).not.toHaveBeenCalled();
   });
 
+  it("tries the apply once more when it throws, so a passing blip does not lock the report", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
+    vi.mocked(applyPayToStartEntitlement)
+      .mockRejectedValueOnce(new Error("pts_apply_payment_persist_failed"))
+      .mockResolvedValueOnce(41);
+    expect(await claim()).toEqual({ outcome: "unlocked", entitlementId: 7, paymentId: 41 });
+    expect(applyPayToStartEntitlement).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after the second failure: an error for #ops, finished by the sweep", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
+    vi.mocked(applyPayToStartEntitlement).mockRejectedValue(new Error("db down"));
+    expect(await claim()).toMatchObject({ outcome: "error", entitlementId: 7 });
+    expect(applyPayToStartEntitlement).toHaveBeenCalledTimes(2);
+  });
+
   it("reports an apply that wrote nothing as an error", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
     vi.mocked(applyPayToStartEntitlement).mockResolvedValue(null);

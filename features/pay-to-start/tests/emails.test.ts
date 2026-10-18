@@ -64,6 +64,28 @@ describe("the confirmation email", () => {
     expect(tpl.text).toContain(url);
     expect(tpl.html).toContain("LoveIQ Survey &amp; Report");
     expect(tpl.text).toContain("€29.00 for the LoveIQ Survey & Report");
+    expect(tpl.subject).toBe("Payment received: your survey is ready");
+    expect(tpl.text).toContain("Start my survey");
+  });
+
+  it("tells a buyer whose survey is already done that the report is unlocked", () => {
+    const url = buildContinueUrl("https://www.loveiq.org", TOKEN);
+    const tpl = payToStartConfirmationEmail({
+      amountText: "€29.00",
+      continueUrl: url,
+      productName: "LoveIQ Survey & Report",
+      siteUrl: "https://www.loveiq.org",
+      variant: "report",
+    });
+    expect(tpl.subject).toBe("Payment received: your report is unlocked");
+    expect(tpl.html).toContain("Your report is unlocked.");
+    expect(tpl.html).toContain(`href="${url}"`);
+    expect(tpl.text).toContain(`Open my report: ${url}`);
+    for (const body of [tpl.html, tpl.text]) {
+      expect(body).not.toContain("Start my survey");
+      expect(body).not.toContain("Take the survey");
+      expect(body).not.toContain("stop halfway");
+    }
   });
 
   describe("sending", () => {
