@@ -6,8 +6,18 @@ const analytics = vi.hoisted(() => ({
   track: vi.fn(),
   pingFunnelEvent: vi.fn(),
   getGaMeasurementContext: vi.fn(() => ({ clientId: "111.222", sessionId: "333", consent: true })),
+  // The site header's own button counts this; on this page it must never be sent.
+  trackStartSurvey: vi.fn(),
 }));
 vi.mock("@features/analytics/client", () => analytics);
+// The header's links are the site's client-side Links; here, plain anchors.
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
 const posthog = vi.hoisted(() => ({
   register_for_session: vi.fn(),
   get_property: vi.fn(),
@@ -181,12 +191,57 @@ describe("the pay-to-start page, as drawn", () => {
     expect(within(crumbs).getByText(PTS_BREADCRUMB[2]).getAttribute("aria-current")).toBe("page");
   });
 
-  it("links only the legal pages, and nothing into the free funnel", () => {
+  it("links the site's own pages and the legal pages, and never the survey", () => {
     renderPage();
     const hrefs = [...document.querySelectorAll("a[href]")].map((a) => a.getAttribute("href"));
-    expect(hrefs.sort()).toEqual(PTS_FOOTER.links.map((l) => l.href).sort());
+    // The LoveIQ header (Marcus, 18.10): logo and Home, About us, Glossary, Trust Center,
+    // and its button on this page's own price, in the bar and in the phone's menu.
+    const site = ["/", "/about", "/glossary", "/trust-zone"];
+    const allowed = new Set([...site, "#price", ...PTS_FOOTER.links.map((l) => l.href)]);
+    expect(hrefs.filter((href) => !allowed.has(href ?? ""))).toEqual([]);
+    for (const href of [...site, "#price"]) expect(hrefs).toContain(href);
     expect(hrefs).not.toContain("/survey");
-    expect(hrefs).not.toContain("/");
+  });
+
+  it("wears the LoveIQ header, and no Facets", () => {
+    renderPage();
+    const header = within(document.querySelector("header") as HTMLElement);
+    expect(header.getByRole("link", { name: "LoveIQ" }).getAttribute("href")).toBe("/");
+    for (const label of ["Home", "About us", "Glossary", "Trust Center"]) {
+      expect(header.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+    }
+    expect(pageText()).not.toMatch(/facets/i);
+  });
+
+  it("sends the header's button to the price, counted as its own, never as the survey's", () => {
+    renderPage();
+    const button = screen.getByRole("link", { name: "Start test now - navigation" });
+    expect(button.getAttribute("href")).toBe("#price");
+    expect(document.getElementById("price")?.querySelector("h2")?.textContent).toBe(
+      PTS_ONE_PRICE.title
+    );
+    fireEvent.click(button);
+    expect(analytics.track).toHaveBeenCalledWith("pts_nav_click", {
+      target: "price",
+      place: "bar",
+    });
+    expect(analytics.trackStartSurvey).not.toHaveBeenCalled();
+  });
+
+  it("counts a visitor who leaves through the header", () => {
+    renderPage();
+    const stayOnPage = (event: Event) => event.preventDefault();
+    document.addEventListener("click", stayOnPage, true);
+    const bar = within(document.querySelector("header nav") as HTMLElement);
+    fireEvent.click(bar.getByRole("link", { name: "Trust Center" }));
+    fireEvent.click(bar.getByRole("link", { name: "LoveIQ" }));
+    document.removeEventListener("click", stayOnPage, true);
+    expect(analytics.track).toHaveBeenCalledWith("pts_nav_click", {
+      target: "trust_center",
+      place: "bar",
+    });
+    expect(analytics.track).toHaveBeenCalledWith("pts_nav_click", { target: "logo", place: "bar" });
+    expect(analytics.trackStartSurvey).not.toHaveBeenCalled();
   });
 
   it("carries the search ad's sitelink anchors", () => {

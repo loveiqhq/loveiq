@@ -99,6 +99,18 @@ export function trackPtsVideoPlay(): void {
   track("pts_video_play");
 }
 
+/** What the page's header can be pressed for: the site's pages, or its own price. */
+export type PtsNavTarget = "logo" | "home" | "about" | "glossary" | "trust_center" | "price";
+
+/**
+ * A press in the header (the LoveIQ site's own nav), in the bar or the phone's menu. Every
+ * target but `price` leaves the page for the site, where "Start test now" is the free
+ * survey: this counts how many do.
+ */
+export function trackPtsNavClick(params: { target: PtsNavTarget; place: "bar" | "menu" }): void {
+  track("pts_nav_click", params);
+}
+
 /** The status page settled on an answer (or gave up waiting: "timeout", "error"). */
 export function trackPtsStatusViewed(
   state: PayToStartStatusState | "timeout" | "error" | "missing"

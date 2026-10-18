@@ -8,10 +8,11 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 /**
  * Pay to start the survey (Notion "RFD > Pay to start survey"): the page the search ad
  * sends to. Kept out of the index and out of the sitemap; nothing on the site links here.
- * The Open Graph tags are its own, so a shared link does not show the LoveIQ card.
+ * LoveIQ-branded until the new brand is ready (Marcus, 18.10). The Open Graph tags are its
+ * own, so a shared link shows this page's title, not the home page's card.
  */
 export const metadata: Metadata = {
-  title: "What’s my sexual archetype? | Facets",
+  title: "What’s my sexual archetype? | LoveIQ",
   description: PTS_HERO.lead,
   robots: { index: false, follow: false },
   alternates: { canonical: `${siteUrl}/sexual-archetype` },
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
     title: "What’s my sexual archetype?",
     description: PTS_HERO.lead,
     url: `${siteUrl}/sexual-archetype`,
-    siteName: "Facets by Applied Psychometrics",
+    siteName: "LoveIQ",
     type: "website",
   },
   twitter: {

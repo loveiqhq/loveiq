@@ -183,3 +183,45 @@ test.describe("pay to start: the assessment page", () => {
     await expect(cta).toBeEnabled();
   });
 });
+
+test.describe("pay to start: the LoveIQ header", () => {
+  // Marcus, 18.10: the LoveIQ logo and the site's own header sections. Its button takes the
+  // visitor to this page's price (Fatih, 19.10), never into the free survey.
+  test("carries the site's sections, and its button goes to the price", async ({ page }) => {
+    const surveyRequests: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/survey") surveyRequests.push(request.url());
+    });
+    await openPage(page);
+    await expect(page).toHaveTitle(/\| LoveIQ$/);
+    const header = page.locator("header");
+    await expect(header.getByRole("link", { name: "LoveIQ" })).toHaveAttribute("href", "/");
+
+    const sections = ["Home", "About us", "Glossary", "Trust Center"];
+    const hamburger = page.getByRole("button", { name: "Open menu" });
+    const onAPhone = await hamburger.isVisible();
+    if (onAPhone) {
+      await hamburger.click();
+      const menu = page.locator(".w-menu-panel");
+      for (const name of sections) await expect(menu.getByRole("link", { name })).toBeVisible();
+      // The menu's own button: the menu lets go of the page first, then it jumps.
+      await menu.getByRole("link", { name: "Start test now", exact: true }).click();
+      await expect(page.locator(".w-menu-panel.is-open")).toHaveCount(0);
+    } else {
+      const bar = header.locator("nav");
+      // From 1024 wide, as on the site; between 640 and 1023 the bar has the logo and button only.
+      if ((page.viewportSize()?.width ?? 0) >= 1024) {
+        for (const name of sections) await expect(bar.getByRole("link", { name })).toBeVisible();
+      }
+      await page.getByRole("link", { name: "Start test now - navigation" }).click();
+    }
+
+    const priceHeading = page.locator("#price h2");
+    await expect(priceHeading).toBeInViewport();
+    // Below the fixed header, not under it.
+    const headingTop = (await priceHeading.boundingBox())?.y ?? 0;
+    expect(headingTop).toBeGreaterThanOrEqual(64);
+    expect(new URL(page.url()).pathname).toBe(PAGE);
+    expect(surveyRequests).toEqual([]);
+  });
+});

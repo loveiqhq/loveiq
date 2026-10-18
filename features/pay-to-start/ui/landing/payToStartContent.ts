@@ -16,10 +16,10 @@
 /** The address the frames give for refunds (FAQ 2 and the guarantee band). */
 export const PTS_SUPPORT_EMAIL = "hello@loveiq.org";
 
-export const PTS_HEADER = {
-  wordmark: "Facets",
-  byline: "BY APPLIED PSYCHOMETRICS",
-} as const;
+/*
+ * No header copy: the page wears the LoveIQ site's own header (PtsHeader), not Figma's
+ * Facets wordmark (Marcus, 18.10: LoveIQ "until we are ready with the new brand").
+ */
 
 /** Shown as plain text: the pages it names do not exist yet (Fatih, 18.10). */
 export const PTS_BREADCRUMB = ["Assessments", "Sexuality", "What’s my sexual archetype?"] as const;
