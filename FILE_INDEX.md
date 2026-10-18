@@ -98,6 +98,21 @@
 | Testimonials             | `features/landing/ui/white/WTestimonials.tsx`                                                                                                                  |
 | Off-page (kept, unused)  | `WHowItWorks`, `WPerfectFor`, `WProblemValue`, `WArchetypes`, `WReportPreview`, `WAcademicBoard`, `WGlossary`, `WTrustRow`, `WInlineCTA`, `WHeroConstellation` |
 
+## Pay to Start
+
+| Task                                  | Files                                                                                                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Assessment page (`/sexual-archetype`) | `app/sexual-archetype/page.tsx`, `features/pay-to-start/ui/landing/PayToStartLanding.tsx`                                                           |
+| Its copy, verbatim from Figma         | `features/pay-to-start/ui/landing/payToStartContent.ts`                                                                                             |
+| Its buttons' checkout                 | `features/pay-to-start/ui/landing/PtsCheckout.tsx`, `app/api/stripe/pay-to-start/route.ts`, `features/pay-to-start/server/checkout.ts`              |
+| Checkout status page                  | `app/sexual-archetype/checkout/page.tsx`, `features/pay-to-start/ui/status/PayToStartStatusPage.tsx`, `app/api/stripe/pay-to-start/status/route.ts` |
+| Confirmation email + continue link    | `features/pay-to-start/server/emails/confirmation.ts`, `app/sexual-archetype/continue/route.ts`                                                     |
+| Entitlement store                     | `features/pay-to-start/server/entitlement.ts`, `supabase/migrations/20261018120000_pay_to_start_entitlement.sql`                                    |
+| Payment confirmation + sweep          | `features/pay-to-start/server/confirm.ts`, `features/checkout/server/fulfillment.ts`, `features/pay-to-start/server/sweep.ts`                       |
+| Survey claim                          | `features/pay-to-start/server/claim.ts`, `app/api/survey/route.ts`                                                                                  |
+| Price setting                         | `features/pay-to-start/server/offer.ts`, `features/pay-to-start/logic/offer.ts`                                                                     |
+| Runbook                               | `docs/runbooks/PAY_TO_START.md`                                                                                                                     |
+
 ## About Page
 
 | Task                   | Files                                          |

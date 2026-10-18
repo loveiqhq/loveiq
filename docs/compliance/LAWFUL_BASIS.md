@@ -74,6 +74,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: indefinite for accounting; DSAR delete preserves payments (DSAR helper warns "payment data retained, accounting retention")
 - **Subprocessors**: Stripe (separate DPA)
 
+### A7a — Payment before the survey (pay to start, from 2026-10-18)
+
+- **Data**: an opaque entitlement token (httpOnly cookie, 30 days), the email Stripe collects at checkout, the price shown and paid, the Stripe session and payment intent, the visit's attribution (`utm_tracker`), and when it was paid and claimed (`prepaid_report_access`)
+- **Basis**: (b) contract: the buyer pays for a survey and a report delivered after it, and the row is how the paid survey is identified and the confirmation email (with the link back to the survey) is sent
+- **Retention**: with the payment, for accounting; DSAR erasure strips `customer_email` and `utm_tracker`, export returns the rows without the token
+- **Subprocessors**: Stripe, Resend (the confirmation email), Supabase
+
 ### A8 — Engagement analytics
 
 - **Data**: analytics_event rows (event_type + metadata; from 2026-10-16 also `report_chapter_stats`, how long each report chapter was read and which of its actions were used, and `wizard_skipped`, the pre-report slides skipped), survey_behavior_event rows (from 2026-10-16 with `is_tablet`), invite_event rows, scroll depth, time-on-section, click telemetry; funnel_event rows (unique visitor, survey start and, from 2026-10-16, each survey intro card seen and its Back and Skip); client-side: GA4, Microsoft Clarity, PostHog (from 2026-10-16 with the time spent on each landing section, also sent to GA4)

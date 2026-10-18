@@ -97,7 +97,9 @@ export const PtsHeroMedia: FC = () => {
         src={HERO_POSTER_SRC}
         alt=""
         fill
-        priority
+        // The largest thing above the fold on a desktop, as on the landing (WHeroVideo).
+        fetchPriority="high"
+        loading="eager"
         sizes="(min-width: 898px) 850px, calc(100vw - 32px)"
         className="object-cover object-[50%_32%]"
       />

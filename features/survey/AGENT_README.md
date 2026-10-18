@@ -12,6 +12,7 @@
 - `ui/hooks/` — survey state, submission, tracking hooks (`useSurveyState`, `useSubmitSurvey`, `useSurveyTracking`).
 - `server/` — types, utils, server-side helpers.
 - API routes inline at `app/api/survey/route.ts`, `app/api/survey-partial/route.ts`, `app/api/survey-tracking/route.ts`.
+- Pay to start (`features/pay-to-start`): a browser holding a paid entitlement's cookie gets the 4-slide wizard (`wizardSlideOrder("pay_to_start")`), and its submit claims the entitlement, so the report opens unlocked (`server/claim.ts`, called from `app/api/survey/route.ts`).
 
 **Belongs:** survey UI, hooks, server helpers, submission validation, type definitions.
 
