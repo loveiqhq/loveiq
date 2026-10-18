@@ -89,6 +89,7 @@ function checkoutSession(overrides: Record<string, unknown> = {}): Stripe.Checko
       gaClientId: "123.456",
       gaSessionId: "789",
       gaAnalyticsConsent: "1",
+      posthogDistinctId: "019a7c1e-anon",
     },
     payment_intent: {
       id: "pi_test_1",
@@ -337,6 +338,8 @@ describe("the first confirmation", () => {
     expect(sendPosthogPurchaseEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         email: "buyer@example.com",
+        // The visit's anonymous PostHog id: the purchase joins the ad and the page.
+        anonDistinctId: "019a7c1e-anon",
         transactionId: "cs_test_paid",
         value: 29,
         plan: "full_report",

@@ -299,7 +299,12 @@ export async function fetchWizardFunnel(
   );
   if (!res.ok) return { steps: [], totalForwards: 0 };
   const rows = (await res.json()) as Array<{
-    metadata: { from_slide?: number; to_slide?: number; direction?: string } | null;
+    metadata: {
+      from_slide?: number;
+      to_slide?: number;
+      direction?: string;
+      wizard_variant?: string;
+    } | null;
   }>;
 
   // Count forward advances per (from_slide -> to_slide) pair. Skip backwards.
@@ -308,6 +313,9 @@ export async function fetchWizardFunnel(
   for (const r of rows) {
     const md = r.metadata;
     if (!md || md.direction !== "next") continue;
+    // The six-slide wizard only. Pay to start's four (wizard_variant) go 0 -> 3 -> 4 -> 5,
+    // and one such reader made this chain read "0->3: 1% kept, 1->2: 9000% kept".
+    if (md.wizard_variant) continue;
     if (typeof md.from_slide !== "number" || typeof md.to_slide !== "number") continue;
     totalForwards += 1;
     const key = `${md.from_slide}->${md.to_slide}`;

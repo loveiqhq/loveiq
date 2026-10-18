@@ -190,6 +190,7 @@ describe("a first checkout", () => {
         gaClientId: "123.456",
         gaSessionId: "789",
         gaConsent: true,
+        posthogDistinctId: "019a7c1e-anon",
         utmTracker: '{"utm_source":"google","utm_campaign":"archetype"}',
       },
       "other=1"
@@ -238,6 +239,7 @@ describe("a first checkout", () => {
         origin: ORIGIN,
         gaClientId: "123.456",
         gaAnalyticsConsent: "1",
+        posthogDistinctId: "019a7c1e-anon",
         utmSource: "google",
         utmCampaign: "archetype",
       },

@@ -64,6 +64,8 @@ const bodySchema = z.object({
   gaClientId: z.string().max(64).nullable().optional(),
   gaSessionId: z.string().max(64).nullable().optional(),
   gaConsent: z.boolean().nullable().optional(),
+  /** The browser's anonymous PostHog id, joined to the buyer by the purchase event. */
+  posthogDistinctId: z.string().max(200).nullable().optional(),
   /** The page's attribution snapshot (shared/url/utm.ts); over 1,000 characters is dropped. */
   utmTracker: z.string().nullable().optional(),
 });
@@ -234,6 +236,7 @@ export async function POST(request: Request) {
       gaClientId: parsed.data.gaClientId ?? null,
       gaSessionId: parsed.data.gaSessionId ?? null,
       gaConsent: parsed.data.gaConsent === true,
+      posthogDistinctId: parsed.data.posthogDistinctId ?? null,
       utmTracker: entitlement.utm_tracker ?? utmTracker,
       requestIp: ip,
       userAgent: request.headers.get("user-agent"),

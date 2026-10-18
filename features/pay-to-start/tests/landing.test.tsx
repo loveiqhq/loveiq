@@ -8,7 +8,11 @@ const analytics = vi.hoisted(() => ({
   getGaMeasurementContext: vi.fn(() => ({ clientId: "111.222", sessionId: "333", consent: true })),
 }));
 vi.mock("@features/analytics/client", () => analytics);
-const posthog = vi.hoisted(() => ({ register_for_session: vi.fn() }));
+const posthog = vi.hoisted(() => ({
+  register_for_session: vi.fn(),
+  get_property: vi.fn(),
+  get_distinct_id: vi.fn(),
+}));
 vi.mock("posthog-js", () => ({ default: posthog }));
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "csrf-token" }));
 vi.mock("@shared/url/utm", () => ({ getStoredUtm: () => '{"utm_source":"google"}' }));
@@ -226,6 +230,7 @@ describe("its checkout", () => {
       gaClientId: "111.222",
       gaSessionId: "333",
       gaConsent: true,
+      posthogDistinctId: null,
       utmTracker: '{"utm_source":"google"}',
     });
     expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_1");
@@ -238,6 +243,28 @@ describe("its checkout", () => {
       expect.objectContaining({ journey: "pay_to_start", currency: "EUR", value: 29 })
     );
     expect(analytics.pingFunnelEvent).toHaveBeenCalledWith("prepaid_checkout_started");
+  });
+
+  it("sends the anonymous PostHog id, so the purchase joins this visit, never an email", async () => {
+    fetchMock.mockReturnValue(reply({ state: "redirect", url: "https://checkout.stripe.com/x" }));
+    posthog.get_property.mockReturnValue("anonymous");
+    posthog.get_distinct_id.mockReturnValue("019a7c1e-anon");
+    renderPage();
+    fireEvent.click(cta("price_card"));
+    await settle();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).posthogDistinctId).toBe("019a7c1e-anon");
+
+    // An identified browser's id is an email: it has no place in Stripe's metadata.
+    cleanup();
+    fetchMock.mockClear();
+    posthog.get_property.mockReturnValue("identified");
+    posthog.get_distinct_id.mockReturnValue("someone@example.com");
+    renderPage();
+    fireEvent.click(cta("price_card"));
+    await settle();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).posthogDistinctId).toBeNull();
+    posthog.get_property.mockReset();
+    posthog.get_distinct_id.mockReset();
   });
 
   it("sends one request however many buttons are pressed", async () => {
@@ -265,6 +292,28 @@ describe("its checkout", () => {
     fireEvent.click(cta("one_price"));
     await settle();
     expect(assign).toHaveBeenCalledWith("https://www.loveiq.org/survey");
+  });
+
+  it("counts a checkout started only when one opens", async () => {
+    // GA4's begin_checkout (Google Ads reads it) and the durable funnel row mean a
+    // checkout: never a browser sent to its survey, a changed price, or a paused one.
+    for (const answer of [
+      reply({ state: "paid" }),
+      reply({ state: "used", reportPath: null }),
+      reply({ state: "price_changed", priceCents: 1999 }, 409),
+      reply({ state: "unavailable", message: "Checkout is paused." }, 503),
+    ]) {
+      cleanup();
+      vi.mocked(analytics.track).mockClear();
+      vi.mocked(analytics.pingFunnelEvent).mockClear();
+      fetchMock.mockReturnValueOnce(answer);
+      renderPage();
+      fireEvent.click(cta("price_card"));
+      await settle();
+      expect(analytics.track).toHaveBeenCalledWith("pts_cta_click", expect.any(Object));
+      expect(analytics.track).not.toHaveBeenCalledWith("begin_checkout", expect.anything());
+      expect(analytics.pingFunnelEvent).not.toHaveBeenCalledWith("prepaid_checkout_started");
+    }
   });
 
   it("sends a used purchase to its report, or says where to find it", async () => {
