@@ -7,7 +7,11 @@ import {
   isStripeCheckoutEnabled,
 } from "@features/checkout/server/stripeCheckout";
 import { settlePayToStartSession } from "@features/checkout/server/fulfillment";
-import type { PayToStartCheckoutResponse } from "@features/pay-to-start/logic/api";
+import {
+  PAY_TO_START_PAUSED_MESSAGE,
+  PAY_TO_START_SURVEY_CLOSED_MESSAGE,
+  type PayToStartCheckoutResponse,
+} from "@features/pay-to-start/logic/api";
 import { readPrepaidToken } from "@features/pay-to-start/logic/journey";
 import {
   PAY_TO_START_LANDING_VARIANT,
@@ -117,7 +121,7 @@ export async function POST(request: Request) {
     return reply(
       {
         state: "unavailable",
-        message: "Checkout is paused for a moment. Please try again later.",
+        message: PAY_TO_START_PAUSED_MESSAGE,
       },
       503
     );
@@ -127,7 +131,7 @@ export async function POST(request: Request) {
     return reply(
       {
         state: "unavailable",
-        message: "The survey is paused for a moment. Please check back soon; nothing was charged.",
+        message: PAY_TO_START_SURVEY_CLOSED_MESSAGE,
       },
       409
     );
