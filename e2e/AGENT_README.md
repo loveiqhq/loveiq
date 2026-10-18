@@ -11,15 +11,16 @@ End-to-end browser tests using Playwright. Tests run against a production build 
 
 ## Test Files
 
-| File                         | Scope                                                    |
-| ---------------------------- | -------------------------------------------------------- |
-| `smoke.spec.ts`              | Critical paths (homepage loads, nav works)               |
-| `navigation.spec.ts`         | All navigation links and routing                         |
-| `pages.spec.ts`              | Page content and metadata                                |
-| `interactions.spec.ts`       | Forms, buttons, interactive elements                     |
-| `a11y.spec.ts`               | Accessibility (axe-core WCAG checks)                     |
-| `admin.spec.ts`              | Admin sign-in page and the signed-out redirect           |
-| `survey.spec.ts`             | Survey wizard flow                                       |
-| `visual-regression.spec.ts`  | Screenshot comparison tests                              |
-| `landing-hero-video.spec.ts` | Landing arm B: the hero video (playback stubbed)         |
-| `report-guided-tour.spec.ts` | The report's guided tour on a first open, and its replay |
+| File                         | Scope                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `smoke.spec.ts`              | Critical paths (homepage loads, nav works)                                  |
+| `navigation.spec.ts`         | All navigation links and routing                                            |
+| `pages.spec.ts`              | Page content and metadata                                                   |
+| `interactions.spec.ts`       | Forms, buttons, interactive elements                                        |
+| `a11y.spec.ts`               | Accessibility (axe-core WCAG checks)                                        |
+| `admin.spec.ts`              | Admin sign-in page and the signed-out redirect                              |
+| `survey.spec.ts`             | Survey wizard flow                                                          |
+| `visual-regression.spec.ts`  | Screenshot comparison tests                                                 |
+| `landing-hero-video.spec.ts` | Landing arm B: the hero video (playback stubbed)                            |
+| `report-guided-tour.spec.ts` | The report's guided tour on a first open, and its replay                    |
+| `pay-to-start.spec.ts`       | Pay to start: the page, its checkout button, the status page (APIs stubbed) |
