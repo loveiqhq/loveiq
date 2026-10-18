@@ -305,6 +305,60 @@ describe("buildSubmissionJourney", () => {
     });
   });
 
+  describe("pay to start (paid before the survey)", () => {
+    const PAID_BEFORE = {
+      amount: 29,
+      is_test: false,
+      payment_date_time: "2026-08-24T09:50:00.000Z",
+      currency: "EUR",
+      metadata: { journey: "pay_to_start", plan: "full_report" },
+    };
+
+    it("takes the purchase from its payment row, which has no quote", async () => {
+      route({ payments: [PAID_BEFORE] });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.milestones.purchasedAt).toBe("2026-08-24T09:50:00.000Z");
+      expect(journey?.money).toEqual({ plan: "full_report", amount: 29, currency: "EUR" });
+      expect(journey?.payToStart).toBe(true);
+      // Paid before the survey ended: no negative time to purchase.
+      expect(journey?.timings.msToPurchase).toBeNull();
+    });
+
+    it("knows the journey from the tracker's label before any payment row", async () => {
+      route({
+        sub: [
+          {
+            ...SUBMISSION,
+            utm_tracker: JSON.stringify({ utm_source: "google", journey: "pay_to_start" }),
+          },
+        ],
+      });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.payToStart).toBe(true);
+      expect(journey?.milestones.purchasedAt).toBeNull();
+    });
+
+    it("leaves every other submission as it was", async () => {
+      route({ payments: [{ ...PAID_BEFORE, metadata: { plan: "full_report" } }] });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.milestones.purchasedAt).toBeNull();
+      expect(journey?.money).toBeNull();
+      expect(journey).not.toHaveProperty("payToStart");
+    });
+
+    it("prefers a purchased quote when there is one", async () => {
+      route({ quotes: [QUOTE_PURCHASED], payments: [PAID_BEFORE] });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.milestones.purchasedAt).toBe(QUOTE_PURCHASED.purchased_at);
+    });
+
+    it("asks for the payment's date, currency and metadata", async () => {
+      route({});
+      await buildSubmissionJourney(1296);
+      expect(queryFor("/payment?")).toContain("payment_date_time,currency,metadata");
+    });
+  });
+
   it("marks a staff submission internal, without carrying the address", async () => {
     delete process.env.ADMIN_TEST_EMAIL_REGEX;
     __resetStaffEmailRegexForTests();

@@ -11,6 +11,7 @@ const ph = vi.hoisted(() => ({
 vi.mock("posthog-js", () => ({ default: ph }));
 
 import { useSubmitSurvey } from "@features/survey/ui/hooks/useSubmitSurvey";
+import { PAID_WIZARD_KEY } from "@features/survey/ui/hooks/surveySession";
 
 // --- Helpers ---
 
@@ -51,6 +52,56 @@ describe("useSubmitSurvey", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
+  });
+
+  describe("a survey paid for before it was taken (pay to start)", () => {
+    function replying(body: Record<string, unknown>) {
+      return vi.fn().mockResolvedValue({ ok: true, json: async () => body });
+    }
+
+    beforeEach(() => {
+      sessionStorage.clear();
+    });
+
+    it("notes it when the reply says the report is unlocked, for this tab too", async () => {
+      globalThis.fetch = replying({ journey: "pay_to_start", unlocked: true, submissionId: 5 });
+      const { result } = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await result.current.submit(makeAnswers(), new Date().toISOString());
+      });
+      expect(result.current.paidBeforeSurvey).toBe(true);
+      expect(sessionStorage.getItem(PAID_WIZARD_KEY)).toBe("1");
+    });
+
+    it("notes it while the payment settles", async () => {
+      globalThis.fetch = replying({
+        journey: "pay_to_start",
+        unlocked: false,
+        unlockPending: true,
+      });
+      const { result } = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await result.current.submit(makeAnswers(), new Date().toISOString());
+      });
+      expect(result.current.paidBeforeSurvey).toBe(true);
+    });
+
+    it("does not when the claim unlocked nothing, or for anyone else", async () => {
+      globalThis.fetch = replying({ journey: "pay_to_start", unlocked: false });
+      const first = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await first.result.current.submit(makeAnswers(), new Date().toISOString());
+      });
+      expect(first.result.current.paidBeforeSurvey).toBe(false);
+
+      globalThis.fetch = replying({ submissionId: 5 });
+      const second = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await second.result.current.submit(makeAnswers(), new Date().toISOString());
+      });
+      expect(second.result.current.paidBeforeSurvey).toBe(false);
+      expect(sessionStorage.getItem(PAID_WIZARD_KEY)).toBeNull();
+    });
   });
 
   it("initial status is idle", () => {

@@ -15,7 +15,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function WizardPreviewPage() {
+export default async function WizardPreviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ variant?: string | string[] }>;
+}) {
   if (!isNonProdDeploy()) notFound();
-  return <WizardPreviewClient />;
+  // ?variant=pay_to_start shows the four slides a reader who paid before the survey gets.
+  const { variant } = await searchParams;
+  return <WizardPreviewClient variant={variant === "pay_to_start" ? "pay_to_start" : "standard"} />;
 }

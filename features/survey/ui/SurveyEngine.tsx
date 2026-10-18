@@ -41,7 +41,7 @@ import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
 import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
-import { completedReportToken } from "./hooks/surveySession";
+import { completedReportToken, paidWizardRemembered } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
@@ -104,6 +104,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     hasPendingCompletion,
     reportToken,
     submissionId,
+    paidBeforeSurvey,
     status: submitStatus,
     errorKind: submitErrorKind,
   } = useSubmitSurvey();
@@ -751,7 +752,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
       return (
-        <PreReportWizard onComplete={() => onComplete(reportToken ?? completedReportToken())} />
+        <PreReportWizard
+          // Paid before the survey: four slides, none about unlocking (wizardContent.ts).
+          // The stored flag covers a reload mid-wizard, when this run's reply is gone.
+          variant={paidBeforeSurvey || paidWizardRemembered() ? "pay_to_start" : "standard"}
+          onComplete={() => onComplete(reportToken ?? completedReportToken())}
+        />
       );
     }
 

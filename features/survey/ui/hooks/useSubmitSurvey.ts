@@ -9,7 +9,12 @@ import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
 import { isRandomised } from "@features/survey/questionFlags";
 import { orderedOptions } from "../questionOrder";
-import { getSessionId, rememberCompletedReport, setReportSessionId } from "./surveySession";
+import {
+  getSessionId,
+  rememberCompletedReport,
+  rememberPaidWizard,
+  setReportSessionId,
+} from "./surveySession";
 import {
   clearPendingCompletion,
   clearPersistedSurveyState,
@@ -128,6 +133,11 @@ export function useSubmitSurvey() {
   // PreReportWizard mounts. Without this, wizard_slide_advanced events silently
   // skip durable persistence — see persistAnalyticsEvent in features/analytics/client.ts.
   const [submissionId, setSubmissionId] = useState<number | null>(null);
+  /**
+   * The survey was paid for before it was taken (pay to start) and the reply says the
+   * report is unlocked, or will be when the payment settles: the four-slide wizard.
+   */
+  const [paidBeforeSurvey, setPaidBeforeSurvey] = useState(false);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -201,7 +211,17 @@ export function useSubmitSurvey() {
             const json = (await res.json()) as {
               reportToken?: string;
               submissionId?: number;
+              journey?: string;
+              unlocked?: boolean;
+              unlockPending?: boolean;
             };
+            if (
+              json.journey === "pay_to_start" &&
+              (json.unlocked === true || json.unlockPending === true)
+            ) {
+              setPaidBeforeSurvey(true);
+              rememberPaidWizard();
+            }
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
               // Recorded HERE rather than on the way out, because submission
@@ -320,6 +340,7 @@ export function useSubmitSurvey() {
     hasPendingCompletion: !!pendingCompletion,
     reportToken,
     submissionId,
+    paidBeforeSurvey,
     status,
     errorKind,
   };
