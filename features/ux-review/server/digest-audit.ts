@@ -6,6 +6,7 @@ import {
   fetchVerificationStats,
   isSafeSessionId,
   MIN_WATCHABLE_ACTIVE_MS,
+  PROJECT,
   sessionQuery,
   type VerificationStat,
 } from "./review";
@@ -47,8 +48,15 @@ export interface DigestFacts {
   prs: ReadonlyMap<string, PrState>;
   /** Every finding that ever opened a pull request, with its label. */
   labelled: ReadonlyArray<{ prUrl: string; label: string | null }>;
-  /** Finishers a day or more old whom the survey scanner still never opened. */
-  stillUnwatched: ReadonlyArray<{ submissionId: number; sessionId: string }>;
+  /**
+   * Finishers a day or more old whom the survey scanner still never opened, with what
+   * PostHog holds for that recording: null when it was never asked to watch it.
+   */
+  stillUnwatched: ReadonlyArray<{
+    submissionId: number;
+    sessionId: string;
+    posthog?: { status: string; reason: string } | null;
+  }>;
 }
 
 export interface PrState {
@@ -141,13 +149,26 @@ export function checkDigest(f: DigestFacts): DigestCheck[] {
       said === f.finishers ? `${f.finishers} finished` : `${f.finishers} finished, not ${said}`,
   });
 
+  /**
+   * "Queued" is the promise, not "watched": PostHog gives up on some recordings for good
+   * (one it cannot render, an answer with personal data it could not strip), and the
+   * re-queue reports those rather than resending them forever. A reader PostHog was never
+   * asked to watch is the broken promise. One it gave up on is named, with its reason.
+   */
+  const neverSent = f.stillUnwatched.filter((u) => !u.posthog);
+  const gaveUp = f.stillUnwatched.flatMap((u) => (u.posthog ? [{ ...u, look: u.posthog }] : []));
   checks.push({
-    claim: `Unwatched readers "are queued automatically for another look, so they are not lost"`,
-    ok: f.stillUnwatched.length === 0,
-    detail: f.stillUnwatched.length
-      ? `${f.stillUnwatched.length} who finished a day or more ago, with a recording, were never ` +
-        `opened by the survey scanner (submissions ${list(f.stillUnwatched.map((u) => u.submissionId))})`
-      : "every finisher from the last 14 days with a recording was opened",
+    claim: `Unwatched readers "are queued automatically for another look"`,
+    ok: neverSent.length === 0,
+    detail: neverSent.length
+      ? `${neverSent.length} who finished a day or more ago, with a recording, were never ` +
+        `sent to the survey scanner (submissions ${list(neverSent.map((u) => u.submissionId))})`
+      : gaveUp.length
+        ? `every unwatched finisher was sent; PostHog could not watch ` +
+          list(
+            gaveUp.map((u) => `${u.submissionId} (${u.look.reason.split(":")[0] || u.look.status})`)
+          )
+        : "every finisher from the last 14 days with a recording was opened",
   });
 
   return checks;
@@ -273,6 +294,41 @@ async function stillUnwatched(env: Env, at: number) {
     .sort((a, b) => a.submissionId - b.submissionId);
 }
 
+let surveyScannerId: Promise<string> | null = null;
+
+/**
+ * What PostHog holds for the survey scanner and this recording, newest first: null when
+ * it was never asked to watch it. Throws when PostHog cannot say, so an outage is
+ * "could not read a source", never a broken promise.
+ */
+async function surveyObservation(
+  sessionId: string
+): Promise<{ status: string; reason: string } | null> {
+  const get = async <T>(path: string): Promise<T> => {
+    const res = await fetchWithTimeout(
+      `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${path}`,
+      { headers: { Authorization: `Bearer ${process.env.POSTHOG_API_KEY}` }, timeoutMs: 10_000 }
+    );
+    if (!res.ok) throw new Error(`vision/scanners ${res.status}`);
+    return (await res.json()) as T;
+  };
+  surveyScannerId ??= get<{ results?: Array<{ id: string; name: string }> }>("").then((r) => {
+    const id = r.results?.find((s) => s.name === "LoveIQ survey UX")?.id;
+    if (!id) throw new Error("no LoveIQ survey UX scanner");
+    return id;
+  });
+  const id = await surveyScannerId;
+  const { results = [] } = await get<{
+    results?: Array<{ status?: string; error_reason?: string; created_at?: string }>;
+  }>(`${id}/observations/?session_id=${encodeURIComponent(sessionId)}`);
+  const latest = [...results].sort((a, b) =>
+    String(b.created_at).localeCompare(String(a.created_at))
+  )[0];
+  return latest
+    ? { status: String(latest.status ?? ""), reason: String(latest.error_reason ?? "") }
+    : null;
+}
+
 /**
  * The facts behind the last digest that was DELIVERED, or null when it cannot
  * say. `staleAfterMs` is how old that digest may be before its absence is
@@ -312,6 +368,8 @@ export async function gatherDigestFacts(): Promise<
       stillUnwatched(env, at),
     ]);
     if (!verification || !coverage) return null;
+    const looked = [];
+    for (const u of unwatched) looked.push({ ...u, posthog: await surveyObservation(u.sessionId) });
 
     const sessions = new Set([
       ...verification.undeliveredSessions,
@@ -336,7 +394,7 @@ export async function gatherDigestFacts(): Promise<
         threads,
         prs,
         labelled: labelledRows.map((r) => ({ prUrl: r.pr_url, label: r.human_label })),
-        stillUnwatched: unwatched,
+        stillUnwatched: looked,
       },
     };
   } catch (err) {
