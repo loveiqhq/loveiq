@@ -6,9 +6,11 @@ takes the survey, and the report opens unlocked. How it works is in
 
 ## Pause it, or switch it back on
 
-Admin panel → System flags → `pay_to_start_checkout`. Off: every button on the page answers
-"Checkout is paused for a moment" and nothing is charged; the page stays up, so an ad keeps
-landing somewhere. A checkout already open at Stripe can still be paid and is honoured.
+The `pay_to_start_checkout` system flag. There is no screen for it: `PATCH
+/api/admin/system-flags` with an admin session, as `docs/runbooks/DISASTER_RECOVERY.md` §3
+shows, with `{"key":"pay_to_start_checkout","enabled":false}`. Off: every button on the page
+answers "Checkout is paused for a moment" and nothing is charged; the page stays up, so an ad
+keeps landing somewhere. A checkout already open at Stripe can still be paid and is honoured.
 
 The page also refuses to sell while the survey is closed or `survey_submissions` is off.
 
@@ -27,10 +29,16 @@ test is read per price.
 
 ## Test it
 
-- **Locally**: `vercel env pull` the staging project's environment into `.env.local` (never
-  production's), then `stripe listen --forward-to localhost:<port>/api/stripe/webhook` and use
-  the printed `whsec_...`. Pay with `4242 4242 4242 4242`; 3-D Secure with
-  `4000 0025 0000 3155`; a dispute with `4000 0000 0000 0259`.
+- **Staging's webhook first.** Every test-mode event, from any machine or preview, goes to
+  `staging.loveiq.org/api/stripe/webhook` (the only enabled test-mode endpoint). Code without
+  this journey throws on its sessions, completed or merely expired, and posts "webhook
+  processing failed" to #ops on every retry. So the `staging` branch must carry this code,
+  and staging's database its migrations, before any test checkout.
+- **Locally**: `vercel env pull` the staging project's environment (never production's), point
+  the Slack webhooks and `RESEND_BASE_URL` at a local capture if you want to read what would be
+  sent, and pay with `4242 4242 4242 4242`; 3-D Secure with `4000 0025 0000 3155`; a dispute
+  with `4000 0000 0000 0259`. Use Chrome: Safari refuses the `Secure` `__Host-` cookies a
+  local production build sets over http.
 - **Use an `@loveiq.org` email** at Stripe: staging sends real email and Slack, and a team
   address marks the payment `is_test`, so it never reaches GA4, Ads or the numbers.
 - **What to check after a test payment**: the `prepaid_report_access` row (succeeded, then
@@ -39,8 +47,10 @@ test is read per price.
 
 ## A buyer who paid but cannot get in
 
-Most of the time the link in our confirmation email ("Start my survey") is the answer: it
-opens the survey on any device, or their report once they have one.
+Most of the time the link in our confirmation email is the answer: it opens the survey on any
+device, or their report once they have one, when the survey was taken under the address they
+paid with. Someone else's survey (a gift, a shared browser) never opens through it: the survey
+taker has their own report link in the report email.
 
 If the email is lost, find their row by the address Stripe took:
 
@@ -55,43 +65,53 @@ order by created_at desc;
   `https://www.loveiq.org/sexual-archetype/continue?t=<prepaid_token>`. The token opens a paid
   survey; never paste it anywhere else.
 - `succeeded` and consumed: their report is the one the submission's token opens.
-- `pending` for more than an hour: the payment never completed at Stripe (or settles later);
-  the hourly sweep asks Stripe about every pending checkout under 48 hours old.
+- `pending` for more than an hour: the payment never completed at Stripe (a checkout closes
+  after an hour), or a delayed method still settles; the sweep (twice an hour) asks Stripe
+  about every checkout pending under 48 hours.
+- `pending` with a `consumed_submission_id`: they left checkout and took the survey. Paying
+  from the page in the same browser unlocks that report; elsewhere, send the continue link
+  once it is paid.
 
 ## Refunds and disputes
 
-Refund in the Stripe dashboard as usual. The webhook does the rest: before the survey the
-entitlement turns `refunded` and stops unlocking; after it, the report is re-locked like any
-refunded purchase. A dispute behaves the same way while open, and a won dispute restores
-access. #ops gets a `pts_refund` line.
+Refund in the Stripe dashboard as usual. The webhook does the rest. Before the survey: a full
+refund turns the entitlement `refunded` and it stops unlocking (#ops `pts_refund`); a partial
+refund keeps it working, as it keeps a report purchase unlocked. A payment refunded before
+anything confirmed it is never unlocked: the confirmation turns it `refunded`. After the
+survey: the report is re-locked like any refunded purchase (#ops `stripe_refund`). A dispute
+opened voids it (`stripe_dispute_opened`); one won restores it (`stripe_dispute_resolved`).
 
 Someone who paid twice (two tabs, a lost cookie): #ops `pts_double_payment`. Refund the second
 payment; either entitlement works on its own.
 
 ## Alerts
 
-| Channel   | Kind                           | Means                                                                   |
-| --------- | ------------------------------ | ----------------------------------------------------------------------- |
-| #payments | `pts_paid`                     | A payment confirmed (survey not taken yet)                              |
-| #payments | `pts_claimed`                  | The survey claimed it; the report is unlocked                           |
-| #ops      | `pts_checkout_failure`         | Opening checkout failed: visitors may be unable to pay                  |
-| #ops      | `pts_price_setting_invalid`    | `PAY_TO_START_PRICE_CENTS` is out of range; EUR 29 is charged           |
-| #ops      | `pts_paid_without_entitlement` | Stripe says paid, but no row matches: find the buyer, attach by hand    |
-| #ops      | `pts_second_paid_session`      | A second paid session for one entitlement: refund one                   |
-| #ops      | `pts_double_payment`           | The same address paid twice within 48 hours                             |
-| #ops      | `pts_claim_failed`             | A survey's claim errored: check the row (a bound one the sweep retries) |
-| #ops      | `pts_apply_failed`             | Claimed but the report did not unlock: the sweep retries every run      |
-| #ops      | `pts_async_payment_failed`     | A delayed payment failed after a survey had claimed it                  |
-| #ops      | `pts_refund`                   | A refund or dispute reached an entitlement before or after its claim    |
+| Channel   | Kind                           | Means                                                                       |
+| --------- | ------------------------------ | --------------------------------------------------------------------------- |
+| #payments | `pts_paid`                     | A payment confirmed (the line says whether the survey is done yet)          |
+| #payments | `pts_claimed`                  | The survey claimed it; the report is unlocked                               |
+| #ops      | `pts_checkout_failure`         | Opening checkout failed: visitors may be unable to pay                      |
+| #ops      | `pts_price_setting_invalid`    | `PAY_TO_START_PRICE_CENTS` is out of range; EUR 29 is charged               |
+| #ops      | `pts_paid_without_entitlement` | Stripe says paid, but no row matches: find the buyer, attach by hand        |
+| #ops      | `pts_second_paid_session`      | A second paid session for one entitlement: refund one                       |
+| #ops      | `pts_double_payment`           | The same address paid twice within 48 hours                                 |
+| #ops      | `pts_claim_failed`             | A survey's claim errored: check the row (a bound one the sweep retries)     |
+| #ops      | `pts_apply_failed`             | Claimed but the report did not unlock: the sweep retries every run          |
+| #ops      | `pts_async_payment_failed`     | A delayed payment failed (and whether a survey had claimed it)              |
+| #ops      | `pts_refund`                   | A refund reached an entitlement before any survey claimed it                |
+| #ops      | `stripe_dispute_opened`        | A dispute opened (before a claim, the entitlement stops unlocking)          |
+| #ops      | `stripe_dispute_resolved`      | A dispute closed: won restores the entitlement or the report, lost stays so |
 
 ## Before the first ad
 
-- `supabase/migrations/20261018120000_pay_to_start_entitlement.sql` applied to the database
-  the deployment uses (staging first, `docs/runbooks/STAGING_DATABASE.md`; production with
-  its ledger row before the main deployment).
+- Both migrations applied, staging first (`docs/runbooks/STAGING_DATABASE.md`), production with
+  their ledger rows before the main deployment:
+  `supabase/migrations/20261018120000_pay_to_start_entitlement.sql` and
+  `supabase/migrations/20261018130000_pay_to_start_out_of_free_funnel_readouts.sql`.
+- The `staging` branch carries this code (see "Staging's webhook first" above).
 - Stripe → Settings → Public details: a Terms of Service URL, in test and in live mode. The
   checkout requires the terms checkbox and cannot open without it.
 - The price setting matches the ad.
-- The SQL readouts checked against a staging purchase with Eman, so none counts the journey
-  in a landing or pricing arm.
+- A decision on how AP-Analytics, Jarvis and the KPI week show this journey: until then they
+  count its visits, finishers and buyers inside the free funnel's (the digests do not).
 - Marcus's copy flags answered (questions count, minutes, chapters).

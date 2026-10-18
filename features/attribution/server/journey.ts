@@ -23,7 +23,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { classifyTraffic, readStampedArms, type TrafficInfo } from "./traffic";
-import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 
 export interface JourneyArms {
   /** Raw stored values — "white" | "white_prev" | "control" | null etc. Label via labels.ts. */
@@ -157,22 +157,6 @@ interface PaymentRow {
   payment_date_time: string | null;
   currency: string | null;
   metadata: { journey?: unknown; plan?: unknown } | null;
-}
-
-/** Whether a stored tracker carries the pay-to-start journey stamp (app/api/survey). */
-function trackerSaysPayToStart(utmTracker: string | null): boolean {
-  if (!utmTracker) return false;
-  try {
-    const parsed: unknown = JSON.parse(utmTracker);
-    return (
-      !!parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      (parsed as { journey?: unknown }).journey === PAY_TO_START_JOURNEY
-    );
-  } catch {
-    return false;
-  }
 }
 
 interface AnalyticsRow {
@@ -594,7 +578,7 @@ export async function buildSubmissionJourney(
       payments.length > 0 && !payments.some((p) => (toNumber(p.amount) ?? 0) > 0 && !p.is_test),
     quoteCount: quotes.length,
     recordingSessionId: sub.posthog_session_id?.trim() || null,
-    ...(payToStartPayment || trackerSaysPayToStart(sub.utm_tracker) ? { payToStart: true } : {}),
+    ...(payToStartPayment || isPayToStartTracker(sub.utm_tracker) ? { payToStart: true } : {}),
   };
 }
 

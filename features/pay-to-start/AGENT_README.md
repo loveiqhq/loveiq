@@ -11,19 +11,21 @@ landing test arm.
 1. `/sexual-archetype` (`ui/landing/`): the assessment page, Facets-branded, noindex. Every
    "Unlock survey & report" posts to `POST /api/stripe/pay-to-start`.
 2. The checkout route records a pending `prepaid_report_access` row (`server/entitlement.ts`)
-   and sets its bearer token (`rpp_` + 32) in an httpOnly cookie (`__Host-liq_pp`, 30 days),
-   then sends the browser to Stripe Checkout. The session's metadata names the row
-   (`entitlementId`) and `journey: pay_to_start`, never the token.
+   and sets its bearer token (`rpp_` + 32) in an httpOnly cookie (`__Host-liq_pp`, 30 days;
+   production reads no other name), then sends the browser to Stripe Checkout, which closes
+   an unpaid session after an hour. The session's metadata names the row (`entitlementId`),
+   `journey: pay_to_start` and the visitor's anonymous PostHog id, never the token.
 3. The payment is confirmed exactly once (`server/confirm.ts`), by whichever comes first: the
    webhook (`features/checkout/server/fulfillment.ts` routes on `metadata.journey`), the status
-   page Stripe returns to (`/sexual-archetype/checkout`, `ui/status/`), or the hourly sweep
-   (`server/sweep.ts`). The first confirmation sends our email with the continue link
-   (`server/emails/confirmation.ts`, `/sexual-archetype/continue?t=`), #payments, and the
-   purchase to GA4 and PostHog.
-4. `/survey` sees the cookie (`app/survey/page.tsx`), shows the 4-slide wizard, and its
-   submit claims the entitlement (`server/claim.ts`): bind it to the submission (one payment,
-   one report), then apply it (a `full_report` payment row with `metadata.journey` and
-   `prepaid`, the tier). The report opens unlocked.
+   page Stripe returns to (`/sexual-archetype/checkout`, `ui/status/`), or the sweep (twice an
+   hour, `server/sweep.ts`). The first confirmation sends our email with the continue link
+   (`server/emails/confirmation.ts`, `/sexual-archetype/continue?t=`; "your report is
+   unlocked" when the survey was finished first), #payments, and the purchase to GA4 and
+   PostHog.
+4. `/survey` sees the cookie (`app/survey/page.tsx`); its submit claims the entitlement
+   (`server/claim.ts`): bind it to the submission (one payment, one report), then apply it
+   (a `full_report` payment row with `metadata.journey` and `prepaid`, the tier). The reply
+   says unlocked, and the reader gets the 4-slide wizard and an unlocked report.
 
 ## Rules that are easy to break
 
@@ -32,18 +34,33 @@ landing test arm.
   euro amount is written in `ui/**` (`tests/no-hardcoded-price.test.ts`).
 - **Copy lives in `ui/landing/payToStartContent.ts`**, verbatim from Figma; where it disagrees
   with the product (57 questions, ~15 minutes, cut chapters) it is flagged, not changed.
-- **Never in a landing arm.** Visits are labelled `pay_to_start` (`proxy.ts`), the survey's
-  tracker gets `journey` and no arm (`stampLandingArm(..., { arm: false })`), and the readouts
-  leave claimed submissions out (`features/admin/server/experiment-readouts.ts`).
-- **No token in Stripe, analytics or logs.** The status route hands the cookie to a browser
-  that returns without it, for a paid unused entitlement under a week old; the session id is
-  removed from the status page's address for that reason.
+- **Never in a landing arm or the free funnel's numbers.** Visits are labelled
+  `pay_to_start` (`proxy.ts`), so are a buyer's survey steps (`app/api/funnel-event`), the
+  survey's tracker gets `journey` and no arm (`stampLandingArm(..., { arm: false })`). The
+  experiment readouts leave claimed submissions out (`features/admin/server/experiment-readouts.ts`,
+  and in SQL `pay_to_start_submission()`, 20261018130000), and the digests' visit counts and
+  wizard funnels leave the page's visits and the 4-slide wizard out. AP-Analytics, Jarvis and
+  the KPI week still show the journey mixed in: how they should show it is an open decision.
+- **A purchase never opens someone else's report.** The continue link and the checkout route
+  open a used purchase's report only when the survey was taken under the address Stripe took
+  (`server/reportLink.ts`); the status route never sends a report's address, because a
+  checkout session id is no secret (it is the purchase's transaction id in GA4, Ads and
+  PostHog). Its cookie handover is for a browser back without the cookie within two hours of
+  paying (a wallet that finished elsewhere).
 - **Side effects run on the first flip only** (`pending` → `succeeded`, PATCH with
-  `return=representation`): a redelivered webhook or a second poll sends nothing again.
-- **Refunds and disputes**: before the claim the row goes `refunded` and stops unlocking; after
-  it, the payment row's refund re-locks the report as for any purchase.
+  `return=representation`): a redelivered webhook or a second poll sends nothing again. If
+  the function dies after the flip they are lost (at most once), never doubled.
+- **Refunds and disputes**: before the claim a full refund or an opened dispute turns the row
+  `refunded` and stops it unlocking (a partial refund keeps it working, as for a report
+  purchase); a payment refunded before anything confirmed it is turned `refunded` at
+  confirmation. After the claim, the payment row's refund re-locks the report as for any
+  purchase, and the entitlement's status follows.
+- **An unpaid claim keeps the cookie.** A visitor who left checkout and then took the survey
+  has their pending row bound to it; paying later from the page reuses the token and unlocks
+  that report.
 
 ## Kill switch and runbook
 
-The `pay_to_start_checkout` system flag (admin panel) pauses the checkout; the page stays up.
+The `pay_to_start_checkout` system flag pauses the checkout; the page stays up. There is no
+screen for it: `PATCH /api/admin/system-flags` (`docs/runbooks/DISASTER_RECOVERY.md` §3).
 Changing the price, refunds and attaching a payment by hand: `docs/runbooks/PAY_TO_START.md`.
