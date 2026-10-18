@@ -179,10 +179,13 @@ export function claimResponseFields(claim: ClaimOutcome): {
 
 /**
  * Whether the browser's cookie has done its job. Cleared once the entitlement is bound
- * to this submission or can never be claimed; kept after an error, so a retry can claim.
+ * and paid (or on its way), or can never be claimed. Kept after an error, so a retry can
+ * claim, and after an unpaid claim: the cookie is how a checkout from the page later
+ * reuses this same token, so paying then unlocks the report this survey already has
+ * (without it the page mints a new token, and the buyer would have to retake the survey).
  */
 export function claimSettlesCookie(claim: ClaimOutcome): boolean {
-  return claim.outcome !== "error";
+  return claim.outcome !== "error" && claim.outcome !== "unpaid";
 }
 
 /**

@@ -244,6 +244,12 @@ describe("a first checkout", () => {
     );
     expect(options).toMatchObject({ idempotencyKey: expect.any(String) });
 
+    // An abandoned checkout closes within the hour (Stripe's default is 24 hours, and the
+    // hourly sweep re-asks about every pending one until it does).
+    const ttl = (params.expires_at as number) - Date.now() / 1000;
+    expect(ttl).toBeGreaterThanOrEqual(60 * 60 - 1);
+    expect(ttl).toBeLessThanOrEqual(61 * 60 + 1);
+
     // No bearer token and no hero arm in anything sent to Stripe.
     const sent = JSON.stringify(params);
     expect(sent).not.toMatch(/rpp_[A-Za-z0-9]{32}/);
@@ -396,5 +402,23 @@ describe("a browser that already holds a token", () => {
     const response = await post(VALID, cookie);
     expect(createPendingEntitlement).toHaveBeenCalled();
     expect(response.headers.get("set-cookie")).not.toContain(TOKEN);
+  });
+});
+
+describe("the session's expiry", () => {
+  it("is the same for every click in one minute, and lives at least an hour", async () => {
+    const { payToStartSessionExpiresAt, PAY_TO_START_SESSION_TTL_SECONDS } =
+      await import("@features/pay-to-start/server/checkout");
+    const minute = Date.parse("2026-10-18T12:34:00.000Z");
+    // Identical parameters inside a minute: the idempotency key's condition for a double click.
+    expect(payToStartSessionExpiresAt(minute + 1_000)).toBe(
+      payToStartSessionExpiresAt(minute + 59_000)
+    );
+    for (const at of [minute, minute + 59_999]) {
+      const left = payToStartSessionExpiresAt(at) - at / 1000;
+      expect(left).toBeGreaterThanOrEqual(PAY_TO_START_SESSION_TTL_SECONDS);
+      // Stripe accepts 30 minutes to 24 hours.
+      expect(left).toBeLessThanOrEqual(24 * 60 * 60);
+    }
   });
 });

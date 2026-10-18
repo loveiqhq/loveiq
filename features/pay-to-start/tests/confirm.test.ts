@@ -20,6 +20,7 @@ vi.mock("@features/pay-to-start/server/entitlement", () => ({
   findEntitlementById: vi.fn(),
   findRecentPaidDuplicate: vi.fn(),
   markEntitlementExpired: vi.fn(),
+  markEntitlementRefundedUnconfirmed: vi.fn(),
   markEntitlementSucceeded: vi.fn(),
   setEntitlementSession: vi.fn(),
 }));
@@ -32,6 +33,7 @@ import {
   findEntitlementById,
   findRecentPaidDuplicate,
   markEntitlementExpired,
+  markEntitlementRefundedUnconfirmed,
   markEntitlementSucceeded,
   setEntitlementSession,
   type Entitlement,
@@ -214,6 +216,72 @@ describe("unpaid sessions", () => {
     expect(markEntitlementSucceeded).not.toHaveBeenCalled();
   });
 
+  it("reads a delayed payment that failed as failed, so a new checkout can open", async () => {
+    // A complete session never expires: read as processing, every later click would be
+    // sent to the status page for good.
+    const result = await confirm(
+      checkoutSession({
+        payment_status: "unpaid",
+        payment_intent: { id: "pi_test_1", status: "requires_payment_method" },
+      })
+    );
+    expect(result.state).toBe("failed");
+    expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+  });
+
+  it("bounds every Stripe call", async () => {
+    const { stripe, retrieve } = stripeReturning(checkoutSession());
+    await confirmPayToStartSession({ sessionId: "cs_test_paid", source: "sweep", stripe });
+    await flushAfterResponse();
+    expect(retrieve).toHaveBeenCalledWith("cs_test_paid", expect.any(Object), {
+      timeout: 8_000,
+      maxNetworkRetries: 1,
+    });
+  });
+
+  it.each([
+    ["refunded in full", { refunded: true, disputed: false, amount_refunded: 2900 }],
+    ["disputed", { refunded: false, disputed: true, amount_refunded: 0 }],
+  ])("never unlocks a payment %s before anything confirmed it", async (_label, chargeState) => {
+    const result = await confirm(
+      checkoutSession({
+        payment_intent: {
+          id: "pi_test_1",
+          status: "succeeded",
+          latest_charge: { id: "ch_test_1", created: CHARGE_CREATED, ...chargeState },
+        },
+      })
+    );
+    expect(result.state).toBe("refunded");
+    expect(markEntitlementRefundedUnconfirmed).toHaveBeenCalledWith({
+      id: 7,
+      paymentIntentId: "pi_test_1",
+    });
+    expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+    expect(sendPayToStartConfirmationEmail).not.toHaveBeenCalled();
+    expect(sendGa4PurchaseEvent).not.toHaveBeenCalled();
+  });
+
+  it("still unlocks after a partial refund, as a report purchase does", async () => {
+    const result = await confirm(
+      checkoutSession({
+        payment_intent: {
+          id: "pi_test_1",
+          status: "succeeded",
+          latest_charge: {
+            id: "ch_test_1",
+            created: CHARGE_CREATED,
+            refunded: false,
+            disputed: false,
+            amount_refunded: 500,
+          },
+        },
+      })
+    );
+    expect(result.state).toBe("paid");
+    expect(markEntitlementRefundedUnconfirmed).not.toHaveBeenCalled();
+  });
+
   it("never re-opens a refunded entitlement", async () => {
     vi.mocked(findEntitlementById).mockResolvedValue(row({ status: "refunded" }));
     const result = await confirm(checkoutSession());
@@ -345,7 +413,11 @@ describe("the first confirmation", () => {
       stripe,
     });
     await flushAfterResponse();
-    expect(intentRetrieve).toHaveBeenCalledWith("pi_test_1", { expand: ["latest_charge"] });
+    expect(intentRetrieve).toHaveBeenCalledWith(
+      "pi_test_1",
+      { expand: ["latest_charge"] },
+      { timeout: 8_000, maxNetworkRetries: 1 }
+    );
     expect(result.state).toBe("paid");
   });
 });
