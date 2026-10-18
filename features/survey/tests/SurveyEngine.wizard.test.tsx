@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   retryPending: vi.fn(),
   trackNavigation: vi.fn(),
   startedAt: new Date().toISOString(),
+  /** The reply said the survey was paid for before it was taken (pay to start). */
+  paidBeforeSurvey: false,
 }));
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
@@ -41,6 +43,7 @@ vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
     submit: state.submit,
     retryPending: state.retryPending,
     hasPendingCompletion: false,
+    paidBeforeSurvey: state.paidBeforeSurvey,
     status: "success",
   }),
 }));
@@ -85,6 +88,7 @@ vi.mock("@features/survey/ui/ProcessingSequence", () => ({
 }));
 
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
+import { PAID_WIZARD_KEY } from "@features/survey/ui/hooks/surveySession";
 
 /** Let a slide's 250ms leave animation finish. */
 const flush = (ms = 260) =>
@@ -102,6 +106,8 @@ const openWizard = () => {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  state.paidBeforeSurvey = false;
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -143,5 +149,29 @@ describe("SurveyEngine — the wizard after the last question", () => {
     flush();
     expect(counter()).toBe("1 / 6");
     expect(state.setCurrentIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("SurveyEngine — the wizard for a survey paid before it was taken", () => {
+  const fourCounter = () => screen.getByText(/^\d \/ 4$/).textContent;
+
+  it("shows the four-slide wizard when the reply says it was paid for", () => {
+    state.paidBeforeSurvey = true;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(fourCounter()).toBe("1 / 4");
+  });
+
+  it("keeps it after a reload mid-wizard, from the tab's flag", () => {
+    sessionStorage.setItem(PAID_WIZARD_KEY, "1");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(fourCounter()).toBe("1 / 4");
+  });
+
+  it("shows everyone else the six", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(counter()).toBe("1 / 6");
   });
 });

@@ -251,6 +251,43 @@ describe("POST /api/survey-partial", () => {
     expect(JSON.parse(row.utm_tracker)).toEqual({ landing_variant: "white", ...EMAIL });
   });
 
+  it("labels a pay-to-start buyer's draft with the journey and no landing arm", async () => {
+    // A buyer may hold an arm cookie from an earlier visit to the home page: that arm
+    // must not be credited with how far a paid survey got.
+    mockCookieGet.mockReturnValue({ value: "white_prev" });
+    await POST(
+      new Request("http://localhost/api/survey-partial", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "valid-token",
+          cookie: `__liq_pp=rpp_${"a".repeat(32)}`,
+        },
+        body: JSON.stringify({
+          ...validBody(),
+          utmTracker: JSON.stringify({ utm_source: "google", landing_variant: "white" }),
+        }),
+      })
+    );
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker)).toEqual({
+      utm_source: "google",
+      journey: "pay_to_start",
+      ...EMAIL,
+    });
+  });
+
+  it("strips a journey label the browser claims without the cookie", async () => {
+    await POST(
+      makeRequest({
+        ...validBody(),
+        utmTracker: JSON.stringify({ utm_source: "google", journey: "pay_to_start" }),
+      })
+    );
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker)).toEqual({ utm_source: "google", ...EMAIL });
+  });
+
   it("refuses an arm the body claims when no cookie backs it", async () => {
     // utm_tracker is assembled in the browser and posted verbatim.
     mockCookieGet.mockReturnValue(undefined);

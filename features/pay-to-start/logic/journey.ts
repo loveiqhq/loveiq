@@ -51,5 +51,18 @@ export function readPrepaidToken(cookieHeader: string | null | undefined): strin
   return null;
 }
 
+/**
+ * What /survey's server page tells the survey about a visitor who paid before it (their
+ * entitlement cookie holds an unused, paid or settling entitlement). Null for everyone else.
+ */
+export interface SurveyJourney {
+  kind: PayToStartJourney;
+  /** Paid; false while the payment still settles. */
+  paid: boolean;
+}
+
+/** Where the survey's way out leads for that visitor: the page they paid on. */
+export const PAY_TO_START_RETURN_PATH = "/sexual-archetype";
+
 /** A Stripe Checkout session id, as the status route accepts it. */
 export const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[A-Za-z0-9]{10,200}$/;

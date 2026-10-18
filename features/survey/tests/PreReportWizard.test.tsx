@@ -826,3 +826,85 @@ describe("PreReportWizard — the deep-dive tiles swipe and take a tap (01.10)",
     expect(screen.getByRole("main").style.touchAction).toBe("pan-y");
   });
 });
+
+/**
+ * Pay to start: a reader who paid before the survey gets slides 1, 4, 5 and 6 (Figma
+ * Report-3.0 1477:3938, 4018, 4071, 4123): their report opens fully unlocked, so the map
+ * of free chapters and the risk-free unlock have nothing to say. Four segments, "n / 4"
+ * (Fatih, 18.10); the analytics keep each slide's index in the six.
+ */
+describe("PreReportWizard — the pay-to-start variant", () => {
+  const PAID_HEADINGS = [HEADINGS[0], HEADINGS[3], HEADINGS[4], HEADINGS[5]];
+  const filled = () =>
+    document.querySelectorAll("[data-wizard-segment][data-filled='true']").length;
+
+  it("walks four slides, the bar of four and the counter following", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start" />);
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(4);
+    expect(heading()).toBe(PAID_HEADINGS[0]);
+    expect(screen.getByText("1 / 4")).toBeInTheDocument();
+    expect(backButton()).toBeNull();
+    for (let i = 1; i < PAID_HEADINGS.length; i++) {
+      press(continueButton());
+      expect(heading()).toBe(PAID_HEADINGS[i]);
+      expect(screen.getByText(`${i + 1} / 4`)).toBeInTheDocument();
+      expect(filled()).toBe(i + 1);
+    }
+  });
+
+  it("never shows the report map or the risk-free unlock", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start" />);
+    const seen: string[] = [heading() ?? ""];
+    for (let i = 0; i < 3; i++) {
+      press(continueButton());
+      seen.push(heading() ?? "");
+    }
+    expect(seen).not.toContain(HEADINGS[1]);
+    expect(seen).not.toContain(HEADINGS[2]);
+    expect(screen.queryByText(/money-back guarantee/i)).toBeNull();
+  });
+
+  it("goes back through the same four, and ends on the fourth's CONTINUE", () => {
+    const onComplete = vi.fn();
+    render(<PreReportWizard onComplete={onComplete} variant="pay_to_start" />);
+    press(continueButton());
+    press(continueButton());
+    expect(heading()).toBe(PAID_HEADINGS[2]);
+    press(backButton()!);
+    expect(heading()).toBe(PAID_HEADINGS[1]);
+    press(continueButton());
+    press(continueButton());
+    expect(heading()).toBe(PAID_HEADINGS[3]);
+    expect(screen.getByRole("button", { name: "Continue to your report" })).toBeInTheDocument();
+    fireEvent.click(continueButton());
+    flush(950);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports each slide by its index in the six, tagged as this wizard", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start" />);
+    press(continueButton());
+    press(continueButton());
+    press(backButton()!);
+    expect(analytics.trackWizardSlideAdvanced.mock.calls.map(([p]) => p)).toEqual([
+      { from_slide: 0, to_slide: 3, direction: "next", wizard_variant: "pay_to_start" },
+      { from_slide: 3, to_slide: 4, direction: "next", wizard_variant: "pay_to_start" },
+      { from_slide: 4, to_slide: 3, direction: "previous", wizard_variant: "pay_to_start" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    expect(analytics.trackWizardSkipped).toHaveBeenCalledWith({
+      from_slide: 3,
+      wizard_variant: "pay_to_start",
+    });
+  });
+
+  it("leaves the standard wizard's events exactly as they were", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+    expect(analytics.trackWizardSlideAdvanced.mock.calls[0]?.[0]).toEqual({
+      from_slide: 0,
+      to_slide: 1,
+      direction: "next",
+    });
+  });
+});

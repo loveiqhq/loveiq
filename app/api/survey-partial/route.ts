@@ -9,6 +9,11 @@ import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
 import {
+  JOURNEY_TRACKER_KEY,
+  PAY_TO_START_JOURNEY,
+  readPrepaidToken,
+} from "@features/pay-to-start/logic/journey";
+import {
   assignEmailQuestionArm,
   EMAIL_QUESTION_ARM_KEY,
 } from "@shared/experiments/emailQuestionArm";
@@ -87,6 +92,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  const prepaidToken = readPrepaidToken(request.headers.get("cookie"));
   const row = {
     session_id: parsed.data.sessionId,
     answers: parsed.data.answers,
@@ -103,7 +109,13 @@ export async function POST(request: Request) {
      * a tracker for it, so the session id stays the record and the stamp a convenience.
      */
     utm_tracker: mergeTrackerArm(
-      await stampLandingArm(parsed.data.utmTracker),
+      // A visitor who paid before the survey: no landing arm, the server's journey label
+      // (the same rules as the submit, app/api/survey).
+      mergeTrackerArm(
+        await stampLandingArm(parsed.data.utmTracker, { arm: !prepaidToken }),
+        JOURNEY_TRACKER_KEY,
+        prepaidToken ? PAY_TO_START_JOURNEY : null
+      ),
       EMAIL_QUESTION_ARM_KEY,
       assignEmailQuestionArm(parsed.data.sessionId)
     ),

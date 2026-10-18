@@ -247,6 +247,9 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * this message; no /admin screen renders it, which is the point of retiring the
  * axis rather than the arm.
  */
+/** Where a pay-to-start buyer came in: the assessment page, paid before the survey. */
+const PAY_TO_START_PAGE_LABEL = "Pay to start (/sexual-archetype)";
+
 function armFields(journey: SubmissionJourney): SlackBlock {
   // `landing` is live again for its round 3 (V2's question card vs V3's hero video), so
   // a buyer's message says which version they came through, and keeps the row when it
@@ -260,7 +263,13 @@ function armFields(journey: SubmissionJourney): SlackBlock {
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
       const label = armLabel(axis, journey.arms[axis]);
-      const value = label.retired ? `${label.short} _(retired arm)_` : label.short;
+      // Paid on the pay-to-start page: in no landing arm, by design (app/api/survey).
+      const value =
+        axis === "landing" && journey.payToStart
+          ? PAY_TO_START_PAGE_LABEL
+          : label.retired
+            ? `${label.short} _(retired arm)_`
+            : label.short;
       return {
         // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
         label: AXIS_TITLES[axis],
@@ -404,7 +413,9 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   // live arm that failed to stamp stays visible rather than quietly missing.
   const landing = armLabel("landing", journey.arms.landing);
   lines.push(
-    `Landing page design: ${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`
+    journey.payToStart
+      ? `Landing page design: ${bold(PAY_TO_START_PAGE_LABEL)}`
+      : `Landing page design: ${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`
   );
 
   // Pricing 3.0 is live; its arm is stamped when the report first quotes a price, so a
