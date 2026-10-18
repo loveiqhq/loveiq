@@ -82,7 +82,7 @@ const CHALLENGER_NAME = / \(challenger[^)]*\)$/;
 export const isChallengerScanner = (name: string | null | undefined): boolean =>
   CHALLENGER_NAME.test(String(name ?? ""));
 
-const PROJECT = "244778";
+export const PROJECT = "244778";
 const POSTHOG_REPLAY_BASE = `https://eu.posthog.com/project/${PROJECT}/replay`;
 
 /** How far back each run looks. 3x the 30-minute schedule, so one missed tick
@@ -1339,13 +1339,18 @@ function coverageLine(c: CoverageStat | null): string {
    *
    * Both are now handled the same way: anything unwatched is re-queued every
    * hour by the verify workflow, so the honest word is "yet".
+   *
+   * But not "so they are not lost". PostHog gives up on some recordings for good: one
+   * it cannot render, or an answer carrying personal data it could not strip
+   * (submissions 2428, 2475, 2481 and 2570, 7-18 Oct 2026). The re-queue asks; it cannot
+   * make PostHog watch, and the digest audit was red for twelve days on that promise.
    */
   return (
     `*How much we watched:* ${c.observed} of the ${c.submissions} people who finished ` +
     `the survey${c.unrecorded ? " with a recording" : ""} (${pct}%).` +
     (missed > 0
       ? ` The other ${missed} had not been watched when this was written — ` +
-        `they are queued automatically for another look, so they are not lost.`
+        `they are queued automatically for another look.`
       : " Everyone was watched.") +
     unrecorded
   );

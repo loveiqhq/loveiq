@@ -131,12 +131,41 @@ describe("the digest audit", () => {
     ).toEqual([]);
   });
 
-  it("holds 'not lost' to the readers still unwatched a day later", () => {
-    const f = facts({ stillUnwatched: [{ submissionId: 2183, sessionId: "x" }] });
+  it("holds 'queued' to the readers PostHog was never asked to watch", () => {
+    const f = facts({ stillUnwatched: [{ submissionId: 2183, sessionId: "x", posthog: null }] });
     expect(failed(f).map((c) => c.detail)).toEqual([
-      "1 who finished a day or more ago, with a recording, were never opened by the survey " +
+      "1 who finished a day or more ago, with a recording, were never sent to the survey " +
         "scanner (submissions 2183)",
     ]);
+  });
+
+  // 7-18 Oct 2026: PostHog gave up on 2428 (it could not render the recording) and 2481
+  // (the answer carried personal data), and the audit was red for twelve days on a
+  // "not lost" the re-queue could never keep. Queued, and named, is the promise.
+  it("passes readers PostHog gave up on, and names them with the reason", () => {
+    const f = facts({
+      stillUnwatched: [
+        {
+          submissionId: 2428,
+          sessionId: "a",
+          posthog: {
+            status: "failed",
+            reason: "rasterization_failed:capture stopped unexpectedly",
+          },
+        },
+        {
+          submissionId: 2481,
+          sessionId: "b",
+          posthog: { status: "failed", reason: "pii_detected:The answer included personal data" },
+        },
+      ],
+    });
+    expect(failed(f)).toEqual([]);
+    const check = checkDigest(f).find((c) => c.claim.startsWith("Unwatched readers"));
+    expect(check?.detail).toBe(
+      "every unwatched finisher was sent; PostHog could not watch " +
+        "2428 (rasterization_failed), 2481 (pii_detected)"
+    );
   });
 });
 
