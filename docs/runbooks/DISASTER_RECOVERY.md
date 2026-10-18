@@ -46,7 +46,7 @@ DB schema is **not** rolled back by `vercel rollback` — for that, see [MIGRATI
 
 ## 3. Kill switches (instant feature disable)
 
-Three flags in `system_flags` table. Toggle with curl (there is no screen for them):
+Four flags in `system_flags` table. Toggle with curl (there is no screen for them):
 
 ```bash
 curl -X PATCH https://loveiq.org/api/admin/system-flags \
@@ -61,6 +61,7 @@ curl -X PATCH https://loveiq.org/api/admin/system-flags \
 | `survey_submissions`      | `/api/survey` and `/api/survey-partial` return 503                                                                                                                                                                                                          |
 | `nurture_sequence`        | `/api/cron/nurture-sequence` exits early                                                                                                                                                                                                                    |
 | `report_paywall_enforced` | `/api/report` serves every owner report as `all_reports` (fully unlocked) — emergency comp-everyone switch (e.g. Stripe outage). Share-link viewers keep their gift view. Fail-secure: stays enforced if the flag row is absent or Supabase is unreachable. |
+| `pay_to_start_checkout`   | `/api/stripe/pay-to-start` sells nothing: the `/sexual-archetype` page stays up and its buttons say checkout is paused. A checkout already open at Stripe can still be paid and is honoured. Fails open (a missing row means on).                           |
 
 Propagation: up to 30 s across all Vercel instances (in-process cache TTL).
 

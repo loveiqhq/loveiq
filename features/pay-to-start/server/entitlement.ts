@@ -150,7 +150,9 @@ async function readRows(response: Response, failure: string): Promise<Entitlemen
 
 /**
  * The first row a query returns. Callers spell out the whole path, `select` and `limit=1`
- * included, so `npm run check:postgrest-columns` sees every column they filter on.
+ * included. `npm run check:postgrest-columns` reads literal filters only: it cannot see
+ * `${SELECT}` or a filter on a continuation line, so the migration must be applied before
+ * this code deploys (PostgREST refuses an unknown column).
  */
 async function findOne(path: string): Promise<Entitlement | null> {
   const response = await serviceFetch(path);
