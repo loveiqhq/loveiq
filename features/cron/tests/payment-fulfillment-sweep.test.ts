@@ -27,6 +27,12 @@ vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: () => true,
 }));
 
+// Pay to start's own steps have their own tests (features/pay-to-start/tests/sweep.test.ts).
+const { mockSweepPayToStart } = vi.hoisted(() => ({
+  mockSweepPayToStart: vi.fn(async () => ({ reconciled: 0, paid: 0, applied: 0, errors: 0 })),
+}));
+vi.mock("@features/pay-to-start/server/sweep", () => ({ sweepPayToStart: mockSweepPayToStart }));
+
 import { GET } from "@/app/api/cron/payment-fulfillment-sweep/route";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -110,6 +116,29 @@ describe("GET /api/cron/payment-fulfillment-sweep", () => {
       throw new Error(`Unexpected fetchWithTimeout call: ${url}`);
     });
   }
+
+  it("runs pay to start's steps first, and reports them", async () => {
+    mockSweepPayToStart.mockResolvedValueOnce({ reconciled: 2, paid: 1, applied: 1, errors: 0 });
+    mockFetchWithTimeout.mockResolvedValue({ ok: true, json: async () => [] });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect(mockSweepPayToStart).toHaveBeenCalledTimes(1);
+    expect((await res.json()).payToStart).toEqual({
+      reconciled: 2,
+      paid: 1,
+      applied: 1,
+      errors: 0,
+    });
+  });
+
+  it("skips pay to start without Stripe", async () => {
+    delete process.env.STRIPE_SECRET_KEY;
+    mockFetchWithTimeout.mockResolvedValue({ ok: true, json: async () => [] });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect(mockSweepPayToStart).not.toHaveBeenCalled();
+    expect((await res.json()).payToStart).toBeNull();
+  });
 
   it("returns 500 when the find_stuck_payments RPC fails", async () => {
     mockFetchWithTimeout.mockResolvedValue({
