@@ -336,6 +336,18 @@ describe("applyPayToStartEntitlement", () => {
     expect(captured.urls).toHaveLength(0);
   });
 
+  it("never applies an offer that grants anything but the full report", async () => {
+    // The reserved EUR 1.99 pre-unlock is registered, not on sale: if it ever were, its
+    // EUR 1.99 must not write a full report's payment row and tier.
+    const captured = routeSupabase();
+    await expect(
+      applyPayToStartEntitlement({ entitlement: row({ offer: "pre" }), stripe })
+    ).rejects.toThrow("pts_apply_offer_not_a_full_report");
+    expect(captured.paymentPost).toBeNull();
+    expect(captured.urls.filter((u) => !u.startsWith("GET "))).toEqual([]);
+    expect(setEntitlementPaymentId).not.toHaveBeenCalled();
+  });
+
   it("stops before stamping when no archetype is scored yet, so the sweep retries", async () => {
     routeSupabase({ primary: null });
     await expect(applyPayToStartEntitlement({ entitlement: row(), stripe })).rejects.toThrow(
@@ -526,5 +538,61 @@ describe("after a survey claimed the payment", () => {
     });
     expect(findEntitlementByPaymentIntent).not.toHaveBeenCalled();
     expect(voidEntitlementByPaymentIntent).toHaveBeenCalledWith("pi_test_1");
+  });
+
+  it("keeps the entitlement on a partial refund, as the report stays unlocked", async () => {
+    routeSupabase({ existingPaymentId: 41 });
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_partial_after",
+        type: "charge.refunded",
+        data: {
+          object: {
+            id: "ch_test_1",
+            object: "charge",
+            amount: 2900,
+            amount_captured: 2900,
+            amount_refunded: 500,
+            currency: "eur",
+            payment_intent: "pi_test_1",
+          },
+        },
+      } as unknown as Stripe.Event,
+      stripe,
+    });
+    expect(voidEntitlementByPaymentIntent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["charge.dispute.created", "needs_response", "void"],
+    ["charge.dispute.closed", "won", "restore"],
+  ])("keeps the entitlement's status in step on %s (%s)", async (type, disputeStatus, expected) => {
+    routeSupabase({ existingPaymentId: 41 });
+    await processStripeWebhookEvent({
+      event: {
+        id: `evt_${type}`,
+        type,
+        data: {
+          object: {
+            id: "dp_test_1",
+            object: "dispute",
+            charge: "ch_test_1",
+            payment_intent: "pi_test_1",
+            status: disputeStatus,
+            reason: "fraudulent",
+            amount: 2900,
+            currency: "eur",
+          },
+        },
+      } as unknown as Stripe.Event,
+      stripe,
+    });
+    if (expected === "void") {
+      expect(voidEntitlementByPaymentIntent).toHaveBeenCalledWith("pi_test_1");
+      expect(restoreDisputedEntitlement).not.toHaveBeenCalled();
+    } else {
+      expect(restoreDisputedEntitlement).toHaveBeenCalledWith("pi_test_1");
+      expect(voidEntitlementByPaymentIntent).not.toHaveBeenCalled();
+    }
   });
 });

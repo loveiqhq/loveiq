@@ -748,7 +748,9 @@ export async function POST(request: Request) {
         return;
       }
 
-      if (await isEmailSuppressed(normalizedEmail)) {
+      // A buyer's report email confirms a purchase: like a report purchase's email
+      // (sendPurchaseEmail), it goes whatever the suppression list says.
+      if (claim?.outcome !== "unlocked" && (await isEmailSuppressed(normalizedEmail))) {
         logger.info({ submissionId }, "survey-complete: skip suppressed recipient");
         return;
       }

@@ -20,6 +20,7 @@ vi.mock("@features/pay-to-start/server/entitlement", () => ({
   findEntitlementById: vi.fn(),
   findRecentPaidDuplicate: vi.fn(),
   markEntitlementExpired: vi.fn(),
+  markEntitlementRefundedUnconfirmed: vi.fn(),
   markEntitlementSucceeded: vi.fn(),
   setEntitlementSession: vi.fn(),
 }));
@@ -32,6 +33,7 @@ import {
   findEntitlementById,
   findRecentPaidDuplicate,
   markEntitlementExpired,
+  markEntitlementRefundedUnconfirmed,
   markEntitlementSucceeded,
   setEntitlementSession,
   type Entitlement,
@@ -87,6 +89,7 @@ function checkoutSession(overrides: Record<string, unknown> = {}): Stripe.Checko
       gaClientId: "123.456",
       gaSessionId: "789",
       gaAnalyticsConsent: "1",
+      posthogDistinctId: "019a7c1e-anon",
     },
     payment_intent: {
       id: "pi_test_1",
@@ -198,6 +201,25 @@ describe("unpaid sessions", () => {
     expect(markEntitlementSucceeded).not.toHaveBeenCalled();
   });
 
+  it("leaves a pending row alone when a session it no longer points at expires", async () => {
+    // The row moved on to a newer session (a second tab, a new price): the old one
+    // expiring must not expire the row the buyer is about to pay.
+    vi.mocked(findEntitlementById).mockResolvedValue(row({ stripe_session_id: "cs_test_newer" }));
+    const result = await confirm(
+      checkoutSession({ status: "expired", payment_status: "unpaid", payment_intent: null })
+    );
+    expect(result.state).toBe("expired");
+    expect(markEntitlementExpired).not.toHaveBeenCalled();
+  });
+
+  it("does not unlock while a 3DS step is still open (requires_action)", async () => {
+    const result = await confirm(
+      checkoutSession({ payment_intent: { id: "pi_test_1", status: "requires_action" } })
+    );
+    expect(result.state).toBe("processing");
+    expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+  });
+
   it("does not unlock on a PaymentIntent that is still processing", async () => {
     const result = await confirm(
       checkoutSession({ payment_intent: { id: "pi_test_1", status: "processing" } })
@@ -212,6 +234,72 @@ describe("unpaid sessions", () => {
     );
     expect(result.state).toBe("failed");
     expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+  });
+
+  it("reads a delayed payment that failed as failed, so a new checkout can open", async () => {
+    // A complete session never expires: read as processing, every later click would be
+    // sent to the status page for good.
+    const result = await confirm(
+      checkoutSession({
+        payment_status: "unpaid",
+        payment_intent: { id: "pi_test_1", status: "requires_payment_method" },
+      })
+    );
+    expect(result.state).toBe("failed");
+    expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+  });
+
+  it("bounds every Stripe call", async () => {
+    const { stripe, retrieve } = stripeReturning(checkoutSession());
+    await confirmPayToStartSession({ sessionId: "cs_test_paid", source: "sweep", stripe });
+    await flushAfterResponse();
+    expect(retrieve).toHaveBeenCalledWith("cs_test_paid", expect.any(Object), {
+      timeout: 8_000,
+      maxNetworkRetries: 1,
+    });
+  });
+
+  it.each([
+    ["refunded in full", { refunded: true, disputed: false, amount_refunded: 2900 }],
+    ["disputed", { refunded: false, disputed: true, amount_refunded: 0 }],
+  ])("never unlocks a payment %s before anything confirmed it", async (_label, chargeState) => {
+    const result = await confirm(
+      checkoutSession({
+        payment_intent: {
+          id: "pi_test_1",
+          status: "succeeded",
+          latest_charge: { id: "ch_test_1", created: CHARGE_CREATED, ...chargeState },
+        },
+      })
+    );
+    expect(result.state).toBe("refunded");
+    expect(markEntitlementRefundedUnconfirmed).toHaveBeenCalledWith({
+      id: 7,
+      paymentIntentId: "pi_test_1",
+    });
+    expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+    expect(sendPayToStartConfirmationEmail).not.toHaveBeenCalled();
+    expect(sendGa4PurchaseEvent).not.toHaveBeenCalled();
+  });
+
+  it("still unlocks after a partial refund, as a report purchase does", async () => {
+    const result = await confirm(
+      checkoutSession({
+        payment_intent: {
+          id: "pi_test_1",
+          status: "succeeded",
+          latest_charge: {
+            id: "ch_test_1",
+            created: CHARGE_CREATED,
+            refunded: false,
+            disputed: false,
+            amount_refunded: 500,
+          },
+        },
+      })
+    );
+    expect(result.state).toBe("paid");
+    expect(markEntitlementRefundedUnconfirmed).not.toHaveBeenCalled();
   });
 
   it("never re-opens a refunded entitlement", async () => {
@@ -246,6 +334,7 @@ describe("the first confirmation", () => {
       origin: "https://www.loveiq.org",
       productName: "LoveIQ Survey & Report",
       token: TOKEN,
+      variant: "survey",
     });
     const paid = mockNotifySlack.mock.calls.find(([input]) => input.kind === "pts_paid");
     expect(paid?.[0]).toMatchObject({ channel: "payments" });
@@ -268,11 +357,35 @@ describe("the first confirmation", () => {
     expect(sendPosthogPurchaseEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         email: "buyer@example.com",
+        // The visit's anonymous PostHog id: the purchase joins the ad and the page.
+        anonDistinctId: "019a7c1e-anon",
         transactionId: "cs_test_paid",
         value: 29,
         plan: "full_report",
       })
     );
+  });
+
+  it("says the report is unlocked when the survey was finished before the money settled", async () => {
+    // A checkout left open and paid later, or a delayed method: the buyer already has a
+    // report, so "start my survey" would be wrong in the email and in #payments.
+    vi.mocked(findEntitlementById).mockResolvedValue(row({ consumed_submission_id: 42 }));
+    vi.mocked(markEntitlementSucceeded).mockImplementation(async (input) =>
+      row({
+        status: "succeeded",
+        consumed_submission_id: 42,
+        amount_cents: input.amountCents,
+        customer_email: input.customerEmail,
+        paid_at: input.paidAt,
+      })
+    );
+    await confirm(checkoutSession());
+    expect(sendPayToStartConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "report" })
+    );
+    const paid = mockNotifySlack.mock.calls.find(([input]) => input.kind === "pts_paid");
+    expect(paid?.[0].text).toContain("survey already finished (submission #42)");
+    expect(paid?.[0].text).not.toContain("survey not started yet");
   });
 
   it("does nothing more when another path flipped it first", async () => {
@@ -345,7 +458,11 @@ describe("the first confirmation", () => {
       stripe,
     });
     await flushAfterResponse();
-    expect(intentRetrieve).toHaveBeenCalledWith("pi_test_1", { expand: ["latest_charge"] });
+    expect(intentRetrieve).toHaveBeenCalledWith(
+      "pi_test_1",
+      { expand: ["latest_charge"] },
+      { timeout: 8_000, maxNetworkRetries: 1 }
+    );
     expect(result.state).toBe("paid");
   });
 });
@@ -407,5 +524,27 @@ describe("ops lines", () => {
     await confirm(checkoutSession());
     expect(sendGa4PurchaseEvent).toHaveBeenCalled();
     expect(sendPosthogPurchaseEvent).toHaveBeenCalled();
+    expect(mockNotifySlack).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "ops", kind: "pts_confirmation_failed" })
+    );
+  });
+
+  it("asks #ops to send the continue link when the confirmation email did not go", async () => {
+    // For a buyer who paid and closed the tab, that email is the only way back in.
+    vi.mocked(sendPayToStartConfirmationEmail).mockResolvedValue(false);
+    await confirm(checkoutSession());
+    const alert = mockNotifySlack.mock.calls.find(
+      ([input]) => input.kind === "pts_confirmation_failed"
+    )?.[0];
+    expect(alert).toMatchObject({ channel: "ops", context: { entitlementId: 7 } });
+    expect(alert?.text).toContain("entitlement #7");
+    expect(alert?.text).not.toContain("buyer@example.com");
+  });
+
+  it("raises no alert when the confirmation email went", async () => {
+    await confirm(checkoutSession());
+    expect(mockNotifySlack).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "pts_confirmation_failed" })
+    );
   });
 });

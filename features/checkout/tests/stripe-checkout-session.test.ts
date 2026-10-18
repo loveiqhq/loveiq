@@ -28,7 +28,11 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
 }));
 
 vi.mock("@features/checkout/server/fulfillment", () => ({
+  applyPayToStartEntitlement: vi.fn(),
   lookupPrimaryArchetypeForSubmission: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("@features/pay-to-start/server/entitlement", () => ({
+  findEntitlementByConsumedSubmission: vi.fn().mockResolvedValue(null),
 }));
 
 // No Supabase round-trip in these assertions.
@@ -56,7 +60,11 @@ import {
   lookupReportTokenBySubmissionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
-import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/fulfillment";
+import {
+  applyPayToStartEntitlement,
+  lookupPrimaryArchetypeForSubmission,
+} from "@features/checkout/server/fulfillment";
+import { findEntitlementByConsumedSubmission } from "@features/pay-to-start/server/entitlement";
 
 /** The quote the route resolves: full report, €27.49, urgency window still open. */
 const BASE_QUOTE = {
@@ -812,4 +820,80 @@ describe("Pricing 3.0 — what Stripe is asked to sell", () => {
       expect(createSession).not.toHaveBeenCalled();
     }
   );
+});
+
+describe("a report already paid for before the survey (pay to start)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetAt: new Date(),
+    });
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: vi.fn() } },
+    } as never);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({ ...BASE_QUOTE });
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 42,
+      userId: 7,
+      userEmail: "test@example.com",
+    } as never);
+  });
+
+  const body = {
+    archetype: "Spark Seeker",
+    plan: "full_report",
+    reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+  };
+
+  it("applies a claimed, paid entitlement before selling the report again", async () => {
+    vi.mocked(findEntitlementByConsumedSubmission).mockResolvedValue({
+      id: 9,
+      status: "succeeded",
+      payment_id: null,
+      consumed_submission_id: 42,
+    } as never);
+    // Once applied, the report reads as bought.
+    vi.mocked(applyPayToStartEntitlement).mockResolvedValue(77);
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: "full_report",
+      archetypeTiers: { "Spark Seeker": "full_report" },
+    } as never);
+    const res = await POST(makeRequest(body));
+    expect(applyPayToStartEntitlement).toHaveBeenCalledWith(
+      expect.objectContaining({ entitlement: expect.objectContaining({ id: 9 }) })
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("applies it before quoting, so the payment counts as upgrade credit", async () => {
+    vi.mocked(findEntitlementByConsumedSubmission).mockResolvedValue({
+      id: 9,
+      status: "succeeded",
+      payment_id: null,
+      consumed_submission_id: 42,
+    } as never);
+    vi.mocked(applyPayToStartEntitlement).mockResolvedValue(77);
+    await POST(makeRequest(body));
+    const applied = vi.mocked(applyPayToStartEntitlement).mock.invocationCallOrder[0];
+    const quoted = vi.mocked(getReportPriceQuoteForContext).mock.invocationCallOrder[0];
+    expect(applied).toBeDefined();
+    expect(quoted).toBeDefined();
+    expect(applied!).toBeLessThan(quoted!);
+  });
+
+  it("still refuses a plan owned when the entitlement lookup fails", async () => {
+    vi.mocked(findEntitlementByConsumedSubmission).mockRejectedValue(new Error("db down"));
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: "full_report",
+      archetypeTiers: { "Spark Seeker": "full_report" },
+    } as never);
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(409);
+    expect(applyPayToStartEntitlement).not.toHaveBeenCalled();
+  });
 });

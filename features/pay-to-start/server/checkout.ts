@@ -57,14 +57,34 @@ export function utmForMetadata(utmTracker: string | null): {
   return { utmSource: read("utm_source"), utmCampaign: read("utm_campaign") };
 }
 
+/**
+ * How long a checkout stays open. Stripe's default is 24 hours, and every abandoned one
+ * stays `pending` that long, so the sweep (twice an hour) kept re-asking about the same 25
+ * and never reached a paid one whose webhook was missed. An hour covers a wallet, a bank
+ * redirect or a 3DS step; a visitor back later gets a new session under the same token.
+ */
+export const PAY_TO_START_SESSION_TTL_SECONDS = 60 * 60;
+
+/**
+ * `expires_at` for a session made in this minute: the start of the minute plus the TTL
+ * and one minute, so a double click inside the minute sends identical parameters (the
+ * idempotency key's condition) and the session still lives at least the TTL.
+ */
+export function payToStartSessionExpiresAt(nowMs: number = Date.now()): number {
+  return Math.floor(nowMs / 60_000) * 60 + PAY_TO_START_SESSION_TTL_SECONDS + 60;
+}
+
 export interface PayToStartSessionInput {
   offer: PricedOffer;
   entitlementId: number;
   /** The request's origin: every URL Stripe returns to, and the email's link host. */
   origin: string;
+  /** Unix seconds; see `payToStartSessionExpiresAt`. */
+  expiresAt: number;
   gaClientId: string | null;
   gaSessionId: string | null;
   gaConsent: boolean;
+  posthogDistinctId?: string | null;
   utmTracker: string | null;
   requestIp: string | null;
   userAgent: string | null;
@@ -96,6 +116,7 @@ export function buildPayToStartSessionParams(
       },
     ],
     invoice_creation: { enabled: true },
+    expires_at: input.expiresAt,
     consent_collection: { terms_of_service: "required" },
     custom_text: {
       terms_of_service_acceptance: { message: payToStartTermsText(origin) },
@@ -116,6 +137,7 @@ export function buildPayToStartSessionParams(
       gaClientId: toMetadataValue(input.gaClientId),
       gaSessionId: toMetadataValue(input.gaSessionId),
       gaAnalyticsConsent: input.gaConsent ? "1" : "0",
+      posthogDistinctId: toMetadataValue(input.posthogDistinctId),
       utmSource,
       utmCampaign,
       requestIp: toMetadataValue(input.requestIp),

@@ -267,6 +267,36 @@ describe("POST /api/funnel-event", () => {
     expect(body.landing_variant).toBe("white_prev");
   });
 
+  it("labels a paying browser's survey steps pay_to_start, whatever arm cookie it holds", async () => {
+    // proxy.ts labels that survey's page view so; a start credited to the arm would be a
+    // start no visit of the arm led to.
+    mockCookieValue.mockReturnValue("white_video");
+    mockSupabaseFetch.mockResolvedValue({ ok: true, status: 201 });
+    const { POST } = await import("@/app/api/funnel-event/route");
+    await POST(
+      new Request("https://www.loveiq.org/api/funnel-event", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": "t",
+          cookie: `__Host-csrf=t; __liq_pp=rpp_${"q".repeat(32)}`,
+        },
+        body: JSON.stringify({
+          event: "survey_engine_mount",
+          visitor_id: "33333333-3333-4333-8333-333333333333",
+        }),
+      })
+    );
+    const body = JSON.parse(
+      (mockSupabaseFetch.mock.calls.at(-1)![1] as { body: string }).body
+    ) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      event_type: "survey_engine_mount",
+      landing_variant: "pay_to_start",
+    });
+    mockCookieValue.mockReturnValue(undefined);
+  });
+
   it("omits the arm entirely when the visitor carries no landing cookie", async () => {
     mockCookieValue.mockReturnValue(undefined);
     mockSupabaseFetch.mockResolvedValue({ ok: true, status: 201 });

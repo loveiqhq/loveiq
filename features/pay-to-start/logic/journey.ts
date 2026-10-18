@@ -29,17 +29,29 @@ export const PREPAID_COOKIE_PROD = "__Host-liq_pp";
 export const PREPAID_COOKIE_DEV = "__liq_pp";
 
 /**
+ * The names the token is read from. Production reads only the `__Host-` one: a browser
+ * keeps that name only from this exact host, over https, with no Domain, so a sibling
+ * subdomain or an http response before HSTS cannot plant one. Elsewhere either name, so
+ * `next dev` (the plain name, over http) and the tests work.
+ */
+function prepaidCookieNames(): readonly string[] {
+  return process.env.NODE_ENV === "production"
+    ? [PREPAID_COOKIE_PROD]
+    : [PREPAID_COOKIE_PROD, PREPAID_COOKIE_DEV];
+}
+
+/**
  * The entitlement token from a raw Cookie header, or null. Reads the header rather than
- * `cookies()` so route handlers and their tests need no request scope; accepts either
- * name, so a local production build (which sets the `__Host-` one) works too.
+ * `cookies()` so route handlers and their tests need no request scope.
  */
 export function readPrepaidToken(cookieHeader: string | null | undefined): string | null {
   if (!cookieHeader) return null;
+  const names = prepaidCookieNames();
   for (const part of cookieHeader.split(";")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
     const name = part.slice(0, eq).trim();
-    if (name !== PREPAID_COOKIE_PROD && name !== PREPAID_COOKIE_DEV) continue;
+    if (!names.includes(name)) continue;
     let value = part.slice(eq + 1).trim();
     try {
       value = decodeURIComponent(value);

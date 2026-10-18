@@ -821,6 +821,10 @@ describe("proxy — consent-independent daily unique-visit count", () => {
   it("ignores non-GET / api / admin / jarvis / login / _next / bots / prefetch / non-document", () => {
     expect(shouldCountVisit(makeVisitRequest({ method: "POST" }))).toBe(false);
     expect(shouldCountVisit(makeVisitRequest({ path: "/api/contact" }))).toBe(false);
+    // Pay to start's email link renders no page, so it writes no visit row: counting it
+    // would spend the day's visit on nothing and leave the survey it leads to uncounted.
+    expect(shouldCountVisit(makeVisitRequest({ path: "/sexual-archetype/continue" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ path: "/sexual-archetype" }))).toBe(true);
     expect(shouldCountVisit(makeVisitRequest({ path: "/admin/x" }))).toBe(false);
     // The team's Jarvis sign-in page is not a visitor.
     expect(shouldCountVisit(makeVisitRequest({ path: "/jarvis/connect" }))).toBe(false);

@@ -29,8 +29,8 @@ export type ClaimOutcome =
   /** Bound, and the money is on its way (a delayed method): it unlocks when it settles. */
   | { outcome: "pending"; entitlementId: number }
   /**
-   * Bound, but nothing was paid: a checkout opened and left. Paying it later (or a new
-   * checkout from the page, under the same token) unlocks this report by itself.
+   * Bound, but nothing was paid: a checkout opened and left. Paying that checkout later
+   * unlocks this report by itself; a new one from the page is a new purchase.
    */
   | { outcome: "unpaid"; entitlementId: number }
   /** Nothing this submission may claim. */
@@ -88,6 +88,26 @@ export async function claimPayToStartForSubmission({
   }
 }
 
+/**
+ * Apply, and once more if that throws: a reader whose apply fails sees the free report
+ * until the sweep (half-hourly) finishes it, and in between the report's own paywall would
+ * sell it to them a second time. A passing blip should not cost that. Idempotent.
+ */
+async function applyWithRetry(
+  entitlement: Entitlement,
+  reportToken: string | null
+): Promise<number | null> {
+  try {
+    return await applyPayToStartEntitlement({ entitlement, reportToken });
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err, entitlementId: entitlement.id },
+      "pay-to-start: apply failed once; trying again"
+    );
+    return await applyPayToStartEntitlement({ entitlement, reportToken });
+  }
+}
+
 /** Apply a bound entitlement, or say why it does not unlock (yet). */
 async function applyClaimed(
   entitlement: Entitlement,
@@ -99,7 +119,7 @@ async function applyClaimed(
   }
   switch (entitlement.status) {
     case "succeeded": {
-      const paymentId = await applyPayToStartEntitlement({ entitlement, reportToken });
+      const paymentId = await applyWithRetry(entitlement, reportToken);
       return paymentId
         ? { outcome: "unlocked", entitlementId, paymentId }
         : { outcome: "error", entitlementId, error: new Error("pts_apply_returned_nothing") };
@@ -180,6 +200,12 @@ export function claimResponseFields(claim: ClaimOutcome): {
 /**
  * Whether the browser's cookie has done its job. Cleared once the entitlement is bound
  * to this submission or can never be claimed; kept after an error, so a retry can claim.
+ *
+ * An unpaid claim clears it too. The row is bound, so the checkout left open still
+ * unlocks this report if it is paid. Kept, the cookie would hand this survey to the next
+ * purchase in the browser: someone else's on a shared device, a second payment for a
+ * report already bought from its paywall, and every later survey here labelled pay to
+ * start.
  */
 export function claimSettlesCookie(claim: ClaimOutcome): boolean {
   return claim.outcome !== "error";

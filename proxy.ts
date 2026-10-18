@@ -186,6 +186,8 @@ const SURVEY_DAY_COOKIE = "liq_ds";
  * arm with ad traffic that never saw its hero, in the landing test's denominator.
  * Exported for unit testing.
  */
+const PAY_TO_START_CONTINUE_PATH = `${PAY_TO_START_RETURN_PATH}/continue`;
+
 export function isPayToStartPage(path: string): boolean {
   return path === PAY_TO_START_RETURN_PATH || path.startsWith(`${PAY_TO_START_RETURN_PATH}/`);
 }
@@ -216,7 +218,11 @@ export function shouldCountVisit(request: NextRequest): boolean {
     // The team's Jarvis sign-in page, not a visitor.
     path.startsWith("/jarvis") ||
     path.startsWith("/_next") ||
-    path === "/login"
+    path === "/login" ||
+    // Pay to start's email link: a route that answers with a redirect and renders no page,
+    // so no visit row is written for it (the layout writes them), yet counting it would set
+    // the day's visit cookie and the page it leads to would not count either.
+    path === PAY_TO_START_CONTINUE_PATH
   ) {
     return false;
   }

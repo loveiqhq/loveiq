@@ -12,7 +12,7 @@ import { usePtsCheckout } from "./PtsCheckout";
 /**
  * The page's one moment of state on arrival: back from Stripe without paying
  * (`?checkout=cancelled`, the session's cancel_url), or sent here by the email's continue
- * link when it could not open the survey (`?continue=invalid|refunded|unpaid|error`).
+ * link when it could not open the survey (`?continue=invalid|refunded|unpaid|used|error`).
  *
  * Read once from the address the page loaded at, then removed from the address bar, so a
  * reload or a copied link does not repeat it. Also where the visit is counted, once per
@@ -32,6 +32,8 @@ function noticeFor(params: URLSearchParams): Notice | null {
       return { tone: "warning", text: PTS_NOTICES.continueRefunded, key: "continue_refunded" };
     case "unpaid":
       return { tone: "warning", text: PTS_NOTICES.continueUnpaid, key: "continue_unpaid" };
+    case "used":
+      return { tone: "info", text: PTS_NOTICES.continueUsed, key: "continue_used" };
     case "error":
       return { tone: "warning", text: PTS_NOTICES.continueError, key: "continue_error" };
     default:

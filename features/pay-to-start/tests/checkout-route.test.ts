@@ -23,6 +23,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
 vi.mock("@features/checkout/server/fulfillment", () => ({ settlePayToStartSession: vi.fn() }));
 vi.mock("@features/report/server/personalReport", () => ({
   lookupReportTokenBySubmissionId: vi.fn(),
+  resolveSubmissionAccessContext: vi.fn(),
 }));
 vi.mock("@features/pay-to-start/server/entitlement", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/pay-to-start/server/entitlement")>();
@@ -47,7 +48,10 @@ import {
   type Entitlement,
 } from "@features/pay-to-start/server/entitlement";
 import { PAY_TO_START_PRICE_ENV } from "@features/pay-to-start/server/offer";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
+import {
+  lookupReportTokenBySubmissionId,
+  resolveSubmissionAccessContext,
+} from "@features/report/server/personalReport";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -186,6 +190,7 @@ describe("a first checkout", () => {
         gaClientId: "123.456",
         gaSessionId: "789",
         gaConsent: true,
+        posthogDistinctId: "019a7c1e-anon",
         utmTracker: '{"utm_source":"google","utm_campaign":"archetype"}',
       },
       "other=1"
@@ -234,6 +239,7 @@ describe("a first checkout", () => {
         origin: ORIGIN,
         gaClientId: "123.456",
         gaAnalyticsConsent: "1",
+        posthogDistinctId: "019a7c1e-anon",
         utmSource: "google",
         utmCampaign: "archetype",
       },
@@ -243,6 +249,12 @@ describe("a first checkout", () => {
       `${ORIGIN}/digital-content-terms`
     );
     expect(options).toMatchObject({ idempotencyKey: expect.any(String) });
+
+    // An abandoned checkout closes within the hour (Stripe's default is 24 hours, and the
+    // hourly sweep re-asks about every pending one until it does).
+    const ttl = (params.expires_at as number) - Date.now() / 1000;
+    expect(ttl).toBeGreaterThanOrEqual(60 * 60 - 1);
+    expect(ttl).toBeLessThanOrEqual(61 * 60 + 1);
 
     // No bearer token and no hero arm in anything sent to Stripe.
     const sent = JSON.stringify(params);
@@ -307,14 +319,30 @@ describe("a browser that already holds a token", () => {
     expect(sessionsCreate).not.toHaveBeenCalled();
   });
 
-  it("sends a used token to its report and clears the cookie", async () => {
+  it("sends a used token to the payer's own report and clears the cookie", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(
-      row({ status: "succeeded", consumed_submission_id: 42 })
+      row({ status: "succeeded", consumed_submission_id: 42, customer_email: "buyer@example.com" })
     );
     vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: "buyer@example.com",
+    } as never);
     const response = await post(VALID, cookie);
     expect(await response.json()).toEqual({ state: "used", reportPath: "/report/rpt_x" });
     expect(response.headers.get("set-cookie")).toMatch(/Max-Age=0/i);
+  });
+
+  it("never sends a used token to a report someone else's survey claimed", async () => {
+    // The cookie can sit in another person's browser (a gift, a shared computer).
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      row({ status: "succeeded", consumed_submission_id: 42, customer_email: "buyer@example.com" })
+    );
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_x");
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      userEmail: "partner@example.com",
+    } as never);
+    const response = await post(VALID, cookie);
+    expect(await response.json()).toEqual({ state: "used", reportPath: null });
   });
 
   it("hands back a session that is still open", async () => {
@@ -391,10 +419,47 @@ describe("a browser that already holds a token", () => {
     expect(response.headers.get("set-cookie")).toContain(TOKEN);
   });
 
+  it.each(["pending", "expired"] as const)(
+    "never sells a checkout bound to a survey, %s and unpaid, again under its token",
+    async (status) => {
+      // Checkout left, then the survey: the claim bound the row. A cookie still here (a
+      // claim that errored) must not make the next purchase in this browser, someone
+      // else's on a shared device, pay for that survey.
+      vi.mocked(findEntitlementByToken).mockResolvedValue(
+        row({ status, stripe_session_id: "cs_test_old", consumed_submission_id: 42 })
+      );
+      vi.mocked(createPendingEntitlement).mockResolvedValue(row({ id: 8 }));
+      const response = await post(VALID, cookie);
+      expect(await response.json()).toMatchObject({ state: "redirect" });
+      expect(settlePayToStartSession).not.toHaveBeenCalled();
+      expect(createPendingEntitlement).toHaveBeenCalled();
+      expect(sessionsCreate.mock.calls[0]?.[0].metadata.entitlementId).not.toBe("7");
+      expect(response.headers.get("set-cookie")).not.toContain(TOKEN);
+    }
+  );
+
   it("starts afresh after a refund", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ status: "refunded" }));
     const response = await post(VALID, cookie);
     expect(createPendingEntitlement).toHaveBeenCalled();
     expect(response.headers.get("set-cookie")).not.toContain(TOKEN);
+  });
+});
+
+describe("the session's expiry", () => {
+  it("is the same for every click in one minute, and lives at least an hour", async () => {
+    const { payToStartSessionExpiresAt, PAY_TO_START_SESSION_TTL_SECONDS } =
+      await import("@features/pay-to-start/server/checkout");
+    const minute = Date.parse("2026-10-18T12:34:00.000Z");
+    // Identical parameters inside a minute: the idempotency key's condition for a double click.
+    expect(payToStartSessionExpiresAt(minute + 1_000)).toBe(
+      payToStartSessionExpiresAt(minute + 59_000)
+    );
+    for (const at of [minute, minute + 59_999]) {
+      const left = payToStartSessionExpiresAt(at) - at / 1000;
+      expect(left).toBeGreaterThanOrEqual(PAY_TO_START_SESSION_TTL_SECONDS);
+      // Stripe accepts 30 minutes to 24 hours.
+      expect(left).toBeLessThanOrEqual(24 * 60 * 60);
+    }
   });
 });

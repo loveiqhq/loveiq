@@ -16,7 +16,6 @@ import {
   prepaidCookieOptions,
   type Entitlement,
 } from "@features/pay-to-start/server/entitlement";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -30,12 +29,16 @@ export const runtime = "nodejs";
  * It also hands the entitlement's cookie to the browser that comes back, when that
  * browser does not hold it: a wallet or Link payment can finish in another browser than
  * the one that started it. Only for a paid (or settling) session whose entitlement is
- * unused and under a week old.
+ * unused, and only within two hours of the payment: that return happens within minutes.
+ *
+ * The session id is no secret (it rides in the return URL, and goes to GA4, Google Ads
+ * and PostHog as the purchase's transaction id), so it never opens a report: a used
+ * entitlement answers with no report path, and the page points to the report email.
  */
 
 const RATE_LIMIT = { bucket: "pay-to-start-status", limit: 60, windowMs: 60_000 };
 const NO_STORE = { "Cache-Control": "no-store, no-cache, must-revalidate" };
-const COOKIE_HANDOVER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const COOKIE_HANDOVER_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 function reply(body: PayToStartStatusResponse, status = 200) {
   return NextResponse.json(body, { status, headers: NO_STORE });
@@ -81,10 +84,9 @@ export async function GET(request: Request) {
 
     let response: NextResponse;
     if (settled.state === "paid" && entitlement.consumed_submission_id) {
-      const reportToken = await lookupReportTokenBySubmissionId(entitlement.consumed_submission_id);
       response = reply({
         state: "used",
-        reportPath: reportToken ? `/report/${encodeURIComponent(reportToken)}` : null,
+        reportPath: null,
         purchase: purchaseOf(entitlement, sessionId),
       });
     } else if (settled.state === "paid") {
@@ -96,7 +98,8 @@ export async function GET(request: Request) {
     const handOver =
       (settled.state === "paid" || settled.state === "processing") &&
       !entitlement.consumed_submission_id &&
-      Date.now() - new Date(entitlement.created_at).getTime() < COOKIE_HANDOVER_MAX_AGE_MS &&
+      Date.now() - new Date(entitlement.paid_at ?? entitlement.created_at).getTime() <
+        COOKIE_HANDOVER_MAX_AGE_MS &&
       readPrepaidToken(request.headers.get("cookie")) !== entitlement.prepaid_token;
     if (handOver) {
       response.cookies.set(PREPAID_COOKIE, entitlement.prepaid_token, prepaidCookieOptions());
