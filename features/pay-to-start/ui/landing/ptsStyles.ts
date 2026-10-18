@@ -31,3 +31,20 @@ export const PTS_NUMBER =
 
 /** The white cards with a hairline border. */
 export const PTS_CARD = "rounded-[20px] border border-[#e9e6ee] bg-white";
+
+/**
+ * The fly-ins (Marcus, 18.10: "Can we add fly-in effects?"): the landing's own reveal
+ * (app/globals.css), a 24 px fade-up as an element scrolls into view (ScrollAnimator). The
+ * hero plays the same fade-up on load (`animate-on-load`), as the landing's does, because
+ * it is in view from the first paint.
+ *
+ * Never on a price, a checkout button or a status line, nor on anything around one, so a
+ * reveal that does not run can never hide the way to pay. Never on a client component
+ * whose classes change with its state (React would drop `.animate`), nor around a fixed or
+ * sticky element (the transform would become its containing block).
+ */
+export const PTS_REVEAL = "animate-on-scroll";
+
+/** The reveal of a list's `index`th item, one 100 ms step later along its row of `perRow`. */
+export const ptsRevealItem = (index: number, perRow: number) =>
+  `animate-on-scroll stagger-${(index % perRow) + 1}`;

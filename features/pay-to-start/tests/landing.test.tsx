@@ -27,6 +27,7 @@ vi.mock("posthog-js", () => ({ default: posthog }));
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "csrf-token" }));
 vi.mock("@shared/url/utm", () => ({ getStoredUtm: () => '{"utm_source":"google"}' }));
 
+import { readAppCss } from "@shared/testing/read-app-css";
 import { PayToStartLanding } from "@features/pay-to-start/ui/landing/PayToStartLanding";
 import { __resetArrivalNoticeForTests } from "@features/pay-to-start/ui/landing/PtsNotice";
 import {
@@ -263,6 +264,72 @@ describe("the pay-to-start page, as drawn", () => {
     const video = screen.getByTestId("pts-hero-video") as HTMLVideoElement;
     expect(video.getAttribute("src")).toBeNull();
     expect(video.getAttribute("preload")).toBe("none");
+  });
+});
+
+/** Every `@media (prefers-reduced-motion: reduce)` block of the shipped CSS, brace-matched. */
+function reducedMotionBlocks(): string[] {
+  const css = readAppCss().replace(/\/\*[\s\S]*?\*\//g, "");
+  const needle = "@media (prefers-reduced-motion: reduce)";
+  const blocks: string[] = [];
+  for (let from = css.indexOf(needle); from !== -1; from = css.indexOf(needle, from + 1)) {
+    let depth = 0;
+    let i = css.indexOf("{", from);
+    const start = i;
+    for (; i < css.length; i++) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}" && --depth === 0) break;
+    }
+    blocks.push(css.slice(start, i));
+  }
+  return blocks;
+}
+
+describe("its fly-ins (Marcus, 18.10)", () => {
+  it("flies in as the landing does, the hero on load and the rest as it scrolls in", () => {
+    renderPage();
+    const reveals = [...document.querySelectorAll(".animate-on-scroll")];
+    expect(reveals.length).toBeGreaterThan(30);
+    // Every section's heading (the reviews' with its rating line, as one).
+    for (const h2 of document.querySelectorAll("main h2")) {
+      expect(h2.closest(".animate-on-scroll"), h2.textContent ?? "").not.toBeNull();
+    }
+    // In view from the first paint: it plays on load, never waits for a scroll.
+    const hero = document.querySelector("h1")!.parentElement!;
+    expect(hero.querySelectorAll(".animate-on-load").length).toBeGreaterThanOrEqual(5);
+    expect(hero.querySelectorAll(".animate-on-scroll")).toHaveLength(0);
+    // jsdom has no IntersectionObserver, like an old browser: everything shows at once.
+    expect(reveals.filter((el) => !el.classList.contains("animate"))).toEqual([]);
+  });
+
+  it("never makes a price, a button or a status line wait on a reveal", () => {
+    renderPage();
+    const moving = ".animate-on-scroll, .animate-on-load";
+    const stays = [
+      ...document.querySelectorAll("[data-pts-cta]"),
+      ...document.querySelectorAll('[role="status"], [role="alert"]'),
+      document.querySelector('aside[aria-label="Price"]'),
+      screen.getByTestId("pts-sticky-bar"),
+      ...screen.getAllByText("€29"),
+    ];
+    expect(stays.length).toBeGreaterThan(8);
+    for (const el of stays) {
+      expect(el, "an element the test looks for is missing").not.toBeNull();
+      expect(el!.closest(moving), el!.outerHTML.slice(0, 90)).toBeNull();
+    }
+  });
+
+  it("gives a reduced-motion visitor the page at once", () => {
+    const covering = reducedMotionBlocks().filter((b) =>
+      b.includes(".pts-page .animate-on-scroll")
+    );
+    expect(covering.length, "no reduced-motion block covers the page's fly-ins").toBe(1);
+    expect(covering[0]).toMatch(/opacity:\s*1/);
+    expect(covering[0]).toMatch(/transform:\s*none/);
+    // The scope is the page's own root, around every one of its fly-ins.
+    renderPage();
+    const reveals = document.querySelectorAll(".animate-on-scroll");
+    expect(document.querySelectorAll(".pts-page .animate-on-scroll")).toHaveLength(reveals.length);
   });
 });
 

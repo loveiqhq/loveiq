@@ -9,25 +9,34 @@ import {
   PTS_TESTIMONIALS,
 } from "./payToStartContent";
 import { Stars } from "./ptsIcons";
-import { PTS_CARD, PTS_H2, PTS_LEAD, PTS_NUMBER, PTS_SECTION } from "./ptsStyles";
+import {
+  PTS_CARD,
+  PTS_H2,
+  PTS_LEAD,
+  PTS_NUMBER,
+  PTS_REVEAL,
+  PTS_SECTION,
+  ptsRevealItem,
+} from "./ptsStyles";
 
 /**
  * The left column's content sections, top to bottom as Figma 1706:1712 stacks them. Each
  * starts 56 above its heading and has no bottom padding: the next one's top is the gap.
  * The anchors (#inside-your-report, #personalities, #reviews) are the search ad's
- * sitelinks (Figma 1706:1627).
+ * sitelinks (Figma 1706:1627). Headings, leads and items fly in as they scroll into view
+ * (PTS_REVEAL, ptsStyles.ts).
  */
 
 /** 1706:1722: five numbered cards, three to a row on a desktop. */
 export const PtsFindOut: FC = () => (
   <section aria-labelledby="pts-find-out" className={PTS_SECTION}>
-    <h2 id="pts-find-out" className={PTS_H2}>
+    <h2 id="pts-find-out" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_FIND_OUT.title}
     </h2>
-    <p className={PTS_LEAD}>{PTS_FIND_OUT.lead}</p>
+    <p className={`${PTS_LEAD} ${PTS_REVEAL} stagger-1`}>{PTS_FIND_OUT.lead}</p>
     <ul className="mt-[26px] grid gap-[14px] sm:grid-cols-2 lg:grid-cols-3">
-      {PTS_FIND_OUT.cards.map((card) => (
-        <li key={card.number} className={`${PTS_CARD} p-6`}>
+      {PTS_FIND_OUT.cards.map((card, i) => (
+        <li key={card.number} className={`${PTS_CARD} p-6 ${ptsRevealItem(i, 3)}`}>
           <p aria-hidden className={PTS_NUMBER}>
             {card.number}
           </p>
@@ -47,16 +56,16 @@ export const PtsFindOut: FC = () => (
  */
 export const PtsInsideReport: FC<{ price: string }> = ({ price }) => (
   <section id="inside-your-report" aria-labelledby="pts-inside" className={PTS_SECTION}>
-    <h2 id="pts-inside" className={PTS_H2}>
+    <h2 id="pts-inside" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_INSIDE.title}
     </h2>
-    <p className={PTS_LEAD}>{PTS_INSIDE.lead(price)}</p>
+    <p className={`${PTS_LEAD} ${PTS_REVEAL} stagger-1`}>{PTS_INSIDE.lead(price)}</p>
     <div className="mt-[26px] grid gap-4 md:grid-cols-[366fr_468fr]">
       <ol className="border-t border-[#e9e6ee]">
-        {PTS_INSIDE.chapters.map((chapter) => (
+        {PTS_INSIDE.chapters.map((chapter, i) => (
           <li
             key={chapter.number}
-            className="flex gap-3 border-b border-[#e9e6ee] pb-[15px] pl-1 pt-[14px]"
+            className={`flex gap-3 border-b border-[#e9e6ee] pb-[15px] pl-1 pt-[14px] ${ptsRevealItem(i, 3)}`}
           >
             <span aria-hidden className={`${PTS_NUMBER} w-7 shrink-0 tracking-normal`}>
               {chapter.number}
@@ -73,7 +82,9 @@ export const PtsInsideReport: FC<{ price: string }> = ({ price }) => (
           </li>
         ))}
       </ol>
-      <figure className="rounded-[24px] bg-[#fff7f2] p-6 shadow-[0_20px_50px_-30px_rgba(254,104,57,0.55)]">
+      <figure
+        className={`rounded-[24px] bg-[#fff7f2] p-6 shadow-[0_20px_50px_-30px_rgba(254,104,57,0.55)] ${PTS_REVEAL} stagger-2`}
+      >
         <p className="font-sans text-[11px] font-bold leading-[15px] tracking-[0.9px] text-[#c2410c]">
           {PTS_INSIDE.sample.label}
         </p>
@@ -106,15 +117,15 @@ export const PtsInsideReport: FC<{ price: string }> = ({ price }) => (
 /** 1706:1790: the fourteen archetypes, each with Figma's dot colour and motto. */
 export const PtsPersonalities: FC = () => (
   <section id="personalities" aria-labelledby="pts-personalities" className={PTS_SECTION}>
-    <h2 id="pts-personalities" className={PTS_H2}>
+    <h2 id="pts-personalities" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_PERSONALITIES.title}
     </h2>
-    <p className={PTS_LEAD}>{PTS_PERSONALITIES.lead}</p>
+    <p className={`${PTS_LEAD} ${PTS_REVEAL} stagger-1`}>{PTS_PERSONALITIES.lead}</p>
     <ul className="mt-[26px] grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-      {PTS_PERSONALITIES.archetypes.map((archetype) => (
+      {PTS_PERSONALITIES.archetypes.map((archetype, i) => (
         <li
           key={archetype.name}
-          className="rounded-2xl border border-[#e9e6ee] bg-white px-4 py-3.5"
+          className={`rounded-2xl border border-[#e9e6ee] bg-white px-4 py-3.5 ${ptsRevealItem(i, 4)}`}
         >
           <span
             aria-hidden
@@ -136,12 +147,12 @@ export const PtsPersonalities: FC = () => (
 /** 1706:1850: three steps under hairlines. */
 export const PtsHowItWorks: FC<{ price: string }> = ({ price }) => (
   <section aria-labelledby="pts-how" className={PTS_SECTION}>
-    <h2 id="pts-how" className={PTS_H2}>
+    <h2 id="pts-how" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_HOW_IT_WORKS.title}
     </h2>
     <ol className="mt-[26px] grid gap-5 md:grid-cols-3 md:gap-8">
-      {PTS_HOW_IT_WORKS.steps.map((step) => (
-        <li key={step.number} className="border-t border-[#e9e6ee] pt-4">
+      {PTS_HOW_IT_WORKS.steps.map((step, i) => (
+        <li key={step.number} className={`border-t border-[#e9e6ee] pt-4 ${ptsRevealItem(i, 3)}`}>
           <p aria-hidden className={PTS_NUMBER}>
             {step.number}
           </p>
@@ -173,15 +184,17 @@ const RatingLine: FC<{ label: string; className?: string }> = ({ label, classNam
 /** 1706:1865: four quotes; the rating sits right of the heading, under it on a phone. */
 export const PtsTestimonials: FC = () => (
   <section id="reviews" aria-labelledby="pts-reviews" className={PTS_SECTION}>
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+    <div
+      className={`flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6 ${PTS_REVEAL}`}
+    >
       <h2 id="pts-reviews" className={PTS_H2}>
         {PTS_TESTIMONIALS.title}
       </h2>
       <RatingLine label={PTS_TESTIMONIALS.ratingLabel} className="shrink-0" />
     </div>
     <ul className="mt-[18px] grid gap-[14px] sm:grid-cols-2 lg:grid-cols-3">
-      {PTS_TESTIMONIALS.quotes.map((item) => (
-        <li key={item.name} className={`${PTS_CARD} flex flex-col p-6`}>
+      {PTS_TESTIMONIALS.quotes.map((item, i) => (
+        <li key={item.name} className={`${PTS_CARD} flex flex-col p-6 ${ptsRevealItem(i, 3)}`}>
           <Stars size={14} spacing={2} />
           <blockquote className="mt-3.5 font-sans text-[15px] leading-6 text-[#3f3a4d]">
             <p>{item.quote}</p>
@@ -212,13 +225,13 @@ export const PtsTestimonials: FC = () => (
 /** 1706:1893: three numbers, then the two advisors. */
 export const PtsResearch: FC = () => (
   <section aria-labelledby="pts-research" className={PTS_SECTION}>
-    <h2 id="pts-research" className={PTS_H2}>
+    <h2 id="pts-research" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_RESEARCH.title}
     </h2>
-    <p className={PTS_LEAD}>{PTS_RESEARCH.lead}</p>
+    <p className={`${PTS_LEAD} ${PTS_REVEAL} stagger-1`}>{PTS_RESEARCH.lead}</p>
     <ul className="mt-[26px] grid gap-[14px] md:grid-cols-3">
-      {PTS_RESEARCH.stats.map((stat) => (
-        <li key={stat.label} className={`${PTS_CARD} p-6`}>
+      {PTS_RESEARCH.stats.map((stat, i) => (
+        <li key={stat.label} className={`${PTS_CARD} p-6 ${ptsRevealItem(i, 3)}`}>
           <p className="font-serif text-[28px] font-medium leading-[35.84px] text-[#561dbd]">
             {stat.value}
           </p>
@@ -230,8 +243,8 @@ export const PtsResearch: FC = () => (
       ))}
     </ul>
     <ul className="mt-4 grid gap-4 md:grid-cols-2">
-      {PTS_RESEARCH.experts.map((expert) => (
-        <li key={expert.name} className="rounded-[20px] bg-[#faf7ff] p-6">
+      {PTS_RESEARCH.experts.map((expert, i) => (
+        <li key={expert.name} className={`rounded-[20px] bg-[#faf7ff] p-6 ${ptsRevealItem(i, 2)}`}>
           <blockquote className="font-serif text-[18px] leading-[27px] text-[#161021]">
             <p>{expert.quote}</p>
           </blockquote>

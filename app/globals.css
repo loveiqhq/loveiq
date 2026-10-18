@@ -432,6 +432,17 @@ input.autofill-dark:-internal-autofill-previewed {
   opacity: 1;
   transform: translateY(0);
 }
+/* Pay to start's fly-ins (features/pay-to-start/ui/landing): under reduced motion its content
+   is simply there, as `.animate-on-load` does for the hero above. Scoped to that page, so the
+   landing, whose arms are under test, renders as before; the landing's `.animate-on-scroll`
+   still has no such rule. */
+@media (prefers-reduced-motion: reduce) {
+  .pts-page .animate-on-scroll {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 
 /* Line chart that draws itself once its card scrolls into view
    (features/landing/ui/white/WFindOut.tsx).

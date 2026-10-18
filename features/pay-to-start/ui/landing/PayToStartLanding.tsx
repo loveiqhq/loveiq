@@ -1,4 +1,5 @@
 import type { FC } from "react";
+import ScrollAnimator from "@features/landing/ui/ScrollAnimator";
 import { formatOfferPrice, type PayToStartOfferId } from "@features/pay-to-start/logic/offer";
 import { PtsCheckoutProvider } from "./PtsCheckout";
 import { PtsBreadcrumb } from "./PtsBreadcrumb";
@@ -29,6 +30,10 @@ import { PtsStickyBar } from "./PtsStickyBar";
  *
  * The header is fixed and 64 tall: the page starts below it, and the card stays 24 under it.
  *
+ * Its content flies in as the landing's does (Marcus, 18.10): ScrollAnimator reveals each
+ * `.animate-on-scroll` once it is in view, and `pts-page` scopes this page's reduced-motion
+ * rule (app/globals.css).
+ *
  * `priceCents` is the server's price (PAY_TO_START_PRICE_CENTS); every price on the page
  * is printed from it.
  */
@@ -39,7 +44,8 @@ export const PayToStartLanding: FC<{ offer: PayToStartOfferId; priceCents: numbe
   const price = formatOfferPrice(priceCents);
   return (
     <PtsCheckoutProvider offer={offer} priceCents={priceCents} price={price}>
-      <div className="min-h-screen bg-white pt-16 font-sans text-[#161021]">
+      <div className="pts-page min-h-screen bg-white pt-16 font-sans text-[#161021]">
+        <ScrollAnimator />
         {/* The global body is dark (var(--color-bg)) and shows through an overscroll
             bounce, so the page paints it white, as the landing does: as a plain text
             child, since CI's security check allows raw HTML injection in named files only. */}

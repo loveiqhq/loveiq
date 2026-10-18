@@ -225,3 +225,26 @@ test.describe("pay to start: the LoveIQ header", () => {
     expect(surveyRequests).toEqual([]);
   });
 });
+
+test.describe("pay to start: the fly-ins", () => {
+  // Marcus, 18.10: "Can we add fly-in effects?" The landing's own reveal, so no element may
+  // be left faded once the page has been scrolled past it.
+  test("every fly-in plays as the page is scrolled through", async ({ page }) => {
+    await openPage(page);
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    for (let y = 0; y <= height; y += 400) {
+      await page.evaluate((top) => window.scrollTo(0, top), y);
+      await page.waitForTimeout(40);
+    }
+    await expect.poll(() => page.locator(".animate-on-scroll:not(.animate)").count()).toBe(0);
+  });
+
+  test("under reduced motion, everything is there without a scroll", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openPage(page);
+    const faded = await page
+      .locator(".animate-on-scroll, .animate-on-load")
+      .evaluateAll((els) => els.filter((el) => getComputedStyle(el).opacity !== "1").length);
+    expect(faded).toBe(0);
+  });
+});
