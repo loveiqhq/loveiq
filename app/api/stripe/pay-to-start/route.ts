@@ -151,8 +151,7 @@ export async function POST(request: Request) {
     const existingToken = readPrepaidToken(request.headers.get("cookie"));
     const existing = existingToken ? await findEntitlementByToken(existingToken) : null;
 
-    // Paid and claimed: the report is theirs. A claim on a checkout left unpaid is not
-    // "used": paying it now (below) unlocks the report that submission already has.
+    // Paid and claimed: the report is theirs.
     if (existing?.consumed_submission_id && existing.status === "succeeded") {
       // Only the payer's own report: the cookie can be in someone else's browser.
       const response = reply({
@@ -167,9 +166,14 @@ export async function POST(request: Request) {
       response.cookies.set(PREPAID_COOKIE, existing.prepaid_token, prepaidCookieOptions());
       return response;
     }
-    if (existing?.status === "pending" && existing.stripe_session_id) {
+    // Bound to a survey but never paid (a checkout left, then the survey): its own open
+    // session can still be paid and unlocks that report. Anything bought here is a new
+    // purchase: sold again under this token, it would pay for that survey, someone else's
+    // on a shared device.
+    const reusable = existing?.consumed_submission_id ? null : existing;
+    if (reusable?.status === "pending" && reusable.stripe_session_id) {
       const settled = await settlePayToStartSession({
-        sessionId: existing.stripe_session_id,
+        sessionId: reusable.stripe_session_id,
         source: "checkout",
         stripe,
       });
@@ -180,29 +184,29 @@ export async function POST(request: Request) {
           // Paid with a method that is still settling: the status page waits for it.
           return reply({
             state: "redirect",
-            url: `${origin}${offer.landingPath}/checkout?session_id=${encodeURIComponent(existing.stripe_session_id)}`,
+            url: `${origin}${offer.landingPath}/checkout?session_id=${encodeURIComponent(reusable.stripe_session_id)}`,
           });
         case "open":
           // The same session again, unless the price changed since it opened.
           if (settled.session?.url && settled.session.amount_subtotal === offer.priceCents) {
             return reply({ state: "redirect", url: settled.session.url });
           }
-          await stripe.checkout.sessions.expire(existing.stripe_session_id).catch((err) => {
+          await stripe.checkout.sessions.expire(reusable.stripe_session_id).catch((err) => {
             logger.warn({ err }, "pay-to-start: expiring a stale-priced session failed");
           });
-          reuse = existing;
+          reuse = reusable;
           break;
         case "expired":
         case "failed":
-          reuse = existing;
+          reuse = reusable;
           break;
         default:
           // Refunded or unknown: a fresh token below.
           break;
       }
-    } else if (existing?.status === "expired" || existing?.status === "pending") {
+    } else if (reusable?.status === "expired" || reusable?.status === "pending") {
       // Expired, or pending with no session (an earlier create failed): same token.
-      reuse = existing;
+      reuse = reusable;
     }
 
     const utmTracker =

@@ -250,13 +250,17 @@ export async function sendPayToStartConfirmationEmail({
       ),
     ]);
     if (error) {
-      logger.error({ error, entitlementId }, "pay-to-start: confirmation email failed");
+      // Not mirrored to #ops: the caller posts pts_confirmation_failed, with what to do.
+      logger.error(
+        { error, entitlementId, slack: false },
+        "pay-to-start: confirmation email failed"
+      );
       return false;
     }
     logger.info({ entitlementId }, "pay-to-start: confirmation email sent");
     return true;
   } catch (err) {
-    logger.error({ err, entitlementId }, "pay-to-start: confirmation email error");
+    logger.error({ err, entitlementId, slack: false }, "pay-to-start: confirmation email error");
     return false;
   }
 }
