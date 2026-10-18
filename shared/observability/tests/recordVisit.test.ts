@@ -92,6 +92,16 @@ describe("server-side funnel writers", () => {
     expect(insertedBody().landing_variant).toBe("unknown");
   });
 
+  it("keeps pay to start's label, which proxy.ts gives that journey's visits", async () => {
+    // Not an arm: dropped to "unknown" it would be indistinguishable from an entry the
+    // landing test merely could not attribute.
+    await recordUniqueVisit("pay_to_start", "google");
+    expect(insertedBody().landing_variant).toBe("pay_to_start");
+    mockFetch.mockClear();
+    await recordSurveyPageView("pay_to_start");
+    expect(insertedBody().landing_variant).toBe("pay_to_start");
+  });
+
   it("omits utm_source entirely for direct traffic", async () => {
     await recordSurveyPageView("white");
     expect(insertedBody()).not.toHaveProperty("utm_source");

@@ -28,6 +28,7 @@ import { cookies } from "next/headers";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { isProbeRequest } from "@shared/http/probe-cookie";
 import logger from "@shared/observability/logger";
+import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 
 // Top-of-funnel signals that all predate survey_submission, so analytics_event
 // can't host them — see funnel_event migrations for the table-level CHECK
@@ -35,6 +36,8 @@ import logger from "@shared/observability/logger";
 //   • unique_visitor / survey_engine_mount      — original
 //   • intro_slide_1..4                           — 2026-05-29 longitudinal digest
 //   • the intro cards' own steps (view, back, skip) — 20261014120200, applied first
+//   • prepaid_gate_viewed / prepaid_checkout_started — the June pay-first test's two, which
+//     the CHECK kept; pay to start (/sexual-archetype) sends them again since 18.10
 const ALLOWED_EVENTS = [
   "unique_visitor",
   "survey_engine_mount",
@@ -53,7 +56,18 @@ const ALLOWED_EVENTS = [
   "intro_skip_3",
   "intro_skip_4",
   "consent_back",
+  "prepaid_gate_viewed",
+  "prepaid_checkout_started",
 ] as const;
+
+/**
+ * Pay to start's page view and checkout click. Not a landing arm's: they are stored under
+ * `pay_to_start`, whatever arm cookie the browser holds, and get a bucket of their own.
+ */
+const PAY_TO_START_EVENTS: ReadonlySet<string> = new Set([
+  "prepaid_gate_viewed",
+  "prepaid_checkout_started",
+]);
 
 /** The steps added with the intro cards' Back and Skip, on a rate-limit bucket of their own. */
 const INTRO_STEPS: ReadonlySet<string> = new Set([
@@ -96,7 +110,11 @@ export async function POST(request: Request) {
   // The intro cards' own steps (14 Oct 2026) get a bucket of their own, so they never use up
   // the one survey_engine_mount (the start count) and the visit and slide pings share.
   const rateLimit = await checkRateLimit(ip, {
-    bucket: INTRO_STEPS.has(parsed.data.event) ? "funnel-event-intro" : "funnel-event",
+    bucket: INTRO_STEPS.has(parsed.data.event)
+      ? "funnel-event-intro"
+      : PAY_TO_START_EVENTS.has(parsed.data.event)
+        ? "funnel-event-pay-to-start"
+        : "funnel-event",
     limit: 30,
     windowMs: 60_000,
   });
@@ -140,7 +158,11 @@ export async function POST(request: Request) {
         // arm it wanted, with no matching visit row. The fetch is same-origin, so
         // the cookie arrives anyway — reading it here is both the smaller diff
         // and one trust boundary fewer.
-        ...(isLandingVariant(armFromCookie) ? { landing_variant: armFromCookie } : {}),
+        ...(PAY_TO_START_EVENTS.has(event)
+          ? { landing_variant: PAY_TO_START_JOURNEY }
+          : isLandingVariant(armFromCookie)
+            ? { landing_variant: armFromCookie }
+            : {}),
       }),
     });
 

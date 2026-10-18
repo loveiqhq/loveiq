@@ -13,6 +13,11 @@ import { sanitizeUtmSource } from "@shared/url/utm";
 import { safeAdminNext } from "@shared/url/admin-next";
 import { reportingDay } from "@shared/time/reporting-day";
 import { isProbeRequest } from "@shared/http/probe-cookie";
+import {
+  PAY_TO_START_JOURNEY,
+  PAY_TO_START_RETURN_PATH,
+  readPrepaidToken,
+} from "@features/pay-to-start/logic/journey";
 
 // Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
 // `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
@@ -175,6 +180,17 @@ const VISIT_DAY_COOKIE = "liq_dv";
  * between them IS the consent gap, which is worth being able to see.
  */
 const SURVEY_DAY_COOKIE = "liq_ds";
+
+/**
+ * Pay to start (features/pay-to-start): a visit to its pages, and a survey opened by a
+ * browser that paid first, are that journey's, labelled `pay_to_start` instead of a
+ * landing arm. Without this, an arm cookie left by an earlier visit to "/" credited that
+ * arm with ad traffic that never saw its hero, in the landing test's denominator.
+ * Exported for unit testing.
+ */
+export function isPayToStartPage(path: string): boolean {
+  return path === PAY_TO_START_RETURN_PATH || path.startsWith(`${PAY_TO_START_RETURN_PATH}/`);
+}
 
 /**
  * True when this request is the survey page itself, by the same rules
@@ -559,8 +575,9 @@ export async function proxy(request: NextRequest) {
     // landing→survey-start comparison, so the bias landed straight on the
     // headline number.
     const cookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
-    const visitVariant =
-      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "unknown");
+    const visitVariant = isPayToStartPage(request.nextUrl.pathname)
+      ? PAY_TO_START_JOURNEY
+      : (landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "unknown"));
     requestHeaders.set("x-liq-new-visit", visitVariant);
     // Last-touch acquisition source for THIS visit. sanitizeUtmSource strips to
     // a safe charset + length-caps + lowercases at the trust boundary (the raw
@@ -592,10 +609,14 @@ export async function proxy(request: NextRequest) {
     // Same arm resolution as the visit above: an unresolvable arm is "unknown",
     // never "white". /survey is exactly the entry path that used to inflate
     // white's denominator by defaulting.
+    // A browser holding a pay-to-start entitlement opens the survey it paid for.
     const surveyCookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
     requestHeaders.set(
       "x-liq-new-survey",
-      landingVariant ?? (isLandingVariant(surveyCookieVariant) ? surveyCookieVariant : "unknown")
+      readPrepaidToken(request.headers.get("cookie"))
+        ? PAY_TO_START_JOURNEY
+        : (landingVariant ??
+            (isLandingVariant(surveyCookieVariant) ? surveyCookieVariant : "unknown"))
     );
   }
 
