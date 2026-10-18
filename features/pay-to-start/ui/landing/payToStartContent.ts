@@ -409,3 +409,34 @@ export const PTS_VIDEO = {
   label: "Watch the intro video with sound (1:10)",
   videoLabel: "LoveIQ intro video",
 } as const;
+
+/**
+ * The "Checkout status" page Stripe sends the buyer back to (Figma 1475:2090 "08 Back on
+ * LoveIQ", 2091 "09 Payment received", 2092 "10 Unlocked"). The three states are Figma's
+ * words; the rest covers what the frames do not draw (a failed, refunded or used
+ * payment, a wait that runs out), in the same voice. State 10's back link reads "Back to
+ * report" in Figma, the reused component's default: no report exists yet, so it is the
+ * landing page here too (flagged).
+ */
+export const PTS_STATUS = {
+  title: "Checkout status",
+  back: "Back to Landing Page",
+  verifying: "Verifying your checkout session…",
+  received: "Payment received. Unlocking your report…",
+  completeLead: "Payment complete.",
+  completeRest: " Your report is unlocked. Redirecting you now…",
+  usedRest: " Your report is ready.",
+  returnToLanding: "Return to Landing Page",
+  startAgain: "Start checkout again",
+  goToSurvey: "Go to Survey",
+  openReport: "Open your report",
+  missing: "We couldn’t find a checkout session. Go back and try again; nothing was charged.",
+  failed: "The payment didn’t go through, so nothing was charged.",
+  refunded: "This payment was refunded, so it no longer unlocks the survey.",
+  unknown:
+    "We couldn’t find this checkout. If you paid, the link in your confirmation email opens the survey.",
+  slow: "Your payment is still being confirmed. We’ll email you the moment it is; you can close this page.",
+  error: "We couldn’t verify the checkout result. Please reload this page in a moment.",
+  usedNoReport:
+    "This purchase has already been used for a report. Open it from the link in your email.",
+} as const;

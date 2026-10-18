@@ -921,6 +921,8 @@ export interface ReportPurchaseParams {
   discount_amount?: number;
   /** A staff payer, by the rule that sets `payment.is_test` (checkout-session-status). */
   isTest?: boolean;
+  /** "pay_to_start" for a purchase made before the survey; absent for the report's own. */
+  journey?: string;
 }
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
@@ -948,6 +950,7 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
       value: params.value,
       currency: params.currency,
       items: [{ item_name: params.item_name || "LoveIQ Report", price: params.value, quantity: 1 }],
+      ...(params.journey ? { journey: params.journey } : {}),
     });
     trackGoogleAdsPurchaseConversion(params);
     return;
@@ -979,6 +982,7 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
     promotion_code: params.promotion_code,
     coupon_percent_off: params.coupon_percent_off,
     discount_amount: params.discount_amount,
+    ...(params.journey ? { journey: params.journey } : {}),
   });
 
   trackGoogleAdsPurchaseConversion(params);

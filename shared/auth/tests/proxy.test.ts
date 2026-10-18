@@ -79,7 +79,7 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
   createSupabaseMiddleware: () => ({ auth: { getUser: mockGetUser } }),
 }));
 
-import { config, proxy, shouldCountSurveyView, shouldCountVisit } from "@/proxy";
+import { config, isPayToStartPage, proxy, shouldCountSurveyView, shouldCountVisit } from "@/proxy";
 import { renderBrandHeader } from "@shared/emails/shared";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -925,6 +925,38 @@ describe("proxy — consent-independent daily unique-visit count", () => {
   it("carries the video arm in x-liq-new-visit when ?variant=white_video", async () => {
     await proxy(makeVisitRequest({ path: "/?variant=white_video", dest: "document" }));
     expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("white_video");
+  });
+
+  it("labels a visit to the pay-to-start pages pay_to_start, never an arm", async () => {
+    for (const path of ["/sexual-archetype", "/sexual-archetype/checkout"]) {
+      const req = makeVisitRequest({ path, dest: "document" });
+      // A browser that saw the landing before: its arm must not be credited.
+      (
+        req as unknown as { cookies: { get: (n: string) => { value: string } | undefined } }
+      ).cookies = { get: (n: string) => (n === "__liq_lv" ? { value: "white_video" } : undefined) };
+      mockNextOpts.value = null;
+      await proxy(req);
+      expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("pay_to_start");
+    }
+    expect(isPayToStartPage("/sexual-archetype")).toBe(true);
+    expect(isPayToStartPage("/sexual-archetype/continue")).toBe(true);
+    expect(isPayToStartPage("/sexual-archetypes")).toBe(false);
+    expect(isPayToStartPage("/survey")).toBe(false);
+  });
+
+  it("labels the survey a pay-to-start buyer opens pay_to_start", async () => {
+    const req = makeVisitRequest({ path: "/survey", dest: "document" });
+    (req as unknown as { headers: Headers }).headers.set(
+      "cookie",
+      `__liq_lv=white_card; __liq_pp=rpp_${"a".repeat(32)}`
+    );
+    (req as unknown as { cookies: { get: (n: string) => { value: string } | undefined } }).cookies =
+      {
+        get: (n: string) => (n === "__liq_lv" ? { value: "white_card" } : undefined),
+      };
+    mockNextOpts.value = null;
+    await proxy(req);
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-survey")).toBe("pay_to_start");
   });
 
   it("does NOT flag/set when liq_dv already equals today (deduped)", async () => {

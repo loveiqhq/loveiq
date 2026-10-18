@@ -31,8 +31,9 @@ const PRIVATE_ROUTES = [
   "login",
   "admin/login",
   "admin/submissions",
-  // Pay to start: an ad's landing page, sold to, never searched for.
+  // Pay to start: an ad's landing page, sold to, never searched for, and its checkout status.
   "sexual-archetype",
+  "sexual-archetype/checkout",
 ];
 
 describe("legal pages are indexable", () => {

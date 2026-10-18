@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isLandingVariant } from "@shared/experiments/landingVariant";
+import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 import { sanitizeUtmSource } from "@shared/url/utm";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
@@ -65,7 +66,10 @@ async function writeFunnelEvent(
         // anything unrecognised to "white", which is exactly the mis-attribution
         // proxy.ts now avoids by sending "unknown". Normalising here would undo
         // it one layer down.
-        landing_variant: isLandingVariant(variant) ? variant : "unknown",
+        // `pay_to_start` is not an arm: it marks the pay-first journey's visits (its
+        // page, and the survey a buyer opens), so no arm is credited with them.
+        landing_variant:
+          isLandingVariant(variant) || variant === PAY_TO_START_JOURNEY ? variant : "unknown",
         // Last-touch acquisition source for THIS visit (re-sanitized above).
         // Omitted (stays NULL) for direct/untagged visits so COUNT(utm_source)
         // reflects only real campaign traffic.
