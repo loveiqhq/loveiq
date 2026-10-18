@@ -229,12 +229,30 @@ test.describe("pay to start: the LoveIQ header", () => {
 test.describe("pay to start: the fly-ins", () => {
   // Marcus, 18.10: "Can we add fly-in effects?" The landing's own reveal, so no element may
   // be left faded once the page has been scrolled past it.
-  test("every fly-in plays as the page is scrolled through", async ({ page }) => {
+  test("every fly-in plays once it is in view, top to bottom", async ({ page }) => {
     await openPage(page);
-    const height = await page.evaluate(() => document.documentElement.scrollHeight);
-    for (let y = 0; y <= height; y += 400) {
+    const { height, viewport } = await page.evaluate(() => ({
+      height: document.documentElement.scrollHeight,
+      viewport: window.innerHeight,
+    }));
+    // A reader's pace, not a fling: stop every 60 % of a screen until what is in view has
+    // played. CI's WebKit runs the observer far less often than every 40 ms, so a test
+    // that scrolls past without stopping misses reveals no person would (18.10, #613).
+    const unplayedInView = () =>
+      page.evaluate(() => {
+        // The band ScrollAnimator watches: the top 90 % of the screen.
+        const bottom = window.innerHeight * 0.9;
+        return [...document.querySelectorAll<HTMLElement>(".animate-on-scroll:not(.animate)")]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            const shown = Math.min(r.bottom, bottom) - Math.max(r.top, 0);
+            return r.height > 0 && shown >= Math.min(r.height, bottom) * 0.5;
+          })
+          .map((el) => (el.textContent ?? "").trim().slice(0, 40));
+      });
+    for (let y = 0; y <= height; y += Math.round(viewport * 0.6)) {
       await page.evaluate((top) => window.scrollTo(0, top), y);
-      await page.waitForTimeout(40);
+      await expect.poll(unplayedInView).toEqual([]);
     }
     await expect.poll(() => page.locator(".animate-on-scroll:not(.animate)").count()).toBe(0);
   });
