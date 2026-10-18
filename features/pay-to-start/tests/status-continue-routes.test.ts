@@ -130,6 +130,13 @@ describe("GET /api/stripe/pay-to-start/status", () => {
     expect(response.headers.get("set-cookie")).toContain(`__liq_pp=${TOKEN}`);
   });
 
+  it("hands it over while a wallet's payment still settles, too", async () => {
+    settled("processing", row({ status: "pending", paid_at: null }));
+    const response = await status(SESSION);
+    expect(await response.json()).toEqual({ state: "processing" });
+    expect(response.headers.get("set-cookie")).toContain(`__liq_pp=${TOKEN}`);
+  });
+
   it("never hands over an entitlement that is used, unpaid, or paid over two hours ago", async () => {
     settled("open", row({ status: "pending" }));
     expect((await status(SESSION)).headers.get("set-cookie")).toBeNull();

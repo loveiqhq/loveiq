@@ -18,6 +18,16 @@ vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));
+// The landing arm cookie a browser holds from an earlier visit to "/". Without this mock
+// `cookies()` throws (no request scope) and no arm is ever read, so a route that stamped
+// a buyer into an arm would pass.
+const mockArmCookie = vi.hoisted(() => ({ value: undefined as string | undefined }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      /liq_lv$/.test(name) && mockArmCookie.value ? { value: mockArmCookie.value } : undefined,
+  }),
+}));
 vi.mock("@shared/flags/system-flags", () => ({
   isFeatureEnabled: vi.fn().mockResolvedValue(true),
 }));
@@ -169,6 +179,25 @@ describe("a survey submitted by a buyer who paid before it", () => {
       unlocked: true,
     });
     expect(response.headers.get("set-cookie")).toMatch(/__liq_pp=;.*Max-Age=0/i);
+  });
+
+  it("puts a buyer holding a landing arm cookie in no arm, and a free reader in theirs", async () => {
+    mockArmCookie.value = "white_video";
+    try {
+      let seen = routeSupabase();
+      await submit({ utmTracker: '{"utm_source":"google"}' });
+      expect(JSON.parse(String(seen.rpcBody?.p_utm_tracker))).toMatchObject({
+        landing_variant: "white_video",
+      });
+
+      seen = routeSupabase();
+      await submit({ utmTracker: '{"utm_source":"google"}' }, cookie);
+      const tracker = JSON.parse(String(seen.rpcBody?.p_utm_tracker)) as Record<string, unknown>;
+      expect(tracker).not.toHaveProperty("landing_variant");
+      expect(tracker).toMatchObject({ journey: "pay_to_start" });
+    } finally {
+      mockArmCookie.value = undefined;
+    }
   });
 
   it("labels the submission as the journey and in no landing arm", async () => {
