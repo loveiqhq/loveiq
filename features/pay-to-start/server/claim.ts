@@ -29,8 +29,8 @@ export type ClaimOutcome =
   /** Bound, and the money is on its way (a delayed method): it unlocks when it settles. */
   | { outcome: "pending"; entitlementId: number }
   /**
-   * Bound, but nothing was paid: a checkout opened and left. Paying it later (or a new
-   * checkout from the page, under the same token) unlocks this report by itself.
+   * Bound, but nothing was paid: a checkout opened and left. Paying that checkout later
+   * unlocks this report by itself; a new one from the page is a new purchase.
    */
   | { outcome: "unpaid"; entitlementId: number }
   /** Nothing this submission may claim. */

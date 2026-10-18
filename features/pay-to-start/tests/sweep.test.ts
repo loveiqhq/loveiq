@@ -129,7 +129,7 @@ describe("the payment sweep's pay-to-start steps", () => {
     });
   });
 
-  it("runs the second step when the first cannot list", async () => {
+  it("applies claimed reports when the pending list cannot be read", async () => {
     vi.mocked(listPendingForReconcile).mockRejectedValue(new Error("db down"));
     vi.mocked(listBoundUnapplied).mockResolvedValue([
       row({ status: "succeeded", consumed_submission_id: 42 }),
@@ -150,6 +150,33 @@ describe("the payment sweep's pay-to-start steps", () => {
     const summary = await sweepPayToStart({ stripe, now: NOW, shouldStop: () => ++calls > 1 });
     expect(settlePayToStartSession).toHaveBeenCalledTimes(1);
     expect(summary.reconciled).toBe(1);
+  });
+
+  it("keeps time for missed checkouts when claimed rows keep failing to apply", async () => {
+    // A deploy that breaks the payment insert fails every apply, about a second each, and
+    // the same oldest rows lead every run. Without a share of its own, the missed webhook
+    // behind them would never be confirmed, and its buyer never emailed.
+    let clock = 0;
+    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      vi.mocked(listBoundUnapplied).mockResolvedValue(
+        Array.from({ length: 9 }, (_, i) =>
+          row({ id: 200 + i, status: "succeeded", consumed_submission_id: 300 + i })
+        )
+      );
+      vi.mocked(applyPayToStartEntitlement).mockImplementation(async () => {
+        clock += 1_200;
+        throw new Error("insert broken");
+      });
+      vi.mocked(listPendingForReconcile).mockResolvedValue([row({ id: 99 })]);
+      vi.mocked(settlePayToStartSession).mockResolvedValue({ state: "paid" } as never);
+      const summary = await sweepPayToStart({ stripe, now: NOW });
+      expect(settlePayToStartSession).toHaveBeenCalledTimes(1);
+      expect(summary.paid).toBe(1);
+      expect(vi.mocked(applyPayToStartEntitlement).mock.calls.length).toBeLessThan(9);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("unlocks claimed reports before the checkouts use up the run's time", async () => {

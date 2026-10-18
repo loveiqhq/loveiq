@@ -419,19 +419,24 @@ describe("a browser that already holds a token", () => {
     expect(response.headers.get("set-cookie")).toContain(TOKEN);
   });
 
-  it("lets a checkout bound to a finished survey, never paid, be paid now under its token", async () => {
-    // Checkout left, then the survey: the claim bound the pending row and kept the
-    // cookie, so paying now unlocks the report that survey already has. "Used" is only
-    // for a purchase that was paid.
-    vi.mocked(findEntitlementByToken).mockResolvedValue(
-      row({ status: "expired", stripe_session_id: "cs_test_old", consumed_submission_id: 42 })
-    );
-    const response = await post(VALID, cookie);
-    expect(await response.json()).toMatchObject({ state: "redirect" });
-    expect(createPendingEntitlement).not.toHaveBeenCalled();
-    expect(sessionsCreate.mock.calls[0]?.[0].metadata.entitlementId).toBe("7");
-    expect(response.headers.get("set-cookie")).toContain(TOKEN);
-  });
+  it.each(["pending", "expired"] as const)(
+    "never sells a checkout bound to a survey, %s and unpaid, again under its token",
+    async (status) => {
+      // Checkout left, then the survey: the claim bound the row. A cookie still here (a
+      // claim that errored) must not make the next purchase in this browser, someone
+      // else's on a shared device, pay for that survey.
+      vi.mocked(findEntitlementByToken).mockResolvedValue(
+        row({ status, stripe_session_id: "cs_test_old", consumed_submission_id: 42 })
+      );
+      vi.mocked(createPendingEntitlement).mockResolvedValue(row({ id: 8 }));
+      const response = await post(VALID, cookie);
+      expect(await response.json()).toMatchObject({ state: "redirect" });
+      expect(settlePayToStartSession).not.toHaveBeenCalled();
+      expect(createPendingEntitlement).toHaveBeenCalled();
+      expect(sessionsCreate.mock.calls[0]?.[0].metadata.entitlementId).not.toBe("7");
+      expect(response.headers.get("set-cookie")).not.toContain(TOKEN);
+    }
+  );
 
   it("starts afresh after a refund", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ status: "refunded" }));
