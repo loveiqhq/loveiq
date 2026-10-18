@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
-import type { PayToStartStatusResponse } from "@features/pay-to-start/logic/api";
+import {
+  PAY_TO_START_PAUSED_MESSAGE,
+  type PayToStartStatusResponse,
+} from "@features/pay-to-start/logic/api";
 import {
   CHECKOUT_SESSION_ID_REGEX,
   PAY_TO_START_RETURN_PATH,
 } from "@features/pay-to-start/logic/journey";
+import { STATUS_PREVIEWS, type StatusPreview } from "@features/pay-to-start/logic/statusPreview";
 import { trackPtsPurchase, trackPtsStatusViewed } from "../analytics";
 import { PTS_STATUS } from "../landing/payToStartContent";
 import { PtsCtaStatus, usePtsCheckout } from "../landing/PtsCheckout";
@@ -21,6 +25,10 @@ import { PtsCtaStatus, usePtsCheckout } from "../landing/PtsCheckout";
  *
  * The session id leaves the address bar once read (it is kept for this tab, so a reload
  * still works): with it, the status route hands the entitlement to any browser for a week.
+ *
+ * Off production, `?preview=<state>` shows any state without a payment (the route's page
+ * decides, on the server, whether a preview is allowed): some cannot be produced on demand
+ * with a test card. A preview asks nothing, reports nothing and never redirects.
  */
 
 const SESSION_KEY = "pts-checkout-session";
@@ -35,6 +43,36 @@ type View =
   | { kind: "complete" }
   | { kind: "used"; reportPath: string | null }
   | { kind: "message"; text: string };
+
+function previewView(preview: StatusPreview): View {
+  switch (preview) {
+    case "verifying":
+      return { kind: "verifying" };
+    case "received":
+      return { kind: "received" };
+    case "complete":
+      return { kind: "complete" };
+    case "used":
+      // A report that opens off production, so the preview's button goes somewhere.
+      return { kind: "used", reportPath: "/report?preview=1&v4=1&plan=full_report" };
+    case "used_no_report":
+      return { kind: "used", reportPath: null };
+    case "failed":
+      return { kind: "message", text: PTS_STATUS.failed };
+    case "refunded":
+      return { kind: "message", text: PTS_STATUS.refunded };
+    case "slow":
+      return { kind: "message", text: PTS_STATUS.slow };
+    case "unknown":
+      return { kind: "message", text: PTS_STATUS.unknown };
+    case "error":
+      return { kind: "message", text: PTS_STATUS.error };
+    case "missing":
+      return { kind: "message", text: PTS_STATUS.missing };
+    case "paused":
+      return { kind: "message", text: PAY_TO_START_PAUSED_MESSAGE };
+  }
+}
 
 function readStoredSession(): string | null {
   try {
@@ -80,7 +118,38 @@ export const __resetArrivalSessionForTests = () => {
 const replacePage = (path: string) =>
   window.location.replace(new URL(path, window.location.origin).href);
 
-export const PayToStartStatusPage: FC = () => {
+/** The preview's switcher: every state, one tap apart. Never rendered outside a preview. */
+const StatusPreviewNav: FC<{ current: StatusPreview }> = ({ current }) => (
+  <nav
+    aria-label="Status previews"
+    className="fixed inset-x-0 bottom-0 z-40 border-t border-[#e9e6ee] bg-white/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 font-sans text-[12.5px] leading-[17px] text-[#3f3a4d] backdrop-blur"
+  >
+    <p className="mx-auto max-w-[960px] text-[#6b6678]">
+      Preview of every checkout status (never on the live site):
+    </p>
+    <ul className="mx-auto mt-2 flex max-w-[960px] flex-wrap gap-1.5">
+      {STATUS_PREVIEWS.map(([state, label]) => (
+        <li key={state}>
+          <a
+            href={`?preview=${state}`}
+            aria-current={state === current ? "page" : undefined}
+            className={`inline-block rounded-full border px-2.5 py-1 transition-colors ${
+              state === current
+                ? "border-[#161021] bg-[#161021] text-white"
+                : "border-[#e9e6ee] bg-white hover:border-[#161021]"
+            }`}
+          >
+            {label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+);
+
+export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
+  preview = null,
+}) => {
   const sessionId = useSyncExternalStore<string | null | undefined>(
     subscribeToNothing,
     readArrivalSession,
@@ -92,11 +161,11 @@ export const PayToStartStatusPage: FC = () => {
 
   // No session at all: nothing to ask, say so once.
   useEffect(() => {
-    if (sessionId === null) trackPtsStatusViewed("missing");
-  }, [sessionId]);
+    if (!preview && sessionId === null) trackPtsStatusViewed("missing");
+  }, [preview, sessionId]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (preview || !sessionId) return;
     storeSession(sessionId);
     const url = new URL(window.location.href);
     if (url.searchParams.has("session_id")) {
@@ -179,9 +248,13 @@ export const PayToStartStatusPage: FC = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [sessionId]);
+  }, [preview, sessionId]);
 
-  const shown: View = sessionId === null ? { kind: "message", text: PTS_STATUS.missing } : view;
+  const shown: View = preview
+    ? previewView(preview)
+    : sessionId === null
+      ? { kind: "message", text: PTS_STATUS.missing }
+      : view;
   const retrying = checkout.status === "starting";
 
   return (
@@ -253,6 +326,7 @@ export const PayToStartStatusPage: FC = () => {
           </div>
         </div>
       </div>
+      {preview && <StatusPreviewNav current={preview} />}
     </main>
   );
 };

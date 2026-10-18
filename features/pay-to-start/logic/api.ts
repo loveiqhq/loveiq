@@ -2,6 +2,14 @@
  * What the pay-to-start routes answer, shared by the routes and the page's hooks. Pure.
  */
 
+/** What the checkout answers while the kill switch (`pay_to_start_checkout`) is off. */
+export const PAY_TO_START_PAUSED_MESSAGE =
+  "Checkout is paused for a moment. Please try again later.";
+
+/** What it answers while the survey cannot take submissions: never sell one. */
+export const PAY_TO_START_SURVEY_CLOSED_MESSAGE =
+  "The survey is paused for a moment. Please check back soon; nothing was charged.";
+
 /** POST /api/stripe/pay-to-start */
 export type PayToStartCheckoutResponse =
   /** Go to Stripe (or, while a payment settles, to the status page). */
