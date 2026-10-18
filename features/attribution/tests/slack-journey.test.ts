@@ -650,6 +650,48 @@ describe("landing arm — round 3 of the landing test", () => {
   });
 });
 
+describe("pay to start — paid before the survey", () => {
+  /**
+   * A buyer from /sexual-archetype is in no landing arm by design (app/api/survey strips
+   * it), so "Not recorded" would read as a stamping failure. The message names the page.
+   */
+  it("names the pay-to-start page where the landing arm would be", () => {
+    const survey = buildJourneyMessage(
+      journey({
+        arms: { landing: null, survey: null, pricing: null, paywall: null },
+        payToStart: true,
+      }),
+      { kind: "survey_completed", questionCount: 58 }
+    );
+    expect(JSON.stringify(survey.blocks)).toContain(
+      "Landing page design: *Pay to start (/sexual-archetype)*"
+    );
+
+    const purchase = buildJourneyMessage(
+      journey({
+        arms: { landing: null, survey: null, pricing: null, paywall: null },
+        payToStart: true,
+        money: { plan: "full_report", amount: 29, currency: "EUR" },
+        milestones: { ...journey().milestones, purchasedAt: "2026-10-18T10:00:00.000Z" },
+      }),
+      {
+        kind: "purchase",
+        planLabel: "LoveIQ Survey & Report",
+        archetype: null,
+        amountText: "EUR 29.00",
+      }
+    );
+    expect(JSON.stringify(purchase.blocks)).toContain(
+      "*Landing page design*\\nPay to start (/sexual-archetype)"
+    );
+  });
+
+  it("leaves everyone else's landing line as it was", () => {
+    const message = buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: 58 });
+    expect(JSON.stringify(message.blocks)).not.toContain("Pay to start");
+  });
+});
+
 describe("journey rail — the glyphs themselves", () => {
   it("uses green for reached and red for not-yet, and never colour alone", () => {
     const message = buildJourneyMessage(
