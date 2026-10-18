@@ -21,8 +21,12 @@ import {
   bindEntitlement,
   clearedPrepaidCookieOptions,
   createPendingEntitlement,
+  findEntitlementById,
+  findEntitlementByConsumedSubmission,
+  findEntitlementByPaymentIntent,
   findEntitlementBySessionId,
   findEntitlementByToken,
+  findRecentPaidDuplicate,
   generatePrepaidToken,
   hasBoundEntitlement,
   listBoundUnapplied,
@@ -396,5 +400,22 @@ describe("sweep lists", () => {
     const url = calls[0]?.url ?? "";
     expect(url).toContain("status=eq.succeeded");
     expect(url).toContain("consumed_submission_id=not.is.null&payment_id=is.null");
+    expect(url).toContain("offer=not.is.null");
+  });
+
+  it("reads journey rows only, never June's pay-first rows (offer null), on every lookup", async () => {
+    // June's nine rows share the table: a refund, a replay or a duplicate check that
+    // matched one would act on a test that ended in June.
+    routeFetch(() => respond([]));
+    await findEntitlementById(7);
+    await findEntitlementByPaymentIntent("pi_1");
+    await findEntitlementByConsumedSubmission(42);
+    await findRecentPaidDuplicate({
+      customerEmail: "a@example.com",
+      excludeId: 7,
+      since: new Date("2026-10-16T00:00:00.000Z"),
+    });
+    expect(calls).toHaveLength(4);
+    for (const call of calls) expect(call.url).toContain("offer=not.is.null");
   });
 });

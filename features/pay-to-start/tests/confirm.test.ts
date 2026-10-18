@@ -201,6 +201,25 @@ describe("unpaid sessions", () => {
     expect(markEntitlementSucceeded).not.toHaveBeenCalled();
   });
 
+  it("leaves a pending row alone when a session it no longer points at expires", async () => {
+    // The row moved on to a newer session (a second tab, a new price): the old one
+    // expiring must not expire the row the buyer is about to pay.
+    vi.mocked(findEntitlementById).mockResolvedValue(row({ stripe_session_id: "cs_test_newer" }));
+    const result = await confirm(
+      checkoutSession({ status: "expired", payment_status: "unpaid", payment_intent: null })
+    );
+    expect(result.state).toBe("expired");
+    expect(markEntitlementExpired).not.toHaveBeenCalled();
+  });
+
+  it("does not unlock while a 3DS step is still open (requires_action)", async () => {
+    const result = await confirm(
+      checkoutSession({ payment_intent: { id: "pi_test_1", status: "requires_action" } })
+    );
+    expect(result.state).toBe("processing");
+    expect(markEntitlementSucceeded).not.toHaveBeenCalled();
+  });
+
   it("does not unlock on a PaymentIntent that is still processing", async () => {
     const result = await confirm(
       checkoutSession({ payment_intent: { id: "pi_test_1", status: "processing" } })
