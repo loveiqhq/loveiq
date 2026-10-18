@@ -395,6 +395,8 @@ export const PTS_NOTICES = {
     "That link didn’t work. If you paid, open the link in your confirmation email again, or write to us.",
   continueRefunded: "This payment was refunded, so the link no longer unlocks the survey.",
   continueUnpaid: "We couldn’t find a completed payment for that link.",
+  continueUsed:
+    "The survey for this purchase is done. Open the report from the link in the report email.",
   continueError: "Something went wrong on our side. Please try the link again in a moment.",
   checkoutStarting: "Taking you to secure checkout…",
   checkoutFailed: "We couldn’t open secure checkout. Please try again.",
@@ -437,6 +439,8 @@ export const PTS_STATUS = {
     "We couldn’t find this checkout. If you paid, the link in your confirmation email opens the survey.",
   slow: "Your payment is still being confirmed. We’ll email you the moment it is; you can close this page.",
   error: "We couldn’t verify the checkout result. Please reload this page in a moment.",
+  // What the page says once the purchase belongs to a finished survey: the status route
+  // never sends the report's address (a checkout session id is no secret).
   usedNoReport:
-    "This purchase has already been used for a report. Open it from the link in your email.",
+    "Payment complete. Your report is unlocked: open it from the link in your report email.",
 } as const;

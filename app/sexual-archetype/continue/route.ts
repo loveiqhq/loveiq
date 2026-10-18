@@ -5,7 +5,7 @@ import {
   findEntitlementByToken,
   prepaidCookieOptions,
 } from "@features/pay-to-start/server/entitlement";
-import { lookupReportTokenBySubmissionId } from "@features/report/server/personalReport";
+import { claimedReportPathForPayer } from "@features/pay-to-start/server/reportLink";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -15,9 +15,15 @@ export const runtime = "nodejs";
  * The link in the pay-to-start confirmation email: "come back to this any time".
  *
  * Paid and unused: the entitlement's cookie is set in this browser and the buyer goes to
- * the survey (a draft saved on this device resumes). Used: their report. Anything else:
+ * the survey (a draft saved on this device resumes). Used: the report, when the survey
+ * was taken under the payer's address (a forwarded link never opens someone else's);
+ * otherwise the assessment page says to open it from the report email. Anything else:
  * the assessment page, which says why. Opening it changes nothing on the server, so a
  * mail scanner that follows the link spends nothing.
+ *
+ * Only a paid entitlement sets the cookie. The email goes out once the payment is
+ * confirmed, so a link to one still pending is not one we sent: setting its cookie would
+ * only let someone plant their own checkout in another person's browser.
  */
 
 const RATE_LIMIT = { bucket: "pay-to-start-continue", limit: 20, windowMs: 60_000 };
@@ -47,10 +53,10 @@ export async function GET(request: Request) {
     if (entitlement.status === "refunded") return redirect(request, `${LANDING}?continue=refunded`);
 
     if (entitlement.consumed_submission_id) {
-      const reportToken = await lookupReportTokenBySubmissionId(entitlement.consumed_submission_id);
+      const reportPath = await claimedReportPathForPayer(entitlement);
       return redirect(
         request,
-        reportToken ? `/report/${encodeURIComponent(reportToken)}?from=email` : "/report?from=email"
+        reportPath ? `${reportPath}?from=email` : `${LANDING}?continue=used`
       );
     }
 
@@ -60,15 +66,6 @@ export async function GET(request: Request) {
       return response;
     }
 
-    // Pending: the payment is still settling. The status page waits for it.
-    if (entitlement.status === "pending" && entitlement.stripe_session_id) {
-      const response = redirect(
-        request,
-        `${LANDING}/checkout?session_id=${encodeURIComponent(entitlement.stripe_session_id)}`
-      );
-      response.cookies.set(PREPAID_COOKIE, entitlement.prepaid_token, prepaidCookieOptions());
-      return response;
-    }
     return redirect(request, `${LANDING}?continue=unpaid`);
   } catch (err) {
     logger.error({ err }, "pay-to-start: continue link failed");

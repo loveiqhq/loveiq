@@ -174,30 +174,40 @@ describe("DSAR and pay-to-start entitlements (Art. 15 / Art. 17)", () => {
     expect(reads).toHaveLength(2);
     // The token opens a paid survey and report: never handed out, not even here.
     for (const p of reads) expect(p).not.toContain("prepaid_token");
+    // Found through a survey, the payer may be someone else: their address and their
+    // visit's attribution are not the survey taker's to receive.
+    const bySubmission = reads.find((p) => p.includes("consumed_submission_id="))!;
+    expect(bySubmission).not.toContain("customer_email");
+    expect(bySubmission).not.toContain("utm_tracker");
+    expect(reads.find((p) => p.includes("customer_email=eq."))).toContain("customer_email,");
   });
 
   it("erases the email and attribution but keeps the payment's record", async () => {
     const result = await deleteDataSubject("a@x.com");
-    const writes = mockSupabaseFetch.mock.calls.filter(([p]) =>
-      String(p).includes("/prepaid_report_access?")
+    const writes = mockSupabaseFetch.mock.calls.filter(
+      ([p, init]) =>
+        String(p).includes("/prepaid_report_access?") &&
+        (init as { method?: string } | undefined)?.method === "PATCH"
     );
-    expect(writes.map(([, init]) => (init as { method?: string }).method)).toEqual([
-      "PATCH",
-      "PATCH",
+    expect(writes.map(([p]) => String(p))).toEqual([
+      expect.stringContaining("/prepaid_report_access?customer_email=eq."),
     ]);
-    for (const [, init] of writes) {
-      expect(JSON.parse((init as { body: string }).body)).toEqual({
-        customer_email: null,
-        utm_tracker: null,
-      });
-    }
-    // By submission before the submissions go, or their link is nulled first.
-    const order = mockSupabaseFetch.mock.calls.map(([p]) => String(p));
-    expect(
-      order.findIndex((p) => p.includes("/prepaid_report_access?consumed_submission_id="))
-    ).toBeLessThan(order.findIndex((p) => p.includes("/survey_submission?id=")));
+    expect(JSON.parse((writes[0]![1] as { body: string }).body)).toEqual({
+      customer_email: null,
+      utm_tracker: null,
+    });
     expect(result.rowsAffected.prepaid_report_access_pseudonymized).toBe(1);
-    expect(result.rowsAffected.prepaid_report_access_by_submission_pseudonymized).toBe(1);
+  });
+
+  it("never erases a payer's address because someone else's survey claimed their purchase", async () => {
+    await deleteDataSubject("a@x.com");
+    const bySubmissionWrites = mockSupabaseFetch.mock.calls.filter(
+      ([p, init]) =>
+        String(p).includes("/prepaid_report_access?consumed_submission_id=") &&
+        (init as { method?: string } | undefined)?.method !== undefined &&
+        (init as { method?: string }).method !== "GET"
+    );
+    expect(bySubmissionWrites).toEqual([]);
   });
 });
 
