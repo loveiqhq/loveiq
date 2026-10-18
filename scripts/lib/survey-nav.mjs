@@ -41,6 +41,10 @@ export async function seedQuestion(page, index) {
     ({ idx, step }) => {
       try {
         sessionStorage.setItem("loveiq-survey-step", step);
+        // Since #495 the engine opens only with consent given for this run; without it
+        // the seeded step lands on "Before we begin" and every probe seeded here measured
+        // the consent screen instead (verify-input-zoom exited 3 from 2026-10-05).
+        localStorage.setItem("loveiq-survey-consent", new Date().toISOString());
         localStorage.setItem(
           "loveiq-survey-answers",
           JSON.stringify({

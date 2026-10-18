@@ -5,6 +5,10 @@
  * Taps the card body well clear of the CTA and requires the pricing modal, and
  * checks the desktop affordance separately since a cursor does not exist on
  * touch.
+ *
+ * Report 3.0's locked card is `.rv4-premium` (its button `.rv4-premium__cta`). Looking
+ * only for the old `.report-premium-overlay__card`, this exited 3 on every run from
+ * 2026-10-06, and the guard that proves it can still fail did not run to say so.
  */
 import { chromium, webkit, devices } from "playwright";
 import { stagingCookies } from "./staging-cookie.mjs";
@@ -85,7 +89,7 @@ for (const name of DEVICE_LIST) {
         "click",
         (e) => {
           const t = e.target;
-          if (t instanceof Element && t.closest(".report-premium-overlay")) {
+          if (t instanceof Element && t.closest(".report-premium-overlay, .rv4-premium")) {
             e.stopImmediatePropagation();
           }
         },
@@ -156,7 +160,7 @@ for (const name of DEVICE_LIST) {
        */
       await page.evaluate(() => {
         document
-          .querySelector(".report-premium-overlay__card")
+          .querySelector(".report-premium-overlay__card, .rv4-premium")
           ?.scrollIntoView({ block: "center" });
       });
       await page.waitForTimeout(1200);
@@ -184,17 +188,17 @@ for (const name of DEVICE_LIST) {
         for (let attempt = 0; attempt < 4 && !pt?.onScreen; attempt += 1) {
           await page.evaluate(() => {
             document
-              .querySelector(".report-premium-overlay__card")
+              .querySelector(".report-premium-overlay__card, .rv4-premium")
               ?.scrollIntoView({ block: "center" });
           });
           await page.waitForTimeout(900);
           while (await paywallOpen(page)) await dismissPaywall(page);
           const found = await page.evaluate(() => {
-            const card = document.querySelector(".report-premium-overlay__card");
-            const ov = document.querySelector(".report-premium-overlay");
+            const card = document.querySelector(".report-premium-overlay__card, .rv4-premium");
+            const ov = document.querySelector(".report-premium-overlay, .rv4-premium");
             if (!card || !ov) return null;
             const b = card.getBoundingClientRect();
-            const cta = card.querySelector(".report-premium-overlay__cta");
+            const cta = card.querySelector(".report-premium-overlay__cta, .rv4-premium__cta");
             const cx = Math.round(b.left + b.width / 2);
             /**
              * SCAN for a tappable point instead of assuming one. A fixed offset

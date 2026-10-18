@@ -49,12 +49,20 @@ vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
 
 const mockClearPendingCompletion = vi.fn();
 let mockErrorKind: string | null = null;
+const mockRetryPending = vi.fn();
+let mockHasPending = false;
+let mockSentMomentsAgo = false;
 vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
   useSubmitSurvey: () => ({
     submit: mockSubmit,
-    retryPending: vi.fn(),
+    retryPending: mockRetryPending,
     clearPendingCompletion: mockClearPendingCompletion,
-    hasPendingCompletion: false,
+    get hasPendingCompletion() {
+      return mockHasPending;
+    },
+    get pendingSentMomentsAgo() {
+      return mockSentMomentsAgo;
+    },
     get status() {
       return mockSubmitStatus;
     },
@@ -210,6 +218,9 @@ beforeEach(() => {
   mockSetCurrentIndex.mockClear();
   mockTrackNavigation.mockClear();
   mockSubmit.mockClear();
+  mockRetryPending.mockClear();
+  mockHasPending = false;
+  mockSentMomentsAgo = false;
 });
 
 afterEach(() => {
@@ -272,6 +283,61 @@ describe("SurveyEngine", () => {
     } finally {
       sessionStorage.removeItem("loveiq-completed-report");
     }
+  });
+
+  // 1-15 Oct 2026: in a restored tab, the finish's step back through history loaded the
+  // survey anew while the submit was in flight, and the new page declared it interrupted.
+  it("carries on with a submit the page loaded in the middle of, instead of calling it interrupted", () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockHasPending = true;
+    mockSentMomentsAgo = true;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
+    // Not at once: sooner, a repeat can beat the original's insert to the email cooldown.
+    act(() => {
+      vi.advanceTimersByTime(1999);
+    });
+    expect(mockRetryPending).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(mockRetryPending).toHaveBeenCalledTimes(1);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(mockRetryPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shows the retry screen for a submit left pending long ago", () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockHasPending = true;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /retry submission/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockRetryPending).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing once the page that would resend has gone", () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockHasPending = true;
+    mockSentMomentsAgo = true;
+    const { unmount } = render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(mockRetryPending).not.toHaveBeenCalled();
   });
 
   it("calls onComplete when wizard completes", () => {

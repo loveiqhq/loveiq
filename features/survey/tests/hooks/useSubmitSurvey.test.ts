@@ -10,7 +10,8 @@ const ph = vi.hoisted(() => ({
 }));
 vi.mock("posthog-js", () => ({ default: ph }));
 
-import { useSubmitSurvey } from "@features/survey/ui/hooks/useSubmitSurvey";
+import { sentMomentsAgo, useSubmitSurvey } from "@features/survey/ui/hooks/useSubmitSurvey";
+import { PENDING_COMPLETION_KEY } from "@features/survey/ui/hooks/surveyStorage";
 
 // --- Helpers ---
 
@@ -398,5 +399,61 @@ describe("useSubmitSurvey — the end of a run", () => {
       await result.current.submit(makeAnswers(), new Date().toISOString());
     });
     expect(result.current.errorKind).toBe(kind);
+  });
+});
+
+// 1-15 Oct 2026: two readers whose tab was restored mid-run met "Submission Interrupted" a
+// second after their answers were saved: the page loaded again while the submit was in
+// flight. A pending submission that young is resent on load (see SurveyEngine).
+describe("useSubmitSurvey — a submit the page loaded in the middle of", () => {
+  const pending = (savedAt: string) => ({
+    sessionId: "3f0b8a52-6c1d-4e8b-9a7e-2d5c4b1a0f9e",
+    email: "alice@example.com",
+    firstName: "Alice",
+    answers: {},
+    startedAt: "2026-10-15T01:50:00.000Z",
+    durationMs: 260_000,
+    utmTracker: null,
+    currentIndex: 62,
+    savedAt,
+  });
+  const now = Date.parse("2026-10-15T01:54:40.000Z");
+
+  it("counts a submission sent seconds ago as in flight, and an older one as not", () => {
+    expect(sentMomentsAgo(pending("2026-10-15T01:54:36.624Z"), now)).toBe(true);
+    expect(sentMomentsAgo(pending("2026-10-15T01:52:41.000Z"), now)).toBe(true);
+    expect(sentMomentsAgo(pending("2026-10-15T01:52:39.000Z"), now)).toBe(false);
+    expect(sentMomentsAgo(pending("2026-10-14T09:00:00.000Z"), now)).toBe(false);
+  });
+
+  it("does not resend a submission from a clock ahead of this one, a broken stamp or nothing", () => {
+    expect(sentMomentsAgo(pending("2026-10-15T01:55:00.000Z"), now)).toBe(false);
+    expect(sentMomentsAgo(pending("not a date"), now)).toBe(false);
+    expect(sentMomentsAgo(null, now)).toBe(false);
+  });
+
+  it("reports what it found pending as this page loaded", () => {
+    localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(pending(new Date().toISOString())));
+    try {
+      const { result } = renderHook(() => useSubmitSurvey());
+      expect(result.current.hasPendingCompletion).toBe(true);
+      expect(result.current.pendingSentMomentsAgo).toBe(true);
+    } finally {
+      localStorage.removeItem(PENDING_COMPLETION_KEY);
+    }
+  });
+
+  it("leaves an old pending submission to the retry screen", () => {
+    localStorage.setItem(
+      PENDING_COMPLETION_KEY,
+      JSON.stringify(pending("2026-10-01T09:00:00.000Z"))
+    );
+    try {
+      const { result } = renderHook(() => useSubmitSurvey());
+      expect(result.current.hasPendingCompletion).toBe(true);
+      expect(result.current.pendingSentMomentsAgo).toBe(false);
+    } finally {
+      localStorage.removeItem(PENDING_COMPLETION_KEY);
+    }
   });
 });
