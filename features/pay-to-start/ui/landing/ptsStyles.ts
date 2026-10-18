@@ -11,8 +11,12 @@
 export const PTS_CTA_GRADIENT =
   "bg-[linear-gradient(to_bottom_right,#fe6839_14.6%,#bf66d9_45.1%,#958ef6_85.4%)]";
 
-/** Every section: its heading sits 56 below the section's top; sections have no bottom padding. */
-export const PTS_SECTION = "scroll-mt-6 pt-14";
+/**
+ * Every section: its heading sits 56 below the section's top; sections have no bottom
+ * padding. A jump to one (the sitelinks, the header's `#price`) stops at the bottom of the
+ * fixed 64 header, so the heading keeps its 56 of air.
+ */
+export const PTS_SECTION = "scroll-mt-16 pt-14";
 
 /** Section headings: Lora 500, 34/40.8 (26/31.2 on a phone), -0.3 tracking. */
 export const PTS_H2 =

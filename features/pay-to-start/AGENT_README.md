@@ -8,7 +8,8 @@ landing test arm.
 
 ## The journey
 
-1. `/sexual-archetype` (`ui/landing/`): the assessment page, Facets-branded, noindex. Every
+1. `/sexual-archetype` (`ui/landing/`): the assessment page, noindex, under the LoveIQ site's own
+   header (LoveIQ-branded until the new brand is ready, Marcus 18.10). Every
    "Unlock survey & report" posts to `POST /api/stripe/pay-to-start`.
 2. The checkout route records a pending `prepaid_report_access` row (`server/entitlement.ts`)
    and sets its bearer token (`rpp_` + 32) in an httpOnly cookie (`__Host-liq_pp`, 30 days;
@@ -34,6 +35,11 @@ landing test arm.
   euro amount is written in `ui/**` (`tests/no-hardcoded-price.test.ts`).
 - **Copy lives in `ui/landing/payToStartContent.ts`**, verbatim from Figma; where it disagrees
   with the product (57 questions, ~15 minutes, cut chapters) it is flagged, not changed.
+- **The header is the site's, pointed at this page's price.** `ui/landing/PtsHeader.tsx` mounts
+  `WNavSection` with its button on `#price` (the One price section), never the free survey, and
+  counts every press as `pts_nav_click`, never the landing test's `cta_click`. Its other links
+  leave for the site's pages, whose "Start test now" is the free survey: `pts_nav_click` says how
+  many go.
 - **Never in a landing arm or the free funnel's numbers.** Visits are labelled
   `pay_to_start` (`proxy.ts`), so are a buyer's survey steps (`app/api/funnel-event`), the
   survey's tracker gets `journey` and no arm (`stampLandingArm(..., { arm: false })`). The

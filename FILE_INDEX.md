@@ -104,6 +104,7 @@
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Assessment page (`/sexual-archetype`)  | `app/sexual-archetype/page.tsx`, `features/pay-to-start/ui/landing/PayToStartLanding.tsx`                                                           |
 | Its copy, verbatim from Figma          | `features/pay-to-start/ui/landing/payToStartContent.ts`                                                                                             |
+| Its header (the site's own nav)        | `features/pay-to-start/ui/landing/PtsHeader.tsx`, `features/landing/ui/white/WNavSection.tsx`                                                       |
 | Its buttons' checkout                  | `features/pay-to-start/ui/landing/PtsCheckout.tsx`, `app/api/stripe/pay-to-start/route.ts`, `features/pay-to-start/server/checkout.ts`              |
 | Checkout status page                   | `app/sexual-archetype/checkout/page.tsx`, `features/pay-to-start/ui/status/PayToStartStatusPage.tsx`, `app/api/stripe/pay-to-start/status/route.ts` |
 | Confirmation email + continue link     | `features/pay-to-start/server/emails/confirmation.ts`, `app/sexual-archetype/continue/route.ts`, `features/pay-to-start/server/reportLink.ts`       |
