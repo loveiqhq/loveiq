@@ -66,3 +66,23 @@ export const PAY_TO_START_RETURN_PATH = "/sexual-archetype";
 
 /** A Stripe Checkout session id, as the status route accepts it. */
 export const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[A-Za-z0-9]{10,200}$/;
+
+/**
+ * Whether a `utm_tracker` blob carries the server's journey label (`journey`, the
+ * JOURNEY_TRACKER_KEY). Only a buyer whose survey had a tracker carries it: the label
+ * never creates one, so a reader of submissions must also check the claimed entitlement.
+ */
+export function isPayToStartTracker(tracker: string | null | undefined): boolean {
+  if (!tracker || !tracker.includes(PAY_TO_START_JOURNEY)) return false;
+  try {
+    const parsed: unknown = JSON.parse(tracker);
+    return (
+      !!parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      (parsed as { journey?: unknown }).journey === PAY_TO_START_JOURNEY
+    );
+  } catch {
+    return false;
+  }
+}
