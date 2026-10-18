@@ -177,6 +177,30 @@ describe("POST /api/funnel-event", () => {
     }
   });
 
+  it("accepts pay to start's two events again, under its own label and bucket", async () => {
+    // The CHECK kept them since June's pay-first test (20261014120200 still lists them).
+    const check = readFileSync(
+      "supabase/migrations/20261014120200_funnel_event_intro_steps.sql",
+      "utf8"
+    ).split("ADD CONSTRAINT")[1]!;
+    mockSupabaseFetch.mockResolvedValue({ ok: true });
+    // A browser that once saw the landing still sends these under pay_to_start, never
+    // under its arm: the landing test must not count the ad's traffic.
+    mockCookieValue.mockReturnValue("white_video");
+    for (const event of ["prepaid_gate_viewed", "prepaid_checkout_started"]) {
+      expect(check).toContain(`'${event}'`);
+      mockSupabaseFetch.mockClear();
+      vi.mocked(ratelimit.checkRateLimit).mockClear();
+      expect((await POST(makeRequest({ event, visitor_id: VALID_UUID }))).status).toBe(204);
+      const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
+      expect(body).toMatchObject({ event_type: event, landing_variant: "pay_to_start" });
+      expect(
+        (vi.mocked(ratelimit.checkRateLimit).mock.calls[0]?.[1] as { bucket: string }).bucket
+      ).toBe("funnel-event-pay-to-start");
+    }
+    mockCookieValue.mockReturnValue(undefined);
+  });
+
   it("returns 204 even when the insert fails (best-effort)", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500 });
     const res = await POST(makeRequest({ event: "unique_visitor", visitor_id: VALID_UUID }));
