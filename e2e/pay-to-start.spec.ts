@@ -87,7 +87,10 @@ test.describe("pay to start: the assessment page", () => {
     await expect(cta).toBeInViewport();
   });
 
-  test("goes from the button to the survey through the status page", async ({ page }) => {
+  test("goes from the button to the survey through the status page", async ({
+    page,
+    browserName,
+  }) => {
     const posts: CheckoutPost[] = [];
     const polled: string[] = [];
     await stubCheckout(page, (post) => posts.push(post));
@@ -117,7 +120,11 @@ test.describe("pay to start: the assessment page", () => {
       method: "POST",
       body: { offer: "full", displayedPriceCents: 2900 },
     });
-    expect(posts[0]!.csrf).toBeTruthy();
+    // The header is the page's CSRF cookie. WebKit refuses that Secure cookie on
+    // http://localhost (production is https), so there it has none to send.
+    const csrfCookie = (await page.context().cookies()).find((c) => c.name.endsWith("csrf"));
+    if (browserName !== "webkit") expect(csrfCookie?.value).toBeTruthy();
+    expect(posts[0]!.csrf ?? "").toBe(csrfCookie?.value ?? "");
     // The status page asks about the session Stripe sent back, and nothing else.
     expect(polled.length).toBeGreaterThan(0);
     expect(new Set(polled)).toEqual(new Set([SESSION]));
