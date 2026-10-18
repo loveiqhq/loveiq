@@ -37,8 +37,9 @@ export const PayToStartLanding: FC<{ offer: PayToStartOfferId; priceCents: numbe
     <PtsCheckoutProvider offer={offer} priceCents={priceCents} price={price}>
       <div className="min-h-screen bg-white font-sans text-[#161021]">
         {/* The global body is dark (var(--color-bg)) and shows through an overscroll
-            bounce; the landing paints it white the same way. */}
-        <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
+            bounce, so the page paints it white, as the landing does: as a plain text
+            child, since CI's security check allows raw HTML injection in named files only. */}
+        <style>{"html,body{background:#ffffff;}"}</style>
         <PtsHeader />
         <main id="main-content" className="mx-auto w-full max-w-[1288px] px-4 pb-24 sm:px-6">
           <PtsBreadcrumb />
