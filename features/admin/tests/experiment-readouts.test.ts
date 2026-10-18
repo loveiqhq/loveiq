@@ -100,7 +100,8 @@ describe("loadArmOutcomes: a window's readers in the list they were dealt", () =
     expect(o.bySubmission.get(2)?.pricing).toBe("B");
     expect(o.bySubmission.get(3)?.pricing).toBeNull();
 
-    const [subs, quotes] = paths;
+    const subs = paths.find((p) => p.startsWith("/rest/v1/survey_submission?"));
+    const quotes = paths.find((p) => p.startsWith("/rest/v1/report_price_quote?"));
     expect(subs).toContain("created_date_time=gte.2026-08-02T22:00:00.000Z");
     expect(subs).toContain("created_date_time=lt.2026-08-31T22:00:00.000Z");
     // The history comes with each quote, oldest change first, for the window's ids only.
@@ -121,6 +122,35 @@ describe("loadArmOutcomes: a window's readers in the list they were dealt", () =
     const o = await loadArmOutcomes("2026-10-08T15:23:00Z");
     expect(o.bySubmission.get(7)?.pricing).toBe("A3");
     expect(paths[0]).not.toContain("created_date_time=lt.");
+  });
+
+  it("leaves surveys bought before they were taken out of every arm", async () => {
+    // Pay to start: a buyer's EUR 29 would count as a purchase in whatever arm their
+    // session fell into. Known by the entitlement they claimed (3), or by the server's
+    // tracker label when no claim is readable (4).
+    tables = {
+      survey_submission: [
+        sub(1),
+        sub(3),
+        {
+          ...sub(4),
+          utm_tracker: JSON.stringify({ utm_source: "google", journey: "pay_to_start" }),
+        },
+      ],
+      prepaid_report_access: [{ consumed_submission_id: 3 }],
+      report_price_quote: [quote(1, "A3", "2026-08-10T10:05:00Z")],
+      payment: [
+        { amount: "29", personal_report: { survey_submission_id: 3 } },
+        { amount: "29", personal_report: { survey_submission_id: 4 } },
+      ],
+    };
+    const o = await loadArmOutcomes("2026-08-02T22:00:00.000Z");
+    expect(o.submissions.map((s) => s.id)).toEqual([1]);
+    expect(o.bySubmission.has(3)).toBe(false);
+    expect(o.bySubmission.has(4)).toBe(false);
+    expect(paths.find((p) => p.startsWith("/rest/v1/prepaid_report_access?"))).toContain(
+      "consumed_submission_id=gte.1&consumed_submission_id=lte.4"
+    );
   });
 
   it("fails loudly when a read fails, rather than reading everyone as unattributed", async () => {
