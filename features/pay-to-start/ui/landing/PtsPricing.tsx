@@ -3,7 +3,7 @@ import Image from "next/image";
 import { PTS_ONE_PRICE, PTS_PRICE_CARD } from "./payToStartContent";
 import { PtsCtaButton, PtsCtaStatus } from "./PtsCheckout";
 import { CheckIcon, ShieldIcon } from "./ptsIcons";
-import { PTS_H2, PTS_SECTION } from "./ptsStyles";
+import { PTS_H2, PTS_REVEAL, PTS_SECTION } from "./ptsStyles";
 
 /**
  * Two of the places the page sells from: the "One price" section in the column and the
@@ -13,11 +13,12 @@ import { PTS_H2, PTS_SECTION } from "./ptsStyles";
 
 /**
  * 1706:1918: the band with the price and the button, what is included, the guarantee.
- * `#price` is where the header's "Start test now" takes the visitor, at every width.
+ * `#price` is where the header's "Start test now" takes the visitor, at every width. Only
+ * its heading flies in: the band holds the price and a button, which never wait on a reveal.
  */
 export const PtsOnePrice: FC<{ price: string }> = ({ price }) => (
   <section id="price" aria-labelledby="pts-one-price" className={PTS_SECTION}>
-    <h2 id="pts-one-price" className={PTS_H2}>
+    <h2 id="pts-one-price" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_ONE_PRICE.title}
     </h2>
     <div className="mt-[26px] overflow-hidden rounded-[20px] border border-[#e9e6ee] bg-white">
