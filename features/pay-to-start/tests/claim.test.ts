@@ -225,6 +225,15 @@ describe("a replay without the cookie", () => {
     vi.mocked(findEntitlementByConsumedSubmission).mockResolvedValue(null);
     expect(await claimedEntitlementFor(42)).toBeNull();
   });
+
+  it("treats a lookup that fails as no claim, never as a failed one", async () => {
+    // Almost every replay is a free reader's: an error here put the journey in their reply
+    // (the paid wizard) and a failed claim in #ops.
+    vi.mocked(findEntitlementByConsumedSubmission).mockRejectedValue(
+      new Error("prepaid_entitlement_lookup_failed")
+    );
+    expect(await claimedEntitlementFor(42)).toBeNull();
+  });
 });
 
 describe("what the reply carries", () => {
