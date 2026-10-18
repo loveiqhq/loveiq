@@ -1,7 +1,8 @@
 "use client";
 
 import posthog from "posthog-js";
-import { pingFunnelEvent, track } from "@features/analytics/client";
+import { pingFunnelEvent, track, trackReportPurchase } from "@features/analytics/client";
+import type { PayToStartPurchase, PayToStartStatusState } from "@features/pay-to-start/logic/api";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 import { getOfferDefinition, type PayToStartOfferId } from "@features/pay-to-start/logic/offer";
 
@@ -81,4 +82,20 @@ export function trackPtsCheckoutCancelled(): void {
 /** The intro video started playing, with sound. */
 export function trackPtsVideoPlay(): void {
   track("pts_video_play");
+}
+
+/** The status page settled on an answer (or gave up waiting: "timeout", "error"). */
+export function trackPtsStatusViewed(
+  state: PayToStartStatusState | "timeout" | "error" | "missing"
+): void {
+  track("pts_status_viewed", { state });
+}
+
+/**
+ * The purchase, once per payment, from the page the buyer comes back to: GA4's `purchase`
+ * and the Google Ads conversion (production only, never a staff or EUR 0 payment; the
+ * server sends its own copy at the same transaction id, so GA4 counts one).
+ */
+export function trackPtsPurchase(purchase: PayToStartPurchase): void {
+  trackReportPurchase({ ...purchase, journey: PAY_TO_START_JOURNEY });
 }
