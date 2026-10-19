@@ -11,6 +11,8 @@ import { instantScroll } from "./fixtures/instant-scroll";
  * The build has no PAY_TO_START_PRICE_CENTS, so the page sells at the default EUR 29.99.
  */
 const PAGE = "/sexual-archetype";
+/** The initial report's page (EUR 1.99, Marcus 19.10). */
+const INITIAL = "/sexual-archetype/initial";
 const SESSION = "cs_test_e2eAbcdefghijKLMN";
 const purchase = {
   value: 29.99,
@@ -264,5 +266,77 @@ test.describe("pay to start: the fly-ins", () => {
       .locator(".animate-on-scroll, .animate-on-load")
       .evaluateAll((els) => els.filter((el) => getComputedStyle(el).opacity !== "1").length);
     expect(faded).toBe(0);
+  });
+});
+
+test.describe("pay to start: the initial report's page", () => {
+  test("stays out of the index, and shows its price and a way to pay above the fold", async ({
+    page,
+  }) => {
+    await openPage(page, INITIAL);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+    await expect(page.getByText("€1.99", { exact: true }).first()).toBeVisible();
+    await expect(await primaryCta(page)).toBeInViewport();
+  });
+
+  test("puts its one price card under the film below 1280, beside the column from there", async ({
+    page,
+  }) => {
+    await openPage(page, INITIAL);
+    const card = page.locator("#price");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("SURVEY + INITIAL REPORT");
+    const cardBox = (await card.boundingBox())!;
+    const filmBox = (await page.getByTestId("pts-hero-media").boundingBox())!;
+    if ((page.viewportSize()?.width ?? 0) >= 1280) {
+      expect(cardBox.x).toBeGreaterThanOrEqual(filmBox.x + filmBox.width);
+    } else {
+      expect(cardBox.y).toBeGreaterThanOrEqual(filmBox.y + filmBox.height);
+      expect(cardBox.x + cardBox.width).toBeLessThanOrEqual((page.viewportSize()?.width ?? 0) + 1);
+    }
+  });
+
+  test("sells the initial report, and its status page leads back to its own page", async ({
+    page,
+  }) => {
+    const posts: CheckoutPost[] = [];
+    await page.route("**/api/stripe/pay-to-start", (route) => {
+      const request = route.request();
+      posts.push({
+        method: request.method(),
+        csrf: request.headers()["x-csrf-token"] ?? null,
+        body: (request.postDataJSON() ?? {}) as Record<string, unknown>,
+      });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          state: "redirect",
+          url: new URL(`${PAGE}/checkout?session_id=${SESSION}&offer=pre`, page.url()).href,
+        }),
+      });
+    });
+    await page.route("**/api/stripe/pay-to-start/status**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ state: "failed" }),
+      })
+    );
+    await openPage(page, INITIAL);
+    await (await primaryCta(page)).click();
+
+    await expect(page.getByText("The payment didn’t go through")).toBeVisible();
+    // The session id leaves the address once read; the offer stays.
+    await expect(page).toHaveURL(/\/sexual-archetype\/checkout\?offer=pre$/);
+    await expect(page.getByRole("link", { name: "Return to Landing Page" })).toHaveAttribute(
+      "href",
+      INITIAL
+    );
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      method: "POST",
+      body: { offer: "pre", displayedPriceCents: 199 },
+    });
   });
 });

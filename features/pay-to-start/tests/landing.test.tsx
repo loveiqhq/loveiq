@@ -38,6 +38,7 @@ import {
   PTS_FOOTER,
   PTS_HERO,
   PTS_HOW_IT_WORKS,
+  PTS_INITIAL,
   PTS_INSIDE,
   PTS_NOTICES,
   PTS_ONE_PRICE,
@@ -576,5 +577,105 @@ describe("its arrival notices", () => {
       pts_price_cents: 2900,
     });
     expect(analytics.pingFunnelEvent).toHaveBeenCalledWith("prepaid_gate_viewed");
+  });
+});
+
+/**
+ * The initial report's page (EUR 1.99, Marcus 19.10; Figma 1733:4089, phone 1733:4424): the
+ * same page in the initial report's words, with no "One price" band, and its one price card
+ * under the film below 1280 and beside the column from there.
+ */
+describe("the initial report's page", () => {
+  const renderInitial = () => render(<PayToStartLanding offer="pre" priceCents={199} />);
+
+  it("prints the initial report's words, and none that promise the full report", () => {
+    renderInitial();
+    const text = pageText();
+    const price = "€1.99";
+    const expected = [
+      PTS_HERO.title,
+      PTS_HERO.lead,
+      PTS_FIND_OUT.title,
+      PTS_INSIDE.title,
+      PTS_INITIAL.insideLead,
+      ...PTS_INITIAL.steps.flatMap((s) => [s.title, s.body()]),
+      ...PTS_INITIAL.faqItems.flatMap((i) => [i.question, i.answer]),
+      PTS_INITIAL.priceCard.eyebrow,
+      ...PTS_INITIAL.priceCard.includes,
+      PTS_INITIAL.finalCta.leadBefore,
+      PTS_INITIAL.finalCta.cta(price),
+      PTS_INITIAL.finalCta.ctaShort(price),
+      PTS_INITIAL.stickyLabel,
+    ];
+    for (const line of expected) expect(text).toContain(line.replace(/\s+/g, " "));
+    expect(text).toContain("SURVEY + INITIAL REPORT");
+    expect(text).toContain("€10 credit toward the full Premium Report");
+    for (const wrong of [
+      PTS_ONE_PRICE.title,
+      "the full report.",
+      "nothing locked",
+      "no second paywall",
+      "All of it is included",
+      "a 50+ page report you keep",
+      "€29",
+    ]) {
+      expect(text).not.toContain(wrong);
+    }
+  });
+
+  it("prints its price where the full report's page prints it, and no other", () => {
+    renderInitial();
+    // The price card and the sticky bar.
+    expect(screen.getAllByText("€1.99")).toHaveLength(2);
+    expect(pageText()).toContain("Unlock survey & report €1.99");
+  });
+
+  it("has one price card, the header's #price, under the film and beside the column", () => {
+    renderInitial();
+    const asides = document.querySelectorAll('aside[aria-label="Price"]');
+    expect(asides).toHaveLength(1);
+    expect(asides[0]!.id).toBe("price");
+    expect(asides[0]!.textContent).toContain(PTS_INITIAL.priceCard.eyebrow);
+    // Visible at every width: in the column below 1280, beside it from there.
+    expect(asides[0]!.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    // Right after the hero, before the first section.
+    const hero = document.querySelector("h1")!.closest("div.mx-auto")!;
+    expect(hero.nextElementSibling).toBe(asides[0]);
+    expect(
+      screen.getByRole("link", { name: "Start test now - navigation" }).getAttribute("href")
+    ).toBe("#price");
+    expect(document.querySelectorAll("#price")).toHaveLength(1);
+  });
+
+  it("never makes its price card or the sticky bar wait on a reveal", () => {
+    renderInitial();
+    const moving = ".animate-on-scroll, .animate-on-load";
+    for (const el of [
+      document.querySelector("#price"),
+      screen.getByTestId("pts-sticky-bar"),
+      ...screen.getAllByText("€1.99"),
+      ...document.querySelectorAll("[data-pts-cta]"),
+    ]) {
+      expect(el).not.toBeNull();
+      expect(el!.closest(moving), el!.outerHTML.slice(0, 90)).toBeNull();
+    }
+  });
+
+  it("sells the initial report: its offer, at the price it shows", async () => {
+    fetchMock.mockReturnValue(
+      reply({ state: "redirect", url: "https://checkout.stripe.com/c/pay/cs_test_pre" })
+    );
+    renderInitial();
+    fireEvent.click(cta("price_card"));
+    await settle();
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toMatchObject({ offer: "pre", displayedPriceCents: 199 });
+    expect(analytics.track).toHaveBeenCalledWith(
+      "begin_checkout",
+      expect.objectContaining({
+        value: 1.99,
+        items: [expect.objectContaining({ item_id: "pay_to_start_pre" })],
+      })
+    );
   });
 });

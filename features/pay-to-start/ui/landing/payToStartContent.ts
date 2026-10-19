@@ -1,8 +1,12 @@
+import { formatOfferPrice, type PayToStartOfferId } from "@features/pay-to-start/logic/offer";
+import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnlock";
+
 /**
  * Every word on the pay-to-start assessment page, verbatim from Figma Report-3.0
  * "Pay to start > Full Payments" (desktop 1706:1699, mobile 1706:2034), read from the
  * frames' text nodes on 18.10. Kept here, not in the components, so a copy change is one
- * diff and a test can hold the page to it.
+ * diff and a test can hold the page to it. What the initial report's page says otherwise
+ * is `PTS_INITIAL`, at the end.
  *
  * A price is never written out: every string that names one is a function of the price
  * the server sells at (`formatOfferPrice`), so the setting changes every mention at once.
@@ -370,6 +374,116 @@ export const PTS_STICKY_BAR = {
   label: "Survey + full report",
   cta: "Unlock survey & report",
 } as const;
+
+/**
+ * What the initial report's page (EUR 1.99, `/sexual-archetype/initial`) says where it differs
+ * from the full report's: Figma "Pay to start > Pre-Payments", desktop 1733:4089 and phone
+ * 1733:4424, read from the frames' text nodes on 19.10. Everything else on it is the copy
+ * above, and it has no "One price" band (neither frame draws one).
+ *
+ * Marcus drew it from the full report's frames and edited what changed. Lines he left as
+ * they were, which say what EUR 1.99 does not buy, are corrected here and listed for him in
+ * the PR (Fatih, 19.10: "fix them, flag to Marcus"):
+ * - step 1 and the first answer said "the full report" (and the answer "nothing locked and
+ *   no second paywall"): they now say the initial report;
+ * - the phone's step 3 and closing line kept the full report's; both take the desktop's.
+ */
+export const PTS_INITIAL = {
+  insideLead:
+    "A 50+ page report (when fully unlocked) written for your archetype, in chapters you can read in a few minutes each.",
+  steps: [
+    {
+      number: "01",
+      title: "Unlock once",
+      // The frames dropped the price here (the phone's reads "Paid securely …").
+      body: () =>
+        "Paid securely with Apple Pay, card or Link. One payment covers the survey and your initial report.",
+    },
+    PTS_HOW_IT_WORKS.steps[1],
+    {
+      number: "03",
+      title: "Read your report",
+      body: () =>
+        "Your archetype and your initial report open the moment you finish. Nothing left to pay.",
+    },
+  ],
+  faqItems: [
+    {
+      question: "Why do I pay before the survey?",
+      answer:
+        "So the report is ready the moment you finish. One payment covers the survey and your initial report.",
+    },
+    ...PTS_FAQ.items.slice(1),
+  ],
+  priceCard: {
+    ...PTS_PRICE_CARD,
+    eyebrow: "SURVEY + INITIAL REPORT",
+    includes: [
+      "57 questions · ~15 minutes",
+      "Your Core Archetype and what drives it",
+      "4x full chapters + 4x partly open",
+      "How you rank against all 14 archetypes",
+      // The initial unlock's credit (features/report/logic/initialUnlock.ts), as checkout takes it.
+      `${formatOfferPrice(INITIAL_UNLOCK_CREDIT_CENTS)} credit toward the full Premium Report`,
+    ],
+  },
+  finalCta: {
+    ...PTS_FINAL_CTA,
+    leadBefore: "57 questions · about 9 minutes",
+    leadPrice: null,
+    // As drawn: no middle dot before the price.
+    cta: (price: string) => `Unlock survey & report ${price}`,
+  },
+  stickyLabel: "Survey + Initial Report",
+} as const;
+
+/** One offer's page: what it says where the two pages differ. */
+export interface PtsOfferCopy {
+  insideLead: (price: string) => string;
+  steps: ReadonlyArray<{ number: string; title: string; body: (price: string) => string }>;
+  faqItems: ReadonlyArray<{ question: string; answer: string }>;
+  priceCard: {
+    eyebrow: string;
+    per: string;
+    cta: string;
+    guarantee: string;
+    includes: readonly string[];
+  };
+  finalCta: {
+    title: string;
+    stars: string;
+    leadBefore: string;
+    /** The closing line's price clause; the initial report's line has none. */
+    leadPrice: ((price: string) => string) | null;
+    cta: (price: string) => string;
+    ctaShort: (price: string) => string;
+    badges: readonly string[];
+  };
+  stickyLabel: string;
+  /** The "One price" band, and the header's `#price` on it: the full report's page only. */
+  onePrice: boolean;
+}
+
+export const PTS_OFFER_COPY: Record<PayToStartOfferId, PtsOfferCopy> = {
+  full: {
+    insideLead: PTS_INSIDE.lead,
+    steps: PTS_HOW_IT_WORKS.steps,
+    faqItems: PTS_FAQ.items,
+    priceCard: PTS_PRICE_CARD,
+    finalCta: PTS_FINAL_CTA,
+    stickyLabel: PTS_STICKY_BAR.label,
+    onePrice: true,
+  },
+  pre: {
+    insideLead: () => PTS_INITIAL.insideLead,
+    steps: PTS_INITIAL.steps,
+    faqItems: PTS_INITIAL.faqItems,
+    priceCard: PTS_INITIAL.priceCard,
+    finalCta: PTS_INITIAL.finalCta,
+    stickyLabel: PTS_INITIAL.stickyLabel,
+    onePrice: false,
+  },
+};
 
 export const PTS_FOOTER = {
   company: "© Applied Psychometrics UG · Berlin",

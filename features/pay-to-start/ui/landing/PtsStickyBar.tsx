@@ -13,7 +13,10 @@ import { PtsCtaButton, usePtsCheckout } from "./PtsCheckout";
  * and clears the home indicator. A failed click says why in a line above the row: the
  * row itself has no room for a sentence on a 360-wide phone.
  */
-export const PtsStickyBar: FC = () => {
+export const PtsStickyBar: FC<{
+  /** What the price buys, under it: the offer's (PtsOfferCopy). */
+  label: string;
+}> = ({ label }) => {
   const { price, state } = usePtsCheckout();
   const failed = state.status === "failed" && state.location === "sticky_bar" ? state : null;
   const starting = state.status === "starting" && state.location === "sticky_bar";
@@ -39,7 +42,7 @@ export const PtsStickyBar: FC = () => {
             {price}
           </p>
           <p className="mt-[4.5px] truncate font-sans text-[12px] leading-[16.39px] text-[#6b6678]">
-            {PTS_STICKY_BAR.label}
+            {label}
           </p>
         </div>
         <PtsCtaButton
