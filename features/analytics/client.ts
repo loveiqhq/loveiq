@@ -799,7 +799,8 @@ export const trackPriceShown = (params: PriceShownParams) => {
  * ecommerce shape goes to GA4/PostHog only.
  */
 export const trackBeginCheckout = (
-  plan: "essentials" | "full_report" | "core" | "all_reports",
+  // `initial`: the EUR 1.99 Core Archetype from the pre-unlock gate.
+  plan: "essentials" | "full_report" | "core" | "all_reports" | "initial",
   price: number | null,
   currency: string | null
 ) => {
@@ -861,7 +862,7 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
  * `trackReportPurchase`, so a refresh of the return page doesn't double-write.
  */
 export const trackPaywallUnlocked = (
-  plan: "essentials" | "full_report" | "core" | "all_reports",
+  plan: "essentials" | "full_report" | "core" | "all_reports" | "initial",
   priceEur: number,
   currency: string,
   transactionId: string
