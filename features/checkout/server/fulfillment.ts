@@ -11,6 +11,7 @@ import { reportCoreEmail } from "@features/report/server/emails/report-core";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
+import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
 import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
 import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
@@ -249,7 +250,8 @@ async function sendPurchaseEmail({
     plan !== "essentials" &&
     plan !== "full_report" &&
     plan !== "all_reports" &&
-    plan !== "core"
+    plan !== "core" &&
+    plan !== INITIAL_UNLOCK_PLAN
   ) {
     return;
   }
@@ -287,12 +289,14 @@ async function sendPurchaseEmail({
         recipient.email,
         siteUrl,
         unsubSecret,
-        UNSUBSCRIBE_CAMPAIGNS.reportUnlocked
+        isInitialUnlockPlan(plan)
+          ? UNSUBSCRIBE_CAMPAIGNS.initialUnlocked
+          : UNSUBSCRIBE_CAMPAIGNS.reportUnlocked
       )
     : undefined;
 
-  // Essentials + core each have a single template; full_report and all_reports
-  // run an A/B copy test. Variant is deterministic per recipient (hashed email)
+  // The initial unlock (E06), essentials and core each have a single template;
+  // full_report and all_reports run an A/B copy test. Variant is deterministic per recipient (hashed email)
   // so retries and dashboards stay consistent. Core lists the buyer's unlocked
   // top matches, so resolve them here (best-effort — a miss falls back to a
   // single report CTA inside the template).
@@ -304,7 +308,10 @@ async function sendPurchaseEmail({
    * one-armed test in the results with a 100% share and no comparison, which
    * reads as a winner.
    */
-  const purchaseExperiment = plan === "essentials" || plan === "core" ? null : `purchase-${plan}`;
+  const purchaseExperiment =
+    plan === "essentials" || plan === "core" || isInitialUnlockPlan(plan)
+      ? null
+      : `purchase-${plan}`;
   const variant = purchaseExperiment ? pickEmailVariant(recipient.email, purchaseExperiment) : "a";
 
   // The A copy (Figma 1382:2556) names no archetype, because on the main path the
@@ -318,8 +325,9 @@ async function sendPurchaseEmail({
       ? null
       : (unlockedArchetype ?? null);
 
-  const tpl =
-    plan === "all_reports"
+  const tpl = isInitialUnlockPlan(plan)
+    ? initialUnlockEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
+    : plan === "all_reports"
       ? variant === "b"
         ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
         : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
