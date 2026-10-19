@@ -3,14 +3,22 @@
  * report, how long they read, when they come back and what brings them, every chapter's
  * votes, and the feedback log.
  */
+import { tourSteps, type TourAudience, type TourStepId } from "@features/report/logic/guidedTour";
+import { TOUR_COPY } from "@features/report/ui/v3/guidedTourContent";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 import { supabaseFetch } from "@features/admin/server/supabase";
 
 import { assessmentScope } from "./assessment";
 import { shortDate } from "./days";
 import { PRE_PLANS, type Facts, type SubFact } from "./facts";
-import { activeNarrowing, bucketCaption, rangeLabel, type ApFilters } from "./filters";
-import { type GoodWhen, type Unit } from "./format";
+import {
+  activeNarrowing,
+  bucketCaption,
+  rangeLabel,
+  trendBuckets,
+  type ApFilters,
+} from "./filters";
+import { fmt, type GoodWhen, type Unit } from "./format";
 import {
   EVENTS_COMPLETE_FROM,
   launched,
@@ -158,6 +166,128 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
   };
 }
 
+/**
+ * The guided tour's first runs (ap_report_tour) of the range's finishers, whenever they ran,
+ * each said to be a free or a paid reader's: a free reader's tour has the unlock stop.
+ */
+export interface ReportTour {
+  /** Per finisher's day and audience; unended: runs with no end stored. */
+  days: Array<{
+    day: string;
+    audience: TourAudience;
+    readers: number;
+    runs: number;
+    completed: number;
+    skipped: number;
+    left: number;
+    unended: number;
+  }>;
+  /**
+   * Per audience and stop, over the runs whose end carries its stops: reached, went on (Next
+   * or Finish), went back at least once, skipped, left the page; each run's end is placed on
+   * the furthest stop it reached, so next + skip + exit = reached.
+   */
+  stops: Array<{
+    audience: TourAudience;
+    id: TourStepId;
+    reached: number;
+    next: number;
+    back: number;
+    skip: number;
+    exit: number;
+    median_ms: number | null;
+    timed: number;
+  }>;
+  /** Per audience, the runs whose end carries its stops: what the stops are out of. */
+  placed: Array<{ audience: TourAudience; runs: number }>;
+}
+
+const AUDIENCES: readonly TourAudience[] = ["free", "paid"];
+const isAudience = (v: unknown): v is TourAudience => v === "free" || v === "paid";
+
+export async function fetchReportTour(from: string, to: string): Promise<ReportTour> {
+  const res = await supabaseFetch("/rest/v1/rpc/ap_report_tour", {
+    method: "POST",
+    body: JSON.stringify({ p_from: from, p_to: to }),
+    timeoutMs: 30_000,
+  });
+  if (!res.ok) throw new Error(`ap_report_tour failed (${res.status})`);
+  const raw = (await res.json()) as Partial<ReportTour> | null;
+  if (!raw || !Array.isArray(raw.days) || !Array.isArray(raw.stops) || !Array.isArray(raw.placed)) {
+    throw new Error("ap_report_tour: unexpected shape");
+  }
+  const num = (v: unknown) => Number(v) || 0;
+  return {
+    days: raw.days
+      .filter((d) => isAudience(d.audience))
+      .map((d) => ({
+        day: String(d.day),
+        audience: d.audience,
+        readers: num(d.readers),
+        runs: num(d.runs),
+        completed: num(d.completed),
+        skipped: num(d.skipped),
+        left: num(d.left),
+        unended: num(d.unended),
+      })),
+    stops: raw.stops
+      .filter((s) => isAudience(s.audience))
+      .map((s) => ({
+        audience: s.audience,
+        id: s.id,
+        reached: num(s.reached),
+        next: num(s.next),
+        back: num(s.back),
+        skip: num(s.skip),
+        exit: num(s.exit),
+        median_ms: s.median_ms === null || s.median_ms === undefined ? null : num(s.median_ms),
+        timed: num(s.timed),
+      })),
+    placed: raw.placed
+      .filter((p) => isAudience(p.audience))
+      .map((p) => ({ audience: p.audience, runs: num(p.runs) })),
+  };
+}
+
+/**
+ * The guided tour's first day on production with every first run's start and end stored, with
+ * whose tour it was and its stops (the lead sets it at release). A range starting earlier shows
+ * no tour figures, and a period starting earlier is not compared.
+ */
+export const TOUR_TRACKING_FROM = "2026-10-20";
+
+/** What each stop's spotlight frames, as the reader sees it (ui/v3/guidedTourAnchors.ts). */
+const TOUR_TARGETS: Record<TourStepId, string> = {
+  chapter_menu: "Chapter menu: the pill at the top, the sidebar from 1280px",
+  show_all: "Show all · Typical Beliefs' first fold",
+  chapter_toggle: "Chapter arrow · Typical Beliefs",
+  try_this: "Try This & See What Shifts · Typical Beliefs",
+  unlock: "Unlock Report · the first locked chapter",
+};
+
+/**
+ * Whole percentages of `counts` that add up to 100, as shares (0.34): each rounded down, then
+ * the points still missing go to the largest remainders. A count that is not nothing keeps at
+ * least 1%, taken back from the largest share, so a skip is never shown as none. Null for none.
+ */
+export function wholeShares(counts: number[]): number[] | null {
+  const total = counts.reduce((a, c) => a + c, 0);
+  if (total <= 0) return null;
+  const parts = counts.map((c) => {
+    const exact = (c * 100) / total;
+    return { exact, whole: c > 0 ? Math.max(1, Math.floor(exact)) : 0 };
+  });
+  for (let missing = 100 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0; ) {
+    const step = Math.sign(missing);
+    // Up: the largest remainder, the first of equals. Down: the largest share.
+    const by = (p: (typeof parts)[number]) => (step > 0 ? p.exact - p.whole : p.whole);
+    const pick = parts.reduce((best, p) => (by(p) > by(best) ? p : best));
+    pick.whole += step;
+    missing -= step;
+  }
+  return parts.map((p) => p.whole / 100);
+}
+
 const SLIDES = [
   {
     name: "A note before you explore your report",
@@ -243,6 +373,12 @@ export function twoFigures(v: number | null): number | undefined {
 }
 
 /**
+ * Whole percentages, as the wizard's and the tour's tiles are drawn; a share under 1% keeps a
+ * tenth, so a handful never reads 0%.
+ */
+const wholeDigits = (v: number | null) => (v !== null && v > 0 && v < 0.01 ? 1 : 0);
+
+/**
  * A box under Time in report or Returns: its value and the period before's at the same age,
  * for the change as a percentage, or the note shown in its place.
  */
@@ -255,6 +391,40 @@ export interface ChangeBox {
   goodWhen: GoodWhen;
   digits?: number;
   note?: string;
+}
+
+/** A stop of the guided tour, as a reader of its audience gets it, and how its runs went there. */
+export interface TourStopRow {
+  n: number;
+  id: TourStepId;
+  /** The bubble's title and text, and what its spotlight frames. */
+  name: string;
+  purpose: string;
+  target: string;
+  /** Runs that came to the stop, of the runs whose end carries its stops (TourView.placed). */
+  reached: number;
+  reachedShare: number | null;
+  medianMs: number | null;
+  /** Whole-percent shares of the stop's runs, adding up to 1 (wholeShares); null with none. */
+  next: number | null;
+  skip: number | null;
+  exit: number | null;
+  /** Went back from it at least once, of its runs; null on the first stop, which has no Back. */
+  back: number | null;
+}
+
+/** The guided tour for one audience: free readers get the unlock stop, paid readers do not. */
+export interface TourView {
+  key: TourAudience;
+  /** "Free readers · 5 stops". */
+  label: string;
+  /** Tour started, Completed, Skipped tour, Left the tour / bounced. */
+  tiles: ReportTile[];
+  stops: TourStopRow[];
+  /** The runs the table is of: their end was stored with their stops. */
+  placed: number;
+  /** Runs with no end stored: counted in Left the tour / bounced, on no stop. */
+  unended: number;
 }
 
 /** Reading time for one group of readers: the mean and the median, and the benchmark's. */
@@ -294,6 +464,16 @@ export interface ReportPayload extends PageHead {
     }>;
     /** The first day Skip Intro was recorded per slide; null before it was. */
     skipsFrom: string | null;
+  };
+  /** The guided tour's first runs, all traffic (ap_report_tour), free readers then paid. */
+  tour: {
+    /** The day it is recorded from, as the page writes it ("20 Oct 2026"). */
+    from: string;
+    /** The range starts before `from`: the section is blank and says from when. */
+    before: boolean;
+    /** The range's readers who opened their report: what Tour started is a share of. */
+    openers: number;
+    audiences: TourView[];
   };
   time: {
     readers: number;
@@ -466,6 +646,12 @@ export function buildReportPage(input: {
   returns: PostHogResult<ReportReturns> | null;
   /** The period before's, for "Returned via email"'s change; null when it is not read. */
   previousReturns?: PostHogResult<ReportReturns> | null;
+  /**
+   * The guided tour (ap_report_tour), read for a range from TOUR_TRACKING_FROM; null when it
+   * was not read, or could not be. The period before's, for the tiles' changes.
+   */
+  tour?: ReportTour | null;
+  previousTour?: ReportTour | null;
   filters: ApFilters;
   today: string;
   now: Date;
@@ -822,6 +1008,130 @@ export function buildReportPage(input: {
     },
   ];
 
+  // The guided tour, from our own records of every reader's first run, so all traffic: they
+  // carry no source, device or tier. Shown for a range from TOUR_TRACKING_FROM, and compared
+  // with a period that starts there too. Tour started is a share of the range's readers who
+  // opened their report (Reports opened, all traffic): the tour runs as the report first opens,
+  // and the runs counted are those same finishers', whenever they ran.
+  const tourFrom = rangeLabel(TOUR_TRACKING_FROM, TOUR_TRACKING_FROM);
+  const tourOn = launched(scope) && f.from >= TOUR_TRACKING_FROM;
+  const tour = tourOn ? (input.tour ?? null) : null;
+  const tourWhy = !launched(scope)
+    ? "Not launched."
+    : !tourOn
+      ? `Recorded from ${tourFrom}: pick a range from that day on.`
+      : tour
+        ? null
+        : "The guided tour could not be read just now. Try again in a minute.";
+  const prevTour = previous && previous.from >= TOUR_TRACKING_FROM ? input.previousTour : null;
+  const tourNoCmp =
+    previous && previous.from < TOUR_TRACKING_FROM
+      ? { note: `No comparison before ${tourFrom}` }
+      : {};
+  const openers = subsIn(facts, {
+    ...scope,
+    source: "all",
+    device: "all",
+    tier: "all",
+    visitor: "all",
+  }).filter((s) => s.openedAt).length;
+  /** An audience's runs over the range, or over one trend point's days. */
+  const tourSums = (
+    t: ReportTour | null | undefined,
+    key: TourAudience,
+    within?: { from: string; to: string }
+  ) =>
+    (t?.days ?? [])
+      .filter(
+        (d) => d.audience === key && (!within || (d.day >= within.from && d.day <= within.to))
+      )
+      .reduce(
+        (a, d) => ({
+          readers: a.readers + d.readers,
+          runs: a.runs + d.runs,
+          completed: a.completed + d.completed,
+          skipped: a.skipped + d.skipped,
+          // A run with no end stored left too, at no stop.
+          left: a.left + d.left + d.unended,
+          unended: a.unended + d.unended,
+        }),
+        { readers: 0, runs: 0, completed: 0, skipped: 0, left: 0, unended: 0 }
+      );
+  type TourSums = ReturnType<typeof tourSums>;
+  const tourPoints = trendBuckets(facts.from, facts.to);
+  const tourView = (key: TourAudience): TourView => {
+    const ids = tourSteps({ includeUnlock: key === "free" });
+    const cur = tourSums(tour, key);
+    const was = prevTour ? tourSums(prevTour, key) : null;
+    const tourTile = (
+      tileKey: string,
+      label: string,
+      unit: Tile["unit"],
+      pick: (x: TourSums) => number | null,
+      goodWhen: GoodWhen
+    ): ReportTile => ({
+      ...tile(
+        tileKey,
+        label,
+        unit,
+        pick(cur),
+        was ? pick(was) : null,
+        "",
+        tour ? tourPoints.map((b) => pick(tourSums(tour, key, b))) : [],
+        tourWhy
+      ),
+      goodWhen,
+      ...tourNoCmp,
+    });
+    const started = tourTile("tour-started", "Tour started", "count", (x) => x.readers, "up");
+    const placed = tour?.placed.find((p) => p.audience === key)?.runs ?? 0;
+    return {
+      key,
+      label: `${key === "free" ? "Free" : "Paid"} readers · ${ids.length} stops`,
+      tiles: [
+        tour && openers > 0
+          ? {
+              ...started,
+              share: `${fmt("pct", cur.readers / openers, 0)} of the ${n(openers)} ${
+                openers === 1 ? "reader" : "readers"
+              } who opened their report`,
+            }
+          : started,
+        tourTile("tour-completed", "Completed", "pct", (x) => ratio(x.completed, x.runs), "up"),
+        tourTile("tour-skipped", "Skipped tour", "pct", (x) => ratio(x.skipped, x.runs), "down"),
+        tourTile(
+          "tour-left",
+          "Left the tour / bounced",
+          "pct",
+          (x) => ratio(x.left, x.runs),
+          "down"
+        ),
+      ].map((t) => ({ ...t, digits: wholeDigits(t.value) })),
+      stops: ids.map((id, i) => {
+        const s = tour?.stops.find((x) => x.audience === key && x.id === id);
+        const reached = s?.reached ?? 0;
+        const [next = null, skip = null, exit = null] =
+          wholeShares([s?.next ?? 0, s?.skip ?? 0, s?.exit ?? 0]) ?? [];
+        return {
+          n: i + 1,
+          id,
+          name: TOUR_COPY[id].title,
+          purpose: TOUR_COPY[id].body,
+          target: TOUR_TARGETS[id],
+          reached,
+          reachedShare: tour ? ratio(reached, placed) : null,
+          medianMs: s && s.timed > 0 ? s.median_ms : null,
+          next,
+          skip,
+          exit,
+          back: i === 0 ? null : ratio(s?.back ?? 0, reached),
+        };
+      }),
+      placed,
+      unended: cur.unended,
+    };
+  };
+
   const benchRec = recorded(
     subsIn(input.benchmark, { ...scope, source: "all", device: "all", tier: "all", visitor: "all" })
   ).filter((s) => s.day >= EVENTS_COMPLETE_FROM);
@@ -1075,14 +1385,16 @@ export function buildReportPage(input: {
     ...head(f, today, now),
     launched: launched(scope),
     tiles,
-    // Whole percentages, as drawn; a share under 1% keeps a tenth so a handful never reads 0%.
     wizard: {
-      tiles: wizardTiles.map((t) => ({
-        ...t,
-        digits: t.value !== null && t.value > 0 && t.value < 0.01 ? 1 : 0,
-      })),
+      tiles: wizardTiles.map((t) => ({ ...t, digits: wholeDigits(t.value) })),
       slides,
       skipsFrom,
+    },
+    tour: {
+      from: tourFrom,
+      before: launched(scope) && !tourOn,
+      openers,
+      audiences: AUDIENCES.map(tourView),
     },
     time: {
       readers: readers.length,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The page routes' own wiring: what each reads for the comparison and the visitor filter.
 const mockVerifyAdminSession = vi.fn();
@@ -121,6 +121,74 @@ describe("GET /api/admin/ap/report", () => {
   it("shows the tile uncompared when the earlier period's presses can't be read", async () => {
     extrasFails = true;
     expect(await skipped()).toMatchObject({ value: 1 / 4, prev: null });
+  });
+});
+
+describe("GET /api/admin/ap/report: the guided tour", () => {
+  // A week from the day the tour is recorded, read the day after it ends.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-03T10:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** The page's tour, with ap_report_tour answering `tour` for a period (undefined: it fails). */
+  const tourPage = async (from: string, to: string, tour: (from: string) => unknown) => {
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
+      const { p_from } = JSON.parse(init?.body ?? "{}") as { p_from?: string };
+      if (path === "/rest/v1/rpc/ap_facts") return json(facts([]));
+      if (path === "/rest/v1/rpc/ap_report_extras") return json(extras([]));
+      if (path === "/rest/v1/rpc/ap_report_tour") {
+        const body = tour(p_from ?? "");
+        return body === undefined ? json({ message: "boom" }, 500) : json(body);
+      }
+      return json(null, 404);
+    });
+    const res = await reportGet(
+      new Request(`http://localhost/api/admin/ap/report?period=custom&from=${from}&to=${to}`)
+    );
+    expect(res.status).toBe(200);
+    return (
+      (await res.json()) as {
+        tour: {
+          audiences: Array<{
+            tiles: Array<{ key: string; value: number | null; prev: number | null }>;
+          }>;
+        };
+      }
+    ).tour.audiences[0]!.tiles;
+  };
+  const tourReads = () =>
+    mockSupabaseFetch.mock.calls
+      .filter(([path]) => path === "/rest/v1/rpc/ap_report_tour")
+      .map(([, init]) => JSON.parse((init as { body: string }).body).p_from)
+      .sort();
+  const week = (day: string, completed: number) => ({
+    days: [
+      { day, audience: "free", readers: 1, runs: 1, completed, skipped: 0, left: 0, unended: 0 },
+    ],
+    stops: [],
+    placed: [],
+  });
+
+  it("reads it for the range and the period before, once each is recorded all through", async () => {
+    const tiles = await tourPage("2026-10-27", "2026-11-02", (from) =>
+      week(from, from === "2026-10-27" ? 1 : 0)
+    );
+    expect(tourReads()).toEqual(["2026-10-20", "2026-10-27"]);
+    expect(tiles.find((t) => t.key === "tour-completed")).toMatchObject({ value: 1, prev: 0 });
+
+    // A range before 20 Oct has no tour to read.
+    mockSupabaseFetch.mockClear();
+    await tourPage("2026-10-06", "2026-10-12", (from) => week(from, 1));
+    expect(tourReads()).toEqual([]);
+  });
+
+  it("keeps the page when the tour cannot be read, and says so in its tiles", async () => {
+    const tiles = await tourPage("2026-10-27", "2026-11-02", () => undefined);
+    expect(tiles[0]).toMatchObject({
+      blocked: "The guided tour could not be read just now. Try again in a minute.",
+    });
   });
 });
 
