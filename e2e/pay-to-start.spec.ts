@@ -276,7 +276,13 @@ test.describe("pay to start: the initial report's page", () => {
     await openPage(page, INITIAL);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     await expect(page.getByText("€1.99", { exact: true }).first()).toBeVisible();
-    await expect(await primaryCta(page)).toBeInViewport();
+    // Below 1280 the card sits in the column under the film, which on a short phone (the
+    // iPhone 15 Pro's 659) is below the fold: there the bar pinned to the bottom is the way
+    // to pay from the first paint. `primaryCta` picks the card whenever it is drawn.
+    const bar = page.locator('[data-pts-cta="sticky_bar"]');
+    await expect(
+      (await bar.isVisible()) ? bar : page.locator('[data-pts-cta="price_card"]')
+    ).toBeInViewport();
   });
 
   test("puts its one price card under the film below 1280, beside the column from there", async ({
