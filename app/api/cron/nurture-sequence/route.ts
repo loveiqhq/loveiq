@@ -9,6 +9,8 @@
  *                        email; the 6h "report ready"/"unlock" reminders and the
  *                        old 30h/54h discount ladder were retired — no more nudges)
  *
+ * Skips every reader the unlock-feedback email went to (`unlock_feedback.sent_at`).
+ *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
  * of stage strings) on the `full_report` quote row for the submission. Per-
  * user Stripe promotion codes are stored alongside in
@@ -207,6 +209,20 @@ async function fetchFullReportQuote(submissionId: number): Promise<FullReportQuo
   if (!r.ok) return null;
   const rows = (await r.json()) as FullReportQuote[];
   return rows[0] ?? null;
+}
+
+/**
+ * Whether the unlock-feedback email went to this reader (app/api/cron/unlock-feedback): it
+ * offers the full report free for one answer, so a -50% code days later would undercut it,
+ * and Eman decided on 18 Oct that it skips them.
+ */
+async function unlockFeedbackSent(submissionId: number): Promise<boolean> {
+  const r = await supabaseFetch(
+    // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
+    `/rest/v1/unlock_feedback?survey_submission_id=eq.${submissionId}&sent_at=not.is.null&select=id&limit=1`
+  );
+  if (!r.ok) throw new Error(`unlock_feedback_lookup_failed:${r.status}`);
+  return ((await r.json()) as unknown[]).length > 0;
 }
 
 async function fetchAccessToken(submissionId: number): Promise<string | null> {
@@ -524,6 +540,7 @@ interface StageSummary {
   skippedNoToken: number;
   skippedNoQuote: number;
   skippedNoPromo: number;
+  skippedUnlockFeedback: number;
   failed: number;
 }
 
@@ -538,6 +555,7 @@ function newStageSummary(): StageSummary {
     skippedNoToken: 0,
     skippedNoQuote: 0,
     skippedNoPromo: 0,
+    skippedUnlockFeedback: 0,
     failed: 0,
   };
 }
@@ -576,6 +594,20 @@ async function processCandidate(
     if (!email) {
       summary.skippedNoEmail++;
       return;
+    }
+
+    // Before the token and quote lookups, which a reader skipped here does not need. A failed
+    // lookup carries on, like the paid check below: it must not stop every discount email.
+    try {
+      if (await unlockFeedbackSent(candidate.survey_submission_id)) {
+        summary.skippedUnlockFeedback++;
+        return;
+      }
+    } catch (err) {
+      logger.warn(
+        { err, submissionId: candidate.survey_submission_id },
+        "nurture-sequence: unlock-feedback check failed; continuing"
+      );
     }
 
     // Token resolves first because (a) it's needed for the CTA URL and (b) the
