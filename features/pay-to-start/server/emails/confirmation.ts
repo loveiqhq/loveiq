@@ -10,6 +10,7 @@ import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import logger from "@shared/observability/logger";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import type { PayToStartOfferId } from "@features/pay-to-start/logic/offer";
 
 /**
  * The email a buyer gets the moment their payment is confirmed, before any survey.
@@ -20,9 +21,11 @@ import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
  */
 
 export interface PayToStartConfirmationParams {
-  /** "€29.00": what was actually paid. */
+  /** "€29.99": what was actually paid. */
   amountText: string;
   continueUrl: string;
+  /** What was bought, so the email says what opens: the full report, or the initial one. */
+  offer?: PayToStartOfferId;
   productName: string;
   siteUrl: string;
   unsubscribeUrl?: string;
@@ -34,8 +37,8 @@ export interface PayToStartConfirmationParams {
   variant?: "survey" | "report";
 }
 
-/** The copy that differs between the two versions. Proposals, flagged for Marcus. */
-const CONFIRMATION_COPY = {
+/** The copy that differs between the versions. Proposals, flagged for Marcus. */
+const FULL_COPY = {
   survey: {
     subject: "Payment received: your survey is ready",
     previewText: "Finish the survey and your full report unlocks straight away.",
@@ -62,15 +65,40 @@ const CONFIRMATION_COPY = {
   },
 } as const;
 
+/**
+ * The initial report (EUR 1.99): what opens is the Pre-Paywall board's E06, "You've
+ * unlocked your Core Archetype" (Figma 1604:2328), and EUR 10 off the rest.
+ */
+const PRE_COPY = {
+  survey: {
+    ...FULL_COPY.survey,
+    previewText: "Finish the survey and your Core Archetype opens straight away.",
+    body: "Take the survey whenever you&rsquo;re ready. When you finish it, your initial report opens straight away: your Core Archetype in full, and &euro;10 off the full report if you want the rest.",
+    bodyText:
+      "Take the survey whenever you're ready. When you finish it, your initial report opens straight away: your Core Archetype in full, and €10 off the full report if you want the rest.",
+  },
+  report: {
+    ...FULL_COPY.report,
+    subject: "Payment received: your Core Archetype is unlocked",
+    previewText: "Your survey is already done, so your Core Archetype is open now.",
+    heading: "Payment received. Your Core Archetype is unlocked.",
+    body: "Your survey is already done, so your initial report is open now: your Core Archetype in full, and &euro;10 off the full report if you want the rest.",
+    bodyText:
+      "Your survey is already done, so your initial report is open now: your Core Archetype in full, and €10 off the full report if you want the rest.",
+  },
+} as const;
+
 export function payToStartConfirmationEmail({
   amountText,
   continueUrl,
+  offer = "full",
   productName,
   siteUrl,
   unsubscribeUrl,
   variant = "survey",
 }: PayToStartConfirmationParams) {
-  const copy = CONFIRMATION_COPY[variant];
+  const byOffer = offer === "pre" ? PRE_COPY : FULL_COPY;
+  const copy = variant === "report" ? byOffer.report : byOffer.survey;
   const subject = copy.subject;
   const previewText = copy.previewText;
   const safeAmount = escapeHtml(amountText);
@@ -187,6 +215,7 @@ export async function sendPayToStartConfirmationEmail({
   amountText,
   email,
   entitlementId,
+  offer = "full",
   origin,
   productName,
   token,
@@ -195,6 +224,7 @@ export async function sendPayToStartConfirmationEmail({
   amountText: string;
   email: string;
   entitlementId: number;
+  offer?: PayToStartOfferId;
   /** The origin stamped on the Stripe session (see `resolveEmailOrigin`). */
   origin: string | null;
   productName: string;
@@ -216,6 +246,7 @@ export async function sendPayToStartConfirmationEmail({
   const tpl = payToStartConfirmationEmail({
     amountText,
     continueUrl: buildContinueUrl(linkOrigin, token),
+    offer,
     productName,
     siteUrl,
     unsubscribeUrl,
@@ -233,6 +264,7 @@ export async function sendPayToStartConfirmationEmail({
         text: tpl.text,
         tags: [
           { name: "journey", value: PAY_TO_START_JOURNEY },
+          { name: "offer", value: offer },
           {
             name: "email",
             value: variant === "report" ? "pts_confirmation_report" : "pts_confirmation",

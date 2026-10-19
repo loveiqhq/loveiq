@@ -13,11 +13,11 @@ export const WIZARD_SLIDE_COUNT = 6;
 
 /**
  * Which wizard a reader gets. `pay_to_start`: a reader who paid before the survey (Figma
- * Report-3.0 1477:3920), whose report opens fully unlocked, sees slides 1, 4, 5 and 6 of
- * the six; the report map ("your free chapters") and "Unlocking your report is fully risk
- * free" have nothing left to say to them. Figma draws those four with the six-slide bar
- * and counters (1/6, 2/6, 3/6, 5/6); the bar here has four segments, "n / 4" (Fatih,
- * 18.10).
+ * Report-3.0 1477:3920; the EUR 1.99 board 1741:5587 draws the same four), whose report
+ * opens unlocked or pre-unlocked, sees slides 1, 4, 5 and 6 of the six; the report map
+ * ("your free chapters") and "Unlocking your report is fully risk free" are left out.
+ * Figma draws those four with the six-slide bar and counters (1/6, 2/6, 3/6, 5/6); the bar
+ * here has four segments, "n / 4" (Fatih, 18.10).
  */
 export type WizardVariant = "standard" | "pay_to_start";
 

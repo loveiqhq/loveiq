@@ -529,7 +529,7 @@ async function agree() {
 }
 
 describe("SurveyPage — a visitor who paid before the survey (pay to start)", () => {
-  const journey = { kind: "pay_to_start" as const, paid: true };
+  const journey = { kind: "pay_to_start" as const, paid: true, returnPath: "/sexual-archetype" };
 
   beforeEach(() => {
     localStorage.clear();
@@ -583,6 +583,18 @@ describe("SurveyPage — a visitor who paid before the survey (pay to start)", (
       render(<SurveyPage journey={journey} />);
       await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
       expect(nav.navigated).toEqual(["/sexual-archetype"]);
+    } finally {
+      nav.restore();
+    }
+  });
+
+  it("leads a buyer of the initial report back to its own page", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage journey={{ ...journey, returnPath: "/sexual-archetype/initial" }} />);
+      await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
+      expect(nav.navigated).toEqual(["/sexual-archetype/initial"]);
     } finally {
       nav.restore();
     }

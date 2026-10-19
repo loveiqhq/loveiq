@@ -351,3 +351,38 @@ describe("the checkout status page's preview (off production)", () => {
     expect(screen.queryByRole("navigation", { name: "Status previews" })).toBeNull();
   });
 });
+
+describe("the checkout status page for the initial report", () => {
+  beforeEach(() => {
+    setLocation(`https://www.loveiq.org/sexual-archetype/checkout?session_id=${SESSION}&offer=pre`);
+  });
+
+  it("leads back to the page the buyer paid on, and keeps the offer in the address", async () => {
+    fetchMock.mockReturnValueOnce(json({ state: "failed" }));
+    render(
+      <PtsCheckoutProvider offer="pre" priceCents={199} price="€1.99">
+        <PayToStartStatusPage />
+      </PtsCheckoutProvider>
+    );
+    await flush();
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.getAttribute("href")).toBe("/sexual-archetype/initial");
+    }
+    expect(replaceState.mock.calls[0]?.[2]).toBe("/sexual-archetype/checkout?offer=pre");
+  });
+
+  it("keeps the offer in the preview's switcher, and its report opens as the offer does", () => {
+    render(
+      <PtsCheckoutProvider offer="pre" priceCents={199} price="€1.99">
+        <PayToStartStatusPage preview="used" />
+      </PtsCheckoutProvider>
+    );
+    const nav = screen.getByRole("navigation", { name: "Status previews" });
+    for (const link of nav.querySelectorAll("a")) {
+      expect(link.getAttribute("href")).toMatch(/^\?preview=\w+&offer=pre$/);
+    }
+    expect(screen.getByRole("link", { name: PTS_STATUS.openReport }).getAttribute("href")).toBe(
+      "/report?preview=1&v4=1&plan=initial"
+    );
+  });
+});

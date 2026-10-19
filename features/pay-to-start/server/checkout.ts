@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import { PAY_TO_START_STATUS_PATH, statusOfferQuery } from "@features/pay-to-start/logic/offer";
 import type { PricedOffer } from "@features/pay-to-start/server/offer";
 
 /**
@@ -130,7 +131,7 @@ export function buildPayToStartSessionParams(
       journey: PAY_TO_START_JOURNEY,
       offer: offer.id,
       entitlementId: String(input.entitlementId),
-      plan: "full_report",
+      plan: offer.grant.plan,
       listPriceCents: String(offer.priceCents),
       landingPage: offer.landingPath,
       origin,
@@ -152,8 +153,12 @@ export function buildPayToStartSessionParams(
         entitlementId: String(input.entitlementId),
       },
     },
-    // Built from parts so {CHECKOUT_SESSION_ID} does not trip the no-secrets check.
-    success_url: `${origin}${offer.landingPath}/checkout?session_id=` + "{CHECKOUT_SESSION_ID}",
+    // Built from parts so {CHECKOUT_SESSION_ID} does not trip the no-secrets check. One
+    // status page for both offers; the way back from Stripe is the offer's own page.
+    success_url:
+      `${origin}${PAY_TO_START_STATUS_PATH}?session_id=` +
+      "{CHECKOUT_SESSION_ID}" +
+      statusOfferQuery(offer.id),
     cancel_url: `${origin}${offer.landingPath}?checkout=cancelled`,
   };
 }

@@ -15,8 +15,9 @@ import {
 
 /**
  * A submitted survey claiming the entitlement its browser holds: bind it to this one
- * submission, then apply it (the payment row, report link and full-report tier), before
- * the survey's response goes out, so the reader opens a report that is already unlocked.
+ * submission, then apply it (the payment row, report link and, for the full report, its
+ * tier), before the survey's response goes out, so the reader opens a report that is
+ * already unlocked as the offer says.
  *
  * Never throws: the survey is saved whatever happens here. An error is returned for the
  * caller to report after the response, and the sweep finishes any bound, paid entitlement
@@ -24,7 +25,7 @@ import {
  */
 
 export type ClaimOutcome =
-  /** Bound and applied: the report is fully unlocked. */
+  /** Bound and applied: the report is unlocked (or, for the initial report, pre-unlocked). */
   | { outcome: "unlocked"; entitlementId: number; paymentId: number }
   /** Bound, and the money is on its way (a delayed method): it unlocks when it settles. */
   | { outcome: "pending"; entitlementId: number }

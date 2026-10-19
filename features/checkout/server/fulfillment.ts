@@ -25,7 +25,7 @@ import {
 import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
 import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
-import { getOfferDefinition, isPayToStartOfferId } from "@features/pay-to-start/logic/offer";
+import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import {
   confirmPayToStartSession,
   type ConfirmResult,
@@ -2050,8 +2050,9 @@ function paymentIntentIdOf(value: Stripe.Charge["payment_intent"]): string | nul
 
 /**
  * The payment row's metadata for a pay-to-start purchase. `plan` and `archetype` drive
- * access exactly as a full report bought after the survey; `journey` and `prepaid` let
- * readouts tell the two apart (the money arrived on `paidAt`, not on this row's day).
+ * access exactly as the same plan bought after the survey (the full report, or the initial
+ * unlock); `journey` and `prepaid` let readouts tell the two apart (the money arrived on
+ * `paidAt`, not on this row's day).
  */
 function payToStartPaymentMetadata({
   archetype,
@@ -2071,7 +2072,7 @@ function payToStartPaymentMetadata({
   const amount = toAmount(entitlement.amount_cents);
   const listPrice = toAmount(entitlement.list_price_cents);
   return {
-    plan: "full_report",
+    plan: offerDefinitionOf(entitlement.offer).grant.plan,
     archetype,
     checkoutSessionId: entitlement.stripe_session_id,
     journey: PAY_TO_START_JOURNEY,
@@ -2099,6 +2100,7 @@ function payToStartPaymentMetadata({
  * The payment row, item, report link and tier for an entitlement that is paid and bound
  * to a submission: the report then opens exactly as one bought after the survey. Returns
  * the payment id, or null when the entitlement is not ready (unpaid, unclaimed, refunded).
+ * The initial unlock writes no tier: its payment row is what opens it.
  *
  * Idempotent: an existing payment row for the session or intent is reused as it stands,
  * and the entitlement is stamped last, so a failure part-way leaves it for the sweep
@@ -2129,14 +2131,7 @@ export async function applyPayToStartEntitlement({
   const archetype = await lookupPrimaryArchetypeForSubmission(submissionId);
   if (!archetype) throw new Error("pts_apply_missing_archetype");
   const token = reportToken ?? (await lookupReportTokenForSubmission(submissionId));
-  const offer = getOfferDefinition(
-    isPayToStartOfferId(entitlement.offer) ? entitlement.offer : "full"
-  );
-  // What is written below is a full report. An offer that grants anything else (the
-  // reserved EUR 1.99 pre-unlock) needs its own apply before it can ever be sold.
-  if (offer.grant.kind !== "report_plan" || offer.grant.plan !== "full_report") {
-    throw new Error("pts_apply_offer_not_a_full_report");
-  }
+  const offer = offerDefinitionOf(entitlement.offer);
   const amount = toAmount(entitlement.amount_cents);
 
   const existing = await fetchExistingPayment({
@@ -2182,11 +2177,13 @@ export async function applyPayToStartEntitlement({
     personalReportId: personalReport.id,
     status: "succeeded",
   });
-  await upsertArchetypeTierForPersonalReport({
-    archetype,
-    personalReportId: personalReport.id,
-    tier: "full_report",
-  });
+  if (offer.grant.kind === "report_plan") {
+    await upsertArchetypeTierForPersonalReport({
+      archetype,
+      personalReportId: personalReport.id,
+      tier: offer.grant.plan,
+    });
+  }
 
   const stampedNow = await setEntitlementPaymentId({ id: entitlement.id, paymentId });
   if (stampedNow) {
@@ -2205,7 +2202,11 @@ export async function applyPayToStartEntitlement({
       await notifySlack({
         channel: "payments",
         kind: "pts_claimed",
-        text: `${internalTag}:white_check_mark: Pay to start: survey finished and the full report unlocked (entitlement #${applied.id}, payment #${paymentId}, submission #${submissionId}).`,
+        text: `${internalTag}:white_check_mark: Pay to start: survey finished and the ${
+          offer.grant.kind === "report_plan"
+            ? "full report unlocked"
+            : "initial report pre-unlocked"
+        } (entitlement #${applied.id}, payment #${paymentId}, submission #${submissionId}).`,
         username: "payment_notification",
         context: { entitlementId: applied.id, paymentId, submissionId },
       });

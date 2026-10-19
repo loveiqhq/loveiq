@@ -88,6 +88,39 @@ describe("the confirmation email", () => {
     }
   });
 
+  // The initial report (EUR 1.99): what opens is the Core Archetype, with EUR 10 off the rest
+  // (the Pre-Paywall board's E06), never "your full report".
+  it("tells a buyer of the initial report what opens, and what the rest costs less", () => {
+    const url = buildContinueUrl("https://www.loveiq.org", TOKEN);
+    const survey = payToStartConfirmationEmail({
+      amountText: "€1.99",
+      continueUrl: url,
+      offer: "pre",
+      productName: "LoveIQ Survey & Initial Report",
+      siteUrl: "https://www.loveiq.org",
+    });
+    expect(survey.subject).toBe("Payment received: your survey is ready");
+    expect(survey.text).toContain("€1.99 for the LoveIQ Survey & Initial Report");
+    expect(survey.text).toContain("your Core Archetype in full, and €10 off the full report");
+    expect(survey.html).toContain("&euro;10 off the full report");
+    expect(survey.text).toContain(`Start my survey: ${url}`);
+
+    const report = payToStartConfirmationEmail({
+      amountText: "€1.99",
+      continueUrl: url,
+      offer: "pre",
+      productName: "LoveIQ Survey & Initial Report",
+      siteUrl: "https://www.loveiq.org",
+      variant: "report",
+    });
+    expect(report.subject).toBe("Payment received: your Core Archetype is unlocked");
+    expect(report.text).toContain(`Open my report: ${url}`);
+    for (const body of [survey.html, survey.text, report.html, report.text]) {
+      expect(body).not.toContain("full report unlocks");
+      expect(body).not.toContain("nothing more to pay");
+    }
+  });
+
   describe("sending", () => {
     beforeEach(() => {
       mockSend.mockReset();
@@ -112,6 +145,7 @@ describe("the confirmation email", () => {
       expect(payload.to).toBe("buyer@example.com");
       expect(payload.tags).toEqual([
         { name: "journey", value: "pay_to_start" },
+        { name: "offer", value: "full" },
         { name: "email", value: "pts_confirmation" },
       ]);
       expect(String(payload.html)).toContain(

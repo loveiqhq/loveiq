@@ -258,6 +258,17 @@ describe("GET /sexual-archetype/continue", () => {
     );
   });
 
+  it("explains a problem with the initial report's link on its own page", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ offer: "pre", status: "refunded" }));
+    expect((await open(TOKEN)).headers.get("location")).toBe(
+      `${ORIGIN}/sexual-archetype/initial?continue=refunded`
+    );
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ offer: "pre", status: "pending" }));
+    expect((await open(TOKEN)).headers.get("location")).toBe(
+      `${ORIGIN}/sexual-archetype/initial?continue=unpaid`
+    );
+  });
+
   it("never sets the cookie for a checkout still pending", async () => {
     // The email goes out only once a payment is confirmed: a link to a pending one is not
     // ours, and setting its cookie would plant that checkout in someone else's browser.

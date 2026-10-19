@@ -5,10 +5,12 @@ import {
   PAY_TO_START_PAUSED_MESSAGE,
   type PayToStartStatusResponse,
 } from "@features/pay-to-start/logic/api";
+import { CHECKOUT_SESSION_ID_REGEX } from "@features/pay-to-start/logic/journey";
 import {
-  CHECKOUT_SESSION_ID_REGEX,
-  PAY_TO_START_RETURN_PATH,
-} from "@features/pay-to-start/logic/journey";
+  getOfferDefinition,
+  statusOfferQuery,
+  type PayToStartOfferId,
+} from "@features/pay-to-start/logic/offer";
 import { gtagQueueSettled } from "@features/analytics/client";
 import { STATUS_PREVIEWS, type StatusPreview } from "@features/pay-to-start/logic/statusPreview";
 import { trackPtsPurchase, trackPtsStatusViewed } from "../analytics";
@@ -48,7 +50,7 @@ type View =
   | { kind: "used"; reportPath: string | null }
   | { kind: "message"; text: string };
 
-function previewView(preview: StatusPreview): View {
+function previewView(preview: StatusPreview, offer: PayToStartOfferId): View {
   switch (preview) {
     case "verifying":
       return { kind: "verifying" };
@@ -57,8 +59,12 @@ function previewView(preview: StatusPreview): View {
     case "complete":
       return { kind: "complete" };
     case "used":
-      // A report that opens off production, so the preview's button goes somewhere.
-      return { kind: "used", reportPath: "/report?preview=1&v4=1&plan=full_report" };
+      // A report that opens off production, as the offer opens it, so the preview's button
+      // goes somewhere.
+      return {
+        kind: "used",
+        reportPath: `/report?preview=1&v4=1&plan=${getOfferDefinition(offer).grant.plan}`,
+      };
     case "used_no_report":
       return { kind: "used", reportPath: null };
     case "failed":
@@ -123,7 +129,10 @@ const replacePage = (path: string) =>
   window.location.replace(new URL(path, window.location.origin).href);
 
 /** The preview's switcher: every state, one tap apart. Never rendered outside a preview. */
-const StatusPreviewNav: FC<{ current: StatusPreview }> = ({ current }) => (
+const StatusPreviewNav: FC<{ current: StatusPreview; offer: PayToStartOfferId }> = ({
+  current,
+  offer,
+}) => (
   <nav
     aria-label="Status previews"
     className="fixed inset-x-0 bottom-0 z-40 border-t border-[#e9e6ee] bg-white/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 font-sans text-[12.5px] leading-[17px] text-[#3f3a4d] backdrop-blur"
@@ -135,7 +144,7 @@ const StatusPreviewNav: FC<{ current: StatusPreview }> = ({ current }) => (
       {STATUS_PREVIEWS.map(([state, label]) => (
         <li key={state}>
           <a
-            href={`?preview=${state}`}
+            href={`?preview=${state}${statusOfferQuery(offer)}`}
             aria-current={state === current ? "page" : undefined}
             className={`inline-block rounded-full border px-2.5 py-1 transition-colors ${
               state === current
@@ -161,7 +170,9 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
   );
   const [view, setView] = useState<View>({ kind: "verifying" });
   const reportedPurchase = useRef<string | null>(null);
-  const { state: checkout, start } = usePtsCheckout();
+  const { state: checkout, start, offer } = usePtsCheckout();
+  // The page the buyer paid on: the way back, and where a used purchase leads.
+  const landingPath = getOfferDefinition(offer).landingPath;
 
   // No session at all: nothing to ask, say so once.
   useEffect(() => {
@@ -259,7 +270,7 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
   }, [preview, sessionId]);
 
   const shown: View = preview
-    ? previewView(preview)
+    ? previewView(preview, offer)
     : sessionId === null
       ? { kind: "message", text: PTS_STATUS.missing }
       : view;
@@ -268,7 +279,7 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
   return (
     <main id="main-content" className="checkout-page checkout-page--return">
       <div className="checkout-page__shell">
-        <a href={PAY_TO_START_RETURN_PATH} className="checkout-page__back">
+        <a href={landingPath} className="checkout-page__back">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
             <path d="M9.75 3.25 5 8l4.75 4.75" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -314,18 +325,12 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
             ) : shown.kind === "used" ? (
               // Paid, and its survey is done: a new checkout here would sell the same
               // thing again, so there is none to start.
-              <a
-                href={PAY_TO_START_RETURN_PATH}
-                className="checkout-submit checkout-submit--secondary"
-              >
+              <a href={landingPath} className="checkout-submit checkout-submit--secondary">
                 {PTS_STATUS.returnToLanding}
               </a>
             ) : (
               <>
-                <a
-                  href={PAY_TO_START_RETURN_PATH}
-                  className="checkout-submit checkout-submit--secondary"
-                >
+                <a href={landingPath} className="checkout-submit checkout-submit--secondary">
                   {PTS_STATUS.returnToLanding}
                 </a>
                 <button
@@ -343,7 +348,7 @@ export const PayToStartStatusPage: FC<{ preview?: StatusPreview | null }> = ({
           </div>
         </div>
       </div>
-      {preview && <StatusPreviewNav current={preview} />}
+      {preview && <StatusPreviewNav current={preview} offer={offer} />}
     </main>
   );
 };

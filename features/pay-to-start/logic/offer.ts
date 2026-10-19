@@ -1,6 +1,10 @@
+import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
+
 /**
- * Pay to start the survey (Notion "RFD > Pay to start survey", Figma Report-3.0 1741:3820):
- * what is sold before the survey, and how its price reads.
+ * Pay to start the survey (Notion "RFD > Pay to start survey", Figma Report-3.0 1468:720):
+ * what is sold before the survey, and how its price reads. Two offers, each with its own
+ * page (Marcus, 19.10): the full report ("Full Payments", 1741:3820) and the initial
+ * report ("Pre-Payments", 1741:5587).
  *
  * Pure: no environment, no I/O. The server decides the price (`server/offer.ts`), and the
  * landing page and the Stripe session both read that one offer, so the price a visitor is
@@ -11,17 +15,20 @@ export type PayToStartOfferId = "full" | "pre";
 
 export interface PayToStartOffer {
   id: PayToStartOfferId;
-  /** What paying unlocks once the survey is submitted. */
-  grant: { kind: "report_plan"; plan: "full_report" } | { kind: "pre_unlock" };
+  /**
+   * What paying unlocks once the survey is submitted. `plan` is the key the payment row
+   * and the entitlement carry: the full report, or the initial unlock
+   * (features/report/logic/initialUnlock.ts), which is access only and holds no tier.
+   */
+  grant:
+    | { kind: "report_plan"; plan: "full_report" }
+    | { kind: "initial_unlock"; plan: typeof INITIAL_UNLOCK_PLAN };
   /** The Stripe line item, the receipt line and the payment_item name (Figma receipt 1475:2114). */
   productName: string;
   defaultPriceCents: number;
   /** The pre-report wizard a buyer of this offer gets. */
   wizard: "pay_to_start" | "standard";
-  /**
-   * Whether it can be sold. The EUR 1.99 Pre-Payments offer (Figma 1741:5587) unlocks
-   * part of the report and needs that partial-unlock state to exist first.
-   */
+  /** Whether it can be sold: a checkout for an offer that is not is refused. */
   enabled: boolean;
   /** Where its landing page lives (the search ad's URL in Figma 1706:1627). */
   landingPath: string;
@@ -38,15 +45,20 @@ const FULL_OFFER: PayToStartOffer = {
   landingPath: "/sexual-archetype",
 };
 
-/** Registered so rows, metadata and readouts can name it; not on sale (see `enabled`). */
+/**
+ * EUR 1.99: Marcus, 19.10, "pay to start 1.99€ #pre-unlock". The survey, then the report
+ * pre-unlocked: the Core Archetype in full and EUR 10 off the full report. Its price is
+ * fixed here; the price setting is the full offer's alone.
+ */
 const PRE_OFFER: PayToStartOffer = {
   id: "pre",
-  grant: { kind: "pre_unlock" },
-  productName: "LoveIQ Survey & Report",
+  grant: { kind: "initial_unlock", plan: INITIAL_UNLOCK_PLAN },
+  productName: "LoveIQ Survey & Initial Report",
   defaultPriceCents: 199,
-  wizard: "standard",
-  enabled: false,
-  landingPath: "/sexual-archetype",
+  // The board draws the same four slides (1741:5587).
+  wizard: "pay_to_start",
+  enabled: true,
+  landingPath: "/sexual-archetype/initial",
 };
 
 export function getOfferDefinition(id: PayToStartOfferId): PayToStartOffer {
@@ -60,6 +72,26 @@ export function getOfferDefinition(id: PayToStartOfferId): PayToStartOffer {
 
 export function isPayToStartOfferId(value: unknown): value is PayToStartOfferId {
   return value === "full" || value === "pre";
+}
+
+/**
+ * The offer a row or a parameter names. A row from before the offers (June's rows carry no
+ * offer) and anything unknown read as the full offer, as they always did.
+ */
+export function offerDefinitionOf(value: unknown): PayToStartOffer {
+  return getOfferDefinition(isPayToStartOfferId(value) ? value : "full");
+}
+
+/** The checkout status page, which Stripe returns every buyer to, whichever offer. */
+export const PAY_TO_START_STATUS_PATH = "/sexual-archetype/checkout";
+
+/**
+ * What follows `session_id` in the status page's address: nothing for the full offer (its
+ * address as it always was), `&offer=pre` for the other, so the page's way back and its
+ * "Start checkout again" sell what the buyer chose.
+ */
+export function statusOfferQuery(id: PayToStartOfferId): string {
+  return id === "full" ? "" : `&offer=${id}`;
 }
 
 /**

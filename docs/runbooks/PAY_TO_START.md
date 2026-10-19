@@ -1,7 +1,9 @@
 # Pay to start: runbook
 
-The pay-first journey on `/sexual-archetype`: a visitor pays for the survey and the full report,
-takes the survey, and the report opens unlocked. How it works is in
+The pay-first journey, two offers on two pages (Marcus, 19.10): `/sexual-archetype` sells the
+survey and the full report (EUR 29.99), `/sexual-archetype/initial` the survey and the initial
+report (EUR 1.99: the Core Archetype in full, and EUR 10 off the full report). A visitor pays,
+takes the survey, and the report opens unlocked or pre-unlocked. How it works is in
 `features/pay-to-start/AGENT_README.md`; this page is what to do with it.
 
 ## Pause it, or switch it back on
@@ -18,7 +20,8 @@ The page also refuses to sell while the survey is closed or `survey_submissions`
 
 1. Set `PAY_TO_START_PRICE_CENTS` on the Vercel project (cents, 500 to 9900; unset is 2999, EUR
    29.99). A value outside the range is ignored (EUR 29.99 is charged) and alerts #ops
-   (`pts_price_setting_invalid`).
+   (`pts_price_setting_invalid`). The setting is the full report's: the initial report's EUR
+   1.99 is below its range and fixed in `features/pay-to-start/logic/offer.ts`, a code change.
 2. Redeploy: Vercel applies an environment change to new deployments only.
 3. The ad's copy must say the same price (the search ad names it).
 
@@ -42,8 +45,10 @@ test is read per price.
 - **Use an `@loveiq.org` email** at Stripe: staging sends real email and Slack, and a team
   address marks the payment `is_test`, so it never reaches GA4, Ads or the numbers.
 - **What to check after a test payment**: the `prepaid_report_access` row (succeeded, then
-  `consumed_submission_id`, then `payment_id`), the `payment` row (`metadata.journey`), the
-  confirmation email and its link, the 4-slide wizard, the report fully unlocked.
+  `consumed_submission_id`, then `payment_id`), the `payment` row (`metadata.journey`, and
+  `metadata.plan`: `full_report` or `initial`), the confirmation email and its link, the
+  4-slide wizard, and the report: fully unlocked, or for the initial report the Core
+  Archetype card and Summary open and the pay screen at EUR 19.99, "EUR 10.00 credit applied".
 
 ## A buyer who paid but cannot get in
 
@@ -81,6 +86,10 @@ anything confirmed it is never unlocked: the confirmation turns it `refunded`. A
 survey: the report is re-locked like any refunded purchase (#ops `stripe_refund`). A dispute
 opened voids it (`stripe_dispute_opened`); one won restores it (`stripe_dispute_resolved`).
 
+A refund of the initial report takes its EUR 10 credit back with it. Refunded after the full
+report it credited, #ops gets `credited_payment_refunded`: the reader keeps the full report for
+EUR 10 less, and charging the difference is a person's call.
+
 Someone who paid twice (two tabs, a lost cookie): #ops `pts_double_payment`. Refund the second
 payment; either entitlement works on its own.
 
@@ -89,7 +98,7 @@ payment; either entitlement works on its own.
 | Channel   | Kind                           | Means                                                                       |
 | --------- | ------------------------------ | --------------------------------------------------------------------------- |
 | #payments | `pts_paid`                     | A payment confirmed (the line says whether the survey is done yet)          |
-| #payments | `pts_claimed`                  | The survey claimed it; the report is unlocked                               |
+| #payments | `pts_claimed`                  | The survey claimed it; the report is unlocked (or pre-unlocked)             |
 | #ops      | `pts_checkout_failure`         | Opening checkout failed: visitors may be unable to pay                      |
 | #ops      | `pts_confirmation_failed`      | A buyer's confirmation email did not go: send their continue link (above)   |
 | #ops      | `pts_price_setting_invalid`    | `PAY_TO_START_PRICE_CENTS` is out of range; EUR 29.99 is charged            |
@@ -112,7 +121,8 @@ payment; either entitlement works on its own.
 - The `staging` branch carries this code (see "Staging's webhook first" above).
 - Stripe → Settings → Public details: a Terms of Service URL, in test and in live mode. The
   checkout requires the terms checkbox and cannot open without it.
-- The price setting matches the ad.
+- The price setting matches the EUR 29.99 ad, and the EUR 1.99 ad lands on
+  `/sexual-archetype/initial`.
 - A decision on how the numbers show this journey. The digests leave its visits and survey
   views out of the free funnel's, and its buyers out of the arms and the price test, but keep
   its finishers, payments and revenue in their totals, so their rates per visit read high
