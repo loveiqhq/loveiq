@@ -74,7 +74,7 @@ function row(overrides: Partial<Entitlement> = {}): Entitlement {
     consumed_submission_id: null,
     consumed_at: null,
     amount_cents: null,
-    list_price_cents: 2900,
+    list_price_cents: 2999,
     currency: "EUR",
     customer_email: null,
     is_test: false,
@@ -102,7 +102,7 @@ function post(body: Record<string, unknown>, cookie?: string) {
   );
 }
 
-const VALID = { offer: "full", displayedPriceCents: 2900 };
+const VALID = { offer: "full", displayedPriceCents: 2999 };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -147,7 +147,7 @@ describe("refusals", () => {
 
   it("refuses an unknown or switched-off offer", async () => {
     expect((await post({ offer: "pre", displayedPriceCents: 199 })).status).toBe(400);
-    expect((await post({ offer: "nope", displayedPriceCents: 2900 })).status).toBe(400);
+    expect((await post({ offer: "nope", displayedPriceCents: 2999 })).status).toBe(400);
   });
 
   it("says checkout is unavailable where payments are off", async () => {
@@ -206,7 +206,7 @@ describe("a first checkout", () => {
     expect(created).toMatchObject({
       currency: "EUR",
       landingVariant: "sexual-archetype",
-      listPriceCents: 2900,
+      listPriceCents: 2999,
       offer: "full",
       plan: "full_report",
       utmTracker: '{"utm_source":"google","utm_campaign":"archetype"}',
@@ -223,7 +223,7 @@ describe("a first checkout", () => {
           price_data: {
             currency: "eur",
             product_data: { name: "LoveIQ Survey & Report" },
-            unit_amount: 2900,
+            unit_amount: 2999,
           },
           quantity: 1,
         },
@@ -235,7 +235,7 @@ describe("a first checkout", () => {
         offer: "full",
         entitlementId: "7",
         plan: "full_report",
-        listPriceCents: "2900",
+        listPriceCents: "2999",
         origin: ORIGIN,
         gaClientId: "123.456",
         gaAnalyticsConsent: "1",
@@ -264,7 +264,7 @@ describe("a first checkout", () => {
 
     expect(setEntitlementSession).toHaveBeenCalledWith({
       id: 7,
-      listPriceCents: 2900,
+      listPriceCents: 2999,
       stripeSessionId: "cs_test_new",
     });
     const cookie = response.headers.get("set-cookie") ?? "";
@@ -350,7 +350,7 @@ describe("a browser that already holds a token", () => {
     vi.mocked(settlePayToStartSession).mockResolvedValue({
       state: "open",
       entitlement: row({ stripe_session_id: "cs_test_open" }),
-      session: { url: "https://checkout.stripe.com/c/open", amount_subtotal: 2900 } as never,
+      session: { url: "https://checkout.stripe.com/c/open", amount_subtotal: 2999 } as never,
       firstFlip: false,
       paymentId: null,
     });

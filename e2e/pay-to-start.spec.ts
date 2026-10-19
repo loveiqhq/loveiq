@@ -8,12 +8,12 @@ import { instantScroll } from "./fixtures/instant-scroll";
  * two pay-to-start APIs are stood in for with page.route, so nothing is charged and no
  * database is needed: what is under test is the pages and the browser's way through them.
  *
- * The build has no PAY_TO_START_PRICE_CENTS, so the page sells at the default EUR 29.
+ * The build has no PAY_TO_START_PRICE_CENTS, so the page sells at the default EUR 29.99.
  */
 const PAGE = "/sexual-archetype";
 const SESSION = "cs_test_e2eAbcdefghijKLMN";
 const purchase = {
-  value: 29,
+  value: 29.99,
   currency: "EUR",
   transaction_id: SESSION,
   item_name: "LoveIQ Survey & Report",
@@ -77,7 +77,7 @@ test.describe("pay to start: the assessment page", () => {
     await expect(page.locator("h1")).toHaveText("What’s my sexual archetype?");
     const cta = await primaryCta(page);
     await expect(cta).toBeInViewport();
-    await expect(page.getByText("€29", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("€29.99", { exact: true }).first()).toBeVisible();
   });
 
   test("keeps the price in view while the page scrolls", async ({ page }) => {
@@ -118,7 +118,7 @@ test.describe("pay to start: the assessment page", () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]).toMatchObject({
       method: "POST",
-      body: { offer: "full", displayedPriceCents: 2900 },
+      body: { offer: "full", displayedPriceCents: 2999 },
     });
     // The header is the page's CSRF cookie. WebKit refuses that Secure cookie on
     // http://localhost (production is https), so there it has none to send.

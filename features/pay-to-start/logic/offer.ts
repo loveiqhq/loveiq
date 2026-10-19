@@ -31,7 +31,8 @@ const FULL_OFFER: PayToStartOffer = {
   id: "full",
   grant: { kind: "report_plan", plan: "full_report" },
   productName: "LoveIQ Survey & Report",
-  defaultPriceCents: 2900,
+  // EUR 29.99: Marcus, 19.10, "pay to start 29.99€ #full-unlock" (Figma drew EUR 29).
+  defaultPriceCents: 2999,
   wizard: "pay_to_start",
   enabled: true,
   landingPath: "/sexual-archetype",
