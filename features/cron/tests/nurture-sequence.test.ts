@@ -270,7 +270,8 @@ describe("GET /api/cron/nurture-sequence", () => {
     const [lookup] = mockFetchWithTimeout.mock.calls.find(([u]) =>
       String(u).includes("/rest/v1/unlock_feedback")
     )!;
-    expect(String(lookup)).toContain("survey_submission_id=eq.6&sent_at=not.is.null");
+    expect(String(lookup)).toContain("unlock_feedback?survey_submission_id=eq.6&select=id");
+    expect(String(lookup)).not.toContain("sent_at");
   });
 
   it("still sends the 72h email when the unlock-feedback lookup fails", async () => {

@@ -9,7 +9,8 @@
  *                        email; the 6h "report ready"/"unlock" reminders and the
  *                        old 30h/54h discount ladder were retired — no more nudges)
  *
- * Skips every reader the unlock-feedback email went to (`unlock_feedback.sent_at`).
+ * Skips every reader the unlock-feedback email was sent or may have been sent to (an
+ * `unlock_feedback` row).
  *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
  * of stage strings) on the `full_report` quote row for the submission. Per-
@@ -212,14 +213,16 @@ async function fetchFullReportQuote(submissionId: number): Promise<FullReportQuo
 }
 
 /**
- * Whether the unlock-feedback email went to this reader (app/api/cron/unlock-feedback): it
- * offers the full report free for one answer, so a -50% code days later would undercut it,
- * and Eman decided on 18 Oct that it skips them.
+ * Whether the unlock-feedback email went, or may have gone, to this reader
+ * (app/api/cron/unlock-feedback): it offers the full report free for one answer, so a -50%
+ * code days later would undercut it, and Eman decided on 18 Oct that it skips them. Any row
+ * counts, not only one with `sent_at`: the send keeps its claim without a time when Resend
+ * timed out, and that email may well have arrived. A claim freed after a refusal is deleted.
  */
 async function unlockFeedbackSent(submissionId: number): Promise<boolean> {
   const r = await supabaseFetch(
     // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
-    `/rest/v1/unlock_feedback?survey_submission_id=eq.${submissionId}&sent_at=not.is.null&select=id&limit=1`
+    `/rest/v1/unlock_feedback?survey_submission_id=eq.${submissionId}&select=id&limit=1`
   );
   if (!r.ok) throw new Error(`unlock_feedback_lookup_failed:${r.status}`);
   return ((await r.json()) as unknown[]).length > 0;
