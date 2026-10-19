@@ -21,6 +21,7 @@ import { buildReport2ChapterCopies, forV4Page } from "@features/report/server/re
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
+import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 
 /**
  * A report with no reader behind it — for looking at the design on a laptop.
@@ -94,6 +95,9 @@ export async function GET(request: Request) {
   // As on the real route, V4's chapters go only to the V4 page (final review 26.09).
   const isV4Request = url.searchParams.get("v4") === "1";
   const accessPlan: ReportAccessPlan = isReportPurchasePlan(planParam) ? planParam : null;
+  // `?plan=initial`: the initial unlock (EUR 1.99), as its buyer sees the report: no plan,
+  // the card and Summary in full, and the full report EUR 10 off on the pay screen.
+  const initialUnlock = isInitialUnlockPlan(planParam);
 
   // A paid preview owns its own archetype, exactly as a real purchase does.
   const unlockedArchetypes = accessPlan ? [archetype] : [];
@@ -108,7 +112,7 @@ export async function GET(request: Request) {
 
   // Part II of the slimmed report: the card and the Summary, half-locked behind the
   // Summary's own gate (Essentials), as on the real route.
-  const summaryUnlocked = unlocked("summary");
+  const summaryUnlocked = unlocked("summary") || initialUnlock;
   const beliefsUnlocked = unlocked("typical_beliefs");
   const beliefsSection = getReport2Section(archetype, "beliefs");
   const accelUnlocked = unlocked("typical_arousal_accelerators_turn_ons_of_the_core_archetype");
@@ -153,7 +157,8 @@ export async function GET(request: Request) {
     reportDate: new Date().toISOString(),
     diagnostics: null,
     snapshotAnswers: { currentSexualSatisfaction: 3, importanceOfSex: 5 },
-    pricingQuotes: buildPreviewQuotes(),
+    pricingQuotes: buildPreviewQuotes(new Date(), { initialCredit: initialUnlock }),
+    initialUnlock,
     unlockedArchetypes,
     archetypeTiers,
 

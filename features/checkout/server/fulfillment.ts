@@ -1353,6 +1353,8 @@ async function syncCheckoutSessionPayment({
     // What All 14 credited for reports bought earlier on this report (EUR), taken off as
     // Stripe's discount; the coupon fields above carry the same amount.
     upgradeCredit: settledSession.metadata?.upgradeCredit || null,
+    // What the full report credited for the initial unlock bought before it (EUR 10).
+    initialCredit: settledSession.metadata?.initialCredit || null,
     promoPercentOff:
       settledSession.metadata?.promoPercentOff &&
       Number.isFinite(Number(settledSession.metadata.promoPercentOff))
@@ -1807,6 +1809,35 @@ async function alertIfAll14CreditedPayment(paymentId: number, personalReportId: 
   }
 }
 
+/**
+ * The full report credits the initial unlock's EUR 10 (`applyInitialCredit`), so refunding
+ * or charging back that EUR 1.99 afterwards leaves the reader with the full report for EUR 10
+ * less. As for All 14, nothing is taken back automatically: a person decides.
+ */
+async function alertIfInitialCreditedPayment(paymentId: number, personalReportId: number) {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/payment?personal_report_id=eq.${personalReportId}&id=gt.${paymentId}&status=eq.succeeded&metadata->>plan=eq.full_report&metadata->>initialCredit=not.is.null&select=id,amount,metadata`
+    );
+    if (!response.ok) throw new Error(`credited_full_report_lookup_${response.status}`);
+    const rows = (await response.json()) as Array<{
+      id: number;
+      amount: number | string | null;
+      metadata: Record<string, unknown> | null;
+    }>;
+    for (const row of rows) {
+      await notifySlack({
+        channel: "ops",
+        kind: "credited_payment_refunded",
+        text: `:warning: Payment #${paymentId} was refunded or charged back, but the full report on the same report (payment #${row.id}, personal_report ${personalReportId}) took €${String(row.metadata?.initialCredit ?? "?")} off for the initial unlock bought before it, so the reader keeps the full report for €${String(row.amount ?? "?")}. Charge the difference or leave it.`,
+        username: "ops_alerts",
+      });
+    }
+  } catch (err) {
+    logger.error({ err, paymentId, personalReportId }, "Initial-credit refund check failed");
+  }
+}
+
 async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event: Stripe.Event }) {
   const existingPayment = await fetchExistingPayment({
     stripeChargeId: charge.id,
@@ -1873,6 +1904,7 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
     await voidEntitlementByPaymentIntent(paymentIntentIdOf(charge.payment_intent));
   if (existingPayment.personal_report_id) {
     await alertIfAll14CreditedPayment(existingPayment.id, existingPayment.personal_report_id);
+    await alertIfInitialCreditedPayment(existingPayment.id, existingPayment.personal_report_id);
   }
 
   await upsertWebhookEventRecord({
@@ -1965,6 +1997,7 @@ async function syncDisputeEvent({
     if (outcome === "opened") {
       await changeAccessOrAlert("revoke", existingPayment.id, existingPayment.personal_report_id);
       await alertIfAll14CreditedPayment(existingPayment.id, existingPayment.personal_report_id);
+      await alertIfInitialCreditedPayment(existingPayment.id, existingPayment.personal_report_id);
     } else if (restoreToSucceeded) {
       await changeAccessOrAlert("regrant", existingPayment.id, existingPayment.personal_report_id);
     }

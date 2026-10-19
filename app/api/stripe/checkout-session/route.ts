@@ -19,6 +19,7 @@ import { findEntitlementByConsumedSubmission } from "@features/pay-to-start/serv
 import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  ensureInitialCreditCoupon,
   ensureUpgradeCreditCoupon,
   getStripeCheckoutCustomerEmail,
   getStripeServerClient,
@@ -364,18 +365,22 @@ export async function POST(request: Request) {
       }
     }
 
-    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`):
-    // the line keeps the regular price and the credit is Stripe's discount, so both the page
-    // and the receipt say what was taken off. Stripe takes one discount per session, so a
-    // nurture promo worth more than the credit wins instead.
+    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`),
+    // and the full report the initial unlock's EUR 10 (`applyInitialCredit`, creditKind
+    // "initial"): the line keeps the regular price and the credit is Stripe's discount, so
+    // both the page and the receipt say what was taken off. Stripe takes one discount per
+    // session, so a nurture promo worth more than the credit wins instead.
     const creditCents = quote.upgradeCreditCents ?? 0;
+    const initialCredit = quote.creditKind === "initial";
     const regularCents = quote.chargedPriceCents + creditCents;
     const promoOffCents = nurturePromoMatch
       ? Math.round((regularCents * nurturePromoMatch.percentOff) / 100)
       : 0;
     const creditCouponId =
       creditCents > 0 && creditCents >= promoOffCents
-        ? await ensureUpgradeCreditCoupon(stripe, creditCents)
+        ? initialCredit
+          ? await ensureInitialCreditCoupon(stripe, creditCents)
+          : await ensureUpgradeCreditCoupon(stripe, creditCents)
         : null;
     const appliedPromo = creditCouponId ? null : nurturePromoMatch;
 
@@ -442,7 +447,10 @@ export async function POST(request: Request) {
           promoStage: appliedPromo.stage,
           promoPercentOff: String(appliedPromo.percentOff),
         }),
-        ...(creditCouponId && { upgradeCredit: String((creditCents / 100).toFixed(2)) }),
+        ...(creditCouponId &&
+          (initialCredit
+            ? { initialCredit: String((creditCents / 100).toFixed(2)) }
+            : { upgradeCredit: String((creditCents / 100).toFixed(2)) })),
         requestIp: toStripeMetadataValue(ip),
         requestUserAgent: toStripeMetadataValue(userAgent),
         reportSessionId: parsed.data.reportSessionId ?? "",
