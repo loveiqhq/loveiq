@@ -52,6 +52,30 @@ describe("GET /api/report/preview — no reader behind it", () => {
   });
 });
 
+/** `?gate=1`: the EUR 1.99 gate as a gated reader meets it (features/report/logic/initialUnlockGate.ts). */
+describe("GET /api/report/preview — the EUR 1.99 gate", () => {
+  it("sends the gate alone, as the real route sends a gated owner", async () => {
+    const { status, json } = await get("archetype=Spark%20Seeker&v4=1&gate=1");
+    expect(status).toBe(200);
+    expect(json).toEqual({
+      gate: "initial_unlock",
+      priceCents: 199,
+      currency: "EUR",
+      creditCents: 1000,
+      guaranteeDays: 14,
+      reportToken: null,
+      submissionId: null,
+      viewMode: "owner",
+    });
+  });
+
+  it("is not found on production", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    const { status } = await get("archetype=Spark%20Seeker&v4=1&gate=1");
+    expect(status).toBe(404);
+  });
+});
+
 /** `?plan=initial`: the report the EUR 1.99 journey lands in (features/report/logic/initialUnlock.ts). */
 describe("GET /api/report/preview — the initial unlock", () => {
   it("opens the Core Archetype card and the Summary in full, and nothing else", async () => {
