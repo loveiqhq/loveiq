@@ -41,6 +41,8 @@ const ALLOWED_KEYS = new Set([
   "pay_to_start_checkout",
   // Every answer to the unlock-feedback email unlocks a full report for free.
   "unlock_feedback",
+  "report_initial_unlock_gate",
+  "initial_unlock_gift_email",
 ]);
 
 export async function GET() {

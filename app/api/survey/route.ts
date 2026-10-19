@@ -33,6 +33,7 @@ import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression"
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
+import { joinInitialGateCohort } from "@features/report/server/initialGateState";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -696,9 +697,12 @@ export async function POST(request: Request) {
       reportToken = token ?? undefined;
     });
 
+    // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
+    // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
+      isExisting ? Promise.resolve() : joinInitialGateCohort(submissionId),
     ]);
 
     // Pay to start: claim what this browser paid for, before the reply, so the report

@@ -15,6 +15,10 @@
  *   pricing_uplift_enabled   — when OFF, all per-visitor price boosts are paused (base prices only)
  *   pay_to_start_checkout    — when OFF, /sexual-archetype sells nothing (20261018120000)
  *   unlock_feedback          — when OFF, the "why didn't you unlock?" email stops (20261019120000)
+ *   report_initial_unlock_gate — when ON, surveys submitted from then on meet the EUR 1.99
+ *                              gate before their report (20261020090000; read default OFF)
+ *   initial_unlock_gift_email  — when ON, E07 gifts the Core Archetype on day 4 to 80% of
+ *                              the gate's non-payers (20261020090000; read default OFF)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -32,7 +36,9 @@ export type SystemFlagKey =
   | "pricing_uplift_enabled"
   | "ux_review_alerts"
   | "pay_to_start_checkout"
-  | "unlock_feedback";
+  | "unlock_feedback"
+  | "report_initial_unlock_gate"
+  | "initial_unlock_gift_email";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;
