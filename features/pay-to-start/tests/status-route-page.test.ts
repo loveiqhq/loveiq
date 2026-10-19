@@ -42,3 +42,27 @@ describe("/sexual-archetype/checkout's preview", () => {
     expect(await previewFor("refunded")).toBeNull();
   });
 });
+
+/** Stripe returns a buyer of the initial report with `&offer=pre` (statusOfferQuery). */
+describe("/sexual-archetype/checkout's offer", () => {
+  async function providerFor(offer: string | string[] | undefined) {
+    const element = (await Page({ searchParams: Promise.resolve({ offer }) })) as {
+      props: { offer: string; priceCents: number; price: string };
+    };
+    return element.props;
+  }
+
+  it("starts the initial report's checkout again, at its price, for its buyer", async () => {
+    expect(await providerFor("pre")).toMatchObject({
+      offer: "pre",
+      priceCents: 199,
+      price: "€1.99",
+    });
+  });
+
+  it("is the full report's for anyone else", async () => {
+    for (const offer of [undefined, "full", "nope", ["pre", "full"]]) {
+      expect((await providerFor(offer)).offer).toBe("full");
+    }
+  });
+});

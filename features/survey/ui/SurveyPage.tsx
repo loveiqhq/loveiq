@@ -19,7 +19,7 @@ import {
   forgetCompletedReport,
 } from "./hooks/surveySession";
 import { pingFunnelEvent } from "@features/analytics/client";
-import { PAY_TO_START_RETURN_PATH, type SurveyJourney } from "@features/pay-to-start/logic/journey";
+import type { SurveyJourney } from "@features/pay-to-start/logic/journey";
 
 /*
  * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
@@ -1416,7 +1416,7 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
       window.location.href = clearAnswers
         ? reportUrlAfterSurvey(reportToken)
         : journey
-          ? PAY_TO_START_RETURN_PATH
+          ? journey.returnPath
           : "/";
     },
     [journey]

@@ -182,7 +182,8 @@ describe("Payment page builder", () => {
     expect(tile("full-cvr").value).toBe(2 / 4);
     expect(tile("pay-cvr")).toMatchObject({ value: 2 / 4, note: "2 of 4 finishers" });
     expect(tile("aov").value).toBe(14.99);
-    expect(tile("pre")).toMatchObject({ value: null, note: "Initial plan · not on sale yet" });
+    // The Initial plan is on sale (19.10); the fixture sold none.
+    expect(tile("pre")).toMatchObject({ value: 0, note: "Initial plan" });
     expect(p.checkout.methods.map((m) => [m.name, m.sales, m.revenue])).toEqual([
       ["Visa", 1, 19.99],
       ["Stripe Link", 1, 9.99],

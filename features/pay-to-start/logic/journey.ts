@@ -11,10 +11,11 @@ export type PayToStartJourney = typeof PAY_TO_START_JOURNEY;
 export const JOURNEY_TRACKER_KEY = "journey";
 
 /**
- * The pre-report wizard a buyer sees: slides 1, 4, 5 and 6 of the six (Figma 1477:3938,
- * 1477:4018, 1477:4071, 1477:4123). The report map ("your free chapters") and "Unlocking
- * your report is fully risk free" are left out; there is nothing left to unlock. Indices
- * are the standard wizard's, so analytics read the same slide under the same number.
+ * The pre-report wizard a buyer sees, whichever offer: slides 1, 4, 5 and 6 of the six
+ * (Figma 1477:3938, 1477:4018, 1477:4071, 1477:4123; the EUR 1.99 board 1741:5587 draws the
+ * same four). The report map ("your free chapters") and "Unlocking your report is fully
+ * risk free" are left out. Indices are the standard wizard's, so analytics read the same
+ * slide under the same number.
  */
 export const PAY_TO_START_WIZARD_SLIDES = [0, 3, 4, 5] as const;
 
@@ -71,9 +72,11 @@ export interface SurveyJourney {
   kind: PayToStartJourney;
   /** Paid; false while the payment still settles. */
   paid: boolean;
+  /** Where the survey's way out leads for that visitor: the page they paid on. */
+  returnPath: string;
 }
 
-/** Where the survey's way out leads for that visitor: the page they paid on. */
+/** The full offer's page, under which both offers' pages live (proxy.ts labels them). */
 export const PAY_TO_START_RETURN_PATH = "/sexual-archetype";
 
 /** A Stripe Checkout session id, as the status route accepts it. */

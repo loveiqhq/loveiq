@@ -8,7 +8,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 
 import { assessmentScope } from "./assessment";
 import { shortDate } from "./days";
-import { type Facts, type SubFact } from "./facts";
+import { PRE_PLANS, type Facts, type SubFact } from "./facts";
 import { activeNarrowing, bucketCaption, rangeLabel, type ApFilters } from "./filters";
 import { type GoodWhen, type Unit } from "./format";
 import {
@@ -501,6 +501,8 @@ export function buildReportPage(input: {
     per((l) => l.filter((s) => s.openedAt && s.invited).length, list);
   const unlockRate = (list: SubFact[]) =>
     per((l) => l.filter((s) => s.openedAt && s.paidAt && s.full).length, list);
+  const preRate = (list: SubFact[]) =>
+    per((l) => l.filter((s) => s.openedAt && s.paidAt && PRE_PLANS.has(s.plan ?? "")).length, list);
   const spark = (pick: (x: SubFact[]) => number | null) =>
     trend(facts, scope, (_x, from, to) => pick(subsIn(facts, scope, from, to)));
   // Paywall clicks, share-method invites and the wizard's slides were recorded only with
@@ -648,11 +650,22 @@ export function buildReportPage(input: {
       ),
       ...noCmpNote,
     },
-    // The Initial plan (pay to start) is not on sale: no figure, and the tile says so.
-    {
-      ...tile("pre", "Pre unlock rate", "pct", null, null, "", []),
-      note: "Initial plan not on sale yet",
-    },
+    // The Initial plan (EUR 1.99, pay to start's initial report since 19.10). With no plan
+    // key on sale, no figure, and the tile says so.
+    PRE_PLANS.size
+      ? tile(
+          "pre",
+          "Pre unlock rate",
+          "pct",
+          preRate(subs),
+          previous ? preRate(prevSubs) : null,
+          "Initial plan purchases ÷ report openers",
+          spark(preRate)
+        )
+      : {
+          ...tile("pre", "Pre unlock rate", "pct", null, null, "", []),
+          note: "Initial plan not on sale yet",
+        },
     tile(
       "full",
       "Full unlock rate",

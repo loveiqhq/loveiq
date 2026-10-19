@@ -363,6 +363,8 @@ function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today:
     : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared.";
   const fullSales = (x: Facts, from = x.from, to = x.to) =>
     salesIn(x, scope, from, to).filter((m) => FULL_PLANS.has(m.plan ?? "")).length;
+  const preSales = (x: Facts, from = x.from, to = x.to) =>
+    salesIn(x, scope, from, to).filter((m) => PRE_PLANS.has(m.plan ?? "")).length;
   const points = trendBuckets(facts.from, facts.to);
   const spark = (pick: (from: string, to: string) => number | null) =>
     points.map((b) => pick(b.from, b.to));
@@ -390,6 +392,7 @@ function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today:
     ...(note !== undefined ? { note } : {}),
   });
   const prevFull = previous && p ? fullSales(previous) : null;
+  const prevPre = previous && p ? preSales(previous) : null;
   return [
     tile(
       "start-cvr",
@@ -415,16 +418,25 @@ function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today:
       }),
       startsWhy
     ),
-    tile(
-      "pre-cvr",
-      "Pre-unlock CVR",
-      "pct",
-      null,
-      null,
-      [],
-      null,
-      PRE_PLANS.size ? undefined : "Initial plan not on sale yet"
-    ),
+    PRE_PLANS.size
+      ? tile(
+          "pre-cvr",
+          "Pre-unlock CVR",
+          "pct",
+          ratio(preSales(facts), t.subs),
+          p && prevPre !== null ? ratio(prevPre, p.subs) : null,
+          spark((from, to) => ratio(preSales(facts, from, to), totals(facts, scope, from, to).subs))
+        )
+      : tile(
+          "pre-cvr",
+          "Pre-unlock CVR",
+          "pct",
+          null,
+          null,
+          [],
+          null,
+          "Initial plan not on sale yet"
+        ),
     tile(
       "full-cvr",
       "Full-unlock CVR",

@@ -214,12 +214,37 @@ describe("report page", () => {
       foot: "of report openers rated at least one chapter (1 of 1 · 1 vote)",
     });
     // No earlier period: nothing compared, and no grey note either.
-    for (const t of q.tiles.filter((x) => x.key !== "pre")) expect(t.note).toBeUndefined();
+    for (const t of q.tiles) expect(t.note).toBeUndefined();
+    // The Initial plan is on sale (19.10); the fixture's reader bought none.
     expect(q.tiles.find((t) => t.key === "pre")).toMatchObject({
       label: "Pre unlock rate",
-      value: null,
-      note: "Initial plan not on sale yet",
+      value: 0,
     });
+  });
+
+  // The Initial plan (EUR 1.99, the initial report since 19.10): a reader whose first paid
+  // plan is `initial` is a pre-unlock, and an upgrade after it is a full unlock too.
+  it("counts the initial report's buyers as pre-unlocks", () => {
+    const cur = factsFixture({
+      subs: [
+        sub({ id: 1, ...day("2026-10-02"), paidAt: "2026-10-02T10:10:00Z", plan: "initial" }),
+        sub({
+          id: 2,
+          ...day("2026-10-03"),
+          paidAt: "2026-10-03T10:10:00Z",
+          plan: "initial",
+          full: true,
+        }),
+        sub({ id: 3, ...day("2026-10-03") }),
+        sub({ id: 4, ...day("2026-10-04") }),
+      ],
+    });
+    const tiles = page({ facts: cur, benchmark: cur }).tiles;
+    expect(tiles.find((t) => t.key === "pre")).toMatchObject({
+      value: 2 / 4,
+      foot: "Initial plan purchases ÷ report openers",
+    });
+    expect(tiles.find((t) => t.key === "full")?.value).toBe(1 / 4);
   });
 
   it("gives the headline rates two figures and the wizard's none, as the design writes them", () => {
@@ -1053,8 +1078,8 @@ describe("report page, on screen", () => {
     expect(change("Share rate")).toHaveClass("text-ap-good");
     expect(change("Invite rate").textContent).toBe("−50.0%");
     expect(change("Invite rate")).toHaveClass("text-ap-bad");
-    expect(change("Pre unlock rate").textContent).toBe("Initial plan not on sale yet");
-    expect(change("Pre unlock rate")).toHaveClass("text-ap-muted");
+    // On sale since 19.10: a figure like the others (none sold, in either period).
+    expect(change("Pre unlock rate").textContent).toBe("±0%");
 
     const fb = within(document.getElementById("feedback")!);
     expect(fb.queryByRole("group", { name: "Filter feedback" })).toBeNull();
