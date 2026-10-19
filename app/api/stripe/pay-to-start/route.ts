@@ -14,6 +14,11 @@ import {
 } from "@features/pay-to-start/logic/api";
 import { readPrepaidToken } from "@features/pay-to-start/logic/journey";
 import {
+  PAY_TO_START_STATUS_PATH,
+  offerDefinitionOf,
+  statusOfferQuery,
+} from "@features/pay-to-start/logic/offer";
+import {
   PAY_TO_START_LANDING_VARIANT,
   buildPayToStartSessionParams,
   payToStartSessionExpiresAt,
@@ -41,16 +46,18 @@ export const runtime = "nodejs";
 
 /**
  * Pay to start the survey: the checkout behind every "Unlock survey & report" button on
- * /sexual-archetype (Figma 1706:1699).
+ * /sexual-archetype (Figma 1706:1699, the full report) and /sexual-archetype/initial
+ * (1741:5587, the initial report).
  *
  * There is no survey, report or email yet, so the buyer is anchored by an opaque token in
  * an httpOnly cookie and a pending entitlement row (features/pay-to-start). Stripe
  * collects the email. Paying is confirmed by the webhook, the status page or the sweep;
- * the survey's submit claims it and the report opens fully unlocked.
+ * the survey's submit claims it and the report opens as the offer says.
  *
- * A browser that already holds a token never pays twice: paid sends it to the survey,
- * an open session is handed back, an expired one is replaced under the same token, and
- * one already used sends it to its report.
+ * A browser that already holds a token never pays twice: paid (either offer) sends it to
+ * the survey, an open session for the same offer is handed back, an expired one is
+ * replaced under the same token, and one already used sends it to its report. A checkout
+ * for the other offer starts afresh, with the open one closed so it cannot be paid too.
  */
 
 const RATE_LIMIT = { bucket: "pay-to-start-checkout", limit: 10, windowMs: 60_000 };
@@ -58,7 +65,7 @@ const RATE_LIMIT = { bucket: "pay-to-start-checkout", limit: 10, windowMs: 60_00
 const NO_STORE = { "Cache-Control": "no-store, no-cache, must-revalidate" };
 
 const bodySchema = z.object({
-  offer: z.literal("full"),
+  offer: z.enum(["full", "pre"]),
   /** The price the page showed: a mismatch means the setting changed under it. */
   displayedPriceCents: z.number().int().positive(),
   gaClientId: z.string().max(64).nullable().optional(),
@@ -171,6 +178,8 @@ export async function POST(request: Request) {
     // purchase: sold again under this token, it would pay for that survey, someone else's
     // on a shared device.
     const reusable = existing?.consumed_submission_id ? null : existing;
+    // A row is sold again only for its own offer: its plan and its price are that offer's.
+    const sameOffer = offerDefinitionOf(reusable?.offer).id === offer.id;
     if (reusable?.status === "pending" && reusable.stripe_session_id) {
       const settled = await settlePayToStartSession({
         sessionId: reusable.stripe_session_id,
@@ -184,27 +193,32 @@ export async function POST(request: Request) {
           // Paid with a method that is still settling: the status page waits for it.
           return reply({
             state: "redirect",
-            url: `${origin}${offer.landingPath}/checkout?session_id=${encodeURIComponent(reusable.stripe_session_id)}`,
+            url: `${origin}${PAY_TO_START_STATUS_PATH}?session_id=${encodeURIComponent(reusable.stripe_session_id)}${statusOfferQuery(offerDefinitionOf(reusable.offer).id)}`,
           });
         case "open":
-          // The same session again, unless the price changed since it opened.
-          if (settled.session?.url && settled.session.amount_subtotal === offer.priceCents) {
+          // The same session again, unless the price changed since it opened or the other
+          // offer is being bought: then it is closed, so it cannot be paid as well.
+          if (
+            sameOffer &&
+            settled.session?.url &&
+            settled.session.amount_subtotal === offer.priceCents
+          ) {
             return reply({ state: "redirect", url: settled.session.url });
           }
           await stripe.checkout.sessions.expire(reusable.stripe_session_id).catch((err) => {
-            logger.warn({ err }, "pay-to-start: expiring a stale-priced session failed");
+            logger.warn({ err }, "pay-to-start: expiring a stale session failed");
           });
-          reuse = reusable;
+          if (sameOffer) reuse = reusable;
           break;
         case "expired":
         case "failed":
-          reuse = reusable;
+          if (sameOffer) reuse = reusable;
           break;
         default:
           // Refunded or unknown: a fresh token below.
           break;
       }
-    } else if (reusable?.status === "expired" || reusable?.status === "pending") {
+    } else if (sameOffer && (reusable?.status === "expired" || reusable?.status === "pending")) {
       // Expired, or pending with no session (an earlier create failed): same token.
       reuse = reusable;
     }
@@ -221,7 +235,7 @@ export async function POST(request: Request) {
         landingVariant: PAY_TO_START_LANDING_VARIANT,
         listPriceCents: offer.priceCents,
         offer: offer.id,
-        plan: "full_report",
+        plan: offer.grant.plan,
         token,
         utmTracker,
       }));

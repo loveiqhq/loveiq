@@ -336,16 +336,41 @@ describe("applyPayToStartEntitlement", () => {
     expect(captured.urls).toHaveLength(0);
   });
 
-  it("never applies an offer that grants anything but the full report", async () => {
-    // The reserved EUR 1.99 pre-unlock is registered, not on sale: if it ever were, its
-    // EUR 1.99 must not write a full report's payment row and tier.
+  it("applies the initial report as its payment row alone: plan initial, and no tier", async () => {
+    // EUR 1.99 (Marcus, 19.10): the payment row is what opens the Core Archetype
+    // (features/report/logic/initialUnlock.ts); a tier would open the whole report.
     const captured = routeSupabase();
-    await expect(
-      applyPayToStartEntitlement({ entitlement: row({ offer: "pre" }), stripe })
-    ).rejects.toThrow("pts_apply_offer_not_a_full_report");
-    expect(captured.paymentPost).toBeNull();
-    expect(captured.urls.filter((u) => !u.startsWith("GET "))).toEqual([]);
-    expect(setEntitlementPaymentId).not.toHaveBeenCalled();
+    const paymentId = await applyPayToStartEntitlement({
+      entitlement: row({ offer: "pre", plan: "initial", amount_cents: 199, list_price_cents: 199 }),
+      stripe,
+    });
+    await flushAfterResponse();
+    expect(paymentId).toBe(41);
+    expect(captured.paymentPost).toMatchObject({
+      amount: 1.99,
+      description: "LoveIQ Survey & Initial Report",
+      status: "succeeded",
+      metadata: expect.objectContaining({
+        plan: "initial",
+        archetype: PRIMARY,
+        journey: "pay_to_start",
+        offer: "pre",
+        prepaid: "true",
+        currentPrice: "1.99",
+      }),
+    });
+    expect(captured.itemPost).toMatchObject({
+      item_name: "LoveIQ Survey & Initial Report",
+      total_price: 1.99,
+    });
+    expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+    expect(setEntitlementPaymentId).toHaveBeenCalledWith({ id: 7, paymentId: 41 });
+    expect(mockNotifySlack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "pts_claimed",
+        text: expect.stringContaining("the initial report pre-unlocked"),
+      })
+    );
   });
 
   it("stops before stamping when no archetype is scored yet, so the sweep retries", async () => {

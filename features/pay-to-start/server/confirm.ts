@@ -11,6 +11,7 @@ import {
   formatOfferAmount,
   getOfferDefinition,
   isPayToStartOfferId,
+  offerDefinitionOf,
 } from "@features/pay-to-start/logic/offer";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { scheduleAfterResponse } from "@shared/http/after-response";
@@ -303,6 +304,7 @@ export async function runFirstPaymentEffects({
           amountText,
           email,
           entitlementId: entitlement.id,
+          offer: offerId,
           origin: metadata.origin ?? null,
           productName: offer.productName,
           token: entitlement.prepaid_token,
@@ -358,7 +360,7 @@ export async function runFirstPaymentEffects({
       itemName: offer.productName,
       isTest,
       params: {
-        plan: "full_report",
+        plan: offer.grant.plan,
         journey: PAY_TO_START_JOURNEY,
         offer: offerId,
         list_price: listPrice,
@@ -374,7 +376,7 @@ export async function runFirstPaymentEffects({
       transactionId: session.id,
       value: amountCents / 100,
       currency,
-      plan: "full_report",
+      plan: offer.grant.plan,
       itemName: offer.productName,
       isTest,
       params: {
@@ -451,7 +453,11 @@ function paidLine({
   const traffic = classifyTraffic(entitlement.utm_tracker);
   const via = [traffic.source, traffic.campaign].filter(Boolean).map((v) => escapeSlack(v ?? ""));
   const parts = [
-    `${internalTag}:moneybag: Pay to start: *${amountText}* paid, ${
+    `${internalTag}:moneybag: Pay to start${
+      offerDefinitionOf(entitlement.offer).grant.kind === "initial_unlock"
+        ? " (initial report)"
+        : ""
+    }: *${amountText}* paid, ${
       entitlement.consumed_submission_id
         ? `survey already finished (submission #${entitlement.consumed_submission_id})`
         : "survey not started yet"

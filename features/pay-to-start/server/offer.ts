@@ -17,7 +17,8 @@ export interface PricedOffer extends PayToStartOffer {
  * NEXT_PUBLIC_ prefix): the page reads it while rendering on the server and hands the
  * number down, so the browser never decides a price. Unset means the offer's default
  * (EUR 29.99, Marcus's price of 19.10). Changing it needs a redeploy, and the ad copy must
- * say the same price.
+ * say the same price. The EUR 1.99 offer has no setting: its price is below the range a
+ * setting may hold, and fixed in `logic/offer.ts`.
  */
 export const PAY_TO_START_PRICE_ENV = "PAY_TO_START_PRICE_CENTS";
 

@@ -17,7 +17,9 @@ import {
   formatOfferPrice,
   getOfferDefinition,
   isPayToStartOfferId,
+  offerDefinitionOf,
   parsePriceCents,
+  statusOfferQuery,
 } from "@features/pay-to-start/logic/offer";
 import {
   CHECKOUT_SESSION_ID_REGEX,
@@ -44,10 +46,27 @@ describe("offer registry", () => {
     expect(offer.landingPath).toBe("/sexual-archetype");
   });
 
-  it("registers the pre-unlock offer without selling it", () => {
-    const offer = getOfferDefinition("pre");
-    expect(offer.enabled).toBe(false);
-    expect(offer.grant).toEqual({ kind: "pre_unlock" });
+  it("sells the initial report at EUR 1.99 on its own page (Marcus, 19.10)", () => {
+    expect(getOfferDefinition("pre")).toEqual({
+      id: "pre",
+      enabled: true,
+      grant: { kind: "initial_unlock", plan: "initial" },
+      productName: "LoveIQ Survey & Initial Report",
+      defaultPriceCents: 199,
+      wizard: "pay_to_start",
+      landingPath: "/sexual-archetype/initial",
+    });
+  });
+
+  it("reads a row with no offer, or an unknown one, as the full offer", () => {
+    expect(offerDefinitionOf(null).id).toBe("full");
+    expect(offerDefinitionOf("nope").id).toBe("full");
+    expect(offerDefinitionOf("pre").id).toBe("pre");
+  });
+
+  it("names the offer on the status page for the initial report only", () => {
+    expect(statusOfferQuery("full")).toBe("");
+    expect(statusOfferQuery("pre")).toBe("&offer=pre");
   });
 
   it("recognises only known offer ids", () => {

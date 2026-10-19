@@ -1,16 +1,24 @@
 # features/pay-to-start
 
-Pay to start the survey (Notion "RFD > Pay to start survey", Figma Report-3.0 "Pay to start >
-Full Payments" `1741:3820`): a visitor pays for the survey and the full report on
-`/sexual-archetype`, takes the survey, and their report opens fully unlocked. A separate,
-independent journey: its own page, its own checkout, its own label in every record, and no
-landing test arm.
+Pay to start the survey (Notion "RFD > Pay to start survey", Figma Report-3.0 `1468:720`): a
+visitor pays before the survey, takes it, and their report opens as the offer says. Two offers,
+each with its own page (`logic/offer.ts`, Marcus 19.10):
+
+- `full`, EUR 29.99 on `/sexual-archetype` ("Full Payments" `1741:3820`): the full report, fully
+  unlocked.
+- `pre`, EUR 1.99 on `/sexual-archetype/initial` ("Pre-Payments" `1741:5587`): the initial
+  report, pre-unlocked. Its payment's plan is `initial` (`features/report/logic/initialUnlock.ts`):
+  the Core Archetype card and Summary in full, and EUR 10 off the full report.
+
+A separate, independent journey: its own pages, its own checkout, its own label in every
+record, and no landing test arm.
 
 ## The journey
 
-1. `/sexual-archetype` (`ui/landing/`): the assessment page, noindex, under the LoveIQ site's own
-   header (LoveIQ-branded until the new brand is ready, Marcus 18.10). Every
-   "Unlock survey & report" posts to `POST /api/stripe/pay-to-start`.
+1. `/sexual-archetype` or `/sexual-archetype/initial` (`ui/landing/`): the assessment page,
+   noindex, under the LoveIQ site's own header (LoveIQ-branded until the new brand is ready,
+   Marcus 18.10). Every "Unlock survey & report" posts its page's offer to
+   `POST /api/stripe/pay-to-start`.
 2. The checkout route records a pending `prepaid_report_access` row (`server/entitlement.ts`)
    and sets its bearer token (`rpp_` + 32) in an httpOnly cookie (`__Host-liq_pp`, 30 days;
    production reads no other name), then sends the browser to Stripe Checkout, which closes
@@ -18,21 +26,27 @@ landing test arm.
    `journey: pay_to_start` and the visitor's anonymous PostHog id, never the token.
 3. The payment is confirmed exactly once (`server/confirm.ts`), by whichever comes first: the
    webhook (`features/checkout/server/fulfillment.ts` routes on `metadata.journey`), the status
-   page Stripe returns to (`/sexual-archetype/checkout`, `ui/status/`), or the sweep (twice an
+   page Stripe returns to (`/sexual-archetype/checkout`, with `&offer=pre` for the initial
+   report, `ui/status/`), or the sweep (twice an
    hour, `server/sweep.ts`). The first confirmation sends our email with the continue link
    (`server/emails/confirmation.ts`, `/sexual-archetype/continue?t=`; "your report is
    unlocked" when the survey was finished first), #payments, and the purchase to GA4 and
    PostHog.
 4. `/survey` sees the cookie (`app/survey/page.tsx`); its submit claims the entitlement
    (`server/claim.ts`): bind it to the submission (one payment, one report), then apply it
-   (a `full_report` payment row with `metadata.journey` and `prepaid`, the tier). The reply
-   says unlocked, and the reader gets the 4-slide wizard and an unlocked report.
+   (a payment row with the offer's plan, `metadata.journey` and `prepaid`; the full report's
+   tier, none for `initial`). The reply says unlocked, and the reader gets the 4-slide wizard
+   and their report.
 
 ## Rules that are easy to break
 
 - **The price is one setting.** `PAY_TO_START_PRICE_CENTS` (`server/offer.ts`) feeds Stripe and
-  every price on the page; the page sends the price it showed and a mismatch is a 409. No
-  euro amount is written in `ui/**` (`tests/no-hardcoded-price.test.ts`).
+  every price on the full report's page; the page sends the price it showed and a mismatch is
+  a 409. The initial report's EUR 1.99 is fixed in `logic/offer.ts`. No euro amount is written
+  in `ui/**` (`tests/no-hardcoded-price.test.ts`).
+- **A token is sold again only for its own offer.** A browser that paid either offer goes to
+  its survey; an open session of the other offer is closed and a new row starts, so one
+  browser never pays for both by accident.
 - **Copy lives in `ui/landing/payToStartContent.ts`**, verbatim from Figma; where it disagrees
   with the product (57 questions, ~15 minutes, cut chapters) it is flagged, not changed.
 - **The header is the site's, pointed at this page's price.** `ui/landing/PtsHeader.tsx` mounts

@@ -145,8 +145,7 @@ describe("refusals", () => {
     expect(response.headers.get("Retry-After")).toBeTruthy();
   });
 
-  it("refuses an unknown or switched-off offer", async () => {
-    expect((await post({ offer: "pre", displayedPriceCents: 199 })).status).toBe(400);
+  it("refuses an unknown offer", async () => {
     expect((await post({ offer: "nope", displayedPriceCents: 2999 })).status).toBe(400);
   });
 
@@ -461,5 +460,123 @@ describe("the session's expiry", () => {
       // Stripe accepts 30 minutes to 24 hours.
       expect(left).toBeLessThanOrEqual(24 * 60 * 60);
     }
+  });
+});
+
+/** The initial report (EUR 1.99, Marcus 19.10): its own page, plan and price. */
+describe("the initial report's checkout", () => {
+  const PRE = { offer: "pre", displayedPriceCents: 199 };
+  const cookie = `__liq_pp=${TOKEN}`;
+  const preRow = (overrides: Partial<Entitlement> = {}) =>
+    row({ offer: "pre", plan: "initial", list_price_cents: 199, ...overrides });
+
+  it("sells the survey and the initial report at EUR 1.99, and returns to its own page", async () => {
+    vi.mocked(createPendingEntitlement).mockResolvedValue(preRow());
+    const response = await post(PRE);
+    expect(await response.json()).toEqual({
+      state: "redirect",
+      url: "https://checkout.stripe.com/c/new",
+    });
+    expect(vi.mocked(createPendingEntitlement).mock.calls[0]?.[0]).toMatchObject({
+      listPriceCents: 199,
+      offer: "pre",
+      plan: "initial",
+    });
+    expect(sessionsCreate.mock.calls[0]?.[0]).toMatchObject({
+      line_items: [
+        {
+          price_data: {
+            product_data: { name: "LoveIQ Survey & Initial Report" },
+            unit_amount: 199,
+          },
+        },
+      ],
+      success_url: `${ORIGIN}/sexual-archetype/checkout?session_id={CHECKOUT_SESSION_ID}&offer=pre`,
+      cancel_url: `${ORIGIN}/sexual-archetype/initial?checkout=cancelled`,
+      metadata: {
+        offer: "pre",
+        plan: "initial",
+        listPriceCents: "199",
+        landingPage: "/sexual-archetype/initial",
+      },
+    });
+  });
+
+  it("keeps its price whatever the full offer's setting says", async () => {
+    process.env[PAY_TO_START_PRICE_ENV] = "1999";
+    vi.mocked(createPendingEntitlement).mockResolvedValue(preRow());
+    await post(PRE);
+    expect(sessionsCreate.mock.calls[0]?.[0].line_items[0].price_data.unit_amount).toBe(199);
+  });
+
+  it("sends a browser that paid for the full report to its survey, not to a second payment", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ status: "succeeded" }));
+    expect(await (await post(PRE, cookie)).json()).toEqual({ state: "paid" });
+    expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("closes the full report's open session rather than hand it back, and starts its own", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ stripe_session_id: "cs_test_open" }));
+    vi.mocked(settlePayToStartSession).mockResolvedValue({
+      state: "open",
+      entitlement: row({ stripe_session_id: "cs_test_open" }),
+      session: { url: "https://checkout.stripe.com/c/open", amount_subtotal: 2999 } as never,
+      firstFlip: false,
+      paymentId: null,
+    });
+    vi.mocked(createPendingEntitlement).mockResolvedValue(preRow({ id: 8 }));
+    const response = await post(PRE, cookie);
+    expect(sessionsExpire).toHaveBeenCalledWith("cs_test_open");
+    expect(createPendingEntitlement).toHaveBeenCalledWith(
+      expect.objectContaining({ offer: "pre", plan: "initial" })
+    );
+    expect(sessionsCreate.mock.calls[0]?.[0].metadata.entitlementId).toBe("8");
+    expect(response.headers.get("set-cookie")).not.toContain(TOKEN);
+  });
+
+  it("never sells itself under the full report's expired row", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      row({ status: "expired", stripe_session_id: "cs_test_old" })
+    );
+    vi.mocked(createPendingEntitlement).mockResolvedValue(preRow({ id: 8 }));
+    await post(PRE, cookie);
+    expect(createPendingEntitlement).toHaveBeenCalledWith(
+      expect.objectContaining({ offer: "pre", plan: "initial" })
+    );
+  });
+
+  it("hands back its own open session", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      preRow({ stripe_session_id: "cs_test_open" })
+    );
+    vi.mocked(settlePayToStartSession).mockResolvedValue({
+      state: "open",
+      entitlement: preRow({ stripe_session_id: "cs_test_open" }),
+      session: { url: "https://checkout.stripe.com/c/open", amount_subtotal: 199 } as never,
+      firstFlip: false,
+      paymentId: null,
+    });
+    expect(await (await post(PRE, cookie)).json()).toEqual({
+      state: "redirect",
+      url: "https://checkout.stripe.com/c/open",
+    });
+    expect(sessionsExpire).not.toHaveBeenCalled();
+  });
+
+  it("sends its settling payment to the status page, which then sells it again", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      preRow({ stripe_session_id: "cs_test_sepa" })
+    );
+    vi.mocked(settlePayToStartSession).mockResolvedValue({
+      state: "processing",
+      entitlement: preRow(),
+      session: null,
+      firstFlip: false,
+      paymentId: null,
+    });
+    expect(await (await post(PRE, cookie)).json()).toEqual({
+      state: "redirect",
+      url: `${ORIGIN}/sexual-archetype/checkout?session_id=cs_test_sepa&offer=pre`,
+    });
   });
 });

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import SurveyPage from "@features/survey/ui/SurveyPage";
 import { readPrepaidToken, type SurveyJourney } from "@features/pay-to-start/logic/journey";
+import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
 
@@ -52,7 +53,11 @@ async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJou
     const entitlement = await findEntitlementByToken(token);
     if (!entitlement || entitlement.consumed_submission_id) return null;
     if (entitlement.status !== "succeeded" && entitlement.status !== "pending") return null;
-    return { kind: "pay_to_start", paid: entitlement.status === "succeeded" };
+    return {
+      kind: "pay_to_start",
+      paid: entitlement.status === "succeeded",
+      returnPath: offerDefinitionOf(entitlement.offer).landingPath,
+    };
   } catch {
     return null;
   }

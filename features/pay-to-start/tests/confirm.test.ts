@@ -331,6 +331,7 @@ describe("the first confirmation", () => {
       amountText: "€29.00",
       email: "buyer@example.com",
       entitlementId: 7,
+      offer: "full",
       origin: "https://www.loveiq.org",
       productName: "LoveIQ Survey & Report",
       token: TOKEN,
@@ -363,6 +364,45 @@ describe("the first confirmation", () => {
         value: 29,
         plan: "full_report",
       })
+    );
+  });
+
+  it("names the initial report in the email, #payments and both purchase events", async () => {
+    const pre = { offer: "pre" as const, plan: "initial", list_price_cents: 199 };
+    vi.mocked(findEntitlementById).mockResolvedValue(row(pre));
+    vi.mocked(markEntitlementSucceeded).mockImplementation(async (input) =>
+      row({
+        ...pre,
+        status: "succeeded",
+        amount_cents: input.amountCents,
+        customer_email: input.customerEmail,
+        paid_at: input.paidAt,
+      })
+    );
+    await confirm(
+      checkoutSession({
+        amount_total: 199,
+        metadata: { ...checkoutSession().metadata, offer: "pre" },
+      })
+    );
+    expect(sendPayToStartConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountText: "€1.99",
+        offer: "pre",
+        productName: "LoveIQ Survey & Initial Report",
+      })
+    );
+    const paid = mockNotifySlack.mock.calls.find(([input]) => input.kind === "pts_paid");
+    expect(paid?.[0].text).toContain("Pay to start (initial report): *€1.99* paid");
+    expect(sendGa4PurchaseEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: 1.99,
+        itemName: "LoveIQ Survey & Initial Report",
+        params: expect.objectContaining({ plan: "initial", offer: "pre" }),
+      })
+    );
+    expect(sendPosthogPurchaseEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ value: 1.99, plan: "initial" })
     );
   });
 
