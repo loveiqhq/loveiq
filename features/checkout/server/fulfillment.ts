@@ -25,6 +25,7 @@ import {
 import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
 import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import { INITIAL_UNLOCK_PLAN, isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import {
   confirmPayToStartSession,
@@ -108,6 +109,15 @@ import { classifyTraffic } from "@features/attribution/server/traffic";
 
 export { classifyTraffic };
 
+/**
+ * What a report checkout can sell: a report plan, or the initial unlock (EUR 1.99, the
+ * pre-unlock gate's), which is access only and holds no tier (initialUnlock.ts).
+ */
+type FulfilledPlan = ReportPurchasePlanId | typeof INITIAL_UNLOCK_PLAN;
+
+/** The initial unlock as the receipt line, #payments and the purchase events name it. */
+const INITIAL_UNLOCK_TITLE = "Your Core Archetype";
+
 async function notifySlackPurchase({
   amount,
   archetype,
@@ -137,7 +147,7 @@ async function notifySlackPurchase({
   /** `isInternalPayment` — the verdict `is_test` and the ops lines' tag carry. */
   internal: boolean;
   paymentId: number;
-  plan: ReportPurchasePlanId;
+  plan: FulfilledPlan;
   /**
    * What was bought, as the receipt reads it (`getPurchaseTitle`). The plan's own title
    * said "Only Your Highest Archetype" for a single report bought for another archetype.
@@ -230,7 +240,7 @@ async function sendPurchaseEmail({
   submissionId,
   unlockedArchetype,
 }: {
-  plan: ReportPurchasePlanId;
+  plan: FulfilledPlan;
   reportTokenOverride: string | null;
   submissionId: number;
   unlockedArchetype?: string | null;
@@ -789,6 +799,13 @@ async function fetchWebhookEventRecord(stripeEventId: string) {
   return rows[0] ?? null;
 }
 
+/** A payment row found again; `metadata.plan` tells an initial unlock's refund apart. */
+interface ExistingPaymentRow {
+  id: number;
+  personal_report_id: number | null;
+  metadata?: Record<string, unknown> | null;
+}
+
 async function fetchExistingPayment({
   checkoutSessionId,
   stripeChargeId,
@@ -805,33 +822,27 @@ async function fetchExistingPayment({
 }) {
   if (stripePaymentIntentId) {
     const response = await supabaseServiceFetch(
-      `/rest/v1/payment?stripe_payment_intent_id=eq.${encodeURIComponent(stripePaymentIntentId)}&select=id,personal_report_id&limit=1`
+      `/rest/v1/payment?stripe_payment_intent_id=eq.${encodeURIComponent(stripePaymentIntentId)}&select=id,personal_report_id,metadata&limit=1`
     );
 
     if (!response.ok) {
       throw new Error("payment_lookup_failed");
     }
 
-    const rows = (await response.json()) as Array<{
-      id: number;
-      personal_report_id: number | null;
-    }>;
+    const rows = (await response.json()) as ExistingPaymentRow[];
     if (rows[0]) return rows[0];
   }
 
   if (stripeChargeId) {
     const response = await supabaseServiceFetch(
-      `/rest/v1/payment?stripe_charge_id=eq.${encodeURIComponent(stripeChargeId)}&select=id,personal_report_id&limit=1`
+      `/rest/v1/payment?stripe_charge_id=eq.${encodeURIComponent(stripeChargeId)}&select=id,personal_report_id,metadata&limit=1`
     );
 
     if (!response.ok) {
       throw new Error("payment_lookup_failed");
     }
 
-    const rows = (await response.json()) as Array<{
-      id: number;
-      personal_report_id: number | null;
-    }>;
+    const rows = (await response.json()) as ExistingPaymentRow[];
     if (rows[0]) return rows[0];
   }
 
@@ -840,14 +851,14 @@ async function fetchExistingPayment({
   }
 
   const response = await supabaseServiceFetch(
-    `/rest/v1/payment?metadata->>checkoutSessionId=eq.${encodeURIComponent(checkoutSessionId)}&select=id,personal_report_id&limit=1`
+    `/rest/v1/payment?metadata->>checkoutSessionId=eq.${encodeURIComponent(checkoutSessionId)}&select=id,personal_report_id,metadata&limit=1`
   );
 
   if (!response.ok) {
     throw new Error("payment_lookup_failed");
   }
 
-  const rows = (await response.json()) as Array<{ id: number; personal_report_id: number | null }>;
+  const rows = (await response.json()) as ExistingPaymentRow[];
   return rows[0] ?? null;
 }
 
@@ -1137,7 +1148,9 @@ async function syncCheckoutSessionPayment({
     return;
   }
 
-  const plan = normalizePlan(session.metadata?.plan);
+  const plan: FulfilledPlan | null = isInitialUnlockPlan(session.metadata?.plan)
+    ? INITIAL_UNLOCK_PLAN
+    : normalizePlan(session.metadata?.plan);
   if (!plan) {
     // Sessions can expire (or async-fail) before any plan metadata was set —
     // e.g. user abandons checkout, or a malformed session never reached the
@@ -1295,13 +1308,15 @@ async function syncCheckoutSessionPayment({
       : null;
 
   // Names the archetype when a single report was bought for another one (getPurchaseTitle).
-  const purchaseTitle = getPurchaseTitle(
-    plan,
-    unlockedArchetype,
-    plan === "full_report" && unlockedArchetype
-      ? await lookupPrimaryArchetypeForSubmission(context.submissionId)
-      : null
-  );
+  const purchaseTitle = isInitialUnlockPlan(plan)
+    ? INITIAL_UNLOCK_TITLE
+    : getPurchaseTitle(
+        plan,
+        unlockedArchetype,
+        plan === "full_report" && unlockedArchetype
+          ? await lookupPrimaryArchetypeForSubmission(context.submissionId)
+          : null
+      );
 
   const metadata = {
     archetype: unlockedArchetype,
@@ -1355,6 +1370,8 @@ async function syncCheckoutSessionPayment({
     upgradeCredit: settledSession.metadata?.upgradeCredit || null,
     // What the full report credited for the initial unlock bought before it (EUR 10).
     initialCredit: settledSession.metadata?.initialCredit || null,
+    // Where an initial unlock was bought: "report_gate", the EUR 1.99 page before the report.
+    unlockSource: settledSession.metadata?.unlockSource || null,
     promoPercentOff:
       settledSession.metadata?.promoPercentOff &&
       Number.isFinite(Number(settledSession.metadata.promoPercentOff))
@@ -1407,12 +1424,16 @@ async function syncCheckoutSessionPayment({
     }
   }
 
-  await updatePersonalReportPayment({
-    amount,
-    paymentId,
-    personalReportId: personalReport.id,
-    status: effectiveStatus,
-  });
+  // The report's payment fields name the purchase that bought the report. The initial
+  // unlock is access only, so it leaves them, and the full report bought after it, alone.
+  if (!isInitialUnlockPlan(plan)) {
+    await updatePersonalReportPayment({
+      amount,
+      paymentId,
+      personalReportId: personalReport.id,
+      status: effectiveStatus,
+    });
+  }
 
   if (effectiveStatus === "succeeded" && (plan === "essentials" || plan === "full_report")) {
     // If the checkout session lacked a valid archetype metadata field,
@@ -1565,6 +1586,7 @@ async function syncCheckoutSessionPayment({
           device_type: metadata.deviceType ?? undefined,
           traffic_source: metadata.trafficSource ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
+          unlock_source: metadata.unlockSource ?? undefined,
           ...promoParams,
         },
       });
@@ -1592,6 +1614,7 @@ async function syncCheckoutSessionPayment({
           device_type: metadata.deviceType ?? undefined,
           traffic_source: metadata.trafficSource ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
+          unlock_source: metadata.unlockSource ?? undefined,
           submission_id: context.submissionId ?? undefined,
           ...promoParams,
         },
@@ -1891,12 +1914,15 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
   // and only some money came back; revoking access would be hostile UX and
   // the most common support-ticket source on a refund flow.
   if (!isPartialRefund && existingPayment.personal_report_id) {
-    await updatePersonalReportPayment({
-      amount: toAmount(captured),
-      paymentId: existingPayment.id,
-      personalReportId: existingPayment.personal_report_id,
-      status: "refunded",
-    });
+    // An initial unlock never wrote the report's payment fields, so its refund leaves them.
+    if (!isInitialUnlockPlan(existingPayment.metadata?.plan)) {
+      await updatePersonalReportPayment({
+        amount: toAmount(captured),
+        paymentId: existingPayment.id,
+        personalReportId: existingPayment.personal_report_id,
+        status: "refunded",
+      });
+    }
     await changeAccessOrAlert("revoke", existingPayment.id, existingPayment.personal_report_id);
   }
   // A claimed pay-to-start payment: its entitlement stops counting as paid too.
@@ -1987,12 +2013,15 @@ async function syncDisputeEvent({
   }
 
   if (existingPayment.personal_report_id) {
-    await updatePersonalReportPayment({
-      amount: toAmount(dispute.amount),
-      paymentId: existingPayment.id,
-      personalReportId: existingPayment.personal_report_id,
-      status: nextStatus,
-    });
+    // As for a refund: an initial unlock leaves the report's payment fields alone.
+    if (!isInitialUnlockPlan(existingPayment.metadata?.plan)) {
+      await updatePersonalReportPayment({
+        amount: toAmount(dispute.amount),
+        paymentId: existingPayment.id,
+        personalReportId: existingPayment.personal_report_id,
+        status: nextStatus,
+      });
+    }
     // Opened: lock what it paid for. Won: open it again. Lost: it stays locked from the open.
     if (outcome === "opened") {
       await changeAccessOrAlert("revoke", existingPayment.id, existingPayment.personal_report_id);
