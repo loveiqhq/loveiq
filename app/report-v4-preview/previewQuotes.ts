@@ -1,8 +1,10 @@
 import {
+  applyInitialCredit,
   getPricingBucketsForPlan,
   type ReportPriceQuotes,
   type ReportPriceQuoteSnapshot,
 } from "@features/pricing/logic/reportPricing";
+import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnlock";
 import { OFFERED_REPORT_PURCHASE_PLAN_IDS } from "@features/checkout/server/reportPurchase";
 
 /**
@@ -27,46 +29,55 @@ import { OFFERED_REPORT_PURCHASE_PLAN_IDS } from "@features/checkout/server/repo
  * Pricing 3.0 has two lists, so the preview shows arm A3's: the prices the paygate
  * frames are drawn with (Figma 842:584 / 963:6).
  */
-export function buildPreviewQuotes(now = new Date()): ReportPriceQuotes {
+export function buildPreviewQuotes(
+  now = new Date(),
+  {
+    initialCredit = false,
+  }: {
+    /** `?plan=initial`: the full report with the initial unlock's EUR 10 off, as checkout charges. */
+    initialCredit?: boolean;
+  } = {}
+): ReportPriceQuotes {
   const stamp = now.toISOString();
   const entries = OFFERED_REPORT_PURCHASE_PLAN_IDS.map((plan) => {
     const bucket = getPricingBucketsForPlan(plan).find((entry) => entry.code === "A3")!;
     const price = bucket.startingCents;
+    const listQuote = {
+      id: 0,
+      plan,
+      currency: "EUR",
+      experimentGroup: "A3",
+      basePriceBucket: bucket.code,
+      basePriceCents: price,
+      msrpCents: bucket.msrpCents,
+      startingPriceCents: price,
+      currentPriceCents: price,
+      initialPriceCents: price,
+      chargedPriceCents: price,
+      discountMultiplier: 1,
+      discountStep: 0,
+      pricingClusterId: "preview",
+      countryTier: "preview",
+      countryMultiplier: 1,
+      deviceType: "iOS",
+      deviceMultiplier: 1,
+      trafficSource: "direct",
+      trafficMultiplier: 1,
+      behavioralBucket: "zero",
+      behavioralMultiplier: 1,
+      engagementScore: 0,
+      engagementMultiplier: 1,
+      reportPreviewViews: 0,
+      surveyDurationMs: null,
+      initialPriceTimestamp: stamp,
+      expiresAt: stamp,
+      checkoutStartedAt: null,
+      purchasedAt: null,
+      viewCount: 0,
+    } satisfies ReportPriceQuoteSnapshot;
     return [
       plan,
-      {
-        id: 0,
-        plan,
-        currency: "EUR",
-        experimentGroup: "A3",
-        basePriceBucket: bucket.code,
-        basePriceCents: price,
-        msrpCents: bucket.msrpCents,
-        startingPriceCents: price,
-        currentPriceCents: price,
-        initialPriceCents: price,
-        chargedPriceCents: price,
-        discountMultiplier: 1,
-        discountStep: 0,
-        pricingClusterId: "preview",
-        countryTier: "preview",
-        countryMultiplier: 1,
-        deviceType: "iOS",
-        deviceMultiplier: 1,
-        trafficSource: "direct",
-        trafficMultiplier: 1,
-        behavioralBucket: "zero",
-        behavioralMultiplier: 1,
-        engagementScore: 0,
-        engagementMultiplier: 1,
-        reportPreviewViews: 0,
-        surveyDurationMs: null,
-        initialPriceTimestamp: stamp,
-        expiresAt: stamp,
-        checkoutStartedAt: null,
-        purchasedAt: null,
-        viewCount: 0,
-      } satisfies ReportPriceQuoteSnapshot,
+      initialCredit ? applyInitialCredit(listQuote, INITIAL_UNLOCK_CREDIT_CENTS) : listQuote,
     ] as const;
   });
 

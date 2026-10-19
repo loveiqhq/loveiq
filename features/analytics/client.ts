@@ -768,11 +768,14 @@ export interface PriceShownParams {
   /** Initial price before ladder discount. */
   initial_price?: number;
   /**
-   * All 14 only: what the reader already paid for single reports, taken off `price`
-   * (`applyUpgradeCredit`). Absent when nothing was credited, so per-arm price analysis
-   * can leave credited prices out.
+   * The credit taken off `price`: on All 14, what the reader already paid for single
+   * reports (`applyUpgradeCredit`); on the full report, the initial unlock's EUR 10
+   * (`applyInitialCredit`, `credit_kind: "initial"`). Absent when nothing was credited, so
+   * per-arm price analysis can leave credited prices out.
    */
   upgrade_credit?: number;
+  /** "initial" when `upgrade_credit` is the initial unlock's; absent for All 14's. */
+  credit_kind?: "initial";
 }
 
 /**

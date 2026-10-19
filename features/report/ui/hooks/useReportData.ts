@@ -38,6 +38,11 @@ export interface ReportData {
    * leaves it null; this is what "has the reader paid at all" reads.
    */
   purchasedPlan?: "essentials" | "full_report" | "core" | "all_reports" | null;
+  /**
+   * The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): the reader's own
+   * card and Summary come whole. Not a plan: `accessPlan`/`purchasedPlan` stay null for it.
+   */
+  initialUnlock?: boolean;
   /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
   userName: string | null;
   userEmail: string | null;
