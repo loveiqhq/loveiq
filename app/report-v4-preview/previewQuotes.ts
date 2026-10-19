@@ -1,11 +1,13 @@
 import {
   applyInitialCredit,
+  applyUpgradeCredit,
   getPricingBucketsForPlan,
   type ReportPriceQuotes,
   type ReportPriceQuoteSnapshot,
 } from "@features/pricing/logic/reportPricing";
 import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnlock";
 import { OFFERED_REPORT_PURCHASE_PLAN_IDS } from "@features/checkout/server/reportPurchase";
+import { getOfferDefinition } from "@features/pay-to-start/logic/offer";
 
 /**
  * Undiscounted price quotes for the staging preview, and ONLY for it.
@@ -34,7 +36,10 @@ export function buildPreviewQuotes(
   {
     initialCredit = false,
   }: {
-    /** `?plan=initial`: the full report with the initial unlock's EUR 10 off, as checkout charges. */
+    /**
+     * `?plan=initial`: as checkout charges a reader who paid the initial unlock (EUR 1.99,
+     * the `pre` offer): the full report EUR 10 less, and All 14 less the EUR 1.99 paid.
+     */
     initialCredit?: boolean;
   } = {}
 ): ReportPriceQuotes {
@@ -77,7 +82,12 @@ export function buildPreviewQuotes(
     } satisfies ReportPriceQuoteSnapshot;
     return [
       plan,
-      initialCredit ? applyInitialCredit(listQuote, INITIAL_UNLOCK_CREDIT_CENTS) : listQuote,
+      initialCredit
+        ? applyUpgradeCredit(
+            applyInitialCredit(listQuote, INITIAL_UNLOCK_CREDIT_CENTS),
+            getOfferDefinition("pre").defaultPriceCents
+          )
+        : listQuote,
     ] as const;
   });
 

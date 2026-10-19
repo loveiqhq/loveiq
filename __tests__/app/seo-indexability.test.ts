@@ -31,8 +31,9 @@ const PRIVATE_ROUTES = [
   "login",
   "admin/login",
   "admin/submissions",
-  // Pay to start: an ad's landing page, sold to, never searched for, and its checkout status.
+  // Pay to start: an ad's landing pages, sold to, never searched for, and their checkout status.
   "sexual-archetype",
+  "sexual-archetype/initial",
   "sexual-archetype/checkout",
 ];
 
@@ -65,6 +66,7 @@ describe("private pages stay out of the index", () => {
       "/login",
       "/admin",
       "/sexual-archetype",
+      "/sexual-archetype/initial",
     ]) {
       expect(urls).not.toContain(route);
     }

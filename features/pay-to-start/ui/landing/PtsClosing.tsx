@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { PTS_FAQ, PTS_FINAL_CTA, PTS_FOOTER } from "./payToStartContent";
+import { PTS_FAQ, PTS_FOOTER, type PtsOfferCopy } from "./payToStartContent";
 import { PtsCtaButton, PtsCtaStatus } from "./PtsCheckout";
 import { ShieldIcon, Stars } from "./ptsIcons";
 import { PTS_H2, PTS_REVEAL, PTS_SECTION, ptsRevealItem } from "./ptsStyles";
@@ -10,15 +10,16 @@ import { PTS_H2, PTS_REVEAL, PTS_SECTION, ptsRevealItem } from "./ptsStyles";
 
 /**
  * Six answers, all drawn open with a "−". Native <details>: each can be folded away, and
- * the answers are in the page for search engines and readers alike.
+ * the answers are in the page for search engines and readers alike. The answers are the
+ * offer's (PtsOfferCopy).
  */
-export const PtsFaq: FC = () => (
+export const PtsFaq: FC<{ items: PtsOfferCopy["faqItems"] }> = ({ items }) => (
   <section aria-labelledby="pts-faq" className={PTS_SECTION}>
     <h2 id="pts-faq" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_FAQ.title}
     </h2>
     <div className="mt-[26px] border-t border-[#e9e6ee]">
-      {PTS_FAQ.items.map((item, i) => (
+      {items.map((item, i) => (
         <details
           key={item.question}
           open
@@ -57,9 +58,13 @@ export const PtsFaq: FC = () => (
 
 /**
  * The closing band across the whole page width; the phone frame shortens its button. Its
- * words fly in; the button and its status line never wait on a reveal.
+ * words fly in; the button and its status line never wait on a reveal. The words are the
+ * offer's (PtsOfferCopy).
  */
-export const PtsFinalCta: FC<{ price: string }> = ({ price }) => (
+export const PtsFinalCta: FC<{ price: string; copy: PtsOfferCopy["finalCta"] }> = ({
+  price,
+  copy,
+}) => (
   <section
     aria-labelledby="pts-final"
     className="mt-16 rounded-[32px] border border-[#f0eef4] bg-[#faf7ff] px-5 py-10 text-center sm:px-10 sm:py-[52px]"
@@ -71,28 +76,28 @@ export const PtsFinalCta: FC<{ price: string }> = ({ price }) => (
       id="pts-final"
       className={`${PTS_REVEAL} stagger-1 mt-3 font-serif text-[30px] font-medium leading-[33.6px] tracking-[-0.4px] text-[#161021] sm:text-[42px] sm:leading-[47px] sm:tracking-[-0.6px]`}
     >
-      {PTS_FINAL_CTA.title}
+      {copy.title}
     </h2>
     <p
       className={`${PTS_REVEAL} stagger-2 mt-3 font-sans text-[16px] leading-[21.86px] text-[#6b6678]`}
     >
-      {PTS_FINAL_CTA.leadBefore}
-      <span className="whitespace-nowrap">{PTS_FINAL_CTA.leadPrice(price)}</span>
+      {copy.leadBefore}
+      {copy.leadPrice && <span className="whitespace-nowrap">{copy.leadPrice(price)}</span>}
     </p>
     <div className="mt-5 flex flex-col items-center">
       <PtsCtaButton
         location="final_cta"
         className="h-[54px] rounded-[27px] pl-7 pr-[25px] text-[17px]"
       >
-        <span className="sm:hidden">{PTS_FINAL_CTA.ctaShort(price)}</span>
-        <span className="hidden sm:inline">{PTS_FINAL_CTA.cta(price)}</span>
+        <span className="sm:hidden">{copy.ctaShort(price)}</span>
+        <span className="hidden sm:inline">{copy.cta(price)}</span>
       </PtsCtaButton>
       <PtsCtaStatus location="final_cta" className="mt-2" />
     </div>
     <ul
       className={`mt-[18px] flex flex-wrap justify-center gap-x-6 gap-y-1.5 font-sans text-[13px] leading-[17.76px] text-[#6b6678] ${PTS_REVEAL}`}
     >
-      {PTS_FINAL_CTA.badges.map((badge) => (
+      {copy.badges.map((badge) => (
         <li key={badge}>{badge}</li>
       ))}
     </ul>

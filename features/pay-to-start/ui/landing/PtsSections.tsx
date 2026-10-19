@@ -7,6 +7,7 @@ import {
   PTS_PERSONALITIES,
   PTS_RESEARCH,
   PTS_TESTIMONIALS,
+  type PtsOfferCopy,
 } from "./payToStartContent";
 import { Stars } from "./ptsIcons";
 import {
@@ -52,14 +53,15 @@ export const PtsFindOut: FC = () => (
 
 /**
  * 1706:1746: the six chapters beside a sample page. The sample shows real report copy for
- * one archetype on purpose: it is the page's marketing, not a paid page leaking.
+ * one archetype on purpose: it is the page's marketing, not a paid page leaking. The lead
+ * is the offer's (PtsOfferCopy).
  */
-export const PtsInsideReport: FC<{ price: string }> = ({ price }) => (
+export const PtsInsideReport: FC<{ lead: string }> = ({ lead }) => (
   <section id="inside-your-report" aria-labelledby="pts-inside" className={PTS_SECTION}>
     <h2 id="pts-inside" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_INSIDE.title}
     </h2>
-    <p className={`${PTS_LEAD} ${PTS_REVEAL} stagger-1`}>{PTS_INSIDE.lead(price)}</p>
+    <p className={`${PTS_LEAD} ${PTS_REVEAL} stagger-1`}>{lead}</p>
     <div className="mt-[26px] grid gap-4 md:grid-cols-[366fr_468fr]">
       <ol className="border-t border-[#e9e6ee]">
         {PTS_INSIDE.chapters.map((chapter, i) => (
@@ -144,14 +146,17 @@ export const PtsPersonalities: FC = () => (
   </section>
 );
 
-/** 1706:1850: three steps under hairlines. */
-export const PtsHowItWorks: FC<{ price: string }> = ({ price }) => (
+/** 1706:1850: three steps under hairlines, in the offer's words (PtsOfferCopy). */
+export const PtsHowItWorks: FC<{ price: string; steps: PtsOfferCopy["steps"] }> = ({
+  price,
+  steps,
+}) => (
   <section aria-labelledby="pts-how" className={PTS_SECTION}>
     <h2 id="pts-how" className={`${PTS_H2} ${PTS_REVEAL}`}>
       {PTS_HOW_IT_WORKS.title}
     </h2>
     <ol className="mt-[26px] grid gap-5 md:grid-cols-3 md:gap-8">
-      {PTS_HOW_IT_WORKS.steps.map((step, i) => (
+      {steps.map((step, i) => (
         <li key={step.number} className={`border-t border-[#e9e6ee] pt-4 ${ptsRevealItem(i, 3)}`}>
           <p aria-hidden className={PTS_NUMBER}>
             {step.number}
