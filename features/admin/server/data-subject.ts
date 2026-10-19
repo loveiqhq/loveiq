@@ -20,6 +20,7 @@
  *       - analytics_event
  *       - report_section_feedback
  *       - email_message_event (exported; erased by its ON DELETE CASCADE from survey_submission)
+ *       - unlock_feedback (the answer to "why didn't you unlock?" and the reader's own words)
  *       - personal_report
  *         - personal_report_section
  *         - report_access_token
@@ -285,6 +286,12 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
     `/rest/v1/email_message_event?survey_submission_id=${subFilter}&select=*`,
     "eme"
   );
+  // The unlock-feedback email, its answer and the reader's own words on the follow-up.
+  result.exportData!.unlock_feedback = await fetchRows(
+    // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
+    `/rest/v1/unlock_feedback?survey_submission_id=${subFilter}&select=*`,
+    "uf"
+  );
   // report_access_token is keyed by survey_submission_id (NOT personal_report_id
   // — that column does not exist on this table), so it is fetched here with the
   // submission filter, independent of whether a personal_report row exists yet.
@@ -531,6 +538,14 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
       // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
       `/rest/v1/report_section_feedback?survey_submission_id=${subFilter}`,
       "rsf",
+      result
+    );
+    // unlock_feedback holds the reader's own words. Its cascade from survey_submission would
+    // clear it too; deleted and counted here for the same reason as the feedback above.
+    result.rowsAffected.unlock_feedback = await deleteWhere(
+      // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
+      `/rest/v1/unlock_feedback?survey_submission_id=${subFilter}`,
+      "uf",
       result
     );
     // report_access_token is keyed by survey_submission_id and its FK to

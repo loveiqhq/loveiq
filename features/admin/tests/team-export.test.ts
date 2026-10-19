@@ -8,7 +8,7 @@
  * repository.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -263,6 +263,27 @@ describe("the team data export", () => {
       answer: MASKED,
     });
     expect(maskRow("booking_event", { raw: { name: "Anna" } }, m, ids).raw).toBe(MASKED);
+    // An unlock-feedback answer keeps its reason and loses the reader's words and link hash.
+    expect(
+      maskRow(
+        "unlock_feedback",
+        {
+          reason: "too_expensive",
+          note: "Anna here, half the price",
+          chips: ["A little less"],
+          link_hash: "a".repeat(64),
+          subject_arm: "D",
+        },
+        m,
+        ids
+      )
+    ).toEqual({
+      reason: "too_expensive",
+      note: MASKED,
+      chips: MASKED,
+      link_hash: MASKED,
+      subject_arm: "D",
+    });
     expect(maskRow("payment_webhook_event", { event_data: { id: "evt" } }, m, ids).event_data).toBe(
       MASKED
     );
@@ -331,6 +352,18 @@ describe("the team data export", () => {
       duration_ms: 5,
       utm: null,
     });
+  });
+
+  it("classifies every column of unlock_feedback, as its migration creates them", () => {
+    const sql = readFileSync("supabase/migrations/20261018200000_unlock_feedback.sql", "utf8");
+    const table = /CREATE TABLE IF NOT EXISTS public\.unlock_feedback \(([\s\S]*?)\n\);/.exec(sql);
+    const columns = [
+      ...table![1]!.matchAll(/^ {2}([a-z_]+)\s+(?:bigint|text|timestamptz|integer|boolean)/gm),
+    ].map((c) => c[1]!);
+    // Guards the parse: an empty list would pass the check below by itself.
+    expect(columns).toEqual(expect.arrayContaining(["link_hash", "note", "chips", "reason"]));
+    expect(columns.length).toBeGreaterThan(20);
+    expect(unclassifiedColumns([{ name: "unlock_feedback", columns, key: ["id"] }])).toEqual([]);
   });
 
   it("stops when a column that may hold personal data has not been classified", async () => {

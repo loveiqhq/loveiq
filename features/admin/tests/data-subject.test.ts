@@ -96,6 +96,12 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
     if (path.includes("/email_message_event?survey_submission_id=in.(10)")) {
       return ok([{ resend_id: "e1", event_type: "opened", survey_submission_id: 10 }]);
     }
+    if (path.includes("/unlock_feedback?survey_submission_id=in.(10)")) {
+      return ok(
+        [{ id: 3, reason: "too_expensive", note: "Half the price", survey_submission_id: 10 }],
+        1
+      );
+    }
     return ok([], 0);
   }
 
@@ -122,6 +128,24 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
     expect(result.exportData?.email_message_event).toEqual([
       { resend_id: "e1", event_type: "opened", survey_submission_id: 10 },
     ]);
+  });
+
+  it("exports the unlock-feedback answer and the reader's own words (Art. 15)", async () => {
+    const result = await exportDataSubject("a@x.com");
+    expect(result.exportData?.unlock_feedback).toEqual([
+      { id: 3, reason: "too_expensive", note: "Half the price", survey_submission_id: 10 },
+    ]);
+  });
+
+  it("deletes the unlock-feedback answer by submission and counts it (Art. 17)", async () => {
+    const result = await deleteDataSubject("a@x.com");
+    const deleted = mockSupabaseFetch.mock.calls.some(
+      ([p, init]) =>
+        p === "/rest/v1/unlock_feedback?survey_submission_id=in.(10)" &&
+        (init as { method?: string })?.method === "DELETE"
+    );
+    expect(deleted).toBe(true);
+    expect(result.rowsAffected.unlock_feedback).toBe(1);
   });
 
   it("issues an explicit DELETE for report_section_feedback and counts it", async () => {
