@@ -60,6 +60,39 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuotesForContext: vi.fn().mockResolvedValue(null),
 }));
 
+// The EUR 1.99 gate's state and switch. Every resetAllMocks unsets the switch, which then
+// reads as off: the suites above run as production does until the gate launches.
+const mockGateEnabled = vi.fn();
+const mockReadGateState = vi.fn();
+const mockStampGateSeen = vi.fn();
+vi.mock("@features/report/server/initialGateState", () => ({
+  isInitialUnlockGateEnabled: (...args: unknown[]) =>
+    mockGateEnabled(...args) ?? Promise.resolve(false),
+  readInitialGateState: (...args: unknown[]) => mockReadGateState(...args),
+  stampInitialGateSeen: (...args: unknown[]) => mockStampGateSeen(...args),
+}));
+const mockLivePayToStart = vi.fn();
+vi.mock("@features/report/server/initialUnlockGate", () => ({
+  hasLivePayToStartEntitlement: (...args: unknown[]) => mockLivePayToStart(...args),
+}));
+const mockResolveShare = vi.fn();
+vi.mock("@features/report/server/shareAccess", async () => {
+  const actual = await vi.importActual<typeof import("@features/report/server/shareAccess")>(
+    "@features/report/server/shareAccess"
+  );
+  return { ...actual, resolveShareFromToken: (...args: unknown[]) => mockResolveShare(...args) };
+});
+const mockVerifyShareCookie = vi.fn();
+vi.mock("@features/report/server/shareVerify", async () => {
+  const actual = await vi.importActual<typeof import("@features/report/server/shareVerify")>(
+    "@features/report/server/shareVerify"
+  );
+  return {
+    ...actual,
+    verifyCookieForShare: (...args: unknown[]) => mockVerifyShareCookie(...args),
+  };
+});
+
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
 
@@ -71,6 +104,7 @@ import {
 } from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { flushAfterResponse } from "@shared/http/after-response";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000", query = "") {
   return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}${query}`);
@@ -1023,5 +1057,180 @@ describe("GET /api/report — the initial unlock", () => {
     expect(json.contentArchetype).toBe("Loyal Ritualist");
     expect(json.archetypeCard.locked).toBe(true);
     expect(json.summaryChapter.locked).toBe(true);
+  });
+});
+
+/**
+ * Pre-unlock: the EUR 1.99 gate (features/report/logic/initialUnlockGate.ts). The rule has
+ * its own tests; these pin that the route feeds it what it knows and, for a gated owner,
+ * answers with the gate in place of the report. The free payload carries real copy under
+ * the blur, so the gate withholds the report rather than covering it.
+ */
+describe("GET /api/report — the EUR 1.99 gate", () => {
+  const OWNER_TOKEN = "rpt_abcdefghij0123456789";
+  const SUBMISSION = {
+    id: 55,
+    user_id: 77,
+    utm_tracker: null,
+    created_date_time: "2026-10-20T08:00:00.000Z",
+    app_user: { first_name: "Alice", email: "alice@example.com" },
+  };
+  const SCORING = {
+    primary_archetype: "Spark Seeker",
+    v5_primary_archetype: "Emotional Voyeur",
+    percentages: { "Spark Seeker": 41 },
+    v5_percentages: { "Emotional Voyeur": 63 },
+    diagnostics: null,
+  };
+  const NOTHING_BOUGHT = {
+    accessPlan: null,
+    anyPlan: null,
+    initialUnlock: false,
+    archetypeTiers: {},
+    personalReportId: 99,
+    unlockedArchetypeColumn: [],
+  };
+  const IN_COHORT = { cohortAt: "2026-10-20T08:00:00.000Z", seenAt: null };
+  const rows = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+  const ownerGet = () =>
+    GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1`));
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    allowCsrf();
+    allowRateLimit();
+    mockIsFeatureEnabled.mockResolvedValue(true); // the paywall is enforced
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({ ...NOTHING_BOUGHT });
+    vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
+    vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
+    mockGateEnabled.mockResolvedValue(true);
+    // Keyed to this reader's own report and survey: anyone else's reads as "not gated".
+    mockReadGateState.mockImplementation(async (personalReportId: number) =>
+      personalReportId === 99 ? { ...IN_COHORT } : null
+    );
+    mockLivePayToStart.mockImplementation(async (submissionId: number) => submissionId !== 55);
+    mockStampGateSeen.mockResolvedValue(undefined);
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/report_access_token?token=eq.")) {
+        return rows([{ survey_submission_id: 55 }]);
+      }
+      if (url.includes("/rest/v1/survey_submission?")) return rows([SUBMISSION]);
+      if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
+      return rows([]);
+    });
+  });
+
+  it("answers a gated owner with the gate alone: price, credit, guarantee, ids", async () => {
+    const res = await ownerGet();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      gate: "initial_unlock",
+      priceCents: 199,
+      currency: "EUR",
+      creditCents: 1000,
+      guaranteeDays: 14,
+      reportToken: OWNER_TOKEN,
+      submissionId: 55,
+      viewMode: "owner",
+    });
+  });
+
+  it("never lets the gate be cached", async () => {
+    const res = await ownerGet();
+    expect(res.headers.get("Cache-Control")).toBe("no-store, no-cache, must-revalidate");
+    expect(res.headers.get("Pragma")).toBe("no-cache");
+  });
+
+  it("creates no price quote for a gated owner", async () => {
+    await ownerGet();
+    expect(getReportPriceQuotesForContext).not.toHaveBeenCalled();
+  });
+
+  it("stamps the gate's first view once, after the reply", async () => {
+    await ownerGet();
+    await flushAfterResponse();
+    expect(mockStampGateSeen.mock.calls).toEqual([[99]]);
+  });
+
+  it("leaves the first view's stamp alone when the reader comes back", async () => {
+    mockReadGateState.mockResolvedValue({ ...IN_COHORT, seenAt: "2026-10-20T08:05:00.000Z" });
+    const res = await ownerGet();
+    expect((await res.json()).gate).toBe("initial_unlock");
+    await flushAfterResponse();
+    expect(mockStampGateSeen).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["while the gate is switched off", () => mockGateEnabled.mockResolvedValue(false)],
+    [
+      "for a report from before the launch",
+      () => mockReadGateState.mockResolvedValue({ cohortAt: null, seenAt: null }),
+    ],
+    ["when the gate state can't be read", () => mockReadGateState.mockResolvedValue(null)],
+    [
+      "to a reader with the full report",
+      () =>
+        vi
+          .mocked(getReportAccessPlanForSubmission)
+          .mockResolvedValue({ ...NOTHING_BOUGHT, accessPlan: "full_report" }),
+    ],
+    [
+      "to a reader who bought another archetype's report",
+      () =>
+        vi
+          .mocked(getReportAccessPlanForSubmission)
+          .mockResolvedValue({ ...NOTHING_BOUGHT, anyPlan: "full_report" }),
+    ],
+    [
+      "to a reader whose Core Archetype is paid or gifted",
+      () =>
+        vi
+          .mocked(getReportAccessPlanForSubmission)
+          .mockResolvedValue({ ...NOTHING_BOUGHT, initialUnlock: true }),
+    ],
+    ["to a pay-to-start buyer, paid or settling", () => mockLivePayToStart.mockResolvedValue(true)],
+    ["when the pay-to-start lookup failed", () => mockLivePayToStart.mockResolvedValue(null)],
+    [
+      "when the reader's purchases can't be read",
+      () =>
+        vi
+          .mocked(getReportAccessPlanForSubmission)
+          .mockRejectedValue(new Error("payment_lookup_failed")),
+    ],
+    [
+      "while the paywall kill switch opens every report",
+      () => mockIsFeatureEnabled.mockResolvedValue(false),
+    ],
+  ])("sends the report itself %s", async (_when, arrange) => {
+    arrange();
+    const res = await ownerGet();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).not.toHaveProperty("gate");
+    expect(json.primaryArchetype).toBe("Emotional Voyeur");
+  });
+
+  it("never gates a shared view of a gated owner's report", async () => {
+    mockResolveShare.mockResolvedValue({
+      share: {
+        id: 12,
+        recipient_email: "friend@example.com",
+        last_viewed_at: "2026-10-20T09:00:00.000Z",
+      },
+      submissionId: 55,
+      ownerFirstName: "Alice",
+      ownerEmail: "alice@example.com",
+    });
+    mockVerifyShareCookie.mockReturnValue(true);
+    const res = await GET(
+      new Request("http://localhost:3000/api/report?token=rpts_abcdefghijklmnopqrst&v4=1")
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).not.toHaveProperty("gate");
+    expect(json.viewMode).toBe("shared");
   });
 });

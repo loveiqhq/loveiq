@@ -875,20 +875,14 @@ export async function POST(request: Request) {
         // gated by report_token, so exposing this int is not a security risk.
         submissionId,
         ...(reportToken ? { reportToken } : {}),
-        ...(scoringSummary
-          ? {
-              primaryArchetype: scoringSummary.primaryArchetype,
-              ...(scoringSummary.v5PrimaryArchetype
-                ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
-                : {}),
-            }
-          : {}),
+        // No archetype: nothing reads it here, and the EUR 1.99 gate sells it. The report
+        // route tells it, to a reader allowed to see it.
         // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
       },
       {
-        // The response carries a fresh report access token + the user's
-        // primary archetype — never let intermediaries cache it.
+        // The response carries a fresh report access token — never let
+        // intermediaries cache it.
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
           "X-Server-Timing": serverTiming,
