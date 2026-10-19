@@ -159,6 +159,8 @@ beforeEach(() => {
   process.env.SUPABASE_URL = "https://test.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
   process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.UNSUBSCRIBE_SECRET = "test-unsubscribe-secret";
   vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
     submissionId: 70,
     userEmail: "alice@example.com",
@@ -235,6 +237,24 @@ describe("a paid EUR 1.99 Core Archetype", () => {
       itemName: "Your Core Archetype",
       params: { unlock_source: "report_gate" },
     });
+  });
+
+  it("emails E06 once: its own copy, under no A/B test, unsubscribable as its own campaign", async () => {
+    backend();
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+    const sent = mockResendSend.mock.calls[0]?.[0] as {
+      to: string;
+      subject: string;
+      html: string;
+      tags?: unknown;
+      headers: Record<string, string>;
+    };
+    expect(sent.to).toBe("alice@example.com");
+    expect(sent.subject).toBe("Your Core Archetype is unlocked");
+    expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
+    expect(sent).not.toHaveProperty("tags");
+    expect(sent.headers["List-Unsubscribe"]).toContain("src=initial_unlocked");
   });
 
   it("sends nothing a second time when the same purchase arrives again", async () => {

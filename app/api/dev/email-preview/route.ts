@@ -25,7 +25,7 @@ const SITE = "http://localhost:3001";
 const REPORT_URL = `${SITE}/report/preview?from=email`;
 
 const TEMPLATES: Record<string, () => { subject: string; html: string }> = {
-  // E06 — the EUR 1.99 Core Archetype, pay to start's initial report (Figma 1669:2703)
+  // E06 — the EUR 1.99 Core Archetype: pay to start's initial report, or the pre-unlock gate (Figma 1669:2703)
   "initial-unlock": () =>
     initialUnlockEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
   // Tier 1 — "Just a snapshot" (reuses the full-report confirmation)
