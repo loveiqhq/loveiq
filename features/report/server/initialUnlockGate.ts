@@ -1,4 +1,11 @@
 import { findEntitlementByConsumedSubmission } from "@features/pay-to-start/server/entitlement";
+import { needsInitialUnlockGate } from "@features/report/logic/initialUnlockGate";
+import {
+  isInitialUnlockGateEnabled,
+  readInitialGateState,
+} from "@features/report/server/initialGateState";
+import { getReportAccessPlanForSubmission } from "@features/report/server/personalReport";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 import logger from "@shared/observability/logger";
 
 /**
@@ -25,4 +32,44 @@ export async function hasLivePayToStartEntitlement(submissionId: number): Promis
     logger.warn({ err, submissionId }, "pre-unlock: pay-to-start lookup failed, gate stands aside");
     return null;
   }
+}
+
+/**
+ * The gate's answer for an owner, for a route that acts for them without building the
+ * report (the report route has every input at hand and feeds the rule itself). Each input
+ * is read only once the earlier ones say the gate could still apply.
+ */
+export async function ownerMeetsInitialGate({
+  personalReportId,
+  submissionId,
+}: {
+  personalReportId: number;
+  submissionId: number;
+}): Promise<boolean> {
+  if (!(await isInitialUnlockGateEnabled())) return false;
+  const state = await readInitialGateState(personalReportId);
+  if (!state?.cohortAt) return false;
+
+  let access: Awaited<ReturnType<typeof getReportAccessPlanForSubmission>> | null = null;
+  try {
+    access = await getReportAccessPlanForSubmission(submissionId);
+  } catch (err) {
+    logger.warn({ err, submissionId }, "pre-unlock: purchases unread, gate stands aside");
+  }
+  const [paywallEnforced, livePayToStart] = await Promise.all([
+    isFeatureEnabled("report_paywall_enforced", true).catch(() => true),
+    hasLivePayToStartEntitlement(submissionId),
+  ]);
+
+  return needsInitialUnlockGate({
+    gateEnabled: true,
+    paywallEnforced,
+    viewMode: "owner",
+    inCohort: true,
+    accessPlan: access?.accessPlan ?? null,
+    purchasedPlan: access?.anyPlan ?? null,
+    initialUnlock: access?.initialUnlock === true,
+    livePayToStart,
+    accessLookupFailed: access === null,
+  });
 }

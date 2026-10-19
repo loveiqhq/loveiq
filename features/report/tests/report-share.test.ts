@@ -67,6 +67,13 @@ vi.mock("@features/report/server/planAccess", async () => {
   };
 });
 
+// The EUR 1.99 gate. Unset (every resetAllMocks) reads as "not gated", as production is
+// until the gate launches.
+const mockOwnerGated = vi.fn();
+vi.mock("@features/report/server/initialUnlockGate", () => ({
+  ownerMeetsInitialGate: (...args: unknown[]) => mockOwnerGated(...args) ?? Promise.resolve(false),
+}));
+
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
 process.env.RESEND_API_KEY = "re_test_key";
@@ -487,6 +494,62 @@ describe("POST /api/report/share", () => {
     expect(sent.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
     // The footer link is inlined by wrapEmailShell → renderBrandFooter.
     expect(sent.html).toContain("Unsubscribe from these emails");
+  });
+});
+
+describe("POST /api/report/share — behind the EUR 1.99 gate", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    mockGenerateToken.mockReturnValue(VALID_SHARE_TOKEN);
+    mockScheduleAfterResponse.mockImplementation(() => undefined);
+    allowCsrf();
+    allowRateLimit();
+    defaultOwner();
+    mockGetPlan.mockResolvedValue(null);
+    mockCreateShare.mockResolvedValue({
+      ok: true,
+      row: {
+        id: 123,
+        personal_report_id: 99,
+        recipient_email: "r@x.io",
+        share_token: VALID_SHARE_TOKEN,
+        shared_by_user_id: 7,
+        plan_at_share: "free",
+        last_viewed_at: null,
+        view_count: 0,
+        revoked_at: null,
+        created_at: "2026-10-20T00:00:00Z",
+      },
+    });
+    // Gated is this owner's report alone: a check made with other ids reads as ungated.
+    mockOwnerGated.mockImplementation(
+      async ({
+        submissionId,
+        personalReportId,
+      }: {
+        submissionId: number;
+        personalReportId: number;
+      }) => submissionId === 42 && personalReportId === 99
+    );
+  });
+
+  it("refuses a gated owner a share link, so a second address can't open the report free", async () => {
+    const res = await POST(
+      postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "r@x.io" })
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "initial_unlock_required" });
+    expect(mockCreateShare).not.toHaveBeenCalled();
+  });
+
+  it("shares as before once the owner is past the gate", async () => {
+    mockOwnerGated.mockResolvedValue(false);
+    const res = await POST(
+      postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "r@x.io" })
+    );
+    expect(res.status).toBe(200);
+    expect(mockCreateShare).toHaveBeenCalledTimes(1);
   });
 });
 
