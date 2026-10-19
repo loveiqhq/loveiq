@@ -126,6 +126,32 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
     }
   );
 
+  // The full report after the initial unlock (EUR 1.99): its EUR 10 off, as checkout charges it.
+  it("credits the initial unlock on the full report", () => {
+    const withCredit = quotes("A3");
+    withCredit.full_report = {
+      ...withCredit.full_report!,
+      chargedPriceCents: 1999,
+      upgradeCreditCents: 1000,
+      creditKind: "initial",
+    };
+    render(<ReportPricingModal {...base} quotes={withCredit} />);
+    expect(within(card("full_report")).getByText("€19.99")).toHaveClass("rpg-card__amount");
+    expect(card("full_report").querySelector(".rpg-card__was")?.textContent).toBe(
+      "€29.99 - €10.00 credit applied"
+    );
+    // All 14 keeps its own price and strike.
+    expect(within(card("all_reports")).getByText("€39.99")).toHaveClass("rpg-card__amount");
+    expect(trackPriceShown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plan: "full_report",
+        price: 19.99,
+        upgrade_credit: 10,
+        credit_kind: "initial",
+      })
+    );
+  });
+
   it("hands checkout the plan and, for the single report, the reader's own archetype", async () => {
     const user = userEvent.setup();
     render(<ReportPricingModal {...base} quotes={quotes("A3")} />);

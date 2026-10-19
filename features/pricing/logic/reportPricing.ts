@@ -10,6 +10,11 @@ import {
   ensurePersonalReportForSubmission,
 } from "@features/report/server/personalReport";
 import { parseUtmSource } from "@features/survey/server/utils";
+import { hasBoundEntitlement } from "@features/pay-to-start/server/entitlement";
+import {
+  INITIAL_UNLOCK_CREDIT_CENTS,
+  isInitialUnlockPlan,
+} from "@features/report/logic/initialUnlock";
 import logger from "@shared/observability/logger";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
@@ -238,12 +243,19 @@ export interface ReportPriceQuoteSnapshot {
    */
   chargedPriceCents: number;
   /**
-   * All 14 only: the credit taken off `chargedPriceCents` (`applyUpgradeCredit`), never
-   * more than the price. Absent or 0 when nothing is credited.
+   * The credit taken off `chargedPriceCents`, never more than the price. Absent or 0 when
+   * nothing is credited. All 14: what was already paid on the report (`applyUpgradeCredit`).
+   * The full report: the initial unlock's EUR 10 (`applyInitialCredit`), see `creditKind`.
    */
   upgradeCreditCents?: number;
   /** All 14 only: everything already paid on the report, which the pay screen names. */
   upgradePaidCents?: number;
+  /**
+   * Which credit `upgradeCreditCents` is: "initial" for the initial unlock's EUR 10 off the
+   * full report; absent for All 14's upgrade credit. The pay screen's line and Stripe's
+   * coupon name follow it.
+   */
+  creditKind?: "initial";
   discountMultiplier: number;
   discountStep: number;
   pricingClusterId: string;
@@ -1130,6 +1142,7 @@ async function fetchStoredQuoteById(quoteId: number) {
 function buildQuotePayload({
   context,
   existingQuote,
+  pinnedArm = null,
   regenerateInitialPrice,
   now,
   plan,
@@ -1138,6 +1151,7 @@ function buildQuotePayload({
 }: {
   context: PricingContext;
   existingQuote?: ReportPriceQuoteRow | null;
+  pinnedArm?: "A3" | null;
   regenerateInitialPrice: boolean;
   now: Date;
   plan: ReportPurchasePlanId;
@@ -1148,7 +1162,7 @@ function buildQuotePayload({
   upliftEnabled: boolean;
 }): BuiltQuotePayload {
   const experimentGroup =
-    existingQuote?.experiment_group ?? pricingArmForReport(context.personalReportId);
+    existingQuote?.experiment_group ?? pinnedArm ?? pricingArmForReport(context.personalReportId);
 
   // Resolve the bucket — either read the stored code (with MSRP/starting
   // sourced from the row when present) or pick fresh for a brand-new quote.
@@ -1339,6 +1353,7 @@ function buildQuotePayload({
 async function persistQuote({
   context,
   existingQuote,
+  pinnedArm = null,
   regenerateInitialPrice,
   now,
   plan,
@@ -1346,6 +1361,8 @@ async function persistQuote({
 }: {
   context: PricingContext;
   existingQuote?: ReportPriceQuoteRow | null;
+  /** The arm a first quote must take instead of the report's hash arm (`resolveQuote`). */
+  pinnedArm?: "A3" | null;
   regenerateInitialPrice: boolean;
   now: Date;
   plan: ReportPurchasePlanId;
@@ -1366,6 +1383,7 @@ async function persistQuote({
   const builtQuote = buildQuotePayload({
     context,
     existingQuote,
+    pinnedArm,
     regenerateInitialPrice,
     now,
     plan,
@@ -1441,6 +1459,16 @@ async function resolveQuote({
     personalReportId: context.personalReportId,
     plan,
   });
+  /**
+   * Pay to start's readers (either offer) are quoted on arm A3, the list price, instead of
+   * their report's hash arm: they are out of the price test's readouts already, the EUR 10
+   * initial credit must leave EUR 19.99 rather than make the EUR 4.99 arm free, and a
+   * full-journey buyer on B3 got All 14 (EUR 6.99 less what they paid) for nothing. Asked
+   * only for a first quote: a stored one keeps its arm, and the survey's claim binds the
+   * purchase before the report is first opened. A failed lookup falls back to the hash.
+   */
+  const pinnedArm =
+    !existingQuote && (await hasBoundEntitlement(context.submissionId)) ? ("A3" as const) : null;
 
   const isExpired =
     existingQuote?.expires_at != null &&
@@ -1449,6 +1477,7 @@ async function resolveQuote({
   const persisted = await persistQuote({
     context,
     existingQuote,
+    pinnedArm,
     regenerateInitialPrice: Boolean(isExpired),
     now,
     plan,
@@ -1590,6 +1619,9 @@ export async function getReportPriceQuotesForContext({
   // Only the plans the paygate sells. Quoting the retired ones as well would write
   // a row per reader that nothing can show or buy — and throw, since no 3.0 arm
   // prices them (`mustGetBucket`).
+  // Both credited plans read the same payments: once for the whole pay screen.
+  let credits: ReturnType<typeof getReportCredits> | null = null;
+  const loadCredits = () => (credits ??= getReportCredits(context.personalReportId));
   const results = await Promise.all(
     OFFERED_REPORT_PURCHASE_PLAN_IDS.map(async (plan) => {
       const quote = await resolveQuote({
@@ -1598,7 +1630,10 @@ export async function getReportPriceQuotesForContext({
         plan,
         pricingSessionId,
       });
-      return [plan, await withUpgradeCredit(quote, context.personalReportId)] as const;
+      return [
+        plan,
+        await withUpgradeCredit(quote, context.personalReportId, false, loadCredits),
+      ] as const;
     })
   );
 
@@ -1616,6 +1651,20 @@ const STRIPE_MIN_CHARGE_CENTS = 50;
  * staff test purchases are left out like everywhere money is counted.
  */
 export async function getUpgradeCreditCents(personalReportId: number): Promise<number> {
+  return (await getReportCredits(personalReportId)).upgradeCents;
+}
+
+/**
+ * Both credits a report can carry, from one read of its payments:
+ * - `upgradeCents`, All 14's (`getUpgradeCreditCents` above);
+ * - `initialCents`, the initial unlock's EUR 10 off the full report
+ *   (`features/report/logic/initialUnlock.ts`): granted by a succeeded, non-test EUR 1.99
+ *   payment that was not refunded in full. Its money counts towards All 14 like any
+ *   single's, so the two never stack on one plan.
+ */
+export async function getReportCredits(
+  personalReportId: number
+): Promise<{ upgradeCents: number; initialCents: number }> {
   const response = await supabaseServiceFetch(
     `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&is_test=is.false&select=amount,refund_amount,currency,metadata&limit=100`
   );
@@ -1628,13 +1677,19 @@ export async function getUpgradeCreditCents(personalReportId: number): Promise<n
     currency: string | null;
     metadata: Record<string, unknown> | null;
   }>;
-  return rows.reduce((total, row) => {
-    if (row.metadata?.plan === "all_reports") return total;
-    if ((row.currency ?? "EUR").toUpperCase() !== "EUR") return total;
+  let upgradeCents = 0;
+  let initialCents = 0;
+  for (const row of rows) {
+    if (row.metadata?.plan === "all_reports") continue;
+    if ((row.currency ?? "EUR").toUpperCase() !== "EUR") continue;
     const paid =
       fromEuroAmount(Number(row.amount)) - fromEuroAmount(Number(row.refund_amount ?? 0));
-    return total + Math.max(0, paid);
-  }, 0);
+    upgradeCents += Math.max(0, paid);
+    if (isInitialUnlockPlan(row.metadata?.plan) && paid > 0) {
+      initialCents = INITIAL_UNLOCK_CREDIT_CENTS;
+    }
+  }
+  return { upgradeCents, initialCents };
 }
 
 /** Take the credit off an All 14 quote; every other plan comes back as it is. */
@@ -1654,6 +1709,26 @@ export function applyUpgradeCredit(
 }
 
 /**
+ * Take the initial unlock's EUR 10 off a full-report quote; every other plan comes back as
+ * it is. A remainder under Stripe's minimum is credited too, as for All 14. Pay to start's
+ * readers are quoted on arm A3 (`resolveQuote`), so theirs is EUR 29.99 - 10 = EUR 19.99.
+ */
+export function applyInitialCredit(
+  quote: ReportPriceQuoteSnapshot,
+  creditCents: number
+): ReportPriceQuoteSnapshot {
+  if (quote.plan !== "full_report" || creditCents <= 0) return quote;
+  let charged = Math.max(0, quote.chargedPriceCents - creditCents);
+  if (charged < STRIPE_MIN_CHARGE_CENTS) charged = 0;
+  return {
+    ...quote,
+    chargedPriceCents: charged,
+    upgradeCreditCents: quote.chargedPriceCents - charged,
+    creditKind: "initial",
+  };
+}
+
+/**
  * A failed lookup shows the full price, as before the credit existed: never a broken pay
  * screen. Checkout passes `strict`: charging the full price after the screen showed the
  * credited one is worse than an error the reader can retry.
@@ -1661,11 +1736,15 @@ export function applyUpgradeCredit(
 async function withUpgradeCredit(
   quote: ReportPriceQuoteSnapshot | null,
   personalReportId: number,
-  strict = false
+  strict = false,
+  loadCredits: () => ReturnType<typeof getReportCredits> = () => getReportCredits(personalReportId)
 ): Promise<ReportPriceQuoteSnapshot | null> {
-  if (!quote || quote.plan !== "all_reports") return quote;
+  if (!quote || (quote.plan !== "all_reports" && quote.plan !== "full_report")) return quote;
   try {
-    return applyUpgradeCredit(quote, await getUpgradeCreditCents(personalReportId));
+    const credits = await loadCredits();
+    return quote.plan === "all_reports"
+      ? applyUpgradeCredit(quote, credits.upgradeCents)
+      : applyInitialCredit(quote, credits.initialCents);
   } catch (err) {
     if (strict) throw err;
     logger.warn({ err, personalReportId }, "pricing: upgrade credit lookup failed");

@@ -185,6 +185,7 @@ import { recordPaywallClick, useChapterStats } from "@features/analytics/chapter
 import { REPORT_LAYOUT_V4_SLIM } from "@features/analytics/reportLayout";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { FIRST_PAYWALL_SELECTOR } from "../logic/paywallSelector";
+import { INITIAL_UNLOCK_SECTION_ID } from "../logic/initialUnlock";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import { useGuidedTour } from "./hooks/useGuidedTour";
 import V4GuidedTour from "./v3/V4GuidedTour";
@@ -446,6 +447,11 @@ interface ReportExperienceProps {
   /** `?v4=1` — V2's report with the Report 3.0 components swapped in. */
   isV4: boolean;
   accessPlan: ReportAccessPlan;
+  /**
+   * The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): the server sends
+   * the reader's own card and Summary whole; this keeps the nav badges and links in step.
+   */
+  initialUnlock: boolean;
   archetypeTiers: Record<string, "essentials" | "full_report">;
   /** Archetypes a tap in the "Other Archetypes" list opens directly. */
   unlockedArchetypes: ReadonlySet<string>;
@@ -595,6 +601,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   isV3,
   isV4,
   accessPlan,
+  initialUnlock,
   archetypeTiers,
   unlockedArchetypes,
   devParam,
@@ -864,6 +871,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     onOpenPricingModal(viewArchetype || null);
   };
 
+  /** The initial unlock opens its gate on the reader's own archetype only (as on the server). */
+  const initialGateOpen = initialUnlock && viewArchetype === primaryArchetype;
   /**
    * An Insight Map CTA points at a real pattern section. If the reader already
    * owns that section, take them to it; only open the paywall when they do not.
@@ -876,12 +885,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // Unknown id would otherwise read as "open" and link to nothing.
     if (!section) return false;
     if (!section.isPremium) return true;
-    return isSectionUnlockedForPlan({
-      accessPlan,
-      archetypeTier: viewArchetypeTier,
-      isPremium: section.isPremium,
-      sectionId: section.id,
-    });
+    return (
+      (initialGateOpen && section.id === INITIAL_UNLOCK_SECTION_ID) ||
+      isSectionUnlockedForPlan({
+        accessPlan,
+        archetypeTier: viewArchetypeTier,
+        isPremium: section.isPremium,
+        sectionId: section.id,
+      })
+    );
   };
 
   const openMapTarget = (sectionId: string) => {
@@ -996,6 +1008,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         }
         const unlocked =
           (isV4 && REPORT_V4_DESIGNED_CHAPTER_IDS.has(item.id)) ||
+          (initialGateOpen && section.id === INITIAL_UNLOCK_SECTION_ID) ||
           isSectionUnlockedForPlan({
             accessPlan,
             archetypeTier: viewArchetypeTier,
@@ -1006,7 +1019,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       }
     }
     return access;
-  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3, isV4]);
+  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3, isV4, initialGateOpen]);
 
   /**
    * Build-time, deliberately not a runtime flag or a query parameter. A reader on
@@ -1210,12 +1223,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     const summaryHtml = normalizeReportHtml(
                       archetypeContent?.[SUMMARY_BLOCK_ID]?.[viewArchetype] ?? null
                     );
-                    const isSummaryUnlocked = isSectionUnlockedForPlan({
-                      accessPlan,
-                      archetypeTier: viewArchetypeTier,
-                      isPremium: section.isPremium,
-                      sectionId: section.id,
-                    });
+                    const isSummaryUnlocked =
+                      (initialGateOpen && section.id === INITIAL_UNLOCK_SECTION_ID) ||
+                      isSectionUnlockedForPlan({
+                        accessPlan,
+                        archetypeTier: viewArchetypeTier,
+                        isPremium: section.isPremium,
+                        sectionId: section.id,
+                      });
                     return (
                       <ReportSection
                         key={section.id}
@@ -3640,6 +3655,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               submissionId={data.submissionId ?? null}
               devParam={devParam}
               accessPlan={data.accessPlan}
+              initialUnlock={data.initialUnlock ?? false}
               archetypeTiers={data.archetypeTiers ?? {}}
               unlockedArchetypes={unlockedArchetypes}
               feedbacks={feedbacks}

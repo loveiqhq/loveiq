@@ -339,6 +339,8 @@ The paywall on `/report` is always enforced — clicking a locked premium sectio
 
 All 14 credits what the reader already paid on that report (single reports, legacy plans; less refunds): the pay screen shows the reduced price, and Stripe keeps the regular line price with the credit as a discount (`getUpgradeCreditCents`, `ensureUpgradeCreditCoupon`). A credit covering the whole price makes a €0 checkout.
 
+The initial unlock (€1.99, a payment whose plan is `initial`) is access only, not a plan: it opens the reader's own Core Archetype card and Summary (`initialUnlock` on `/api/report`), and takes €10 off the full report the same way, on a coupon of its own (`applyInitialCredit`, `ensureInitialCreditCoupon`). A refund of it takes both back. Pay-to-start reports are quoted on arm A3.
+
 Sandbox and live mode both run the real fulfillment path. To test in sandbox use Stripe test card `4242 4242 4242 4242` (any future date, any CVC). After a successful test purchase, the webhook fulfills the access plan onto the report.
 
 Required Vercel env vars (test or production):

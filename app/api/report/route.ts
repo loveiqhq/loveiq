@@ -374,6 +374,9 @@ export async function GET(request: Request) {
     // The strongest plan across EVERY payment, whichever archetype it was for: "has bought
     // anything". Gates the Findings and, on the client, every pay-screen auto-open.
     let purchasedPlan: "essentials" | "full_report" | "core" | "all_reports" | null = null;
+    // The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): opens the
+    // reader's own archetype card and Summary below; not a plan, so pay screens keep selling.
+    let initialUnlock = false;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -406,6 +409,7 @@ export async function GET(request: Request) {
       );
       accessPlan = access.accessPlan;
       purchasedPlan = access.anyPlan;
+      initialUnlock = access.initialUnlock;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
 
@@ -771,12 +775,16 @@ export async function GET(request: Request) {
      * decides; and nothing of the Summary past it. Built for the V4 page only
      * (isV4Request), from the copy of the archetype on screen.
      */
-    const summaryUnlocked = isSectionUnlockedForPlan({
-      accessPlan,
-      archetypeTier: contentArchetypeTier,
-      isPremium: true,
-      sectionId: "summary",
-    });
+    // The initial unlock opens the same gate in full, for the reader's own archetype only;
+    // a shared view shows it too, as it shows whatever the owner's plan opens.
+    const summaryUnlocked =
+      isSectionUnlockedForPlan({
+        accessPlan,
+        archetypeTier: contentArchetypeTier,
+        isPremium: true,
+        sectionId: "summary",
+      }) ||
+      (initialUnlock && contentArchetype === primaryArchetype);
     const archetypeCard = isV4Request
       ? buildArchetypeCard(contentArchetype, { locked: !summaryUnlocked })
       : null;
@@ -1068,6 +1076,7 @@ export async function GET(request: Request) {
         accessPlan,
         // A recipient never pays, so they get null and every auto-open stays off for them.
         purchasedPlan: isShareAccess ? null : purchasedPlan,
+        initialUnlock,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

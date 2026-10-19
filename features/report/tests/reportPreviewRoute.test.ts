@@ -52,6 +52,38 @@ describe("GET /api/report/preview — no reader behind it", () => {
   });
 });
 
+/** `?plan=initial`: the report the EUR 1.99 journey lands in (features/report/logic/initialUnlock.ts). */
+describe("GET /api/report/preview — the initial unlock", () => {
+  it("opens the Core Archetype card and the Summary in full, and nothing else", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=initial&v4=1");
+    expect(json.initialUnlock).toBe(true);
+    expect(json.accessPlan).toBeNull();
+    expect(json.archetypeCard.locked).toBe(false);
+    expect(json.summaryChapter.locked).toBe(false);
+    expect(json.accelerators.lockedFrom).toBe(2);
+    expect(json.fantasy.locked).toBe(true);
+  });
+
+  it("prices the full report with its EUR 10 credit, as checkout charges it", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=initial&v4=1");
+    expect(json.pricingQuotes.full_report).toMatchObject({
+      chargedPriceCents: 1999,
+      upgradeCreditCents: 1000,
+      creditKind: "initial",
+    });
+    expect(json.pricingQuotes.all_reports.chargedPriceCents).toBe(3999);
+  });
+
+  it("leaves the card and the Summary locked, at list price, without it", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=&v4=1");
+    expect(json.initialUnlock).toBe(false);
+    expect(json.archetypeCard.locked).toBe(true);
+    expect(json.summaryChapter.locked).toBe(true);
+    expect(json.pricingQuotes.full_report.chargedPriceCents).toBe(2999);
+    expect(json.pricingQuotes.full_report.creditKind).toBeUndefined();
+  });
+});
+
 describe("GET /api/report/preview — Accelerator & Brakes", () => {
   // Review 26.09 (lockedBlurCopy.ts): a locked reader's page carries the copy it
   // draws blurred — "the unlocked content but blurred" — still marked locked.

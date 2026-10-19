@@ -39,6 +39,11 @@ countdown).
 - `server/personalReport.ts` — personalization composer.
 - `server/access.ts`, `server/planAccess.ts`, `server/shareAccess.ts`, `server/shareVerify.ts` — paywall + share access gates.
 - `server/archetypeSlug.ts` — URL slug ↔ archetype name (includes legacy alias map for V8 renames).
+- `logic/initialUnlock.ts` — the initial unlock (€1.99, Marcus 19.10): a succeeded payment with
+  the plan key `initial`. It is no plan and no tier. `getReportAccessPlanForSubmission` reports
+  it as `initialUnlock`, and `/api/report` then opens the `summary` gate for the reader's own
+  archetype: the Core Archetype card and the Summary in full, nothing else. The pay screens keep
+  selling, with €10 off the full report. Preview it with `&plan=initial`.
 - `server/contentGating.ts` — essentials/full/all gating logic.
 - `server/emails/` — report-related email templates (essentials/full/all, share, discount + A/B variants).
 - API routes inline: `app/api/report/route.ts`, `app/api/report/share/*`, `app/api/report-feedback/route.ts`.
