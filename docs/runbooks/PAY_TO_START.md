@@ -16,8 +16,8 @@ The page also refuses to sell while the survey is closed or `survey_submissions`
 
 ## Change the price
 
-1. Set `PAY_TO_START_PRICE_CENTS` on the Vercel project (cents, 500 to 9900; 2900 is EUR 29).
-   A value outside the range is ignored (EUR 29 is charged) and alerts #ops
+1. Set `PAY_TO_START_PRICE_CENTS` on the Vercel project (cents, 500 to 9900; unset is 2999, EUR
+   29.99). A value outside the range is ignored (EUR 29.99 is charged) and alerts #ops
    (`pts_price_setting_invalid`).
 2. Redeploy: Vercel applies an environment change to new deployments only.
 3. The ad's copy must say the same price (the search ad names it).
@@ -92,7 +92,7 @@ payment; either entitlement works on its own.
 | #payments | `pts_claimed`                  | The survey claimed it; the report is unlocked                               |
 | #ops      | `pts_checkout_failure`         | Opening checkout failed: visitors may be unable to pay                      |
 | #ops      | `pts_confirmation_failed`      | A buyer's confirmation email did not go: send their continue link (above)   |
-| #ops      | `pts_price_setting_invalid`    | `PAY_TO_START_PRICE_CENTS` is out of range; EUR 29 is charged               |
+| #ops      | `pts_price_setting_invalid`    | `PAY_TO_START_PRICE_CENTS` is out of range; EUR 29.99 is charged            |
 | #ops      | `pts_paid_without_entitlement` | Stripe says paid, but no row matches: find the buyer, attach by hand        |
 | #ops      | `pts_second_paid_session`      | A second paid session for one entitlement: refund one                       |
 | #ops      | `pts_double_payment`           | The same address paid twice within 48 hours                                 |

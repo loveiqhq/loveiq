@@ -16,7 +16,8 @@ export interface PricedOffer extends PayToStartOffer {
  * The environment setting that holds the full offer's price, in cents. Server-only (no
  * NEXT_PUBLIC_ prefix): the page reads it while rendering on the server and hands the
  * number down, so the browser never decides a price. Unset means the offer's default
- * (EUR 29, the Figma price). Changing it needs a redeploy, and the ad copy says EUR 29.
+ * (EUR 29.99, Marcus's price of 19.10). Changing it needs a redeploy, and the ad copy must
+ * say the same price.
  */
 export const PAY_TO_START_PRICE_ENV = "PAY_TO_START_PRICE_CENTS";
 
