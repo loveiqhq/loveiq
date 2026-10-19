@@ -62,6 +62,11 @@ export type StripeCheckoutSessionStatusResponse =
   | {
       enabled: true;
       accessPlan: ReportAccessPlan;
+      /**
+       * Only on an initial-unlock session (the EUR 1.99 gate's): whether THIS purchase is
+       * recorded. It opens no plan, so `accessPlan` can't say it landed.
+       */
+      initialUnlock?: boolean;
       paymentStatus: string | null;
       purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;

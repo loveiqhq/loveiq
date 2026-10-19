@@ -10,6 +10,9 @@ import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnloc
 /** One price for the Core Archetype however it is bought: pay to start's offer and this gate. */
 export const INITIAL_UNLOCK_PRICE_CENTS = getOfferDefinition("pre").defaultPriceCents;
 
+/** The initial unlock as the receipt, #payments, the purchase events and the return page name it. */
+export const INITIAL_UNLOCK_TITLE = "Your Core Archetype";
+
 /** "14-day money-back guarantee": Figma draws 7, 14 is the standing rule (Fatih, 02.10). */
 export const INITIAL_UNLOCK_GUARANTEE_DAYS = 14;
 

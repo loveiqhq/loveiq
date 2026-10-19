@@ -16,6 +16,7 @@ import {
   isCheckoutSessionRecorded,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
+import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -275,6 +276,8 @@ export async function GET(request: Request) {
       // Null until THIS purchase is recorded, so the page keeps polling instead of
       // returning a repeat buyer to a report that does not include it yet.
       accessPlan: sessionRecorded ? accessPlan : null,
+      // The initial unlock opens no plan: its page waits on this instead.
+      ...(isInitialUnlockPlan(session.metadata?.plan) ? { initialUnlock: sessionRecorded } : {}),
       paymentStatus: session.payment_status ?? null,
       purchaseAnalytics: getPurchaseAnalytics(session),
       sessionStatus: session.status ?? null,

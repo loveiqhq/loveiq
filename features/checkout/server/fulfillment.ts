@@ -27,6 +27,7 @@ import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
 import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 import { INITIAL_UNLOCK_PLAN, isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
+import { INITIAL_UNLOCK_TITLE } from "@features/report/logic/initialUnlockGate";
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import {
   confirmPayToStartSession,
@@ -115,9 +116,6 @@ export { classifyTraffic };
  * pre-unlock gate's), which is access only and holds no tier (initialUnlock.ts).
  */
 type FulfilledPlan = ReportPurchasePlanId | typeof INITIAL_UNLOCK_PLAN;
-
-/** The initial unlock as the receipt line, #payments and the purchase events name it. */
-const INITIAL_UNLOCK_TITLE = "Your Core Archetype";
 
 async function notifySlackPurchase({
   amount,
