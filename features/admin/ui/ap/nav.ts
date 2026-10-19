@@ -48,6 +48,12 @@ export const NAV: NavGroup[] = [
         href: `${ASSESSMENT_A}/pay-to-start`,
         level: 2,
       },
+      {
+        key: "a-unlock",
+        label: "Unlock feedback",
+        href: `${ASSESSMENT_A}/unlock-feedback`,
+        level: 2,
+      },
       { key: "b", label: "Assessment B", href: "", level: 1, badge: "soon" },
       { key: "c", label: "Assessment C", href: "", level: 1, badge: "soon" },
     ],
@@ -78,6 +84,7 @@ export function activeKey(pathname: string): string {
   if (p === `${ASSESSMENT_A}/traffic`) return "a-traffic";
   if (p === `${ASSESSMENT_A}/payment`) return "a-payment";
   if (p === `${ASSESSMENT_A}/pay-to-start`) return "a-pay-to-start";
+  if (p === `${ASSESSMENT_A}/unlock-feedback`) return "a-unlock";
   if (p === `${ASSESSMENT_A}/landing`) return "a-landing";
   if (p === `${ASSESSMENT_A}/survey`) return "a-survey";
   if (p === `${ASSESSMENT_A}/report`) return "a-report";
