@@ -74,7 +74,7 @@ function db({
       if (method === "POST") return json([{ id: 99 }]);
       if (url.includes("payment_webhook_event?stripe_event_id=eq.")) return json([]);
       if (url.includes("/payment?stripe_charge_id=eq.ch_1"))
-        return json([{ id: 41, personal_report_id: 5 }]);
+        return json([{ id: 41, personal_report_id: 5, metadata: paid }]);
       if (url.includes("/payment?stripe_")) return json([]);
       if (url.includes("/payment?id=eq.41&select=metadata")) return json([{ metadata: paid }]);
       if (url.includes("/personal_report?id=eq.5&select=survey_submission_id"))
@@ -299,5 +299,40 @@ describe("a refunded initial unlock that the full report credited", () => {
     db({ paid: { plan: "initial" }, tiers: {}, initialCredited });
     await processStripeWebhookEvent({ event: dispute("charge.dispute.created"), stripe });
     expect(alerted()).toHaveLength(1);
+  });
+});
+
+/**
+ * The report's own payment fields (personal_report.payment_id, payment_status, price) name the
+ * purchase that bought the report. The EUR 1.99 never wrote them, so taking it back must not
+ * either: a refunded Core Archetype would otherwise mark a report bought in full "refunded".
+ */
+describe("a refunded or charged-back initial unlock", () => {
+  const paymentFields = (patches: Array<{ url: string; body: Record<string, unknown> }>) =>
+    patches.find((p) => p.url.includes("/personal_report?id=eq.5") && "payment_status" in p.body);
+  const paymentRow = (patches: Array<{ url: string; body: Record<string, unknown> }>) =>
+    patches.find((p) => p.url.includes("/payment?id=eq.41"))?.body;
+
+  it("refund: the payment is marked refunded, the report's payment fields stay as they are", async () => {
+    const patches = db({ paid: { plan: "initial" }, tiers: { "Spark Seeker": "full_report" } });
+    await processStripeWebhookEvent({ event: refund(), stripe });
+    expect(paymentRow(patches)).toMatchObject({ status: "refunded" });
+    expect(paymentFields(patches)).toBeUndefined();
+  });
+
+  it("chargeback opened: the payment is disputed, the report's payment fields stay", async () => {
+    const patches = db({ paid: { plan: "initial" }, tiers: {} });
+    await processStripeWebhookEvent({ event: dispute("charge.dispute.created"), stripe });
+    expect(paymentRow(patches)).toMatchObject({ status: "disputed" });
+    expect(paymentFields(patches)).toBeUndefined();
+  });
+
+  it("a full report's refund still marks the report's payment refunded", async () => {
+    const patches = db({
+      paid: { plan: "full_report", archetype: "Spark Seeker" },
+      tiers: { "Spark Seeker": "full_report" },
+    });
+    await processStripeWebhookEvent({ event: refund(), stripe });
+    expect(paymentFields(patches)).toMatchObject({ body: { payment_status: "refunded" } });
   });
 });
