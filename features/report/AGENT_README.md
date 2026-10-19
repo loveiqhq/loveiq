@@ -119,9 +119,14 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
   chapter time, `cta_seen`, scroll depth and Typical Beliefs' midline rows stand down without
   letting go.
 - **Analytics.** `tour_started`, `tour_step_viewed {n, id}`, `tour_back {to}`,
-  `tour_skipped {at, source}`, `tour_completed` and `tour_replayed` go to PostHog; a first run's
-  start and outcome, and each replay, are also stored (`analytics_event`, the submission
-  timeline).
+  `tour_skipped {at, source}`, `tour_completed`, `tour_left {at}` and `tour_replayed` go to
+  PostHog; a first run's start and end, and each replay, are also stored (`analytics_event`).
+  Starts and ends carry `audience` (`free` with the unlock stop, `paid`
+  without); each end carries `stops: [{id, ms, back}]`, every stop the run reached with its time
+  on screen and its Back presses, so the AP Report page's tour table needs no event per step.
+  `tour_left` is sent on `pagehide` alone, when the page goes for good (not `persisted`): a tab
+  switched away and back has not left, and a page kept in the back-forward cache may come back
+  with the tour still up. A run with no end at all counts as left, at no stop.
 - **Tests.** `tests/guidedTour.test.ts`, `tests/guidedTourAnchors.test.ts`,
   `tests/V4GuidedTour.test.tsx`, `tests/hooks/useGuidedTour.test.tsx`, the tour block of
   `tests/ReportPage.test.tsx`, and `e2e/report-guided-tour.spec.ts`. The other report e2e specs

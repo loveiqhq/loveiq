@@ -100,6 +100,7 @@ vi.mock("@features/analytics/client", () => ({
   trackTourBack: vi.fn(),
   trackTourSkipped: vi.fn(),
   trackTourCompleted: vi.fn(),
+  trackTourLeft: vi.fn(),
   trackTourReplayed: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
@@ -2948,8 +2949,9 @@ describe("ReportPage", () => {
       settle();
 
       expect(tourBubble()).toBeInTheDocument();
+      // A locked reader's tour has the unlock stop: a free reader's.
       expect(analytics.trackTourStarted).toHaveBeenCalledWith(
-        expect.objectContaining({ trigger: "auto" })
+        expect.objectContaining({ trigger: "auto", audience: "free" })
       );
       expect(window.localStorage.getItem(TOUR_KEY), "remembered once started").not.toBeNull();
       const shell = document.querySelector(".report-page__shell-wrap")!;

@@ -79,6 +79,7 @@ const ALLOWED_EVENTS = [
   "tour_started",
   "tour_completed",
   "tour_skipped",
+  "tour_left",
   "tour_replayed",
 ] as const;
 
@@ -108,6 +109,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "tour_started":
     case "tour_completed":
     case "tour_skipped":
+    case "tour_left":
     case "tour_replayed":
       return "report";
     case "paywall_view":

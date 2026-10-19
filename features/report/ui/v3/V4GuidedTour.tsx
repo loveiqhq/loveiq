@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   trackTourBack,
   trackTourCompleted,
+  trackTourLeft,
   trackTourSkipped,
   trackTourStarted,
   trackTourStepViewed,
@@ -23,10 +24,12 @@ import {
   scrollTargetFor,
   stepMotion,
   tourSteps,
+  type TourAudience,
   type TourHole,
   type TourOutcome,
   type TourSkipSource,
   type TourStepId,
+  type TourStopSummary,
   type TourTrigger,
 } from "@features/report/logic/guidedTour";
 import { useCloseOnBack } from "@features/report/ui/hooks/useCloseOnBack";
@@ -213,6 +216,14 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     let shimmering = false;
     let bubbleKey = 0;
     let drawn = "";
+    // The run as its stored end carries it (TourStopSummary): every stop it has reached, in
+    // order, with the time its bubble has been up and the Back presses on it. A stop counts
+    // as reached once the tour goes to it, so an end on the way to one is placed there.
+    const audience: TourAudience = includeUnlock ? "free" : "paid";
+    const stops: TourStopSummary[] = [];
+    let shownAt: number | null = null;
+    // The run's end is told once: completed, skipped or left, whichever comes first.
+    let told = false;
 
     edge.hidden = true;
     shimmer.hidden = true;
@@ -307,16 +318,25 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
       edge.removeAttribute("data-pulse");
     };
 
+    /** The time the current stop's bubble has been up goes to its record, once. */
+    const clock = (now: number) => {
+      const stop = stops[index];
+      if (stop && shownAt !== null) stop.ms += now - shownAt;
+      shownAt = null;
+    };
+
     /** Off the current stop: its move stops and its bubble fades while the next one comes. */
-    const leave = () => {
+    const leave = (now: number) => {
+      clock(now);
       stopGesture();
       const old = bubbleRef.current;
       if (old) old.dataset.state = "out";
     };
 
-    const arrive = () => {
+    const arrive = (now: number) => {
       if (!anchor) return;
       phase = "shown";
+      shownAt = now;
       const id = currentId();
       const { gesture } = motion();
       if (!reduced) {
@@ -341,9 +361,10 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     const goTo = (to: number, now: number): boolean => {
       const id = steps[to];
       const next = id ? findTourAnchor(id) : null;
-      if (!next) return false;
-      leave();
+      if (!id || !next) return false;
+      leave(now);
       index = to;
+      if (to === stops.length) stops.push({ id, ms: 0, back: 0 });
       anchor = next;
       anchorRadius = parseFloat(getComputedStyle(next.el).borderTopLeftRadius);
       corrected = false;
@@ -364,8 +385,15 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     };
 
     const finish = (now: number) => {
-      trackTourCompleted({ trigger, steps: steps.length, duration_ms: now - startedAt });
-      leave();
+      leave(now);
+      told = true;
+      trackTourCompleted({
+        trigger,
+        audience,
+        steps: steps.length,
+        duration_ms: now - startedAt,
+        stops,
+      });
       phase = "finishing";
       finishStart = now;
       scrollFrom = window.scrollY;
@@ -411,7 +439,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
           const k = Math.min(1, (now - travelStart) / HOLE_TRAVEL_MS);
           if (!travelFrom || reduced || k >= 1) {
             hole = to;
-            arrive();
+            arrive(now);
           } else {
             hole = lerpHole(travelFrom, to, easeInOutQuad(k));
           }
@@ -447,24 +475,56 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
       },
       back: () => {
         if (phase !== "shown" || index <= 0) return;
+        const stop = stops[index];
+        if (stop) stop.back += 1;
         trackTourBack({ trigger, to: index, steps: steps.length });
         goTo(index - 1, performance.now());
       },
       skip: (source) => {
         if (phase === "idle" || phase === "finishing" || phase === "ended") return;
+        const now = performance.now();
+        leave(now);
+        told = true;
         trackTourSkipped({
           trigger,
+          audience,
           at: index + 1,
           id: currentId(),
           steps: steps.length,
           source,
-          duration_ms: performance.now() - startedAt,
+          duration_ms: now - startedAt,
+          stops,
         });
-        leave();
         jump(0);
         end("skipped");
       },
     };
+
+    /**
+     * The reader leaving with the tour up: the tab closed or reloaded, or another address
+     * opened in it (nothing in the report under the tour can be tapped). Told on pagehide
+     * alone, and only when the page goes for good (not `persisted`). A tab switched away and
+     * back fires visibilitychange, never pagehide, and finds the tour where it was, so it has
+     * not left. A page the browser keeps in its back-forward cache can come back with the
+     * tour still up and end it then: until it does nothing is told, and if it never does the
+     * run has no end at all, which the AP counts as left at no stop.
+     */
+    const onPageHide = (event: PageTransitionEvent) => {
+      if (event.persisted || told || phase === "idle" || phase === "ended") return;
+      const now = performance.now();
+      clock(now);
+      told = true;
+      trackTourLeft({
+        trigger,
+        audience,
+        at: index + 1,
+        id: currentId(),
+        steps: steps.length,
+        duration_ms: now - startedAt,
+        stops,
+      });
+    };
+    window.addEventListener("pagehide", onPageHide);
 
     raf = window.requestAnimationFrame((now) => {
       steps = tourSteps({ includeUnlock }).filter((id) => findTourAnchor(id) !== null);
@@ -476,7 +536,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
       startedAt = now;
       if (!startedRef.current) {
         startedRef.current = true;
-        trackTourStarted({ trigger, steps: steps.length });
+        trackTourStarted({ trigger, audience, steps: steps.length });
       }
       goTo(0, now);
       loop(now);
@@ -485,6 +545,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("pagehide", onPageHide);
       stopGesture();
       apiRef.current = null;
     };
