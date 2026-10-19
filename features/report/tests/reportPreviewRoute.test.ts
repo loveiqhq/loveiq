@@ -64,14 +64,20 @@ describe("GET /api/report/preview — the initial unlock", () => {
     expect(json.fantasy.locked).toBe(true);
   });
 
-  it("prices the full report with its EUR 10 credit, as checkout charges it", async () => {
+  it("prices the full report with its EUR 10 credit, and All 14 less the EUR 1.99 paid", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=initial&v4=1");
     expect(json.pricingQuotes.full_report).toMatchObject({
       chargedPriceCents: 1999,
       upgradeCreditCents: 1000,
       creditKind: "initial",
     });
-    expect(json.pricingQuotes.all_reports.chargedPriceCents).toBe(3999);
+    // As checkout charges it: All 14 credits whatever was paid on the report.
+    expect(json.pricingQuotes.all_reports).toMatchObject({
+      chargedPriceCents: 3800,
+      upgradeCreditCents: 199,
+      upgradePaidCents: 199,
+    });
+    expect(json.pricingQuotes.all_reports.creditKind).toBeUndefined();
   });
 
   it("leaves the card and the Summary locked, at list price, without it", async () => {

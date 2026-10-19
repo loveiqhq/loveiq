@@ -1,6 +1,6 @@
 import type { FC } from "react";
 import Image from "next/image";
-import { PTS_ONE_PRICE, PTS_PRICE_CARD } from "./payToStartContent";
+import { PTS_ONE_PRICE, type PtsOfferCopy } from "./payToStartContent";
 import { PtsCtaButton, PtsCtaStatus } from "./PtsCheckout";
 import { CheckIcon, ShieldIcon } from "./ptsIcons";
 import { PTS_H2, PTS_REVEAL, PTS_SECTION } from "./ptsStyles";
@@ -66,27 +66,30 @@ const WALLETS = [
 
 /**
  * 1706:1988: the card beside the column on a desktop, 342 wide. It stays in view while the
- * column scrolls (sticky): Figma draws it at the top only, the scroll is extrapolated.
+ * column scrolls (sticky): Figma draws it at the top only, the scroll is extrapolated. The
+ * initial report's page also draws it in the column, under the film (1733:5753). Its words
+ * are the offer's (PtsOfferCopy).
  */
-export const PtsPriceCard: FC<{ price: string }> = ({ price }) => (
+export const PtsPriceCard: FC<{ price: string; copy: PtsOfferCopy["priceCard"] }> = ({
+  price,
+  copy,
+}) => (
   <div className="overflow-hidden rounded-[22px] border border-[#e9e6ee] bg-white shadow-[0_22px_54px_-20px_rgba(103,60,120,0.30)]">
     <div className="px-6 pb-6 pt-[24.5px]">
       <p className="font-sans text-[12px] font-bold leading-[16.39px] tracking-[1px] text-[#561dbd]">
-        {PTS_PRICE_CARD.eyebrow}
+        {copy.eyebrow}
       </p>
       <p className="mt-3 flex items-baseline gap-[7px]">
         <span className="font-serif text-[44px] font-medium leading-[56.32px] text-[#161021]">
           {price}
         </span>
-        <span className="font-sans text-[14px] leading-[19.12px] text-[#6b6678]">
-          {PTS_PRICE_CARD.per}
-        </span>
+        <span className="font-sans text-[14px] leading-[19.12px] text-[#6b6678]">{copy.per}</span>
       </p>
       <PtsCtaButton
         location="price_card"
         className="mt-3 h-[54px] w-full rounded-[27px] px-5 text-[17px]"
       >
-        {PTS_PRICE_CARD.cta}
+        {copy.cta}
       </PtsCtaButton>
       <PtsCtaStatus location="price_card" className="mt-2 text-center" />
       <ul aria-label="Wallets" className="mt-3 flex items-center justify-center gap-[7.5px]">
@@ -105,11 +108,11 @@ export const PtsPriceCard: FC<{ price: string }> = ({ price }) => (
       </ul>
       <p className="mt-3 flex items-center justify-center gap-1.5 font-sans text-[12.5px] font-semibold leading-[17.08px] text-[#1f6b4a]">
         <ShieldIcon color="#1F6B4A" className="h-[15px] w-[15px]" />
-        {PTS_PRICE_CARD.guarantee}
+        {copy.guarantee}
       </p>
     </div>
     <ul className="space-y-[9px] border-t border-[#e9e6ee] bg-[#faf9fc] px-6 pb-[22px] pt-[18px]">
-      {PTS_PRICE_CARD.includes.map((item) => (
+      {copy.includes.map((item) => (
         <li key={item} className="flex items-start gap-2.5">
           <CheckIcon className="mt-[3px]" />
           <span className="font-sans text-[13.5px] leading-5 text-[#3f3a4d]">{item}</span>

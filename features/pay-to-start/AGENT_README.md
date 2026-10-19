@@ -48,7 +48,11 @@ record, and no landing test arm.
   its survey; an open session of the other offer is closed and a new row starts, so one
   browser never pays for both by accident.
 - **Copy lives in `ui/landing/payToStartContent.ts`**, verbatim from Figma; where it disagrees
-  with the product (57 questions, ~15 minutes, cut chapters) it is flagged, not changed.
+  with the product (57 questions, ~15 minutes, cut chapters) it is flagged, not changed. The
+  initial report's page is the same page: what it says otherwise is `PTS_INITIAL`
+  (`PTS_OFFER_COPY` picks per offer), where the lines its frames kept from the full report's,
+  and that EUR 1.99 does not buy, are corrected and flagged. It has no "One price" band, so its
+  one price card is `#price`: under the film below 1280, beside the column from there.
 - **The header is the site's, pointed at this page's price.** `ui/landing/PtsHeader.tsx` mounts
   `WNavSection` with its button on `#price` (the One price section), never the free survey, and
   counts every press as `pts_nav_click`, never the landing test's `cta_click`. Its other links
