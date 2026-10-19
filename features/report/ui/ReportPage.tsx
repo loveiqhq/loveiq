@@ -83,6 +83,7 @@ import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
 import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
+import InitialUnlockGate from "./gate/InitialUnlockGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportPricingSessionId,
@@ -2773,7 +2774,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     });
   }, [promoFromUrl, sessionId, token]);
 
-  const { data, status, error, challenge, retry } = useReportData({
+  const { data, status, error, challenge, gate, retry } = useReportData({
     token,
     sessionId: token ? null : sessionId,
     pricingSessionIdOverride: pricingSessionIdFromUrl,
@@ -2785,6 +2786,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // production, and /api/report is untouched either way.
     preview: searchParams.get("preview") === "1",
     previewPlan: searchParams.get("plan"),
+    // `?preview=1&gate=1`: the EUR 1.99 pre-unlock gate, as a reader it stops meets it.
+    previewGate: searchParams.get("preview") === "1" && searchParams.get("gate") === "1",
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,
@@ -3064,6 +3067,26 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     const anchor = parseUnlockAnchor(anchorFromUrl);
     if (anchor) restoreUnlockAnchor(anchor);
   }, [anchorFromUrl, status]);
+
+  // Back from the EUR 1.99 checkout with `?unlocked=initial`: the reader's first look at the
+  // report, so it opens at its top rather than where the browser left off, and the guided
+  // tour may start (it skips only `?anchor` returns). The parameter goes once it is read.
+  const unlockedFromUrl = searchParams.get("unlocked");
+  const unlockedHandledRef = useRef(false);
+  useEffect(() => {
+    if (unlockedHandledRef.current || unlockedFromUrl !== "initial" || status !== "success") {
+      return;
+    }
+    unlockedHandledRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("unlocked");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [status, unlockedFromUrl]);
 
   useEffect(() => {
     if (!data) return;
@@ -3487,6 +3510,20 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           ownerFirstName={challenge?.ownerFirstName ?? null}
           recipientEmailHint={challenge?.recipientEmailHint ?? null}
           onVerified={() => retry()}
+        />
+      </>
+    );
+  }
+
+  // The EUR 1.99 pre-unlock gate: the API sent no report, only what the gate shows.
+  if (status === "gated" && gate) {
+    return (
+      <>
+        {v4ThemeColor}
+        <InitialUnlockGate
+          gate={gate}
+          reportToken={token ?? null}
+          reportSessionId={token ? null : sessionId}
         />
       </>
     );
