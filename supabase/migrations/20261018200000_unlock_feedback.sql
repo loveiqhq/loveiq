@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS public.unlock_feedback (
   CHECK ((first_reason IS NULL) = (answered_at IS NULL))
 );
 
+-- migration-lint: ignore. A plain index, not CONCURRENTLY: the table is created empty just
+-- above, in the same transaction, so there is nothing to lock out.
 CREATE INDEX IF NOT EXISTS unlock_feedback_sent_at_idx ON public.unlock_feedback (sent_at);
 
 ALTER TABLE public.unlock_feedback ENABLE ROW LEVEL SECURITY;
