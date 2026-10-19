@@ -39,6 +39,8 @@ const ALLOWED_KEYS = new Set([
   "nurture_sequence",
   "report_paywall_enforced",
   "pay_to_start_checkout",
+  // Every answer to the unlock-feedback email unlocks a full report for free.
+  "unlock_feedback",
 ]);
 
 export async function GET() {
