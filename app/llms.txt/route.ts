@@ -57,6 +57,7 @@ These paths hold no public content and are disallowed in
 - \`/survey\` — an interactive flow; its rendered HTML is not meaningful as a document.
 - \`/checkout\` — legacy payment redirect.
 - \`/admin\`, \`/api/\`, \`/login\` — internal, authenticated, or non-content endpoints.
+- \`/why\`: one person's answer to an email we sent them, reachable only from that email.
 
 ## Notes for agents
 
