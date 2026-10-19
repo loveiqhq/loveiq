@@ -35,11 +35,11 @@ import {
 const TOKEN = `rpp_${"A1b2".repeat(8)}`;
 
 describe("offer registry", () => {
-  it("sells the full offer: survey + full report, at the Figma price by default", () => {
+  it("sells the full offer: survey + full report, at EUR 29.99 by default", () => {
     const offer = getOfferDefinition("full");
     expect(offer.enabled).toBe(true);
     expect(offer.grant).toEqual({ kind: "report_plan", plan: "full_report" });
-    expect(offer.defaultPriceCents).toBe(2900);
+    expect(offer.defaultPriceCents).toBe(2999);
     expect(offer.wizard).toBe("pay_to_start");
     expect(offer.landingPath).toBe("/sexual-archetype");
   });
@@ -106,9 +106,9 @@ describe("getPayToStartOffer (the price setting)", () => {
 
   it("uses the default when the setting is unset or blank", () => {
     delete process.env[PAY_TO_START_PRICE_ENV];
-    expect(getPayToStartOffer().priceCents).toBe(2900);
+    expect(getPayToStartOffer().priceCents).toBe(2999);
     process.env[PAY_TO_START_PRICE_ENV] = "  ";
-    expect(getPayToStartOffer().priceCents).toBe(2900);
+    expect(getPayToStartOffer().priceCents).toBe(2999);
     expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
@@ -121,8 +121,8 @@ describe("getPayToStartOffer (the price setting)", () => {
 
   it("falls back to the default on an invalid setting and alerts #ops once", () => {
     process.env[PAY_TO_START_PRICE_ENV] = "29";
-    expect(getPayToStartOffer().priceCents).toBe(2900);
-    expect(getPayToStartOffer().priceCents).toBe(2900);
+    expect(getPayToStartOffer().priceCents).toBe(2999);
+    expect(getPayToStartOffer().priceCents).toBe(2999);
     expect(mockNotifySlack).toHaveBeenCalledTimes(1);
     expect(mockNotifySlack.mock.calls[0]?.[0]).toMatchObject({
       channel: "ops",
@@ -133,7 +133,7 @@ describe("getPayToStartOffer (the price setting)", () => {
   it("survives a failing Slack call", async () => {
     mockNotifySlack.mockRejectedValue(new Error("slack down"));
     process.env[PAY_TO_START_PRICE_ENV] = "free";
-    expect(getPayToStartOffer().priceCents).toBe(2900);
+    expect(getPayToStartOffer().priceCents).toBe(2999);
     // Let the rejected promise settle: an unhandled rejection would fail the run.
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
