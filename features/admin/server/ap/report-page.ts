@@ -277,7 +277,7 @@ export function wholeShares(counts: number[]): number[] | null {
     const exact = (c * 100) / total;
     return { exact, whole: c > 0 ? Math.max(1, Math.floor(exact)) : 0 };
   });
-  for (let missing = 100 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0; ) {
+  for (let missing = 100 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0;) {
     const step = Math.sign(missing);
     // Up: the largest remainder, the first of equals. Down: the largest share.
     const by = (p: (typeof parts)[number]) => (step > 0 ? p.exact - p.whole : p.whole);
