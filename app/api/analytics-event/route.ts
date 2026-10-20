@@ -84,6 +84,9 @@ const ALLOWED_EVENTS = [
   "tour_completed",
   "tour_skipped",
   "tour_replayed",
+  // The EUR 1.99 pre-unlock gate: seen, and its two buttons
+  "initial_gate_viewed",
+  "initial_gate_cta_click",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -120,6 +123,8 @@ function entityTypeFor(event: AllowedEvent): string {
     case "paywall_dismissed":
     case "scroll_paywall_dismissed":
     case "lock_icon_clicked":
+    case "initial_gate_viewed":
+    case "initial_gate_cta_click":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
