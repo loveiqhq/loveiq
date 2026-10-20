@@ -18,8 +18,8 @@ const state = vi.hoisted(() => ({
   retryPending: vi.fn(),
   trackNavigation: vi.fn(),
   startedAt: new Date().toISOString(),
-  /** The reply said the survey was paid for before it was taken (pay to start). */
-  paidBeforeSurvey: false,
+  /** The reply said the survey was paid for before it was taken (pay to start): its wizard. */
+  paidWizard: null as "pay_to_start" | "pay_to_start_initial" | null,
 }));
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
@@ -43,7 +43,7 @@ vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
     submit: state.submit,
     retryPending: state.retryPending,
     hasPendingCompletion: false,
-    paidBeforeSurvey: state.paidBeforeSurvey,
+    paidWizard: state.paidWizard,
     status: "success",
   }),
 }));
@@ -106,7 +106,7 @@ const openWizard = () => {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  state.paidBeforeSurvey = false;
+  state.paidWizard = null;
   sessionStorage.clear();
 });
 
@@ -154,15 +154,30 @@ describe("SurveyEngine — the wizard after the last question", () => {
 
 describe("SurveyEngine — the wizard for a survey paid before it was taken", () => {
   const fourCounter = () => screen.getByText(/^\d \/ 4$/).textContent;
+  const fiveCounter = () => screen.getByText(/^\d \/ 5$/).textContent;
 
-  it("shows the four-slide wizard when the reply says it was paid for", () => {
-    state.paidBeforeSurvey = true;
+  it("shows the four-slide wizard when the reply says the full report was paid for", () => {
+    state.paidWizard = "pay_to_start";
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
     expect(fourCounter()).toBe("1 / 4");
   });
 
-  it("keeps it after a reload mid-wizard, from the tab's flag", () => {
+  it("shows the five, with the map, when it says the initial report was (Marcus, 20.10)", () => {
+    state.paidWizard = "pay_to_start_initial";
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(fiveCounter()).toBe("1 / 5");
+  });
+
+  it("keeps it after a reload mid-wizard, from the tab's record", () => {
+    sessionStorage.setItem(PAID_WIZARD_KEY, "pay_to_start_initial");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(fiveCounter()).toBe("1 / 5");
+  });
+
+  it("reads a record from before the EUR 1.99 wizard as the full report's", () => {
     sessionStorage.setItem(PAID_WIZARD_KEY, "1");
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));

@@ -1,5 +1,9 @@
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
-import { PAY_TO_START_WIZARD_SLIDES } from "@features/pay-to-start/logic/journey";
+import {
+  PAY_TO_START_INITIAL_WIZARD_SLIDES,
+  PAY_TO_START_WIZARD_SLIDES,
+  type PayToStartWizard,
+} from "@features/pay-to-start/logic/journey";
 
 /**
  * Content of the pre-report wizard — Figma 1071:2092, "Pre Report Wizard — Mobile
@@ -12,20 +16,28 @@ import { PAY_TO_START_WIZARD_SLIDES } from "@features/pay-to-start/logic/journey
 export const WIZARD_SLIDE_COUNT = 6;
 
 /**
- * Which wizard a reader gets. `pay_to_start`: a reader who paid before the survey (Figma
- * Report-3.0 1477:3920; the EUR 1.99 board 1741:5587 draws the same four), whose report
- * opens unlocked or pre-unlocked, sees slides 1, 4, 5 and 6 of the six; the report map
- * ("your free chapters") and "Unlocking your report is fully risk free" are left out.
- * Figma draws those four with the six-slide bar and counters (1/6, 2/6, 3/6, 5/6); the bar
- * here has four segments, "n / 4" (Fatih, 18.10).
+ * Which wizard a reader gets. A reader who paid before the survey gets their offer's:
+ * - `pay_to_start`, the full report (Figma Report-3.0 1477:3920), opens unlocked: slides 1,
+ *   4, 5 and 6 of the six. The report map ("your free chapters") and "Unlocking your report
+ *   is fully risk free" are left out. Figma draws those four with the six-slide bar and
+ *   counters (1/6, 2/6, 3/6, 5/6); the bar here has four segments, "n / 4" (Fatih, 18.10).
+ * - `pay_to_start_initial`, the initial report (EUR 1.99), opens only partly: the map too,
+ *   slides 1, 2, 4, 5 and 6, "n / 5" (Marcus, 20.10; Figma 1899:5255 on board 1741:5587).
  */
-export type WizardVariant = "standard" | "pay_to_start";
+export type WizardVariant = "standard" | PayToStartWizard;
 
 const STANDARD_ORDER: readonly number[] = Array.from({ length: WIZARD_SLIDE_COUNT }, (_, i) => i);
 
 /** The slides a variant shows, by their index in the six (what the analytics record). */
 export function wizardSlideOrder(variant: WizardVariant): readonly number[] {
-  return variant === "pay_to_start" ? PAY_TO_START_WIZARD_SLIDES : STANDARD_ORDER;
+  switch (variant) {
+    case "pay_to_start":
+      return PAY_TO_START_WIZARD_SLIDES;
+    case "pay_to_start_initial":
+      return PAY_TO_START_INITIAL_WIZARD_SLIDES;
+    case "standard":
+      return STANDARD_ORDER;
+  }
 }
 
 /** Slide 1's three research tiles (1049:1191). The report's methodology has its own. */

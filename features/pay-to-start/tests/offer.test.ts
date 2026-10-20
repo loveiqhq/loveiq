@@ -23,6 +23,7 @@ import {
 } from "@features/pay-to-start/logic/offer";
 import {
   CHECKOUT_SESSION_ID_REGEX,
+  PAY_TO_START_INITIAL_WIZARD_SLIDES,
   PAY_TO_START_WIZARD_SLIDES,
   PREPAID_COOKIE_DEV,
   PREPAID_COOKIE_PROD,
@@ -53,7 +54,8 @@ describe("offer registry", () => {
       grant: { kind: "initial_unlock", plan: "initial" },
       productName: "LoveIQ Survey & Initial Report",
       defaultPriceCents: 199,
-      wizard: "pay_to_start",
+      // Five slides, the report map too: the report is only partly open (Marcus, 20.10).
+      wizard: "pay_to_start_initial",
       landingPath: "/sexual-archetype/initial",
     });
   });
@@ -166,6 +168,10 @@ describe("getPayToStartOffer (the price setting)", () => {
 describe("journey constants", () => {
   it("shows slides 1, 4, 5 and 6 to a buyer, under the standard indices", () => {
     expect([...PAY_TO_START_WIZARD_SLIDES]).toEqual([0, 3, 4, 5]);
+  });
+
+  it("adds the report map, slide 2, for the initial report's buyer (Figma 1899:5255)", () => {
+    expect([...PAY_TO_START_INITIAL_WIZARD_SLIDES]).toEqual([0, 1, 3, 4, 5]);
   });
 
   it("accepts real Checkout session ids only", () => {

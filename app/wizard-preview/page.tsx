@@ -21,7 +21,14 @@ export default async function WizardPreviewPage({
   searchParams: Promise<{ variant?: string | string[] }>;
 }) {
   if (!isNonProdDeploy()) notFound();
-  // ?variant=pay_to_start shows the four slides a reader who paid before the survey gets.
+  // ?variant=pay_to_start shows the four slides the full report's buyer gets before the
+  // report, ?variant=pay_to_start_initial the five the initial report's buyer gets.
   const { variant } = await searchParams;
-  return <WizardPreviewClient variant={variant === "pay_to_start" ? "pay_to_start" : "standard"} />;
+  return (
+    <WizardPreviewClient
+      variant={
+        variant === "pay_to_start" || variant === "pay_to_start_initial" ? variant : "standard"
+      }
+    />
+  );
 }

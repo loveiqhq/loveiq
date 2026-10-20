@@ -1,4 +1,5 @@
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
+import type { PayToStartWizard } from "./journey";
 
 /**
  * Pay to start the survey (Notion "RFD > Pay to start survey", Figma Report-3.0 1468:720):
@@ -26,8 +27,8 @@ export interface PayToStartOffer {
   /** The Stripe line item, the receipt line and the payment_item name (Figma receipt 1475:2114). */
   productName: string;
   defaultPriceCents: number;
-  /** The pre-report wizard a buyer of this offer gets. */
-  wizard: "pay_to_start" | "standard";
+  /** The pre-report wizard a buyer of this offer gets, told to the survey by its claim. */
+  wizard: PayToStartWizard;
   /** Whether it can be sold: a checkout for an offer that is not is refused. */
   enabled: boolean;
   /** Where its landing page lives (the search ad's URL in Figma 1706:1627). */
@@ -55,8 +56,8 @@ const PRE_OFFER: PayToStartOffer = {
   grant: { kind: "initial_unlock", plan: INITIAL_UNLOCK_PLAN },
   productName: "LoveIQ Survey & Initial Report",
   defaultPriceCents: 199,
-  // The board draws the same four slides (1741:5587).
-  wizard: "pay_to_start",
+  // Five slides: the report map too (Marcus, 20.10; Figma 1899:5255).
+  wizard: "pay_to_start_initial",
   enabled: true,
   landingPath: "/sexual-archetype/initial",
 };
