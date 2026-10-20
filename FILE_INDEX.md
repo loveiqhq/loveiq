@@ -117,6 +117,20 @@
 | Kept out of the free funnel's readouts | `supabase/migrations/20261018130000_pay_to_start_out_of_free_funnel_readouts.sql`, `features/admin/server/experiment-readouts.ts`                   |
 | Runbook                                | `docs/runbooks/PAY_TO_START.md`                                                                                                                     |
 
+## Pre-Unlock (the EUR 1.99 gate)
+
+| Task                                                        | Files                                                                                                                              |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Who meets the gate                                          | `features/report/logic/initialUnlockGate.ts`, `features/report/server/initialUnlockGate.ts`, `app/api/report/route.ts`             |
+| Cohort and first-view stamps, flags                         | `features/report/server/initialGateState.ts`, `supabase/migrations/20261020090000_initial_unlock_gate.sql`                         |
+| The gate page                                               | `features/report/ui/gate/`, `features/report/ui/ReportPage.tsx`, `features/report/ui/hooks/useReportData.ts`                       |
+| The EUR 1.99 checkout and its return                        | `app/api/stripe/initial-unlock/route.ts`, `features/checkout/server/fulfillment.ts`, `features/checkout/ui/CheckoutReturnPage.tsx` |
+| E06 and E07                                                 | `features/report/server/emails/initial-unlock.ts`, `features/report/server/emails/initial-unlock-gift.ts`                          |
+| The day-4 gift and its holdout                              | `app/api/cron/initial-unlock-gift/route.ts`, `features/report/server/initialUnlockGift.ts`, `shared/experiments/initialGiftArm.ts` |
+| Pricing for the gate's readers (A3, the EUR 10 on the line) | `features/pricing/logic/reportPricing.ts`, `app/api/stripe/checkout-session/route.ts`                                              |
+| The success KPI                                             | `features/admin/server/ap/focus.ts`, `features/admin/server/ap/payment.ts`, `features/admin/server/ap/landing.ts`                  |
+| Runbook                                                     | `docs/runbooks/PRE_UNLOCK.md`                                                                                                      |
+
 ## About Page
 
 | Task                   | Files                                          |
