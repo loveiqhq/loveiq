@@ -20,8 +20,8 @@ export interface InitialUnlockEmailParams {
   unsubscribeUrl?: string;
 }
 
-/** The four chapters the frame lists as partly open, name and line. */
-const PARTLY_OPEN = [
+/** The four chapters the frame lists as partly open, name and line (E07 lists them too). */
+export const PARTLY_OPEN = [
   ["Typical Beliefs:", "the rules about sex you never agreed to"],
   ["Accelerators & Brakes:", "what turns you on, and what shuts you down"],
   ["Challenges in Partnerships:", "where partners misread you"],

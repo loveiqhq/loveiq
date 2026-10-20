@@ -117,7 +117,7 @@ export async function GET(request: Request) {
         `/rest/v1/personal_report?select=id,survey_submission_id,created_date_time,payment_status&order=id.asc`
       ),
       supabaseFetch(
-        `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,payment_date_time,amount`,
+        `/rest/v1/payment?is_test=is.false&metadata->>gifted=is.null&select=personal_report_id,status,payment_date_time,amount`,
         {
           headers: { Range: "0-9999" },
         }

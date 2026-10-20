@@ -60,9 +60,12 @@ export async function GET(request: Request) {
         supabaseFetch(`/rest/v1/invite_event?select=id,referrer_email,created_at`, {
           headers: { Prefer: "count=exact", Range: "0-49999" },
         }),
-        supabaseFetch(`/rest/v1/payment?is_test=is.false&select=personal_report_id,status`, {
-          headers: { Range: "0-49999" },
-        }),
+        supabaseFetch(
+          `/rest/v1/payment?is_test=is.false&metadata->>gifted=is.null&select=personal_report_id,status`,
+          {
+            headers: { Range: "0-49999" },
+          }
+        ),
       ]);
 
     const submissions = submissionsRes.ok ? await submissionsRes.json() : [];
