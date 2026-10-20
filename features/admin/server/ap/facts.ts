@@ -184,6 +184,14 @@ export const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_repo
  */
 export const PRE_PLANS: ReadonlySet<string> = new Set<string>([INITIAL_UNLOCK_PLAN]);
 
+/**
+ * A finisher's paid pre-unlocks, from their sales ([time, amount, plan]): the EUR 1.99 from
+ * the report's gate or from pay to start. E07's day-4 gift is a EUR 0 row and never one.
+ */
+export function preBuysOf(s: Pick<SubFact, "pays">): Array<[number, number, string | null]> {
+  return (s.pays ?? []).filter(([, amount, plan]) => amount > 0 && PRE_PLANS.has(plan ?? ""));
+}
+
 export interface IntroFact {
   day: string;
   step: string;

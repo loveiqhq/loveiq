@@ -221,6 +221,14 @@ export function buildFocus(input: {
     const kept = salesIn(facts, scope, from, to).filter((m) => FULL_PLANS.has(m.plan ?? ""));
     return { n: kept.length, revenue: kept.reduce((a, m) => a + m.amount, 0) };
   };
+  /**
+   * Pre-unlock sales paid in [from, to]: the EUR 1.99 Core Archetype, from the report's gate
+   * and from pay to start. E07's day-4 gift is a EUR 0 row, which `salesIn` never counts.
+   */
+  const preSales = (from: string, to: string) => {
+    const kept = salesIn(facts, scope, from, to).filter((m) => PRE_PLANS.has(m.plan ?? ""));
+    return { n: kept.length, revenue: kept.reduce((a, m) => a + m.amount, 0) };
+  };
   const users = (from: string, to: string) =>
     new Set(subsIn(facts, scope, from, to).map((s) => s.uid ?? -s.id)).size;
 
@@ -353,19 +361,22 @@ export function buildFocus(input: {
           color: "purple",
           axis: "left",
           unit: "pct",
-          total: null,
-          pick: () => null,
+          total: tablet ? null : ratio(preSales(facts.from, facts.to).n, t.subs),
+          pick: (b) => (tablet ? null : ratio(preSales(b.from, b.to).n, tot(b).subs)),
         },
         {
           name: "Revenue per pre-unlock",
           color: "green",
           axis: "right",
           unit: "eur",
-          total: null,
-          pick: () => null,
+          total: tablet
+            ? null
+            : ratio(preSales(facts.from, facts.to).revenue, preSales(facts.from, facts.to).n),
+          pick: (b) =>
+            tablet ? null : ratio(preSales(b.from, b.to).revenue, preSales(b.from, b.to).n),
         },
       ],
-      { blocked: preBlocked }
+      { blocked: preBlocked ?? tablet }
     ),
     chart(
       "full-unlock",
