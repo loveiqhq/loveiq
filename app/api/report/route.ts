@@ -521,7 +521,13 @@ export async function GET(request: Request) {
     // any copy is built: the free payload carries real copy under the blur, so a gate drawn
     // over the report would hide nothing from the network tab.
     if (initialGatePromise && (await initialGatePromise)) {
-      const gateState = personalReportId ? await readInitialGateState(personalReportId) : null;
+      // Only a reader who holds nothing can meet the gate, so a buyer (after launch, almost
+      // every reader who gets in) never waits on the two reads below; pricing looks the
+      // cohort up itself for their first quote.
+      const mayMeetGate =
+        accessLookupOk && accessPlan === null && purchasedPlan === null && !initialUnlock;
+      const gateState =
+        mayMeetGate && personalReportId ? await readInitialGateState(personalReportId) : null;
       const inCohort = Boolean(gateState?.cohortAt);
       if (gateState) initialGateCohort = inCohort;
       const livePayToStart = inCohort ? await hasLivePayToStartEntitlement(submission.id) : false;
