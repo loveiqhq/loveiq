@@ -248,10 +248,15 @@
 
 /* The frame's 1.5px stroke is drawn inside its edge, and Chrome floors a fractional border to
  * 1px at every DPR: an inset shadow keeps the weight and the frame's own 32/20/24 insets, so
- * the card is its 373px; forced colours drop shadows, so a border stands in there. */
+ * the card is its 373px; forced colours drop shadows, so a border stands in there.
+ * The pricing modal's tablet and desktop rules (paygate.css, from 640 and 960px) restyle the
+ * classes this page shares; the gate is the phone frame at every width, so the values those
+ * rules change are pinned here and below (gap, radius, the badge's padding, the type). */
 .iug-page .iug-card {
+  gap: 16px;
   padding: 32px 20px 24px;
   border: 0;
+  border-radius: 20px;
   box-shadow: inset 0 0 0 1.5px rgba(139, 92, 246, 0.55);
 }
 
@@ -265,11 +270,35 @@
 .iug-card .iug-card__badge {
   top: -12px;
   left: calc(50% + 0.5px);
+  padding: 5px 12px;
   line-height: normal;
 }
 
+.iug-page .iug-card .rpg-card__head {
+  gap: 6px;
+}
+
 .iug-card .iug-card__title {
+  font-size: 22px;
   line-height: normal;
+}
+
+.iug-page .iug-card .rpg-card__desc {
+  font-size: 13px;
+  color: var(--rpg-ink);
+}
+
+.iug-page .iug-card .rpg-card__price {
+  gap: 4px;
+}
+
+.iug-page .iug-card .rpg-card__amount {
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.iug-page .iug-card .rpg-card__cta--filled {
+  height: 45px;
 }
 
 .iug-card .iug-card__suffix {
@@ -586,13 +615,32 @@
 
 /* Broken where the width runs out, as drawn ("Why unlock your / Archetype?"), not balanced. */
 .iug-page .iug-why__title {
+  font-size: 30px;
+  line-height: 36px;
   text-wrap: wrap;
+}
+
+/* One card a row at every width (the modal goes two a row from 640). */
+.iug-page .rpg__why-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
 /* The frames' 16px insets include their 1px inside strokes (99 / 164px cards, not 101 / 166);
  * below 360px the modal's tighter review card stands. */
 .iug-page .rpg-why {
+  gap: 8px;
   padding: 15px;
+  border-radius: 16px;
+}
+
+.iug-page .rpg-why__title {
+  font-size: 18px;
+}
+
+.iug-page .rpg-why__body {
+  font-size: 13px;
+  line-height: 18px;
 }
 
 @media (min-width: 360px) {
@@ -747,8 +795,74 @@
   opacity: 0.85;
 }
 
+/* ── Tablet and desktop: the frame has no desktop sibling, so the phone frame stands in a
+ * centred 560px column (an extrapolation, for Mark to check). From 1024 the column stands on
+ * the status pages' wash (checkout's), the drawer is drawn 1.25× (zoom keeps its pitches on
+ * their rows), and the sticky bar is the column's width. ───────────────────────────────── */
+.iug-shell {
+  min-height: 100dvh;
+  background: #ffffff;
+}
+
+@media (min-width: 768px) {
+  .iug-page {
+    max-width: 560px;
+  }
+  .iug-sticky__row {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .iug-shell {
+    background:
+      radial-gradient(circle at top, rgba(156, 125, 255, 0.1), transparent 34%),
+      radial-gradient(circle at bottom, rgba(254, 104, 57, 0.06), transparent 28%), #fbf9ff;
+    background-attachment: fixed;
+  }
+  .iug-page {
+    box-shadow: 0 0 0 1px rgba(23, 18, 31, 0.06);
+  }
+  .iug-map {
+    zoom: 1.25;
+  }
+  .iug-sticky {
+    right: calc(50% - 280px);
+    left: calc(50% - 280px);
+    box-shadow:
+      1px 0 0 rgba(23, 18, 31, 0.06),
+      -1px 0 0 rgba(23, 18, 31, 0.06);
+  }
+}
+
+/* A pointer that can hover: the sticky pill lifts as the card's button does (paygate.css). */
+@media (hover: hover) and (pointer: fine) {
+  .iug-sticky__cta {
+    transition:
+      transform 200ms ease,
+      filter 200ms ease,
+      box-shadow 200ms ease;
+  }
+  .iug-sticky__cta:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+    box-shadow: 0 8px 20px -6px rgba(168, 90, 76, 0.45);
+  }
+  .iug-sticky__cta:active:not(:disabled) {
+    transform: none;
+  }
+  .iug-header__back:hover {
+    background: rgba(23, 18, 31, 0.04);
+  }
+}
+
 /* Reduced motion: nothing moves or pulses, and the bar simply appears. */
 @media (prefers-reduced-motion: reduce) {
+  .iug-sticky__cta,
+  .iug-sticky__cta:hover:not(:disabled) {
+    transform: none;
+    transition: none;
+  }
   .iug-hero--motion .iug-badge,
   .iug-hero--motion .iug-hero__title,
   .iug-hero--motion .iug-progress,
