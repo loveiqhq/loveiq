@@ -14,6 +14,7 @@ import {
   bubbleWidth,
   consentSettled,
   easeInOutQuad,
+  guidedTourKey,
   hasConsentDecision,
   holeFor,
   lerpHole,
@@ -261,10 +262,17 @@ describe("when the tour starts by itself", () => {
     expect(tourWaitingOn({ ...clear, anchorsReady: false })).toBe("anchors");
   });
 
+  it("is remembered per report, a preview's under its own name", () => {
+    // Marcus, 20.10: once per browser kept it off a reader's next report.
+    expect(guidedTourKey(3011)).toBe(`${GUIDED_TOUR_KEY}:3011`);
+    expect(guidedTourKey(2063)).not.toBe(guidedTourKey(3011));
+    expect(guidedTourKey(null)).toBe(`${GUIDED_TOUR_KEY}:preview`);
+  });
+
   it("is remembered under the key the e2e specs seed, so theirs never meet it", () => {
-    expect(readFileSync("e2e/fixtures/report.ts", "utf8")).toContain(
-      `GUIDED_TOUR_KEY = "${GUIDED_TOUR_KEY}"`
-    );
+    const fixture = readFileSync("e2e/fixtures/report.ts", "utf8");
+    expect(fixture).toContain(`GUIDED_TOUR_KEY = "${GUIDED_TOUR_KEY}"`);
+    expect(fixture).toContain('`${GUIDED_TOUR_KEY}:${submissionId ?? "preview"}`');
   });
 
   it("gives way to a reader who already started scrolling", () => {

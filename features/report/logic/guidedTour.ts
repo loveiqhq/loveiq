@@ -42,10 +42,21 @@ export const TOUR_STEP_IDS: readonly TourStepId[] = [
 ];
 
 /**
- * Seen once, then never again on this browser (localStorage, sessionStorage where that is
- * refused). Versioned so a reworked tour can be shown again by bumping it.
+ * Seen once per report (`guidedTourKey`): localStorage, sessionStorage where that is
+ * refused. Versioned so a reworked tour can be shown again by bumping it.
  */
 export const GUIDED_TOUR_KEY = "loveiq-report-tour-v1";
+
+/**
+ * The record of one report's tour. Once per report, not once per browser: a reader who
+ * had seen it on one report never met it on their next, including straight after the
+ * survey and its wizard (Marcus, 20.10: "Tutorial should start on the report page"). A
+ * preview has no submission; its record is "preview", kept for the tab only, so every
+ * preview link opened shows the first open as a reader meets it.
+ */
+export function guidedTourKey(submissionId: number | null): string {
+  return `${GUIDED_TOUR_KEY}:${submissionId ?? "preview"}`;
+}
 
 /** Where a stop's control comes to rest: this share down the visible screen. */
 export const ANCHOR_AT = 0.42;

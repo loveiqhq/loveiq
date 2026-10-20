@@ -1,12 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
-import { GUIDED_TOUR_KEY, PRIMARY_ARCHETYPE, mockReport } from "./fixtures/report";
+import { PRIMARY_ARCHETYPE, guidedTourKey, mockReport } from "./fixtures/report";
 import { instantScroll } from "./fixtures/instant-scroll";
 
 /**
  * The guided tour on a real build (features/report/logic/guidedTour.ts; Figma 1713:1071 ›
- * 1755:1275, Ready for Dev 16.10): on a V4 report's first open in a browser it walks the
+ * 1755:1275, Ready for Dev 16.10): on each V4 report's first open in a browser it walks the
  * reader through the chapter menu, "Show All", a chapter's toggle, "Try This" and, for a
  * reader who has not paid, a locked chapter's lock. The report is held still under it, and
  * it ends at the top of the page.
@@ -97,16 +97,29 @@ test.describe("guided tour on the first open", () => {
 
     await expect(page.locator(".rv4-tour")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(0);
-    expect(await page.evaluate((key) => localStorage.getItem(key), GUIDED_TOUR_KEY)).not.toBeNull();
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), guidedTourKey(1))
+    ).not.toBeNull();
     // Released: the page answers the reader again.
     await page.evaluate(() => window.scrollTo({ top: 600, behavior: "instant" }));
     await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(0);
 
-    // Once per browser.
+    // Once per report.
     await page.reload();
     await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
     await page.waitForTimeout(5_000);
     await expect(page.locator(".rv4-tour")).toHaveCount(0);
+
+    // The reader's next report starts it again (Marcus, 20.10).
+    await page.unroute("**/api/report?**");
+    await mockReport(
+      page,
+      0,
+      { submissionId: 2, typicalBeliefs: buildTypicalBeliefs(PRIMARY_ARCHETYPE, { locked: true }) },
+      { tour: true }
+    );
+    await page.reload();
+    await expect(bubble(page)).toBeVisible({ timeout: 20_000 });
   });
 
   test("gives a reader who has paid four stops, ending on Try This", async ({ page, baseURL }) => {

@@ -115,8 +115,9 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
 - **When.** Owners and previews, never a shared view, a probe (the persona walks' cookie) or a
   checkout return. It waits for any open window, the cookie banner's answer and its controls,
   and gives way to a reader who has already scrolled. Remembered once started in
-  `localStorage["loveiq-report-tour-v1"]` (`GUIDED_TOUR_KEY`); "Replay the Tour" ends the chapter
-  menu, below its list (the walks count the list's rows).
+  `localStorage["loveiq-report-tour-v1:<submission id>"]` (`guidedTourKey`), once per report so a
+  reader meets it again on their next one; a preview's in `sessionStorage`, for the tab only.
+  "Replay the Tour" ends the chapter menu, below its list (the walks count the list's rows).
 - **While it runs.** A layer of its own on `<body>` (z-index 78, `ui/v3/guidedTour.css`) draws the
   dim with a hole and the bubble; the report under it is inert, without the shell's blur. The
   page is held without the body lock (which would stop the tour's own scrolling): the root's

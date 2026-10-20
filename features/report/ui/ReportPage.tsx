@@ -2996,7 +2996,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   });
 
   /**
-   * The guided tour (features/report/logic/guidedTour.ts), on a V4 report's first open
+   * The guided tour (features/report/logic/guidedTour.ts), on each V4 report's first open
    * on this browser and from the chapter menu. Its owner's or a preview's, never a shared
    * view's; never a probe's (the persona walks carry the cookie); never on a return from
    * checkout, which restores the reader's place instead. While it runs the leave offer is
@@ -3014,6 +3014,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         (data?.contentArchetype ?? data?.primaryArchetype),
     autoStart: !isProbe && !arrivedFromCheckout,
     blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
+    submissionId: data?.submissionId ?? null,
   });
 
   const leaveOffer = useLeaveIntent({
