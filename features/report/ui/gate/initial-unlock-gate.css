@@ -305,10 +305,13 @@
   color: #000000;
 }
 
+/* The frame's #00892F on the card's tint is 4.2:1 at 18px bold, under WCAG AA's 4.5 (the
+ * a11y spec's axe run): a shade darker of the same green, 4.8:1. Flagged for Mark. */
 .iug-card .iug-card__guarantee {
   justify-content: center;
   font-size: 18px;
   line-height: normal;
+  color: #007f2d;
 }
 
 .iug-card .rpg-card__cta[aria-busy="true"] {
@@ -342,6 +345,12 @@
 }
 
 /* ── 1604:2426: the payment marks (paygate.css `rpg__payments-*`) ───────── */
+/* The frame's #9CA3AF is 2.5:1 on white at 11px; the next grey of its family is 4.8:1, the
+ * WCAG AA the a11y spec holds every page to. Flagged for Mark. */
+.iug-page .rpg__payments-label {
+  color: #6b7280;
+}
+
 /* 48px under the card, as the frame's auto layout; its section runs 28px past the marks. */
 .iug-payments {
   display: flex;
@@ -750,11 +759,12 @@
   min-width: 0;
 }
 
+/* The frame's #009148 is 4.1:1 on white at 12px bold; a shade darker, 5.0:1 (WCAG AA). */
 .iug-sticky__days {
   font-size: 12px;
   font-weight: 700;
   line-height: 15.25px;
-  color: #009148;
+  color: #00803f;
 }
 
 .iug-sticky__line {
