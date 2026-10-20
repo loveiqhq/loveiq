@@ -9,9 +9,10 @@ import { PTS_H2, PTS_REVEAL, PTS_SECTION, ptsRevealItem } from "./ptsStyles";
  */
 
 /**
- * Six answers, all drawn open with a "−". Native <details>: each can be folded away, and
- * the answers are in the page for search engines and readers alike. The answers are the
- * offer's (PtsOfferCopy).
+ * Six answers. Native <details>, every one folded at first (Marcus, 20.10: "Collapse the
+ * FAQ by default"; Figma drew them open with a "−", as the main landing's FAQ is not): a
+ * question opens its answer, and the answers are in the page for search engines and
+ * readers alike. The answers are the offer's (PtsOfferCopy).
  */
 export const PtsFaq: FC<{ items: PtsOfferCopy["faqItems"] }> = ({ items }) => (
   <section aria-labelledby="pts-faq" className={PTS_SECTION}>
@@ -22,7 +23,6 @@ export const PtsFaq: FC<{ items: PtsOfferCopy["faqItems"] }> = ({ items }) => (
       {items.map((item, i) => (
         <details
           key={item.question}
-          open
           className={`group border-b border-[#e9e6ee] ${ptsRevealItem(i, 3)}`}
         >
           <summary className="focus-visible-ring flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm px-1 py-[22px] [&::-webkit-details-marker]:hidden">
