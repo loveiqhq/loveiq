@@ -382,11 +382,22 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByRole("textbox")).toHaveValue("Test");
 
     // --- The guidance rows open in place (Figma 11303:174) ---
-    // Pause / Save & exit and Auto-advance left with the 2026-10-04 redesign.
     const why = page.getByRole("button", { name: "Why we ask this" });
     await expect(why).toHaveAttribute("aria-expanded", "false");
     await why.click();
     await expect(why).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("button", { name: /pause|save & exit/i })).toHaveCount(0);
+
+    // --- Auto-advance (off by default) and Pause, back since Marcus's review of 20.10 ---
+    // Exact: a name string matches anywhere, and "Explain auto-advance" holds this one.
+    await expect(page.getByRole("button", { name: "Auto-advance", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    // Pause saves the draft and opens the resume dialog; it does not navigate away.
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
+    await page.getByRole("button", { name: /continue where I left off/i }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("textbox")).toHaveValue("Test");
   });
 });
