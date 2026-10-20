@@ -60,28 +60,31 @@ export default function InitialUnlockGate({
     trackInitialGateViewed({ submission_id: gate.submissionId });
   }, [gate.submissionId]);
 
+  // The shell is the page's ground (the status pages' wash on a desktop); the frame is the column.
   return (
-    <main className="iug-page">
-      <ScrollAnimator />
-      <GateHero />
-      <section className="iug-pricing" aria-label="Your Core Archetype">
-        <GatePriceCard ref={ctaRef} gate={gate} onUnlock={start} state={state} />
-      </section>
-      <GatePayments />
-      <div className="iug-divider" aria-hidden="true" />
-      <div className="iug-sections">
-        <GateChapterMap />
-        <GateWhyUnlock />
-      </div>
-      <div className="iug-divider" aria-hidden="true" />
-      <GateReviews />
-      <GateStickyBar
-        guaranteeDays={gate.guaranteeDays}
-        onUnlock={start}
-        priceCents={gate.priceCents}
-        state={state}
-        visible={stickyVisible}
-      />
-    </main>
+    <div className="iug-shell">
+      <main className="iug-page">
+        <ScrollAnimator />
+        <GateHero />
+        <section className="iug-pricing" aria-label="Your Core Archetype">
+          <GatePriceCard ref={ctaRef} gate={gate} onUnlock={start} state={state} />
+        </section>
+        <GatePayments />
+        <div className="iug-divider" aria-hidden="true" />
+        <div className="iug-sections">
+          <GateChapterMap />
+          <GateWhyUnlock />
+        </div>
+        <div className="iug-divider" aria-hidden="true" />
+        <GateReviews />
+        <GateStickyBar
+          guaranteeDays={gate.guaranteeDays}
+          onUnlock={start}
+          priceCents={gate.priceCents}
+          state={state}
+          visible={stickyVisible}
+        />
+      </main>
+    </div>
   );
 }
