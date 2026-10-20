@@ -263,11 +263,18 @@ describe("the pay-to-start page, as drawn", () => {
     }
   });
 
-  it("opens every answer, as Figma draws them", () => {
+  it("folds every answer at first, and a question opens its own (Marcus, 20.10)", () => {
     renderPage();
     const details = document.querySelectorAll("details");
     expect(details).toHaveLength(PTS_FAQ.items.length);
-    for (const d of details) expect(d.open).toBe(true);
+    for (const d of details) expect(d.open).toBe(false);
+    // Folded, the answers are still in the page.
+    expect(details[0]!.textContent).toContain(PTS_FAQ.items[0]!.answer);
+
+    fireEvent.click(screen.getByText(PTS_FAQ.items[0]!.question));
+
+    expect(details[0]!.open).toBe(true);
+    expect(details[1]!.open).toBe(false);
   });
 
   it("names no video file before the play button is pressed", () => {
