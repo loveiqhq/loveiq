@@ -78,6 +78,10 @@ vi.mock("@features/analytics/client", () => ({
   trackPaywallInitiated: (...args: unknown[]) => mockTrackPaywallInitiated(...args),
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
+  // The EUR 1.99 gate (features/report/ui/gate).
+  trackInitialGateViewed: vi.fn(),
+  trackInitialGateCta: vi.fn(),
+  trackInitialGateBack: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),

@@ -113,6 +113,9 @@ const PERSISTED_EVENTS = new Set([
   "tour_skipped",
   "tour_left",
   "tour_replayed",
+  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, and its two buttons
+  "initial_gate_viewed",
+  "initial_gate_cta_click",
 ]);
 
 /**
@@ -861,6 +864,27 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
  * Idempotency: callers gate on the same `transaction_id` localStorage key as
  * `trackReportPurchase`, so a refresh of the return page doesn't double-write.
  */
+/**
+ * The EUR 1.99 pre-unlock gate (features/report/ui/gate), drawn in place of the report for a
+ * reader it stops. Persisted, so the funnel has the gate's "paywall reached" from the page's
+ * side; the server stamps its own (personal_report.initial_gate_seen_at).
+ */
+export const trackInitialGateViewed = (params: { submission_id: number | null }) => {
+  track("initial_gate_viewed", params);
+  persistAnalyticsEvent("initial_gate_viewed", params);
+};
+
+/** One of the gate's two buttons: the price card's, or the sticky bar's. */
+export const trackInitialGateCta = (params: { place: "card" | "sticky" }) => {
+  track("initial_gate_cta_click", params);
+  persistAnalyticsEvent("initial_gate_cta_click", params);
+};
+
+/** The gate's back arrow, back to the survey's last screen. GA4/PostHog only. */
+export const trackInitialGateBack = () => {
+  track("initial_gate_back", {});
+};
+
 export const trackPaywallUnlocked = (
   plan: "essentials" | "full_report" | "core" | "all_reports" | "initial",
   priceEur: number,
