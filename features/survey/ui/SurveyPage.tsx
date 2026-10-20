@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type FC,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import SurveyEngine from "./SurveyEngine";
@@ -971,6 +979,21 @@ const ConsentScreen: FC<{
     setTimeout(() => onAgree(), 400);
   }, [onAgree]);
 
+  /**
+   * Space ticks or unticks a box, and so does Enter until both are ticked. Then Enter is
+   * "I agree", as Enter sends a form: a click leaves focus on the box, so after ticking
+   * both with the mouse Enter used to untick the last one (Marcus, 20.10).
+   */
+  const handleBoxKey = (e: ReactKeyboardEvent<HTMLDivElement>, toggle: () => void) => {
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    if (e.key === "Enter" && canProceed) {
+      if (!isLeaving) handleAgreeClick();
+      return;
+    }
+    toggle();
+  };
+
   return (
     <main
       className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4"
@@ -1035,12 +1058,7 @@ const ConsentScreen: FC<{
             aria-checked={ageConfirmed}
             tabIndex={0}
             onClick={() => setAgeConfirmed(!ageConfirmed)}
-            onKeyDown={(e) => {
-              if (e.key === " " || e.key === "Enter") {
-                e.preventDefault();
-                setAgeConfirmed(!ageConfirmed);
-              }
-            }}
+            onKeyDown={(e) => handleBoxKey(e, () => setAgeConfirmed(!ageConfirmed))}
             className={`flex cursor-pointer items-start gap-4 rounded-[16px] border bg-white/5 px-4 py-4 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/50 ${ageConfirmed ? "border-[rgba(254,104,57,0.3)]" : "border-white/10"}`}
           >
             <div
@@ -1076,10 +1094,7 @@ const ConsentScreen: FC<{
             }}
             onKeyDown={(e) => {
               if ((e.target as HTMLElement).closest("a")) return;
-              if (e.key === " " || e.key === "Enter") {
-                e.preventDefault();
-                setTermsAccepted(!termsAccepted);
-              }
+              handleBoxKey(e, () => setTermsAccepted(!termsAccepted));
             }}
             className={`flex cursor-pointer items-start gap-4 rounded-[16px] border bg-white/5 px-4 py-4 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/50 ${termsAccepted ? "border-[rgba(254,104,57,0.3)]" : "border-white/10"}`}
           >

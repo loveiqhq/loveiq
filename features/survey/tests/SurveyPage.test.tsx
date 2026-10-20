@@ -314,6 +314,30 @@ describe("SurveyPage", () => {
     expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
   });
 
+  it("takes Enter as I agree once both boxes are ticked, and as a tick before that", async () => {
+    // A click leaves focus on the box: after ticking both with the mouse, Enter unticked
+    // the last one (Marcus, 20.10). Space still ticks and unticks.
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    render(<SurveyPage />);
+    const agreeButton = await screen.findByRole("button", { name: /i agree/i });
+    const [age, terms] = screen.getAllByRole("checkbox");
+
+    await user.click(age!);
+    terms!.focus();
+    await user.keyboard("{Enter}");
+    expect(terms).toHaveAttribute("aria-checked", "true");
+    await user.keyboard(" ");
+    expect(terms).toHaveAttribute("aria-checked", "false");
+    expect(agreeButton).toBeDisabled();
+
+    await user.click(terms!);
+    expect(terms).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(terms).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
+  });
+
   /**
    * A disabled button cannot explain itself: it takes no pointer events, so
    * there is no hover, no click, nothing. On production 22 people tapped this

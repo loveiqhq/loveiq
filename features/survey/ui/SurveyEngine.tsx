@@ -70,6 +70,18 @@ function isTextEntry(target: EventTarget | null): boolean {
 }
 
 /**
+ * An answer already chosen on the question on screen: a ticked option or the pressed
+ * scale point. Never a control around the answers (Previous/Next, a guidance row, a
+ * group's header), which keep their own Enter.
+ */
+function isChosenAnswer(control: Element, questionBody: HTMLElement | null): boolean {
+  return (
+    !!questionBody?.contains(control) &&
+    control.matches('[aria-checked="true"], [aria-pressed="true"]')
+  );
+}
+
+/**
  * How many question entries this one sits above its base, or 0 when the entry on
  * screen is not the question shown (out of step, or not a question entry at all), so
  * that nothing ever pops or jumps history it did not stack.
@@ -581,9 +593,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
       // cancelled the press, so a changed answer was never saved, and Enter on Next
       // moved twice. Enter anywhere else (a text box, the page) still means next.
-      if (e.key === "Enter" && e.target instanceof Element && e.target.closest("button, a")) {
-        return;
-      }
+      //
+      // Except on the answer already chosen. A click leaves focus on the answer, so
+      // after clicking one on a desktop Enter pressed it again (a ticked box came
+      // unticked) and never moved on (Marcus, 20.10: Enter should save the answer
+      // and go to the next question). Pressing it again changes nothing worth
+      // keeping, so there Enter is next; the answer is already saved.
+      const control =
+        e.key === "Enter" && e.target instanceof Element ? e.target.closest("button, a") : null;
+      if (control && !isChosenAnswer(control, bodyRef.current)) return;
       // In a text field the arrows move the caret. They used to change the question,
       // so fixing a typo in your email threw you back to the question before it.
       if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isTextEntry(e.target)) return;
