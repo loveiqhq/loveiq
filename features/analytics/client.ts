@@ -888,6 +888,11 @@ export const trackReportEngagement = (
   persistAnalyticsEvent(eventName, params, thresholdSeconds * 1000);
 };
 
+/** The survey's Pause (back since Marcus's review of 20.10): where, and how far in. */
+export const trackSurveyPause = (qId: string, progress: number) => {
+  track("survey_pause", { question_id: qId, progress_pct: progress });
+};
+
 export const trackSurveyInvite = (method: string = "email") => {
   track("survey_invite", { method });
 };

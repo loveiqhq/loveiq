@@ -22,11 +22,12 @@ import { openFirstCategory } from "./surveyGroups";
  * held the answer client-side and 11 said "Yes" — consent given, never recorded.
  *
  * The trigger was AUTO-ADVANCE: choosing an option scheduled `goNext()` on a 350ms timer,
- * and that callback was the `goNext` from the render BEFORE the answer existed. Auto-advance
- * left with the 2026-10-04 redesign (Figma 11303:174), so the submit is now always a Next
- * click — which cannot fire early, because the button stays disabled until the answer
- * commits. This keeps that guarantee pinned: answer the last question, press Next at the
- * first moment it allows, and the answer must be in the payload.
+ * and that callback was the `goNext` from the render BEFORE the answer existed. The submit
+ * now reads the answers through getLatestAnswers(), and Auto-advance (off by default, back
+ * since 20.10) calls the latest `goNext`; SurveyEngine.pause.test.tsx pins that path. This
+ * pins the Next click, which cannot fire early because the button stays disabled until the
+ * answer commits: answer the last question, press Next at the first moment it allows, and
+ * the answer must be in the payload.
  *
  * Nothing is written: the submit POST is intercepted and inspected, never forwarded.
  */

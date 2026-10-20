@@ -97,7 +97,7 @@ async function renderedOptions(page: Page, role: "radio" | "checkbox"): Promise<
 
 /**
  * Answer whichever question is on screen, press Next, and make sure we land on the next
- * one. Every question needs Next: auto-advance left with the 2026-10-04 redesign.
+ * one. Every question needs Next: Auto-advance is off unless the reader turns it on.
  */
 async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: string | null) {
   switch (q.answerType) {
