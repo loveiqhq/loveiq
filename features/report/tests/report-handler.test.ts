@@ -1213,6 +1213,36 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     expect(json.primaryArchetype).toBe("Emotional Voyeur");
   });
 
+  // Pricing pins these readers to arm A3 (features/pricing/logic/reportPricing.ts): what the
+  // route already knows it passes on, and what it does not know pricing looks up itself.
+  const quoteArgs = () => vi.mocked(getReportPriceQuotesForContext).mock.calls[0]![0];
+
+  it("tells pricing a paying reader of the gate is in its cohort and holds the unlock", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      ...NOTHING_BOUGHT,
+      initialUnlock: true,
+    });
+    await ownerGet();
+    expect(quoteArgs()).toEqual(
+      expect.objectContaining({ initialGateCohort: true, initialUnlock: true })
+    );
+  });
+
+  it("leaves the cohort to pricing while the gate is off, but still says what was bought", async () => {
+    mockGateEnabled.mockResolvedValue(false);
+    await ownerGet();
+    expect(quoteArgs().initialGateCohort).toBeUndefined();
+    expect(quoteArgs().initialUnlock).toBe(false);
+  });
+
+  it("says nothing of the unlock to pricing when the purchases can't be read", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockRejectedValue(
+      new Error("payment_lookup_failed")
+    );
+    await ownerGet();
+    expect(quoteArgs().initialUnlock).toBeUndefined();
+  });
+
   it("never gates a shared view of a gated owner's report", async () => {
     mockResolveShare.mockResolvedValue({
       share: {

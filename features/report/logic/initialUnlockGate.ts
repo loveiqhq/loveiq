@@ -16,6 +16,12 @@ export const INITIAL_UNLOCK_TITLE = "Your Core Archetype";
 /** "14-day money-back guarantee": Figma draws 7, 14 is the standing rule (Fatih, 02.10). */
 export const INITIAL_UNLOCK_GUARANTEE_DAYS = 14;
 
+/**
+ * `payment.metadata.gifted` on the EUR 0 `initial` row E07 grants on day 4: the gift opens
+ * what the EUR 1.99 does and carries its EUR 10 credit (`getReportCredits`).
+ */
+export const INITIAL_UNLOCK_GIFT = "e07";
+
 export interface InitialUnlockGateInput {
   /** report_initial_unlock_gate. */
   gateEnabled: boolean;

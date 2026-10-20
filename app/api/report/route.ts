@@ -409,6 +409,8 @@ export async function GET(request: Request) {
     // live on, and whether the purchases were read at all (an unread one gates nobody).
     let personalReportId: number | null = null;
     let accessLookupOk = false;
+    // For pricing's A3 pin: known only while the gate is on and its state was read.
+    let initialGateCohort: boolean | undefined;
 
     try {
       // `ensure` reads the personal_report row and returns it; handing that row
@@ -521,6 +523,7 @@ export async function GET(request: Request) {
     if (initialGatePromise && (await initialGatePromise)) {
       const gateState = personalReportId ? await readInitialGateState(personalReportId) : null;
       const inCohort = Boolean(gateState?.cohortAt);
+      if (gateState) initialGateCohort = inCohort;
       const livePayToStart = inCohort ? await hasLivePayToStartEntitlement(submission.id) : false;
       if (
         needsInitialUnlockGate({
@@ -566,6 +569,9 @@ export async function GET(request: Request) {
           reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
           submissionId: submission.id,
           userAgent,
+          // What this read already knows; pricing looks up the rest for a first quote.
+          initialGateCohort,
+          initialUnlock: accessLookupOk ? initialUnlock : undefined,
         });
       } catch (err) {
         logger.warn({ err, submissionId: submission.id }, "Unable to resolve report pricing");
