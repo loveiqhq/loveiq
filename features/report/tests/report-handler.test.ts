@@ -1217,15 +1217,38 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   // route already knows it passes on, and what it does not know pricing looks up itself.
   const quoteArgs = () => vi.mocked(getReportPriceQuotesForContext).mock.calls[0]![0];
 
-  it("tells pricing a paying reader of the gate is in its cohort and holds the unlock", async () => {
+  it("tells pricing a paying reader holds the unlock, and leaves the cohort to pricing", async () => {
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
       ...NOTHING_BOUGHT,
       initialUnlock: true,
     });
     await ownerGet();
+    expect(quoteArgs()).toEqual(expect.objectContaining({ initialUnlock: true }));
+    expect(quoteArgs().initialGateCohort).toBeUndefined();
+  });
+
+  it("tells pricing the cohort of a reader who holds nothing", async () => {
+    mockReadGateState.mockResolvedValue({ cohortAt: null, seenAt: null });
+    await ownerGet();
     expect(quoteArgs()).toEqual(
-      expect.objectContaining({ initialGateCohort: true, initialUnlock: true })
+      expect.objectContaining({ initialGateCohort: false, initialUnlock: false })
     );
+  });
+
+  // After launch nearly every reader who gets in has bought something; the gate's two reads
+  // (its state, then pay to start) are only for a reader who could still meet it.
+  it.each([
+    ["the full report", { accessPlan: "full_report" as const }],
+    ["another archetype's report", { anyPlan: "full_report" as const }],
+    ["the Core Archetype", { initialUnlock: true }],
+  ])("reads no gate state for a reader who bought %s", async (_what, bought) => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      ...NOTHING_BOUGHT,
+      ...bought,
+    });
+    await ownerGet();
+    expect(mockReadGateState).not.toHaveBeenCalled();
+    expect(mockLivePayToStart).not.toHaveBeenCalled();
   });
 
   it("leaves the cohort to pricing while the gate is off, but still says what was bought", async () => {
