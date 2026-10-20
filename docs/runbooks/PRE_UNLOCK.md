@@ -21,13 +21,14 @@ with it. Everything ships switched off.
    `docs/runbooks/DISASTER_RECOVERY.md` §3 shows, with
    `{"key":"report_initial_unlock_gate","enabled":true}`. Only surveys submitted from then on
    are gated; the change reaches every instance within 30 seconds (the flags' cache).
-4. **Check it.** Take the survey in a fresh browser with a team address. The gate follows the
-   wizard. Pay (sandbox: Stripe's test card; production: a real card, refunded after). The
-   report opens at its top with the Core Archetype card and the Summary open, and its pay
-   screen offers the full report at EUR 19.99 ("€10 credit applied" on Stripe's page). E06,
-   "Your Core Archetype is unlocked", arrives. In the database the report has
-   `initial_gate_cohort_at` and `initial_gate_seen_at`, and the payment `metadata.plan` =
-   `initial`.
+4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
+   team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
+   carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
+   (sandbox: Stripe's test card; production: a real card, refunded after). The report opens
+   at its top with the Core Archetype card and the Summary open, and its pay screen offers
+   the full report at EUR 19.99 ("€10 credit applied" on Stripe's page). E06, "Your Core
+   Archetype is unlocked", arrives. In the database the report has `initial_gate_cohort_at`
+   and `initial_gate_seen_at`, and the payment `metadata.plan` = `initial`.
 5. **E07, from day 4.** Four days after the switch at the earliest, when the first gated
    readers reach day 4: `{"key":"initial_unlock_gift_email","enabled":true}`. The cron runs
    hourly at :47, on production only; each run logs its summary (`gifted`, `heldOut`,
