@@ -8,7 +8,7 @@ vi.mock("@features/analytics/client", () => analytics);
 const openChapter = vi.hoisted(() => vi.fn());
 vi.mock("@features/report/ui/v3/v4OpenChapter", () => ({ openV4Chapter: openChapter }));
 
-import { GUIDED_TOUR_KEY } from "@features/report/logic/guidedTour";
+import { GUIDED_TOUR_KEY, guidedTourKey } from "@features/report/logic/guidedTour";
 import { useGuidedTour, type UseGuidedTourArgs } from "@features/report/ui/hooks/useGuidedTour";
 
 /**
@@ -33,7 +33,14 @@ function buildPage({ foldPill = true } = {}) {
   }
 }
 
-const ready: UseGuidedTourArgs = { enabled: true, autoStart: true, blocked: false };
+const ready: UseGuidedTourArgs = {
+  enabled: true,
+  autoStart: true,
+  blocked: false,
+  submissionId: 3011,
+};
+/** This report's record. */
+const KEY = guidedTourKey(3011);
 const advance = (ms: number) =>
   act(() => {
     vi.advanceTimersByTime(ms);
@@ -68,14 +75,40 @@ describe("useGuidedTour", () => {
     advance(500);
     expect(result.current.run).toMatchObject({ trigger: "auto" });
     expect(result.current.running).toBe(true);
-    expect(window.localStorage.getItem(GUIDED_TOUR_KEY)).not.toBeNull();
+    expect(window.localStorage.getItem(KEY)).not.toBeNull();
   });
 
-  it("does not start on a browser that has seen it", () => {
-    window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+  it("does not start again on a report that has shown it", () => {
+    window.localStorage.setItem(KEY, "2026-10-17T09:00:00.000Z");
     const { result } = renderHook(() => useGuidedTour(ready));
     advance(5_000);
     expect(result.current.run).toBeNull();
+  });
+
+  it("starts on each new report, on a browser that has seen it on another", () => {
+    // Marcus, 20.10: it never met a reader's next report, nor the one after the survey.
+    window.localStorage.setItem(guidedTourKey(2063), "2026-10-17T09:00:00.000Z");
+    // The record from when it was once per browser no longer counts.
+    window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+    const { result } = renderHook(() => useGuidedTour(ready));
+    advance(500);
+    expect(result.current.run).toMatchObject({ trigger: "auto" });
+    expect(window.localStorage.getItem(KEY)).not.toBeNull();
+  });
+
+  it("remembers a preview for the tab only, so the next preview link starts it again", () => {
+    const preview = { ...ready, submissionId: null };
+    const first = renderHook(() => useGuidedTour(preview));
+    advance(500);
+    expect(first.result.current.run).toMatchObject({ trigger: "auto" });
+    expect(window.sessionStorage.getItem(guidedTourKey(null))).not.toBeNull();
+    expect(window.localStorage.getItem(guidedTourKey(null))).toBeNull();
+    first.unmount();
+
+    // A reload in the same tab.
+    const again = renderHook(() => useGuidedTour(preview));
+    advance(5_000);
+    expect(again.result.current.run).toBeNull();
   });
 
   it("waits while the report is loading, then starts", () => {
@@ -93,7 +126,7 @@ describe("useGuidedTour", () => {
     const { result } = renderHook(() => useGuidedTour({ ...ready, autoStart: false }));
     advance(5_000);
     expect(result.current.run).toBeNull();
-    expect(window.localStorage.getItem(GUIDED_TOUR_KEY)).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
   });
 
   it("reads the probe cookie again as it starts, since the page reads it late", () => {
@@ -153,7 +186,7 @@ describe("useGuidedTour", () => {
     const { result } = renderHook(() => useGuidedTour(ready));
     advance(5_000);
     expect(result.current.run).toBeNull();
-    expect(window.localStorage.getItem(GUIDED_TOUR_KEY)).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
   });
 
   it("does not start where neither storage can remember it", () => {
@@ -168,7 +201,7 @@ describe("useGuidedTour", () => {
   });
 
   it("replays on request, whatever it remembers, and ends on done", () => {
-    window.localStorage.setItem(GUIDED_TOUR_KEY, "seen");
+    window.localStorage.setItem(KEY, "seen");
     const { result } = renderHook(() => useGuidedTour(ready));
     advance(5_000);
     act(() => result.current.replay("drawer", null));
@@ -180,7 +213,7 @@ describe("useGuidedTour", () => {
   });
 
   it("opens Typical Beliefs again for a replay when the reader had closed it", () => {
-    window.localStorage.setItem(GUIDED_TOUR_KEY, "seen");
+    window.localStorage.setItem(KEY, "seen");
     document
       .querySelector("#typical_beliefs .rv4-chapter__button")!
       .setAttribute("aria-expanded", "false");
@@ -194,7 +227,7 @@ describe("useGuidedTour", () => {
   });
 
   it("puts focus back on what replayed it once it ends", () => {
-    window.localStorage.setItem(GUIDED_TOUR_KEY, "seen");
+    window.localStorage.setItem(KEY, "seen");
     const origin = document.querySelector<HTMLButtonElement>(".report-chapter-pill__btn")!;
     const { result } = renderHook(() => useGuidedTour(ready));
     act(() => result.current.replay("drawer", origin));

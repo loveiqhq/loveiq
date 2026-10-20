@@ -5,8 +5,8 @@ import { trackTourReplayed } from "@features/analytics/client";
 import {
   ANCHOR_WAIT_MS,
   AUTO_START_DELAY_MS,
-  GUIDED_TOUR_KEY,
   consentSettled,
+  guidedTourKey,
   tourRuledOut,
   tourSteps,
   tourTooLate,
@@ -33,6 +33,8 @@ export interface UseGuidedTourArgs {
   autoStart: boolean;
   /** Something the page holds in state is open: the plans, share, or the Stripe hand-off. */
   blocked: boolean;
+  /** The report on screen, whose own record says it has shown its tour; null in a preview. */
+  submissionId: number | null;
 }
 
 export interface GuidedTour {
@@ -52,8 +54,14 @@ const RETRY_MS = 250;
 /** A replay into a Typical Beliefs the reader had closed waits for it to open and measure. */
 const REOPEN_SETTLE_MS = 300;
 
-function readRecord(key: string): string | null {
-  for (const store of [() => localStorage, () => sessionStorage]) {
+type Store = () => Storage;
+/** A report's record: for good, or for the tab where localStorage is refused. */
+const REPORT_STORES: readonly Store[] = [() => localStorage, () => sessionStorage];
+/** A preview's: this tab only, so the next preview link opened starts it again. */
+const PREVIEW_STORES: readonly Store[] = [() => sessionStorage];
+
+function readRecord(key: string, stores: readonly Store[]): string | null {
+  for (const store of stores) {
     try {
       const value = store().getItem(key);
       if (value !== null) return value;
@@ -64,9 +72,9 @@ function readRecord(key: string): string | null {
   return null;
 }
 
-/** False when neither storage takes it: then "once" cannot be kept, so it never starts. */
-function writeRecord(key: string, value: string): boolean {
-  for (const store of [() => localStorage, () => sessionStorage]) {
+/** False when no storage takes it: then "once" cannot be kept, so it never starts. */
+function writeRecord(key: string, value: string, stores: readonly Store[]): boolean {
+  for (const store of stores) {
     try {
       store().setItem(key, value);
       return true;
@@ -92,16 +100,21 @@ let runIds = 0;
 
 /**
  * When the guided tour runs (features/report/logic/guidedTour.ts has the rules): once, by
- * itself, the first time a reader opens their report on this browser (spec card 1755:1276:
- * "Starts on first open, straight at step 1"), and again whenever they ask for it from the
- * chapter menu. The page renders V4GuidedTour from `run`.
+ * itself, the first time each report is opened on this browser (spec card 1755:1276:
+ * "Starts on first open, straight at step 1"; `guidedTourKey`), and again whenever the
+ * reader asks for it from the chapter menu. The page renders V4GuidedTour from `run`.
  *
  * Remembered as soon as it starts, like the leave offer's record: a reader who reloads in
  * the middle of it has seen it, and can replay it. Never started over something else that
  * is open, before the cookie question is settled, in a hidden tab, or for a reader who has
  * already begun to scroll (they are reading; it waits for their next visit).
  */
-export function useGuidedTour({ enabled, autoStart, blocked }: UseGuidedTourArgs): GuidedTour {
+export function useGuidedTour({
+  enabled,
+  autoStart,
+  blocked,
+  submissionId,
+}: UseGuidedTourArgs): GuidedTour {
   const [run, setRun] = useState<GuidedTourRun | null>(null);
   const blockedRef = useRef(blocked);
   const settledRef = useRef(false);
@@ -113,10 +126,12 @@ export function useGuidedTour({ enabled, autoStart, blocked }: UseGuidedTourArgs
 
   useEffect(() => {
     if (settledRef.current) return;
+    const key = guidedTourKey(submissionId);
+    const stores = submissionId === null ? PREVIEW_STORES : REPORT_STORES;
     const ruledOut = tourRuledOut({
       enabled,
       autoStart,
-      seen: enabled && autoStart && readRecord(GUIDED_TOUR_KEY) !== null,
+      seen: enabled && autoStart && readRecord(key, stores) !== null,
     });
     // Not yet: the report is still loading or showing another archetype's copy.
     if (ruledOut === "disabled") return;
@@ -147,7 +162,7 @@ export function useGuidedTour({ enabled, autoStart, blocked }: UseGuidedTourArgs
       settledRef.current = true;
       // The page reads the probe cookie only after hydration; ask again as it starts.
       if (isProbeRequest(document.cookie) || tourTooLate(window.scrollY)) return;
-      if (!writeRecord(GUIDED_TOUR_KEY, new Date().toISOString())) return;
+      if (!writeRecord(key, new Date().toISOString(), stores)) return;
       runIds += 1;
       setRun({ id: runIds, trigger: "auto" });
     };
@@ -162,7 +177,7 @@ export function useGuidedTour({ enabled, autoStart, blocked }: UseGuidedTourArgs
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [enabled, autoStart]);
+  }, [enabled, autoStart, submissionId]);
 
   // A report that goes away (another archetype, a refetch) takes its tour with it, for good.
   useEffect(() => {

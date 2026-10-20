@@ -156,7 +156,7 @@ vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
 import ReportPage from "@features/report/ui/ReportPage";
 import { UNLOCK_ANCHOR_REGEX } from "@features/checkout/server/reportPurchase";
 import * as analytics from "@features/analytics/client";
-import { GUIDED_TOUR_KEY } from "@features/report/logic/guidedTour";
+import { GUIDED_TOUR_KEY, guidedTourKey } from "@features/report/logic/guidedTour";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
@@ -393,8 +393,12 @@ describe("ReportPage", () => {
     mockTrackPaywallView.mockReset();
     mockTrackBeginCheckout.mockReset();
     // A V4 report's first open starts the guided tour over the page. These cases are about
-    // the page itself, so this browser has seen it; the tour's own block clears this.
-    window.localStorage.setItem(GUIDED_TOUR_KEY, "seen");
+    // the page itself, so every report they open has shown it (a preview: in this tab);
+    // the tour's own block clears its report's record.
+    for (const id of [42, 1920, 2063, 3011]) {
+      window.localStorage.setItem(guidedTourKey(id), "seen");
+    }
+    window.sessionStorage.setItem(guidedTourKey(null), "seen");
 
     vi.stubGlobal(
       "IntersectionObserver",
@@ -3157,6 +3161,8 @@ describe("ReportPage", () => {
   // gets the inks, so the page is what this pins.
   describe("V4 — the guided tour on the first open", () => {
     const TOUR_TOKEN = "rpt_guided_tour";
+    /** The record of the report these cases open (`tourV4`'s submission). */
+    const TOUR_KEY = guidedTourKey(3011);
     let rects: { mockRestore: () => void } | null = null;
 
     beforeEach(() => {
@@ -3172,8 +3178,8 @@ describe("ReportPage", () => {
           "Date",
         ],
       });
-      // This browser's first open.
-      window.localStorage.removeItem(GUIDED_TOUR_KEY);
+      // This report's first open.
+      window.localStorage.removeItem(TOUR_KEY);
       // The reader has answered the cookie banner, and is at the top of the page.
       document.cookie = "cookieyes-consent=consent:yes,action:yes; path=/";
       Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
@@ -3235,10 +3241,7 @@ describe("ReportPage", () => {
       expect(analytics.trackTourStarted).toHaveBeenCalledWith(
         expect.objectContaining({ trigger: "auto" })
       );
-      expect(
-        window.localStorage.getItem(GUIDED_TOUR_KEY),
-        "remembered once started"
-      ).not.toBeNull();
+      expect(window.localStorage.getItem(TOUR_KEY), "remembered once started").not.toBeNull();
       const shell = document.querySelector(".report-page__shell-wrap")!;
       expect(shell.parentElement!.hasAttribute("inert")).toBe(true);
       expect(shell.className).not.toContain("report-page__shell-wrap--obscured");
@@ -3261,8 +3264,8 @@ describe("ReportPage", () => {
       expect(shell.parentElement!.hasAttribute("inert")).toBe(false);
     });
 
-    it("does not start again on a browser that has seen it", () => {
-      window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+    it("does not start again on a report that has shown it", () => {
+      window.localStorage.setItem(TOUR_KEY, "2026-10-17T09:00:00.000Z");
       tourV4();
       render(<ReportPage token={TOUR_TOKEN} />);
       settle();
@@ -3270,10 +3273,21 @@ describe("ReportPage", () => {
       expect(analytics.trackTourStarted).not.toHaveBeenCalled();
     });
 
+    it("starts on a reader's next report, though this browser has seen it on another", () => {
+      // Marcus, 20.10: "Tutorial should start on the report page". It was remembered per
+      // browser, so a reader who had met it once never met it on the report after their
+      // survey. Other reports' records (seeded above) and the old per-browser one don't count.
+      window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeInTheDocument();
+    });
+
     it("does not start for a probe, a shared view or a return from checkout", () => {
       const notStarted = (why: string) => {
         expect(tourBubble(), why).toBeNull();
-        expect(window.localStorage.getItem(GUIDED_TOUR_KEY), why).toBeNull();
+        expect(window.localStorage.getItem(TOUR_KEY), why).toBeNull();
       };
       document.cookie = "loveiq_probe=1; path=/";
       tourV4();
@@ -3297,7 +3311,7 @@ describe("ReportPage", () => {
     });
 
     it("replays from the chapter menu for a reader who has seen it", () => {
-      window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      window.localStorage.setItem(TOUR_KEY, "2026-10-17T09:00:00.000Z");
       tourV4();
       render(<ReportPage token={TOUR_TOKEN} />);
       settle();
@@ -3330,7 +3344,7 @@ describe("ReportPage", () => {
       render(<ReportPage token={TOUR_TOKEN} />);
       settle();
       expect(tourBubble()).toBeNull();
-      expect(window.localStorage.getItem(GUIDED_TOUR_KEY), "kept for their next open").toBeNull();
+      expect(window.localStorage.getItem(TOUR_KEY), "kept for their next open").toBeNull();
     });
   });
 
