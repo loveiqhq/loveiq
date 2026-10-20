@@ -27,6 +27,7 @@ import {
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
 import { getReportPurchasePlan } from "@features/checkout/server/reportPurchase";
+import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
 import { buildCancelUrl, buildSuccessUrl } from "@features/checkout/server/reportReturnUrls";
 import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
 import {

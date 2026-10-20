@@ -341,7 +341,7 @@ The paywall on `/report` is always enforced — clicking a locked premium sectio
 
 All 14 credits what the reader already paid on that report (single reports, legacy plans; less refunds): the pay screen shows the reduced price, and Stripe keeps the regular line price with the credit as a discount (`getUpgradeCreditCents`, `ensureUpgradeCreditCoupon`). A credit covering the whole price makes a €0 checkout.
 
-The initial unlock (€1.99, a payment whose plan is `initial`) is access only, not a plan: it opens the reader's own Core Archetype card and Summary (`initialUnlock` on `/api/report`), and takes €10 off the full report the same way, on a coupon of its own (`applyInitialCredit`, `ensureInitialCreditCoupon`). A refund of it takes both back. Pay-to-start reports are quoted on arm A3.
+The initial unlock (€1.99, a payment whose plan is `initial`; E07's day-4 gift is a €0 one marked `gifted`) is access only, not a plan: it opens the reader's own Core Archetype card and Summary (`initialUnlock` on `/api/report`), and takes €10 off a full-report quote on arm A3 (`applyInitialCredit`). That credit is the Stripe line's own price, marked "€10 credit applied", not a coupon, so a code typed on Stripe's page still applies; a nurture promo worth more wins instead. A refund of it takes both back. Pay-to-start reports, reports in the €1.99 gate's cohort and initial-unlock holders are quoted on arm A3 on their first quote (`pinsListPrice`).
 
 Sandbox and live mode both run the real fulfillment path. To test in sandbox use Stripe test card `4242 4242 4242 4242` (any future date, any CVC). After a successful test purchase, the webhook fulfills the access plan onto the report.
 
