@@ -4,8 +4,10 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, typ
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
+import SurveyControls from "./SurveyControls";
 import SurveyJumpMenu from "./SurveyJumpMenu";
 import SurveyNav from "./SurveyNav";
+import SurveyPauseModal from "./SurveyPauseModal";
 import SurveyProgress from "./SurveyProgress";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
@@ -19,6 +21,7 @@ import {
   trackSurveyProgress,
   trackSurveyComplete,
   trackSurveyFormError,
+  trackSurveyPause,
   setReportSubmissionContext,
   setSurveyVariant,
   setEmailQuestionArm,
@@ -40,6 +43,7 @@ import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
+import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
 import { completedReportToken, paidWizardRemembered } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
@@ -72,7 +76,7 @@ function isTextEntry(target: EventTarget | null): boolean {
 /**
  * An answer already chosen on the question on screen: a ticked option or the pressed
  * scale point. Never a control around the answers (Previous/Next, a guidance row, a
- * group's header), which keep their own Enter.
+ * group's header, the Auto-advance switch), which keep their own Enter.
  */
 function isChosenAnswer(control: Element, questionBody: HTMLElement | null): boolean {
   return (
@@ -140,12 +144,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     submitStatus === "success"
   );
 
+  const { autoAdvance, toggleAutoAdvance } = useAutoAdvance();
+
   const [animKey, setAnimKey] = useState(0);
+  const [showPauseModal, setShowPauseModal] = useState(false);
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   /** Pending fallback for a Previous whose history.back() found nothing to go back to. */
   const backFallback = useRef<number | null>(null);
+  /** The move an answer schedules while Auto-advance is on. */
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   // The card's last pixel; while it is below the fold the sticky footer is
@@ -356,11 +365,19 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     backFallback.current = null;
   }, []);
 
+  /** So does an answer's pending auto-advance: any move, Previous or Pause drops it. */
+  const cancelAutoAdvance = useCallback(() => {
+    if (autoAdvanceTimer.current === null) return;
+    clearTimeout(autoAdvanceTimer.current);
+    autoAdvanceTimer.current = null;
+  }, []);
+
   // Navigation
   const goTo = useCallback(
     (index: number) => {
       if (index < 0 || index > totalQuestions) return;
       cancelBackFallback();
+      cancelAutoAdvance();
       setAnimKey((k) => k + 1);
       setAttemptedNext(false);
       // Clear transient email-confirm state when leaving the email question
@@ -371,7 +388,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
-    [totalQuestions, setCurrentIndex, cancelBackFallback, orderedQuestions]
+    [totalQuestions, setCurrentIndex, cancelBackFallback, cancelAutoAdvance, orderedQuestions]
   );
 
   /**
@@ -485,12 +502,24 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     markBase,
   ]);
 
+  /**
+   * The latest Next, for Auto-advance's move. Scheduled by the answer's own change, its
+   * callback predates the render that holds the answer: in production that once filed the
+   * last question without its answer (e2e/survey-last-answer.spec.ts). The submit reads
+   * getLatestAnswers() anyway; this keeps everything else the move reads current too.
+   */
+  const goNextRef = useRef(goNext);
+  useEffect(() => {
+    goNextRef.current = goNext;
+  }, [goNext]);
+
   const goPrev = useCallback(() => {
     // Finished: the screens after submitting are not questions. ArrowLeft and a right swipe
     // reach this through window listeners on them too, and reopened the last question under
     // the finished run's session id, saving its answers again; a reload then read them as a
     // new run (#393) and Next filed the same answers as a second submission.
     if (currentIndex >= totalQuestions) return;
+    cancelAutoAdvance();
     const moveWithoutHistory = () => {
       trackNavigation("back");
       if (currentIndex > 0) markBase(currentIndex - 1, true);
@@ -510,7 +539,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       return;
     }
     moveWithoutHistory();
-  }, [currentIndex, totalQuestions, goTo, trackNavigation, markBase, cancelBackFallback]);
+  }, [
+    currentIndex,
+    totalQuestions,
+    goTo,
+    trackNavigation,
+    markBase,
+    cancelBackFallback,
+    cancelAutoAdvance,
+  ]);
 
   /**
    * The phone's Back goes to the previous question, and Forward to the next.
@@ -547,6 +584,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
         window.history.back();
         return;
       }
+      // Back while paused goes back a question like any other Back, and the dialog
+      // closes with it instead of promising "where you left off" over another question.
+      setShowPauseModal(false);
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
     };
@@ -567,15 +607,66 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
   }, [cancelBackFallback]);
 
-  // Handle answer change. Moving on is always the reader's own Next: the
-  // auto-advance toggle and the Pause / Save & exit control left with the
-  // 2026-10-04 redesign (Figma 11303:174), which carries neither.
+  /**
+   * Pause (SurveyControls): the draft goes to the server, and a dialog says the run is
+   * saved, with "Continue where I left off" and "Go back to main page" (the page a
+   * pay-to-start buyer paid on, else the homepage). Back from Marcus's review of 20.10.
+   */
+  const handlePause = useCallback(() => {
+    cancelBackFallback(); // it would move the question under the dialog
+    cancelAutoAdvance();
+    savePartial();
+    trackNavigation("abandon");
+    if (question) {
+      trackSurveyPause(question.qId, Math.round((currentIndex / totalQuestions) * 100));
+    }
+    setShowPauseModal(true);
+  }, [
+    question,
+    currentIndex,
+    totalQuestions,
+    trackNavigation,
+    savePartial,
+    cancelBackFallback,
+    cancelAutoAdvance,
+  ]);
+
+  const handleResumeFromPause = useCallback(() => {
+    setShowPauseModal(false);
+  }, []);
+
+  const handleExitFromPause = useCallback(() => {
+    setShowPauseModal(false);
+    onExit();
+  }, [onExit]);
+
+  // Handle answer change. With Auto-advance on (off by default, SurveyControls), a single
+  // choice, a scale point or a country moves on by itself a moment later. Never a
+  // multiple choice or an open answer, where the reader is not done yet.
   const handleChange = useCallback(
     (value: AnswerValue) => {
       if (!question) return;
       setAnswer(question.qId, value);
+
+      cancelAutoAdvance();
+      if (
+        !autoAdvance ||
+        (question.answerType !== "single" &&
+          question.answerType !== "scale" &&
+          question.answerType !== "country")
+      ) {
+        return;
+      }
+      // "Other" waits for its text; a cleared country is no answer.
+      if (value === "" || (question.answerType === "single" && /^other\b/i.test(String(value)))) {
+        return;
+      }
+      autoAdvanceTimer.current = setTimeout(() => {
+        autoAdvanceTimer.current = null;
+        goNextRef.current();
+      }, 350);
     },
-    [question, setAnswer]
+    [question, setAnswer, autoAdvance, cancelAutoAdvance]
   );
 
   // Once the last question is answered there is nothing to navigate: the processing
@@ -589,6 +680,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   useEffect(() => {
     if (surveyOver) return;
     const handleKey = (e: KeyboardEvent) => {
+      if (showPauseModal) return; // the dialog has the keyboard
       // Enter on a focused control is that control's own press: a scale point, an
       // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
       // cancelled the press, so a changed answer was never saved, and Enter on Next
@@ -617,7 +709,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev, surveyOver]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
@@ -650,6 +742,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
         return;
       }
       if (touchStartX.current === null || touchStartY.current === null) return;
+      if (showPauseModal) {
+        // A swipe on the dialog is not a question move.
+        clearSwipe();
+        return;
+      }
       const diffX = e.changedTouches[0]!.clientX - touchStartX.current;
       const diffY = e.changedTouches[0]!.clientY - touchStartY.current;
       clearSwipe();
@@ -665,7 +762,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev, surveyOver]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal]);
+
+  // An answer's pending move goes with the screen.
+  useEffect(() => cancelAutoAdvance, [cancelAutoAdvance]);
 
   // The country search opens a list under its box, which a phone keyboard would cover
   // if the question sat lower: that one stays at the top on a phone.
@@ -839,6 +939,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             <p className="sr-only" aria-live="polite">
               {`Question ${currentIndex + 1} of ${totalQuestions}: ${question.question}`}
             </p>
+            {/* Auto-advance and Pause, top right as the old header had them (Marcus,
+                20.10). Inside the card, so placing the card counts them. */}
+            <div className="px-[18.4px] pt-3 sm:px-[35px] sm:pt-[22px]">
+              <SurveyControls
+                onPause={handlePause}
+                autoAdvance={autoAdvance}
+                onToggleAutoAdvance={toggleAutoAdvance}
+              />
+            </div>
             {/* Staging, previews and dev only (Mark, 30.09): jump straight to any question.
                 Inside the card, so placing the card counts it. */}
             {isNonProdDeploy() ? (
@@ -932,6 +1041,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             <div ref={cardEndRef} aria-hidden className="absolute bottom-0 h-px w-px" />
           </section>
         </div>
+
+        <SurveyPauseModal
+          open={showPauseModal}
+          email={(answers[EMAIL_QID] as string | undefined) ?? ""}
+          onResume={handleResumeFromPause}
+          onExit={handleExitFromPause}
+        />
       </main>
     </SurveyThemeProvider>
   );

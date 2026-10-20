@@ -88,6 +88,7 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyProgress: vi.fn(),
   trackSurveyComplete: vi.fn(),
   trackSurveyFormError: vi.fn(),
+  trackSurveyPause: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   setSurveyVariant: vi.fn(),
   trackExperimentExposure: vi.fn(),
@@ -101,8 +102,11 @@ vi.mock("@features/survey/ui/questions/SingleChoiceQuestion", () => ({
 }));
 
 vi.mock("@features/survey/ui/questions/ScaleQuestion", () => ({
-  default: (props: { question: { question: string } }) => (
-    <div data-testid="scale-question">{props.question.question}</div>
+  default: (props: { question: { question: string }; onChange: (value: number) => void }) => (
+    <div data-testid="scale-question">
+      <span>{props.question.question}</span>
+      <button onClick={() => props.onChange(4)}>Choose 4</button>
+    </div>
   ),
 }));
 
@@ -346,11 +350,14 @@ describe("SurveyEngine", () => {
     expect(screen.getByTestId("survey-progress")).toHaveTextContent("1/3");
   });
 
-  it("offers no Pause or Auto-advance control any more", () => {
-    // Both left with the 2026-10-04 redesign (Figma 11303:174).
+  it("offers Pause and the Auto-advance switch, off by default", () => {
+    // Back on Marcus's review of 20.10; SurveyEngine.pause.test.tsx has what they do.
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: /pause|save & exit/i })).toBeNull();
-    expect(screen.queryByText(/auto-advance/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auto-advance" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
   });
 
   it("blocks progressing when a persisted multiselect answer exceeds maxSelections", () => {
@@ -1027,20 +1034,105 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
   });
 
-  it("drops a pending Previous fallback when Next moves on before it fires", () => {
+  it("cancels a pending auto-advance when Previous pops instead", () => {
+    // The timer used to fire while the pop was in flight and pushed the next question
+    // over it, losing the reader's Previous.
+    localStorage.setItem("loveiq-survey-autoadvance", "true");
+    window.history.replaceState(q(1, 0), "", "/survey");
+    mockCurrentIndex = 1; // a scale, which auto-advances
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const push = vi.spyOn(window.history, "pushState");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose 4" })); // arms it
+    fireEvent.click(screen.getByTestId("survey-nav-prev"));
+    act(() => {
+      vi.advanceTimersByTime(400); // past the auto-advance, short of the fallback
+    });
+
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Next moves on", "survey-nav-next"],
+    ["the reader pauses", null],
+  ])("drops a pending Previous fallback when %s before it fires", (_, testId) => {
     window.history.replaceState(q(2, 0), "", "/survey");
     mockCurrentIndex = 2; // optional, so Next is live
     vi.spyOn(window.history, "back").mockImplementation(() => {}); // the pop never lands
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
     fireEvent.click(screen.getByTestId("survey-nav-prev")); // arms the fallback
-    fireEvent.click(screen.getByTestId("survey-nav-next"));
+    fireEvent.click(
+      testId ? screen.getByTestId(testId) : screen.getByRole("button", { name: "Pause" })
+    );
     mockSetCurrentIndex.mockClear();
     act(() => {
       vi.advanceTimersByTime(1000);
     });
 
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("SurveyEngine — Back with the pause dialog open", () => {
+  // With an entry per question, Back moves the question, so it must not leave the dialog
+  // promising "where you left off" over another one (found in review, 2026-10-04; the
+  // guards went with Pause on 04.10 and came back with it on 20.10).
+  const q = (index: number, base: number) => ({ surveyQuestion: index, surveyQuestionBase: base });
+
+  beforeEach(() => {
+    window.history.replaceState(q(2, 0), "", "/survey");
+    mockCurrentIndex = 2;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  // Previous here pops an entry (history.back) and only moves on its own after a
+  // fallback delay, so "did not move" has to check both, past the delay.
+  const expectNoMove = (back: ReturnType<typeof vi.spyOn>) => {
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(back).not.toHaveBeenCalled();
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  };
+
+  it("goes back a question and closes the dialog", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: q(1, 0) }));
+    });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("does not move the question on ArrowLeft while the dialog is open", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    const back = vi.spyOn(window.history, "back");
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+
+    expectNoMove(back);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("does not move the question on a swipe while the dialog is open", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    const back = vi.spyOn(window.history, "back");
+
+    // A right swipe is Previous everywhere else.
+    fireEvent.touchStart(window, { touches: [{ clientX: 40, clientY: 300 }] });
+    fireEvent.touchEnd(window, { changedTouches: [{ clientX: 240, clientY: 305 }] });
+
+    expectNoMove(back);
   });
 });
 
