@@ -157,15 +157,22 @@ describe("GET /api/cron/nurture-sequence", () => {
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
     unlockFeedback = jsonResponse([]),
+    cohortIds,
   }: {
     seventyTwoHour: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
     patchSpy?: () => unknown;
     unlockFeedback?: unknown;
+    /** The EUR 1.99 gate's cohort among the candidates; null answers the read with a 500. */
+    cohortIds?: number[] | null;
   }) {
     let personalReportCalls = 0;
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
+      if (url.includes("/rest/v1/personal_report") && url.includes("initial_gate_cohort_at")) {
+        if (cohortIds === null) return Promise.resolve(jsonResponse({ message: "boom" }, 500));
+        return Promise.resolve(jsonResponse((cohortIds ?? []).map((id) => ({ id }))));
+      }
       if (url.includes("/rest/v1/personal_report")) {
         personalReportCalls += 1;
         if (personalReportCalls === 1) return Promise.resolve(jsonResponse(seventyTwoHour));
@@ -396,6 +403,76 @@ describe("GET /api/cron/nurture-sequence", () => {
     const body = await res.json();
     expect(body.summaries["72h_no_unlock"].sent).toBe(0);
     expect(body.summaries["72h_no_unlock"].failed).toBe(1);
+  });
+
+  describe("readers behind the EUR 1.99 gate", () => {
+    const candidate = {
+      id: 42,
+      survey_submission_id: 7,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "gate@example.com", first_name: "Ga" } },
+    };
+    const urls = () => mockFetchWithTimeout.mock.calls.map((call) => String(call[0]));
+    const gateOn = () =>
+      __resetSystemFlagsCacheForTests({ nurture_sequence: true, report_initial_unlock_gate: true });
+
+    it("skips the gate's cohort: no promo, no email, no quote made for them", async () => {
+      gateOn();
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [42],
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(1);
+      expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+      expect(mockStripePromoCreate).not.toHaveBeenCalled();
+      expect(mockResendSend).not.toHaveBeenCalled();
+      expect(urls().some((url) => url.includes("/rest/v1/report_access_token"))).toBe(false);
+      expect(urls().some((url) => url.includes("/rest/v1/report_price_quote"))).toBe(false);
+    });
+
+    it("emails everyone outside the cohort as today", async () => {
+      gateOn();
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [],
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+      expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(0);
+    });
+
+    it("reads no cohort while the gate is switched off", async () => {
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [42],
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+      expect(urls().some((url) => url.includes("initial_gate_cohort_at"))).toBe(false);
+    });
+
+    it("sends as today when the cohort can't be read", async () => {
+      gateOn();
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: null,
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+    });
   });
 
   it("time-budget guard: defers all candidates when the wall-clock budget is exhausted", async () => {

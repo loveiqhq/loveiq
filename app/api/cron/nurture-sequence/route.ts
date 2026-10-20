@@ -47,6 +47,10 @@ import {
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
 import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
+import {
+  isInitialUnlockGateEnabled,
+  readInitialGateCohortIds,
+} from "@features/report/server/initialGateState";
 // The 50%-off template is timing-agnostic (it references the code's 24h expiry,
 // not the send hour), so the single 72h discount stage reuses it as-is.
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
@@ -544,6 +548,8 @@ interface StageSummary {
   skippedNoQuote: number;
   skippedNoPromo: number;
   skippedUnlockFeedback: number;
+  /** In the EUR 1.99 gate's cohort: the gate and its day-4 gift (E07) are their offer. */
+  skippedInitialGate: number;
   failed: number;
 }
 
@@ -559,6 +565,7 @@ function newStageSummary(): StageSummary {
     skippedNoQuote: 0,
     skippedNoPromo: 0,
     skippedUnlockFeedback: 0,
+    skippedInitialGate: 0,
     failed: 0,
   };
 }
@@ -573,6 +580,9 @@ interface RouteContext {
   // Run-level collector of "<stage>: <reason>" strings for failed sends/rows so
   // the aggregate alert is self-diagnosing instead of forcing a Vercel log dive.
   failureReasons: string[];
+  // The batch's reports in the EUR 1.99 gate's cohort, read once per run while the gate is
+  // on; empty when it is off or the read failed, so everyone is emailed as before.
+  initialGateCohort: ReadonlySet<number>;
 }
 
 async function processCandidate(
@@ -596,6 +606,13 @@ async function processCandidate(
     const email = candidate.survey_submission?.app_user?.email?.trim() ?? "";
     if (!email) {
       summary.skippedNoEmail++;
+      return;
+    }
+
+    // The EUR 1.99 gate's readers (Pre-unlock): no 50% code beside the gate's own EUR 1.99,
+    // its EUR 10 credit and the day-4 gift. Before the token, so no quote is made for them.
+    if (ctx.initialGateCohort.has(candidate.id)) {
+      summary.skippedInitialGate++;
       return;
     }
 
@@ -860,6 +877,7 @@ export async function GET(request: Request) {
     unsubSecret: process.env.UNSUBSCRIBE_SECRET,
     deadlineAtMs: startMs + resolveTimeBudgetMs(),
     failureReasons: [],
+    initialGateCohort: new Set<number>(),
   };
 
   const summaries: Record<Stage, StageSummary> = {
@@ -868,6 +886,14 @@ export async function GET(request: Request) {
 
   try {
     const seventyTwoCandidates = await fetchCandidatesByAge(AGE_WINDOWS.seventyTwo);
+    if (
+      seventyTwoCandidates.length > 0 &&
+      (await isInitialUnlockGateEnabled().catch(() => false))
+    ) {
+      ctx.initialGateCohort = await readInitialGateCohortIds(
+        seventyTwoCandidates.map((candidate) => candidate.id)
+      );
+    }
 
     // Single discount stage (pricing 2.0): one −50% code at 72h. The prior 6h
     // "report ready"/"unlock" reminders and the 30h(50%)/54h(75%) discount
