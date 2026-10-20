@@ -132,6 +132,44 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
   `tests/ReportPage.test.tsx`, and `e2e/report-guided-tour.spec.ts`. The other report e2e specs
   start as a browser that has seen it (`mockReport` seeds the key).
 
+**The EUR 1.99 pre-unlock gate (2026-10-20).** A reader who finished the free survey meets a
+forced EUR 1.99 "Core Archetype" page before their report (Figma Report-3.0 `1604:2328`, the
+page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runbook:
+`docs/runbooks/PRE_UNLOCK.md`.
+
+- **Who meets it.** Decided on the server, in `/api/report`, by `needsInitialUnlockGate`
+  (`logic/initialUnlockGate.ts`): the gate is on, the paywall is enforced, the reader is the
+  owner, their report is in the cohort, and they hold nothing — no plan on any archetype, no
+  initial unlock (paid or gifted), no live pay-to-start entitlement. Any lookup that fails opens
+  the report: an outage never asks a buyer for EUR 1.99. Shared views and old reports never meet
+  it, and a gated owner can't mint share links (403 `initial_unlock_required`).
+- **The cohort.** `personal_report.initial_gate_cohort_at`, stamped when the survey is submitted
+  while `report_initial_unlock_gate` is on; `initial_gate_seen_at` is the gate's first view
+  (its "paywall reached", and E07's clock). Read only through `server/initialGateState.ts`,
+  which fails soft; never in the report lookup's select.
+- **The answer.** A gated owner gets `buildInitialUnlockGatePayload` instead of the report —
+  price, credit, guarantee, the token and the submission id, nothing of the report —
+  `useReportData` turns it into `status: "gated"`, and `ReportPage` draws
+  `ui/gate/InitialUnlockGate.tsx` in its place: a page of its own, never a pop-up.
+- **Buying it.** `POST /api/stripe/initial-unlock` (plan `initial`, EUR 1.99 from pay to start's
+  `PRE_OFFER`) → Stripe → fulfillment records a payment with `metadata.plan = "initial"` and
+  never touches `personal_report.payment_*` → E06 (`server/emails/initial-unlock.ts`) → the
+  return page sends the reader to `/report/<token>?unlocked=initial`, which opens at the top.
+  The reader then has the Core Archetype card and the Summary, and EUR 10 off the full report
+  on arm A3 (EUR 19.99, the credit on Stripe's line, so codes still work).
+- **E07, day 4.** `app/api/cron/initial-unlock-gift` gives 80% of the readers still unpaid four
+  days after the gate the unlock as a EUR 0 payment (`metadata.gifted = "e07"`) and E07
+  (`server/emails/initial-unlock-gift.ts`); 20% are held out (`initial_gift_arm`). Behind
+  `initial_unlock_gift_email`. The gift is never a sale: admin readers leave it out
+  (`features/admin/tests/payment-gift-exclusion.test.ts`).
+- **Previews.** `/report?preview=1&v4=1&gate=1` draws the gate off production;
+  `/report?preview=1&v4=1&plan=initial` the report after the EUR 1.99; the emails at
+  `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`.
+- **Tests.** `tests/initialUnlockGate.test.ts`, `tests/initialGateState.test.ts`,
+  `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`, the gate blocks of
+  `tests/report-handler.test.ts`, `tests/ReportPage.test.tsx` and
+  `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`.
+
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 
 **Does NOT belong:**
