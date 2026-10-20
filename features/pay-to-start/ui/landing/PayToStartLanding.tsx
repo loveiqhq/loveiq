@@ -109,7 +109,7 @@ export const PayToStartLanding: FC<{ offer: PayToStartOfferId; priceCents: numbe
           <PtsFinalCta price={price} copy={copy.finalCta} />
         </main>
         <PtsFooter />
-        <PtsStickyBar label={copy.stickyLabel} />
+        <PtsStickyBar label={copy.stickyLabel} cta={copy.stickyCta} />
       </div>
     </PtsCheckoutProvider>
   );

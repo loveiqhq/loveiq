@@ -49,7 +49,7 @@ export function trackPtsLandingViewed(params: {
   pingFunnelEvent("prepaid_gate_viewed");
 }
 
-/** A click on any "Unlock survey & report" button, before the request goes out. */
+/** A click on any "Unlock …" button, before the request goes out. */
 export function trackPtsCtaClick(params: {
   location: PtsCtaLocation;
   offer: PayToStartOfferId;

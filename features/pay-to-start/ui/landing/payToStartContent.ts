@@ -293,7 +293,7 @@ export const PTS_RESEARCH = {
 export const PTS_ONE_PRICE = {
   title: "One price. Survey and full report.",
   terms: "One-time payment · no subscription",
-  cta: "Unlock survey & report",
+  cta: "Unlock Survey & Full Report",
   includes: [
     "The full survey: 57 questions, about 9 minutes",
     "Your core archetype out of 14, with your closest matches",
@@ -348,7 +348,8 @@ export const PTS_FAQ = {
 export const PTS_PRICE_CARD = {
   eyebrow: "SURVEY + FULL REPORT",
   per: "one-time",
-  cta: "Unlock survey & report",
+  /** Each page's buttons name its own report (Sanjin Studenovic, 20.10: both pages read the same). */
+  cta: "Unlock Survey & Full Report",
   guarantee: "14-day money-back guarantee",
   includes: [
     "57 questions · ~15 minutes",
@@ -364,7 +365,7 @@ export const PTS_FINAL_CTA = {
   /** Split so the price clause never breaks at the hyphen in "one-time". */
   leadBefore: "57 questions · about 9 minutes · a 50+ page report you keep. ",
   leadPrice: (price: string) => `${price}, one-time.`,
-  cta: (price: string) => `Unlock survey & report · ${price}`,
+  cta: (price: string) => `Unlock Survey & Full Report · ${price}`,
   /** The phone frame's shorter label (1706:2329). */
   ctaShort: (price: string) => `Unlock for ${price}`,
   badges: ["Anonymous by default", "14-day money-back", "No subscription"],
@@ -372,7 +373,11 @@ export const PTS_FINAL_CTA = {
 
 export const PTS_STICKY_BAR = {
   label: "Survey + full report",
-  cta: "Unlock survey & report",
+  /**
+   * Shorter than the other buttons: the bar's button never wraps, and on a 360-wide phone
+   * "Unlock Survey & Full Report" leaves the price too little room (measured 20.10).
+   */
+  cta: "Unlock Full Report",
 } as const;
 
 /**
@@ -418,6 +423,7 @@ export const PTS_INITIAL = {
   priceCard: {
     ...PTS_PRICE_CARD,
     eyebrow: "SURVEY + INITIAL REPORT",
+    cta: "Unlock Survey & Initial Report",
     includes: [
       "57 questions · ~15 minutes",
       "Your Core Archetype and what drives it",
@@ -432,9 +438,11 @@ export const PTS_INITIAL = {
     leadBefore: "57 questions · about 9 minutes",
     leadPrice: null,
     // As drawn: no middle dot before the price.
-    cta: (price: string) => `Unlock survey & report ${price}`,
+    cta: (price: string) => `Unlock Survey & Initial Report ${price}`,
   },
   stickyLabel: "Survey + Initial Report",
+  // Short for the bar, as the full report's (PTS_STICKY_BAR).
+  stickyCta: "Unlock Initial Report",
 } as const;
 
 /** One offer's page: what it says where the two pages differ. */
@@ -460,6 +468,7 @@ export interface PtsOfferCopy {
     badges: readonly string[];
   };
   stickyLabel: string;
+  stickyCta: string;
   /** The "One price" band, and the header's `#price` on it: the full report's page only. */
   onePrice: boolean;
 }
@@ -472,6 +481,7 @@ export const PTS_OFFER_COPY: Record<PayToStartOfferId, PtsOfferCopy> = {
     priceCard: PTS_PRICE_CARD,
     finalCta: PTS_FINAL_CTA,
     stickyLabel: PTS_STICKY_BAR.label,
+    stickyCta: PTS_STICKY_BAR.cta,
     onePrice: true,
   },
   pre: {
@@ -481,6 +491,7 @@ export const PTS_OFFER_COPY: Record<PayToStartOfferId, PtsOfferCopy> = {
     priceCard: PTS_INITIAL.priceCard,
     finalCta: PTS_INITIAL.finalCta,
     stickyLabel: PTS_INITIAL.stickyLabel,
+    stickyCta: PTS_INITIAL.stickyCta,
     onePrice: false,
   },
 };

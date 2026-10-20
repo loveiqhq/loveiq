@@ -11,7 +11,7 @@ import type { PayToStartOfferId } from "@features/pay-to-start/logic/offer";
 
 /**
  * The pay-to-start entitlement: one `prepaid_report_access` row per checkout, from the
- * moment the visitor clicks "Unlock survey & report" until a submitted survey claims it.
+ * moment the visitor clicks an "Unlock …" button until a submitted survey claims it.
  *
  * Ported from June's pay-first test (`git show 3ec8c895^:features/checkout/server/
  * prepaidEntitlement.ts`). At payment time there is no submission, report or user yet,

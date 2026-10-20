@@ -17,7 +17,7 @@ record, and no landing test arm.
 
 1. `/sexual-archetype` or `/sexual-archetype/initial` (`ui/landing/`): the assessment page,
    noindex, under the LoveIQ site's own header (LoveIQ-branded until the new brand is ready,
-   Marcus 18.10). Every "Unlock survey & report" posts its page's offer to
+   Marcus 18.10). Every "Unlock …" button posts its page's offer to
    `POST /api/stripe/pay-to-start`.
 2. The checkout route records a pending `prepaid_report_access` row (`server/entitlement.ts`)
    and sets its bearer token (`rpp_` + 32) in an httpOnly cookie (`__Host-liq_pp`, 30 days;

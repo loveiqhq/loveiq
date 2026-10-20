@@ -62,7 +62,7 @@ async function stubCheckout(page: Page, onPost?: (post: CheckoutPost) => void) {
   });
 }
 
-/** The one visible "Unlock survey & report" for this viewport: the card, or the bar. */
+/** The one visible "Unlock …" button for this viewport: the card, or the bar. */
 async function primaryCta(page: Page) {
   const card = page.locator('[data-pts-cta="price_card"]');
   return (await card.isVisible()) ? card : page.locator('[data-pts-cta="sticky_bar"]');
