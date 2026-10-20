@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { PTS_NOTICES, PTS_STICKY_BAR } from "./payToStartContent";
+import { PTS_NOTICES } from "./payToStartContent";
 import { PtsCtaButton, usePtsCheckout } from "./PtsCheckout";
 
 /**
@@ -16,7 +16,9 @@ import { PtsCtaButton, usePtsCheckout } from "./PtsCheckout";
 export const PtsStickyBar: FC<{
   /** What the price buys, under it: the offer's (PtsOfferCopy). */
   label: string;
-}> = ({ label }) => {
+  /** The button's words, which name the offer's report (PtsOfferCopy). */
+  cta: string;
+}> = ({ label, cta }) => {
   const { price, state } = usePtsCheckout();
   const failed = state.status === "failed" && state.location === "sticky_bar" ? state : null;
   const starting = state.status === "starting" && state.location === "sticky_bar";
@@ -50,7 +52,7 @@ export const PtsStickyBar: FC<{
           glow={false}
           className="h-12 shrink-0 rounded-3xl px-[17px] text-[15px]"
         >
-          {PTS_STICKY_BAR.cta}
+          {cta}
         </PtsCtaButton>
       </div>
     </div>

@@ -45,7 +45,7 @@ import { escapeSlack, notifySlack } from "@shared/observability/slack";
 export const runtime = "nodejs";
 
 /**
- * Pay to start the survey: the checkout behind every "Unlock survey & report" button on
+ * Pay to start the survey: the checkout behind every "Unlock …" button on
  * /sexual-archetype (Figma 1706:1699, the full report) and /sexual-archetype/initial
  * (1741:5587, the initial report).
  *

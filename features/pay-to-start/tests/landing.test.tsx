@@ -179,10 +179,20 @@ describe("the pay-to-start page, as drawn", () => {
     expect(text).toContain("All of it is included in €19.99;");
     expect(text).toContain("€19.99, paid securely with Apple Pay");
     expect(text).toContain("€19.99, one-time.");
-    expect(text).toContain("Unlock survey & report · €19.99");
+    expect(text).toContain("Unlock Survey & Full Report · €19.99");
     expect(text).toContain("Unlock for €19.99");
     // The price card, the One price band and the sticky bar.
     expect(screen.getAllByText("€19.99")).toHaveLength(3);
+  });
+
+  it("names the full report on every button (Sanjin Studenovic, 20.10)", () => {
+    renderPage();
+    for (const location of ["price_card", "one_price", "final_cta"]) {
+      expect(cta(location).textContent).toContain("Unlock Survey & Full Report");
+    }
+    expect(cta("final_cta").textContent).toContain("Unlock Survey & Full Report · €29");
+    // Shorter in the bar, so its price keeps its room on a 360-wide phone.
+    expect(cta("sticky_bar").textContent).toContain("Unlock Full Report");
   });
 
   it("has no Log in, and its breadcrumb links nowhere", () => {
@@ -627,7 +637,17 @@ describe("the initial report's page", () => {
     renderInitial();
     // The price card and the sticky bar.
     expect(screen.getAllByText("€1.99")).toHaveLength(2);
-    expect(pageText()).toContain("Unlock survey & report €1.99");
+    expect(pageText()).toContain("Unlock Survey & Initial Report €1.99");
+  });
+
+  it("names the initial report on every button, never the full one (Sanjin Studenovic, 20.10)", () => {
+    renderInitial();
+    const buttons = document.querySelectorAll("[data-pts-cta]");
+    expect(buttons).toHaveLength(3);
+    expect(cta("price_card").textContent).toContain("Unlock Survey & Initial Report");
+    expect(cta("final_cta").textContent).toContain("Unlock Survey & Initial Report €1.99");
+    expect(cta("sticky_bar").textContent).toContain("Unlock Initial Report");
+    for (const button of buttons) expect(button.textContent).not.toContain("Full");
   });
 
   it("has one price card, the header's #price, under the film and beside the column", () => {

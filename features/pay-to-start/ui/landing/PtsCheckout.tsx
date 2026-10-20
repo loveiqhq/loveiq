@@ -28,7 +28,7 @@ import { ArrowGlyph, Spinner } from "./ptsIcons";
 import { PTS_CTA_GRADIENT } from "./ptsStyles";
 
 /**
- * Every "Unlock survey & report" button on the page shares one checkout: one request in
+ * Every "Unlock …" button on the page shares one checkout: one request in
  * flight however many buttons are pressed, one answer, and the page goes where it says.
  *
  *   redirect       → Stripe Checkout (or the status page while a payment settles)
