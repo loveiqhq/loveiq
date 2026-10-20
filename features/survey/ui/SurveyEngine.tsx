@@ -128,7 +128,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     pendingSentMomentsAgo,
     reportToken,
     submissionId,
-    paidBeforeSurvey,
+    paidWizard,
     status: submitStatus,
     errorKind: submitErrorKind,
   } = useSubmitSurvey();
@@ -910,9 +910,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     if (completionPhase === "wizard") {
       return (
         <PreReportWizard
-          // Paid before the survey: four slides, none about unlocking (wizardContent.ts).
-          // The stored flag covers a reload mid-wizard, when this run's reply is gone.
-          variant={paidBeforeSurvey || paidWizardRemembered() ? "pay_to_start" : "standard"}
+          // Paid before the survey: the offer's wizard, four slides for the full report and
+          // five, with the map, for the initial one (wizardContent.ts). The stored one covers
+          // a reload mid-wizard, when this run's reply is gone.
+          variant={paidWizard ?? paidWizardRemembered() ?? "standard"}
           onComplete={() => onComplete(reportToken ?? completedReportToken())}
         />
       );

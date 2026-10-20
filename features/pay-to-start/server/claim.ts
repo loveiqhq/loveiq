@@ -4,6 +4,12 @@ import {
 } from "@features/checkout/server/fulfillment";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import logger from "@shared/observability/logger";
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
+import {
+  getOfferDefinition,
+  offerDefinitionOf,
+  type PayToStartOfferId,
+} from "@features/pay-to-start/logic/offer";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
   bindEntitlement,
@@ -25,10 +31,13 @@ import {
  */
 
 export type ClaimOutcome =
-  /** Bound and applied: the report is unlocked (or, for the initial report, pre-unlocked). */
-  | { outcome: "unlocked"; entitlementId: number; paymentId: number }
+  /**
+   * Bound and applied: the report is unlocked (or, for the initial report, pre-unlocked).
+   * `offer` is what was bought, for the wizard the reader gets next.
+   */
+  | { outcome: "unlocked"; entitlementId: number; paymentId: number; offer: PayToStartOfferId }
   /** Bound, and the money is on its way (a delayed method): it unlocks when it settles. */
-  | { outcome: "pending"; entitlementId: number }
+  | { outcome: "pending"; entitlementId: number; offer: PayToStartOfferId }
   /**
    * Bound, but nothing was paid: a checkout opened and left. Paying that checkout later
    * unlocks this report by itself; a new one from the page is a new purchase.
@@ -115,14 +124,15 @@ async function applyClaimed(
   reportToken: string | null
 ): Promise<ClaimOutcome> {
   const entitlementId = entitlement.id;
+  const offer = offerDefinitionOf(entitlement.offer).id;
   if (entitlement.payment_id) {
-    return { outcome: "unlocked", entitlementId, paymentId: entitlement.payment_id };
+    return { outcome: "unlocked", entitlementId, paymentId: entitlement.payment_id, offer };
   }
   switch (entitlement.status) {
     case "succeeded": {
       const paymentId = await applyWithRetry(entitlement, reportToken);
       return paymentId
-        ? { outcome: "unlocked", entitlementId, paymentId }
+        ? { outcome: "unlocked", entitlementId, paymentId, offer }
         : { outcome: "error", entitlementId, error: new Error("pts_apply_returned_nothing") };
     }
     case "refunded":
@@ -146,10 +156,10 @@ async function applyClaimed(
   switch (settled.state) {
     case "paid":
       return settled.paymentId
-        ? { outcome: "unlocked", entitlementId, paymentId: settled.paymentId }
+        ? { outcome: "unlocked", entitlementId, paymentId: settled.paymentId, offer }
         : { outcome: "error", entitlementId, error: new Error("pts_apply_after_settle_failed") };
     case "processing":
-      return { outcome: "pending", entitlementId };
+      return { outcome: "pending", entitlementId, offer };
     case "refunded":
       return { outcome: "refused", reason: "refunded", entitlementId };
     default:
@@ -185,16 +195,24 @@ export async function claimedEntitlementFor(submissionId: number): Promise<Claim
   }
 }
 
-/** What the survey's response tells the page, from a claim. */
+/**
+ * What the survey's response tells the page, from a claim: whether the report opens
+ * unlocked (or will once the payment settles) and, when it does, the pre-report wizard its
+ * offer shows (four slides for the full report, five with the map for the initial one).
+ */
 export function claimResponseFields(claim: ClaimOutcome): {
   journey: "pay_to_start";
   unlocked: boolean;
   unlockPending?: true;
+  wizard?: PayToStartWizard;
 } {
   return {
     journey: "pay_to_start",
     unlocked: claim.outcome === "unlocked",
     ...(claim.outcome === "pending" ? { unlockPending: true as const } : {}),
+    ...(claim.outcome === "unlocked" || claim.outcome === "pending"
+      ? { wizard: getOfferDefinition(claim.offer).wizard }
+      : {}),
   };
 }
 

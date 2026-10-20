@@ -1,5 +1,6 @@
 import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import type {
   TourReplaySource,
@@ -1279,8 +1280,8 @@ export const trackWizardSlideAdvanced = (params: {
   from_slide: number;
   to_slide: number;
   direction: "next" | "previous";
-  /** Only on the pay-to-start wizard (four of the six slides); absent means the six. */
-  wizard_variant?: "pay_to_start";
+  /** Only on a pay-to-start wizard (four of the six slides, or five); absent means the six. */
+  wizard_variant?: PayToStartWizard;
 }) => {
   track("wizard_slide_advanced", params);
   persistAnalyticsEvent("wizard_slide_advanced", params);
@@ -1308,8 +1309,8 @@ export const trackWizardMapStep = (params: {
 export const trackWizardSkipped = (params: {
   from_slide: number;
   map_step?: number;
-  /** Only on the pay-to-start wizard; absent means the six. */
-  wizard_variant?: "pay_to_start";
+  /** Only on a pay-to-start wizard; absent means the six. */
+  wizard_variant?: PayToStartWizard;
 }) => {
   track("wizard_skipped", params);
   persistAnalyticsEvent("wizard_skipped", params);

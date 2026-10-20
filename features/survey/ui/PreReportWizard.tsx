@@ -32,9 +32,10 @@ import "./wizard/wizard-desktop.css";
  * wizard/wizard-desktop.css, on the wz-* hooks named here (Fatih, 01.10). A phone keeps
  * the 393 design exactly.
  *
- * A reader who paid before the survey gets four of the six (`variant="pay_to_start"`,
- * wizardContent.ts). The state is a position in the variant's order; the analytics keep
- * each slide's index in the six, so slide 4 reads as 3 whichever wizard showed it.
+ * A reader who paid before the survey gets four of the six, or five with the map for the
+ * initial report (`variant`, wizardContent.ts). The state is a position in the variant's
+ * order; the analytics keep each slide's index in the six, so slide 4 reads as 3 whichever
+ * wizard showed it.
  */
 
 const MAP_SLIDE = 1;
@@ -383,8 +384,9 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
             from_slide: fromSlide,
             to_slide: toSlide,
             direction,
-            // Only on the four-slide wizard, so the standard events read as before.
-            ...(variant === "pay_to_start" ? { wizard_variant: variant } : {}),
+            // Only on a paid wizard, so the standard events read as before and the free
+            // funnel's readouts (which skip any wizard_variant) never count a skipped slide.
+            ...(variant !== "standard" ? { wizard_variant: variant } : {}),
           });
         }
         // Forward onto the map shows its overview; back from slide 3 shows the deep dive
@@ -436,7 +438,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
       trackWizardSkipped({
         from_slide: slide,
         ...(slide === MAP_SLIDE ? { map_step: stepRef.current } : {}),
-        ...(variant === "pay_to_start" ? { wizard_variant: variant } : {}),
+        ...(variant !== "standard" ? { wizard_variant: variant } : {}),
       });
     }
     exit();
@@ -642,8 +644,8 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
               </button>
             </div>
 
-            {/* 1049:1219 — a segment per slide (six, or four), filled up to this one, 3.2
-             * tall since 01.10. */}
+            {/* 1049:1219 — a segment per slide (six, five or four), filled up to this one,
+             * 3.2 tall since 01.10. */}
             <div className="wz-bar flex h-[3.2px] w-full max-w-[448px] gap-3">
               {Array.from({ length: slideCount }, (_, i) => {
                 const filled = i <= position;

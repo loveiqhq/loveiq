@@ -313,8 +313,9 @@ export async function fetchWizardFunnel(
   for (const r of rows) {
     const md = r.metadata;
     if (!md || md.direction !== "next") continue;
-    // The six-slide wizard only. Pay to start's four (wizard_variant) go 0 -> 3 -> 4 -> 5,
-    // and one such reader made this chain read "0->3: 1% kept, 1->2: 9000% kept".
+    // The six-slide wizard only. Pay to start's (wizard_variant) go 0 -> 3 -> 4 -> 5, or
+    // 0 -> 1 -> 3 -> 4 -> 5 for the initial report, and one such reader made this chain read
+    // "0->3: 1% kept, 1->2: 9000% kept".
     if (md.wizard_variant) continue;
     if (typeof md.from_slide !== "number" || typeof md.to_slide !== "number") continue;
     totalForwards += 1;

@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import posthog from "posthog-js";
 import { surveyQuestions } from "@/data/survey-data";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
@@ -152,9 +153,9 @@ export function useSubmitSurvey() {
   const [submissionId, setSubmissionId] = useState<number | null>(null);
   /**
    * The survey was paid for before it was taken (pay to start) and the reply says the
-   * report is unlocked, or will be when the payment settles: the four-slide wizard.
+   * report is unlocked, or will be when the payment settles: the wizard its offer shows.
    */
-  const [paidBeforeSurvey, setPaidBeforeSurvey] = useState(false);
+  const [paidWizard, setPaidWizard] = useState<PayToStartWizard | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -233,13 +234,18 @@ export function useSubmitSurvey() {
               journey?: string;
               unlocked?: boolean;
               unlockPending?: boolean;
+              wizard?: string;
             };
             if (
               json.journey === "pay_to_start" &&
               (json.unlocked === true || json.unlockPending === true)
             ) {
-              setPaidBeforeSurvey(true);
-              rememberPaidWizard();
+              // A reply that names no wizard (a server from before the EUR 1.99 one) means
+              // the full report's.
+              const wizard: PayToStartWizard =
+                json.wizard === "pay_to_start_initial" ? "pay_to_start_initial" : "pay_to_start";
+              setPaidWizard(wizard);
+              rememberPaidWizard(wizard);
             }
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
@@ -360,7 +366,7 @@ export function useSubmitSurvey() {
     pendingSentMomentsAgo,
     reportToken,
     submissionId,
-    paidBeforeSurvey,
+    paidWizard,
     status,
     errorKind,
   };

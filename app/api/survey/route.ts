@@ -884,7 +884,7 @@ export async function POST(request: Request) {
                 : {}),
             }
           : {}),
-        // Pay to start: whether the report is unlocked (the wizard shows four slides).
+        // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
       },
       {

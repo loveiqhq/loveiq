@@ -64,14 +64,42 @@ describe("useSubmitSurvey", () => {
       sessionStorage.clear();
     });
 
-    it("notes it when the reply says the report is unlocked, for this tab too", async () => {
-      globalThis.fetch = replying({ journey: "pay_to_start", unlocked: true, submissionId: 5 });
+    it("notes its wizard when the reply says the report is unlocked, for this tab too", async () => {
+      globalThis.fetch = replying({
+        journey: "pay_to_start",
+        unlocked: true,
+        wizard: "pay_to_start",
+        submissionId: 5,
+      });
       const { result } = renderHook(() => useSubmitSurvey());
       await act(async () => {
         await result.current.submit(makeAnswers(), new Date().toISOString());
       });
-      expect(result.current.paidBeforeSurvey).toBe(true);
-      expect(sessionStorage.getItem(PAID_WIZARD_KEY)).toBe("1");
+      expect(result.current.paidWizard).toBe("pay_to_start");
+      expect(sessionStorage.getItem(PAID_WIZARD_KEY)).toBe("pay_to_start");
+    });
+
+    it("notes the initial report's five-slide wizard for a EUR 1.99 buyer", async () => {
+      globalThis.fetch = replying({
+        journey: "pay_to_start",
+        unlocked: true,
+        wizard: "pay_to_start_initial",
+      });
+      const { result } = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await result.current.submit(makeAnswers(), new Date().toISOString());
+      });
+      expect(result.current.paidWizard).toBe("pay_to_start_initial");
+      expect(sessionStorage.getItem(PAID_WIZARD_KEY)).toBe("pay_to_start_initial");
+    });
+
+    it("reads a reply that names no wizard, from an older server, as the full report's", async () => {
+      globalThis.fetch = replying({ journey: "pay_to_start", unlocked: true });
+      const { result } = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await result.current.submit(makeAnswers(), new Date().toISOString());
+      });
+      expect(result.current.paidWizard).toBe("pay_to_start");
     });
 
     it("notes it while the payment settles", async () => {
@@ -84,7 +112,7 @@ describe("useSubmitSurvey", () => {
       await act(async () => {
         await result.current.submit(makeAnswers(), new Date().toISOString());
       });
-      expect(result.current.paidBeforeSurvey).toBe(true);
+      expect(result.current.paidWizard).toBe("pay_to_start");
     });
 
     it("does not when the claim unlocked nothing, or for anyone else", async () => {
@@ -93,14 +121,14 @@ describe("useSubmitSurvey", () => {
       await act(async () => {
         await first.result.current.submit(makeAnswers(), new Date().toISOString());
       });
-      expect(first.result.current.paidBeforeSurvey).toBe(false);
+      expect(first.result.current.paidWizard).toBeNull();
 
       globalThis.fetch = replying({ submissionId: 5 });
       const second = renderHook(() => useSubmitSurvey());
       await act(async () => {
         await second.result.current.submit(makeAnswers(), new Date().toISOString());
       });
-      expect(second.result.current.paidBeforeSurvey).toBe(false);
+      expect(second.result.current.paidWizard).toBeNull();
       expect(sessionStorage.getItem(PAID_WIZARD_KEY)).toBeNull();
     });
   });

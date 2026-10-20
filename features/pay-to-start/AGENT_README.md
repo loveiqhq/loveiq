@@ -35,8 +35,10 @@ record, and no landing test arm.
 4. `/survey` sees the cookie (`app/survey/page.tsx`); its submit claims the entitlement
    (`server/claim.ts`): bind it to the submission (one payment, one report), then apply it
    (a payment row with the offer's plan, `metadata.journey` and `prepaid`; the full report's
-   tier, none for `initial`). The reply says unlocked, and the reader gets the 4-slide wizard
-   and their report.
+   tier, none for `initial`). The reply says unlocked and names the offer's wizard
+   (`claimResponseFields`): four slides for the full report (`pay_to_start`), five with the
+   report map for the initial one (`pay_to_start_initial`, Marcus 20.10, Figma 1899:5255).
+   Then the reader opens their report.
 
 ## Rules that are easy to break
 
@@ -68,7 +70,7 @@ record, and no landing test arm.
   survey's tracker gets `journey` and no arm (`stampLandingArm(..., { arm: false })`). The
   experiment readouts leave claimed submissions out (`features/admin/server/experiment-readouts.ts`,
   and in SQL `pay_to_start_submission()`, 20261018130000), and the digests' visit counts and
-  wizard funnels leave the page's visits and the 4-slide wizard out; its finishers, payments
+  wizard funnels leave the page's visits and the paid wizards (`wizard_variant`) out; its finishers, payments
   and revenue stay in the digests' totals. AP-Analytics, Jarvis and the KPI week still show
   the journey mixed in: how all of them should show it is an open decision.
 - **A purchase never opens someone else's report.** The continue link and the checkout route
