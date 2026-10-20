@@ -88,6 +88,23 @@ export const GUIDED_TOUR_KEY = "loveiq-report-tour-v1";
 export const guidedTourKey = (submissionId: number | null) =>
   `${GUIDED_TOUR_KEY}:${submissionId ?? "preview"}`;
 
+/**
+ * What /api/report answers a reader the EUR 1.99 gate stops, in place of the report
+ * (features/report/logic/initialUnlockGate.ts, buildInitialUnlockGatePayload).
+ */
+export function buildInitialGateFixture(reportToken: string) {
+  return {
+    gate: "initial_unlock",
+    priceCents: 199,
+    currency: "EUR",
+    creditCents: 1000,
+    guaranteeDays: 14,
+    reportToken,
+    submissionId: 1,
+    viewMode: "owner",
+  };
+}
+
 export async function mockReport(
   page: Page,
   discountStep: number,
