@@ -124,12 +124,24 @@ describe("unlocking", () => {
   it("binds a paid entitlement to this submission, then applies it", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row());
     vi.mocked(findEntitlementById).mockResolvedValue(row({ consumed_submission_id: 42 }));
-    expect(await claim()).toEqual({ outcome: "unlocked", entitlementId: 7, paymentId: 41 });
+    expect(await claim()).toEqual({
+      outcome: "unlocked",
+      entitlementId: 7,
+      paymentId: 41,
+      offer: "full",
+    });
     expect(bindEntitlement).toHaveBeenCalledWith({ id: 7, submissionId: 42 });
     expect(applyPayToStartEntitlement).toHaveBeenCalledWith({
       entitlement: expect.objectContaining({ id: 7, consumed_submission_id: 42 }),
       reportToken: "rpt_abc",
     });
+  });
+
+  it("says which offer was bought: the initial report's for a EUR 1.99 row", async () => {
+    vi.mocked(findEntitlementByToken).mockResolvedValue(
+      row({ offer: "pre", plan: "initial", consumed_submission_id: 42 })
+    );
+    expect(await claim()).toMatchObject({ outcome: "unlocked", offer: "pre" });
   });
 
   it("treats a lost bind that this submission made anyway as ours (a retry)", async () => {
@@ -148,7 +160,12 @@ describe("unlocking", () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(
       row({ consumed_submission_id: 42, payment_id: 33 })
     );
-    expect(await claim()).toEqual({ outcome: "unlocked", entitlementId: 7, paymentId: 33 });
+    expect(await claim()).toEqual({
+      outcome: "unlocked",
+      entitlementId: 7,
+      paymentId: 33,
+      offer: "full",
+    });
     expect(applyPayToStartEntitlement).not.toHaveBeenCalled();
   });
 
@@ -157,7 +174,12 @@ describe("unlocking", () => {
     vi.mocked(applyPayToStartEntitlement)
       .mockRejectedValueOnce(new Error("pts_apply_payment_persist_failed"))
       .mockResolvedValueOnce(41);
-    expect(await claim()).toEqual({ outcome: "unlocked", entitlementId: 7, paymentId: 41 });
+    expect(await claim()).toEqual({
+      outcome: "unlocked",
+      entitlementId: 7,
+      paymentId: 41,
+      offer: "full",
+    });
     expect(applyPayToStartEntitlement).toHaveBeenCalledTimes(2);
   });
 
@@ -191,7 +213,12 @@ describe("a payment not settled at the end of the survey", () => {
 
   it("asks Stripe once, and unlocks when it turns out paid", async () => {
     settles("paid", 41);
-    expect(await claim()).toEqual({ outcome: "unlocked", entitlementId: 7, paymentId: 41 });
+    expect(await claim()).toEqual({
+      outcome: "unlocked",
+      entitlementId: 7,
+      paymentId: 41,
+      offer: "full",
+    });
     expect(settlePayToStartSession).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "cs_test_1", source: "claim" })
     );
@@ -199,7 +226,7 @@ describe("a payment not settled at the end of the survey", () => {
 
   it("says pending while a delayed method settles", async () => {
     settles("processing");
-    expect(await claim()).toEqual({ outcome: "pending", entitlementId: 7 });
+    expect(await claim()).toEqual({ outcome: "pending", entitlementId: 7, offer: "full" });
   });
 
   it("says unpaid for a checkout left open, bound so paying later unlocks it", async () => {
@@ -234,6 +261,7 @@ describe("a replay without the cookie", () => {
       outcome: "unlocked",
       entitlementId: 7,
       paymentId: 41,
+      offer: "full",
     });
   });
 
@@ -253,25 +281,41 @@ describe("a replay without the cookie", () => {
 });
 
 describe("what the reply carries", () => {
-  it("says unlocked, or pending, under the journey", () => {
-    expect(claimResponseFields({ outcome: "unlocked", entitlementId: 7, paymentId: 41 })).toEqual({
+  it("says unlocked, or pending, under the journey, with the offer's wizard", () => {
+    expect(
+      claimResponseFields({ outcome: "unlocked", entitlementId: 7, paymentId: 41, offer: "full" })
+    ).toEqual({
       journey: "pay_to_start",
       unlocked: true,
+      wizard: "pay_to_start",
     });
-    expect(claimResponseFields({ outcome: "pending", entitlementId: 7 })).toEqual({
+    expect(claimResponseFields({ outcome: "pending", entitlementId: 7, offer: "full" })).toEqual({
       journey: "pay_to_start",
       unlocked: false,
       unlockPending: true,
+      wizard: "pay_to_start",
     });
+    // Nothing opens: no wizard of the journey's.
     expect(claimResponseFields({ outcome: "refused", reason: "used" })).toEqual({
       journey: "pay_to_start",
       unlocked: false,
     });
   });
 
+  it("names the initial report's five-slide wizard for its EUR 1.99 buyer (Marcus, 20.10)", () => {
+    expect(
+      claimResponseFields({ outcome: "unlocked", entitlementId: 7, paymentId: 41, offer: "pre" })
+    ).toMatchObject({ unlocked: true, wizard: "pay_to_start_initial" });
+    expect(
+      claimResponseFields({ outcome: "pending", entitlementId: 7, offer: "pre" })
+    ).toMatchObject({ unlockPending: true, wizard: "pay_to_start_initial" });
+  });
+
   it("clears the cookie unless the claim failed", () => {
-    expect(claimSettlesCookie({ outcome: "unlocked", entitlementId: 7, paymentId: 41 })).toBe(true);
-    expect(claimSettlesCookie({ outcome: "pending", entitlementId: 7 })).toBe(true);
+    expect(
+      claimSettlesCookie({ outcome: "unlocked", entitlementId: 7, paymentId: 41, offer: "full" })
+    ).toBe(true);
+    expect(claimSettlesCookie({ outcome: "pending", entitlementId: 7, offer: "full" })).toBe(true);
     expect(claimSettlesCookie({ outcome: "refused", reason: "refunded" })).toBe(true);
     expect(claimSettlesCookie({ outcome: "error", error: new Error("x") })).toBe(false);
     // Cleared: kept, the next purchase in this browser (someone else's, or a second one

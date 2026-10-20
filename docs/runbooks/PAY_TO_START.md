@@ -47,8 +47,9 @@ test is read per price.
 - **What to check after a test payment**: the `prepaid_report_access` row (succeeded, then
   `consumed_submission_id`, then `payment_id`), the `payment` row (`metadata.journey`, and
   `metadata.plan`: `full_report` or `initial`), the confirmation email and its link, the
-  4-slide wizard, and the report: fully unlocked, or for the initial report the Core
-  Archetype card and Summary open and the pay screen at EUR 19.99, "EUR 10.00 credit applied".
+  wizard (four slides; five, with the report map, for the initial report), and the report:
+  fully unlocked, or for the initial report the Core Archetype card and Summary open and the
+  pay screen at EUR 19.99, "EUR 10.00 credit applied".
 
 ## A buyer who paid but cannot get in
 

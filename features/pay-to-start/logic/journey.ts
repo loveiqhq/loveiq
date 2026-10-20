@@ -11,13 +11,24 @@ export type PayToStartJourney = typeof PAY_TO_START_JOURNEY;
 export const JOURNEY_TRACKER_KEY = "journey";
 
 /**
- * The pre-report wizard a buyer sees, whichever offer: slides 1, 4, 5 and 6 of the six
- * (Figma 1477:3938, 1477:4018, 1477:4071, 1477:4123; the EUR 1.99 board 1741:5587 draws the
- * same four). The report map ("your free chapters") and "Unlocking your report is fully
- * risk free" are left out. Indices are the standard wizard's, so analytics read the same
- * slide under the same number.
+ * The pre-report wizard the full report's buyer sees: slides 1, 4, 5 and 6 of the six (Figma
+ * 1477:3938, 1477:4018, 1477:4071, 1477:4123). The report map ("your free chapters") and
+ * "Unlocking your report is fully risk free" are left out. Indices are the standard
+ * wizard's, so analytics read the same slide under the same number.
  */
 export const PAY_TO_START_WIZARD_SLIDES = [0, 3, 4, 5] as const;
+
+/**
+ * The initial report's buyer (EUR 1.99) also gets slide 2, the report map: their report is
+ * only partly open, so its free, featured and locked chapters are theirs to find too
+ * (Marcus, 20.10: "the Wizard needs to be different for the 1.99€ pay to start survey
+ * version as the report is only partially unlocked"; Figma 1899:5255 on the EUR 1.99 board
+ * 1741:5587, between slides 1 and 4).
+ */
+export const PAY_TO_START_INITIAL_WIZARD_SLIDES = [0, 1, 3, 4, 5] as const;
+
+/** The pre-report wizard each offer's buyer gets (`PayToStartOffer.wizard`). */
+export type PayToStartWizard = "pay_to_start" | "pay_to_start_initial";
 
 /** `rpp_` + 32 base62 characters, about 190 bits: unguessable and database-backed. */
 export const PREPAID_TOKEN_REGEX = /^rpp_[a-zA-Z0-9]{32}$/;

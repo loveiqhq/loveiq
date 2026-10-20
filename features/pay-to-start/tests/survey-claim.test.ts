@@ -114,7 +114,12 @@ function submit(body: Record<string, unknown> = {}, cookie?: string) {
   );
 }
 
-const unlocked: ClaimOutcome = { outcome: "unlocked", entitlementId: 7, paymentId: 41 };
+const unlocked: ClaimOutcome = {
+  outcome: "unlocked",
+  entitlementId: 7,
+  paymentId: 41,
+  offer: "full",
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -177,8 +182,16 @@ describe("a survey submitted by a buyer who paid before it", () => {
       submissionId: 123,
       journey: "pay_to_start",
       unlocked: true,
+      wizard: "pay_to_start",
     });
     expect(response.headers.get("set-cookie")).toMatch(/__liq_pp=;.*Max-Age=0/i);
+  });
+
+  it("names the five-slide wizard for a EUR 1.99 buyer (Marcus, 20.10)", async () => {
+    routeSupabase();
+    vi.mocked(claimPayToStartForSubmission).mockResolvedValue({ ...unlocked, offer: "pre" });
+    const json = await (await submit({}, cookie)).json();
+    expect(json).toMatchObject({ unlocked: true, wizard: "pay_to_start_initial" });
   });
 
   it("puts a buyer holding a landing arm cookie in no arm, and a free reader in theirs", async () => {
@@ -213,6 +226,7 @@ describe("a survey submitted by a buyer who paid before it", () => {
     vi.mocked(claimPayToStartForSubmission).mockResolvedValue({
       outcome: "pending",
       entitlementId: 7,
+      offer: "full",
     });
     const json = await (await submit({}, cookie)).json();
     expect(json).toMatchObject({ journey: "pay_to_start", unlocked: false, unlockPending: true });

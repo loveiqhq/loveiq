@@ -921,3 +921,65 @@ describe("PreReportWizard — the pay-to-start variant", () => {
     });
   });
 });
+
+/**
+ * The initial report (EUR 1.99; Marcus, 20.10: "the Wizard needs to be different for the
+ * 1.99€ pay to start survey version as the report is only partially unlocked"; Figma
+ * 1899:5255 on the board 1741:5587): its report opens only partly, so the map comes back
+ * between the note and "Take only what resonates". Slides 1, 2, 4, 5 and 6, "n / 5".
+ */
+describe("PreReportWizard — the initial report's variant", () => {
+  const INITIAL_HEADINGS = [HEADINGS[0], HEADINGS[1], HEADINGS[3], HEADINGS[4], HEADINGS[5]];
+  const filled = () =>
+    document.querySelectorAll("[data-wizard-segment][data-filled='true']").length;
+
+  it("walks five slides, the map second, the bar of five and the counter following", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(5);
+    expect(heading()).toBe(INITIAL_HEADINGS[0]);
+    expect(screen.getByText("1 / 5")).toBeInTheDocument();
+
+    press(continueButton());
+    expect(heading()).toBe(INITIAL_HEADINGS[1]);
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
+    // The map's overview continues into its deep dives, still slide 2 of 5.
+    press(continueButton());
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
+
+    for (let i = 2; i < INITIAL_HEADINGS.length; i++) {
+      press(continueButton());
+      expect(heading()).toBe(INITIAL_HEADINGS[i]);
+      expect(screen.getByText(`${i + 1} / 5`)).toBeInTheDocument();
+      expect(filled()).toBe(i + 1);
+    }
+    expect(screen.getByRole("button", { name: "Continue to your report" })).toBeInTheDocument();
+  });
+
+  it("never shows the risk-free unlock", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    const seen: string[] = [heading() ?? ""];
+    for (let i = 0; i < 5; i++) {
+      press(continueButton());
+      seen.push(heading() ?? "");
+      expect(screen.queryByText(/money-back guarantee/i)).toBeNull();
+    }
+    expect(seen).not.toContain(HEADINGS[2]);
+  });
+
+  it("reports each slide by its index in the six, tagged as this wizard", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    press(continueButton()); // 0 -> 1, the map
+    press(continueButton()); // the map's first deep dive: a map step, not a slide
+    press(continueButton()); // 1 -> 3
+    expect(analytics.trackWizardSlideAdvanced.mock.calls.map(([p]) => p)).toEqual([
+      { from_slide: 0, to_slide: 1, direction: "next", wizard_variant: "pay_to_start_initial" },
+      { from_slide: 1, to_slide: 3, direction: "next", wizard_variant: "pay_to_start_initial" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    expect(analytics.trackWizardSkipped).toHaveBeenCalledWith({
+      from_slide: 3,
+      wizard_variant: "pay_to_start_initial",
+    });
+  });
+});

@@ -78,6 +78,15 @@ describe("/wizard-preview", () => {
     expect(screen.getByText("1 / 4")).toBeTruthy();
   });
 
+  it("shows the initial report's five, with the map, with ?variant=pay_to_start_initial", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
+    render(await page("pay_to_start_initial"));
+    expect(heading()).toBe("A note before you explore your report.");
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(5);
+    expect(screen.getByText("1 / 5")).toBeTruthy();
+  });
+
   it("ignores any other variant", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
