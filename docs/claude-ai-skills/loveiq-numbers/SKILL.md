@@ -13,7 +13,10 @@ Needs the loveiq-brain connector (Jarvis) turned on in this chat.
 2. Start with `get_business_numbers` for the funnel, revenue, paid customers and ad spend.
    Its numbers are the AP-Analytics dashboard's: say so, and give the link it returns.
 3. For a split (country, age, gender, archetype, month), use `user_totals`. Groups under 5
-   people are hidden on purpose; say so rather than guessing them.
+   people are hidden on purpose; say so rather than guessing them. For a crosstab of survey
+   answers (how the people who gave one answer answered other questions), use
+   `query_product_data` with `rpc/get_answer_crosstab`, and report only the differences it
+   marks as real.
 4. For "why did this move", use `explain_change`. For "is the site OK", use
    `brain_health` or `list_sources` first to check the data is fresh.
 5. For a trend, draw it with `show_chart` and give the link.

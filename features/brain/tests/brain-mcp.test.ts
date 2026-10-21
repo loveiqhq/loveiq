@@ -2019,6 +2019,42 @@ describe("/api/mcp", () => {
       expect(live.description).toMatch(/what do we charge/i);
     });
 
+    it("names every parameter get_answer_crosstab takes, as the migration declares them", async () => {
+      /**
+       * The function has no defaults (an overload could appear later), so a call missing one
+       * key fails in PostgREST. The description is the only place a caller learns the keys:
+       * read them from the migration, so renaming or adding one fails here, not in a chat.
+       */
+      const { readFileSync } = await import("node:fs");
+      const sql = readFileSync("supabase/migrations/20261021150000_answer_crosstab.sql", "utf8");
+      const signature = /FUNCTION public\.get_answer_crosstab\(([^)]*)\)/.exec(sql)![1]!;
+      const params = signature.split(",").map((p) => p.trim().split(/\s+/)[0]!);
+      expect(params).toEqual([
+        "row_question",
+        "col_questions",
+        "group_by",
+        "filters",
+        "since_day",
+        "until_day",
+      ]);
+      const list = await (await POST(rpc({ jsonrpc: "2.0", id: 26, method: "tools/list" }))).json();
+      const tools = list.result.tools as Array<{ name: string; description: string }>;
+      const live = tools.find((t) => t.name === "query_product_data")!.description;
+      const at = live.indexOf("rpc/get_answer_crosstab");
+      expect(at).toBeGreaterThan(-1);
+      const sentence = live.slice(at, live.indexOf("funnel_event's unique_visitor", at));
+      for (const p of params) expect(sentence).toContain(p);
+      expect(sentence).toContain(
+        `pass all ${["", "one", "two", "three", "four", "five", "six", "seven"][params.length]}`
+      );
+      // And the tools a crosstab ask lands on first send it there.
+      for (const name of ["user_totals"]) {
+        expect(tools.find((t) => t.name === name)!.description).toContain(
+          "rpc/get_answer_crosstab"
+        );
+      }
+    });
+
     it("keeps the decision-record filter reachable, by the value the ingester emits", async () => {
       /**
        * A tool that names a filter value nothing produces LIES rather than errors.
@@ -6146,6 +6182,75 @@ describe("/api/mcp", () => {
         expect(r.content[0].text).toContain('"q_text":"Right now, I feel satisfied"');
         expect(r.content[0].text).not.toContain("[private");
         expect(r.content[0].text).not.toContain("Masked as private");
+      });
+
+      /**
+       * A CROSSTAB IS TOTALS, so none of it may be masked: a group label under a key such as
+       * `gender` would come back a #tag, and a share table nobody can read. Every key
+       * get_answer_crosstab writes is read from the migration, so a new one is checked the day
+       * it is added.
+       */
+      it("passes every key get_answer_crosstab writes through unmasked", async () => {
+        const { readFileSync } = await import("node:fs");
+        const sql = readFileSync("supabase/migrations/20261021150000_answer_crosstab.sql", "utf8");
+        // The keys: every literal in a key position of a json(b)_build_object call.
+        const found = new Set<string>();
+        for (const m of sql.matchAll(/jsonb?_build_object\(/g)) {
+          const args: string[] = [];
+          let depth = 0;
+          let quoted = false;
+          let arg = "";
+          for (let i = m.index! + m[0].length; i < sql.length; i++) {
+            const ch = sql[i]!;
+            if (ch === "'") quoted = !quoted;
+            if (!quoted && ch === "(") depth++;
+            if (!quoted && ch === ")" && depth-- === 0) break;
+            if (!quoted && ch === "," && depth === 0) {
+              args.push(arg.trim());
+              arg = "";
+            } else arg += ch;
+          }
+          args.push(arg.trim());
+          args.forEach((a, i) => i % 2 === 0 && /^'[^']+'$/.test(a) && found.add(a.slice(1, -1)));
+        }
+        const all = [...found];
+        for (const k of [
+          "about",
+          "row_question",
+          "people",
+          "columns",
+          "rows",
+          "group",
+          "answer",
+          "cols",
+          "pct",
+          "pct_5_7",
+          "mean",
+          "vs_rest",
+          "hidden_rows",
+          "people_in_hidden_groups",
+          "is any of",
+        ])
+          expect(all, k).toContain(k);
+        const table = Object.fromEntries(all.map((k) => [k, `value of ${k}`]));
+        wire({
+          ...table,
+          rows: [
+            { group: "Woman", answer: "Shame, self-judgment, or inner pressure", people: 586 },
+          ],
+        });
+        const r = await call({ table: "rpc/get_report_counts", params: {} });
+        expect(r.isError).toBeFalsy();
+        const text = r.content[0].text;
+        expect(text).not.toContain("[private");
+        expect(text).not.toContain("Masked as private");
+        for (const k of all)
+          expect(text).toContain(
+            `"${k}":"value of ${k}"`.replace(`"rows":"value of rows"`, `"rows":[`)
+          );
+        expect(text).toContain(
+          '{"group":"Woman","answer":"Shame, self-judgment, or inner pressure","people":586}'
+        );
       });
 
       /**

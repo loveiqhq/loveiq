@@ -1912,7 +1912,19 @@ export const TOOLS = [
       "measure. Which survey questions move together (conditionality) is " +
       "rpc/get_answer_correlations with since_ts, until_ts (null for all time), min_people " +
       "and min_r: every pair of scale questions, correlated over the people who answered " +
-      "both. funnel_event's unique_visitor rows are the server's daily visit count (see " +
+      "both. CROSSTABS of survey answers (how the people who gave each answer to one question " +
+      "answered others, e.g. obstacles 16014 by satisfaction 01002 and wanted changes 16001) are " +
+      "rpc/get_answer_crosstab, with params row_question, col_questions (up to 25 ids), " +
+      "group_by (gender, age, orientation, relationship, country, archetype, month, or a " +
+      "one-answer question's id), filters (demographics or answers, e.g. " +
+      '{"relationship": "Single", "16014": "shame", "01002": "5-7"}), since_day and until_day: ' +
+      "pass all six, null for what is not used, and with group_by ask for a few columns at a " +
+      "time, or the reply passes its size limit. Per answer it gives the people, a scale's mean " +
+      "and share answering 5 to 7, a choice question's share per option, and which differ " +
+      "from everyone else after a multiple-comparison correction; groups and cells under 5 are " +
+      "hidden, as user_totals hides them, and each table is protected on its own: two tables " +
+      "can still be subtracted (a day apart, one filter narrower), so never use it to find out " +
+      "about one person. funnel_event's unique_visitor rows are the server's daily visit count (see " +
       "get_business_numbers), so they are never the bottom of a rate of something done on a " +
       "page: that comes whole from query_product_analytics. " +
       SEGMENT_RULES,
@@ -2407,7 +2419,10 @@ export const TOOLS = [
       "everyone', 'who unsubscribes and from what', 'how did women aged 25 to 34 answer 16001', " +
       "'average reading time in the first week of October'. Which survey questions move " +
       "together (conditionality) is not a total: query_product_data's " +
-      "rpc/get_answer_correlations. " +
+      "rpc/get_answer_correlations. Nor is a crosstab, how the people who gave each answer to " +
+      "one question answered others ('how satisfied are people whose obstacle is shame'): " +
+      "query_product_data's rpc/get_answer_crosstab, which also says which differences are " +
+      "real. " +
       "Group by up to two of gender, age, orientation, relationship, country, archetype and " +
       "month, and narrow with the same keys. SEVERAL AT ONCE, in ONE call rather than one call " +
       'each: breakdowns ["gender", "age", "country"] gives each of those on its own, exactly as ' +
@@ -8250,7 +8265,10 @@ export const MCP_INSTRUCTIONS =
   "person, with any group under 5 hidden. Its measure picks what is counted: people (who " +
   "finished and paid), traits (the user graph: the 21 trait averages), emails (reminders sent, " +
   "unsubscribes, bounces) or answers (how a group answered one survey question). Several " +
-  "breakdowns, or several questions' answers, come in one call (breakdowns, questions).\n\n" +
+  "breakdowns, or several questions' answers, come in one call (breakdowns, questions). " +
+  "CROSSTABS, how the people who gave each answer to one question answered others, with " +
+  "which differences hold up after a multiple-comparison correction, are query_product_data's " +
+  "rpc/get_answer_crosstab.\n\n" +
   "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
   "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
   "WHAT VISITORS DID ON THE SITE: query_product_analytics counts it from PostHog with one " +
