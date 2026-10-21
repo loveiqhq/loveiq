@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -723,7 +723,8 @@ describe("SurveyPage — the intro's own records", () => {
       await screen.findByRole("button", { name: /continue to survey introduction/i })
     );
     await screen.findByRole("heading", { name: /quality in/i }, { timeout: 2000 });
-    expect(sent()).toEqual(["intro_view", "intro_slide_1"]);
+    // The slide's record is sent from an effect, which can run just after its heading shows.
+    await waitFor(() => expect(sent()).toEqual(["intro_view", "intro_slide_1"]));
     const ids = fetchSpy.mock.calls
       .filter(([url]) => url === "/api/funnel-event")
       .map(([, init]) => JSON.parse(String((init as RequestInit).body)).visitor_id as string);
