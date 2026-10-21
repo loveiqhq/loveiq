@@ -159,3 +159,8 @@ Perel
 Nagoski
 Hadzic
 Hadžić
+# Statistics in the survey crosstab (rpc/get_answer_crosstab)
+crosstab
+crosstabs
+Benjamini
+Hochberg

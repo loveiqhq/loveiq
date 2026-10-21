@@ -33,6 +33,7 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
 | "what do customers say about the report"                          | `customer_feedback` gives chapter votes, comments and reviews, and says what it can't see  |
 | "average reading time in the first week of October, by month"     | `user_totals` with `measure: "reading"`: median and average minutes per reader             |
 | "which survey questions move together"                            | `rpc/get_answer_correlations` correlates every pair of scale questions, staff left out     |
+| "how satisfied are people whose obstacle is shame, by gender"     | `rpc/get_answer_crosstab` splits people by one answer, shows their others and tests them   |
 
 **It is weak at, and will say so rather than guess:**
 
@@ -670,6 +671,45 @@ later `date:` is the current decision.
 | `query_external_service`  | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `query_product_analytics` | What visitors did on the site, counted from PostHog with one read-only HogQL query: page views, video plays, taps, landing arms, whether the hero media was seen. The bottom of any rate of something done on a page comes from here too, never from the server's daily visit count (`get_business_numbers`, `funnel_event`). A query with no LIMIT gets 1,000 rows; a bigger LIMIT is refused                                                                                                                                                                                                                                                                            |
 | `design_changes`          | What changed in a Figma design since a date, in one call: frames, components and text layers added, removed, renamed or rewritten, grouped by page and frame with links, and who saved each version (with its label and description), not who made each change. Takes the Figma link, so any file. A page or frame is read whole, text included; a whole file only its top three levels, where a layer shown as added or removed may instead have moved up from or down below them, and the line says so. A comparison is kept for a day when the shared cache is reachable, so asking again reads only the version list. Five comparisons a minute for everyone together |
+
+**Crosstabs of survey answers: `rpc/get_answer_crosstab`** (since 2026-10-21, asked for by
+Sanjin). How the people who gave each answer to one question answered others: obstacles (16014)
+by satisfaction (01002) and wanted changes (16001), say. Params: `row_question`, `col_questions`
+(up to 25), `group_by` (a demographic or a one-answer question), `filters` (demographics or
+answers, a part of an option's words is enough when only one option contains it), `since_day`
+and `until_day`, all six passed, null when unused. Mistakes come back as `{"error": ...}` with
+what would work, because PostgREST's error text reaches Jarvis cut at 400 characters.
+
+- **Who counts** is `user_totals`' rule: finished surveys, staff out, each person once with
+  their latest finish's answers; also out, anyone who asked us to restrict processing (Art.
+  18). Demographics are the person's own answers to 15010, 15003, 15011 and 15004, so the
+  profile's legacy relationship labels ("Monogamous", 114 people) count under the survey's
+  current wording. From 22 May to 14 Jun 2026 single-choice answers were stored as the
+  option's own words instead of a link (about 130 finishers, every one an exact match):
+  they count as that option. `user_totals` and AP-Analytics' question view still miss them.
+- **Never a person**: groups under 5 hidden, and where each person is in one row the next
+  smallest goes too while the hidden ones add up to 1 to 4; a share needs 5 people each way;
+  a lone hidden share in a single-choice column takes the next-smallest with it; a mean needs
+  20 answers; figures show only beside an exact count of who answered, since rounded shares
+  and a mean pin that count down; "(all)" withholds any figure that, minus the shown groups,
+  gives back a hidden one; a filter value fewer than 5 people hold is refused, in the same
+  words whether nobody or 1 to 4 hold it. Like `user_totals`, each table is protected on its
+  own: two tables a day apart, or one filter narrower, can still be subtracted, and the
+  description says so. The full reasoning is in the migration's header.
+- **Speed and size**: hash joins only (`enable_nestloop` off for the function), because the
+  planner's one-row guesses for its CTEs made 25 columns grouped by country take 26 s against
+  PostgREST's 8 s limit; it takes under 1 s now, 2 columns 0.2 s. 25 columns fit the 40,000
+  character reply without `group_by` (37,000 for 16014); grouped, ask for a few at a time.
+- **Which differences are real**: each group against the rest of its group (Welch's t for
+  means, two-proportion z for shares), Benjamini-Hochberg corrected across the whole table
+  at a 5% false discovery rate; only "higher" or "lower" is returned, since an exact p could
+  give a withheld figure back.
+- **Verified 2026-10-21 on production data**, read-only, the function run as a temporary copy
+  in rolled-back transactions: an independent JavaScript re-implementation matched every
+  number, flag and refusal over 232 random calls (194 tables, 38 refusals), and an
+  attacker's-view checker (`scripts/crosstab-leaks.ts`) found no count under 5 that could be
+  pinned down in any of them; each privacy rule broken on purpose was caught. The MCP battery
+  runs that checker on two live tables every Monday (`mcp-crosstab-*`).
 
 **LoveIQ's designs live in more than one Figma file**, and a link names its file
 (`figma.com/design/<key>/<name>?node-id=1-2`). `show_design` and `design_changes` take the

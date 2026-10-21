@@ -18,6 +18,7 @@
 import { answerQuestion } from "@features/brain/server/answer";
 import { retrieve, type BrainChunk, type RetrieveOptions } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { crosstabLeaks, type Crosstab } from "./crosstab-leaks";
 
 /** What one battery run found, as `--record` stores it for the brain's weekly report. */
 interface BatteryResult {
@@ -2880,6 +2881,27 @@ const both =
   (t: string) =>
     cs.flatMap((c) => c(t));
 
+/** get_answer_crosstab takes all six parameters, null for those not used. */
+const CROSSTAB_NULLS = {
+  group_by: null,
+  filters: null,
+  since_day: null,
+  until_day: null,
+};
+
+/** The crosstab inside query_product_data's reply, attacked from the outside. */
+function crosstabChecked(text: string): string[] {
+  const json = text.slice(text.indexOf("{"));
+  let table: Crosstab;
+  try {
+    table = JSON.parse(json) as Crosstab;
+  } catch {
+    return ["the reply holds no crosstab"];
+  }
+  if (table.error) return [`refused: ${table.error}`];
+  return crosstabLeaks(table).map((leak) => `LEAKED ${leak}`);
+}
+
 /**
  * A service with no credential set, or null when every one of them has one.
  *
@@ -3532,6 +3554,41 @@ async function mcpProbes(): Promise<McpProbe[]> {
       // From 1 Sep: Resend's record starts on the 14th, and the answer must say so.
       args: { measure: "emails", since: "2026-09-01" },
       check: both(contains("report reminders recorded", "its record starts on"), absent("@")),
+    },
+    // Crosstabs (2026-10-21): every live table attacked from its output alone, so a privacy
+    // rule that stops holding on real data turns this red (scripts/crosstab-leaks.ts).
+    {
+      kind: "mcp-crosstab-no-leak",
+      tool: "query_product_data",
+      args: {
+        table: "rpc/get_answer_crosstab",
+        params: { ...CROSSTAB_NULLS, row_question: "16014", col_questions: ["01002", "16001"] },
+      },
+      check: both(crosstabChecked, contains('"(all)"', '"vs_rest"'), absent("@")),
+    },
+    // Each person in one row, and many small groups: the subtraction rules are what is tested.
+    {
+      kind: "mcp-crosstab-small-groups",
+      tool: "query_product_data",
+      args: {
+        table: "rpc/get_answer_crosstab",
+        params: {
+          ...CROSSTAB_NULLS,
+          row_question: "15004",
+          col_questions: ["01002", "15006"],
+          group_by: "country",
+        },
+      },
+      check: both(crosstabChecked, contains("people_in_hidden_groups", '"<5"'), absent("@")),
+    },
+    {
+      kind: "mcp-crosstab-refuses-free-text",
+      tool: "query_product_data",
+      args: {
+        table: "rpc/get_answer_crosstab",
+        params: { ...CROSSTAB_NULLS, row_question: "00000", col_questions: ["01002"] },
+      },
+      check: both(contains("written text, which is never read"), absent("@")),
     },
     // THE SECURITY GUARD. `query_product_data` reads production tables directly, so
     // a column holding an email or a report token must come back masked. A regression
