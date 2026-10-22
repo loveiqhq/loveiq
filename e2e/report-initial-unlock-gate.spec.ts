@@ -13,13 +13,16 @@ const TOKEN = "rpt_e2eGateAbCdEfGhIjKlM";
 async function mockGate(page: Page, paid: () => boolean = () => false) {
   // The guided tour starts on a report's first open, remembered per report; these specs are
   // about the pages under it. The gated reader's submission is the report's after the EUR 1.99.
-  await page.addInitScript((key) => {
-    try {
-      window.localStorage.setItem(key, "seen");
-    } catch {
-      // No storage: then the tour cannot remember itself and never starts either.
-    }
-  }, guidedTourKey(buildInitialGateFixture(TOKEN).submissionId));
+  await page.addInitScript(
+    (key) => {
+      try {
+        window.localStorage.setItem(key, "seen");
+      } catch {
+        // No storage: then the tour cannot remember itself and never starts either.
+      }
+    },
+    guidedTourKey(buildInitialGateFixture(TOKEN).submissionId)
+  );
   await page.route("**/api/report?**", async (route) => {
     await route.fulfill({
       status: 200,
