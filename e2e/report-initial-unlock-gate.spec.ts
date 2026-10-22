@@ -45,7 +45,10 @@ test.describe("The EUR 1.99 gate", () => {
     await expect(page.locator(".rv4")).toHaveCount(0);
   });
 
-  test("pays the EUR 1.99 and comes back to the top of the report", async ({ page }) => {
+  test("pays the EUR 1.99 and comes back to the top of the report", async ({
+    page,
+    browserName,
+  }) => {
     let paid = false;
     let csrf: string | undefined;
     await mockGate(page, () => paid);
@@ -82,8 +85,20 @@ test.describe("The EUR 1.99 gate", () => {
     await page.goto(`/report/${TOKEN}`);
     await page.locator(".iug-card .rpg-card__cta").click();
 
-    await expect(page.locator(".rv4")).toBeVisible({ timeout: 15_000 });
-    expect(csrf, "the EUR 1.99 checkout is posted with the CSRF header").toBeTruthy();
+    // No other spec opens /checkout/return, so this is the server's first render of it; on
+    // CI's WebKit that has outlasted 15 s.
+    await expect(page.locator(".rv4")).toBeVisible({ timeout: 30_000 });
+    // The header is the page's CSRF cookie, as the page reads it (getCsrfToken). WebKit keeps
+    // that Secure cookie from scripts on http://localhost (production is https), or refuses
+    // it outright on Linux, so there the page has none to send.
+    const pageCsrf = await page.evaluate(() => {
+      const row = document.cookie
+        .split("; ")
+        .find((r) => r.startsWith("__Host-csrf=") || r.startsWith("__csrf="));
+      return row?.substring(row.indexOf("=") + 1) ?? "";
+    });
+    if (browserName !== "webkit") expect(pageCsrf).toBeTruthy();
+    expect(csrf ?? "", "the EUR 1.99 checkout is posted with the CSRF header").toBe(pageCsrf);
     // Back from Stripe through ?unlocked=initial, which the report then drops.
     await expect.poll(() => urls.some((u) => u.includes("unlocked=initial"))).toBe(true);
     await expect(page).toHaveURL(new RegExp(`/report/${TOKEN}$`));
