@@ -62,6 +62,9 @@ report for free and asks an optional follow-up. The admin's "Unlock feedback" pa
   after three failed sends (`MAX_FAILED_SENDS`): a send without a clear answer keeps its
   claim, so carrying on through a Resend outage would use up every reader in reach. The
   hourly send's flag fails closed: if it cannot be read, nothing is sent.
+- **The greeting** is `greetingName` (`logic/audience.ts`): the first word of the first name,
+  ALL CAPS or all lower case in Title Case, and "Hi there," for initials, digits, an @ or an
+  underscore (one in five readers' names needed it on 22.10).
 - **A link works as long as its row exists:** the token is only in that email, so `/why`
   accepts it even when the send had no clear answer and `sent_at` was never written.
 - **Personal data:** `note` is the reader's own words. Masked in the team export and in the
