@@ -73,6 +73,28 @@ describe("the day-4 gift is never counted as a sale", () => {
     }
   });
 
+  it("leaves both free unlocks out of the two RPCs that counted every payment", () => {
+    // get_dropoff_everywhere feeds the conversion digest's funnel; get_conversion_pipeline the
+    // admin strategy. A coupon's EUR 0 redemption still counts (20260915110402).
+    const sql = readFileSync(
+      join(REPO, "supabase/migrations/20261023010000_free_unlocks_are_not_purchases.sql"),
+      "utf8"
+    );
+    for (const fn of ["get_conversion_pipeline", "get_dropoff_everywhere"]) {
+      expect(sql).toContain(`'${fn}'`);
+    }
+    expect(sql).toContain("metadata->>''gifted'' IS NULL");
+    expect(sql).toContain("<> ''unlock_feedback''");
+    expect(sql).toMatch(/expected exactly 1/);
+    expect(sql).toContain("CONTINUE WHEN");
+    const down = readFileSync(
+      join(REPO, "supabase/rollbacks/20261023010000_free_unlocks_are_not_purchases_down.sql"),
+      "utf8"
+    );
+    expect(down).toContain("'get_conversion_pipeline'");
+    expect(down).toContain("'get_dropoff_everywhere'");
+  });
+
   it("keeps the weekly invite reminders' 200 rows for the plans they remind", () => {
     // Gifts and EUR 1.99 rows are skipped after the read; read first, they would take the
     // slots of the full-report buyers the reminders are for.
