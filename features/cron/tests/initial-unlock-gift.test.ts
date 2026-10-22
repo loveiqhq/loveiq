@@ -171,6 +171,16 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     expect(await res.json()).toEqual({ skipped: true, reason: "flag_off" });
     expect(calls.candidateUrl).toBeNull();
     expect(mockResendSend).not.toHaveBeenCalled();
+    // The run is still recorded: the stall watch must see a cron that is alive and off.
+    const runs = mockFetchWithTimeout.mock.calls.filter(([url]) =>
+      String(url).includes("/rest/v1/cron_run")
+    );
+    expect(runs).toHaveLength(1);
+    expect(JSON.parse(String((runs[0]![1] as { body: string }).body))).toMatchObject({
+      cron_name: "initial-unlock-gift",
+      status: "success",
+      error_message: "skipped: the flag is off",
+    });
   });
 
   it("looks only at reports first gated four to five days ago, with no arm yet", async () => {

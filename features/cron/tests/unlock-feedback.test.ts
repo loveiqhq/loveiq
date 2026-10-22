@@ -47,6 +47,9 @@ interface Db {
   /** The reader's other reports, by id, and what was paid on each. */
   otherReports?: Array<{ id: number; plan?: string }>;
   flagsDown?: boolean;
+  /** In the EUR 1.99 gate's cohort; cohortDown answers that read with a 500. */
+  cohort?: boolean;
+  cohortDown?: boolean;
   payments?: Array<{ metadata: { plan: string } }>;
   paymentsDown?: boolean;
   notOpened?: boolean;
@@ -82,6 +85,9 @@ function withDb(db: Db) {
     if (path.startsWith("/rest/v1/system_flags?")) return json({}, db.flagsDown ? 503 : 200);
     if (path.startsWith("/rest/v1/survey_submission?user_id=eq.")) {
       return json([{ id: 201 }, ...(db.otherReports ?? []).map((r) => ({ id: r.id + 1000 }))]);
+    }
+    if (path.includes("initial_gate_cohort_at=not.is.null")) {
+      return db.cohortDown ? json({}, 500) : json(db.cohort ? [{ id: 101 }] : []);
     }
     if (path.startsWith("/rest/v1/personal_report?survey_submission_id=in.")) {
       return json((db.otherReports ?? []).map((r) => ({ id: r.id })));
@@ -376,6 +382,7 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
       "paid",
     ],
     ["a reader who never opened their report", { notOpened: true }, "not_opened"],
+    ["a reader behind the EUR 1.99 gate: its offer stands", { cohort: true }, "gate_cohort"],
     [
       "someone who bought another of their reports",
       { otherReports: [{ id: 77, plan: "full_report" }] },
@@ -406,6 +413,7 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
   it.each([
     ["payments", { paymentsDown: true }],
     ["report opens", { sessionsDown: true }],
+    ["EUR 1.99 gate cohort", { cohortDown: true }],
   ] as const)("a reader whose %s cannot be read waits for the next run", async (_label, db) => {
     withDb({ candidates: [candidate()], ...db });
     const { body } = await run();

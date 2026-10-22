@@ -314,6 +314,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
   if (!(await isInitialGiftEmailEnabled().catch(() => false))) {
+    // Recorded, or the stall watch would call the cron dead every day it is off.
+    await recordCronRun("initial-unlock-gift", Date.now(), "success", "skipped: the flag is off");
     return NextResponse.json({ skipped: true, reason: "flag_off" });
   }
   const resend = getResend();
