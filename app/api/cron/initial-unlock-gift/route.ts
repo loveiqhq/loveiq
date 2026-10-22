@@ -319,7 +319,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "flag_off" });
   }
   const resend = getResend();
-  if (!resend) {
+  // E07 sells (its P.S. is the EUR 10 off), so its Unsubscribe has to work: no secret, no run.
+  if (!resend || !process.env.UNSUBSCRIBE_SECRET) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 

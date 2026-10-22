@@ -183,6 +183,16 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     });
   });
 
+  it("gives and mails nothing without the unsubscribe secret: E07's footer link must work", async () => {
+    const calls = routeFetches({ candidates: [candidate(GIFT_ID)] });
+    delete process.env.UNSUBSCRIBE_SECRET;
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(503);
+    expect(calls.candidateUrl).toBeNull();
+    expect(calls.grants).toEqual([]);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
   it("looks only at reports first gated four to five days ago, with no arm yet", async () => {
     const calls = routeFetches({ candidates: [] });
     await GET(makeRequest("test-cron-secret"));
