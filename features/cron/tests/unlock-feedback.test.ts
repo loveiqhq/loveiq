@@ -36,8 +36,12 @@ const NOW = "2026-10-21T12:41:00Z";
 
 interface Db {
   candidates: unknown[];
-  payments?: unknown[];
+  payments?: Array<{ metadata: { plan: string } }>;
   paymentsDown?: boolean;
+  notOpened?: boolean;
+  sessionsDown?: boolean;
+  /** The full_report quote; the default is a EUR 29.99 one. */
+  quote?: Array<{ current_price: string | null; currency: string | null }>;
   suppressed?: boolean;
   suppressionDown?: boolean;
   emailedBefore?: boolean;
@@ -69,7 +73,16 @@ function withDb(db: Db) {
       return json(db.emailedBefore ? [{ id: 9 }] : []);
     }
     if (path.startsWith("/rest/v1/payment?")) {
-      return db.paymentsDown ? json({}, 500) : json(db.payments ?? []);
+      if (db.paymentsDown) return json({}, 500);
+      // The EUR 1.99 check asks for its own plan; the plan check reads every payment.
+      const plan = /metadata->>plan=eq\.([a-z_]+)/.exec(path)?.[1];
+      return json((db.payments ?? []).filter((p) => !plan || p.metadata.plan === plan));
+    }
+    if (path.startsWith("/rest/v1/report_session?")) {
+      return db.sessionsDown ? json({}, 500) : json(db.notOpened ? [] : [{ id: "s-1" }]);
+    }
+    if (path.startsWith("/rest/v1/report_price_quote?")) {
+      return json(db.quote ?? [{ current_price: "29.99", currency: "EUR" }]);
     }
     if (path.startsWith("/rest/v1/email_suppression?")) {
       return db.suppressionDown ? json({}, 503) : json(db.suppressed ? [{ email: "x" }] : []);
@@ -93,7 +106,7 @@ function candidate(n = 1, email = `reader${n}@example.com`) {
     survey_submission: {
       user_id: 300 + n,
       duration_ms: 600_000,
-      app_user: { email, processing_restricted_at: null },
+      app_user: { email, first_name: "Ana", processing_restricted_at: null },
       scoring_result: [{ primary_archetype: "Spiritual Lover", v5_primary_archetype: null }],
     },
   };
@@ -202,9 +215,10 @@ describe("GET /api/cron/unlock-feedback: claim, send, record", () => {
     const claim = bodies[claimCall] as Record<string, unknown>;
     expect(claim).toMatchObject({ survey_submission_id: 201, personal_report_id: 101 });
     expect(claim.link_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(claim.send_batch).toBe("hourly");
     const order = claim.reason_order as string[];
-    expect(order).toHaveLength(9);
-    expect(order[8]).toBe("other");
+    expect(order).toHaveLength(8);
+    expect(order[7]).toBe("other");
     const arm = claim.subject_arm as SubjectArm;
     expect(["A", "B", "C", "D"]).toContain(arm);
 
@@ -213,6 +227,8 @@ describe("GET /api/cron/unlock-feedback: claim, send, record", () => {
     expect(sent.to).toBe("reader1@example.com");
     expect(sent.replyTo).toBe("hello@loveiq.org");
     expect(sent.subject).toBe(subjectFor(arm, "The Spiritual Lover"));
+    expect(sent.text).toContain("Hi Ana,\n");
+    expect(sent.text).toContain("we unlock the full report, worth €29.99, with all its chapters");
     expect(sent.headers["List-Unsubscribe"]).toMatch(
       /^<https:\/\/www\.loveiq\.org\/api\/unsubscribe\?token=[^>]+&src=unlock_feedback>$/
     );
@@ -299,6 +315,12 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
     ["a suppressed or unsubscribed address", { suppressed: true }, "suppressed"],
     ["anyone, while the suppression list cannot be read", { suppressionDown: true }, "unknown"],
     ["a person this email already went to", { emailedBefore: true }, "emailed_before"],
+    [
+      "a buyer of the EUR 1.99 initial report",
+      { payments: [{ metadata: { plan: "initial" } }] },
+      "paid",
+    ],
+    ["a reader who never opened their report", { notOpened: true }, "not_opened"],
   ] as const)("%s", async (_label, db, reason) => {
     withDb({ candidates: [candidate()], ...db });
     const { body } = await run();
@@ -316,12 +338,34 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
     );
   });
 
-  it("a reader whose payments cannot be read waits for the next run", async () => {
-    withDb({ candidates: [candidate()], paymentsDown: true });
+  it.each([
+    ["payments", { paymentsDown: true }],
+    ["report opens", { sessionsDown: true }],
+  ] as const)("a reader whose %s cannot be read waits for the next run", async (_label, db) => {
+    withDb({ candidates: [candidate()], ...db });
     const { body } = await run();
     expect(body.summary).toMatchObject({ sent: 0, failed: 1 });
     expect(log.some((c) => c.startsWith("POST /rest/v1/unlock_feedback"))).toBe(false);
     expect(mockSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/cron/unlock-feedback: what the full report is worth", () => {
+  it.each([
+    [
+      "the price-test arm's own price",
+      [{ current_price: "4.99", currency: "EUR" }],
+      ", worth €4.99,",
+    ],
+    ["no quote", [], ""],
+    ["a quote in another currency", [{ current_price: "29.99", currency: "USD" }], ""],
+    ["a quote without a price", [{ current_price: null, currency: "EUR" }], ""],
+  ] as const)("%s", async (_label, quote, worth) => {
+    withDb({ candidates: [candidate()], quote: [...quote] });
+    expect((await run()).body.summary.sent).toBe(1);
+    expect(mockSend.mock.calls[0]![0].text).toContain(
+      `we unlock the full report${worth} with all its chapters`
+    );
   });
 });
 

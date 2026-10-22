@@ -10,6 +10,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
+import UnlockFeedbackSend from "./UnlockFeedbackSend";
 import { exportTables } from "./csv";
 import { bucketTitles, IndexHover } from "./hover";
 import {
@@ -28,6 +29,7 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
+import { useApRole } from "./status";
 import { useApFilters } from "./useApFilters";
 
 type Data = UnlockFeedbackPayload;
@@ -214,6 +216,7 @@ export default function ApUnlockFeedback() {
     params
   );
   useHashScroll(Boolean(data));
+  const { isAdmin } = useApRole();
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -247,6 +250,7 @@ export default function ApUnlockFeedback() {
         fixed={["source", "device", "tier", "visitor"]}
         fixedNote="This page reads every unlock feedback email over all traffic, so the source, device, tier and visitor filters do not apply. Its segments split the answers by device, gender and age."
       />
+      {isAdmin && <UnlockFeedbackSend />}
       {loading && !data && <Loading label="the unlock feedback page" />}
       {error && <Failed message={error} onRetry={refetch} />}
       {data && (

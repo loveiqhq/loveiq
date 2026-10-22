@@ -16,7 +16,7 @@ function row(sub: NonNullable<CandidateRow["survey_submission"]>): CandidateRow 
 const reader = {
   user_id: 7,
   duration_ms: 9 * 60_000,
-  app_user: { email: "ana@example.com", processing_restricted_at: null },
+  app_user: { email: "ana@example.com", first_name: " Ana ", processing_restricted_at: null },
   scoring_result: [{ primary_archetype: "Spark Seeker", v5_primary_archetype: "Spiritual Lover" }],
 };
 
@@ -26,7 +26,16 @@ describe("who the unlock feedback email goes to", () => {
       email: "ana@example.com",
       userId: 7,
       archetypeName: "The Spiritual Lover",
+      firstName: "Ana",
     });
+  });
+
+  it("greets by first name only when the reader gave one", () => {
+    for (const first_name of [null, undefined, "", "   "]) {
+      expect(
+        readerOf(row({ ...reader, app_user: { ...reader.app_user, first_name } }))
+      ).toMatchObject({ firstName: null });
+    }
   });
 
   it("reads a single scoring object and an archetype stored under its old name", () => {
@@ -54,6 +63,25 @@ describe("who the unlock feedback email goes to", () => {
     expect(readerOf(row({ ...reader, duration_ms: 45_000 }))).toEqual({ skip: "test" });
     // An unknown duration is not evidence of a test.
     expect(readerOf(row({ ...reader, duration_ms: null }))).toMatchObject({ userId: 7 });
+  });
+
+  it("takes staff only for the admin's own test, with the real archetype, and nothing else", () => {
+    const staff = row({ ...reader, app_user: { email: "ec@loveiq.org", first_name: "Eman" } });
+    expect(readerOf(staff, { staffTest: true })).toEqual({
+      email: "ec@loveiq.org",
+      userId: 7,
+      archetypeName: "The Spiritual Lover",
+      firstName: "Eman",
+    });
+    const restricted = { email: "ec@loveiq.org", processing_restricted_at: "2026-10-01T00:00:00Z" };
+    expect(readerOf(row({ ...reader, app_user: restricted }), { staffTest: true })).toEqual({
+      skip: "restricted",
+    });
+    expect(
+      readerOf(row({ ...reader, app_user: { email: "ec@loveiq.org" }, scoring_result: [] }), {
+        staffTest: true,
+      })
+    ).toEqual({ skip: "no_archetype" });
   });
 });
 

@@ -26,7 +26,7 @@ function seq(values: number[]): () => number {
 }
 
 describe("unlock feedback reasons", () => {
-  it("keeps the migration's nine codes, in the design's order", () => {
+  it("keeps Mark's eight answers of 22.10, in the design's order", () => {
     expect(UNLOCK_REASONS).toEqual([
       "too_expensive",
       "low_value",
@@ -34,20 +34,26 @@ describe("unlock feedback reasons", () => {
       "unclear_content",
       "result_off",
       "privacy",
-      "checkout",
-      "later",
+      "time_commitment",
       "other",
     ]);
-    expect(isUnlockReason("later")).toBe(true);
-    expect(isUnlockReason("LATER")).toBe(false);
+    expect(isUnlockReason("time_commitment")).toBe(true);
+    // Taken out on 22.10: a link carrying one is refused, not read as another answer.
+    expect(isUnlockReason("checkout")).toBe(false);
+    expect(isUnlockReason("later")).toBe(false);
+    expect(isUnlockReason("TIME_COMMITMENT")).toBe(false);
     expect(isUnlockReason(undefined)).toBe(false);
+    expect(REASON_COPY.low_value.email).toBe("The free report didn’t feel valuable enough");
+    expect(REASON_COPY.time_commitment.email).toBe(
+      "The full report felt like too much of a time commitment"
+    );
   });
 
-  it("rotates the first eight and keeps Something else last", () => {
+  it("rotates the first seven and keeps Something else last", () => {
     for (const random of [seq([0]), seq([0.999]), seq([0.5, 0.1, 0.9, 0.3]), Math.random]) {
       const order = rotateReasons(random);
-      expect(order).toHaveLength(9);
-      expect(order[8]).toBe("other");
+      expect(order).toHaveLength(8);
+      expect(order[7]).toBe("other");
       expect([...order].sort()).toEqual([...UNLOCK_REASONS].sort());
     }
     expect(rotateReasons(seq([0]))).not.toEqual(UNLOCK_REASONS);

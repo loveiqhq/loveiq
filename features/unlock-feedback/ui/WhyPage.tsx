@@ -147,9 +147,8 @@ const WhyPage: FC<{ initialReason: UnlockReason | null }> = ({ initialReason }) 
               <p className="m-0 text-[16px] leading-[25.6px] text-ap-body">
                 {view.answer.alreadyPaid
                   ? "You already have your report. It’s ready whenever you are."
-                  : view.answer.archetypeName
-                    ? `We’ve saved your answer. All 50+ pages for ${view.answer.archetypeName} are yours now, free.`
-                    : "We’ve saved your answer. All 50+ pages are yours now, free."}
+                  : // Mark's line (22.10); the full report has 17 chapters, 21 before the slimmed one.
+                    "We’ve saved your answer. The full report, with all its 10+ chapters, is yours now, free."}
               </p>
             </>
           )}
@@ -220,7 +219,7 @@ const WhyPage: FC<{ initialReason: UnlockReason | null }> = ({ initialReason }) 
               <p className="m-0 flex items-center gap-2">
                 <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-ap-orange" />
                 <span className="text-[11px] font-bold uppercase leading-4 tracking-[0.88px] text-ap-label">
-                  Optional · About 30 seconds
+                  Optional
                 </span>
               </p>
               <h2
@@ -288,7 +287,7 @@ const WhyPage: FC<{ initialReason: UnlockReason | null }> = ({ initialReason }) 
                   disabled={sending}
                   className={CTA}
                 >
-                  Open my report
+                  Submit and open my report
                 </button>
                 {/* Always rendered: a live region that appears with its text is not read out. */}
                 <p
@@ -307,8 +306,7 @@ const WhyPage: FC<{ initialReason: UnlockReason | null }> = ({ initialReason }) 
             </div>
 
             <p className="mx-4 mt-4 border-t border-ap-ink/[0.08] pt-4 text-[12px] leading-[19.2px] text-ap-muted">
-              Your answers are only used to improve LoveIQ. Anonymous by default · No payment
-              details needed
+              Your answers are only used to improve LoveIQ. No payment details needed.
             </p>
           </>
         )}

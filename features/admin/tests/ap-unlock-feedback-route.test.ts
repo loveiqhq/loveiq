@@ -35,7 +35,7 @@ const answered = {
   arm: "A",
   sent_at: `${THIS}T08:00:00Z`,
   delivered_at: `${THIS}T08:00:05Z`,
-  reason: "later",
+  reason: "time_commitment",
   answered_at: `${THIS}T09:00:00Z`,
   loads: 1,
   chips: [],

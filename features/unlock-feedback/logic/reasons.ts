@@ -1,8 +1,10 @@
 /**
- * The nine answers to "Why didn't you unlock your report?", with every piece of copy the email,
- * the /why page and the admin page show for them. Copy is Marcus's, exact, from the epic's
- * canvas ("Unlock feedback email": Main = the email, Landing = /why) and the AP-Analytics
- * canvas (Unlock feedback: the short labels and themes).
+ * The eight answers to "Why didn't you unlock your report?", with every piece of copy the email,
+ * the /why page and the admin page show for them. Copy from the epic's canvas ("Unlock feedback
+ * email": Main = the email, Landing = /why) and the AP-Analytics canvas (Unlock feedback: the
+ * short labels and themes), as Mark revised the answers on 22.10 (Marcus: "ok great changes"):
+ * "The free report didn't feel valuable enough" for the preview line, "too much of a time
+ * commitment" added, "Checkout didn't work" and "life got in the way" taken out.
  */
 
 export const UNLOCK_REASONS = [
@@ -12,8 +14,7 @@ export const UNLOCK_REASONS = [
   "unclear_content",
   "result_off",
   "privacy",
-  "checkout",
-  "later",
+  "time_commitment",
   "other",
 ] as const;
 
@@ -52,11 +53,11 @@ export const REASON_COPY: Record<UnlockReason, ReasonCopy> = {
     placeholder: "For example: what you’d expect a report like this to cost",
   },
   low_value: {
-    email: "I didn’t see enough value in the preview",
-    landing: "I didn’t see enough value in the preview",
-    short: "Not enough value in the preview",
+    email: "The free report didn’t feel valuable enough",
+    landing: "The free report didn’t feel valuable enough",
+    short: "Free report not valuable enough",
     theme: "Offer",
-    question: "What was missing from the preview?",
+    question: "What was missing from the free report?",
     chips: [
       "Couldn’t see what’s inside",
       "Felt too general",
@@ -126,35 +127,16 @@ export const REASON_COPY: Record<UnlockReason, ReasonCopy> = {
     ],
     placeholder: "What would make you feel more at ease?",
   },
-  checkout: {
-    email: "Checkout didn’t work for me",
-    landing: "Checkout didn’t work for me",
-    short: "Checkout didn’t work",
+  // Mark, 22.10. The canvas gives it no follow-up of its own yet: the page asks only for the
+  // reader's words, as "Something else" does.
+  time_commitment: {
+    email: "The full report felt like too much of a time commitment",
+    landing: "The full report felt like too much of a time commitment",
+    short: "Too much of a time commitment",
     theme: "Friction",
-    question: "What happened at checkout?",
-    chips: [
-      "My payment method was missing",
-      "Payment failed",
-      "Page didn’t load",
-      "Couldn’t find the button",
-      "Price changed",
-    ],
-    placeholder: "Device, browser, what you saw on screen",
-  },
-  later: {
-    email: "I meant to, and life got in the way",
-    landing: "I meant to, and life got in the way",
-    short: "Life got in the way",
-    theme: "Friction",
-    question: "What got in the way?",
-    chips: [
-      "Busy at the time",
-      "Wanted to read on a bigger screen",
-      "Wanted to ask my partner first",
-      "Simply forgot",
-      "Waited for a discount",
-    ],
-    placeholder: "Anything that would have made it easier?",
+    question: "What would have made it easier?",
+    chips: [],
+    placeholder: "One sentence is plenty",
   },
   other: {
     email: "Something else (tell us in a sentence)",
@@ -178,9 +160,10 @@ export function keepKnownChips(reason: UnlockReason, chips: readonly unknown[]):
 }
 
 /**
- * The order one email shows the answers in: the first eight shuffled (the design's "rotate the
- * first eight rows per send", against order bias), "Something else" always last. `random`
- * returns [0, 1), Math.random in the send and a fixed sequence in tests.
+ * The order one email shows the answers in: all but "Something else" shuffled (the design's
+ * "rotate the rows per send", against order bias; Marcus 22.10, "randomize them in email"),
+ * "Something else" always last. `random` returns [0, 1), Math.random in the send and a fixed
+ * sequence in tests.
  */
 export function rotateReasons(random: () => number = Math.random): UnlockReason[] {
   const first = UNLOCK_REASONS.filter((r) => r !== "other");

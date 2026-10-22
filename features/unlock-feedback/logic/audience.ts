@@ -27,25 +27,40 @@ interface ScoringRow {
 export interface CandidateRow {
   id: number;
   survey_submission_id: number;
+  /** When the report was made: the tranche pages back through reports by it. */
+  created_date_time?: string | null;
   survey_submission?: {
     user_id?: number | null;
     duration_ms?: number | null;
-    app_user?: { email?: string | null; processing_restricted_at?: string | null } | null;
+    app_user?: {
+      email?: string | null;
+      first_name?: string | null;
+      processing_restricted_at?: string | null;
+    } | null;
     scoring_result?: ScoringRow[] | ScoringRow | null;
   } | null;
 }
 
 export type SkipReason = "restricted" | "no_email" | "test" | "no_archetype";
 
-export type Reader = { email: string; userId: number | null; archetypeName: string };
+export type Reader = {
+  email: string;
+  userId: number | null;
+  archetypeName: string;
+  /** The greeting's name, as the survey took it; null when the reader gave none. */
+  firstName: string | null;
+};
 
 /**
  * The reader to email, or why not. Restricted processing (Art. 18) and a missing address
  * first; then staff and runs too fast to be real, by the admin panel's own test rule (our
- * probes read staff reports, so this covers them too); then the archetype the email names,
- * as the report titles it ("The Spiritual Lover").
+ * probes read staff reports, so this covers them too), unless this is the admin's own test;
+ * then the archetype the email names, as the report titles it ("The Spiritual Lover").
  */
-export function readerOf(row: CandidateRow): Reader | { skip: SkipReason } {
+export function readerOf(
+  row: CandidateRow,
+  opts: { staffTest?: boolean } = {}
+): Reader | { skip: SkipReason } {
   const sub = row.survey_submission;
   if (sub?.app_user?.processing_restricted_at) return { skip: "restricted" };
   const email = sub?.app_user?.email?.trim() ?? "";
@@ -55,11 +70,16 @@ export function readerOf(row: CandidateRow): Reader | { skip: SkipReason } {
     email,
     durationMs: sub?.duration_ms ?? null,
   });
-  if (test.isLikelyTest) return { skip: "test" };
+  if (test.isLikelyTest && !opts.staffTest) return { skip: "test" };
   const scoring = Array.isArray(sub?.scoring_result) ? sub.scoring_result[0] : sub?.scoring_result;
   const archetype = normalizeArchetypeName(
     scoring?.v5_primary_archetype || scoring?.primary_archetype || null
   );
   if (!archetype) return { skip: "no_archetype" };
-  return { email, userId: sub?.user_id ?? null, archetypeName: `The ${archetype}` };
+  return {
+    email,
+    userId: sub?.user_id ?? null,
+    archetypeName: `The ${archetype}`,
+    firstName: sub?.app_user?.first_name?.trim() || null,
+  };
 }

@@ -95,12 +95,12 @@ describe("GET /api/unlock-feedback/open (the email's link)", () => {
 
   it("marks the cookie Secure in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    const res = await open(link(`r=later&t=${READER.linkToken}`));
+    const res = await open(link(`r=time_commitment&t=${READER.linkToken}`));
     expect(res.headers.get("set-cookie")).toMatch(/Secure/i);
   });
 
   it("records nothing: a scanner's GET is not an answer", async () => {
-    await open(link(`r=later&t=${READER.linkToken}`));
+    await open(link(`r=time_commitment&t=${READER.linkToken}`));
     expect(state.db.calls).toHaveLength(0);
     expect(state.db.feedback().answered_at).toBeNull();
   });
@@ -121,7 +121,7 @@ describe("GET /api/unlock-feedback/open (the email's link)", () => {
 
   it("is rate limited", async () => {
     mockRateLimit.mockResolvedValueOnce({ ...allowed, allowed: false });
-    const res = await open(link(`r=later&t=${READER.linkToken}`));
+    const res = await open(link(`r=time_commitment&t=${READER.linkToken}`));
     expect(res.status).toBe(429);
     expect(res.headers.get("set-cookie")).toBeNull();
   });
@@ -130,38 +130,41 @@ describe("GET /api/unlock-feedback/open (the email's link)", () => {
 describe("POST /api/unlock-feedback/answer", () => {
   it("403 without a valid CSRF token, nothing recorded", async () => {
     mockCsrf.mockResolvedValue(false);
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(403);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(403);
     expect(state.db.feedback().answered_at).toBeNull();
   });
 
   it("429 per address, and per link keyed on the token's hash, never the token", async () => {
     mockRateLimit.mockResolvedValueOnce({ ...allowed, allowed: false });
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(429);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(429);
 
     mockRateLimit
       .mockResolvedValueOnce(allowed)
       .mockResolvedValueOnce({ ...allowed, allowed: false });
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(429);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(429);
     const keys = mockRateLimit.mock.calls.map(([key]) => key);
     expect(keys).toContain(hashLinkToken(READER.linkToken));
     expect(keys).not.toContain(READER.linkToken);
     expect(state.db.feedback().answered_at).toBeNull();
   });
 
-  it("400 on an unknown reason", async () => {
-    expect((await answer(post("answer", { r: "free" }))).status).toBe(400);
+  it("400 on an unknown reason, and on the two answers taken out on 22.10", async () => {
+    for (const r of ["free", "checkout", "later"]) {
+      expect((await answer(post("answer", { r }))).status).toBe(400);
+    }
+    expect(state.db.feedback().answered_at).toBeNull();
   });
 
   it("404 alike for no cookie, a malformed one, an unknown token and an unsent email", async () => {
     state.cookie = null;
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(404);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     state.cookie = "not-a-token";
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(404);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     state.cookie = "B".repeat(43);
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(404);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     state.cookie = READER.linkToken;
     state.db.feedback().sent_at = null;
-    expect((await answer(post("answer", { r: "later" }))).status).toBe(404);
+    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     expect(state.db.grants()).toHaveLength(0);
   });
 
@@ -190,7 +193,7 @@ describe("POST /api/unlock-feedback/answer", () => {
 
   it("keeps the first answer when another button is tapped later", async () => {
     await answer(post("answer", { r: "too_expensive" }));
-    const res = await answer(post("answer", { r: "later" }));
+    const res = await answer(post("answer", { r: "time_commitment" }));
 
     expect((await res.json()).reason).toBe("too_expensive");
     expect(state.db.feedback()).toMatchObject({
@@ -204,12 +207,12 @@ describe("POST /api/unlock-feedback/answer", () => {
   it("two posts at the same instant: one first answer, one grant, both counted", async () => {
     const [a, b] = await Promise.all([
       answer(post("answer", { r: "privacy" })),
-      answer(post("answer", { r: "checkout" })),
+      answer(post("answer", { r: "result_off" })),
     ]);
     const [bodyA, bodyB] = [await a.json(), await b.json()];
 
     const first = state.db.feedback().first_reason;
-    expect(["privacy", "checkout"]).toContain(first);
+    expect(["privacy", "result_off"]).toContain(first);
     expect(bodyA.reason).toBe(first);
     expect(bodyB.reason).toBe(first);
     expect(state.db.feedback().answer_loads).toBe(2);
@@ -237,7 +240,7 @@ describe("POST /api/unlock-feedback/answer", () => {
   });
 
   it("tells a tablet from a phone and a computer", async () => {
-    await answer(post("answer", { r: "later" }, IPAD));
+    await answer(post("answer", { r: "time_commitment" }, IPAD));
     expect(state.db.feedback().device).toBe("tablet");
 
     for (const [userAgent, touch, device] of [
@@ -246,14 +249,14 @@ describe("POST /api/unlock-feedback/answer", () => {
     ] as const) {
       state.db = createFakeDb();
       state.db.seedReader();
-      await answer(post("answer", { r: "later", touch }, userAgent));
+      await answer(post("answer", { r: "time_commitment", touch }, userAgent));
       expect(state.db.feedback().device).toBe(device);
     }
   });
 
   it("500 with a generic message when the database fails", async () => {
     state.db.fetch = async () => new Response("{}", { status: 500 });
-    const res = await answer(post("answer", { r: "later" }));
+    const res = await answer(post("answer", { r: "time_commitment" }));
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "Unable to save your answer." });
   });
@@ -300,14 +303,12 @@ describe("POST /api/unlock-feedback/detail", () => {
 
   it("a changed answer replaces the reason, never the first one, and its chips follow it", async () => {
     await answered();
-    await detail(
-      post("detail", { reason: "checkout", chips: ["Payment failed", "A little less"] })
-    );
+    await detail(post("detail", { reason: "result_off", chips: ["Too broad", "A little less"] }));
 
     expect(state.db.feedback()).toMatchObject({
-      reason: "checkout",
+      reason: "result_off",
       first_reason: "too_expensive",
-      chips: ["Payment failed"],
+      chips: ["Too broad"],
       note: null,
     });
     expect(state.db.feedback().changed_at).toEqual(expect.any(String));

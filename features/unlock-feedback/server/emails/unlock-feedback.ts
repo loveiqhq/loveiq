@@ -7,9 +7,12 @@ import {
 } from "@features/unlock-feedback/logic/subjects";
 
 /**
- * "Why didn't you unlock your report?", Marcus's design ("Unlock feedback email", Main) with
- * his copy exact. Table layout and inline styles so Outlook and Gmail draw it; the design's
- * speech-bubble icon is left out, because Gmail and Outlook drop an inline SVG.
+ * "Why didn't you unlock your report?", the design ("Unlock feedback email", Main) as Mark left
+ * it on 22.10, with its copy exact but for two typos ("its", "feel"). Eman's calls of 22.10:
+ * the reader's first name, and the full report's worth at the price that reader was quoted
+ * (Marcus 18.10); "Anonymous by default" and "not a horoscope" are left out of the footer (the
+ * answer is tied to the reader, and Mark found the second "AI slop"). Table layout and inline
+ * styles so Outlook and Gmail draw it.
  */
 
 const SERIF = "Lora, Georgia, 'Times New Roman', serif";
@@ -17,22 +20,19 @@ const INK = "#161021";
 const BODY = "#3f3a4d";
 const MUTED = "#6b6678";
 
-const HEADING = "Tell us why you didn’t unlock it, and the ";
+const HEADING = "Tell us why you didn’t unlock your report, and the ";
 const HEADING_ACCENT = "full report is yours";
-const MET_BEFORE = "You took the LoveIQ test and met your result, ";
-const MET_AFTER =
-  ". You stopped before the full report, and that’s completely fine. We’d just like to understand why, so we can make LoveIQ better.";
-const TAP_LEAD = "Tap the answer that fits best.";
-const TAP =
-  "That one tap is your answer, and we unlock all 50+ pages for you, free. No payment details, no catch.";
+const DECIDED =
+  "You took the LoveIQ test, reviewed your results and decided to not unlock the full report.";
+const WHY =
+  "To make LoveIQ even better, we would like to understand why and would love to offer you a free unlock in return.";
+const TAP_LEAD = "Tap the answer that fits best";
 const QUESTION = "Why didn’t you unlock your report?";
 const QUESTION_HINT = "One tap is enough. Your report opens right after.";
-const MORE_LEAD = "Want to say more?";
-const MORE =
-  "After your tap, a short page opens where you can add a few words. Completely optional: your report is unlocked either way.";
-const THANKS = "We read every answer ourselves. Thank you for helping us get this right.";
-const FOOTER_LINE =
-  "Your answer is only used to improve LoveIQ. Anonymous by default · Science-backed, not a horoscope";
+const READ = "We read every answer ourselves.";
+const THANKS = "Thank you for helping us get this right.";
+const SIGNATURE = "The LoveIQ Team";
+const FOOTER_LINE = "Your answer is only used to improve LoveIQ.";
 const COMPANY = "Applied Psychometrics UG · Berlin · ";
 
 /**
@@ -46,9 +46,13 @@ export function unlockFeedbackLink(siteUrl: string, reason: UnlockReason, token:
 
 export interface UnlockFeedbackEmailParams {
   arm: SubjectArm;
-  /** The reader's archetype as the report titles it: "The Spiritual Lover". */
+  /** The reader's archetype as the report titles it: "The Spiritual Lover" (subject D). */
   archetypeName: string;
-  /** The row's reason_order: the order the nine buttons are shown in, "other" last. */
+  /** The greeting's name; without one the email says "Hi there,". */
+  firstName?: string | null;
+  /** The full report's price as this reader was quoted it ("€29.99"); null leaves "worth" out. */
+  worth?: string | null;
+  /** The row's reason_order: the order the buttons are shown in, "other" last. */
   reasonOrder: readonly UnlockReason[];
   /** The link token (the row keeps only its hash). */
   token: string;
@@ -86,6 +90,8 @@ function renderButton(href: string, reason: UnlockReason): string {
 export function unlockFeedbackEmail({
   arm,
   archetypeName,
+  firstName,
+  worth,
   reasonOrder,
   token,
   siteUrl,
@@ -97,15 +103,17 @@ export function unlockFeedbackEmail({
     href: unlockFeedbackLink(siteUrl, reason, token),
   }));
 
+  const name = firstName?.trim() || "there";
+  const tap = `and we unlock the full report${worth ? `, worth ${worth},` : ""} with all its chapters for you. This is entirely free. No payment details, no catch.`;
+
   // The heading's accent is a gradient where the mail app draws one and its middle colour
   // where it does not (Outlook), like the wordmark in the shared header.
   const bodyHtml = `
   <tr>
     <td style="padding:24px 32px 0;">
-      <h1 style="margin:0 0 14px 0; font-family:${SERIF}; font-size:34px; line-height:1.22; font-weight:500; letter-spacing:-0.3px; color:${INK};">${escapeHtml(HEADING)}<span style="font-style:italic; color:#bf66d9; background:linear-gradient(135deg,#fe6839 0%,#bf66d9 43%,#958ef6 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${escapeHtml(HEADING_ACCENT)}</span>.</h1>
-      ${paragraph("Hi,")}
-      ${paragraph(`${escapeHtml(MET_BEFORE)}<strong style="color:#d63200; font-weight:700;">${escapeHtml(archetypeName)}</strong>${escapeHtml(MET_AFTER)}`, 14)}
-      ${paragraph(`<strong style="color:${INK};">${escapeHtml(TAP_LEAD)}</strong> ${escapeHtml(TAP)}`, 14)}
+      <h1 style="margin:0; font-family:${SERIF}; font-size:34px; line-height:1.22; font-weight:500; letter-spacing:-0.3px; color:${INK};">${escapeHtml(HEADING)}<span style="font-style:italic; color:#bf66d9; background:linear-gradient(135deg,#fe6839 0%,#bf66d9 43%,#958ef6 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${escapeHtml(HEADING_ACCENT)}</span>.</h1>
+      ${paragraph(`Hi ${escapeHtml(name)},<br>${escapeHtml(DECIDED)}<br>${escapeHtml(WHY)}`, 22)}
+      ${paragraph(`<strong style="color:${INK};">${escapeHtml(TAP_LEAD)}</strong> ${escapeHtml(tap)}`, 14)}
     </td>
   </tr>
   <tr>
@@ -116,19 +124,15 @@ export function unlockFeedbackEmail({
     </td>
   </tr>
   <tr>
-    <td style="padding:18px 32px 0;">
+    <td style="padding:18px 32px 36px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="border-top:1px solid #edecee; padding-top:16px; font-family:${EMAIL_FONT}; font-size:14px; line-height:22.4px; color:${BODY};"><strong style="color:${INK};">${escapeHtml(MORE_LEAD)}</strong> ${escapeHtml(MORE)}</td>
+          <td style="border-top:1px solid #e9e6ee; padding-top:40px;">
+            ${paragraph(`${escapeHtml(READ)}<br>${escapeHtml(THANKS)}`)}
+            <p style="margin:8px 0 0 0; font-family:${SERIF}; font-style:italic; font-size:18px; line-height:24px; color:${INK};">${escapeHtml(SIGNATURE)}</p>
+          </td>
         </tr>
       </table>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:32px 32px 36px;">
-      ${paragraph(escapeHtml(THANKS))}
-      <p style="margin:12px 0 0 0; font-family:${SERIF}; font-style:italic; font-size:18px; line-height:24px; color:${INK};">Marcus</p>
-      <p style="margin:4px 0 0 0; font-family:${EMAIL_FONT}; font-size:12px; line-height:19.2px; color:${MUTED};">Founder, LoveIQ</p>
     </td>
   </tr>`;
 
@@ -151,22 +155,20 @@ export function unlockFeedbackEmail({
   const text = [
     `${HEADING}${HEADING_ACCENT}.`,
     "",
-    "Hi,",
+    `Hi ${name},`,
+    DECIDED,
+    WHY,
     "",
-    `${MET_BEFORE}${archetypeName}${MET_AFTER}`,
-    "",
-    `${TAP_LEAD} ${TAP}`,
+    `${TAP_LEAD} ${tap}`,
     "",
     QUESTION,
     QUESTION_HINT,
     "",
     ...links.flatMap((l) => [REASON_COPY[l.reason].email, l.href, ""]),
-    `${MORE_LEAD} ${MORE}`,
-    "",
+    READ,
     THANKS,
     "",
-    "Marcus",
-    "Founder, LoveIQ",
+    SIGNATURE,
     "",
     FOOTER_LINE,
     `${COMPANY}Unsubscribe: ${unsubscribeUrl}`,

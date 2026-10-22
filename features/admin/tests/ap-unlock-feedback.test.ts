@@ -91,14 +91,16 @@ describe("parseUnlockFeedback", () => {
 
   it("reads the function's names into the page's", () => {
     const d = parseUnlockFeedback({
-      rows: [answer("later", { chips: ["Simply forgot"], unsub_at: "2026-10-21T09:00:00Z" })],
+      rows: [
+        answer("too_expensive", { chips: ["A little less"], unsub_at: "2026-10-21T09:00:00Z" }),
+      ],
       paid: [{ day: "2026-10-20", src: null, med: null }],
       first_sent: "2026-10-19",
     });
     expect(d.rows[0]).toMatchObject({
-      reason: "later",
+      reason: "too_expensive",
       answeredAt: "2026-10-20T08:31:10Z",
-      chips: ["Simply forgot"],
+      chips: ["A little less"],
       unsubAt: "2026-10-21T09:00:00Z",
       after: { reached: {}, readMs: 0, shared: false },
     });
@@ -132,7 +134,7 @@ describe("an empty range", () => {
       ["unsubscribed", 0, null],
     ]);
     expect(page.funnel.every((s) => s.n === 0 && s.bar === 0 && s.ofPrev === null)).toBe(true);
-    expect(page.reasons).toHaveLength(9);
+    expect(page.reasons).toHaveLength(8);
     expect(page.reasons.every((r) => r.n === 0 && r.share === null)).toBe(true);
     expect(page.reasons.at(-1)!.code).toBe("other");
     expect(page.arms.map((a) => [a.arm, a.rate, a.lo])).toEqual([
@@ -170,7 +172,7 @@ describe("from send to answer", () => {
       },
     }),
     // Answered a second after delivery: a bot that ran the page, though the page unlocked it.
-    answer("checkout", { answered_at: "2026-10-20T08:00:06Z" }),
+    answer("result_off", { answered_at: "2026-10-20T08:00:06Z" }),
     // Had bought before answering: an answer, nothing to unlock.
     answer("privacy", {
       already_paid: true,
@@ -239,8 +241,7 @@ describe("from send to answer", () => {
       "free_enough",
       "unclear_content",
       "result_off",
-      "checkout",
-      "later",
+      "time_commitment",
       "other",
     ]);
     expect(page.reasons[0]).toMatchObject({
@@ -322,9 +323,9 @@ describe("wilson", () => {
 
   it("is the subject test's interval, of the emails delivered per arm", () => {
     const rows = [
-      answer("later", { arm: "B" }),
-      answer("later", { arm: "B" }),
-      answer("later", { arm: "B" }),
+      answer("time_commitment", { arm: "B" }),
+      answer("time_commitment", { arm: "B" }),
+      answer("time_commitment", { arm: "B" }),
       email({ arm: "B" }),
       email({ arm: "C" }),
     ];
@@ -348,7 +349,7 @@ describe("segments", () => {
       answer(i < 14 ? "too_expensive" : "free_enough", { gender: "Woman", age: "25–34" })
     ),
     ...Array.from({ length: 3 }, () =>
-      answer("later", { device: "desktop", gender: "Man", age: "45–54" })
+      answer("time_commitment", { device: "desktop", gender: "Man", age: "45–54" })
     ),
   ];
   const page = build({ rows, paid: [], first_sent: "2026-10-19" });
@@ -384,7 +385,9 @@ describe("segments", () => {
 describe("answers per day after the send", () => {
   it("counts days of 24 hours from the send, the last bar holding day 10 and later", () => {
     const at = (h: number) => new Date(Date.parse("2026-10-20T08:00:00Z") + h * 3_600_000);
-    const rows = [1, 30, 50, 300].map((h) => answer("later", { answered_at: at(h).toISOString() }));
+    const rows = [1, 30, 50, 300].map((h) =>
+      answer("time_commitment", { answered_at: at(h).toISOString() })
+    );
     const page = build({ rows, paid: [], first_sent: "2026-10-19" });
     expect(page.time.days.map((d) => d.n)).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1]);
     expect(page.time.days.at(-1)!.label).toBe("D10+");
@@ -396,7 +399,7 @@ describe("answers per day after the send", () => {
 describe("after the free unlock, against paying readers", () => {
   const read = (over: Raw) => ({ ...AFTER, ...over });
   const rows = [
-    answer("later", {
+    answer("time_commitment", {
       after: read({
         reached: { introduction: "2026-10-20T09:00:00Z", love_language: "2026-10-20T09:05:00Z" },
         read_ms: 240_000,
@@ -405,7 +408,9 @@ describe("after the free unlock, against paying readers", () => {
         downs: 1,
       }),
     }),
-    answer("later", { after: read({ reached: { introduction: "2026-10-20T09:00:00Z" } }) }),
+    answer("time_commitment", {
+      after: read({ reached: { introduction: "2026-10-20T09:00:00Z" } }),
+    }),
   ];
   const paid = [
     {
@@ -447,7 +452,7 @@ describe("the period before", () => {
     // at 10:00. Its one email was answered on the 19th at 11:00: not yet, at that age.
     const previous = {
       rows: [
-        answer("later", {
+        answer("time_commitment", {
           day: "2026-10-13",
           sent_at: "2026-10-13T08:00:00Z",
           delivered_at: "2026-10-13T08:00:05Z",
@@ -461,7 +466,7 @@ describe("the period before", () => {
       first_sent: "2026-10-01",
     };
     const page = build(
-      { rows: [answer("later"), email()], paid: [], first_sent: "2026-10-01" },
+      { rows: [answer("time_commitment"), email()], paid: [], first_sent: "2026-10-01" },
       { previous }
     );
     const tile = (k: string) => page.tiles.find((t) => t.key === k)!;
@@ -473,7 +478,7 @@ describe("the period before", () => {
 
   it("is not compared when it starts before the first email", () => {
     const page = build(
-      { rows: [answer("later")], paid: [], first_sent: "2026-10-19" },
+      { rows: [answer("time_commitment")], paid: [], first_sent: "2026-10-19" },
       { previous: { rows: [], paid: [], first_sent: "2026-10-19" } }
     );
     expect(page.tiles.every((t) => t.prev === null)).toBe(true);
@@ -488,9 +493,9 @@ describe("staff and test", () => {
   it("leaves our own probes out, as every AP page does", () => {
     const page = build({
       rows: [
-        answer("later"),
-        answer("later", { med: "probe" }),
-        answer("later", { src: "prod-e2e-check" }),
+        answer("time_commitment"),
+        answer("time_commitment", { med: "probe" }),
+        answer("time_commitment", { src: "prod-e2e-check" }),
       ],
       paid: [],
       first_sent: "2026-10-19",

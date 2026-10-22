@@ -60,24 +60,27 @@ describe("/why while the answer is recorded", () => {
 });
 
 describe("/why once the answer is in", () => {
-  it("says the report is unlocked, for the reader's archetype, in Marcus's words", async () => {
+  it("says the report is unlocked, in Mark's words", async () => {
     render(<WhyPage initialReason="too_expensive" />);
 
     expect(await ready()).toHaveTextContent("Thank you. Your full report is unlocked.");
     expect(
       screen.getByText(
-        "We’ve saved your answer. All 50+ pages for Loyal Ritualist are yours now, free."
+        "We’ve saved your answer. The full report, with all its 10+ chapters, is yours now, free."
       )
     ).toBeInTheDocument();
+    expect(screen.getByText("Optional")).toBeInTheDocument();
     expect(
-      screen.getByText(/Anonymous by default · No payment details needed/)
+      screen.getByText("Your answers are only used to improve LoveIQ. No payment details needed.")
     ).toBeInTheDocument();
+    // Left out on 22.10: the answer is tied to the reader, and the page asks for no time.
+    expect(document.body.textContent).not.toMatch(/Anonymous|30 seconds|50\+/);
   });
 
-  it("preselects the answer as kept, from the nine labels, with its follow-up", async () => {
+  it("preselects the answer as kept, from the eight labels, with its follow-up", async () => {
     // Another button tapped later: the first answer stands, and the page shows it.
     fetchMock.mockImplementation(() => json({ ...ANSWER, reason: "privacy" }));
-    render(<WhyPage initialReason="later" />);
+    render(<WhyPage initialReason="time_commitment" />);
     await ready();
 
     const select = screen.getByLabelText("Your answer") as HTMLSelectElement;
@@ -127,14 +130,14 @@ describe("/why when the link or the network fails", () => {
 
   it("an expired or unknown link: the same state", async () => {
     fetchMock.mockImplementation(() => json({ error: "Not found." }, 404));
-    render(<WhyPage initialReason="later" />);
+    render(<WhyPage initialReason="time_commitment" />);
     expect(await ready()).toHaveTextContent("We couldn’t open this link.");
   });
 
   it("a network error offers a retry that posts again", async () => {
     fetchMock.mockImplementationOnce(() => Promise.reject(new TypeError("offline")));
     const user = userEvent.setup();
-    render(<WhyPage initialReason="later" />);
+    render(<WhyPage initialReason="time_commitment" />);
 
     expect(await ready()).toHaveTextContent("Something went wrong.");
     await user.click(screen.getByRole("button", { name: "Try again" }));
@@ -150,14 +153,25 @@ describe("/why's follow-up", () => {
     await ready();
 
     await user.click(screen.getByRole("button", { name: "A little less" }));
-    await user.selectOptions(screen.getByLabelText("Your answer"), "checkout");
+    await user.selectOptions(screen.getByLabelText("Your answer"), "result_off");
     expect(
-      screen.getByRole("heading", { level: 2, name: REASON_COPY.checkout.question })
+      screen.getByRole("heading", { level: 2, name: REASON_COPY.result_off.question })
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Payment failed" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Too broad" })).toBeInTheDocument();
     expect(screen.getByLabelText("Anything else we should know?")).toHaveAttribute(
       "placeholder",
-      REASON_COPY.checkout.placeholder
+      REASON_COPY.result_off.placeholder
+    );
+
+    // Mark's new answer asks only for the reader's words, as Something else does.
+    await user.selectOptions(screen.getByLabelText("Your answer"), "time_commitment");
+    expect(
+      screen.getByRole("heading", { level: 2, name: "What would have made it easier?" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.getByLabelText("Anything else we should know?")).toHaveAttribute(
+      "placeholder",
+      "One sentence is plenty"
     );
 
     await user.selectOptions(screen.getByLabelText("Your answer"), "too_expensive");
@@ -183,11 +197,11 @@ describe("/why's follow-up", () => {
     expect(chip).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("Open my report with nothing added goes straight to the report", async () => {
+  it("Submit and open my report with nothing added goes straight to the report", async () => {
     const user = userEvent.setup();
     render(<WhyPage initialReason="too_expensive" />);
     await ready();
-    await user.click(screen.getByRole("button", { name: "Open my report" }));
+    await user.click(screen.getByRole("button", { name: "Submit and open my report" }));
     expect(posts("/api/unlock-feedback/detail")).toHaveLength(0);
     expect(mockPush).toHaveBeenCalledWith(ANSWER.reportPath);
   });
@@ -198,7 +212,7 @@ describe("/why's follow-up", () => {
     await ready();
     await user.click(screen.getByRole("button", { name: "A little less" }));
     await user.type(screen.getByLabelText("Anything else we should know?"), "  About 15 euros ");
-    await user.click(screen.getByRole("button", { name: "Open my report" }));
+    await user.click(screen.getByRole("button", { name: "Submit and open my report" }));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith(ANSWER.reportPath));
     expect(bodyOf(posts("/api/unlock-feedback/detail")[0]!)).toEqual({
@@ -211,12 +225,12 @@ describe("/why's follow-up", () => {
     const user = userEvent.setup();
     render(<WhyPage initialReason="too_expensive" />);
     await ready();
-    await user.selectOptions(screen.getByLabelText("Your answer"), "later");
-    await user.click(screen.getByRole("button", { name: "Open my report" }));
+    await user.selectOptions(screen.getByLabelText("Your answer"), "time_commitment");
+    await user.click(screen.getByRole("button", { name: "Submit and open my report" }));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(bodyOf(posts("/api/unlock-feedback/detail")[0]!)).toEqual({
-      reason: "later",
+      reason: "time_commitment",
       chips: [],
       note: "",
     });
@@ -230,14 +244,14 @@ describe("/why's follow-up", () => {
     render(<WhyPage initialReason="too_expensive" />);
     await ready();
     await user.type(screen.getByLabelText("Anything else we should know?"), "Too dear");
-    await user.click(screen.getByRole("button", { name: "Open my report" }));
+    await user.click(screen.getByRole("button", { name: "Submit and open my report" }));
 
     expect(
       await screen.findByText("We couldn’t send that. Please try again, or skip to your report.")
     ).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Anything else we should know?")).toHaveValue("Too dear");
-    expect(screen.getByRole("button", { name: "Open my report" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Submit and open my report" })).toBeEnabled();
     expect(screen.getByRole("link", { name: "Skip, just open my report" })).toHaveAttribute(
       "href",
       ANSWER.reportPath
