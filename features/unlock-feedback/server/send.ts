@@ -116,18 +116,21 @@ async function emailedBefore(userId: number): Promise<boolean> {
   return ((await res.json()) as unknown[]).length > 0;
 }
 
+const MAX_OWN_SUBMISSIONS = 50;
+
 /**
  * Whether the person paid for another of their reports: someone who bought and then took the
- * test again is a buyer, not a reader who stopped at the paywall.
+ * test again is a buyer, not a reader who stopped at the paywall. Past 50 submissions the list
+ * would be cut short, so that person counts as a buyer: they are not emailed.
  */
 async function paidAnotherReport(userId: number, row: CandidateRow): Promise<boolean> {
   const subs = await supabaseFetch(
-    `/rest/v1/survey_submission?user_id=eq.${userId}&select=id&limit=50`
+    `/rest/v1/survey_submission?user_id=eq.${userId}&select=id&limit=${MAX_OWN_SUBMISSIONS + 1}`
   );
   if (!subs.ok) throw new Error(`other_submissions_lookup_failed:${subs.status}`);
-  const others = ((await subs.json()) as Array<{ id: number }>)
-    .map((s) => s.id)
-    .filter((id) => id !== row.survey_submission_id);
+  const all = (await subs.json()) as Array<{ id: number }>;
+  if (all.length > MAX_OWN_SUBMISSIONS) return true;
+  const others = all.map((s) => s.id).filter((id) => id !== row.survey_submission_id);
   if (others.length === 0) return false;
   const reports = await supabaseFetch(
     `/rest/v1/personal_report?survey_submission_id=in.(${others.join(",")})&select=id`

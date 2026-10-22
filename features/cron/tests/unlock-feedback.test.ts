@@ -446,6 +446,16 @@ describe("GET /api/cron/unlock-feedback: when Resend fails", () => {
     expect(mockSend).toHaveBeenCalledTimes(3);
   });
 
+  it("someone with more submissions than one look can read is not emailed: it fails closed", async () => {
+    withDb({
+      candidates: [candidate()],
+      otherReports: Array.from({ length: 50 }, (_, i) => ({ id: 400 + i })),
+    });
+    const { body } = await run();
+    expect(body.summary.skipped).toEqual({ paid: 1 });
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
   it("a reader with another, unpaid report is still emailed", async () => {
     withDb({ candidates: [candidate()], otherReports: [{ id: 77 }] });
     expect((await run()).body.summary.sent).toBe(1);
