@@ -1503,6 +1503,7 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
         onExit={() => handleReturn()}
         onComplete={(token) => handleReturn(true, token)}
         onStartOver={handleStartOver}
+        payToStart={journey !== null}
       />
     );
   }

@@ -99,6 +99,20 @@ async function fetchCandidates(): Promise<PartialSaveRow[]> {
   return (await response.json()) as PartialSaveRow[];
 }
 
+/**
+ * A paid pay-to-start purchase (or the older prepaid checkout) this address has not used
+ * yet: its survey belongs to the purchase, and only the confirmation email's continue link
+ * carries it to another browser. This email's bare /survey link would start a free survey
+ * there, and its report would come back locked although paid for.
+ */
+async function hasUnusedPrepaidPurchase(email: string): Promise<boolean> {
+  const path = `/rest/v1/prepaid_report_access?customer_email=eq.${encodeURIComponent(email.trim().toLowerCase())}&status=eq.succeeded&consumed_submission_id=is.null&select=id&limit=1`;
+  const response = await supabaseGet(path);
+  if (!response.ok) return false;
+  const rows = (await response.json()) as Array<{ id: number }>;
+  return rows.length > 0;
+}
+
 async function isSubmitted(sessionId: string): Promise<boolean> {
   const path = `/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sessionId)}&select=id&limit=1`;
   const response = await supabaseGet(path);
@@ -149,6 +163,7 @@ export async function GET(request: Request) {
     skippedSubmitted: 0,
     skippedCooldown: 0,
     skippedSuppressed: 0,
+    skippedPrepaid: 0,
     errors: 0,
   };
 
@@ -175,6 +190,11 @@ export async function GET(request: Request) {
 
       if (await isSubmitted(row.session_id)) {
         summary.skippedSubmitted++;
+        continue;
+      }
+
+      if (await hasUnusedPrepaidPurchase(email)) {
+        summary.skippedPrepaid++;
         continue;
       }
 

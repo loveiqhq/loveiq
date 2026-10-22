@@ -85,6 +85,40 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     );
   });
 
+  it("counts a EUR 1.99 buyer's full report or All 14 as an upgrade, credit or not", async () => {
+    mockFetchAllRows.mockImplementation(async (path: string) => {
+      if (path.startsWith("/rest/v1/prepaid_report_access?"))
+        return [
+          {
+            id: 2,
+            offer: "pre",
+            status: "succeeded",
+            amount_cents: 199,
+            list_price_cents: 199,
+            is_test: false,
+            customer_email: "reader@example.com",
+            created_at: "2026-10-20T10:00:00Z",
+            paid_at: "2026-10-20T10:02:00Z",
+            consumed_submission_id: 700,
+          },
+        ];
+      if (path.startsWith("/rest/v1/personal_report?"))
+        return [{ id: 9700, survey_submission_id: 700 }];
+      if (path.startsWith("/rest/v1/payment?")) return [{ personal_report_id: 9700, amount: 38 }];
+      return [];
+    });
+    const body = await (await GET(req())).json();
+    expect(body.arms.find((a: { offer: string }) => a.offer === "pre")).toMatchObject({
+      upgrades: 1,
+      upgradeRevenue: 38,
+    });
+    const paths = mockFetchAllRows.mock.calls.map(([p]) => String(p));
+    const query = paths.find((p) => p.startsWith("/rest/v1/payment?"))!;
+    expect(query).toContain("metadata->>plan=in.(full_report,all_reports)");
+    expect(query).not.toContain("initialCredit");
+    expect(query).toContain("is_test=is.false");
+  });
+
   it("answers a failed read with a generic 500", async () => {
     mockFetchAllRows.mockResolvedValue(null);
     const res = await GET(req());

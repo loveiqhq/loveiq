@@ -98,6 +98,9 @@ async function fetchPaidCandidates(): Promise<PaidUserRow[]> {
   const path =
     `/rest/v1/payment` +
     `?status=eq.succeeded` +
+    // Only the plans these reminders are for: EUR 1.99 rows and E07's gifts are skipped
+    // below anyway, and read first they would take the 200 slots of full-report buyers.
+    `&metadata->>plan=in.(full_report,all_reports)` +
     `&payment_date_time=gte.${encodeURIComponent(minIso)}` +
     `&payment_date_time=lte.${encodeURIComponent(maxIso)}` +
     `&select=id,payment_date_time,personal_report_id,metadata,app_user!fk_payment_user(email,first_name)` +

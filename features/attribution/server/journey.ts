@@ -111,6 +111,8 @@ export interface SubmissionJourney {
    * quote, and the purchase comes from its payment row. Absent means no.
    */
   payToStart?: boolean;
+  /** Which page they paid on, from that payment: "pre" is /sexual-archetype/initial. */
+  payToStartOffer?: "full" | "pre";
   /**
    * PostHog `$session_id` captured at submit, or null. Null is the ordinary case for
    * anything submitted before 2026-08-27, and for a visitor whose replay never ran
@@ -156,7 +158,7 @@ interface PaymentRow {
   is_test: boolean | null;
   payment_date_time: string | null;
   currency: string | null;
-  metadata: { journey?: unknown; plan?: unknown } | null;
+  metadata: { journey?: unknown; plan?: unknown; offer?: unknown } | null;
 }
 
 interface AnalyticsRow {
@@ -356,6 +358,14 @@ export function measureReportDwellMs(
   const dwell = Math.max(span, milestoneFloor);
   if (measured) return dwell > 0 ? dwell : null;
   return dwell >= MIN_MEASURABLE_DWELL_MS ? dwell : null;
+}
+
+/** The page a pay-to-start buyer paid on, from that payment, even after a later upgrade. */
+function payToStartOfferOf(
+  payments: Array<{ metadata: { journey?: unknown; offer?: unknown } | null }>
+): { payToStartOffer?: "full" | "pre" } {
+  const offer = payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY)?.metadata?.offer;
+  return offer === "full" || offer === "pre" ? { payToStartOffer: offer } : {};
 }
 
 async function fetchJson<T>(path: string, what: string): Promise<T[]> {
@@ -579,6 +589,7 @@ export async function buildSubmissionJourney(
     quoteCount: quotes.length,
     recordingSessionId: sub.posthog_session_id?.trim() || null,
     ...(payToStartPayment || isPayToStartTracker(sub.utm_tracker) ? { payToStart: true } : {}),
+    ...payToStartOfferOf(payments),
   };
 }
 

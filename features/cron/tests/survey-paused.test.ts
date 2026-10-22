@@ -137,13 +137,16 @@ describe("GET /api/cron/survey-paused", () => {
     saved_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
   };
 
-  function mockSupabaseSequence(opts: { submitted?: boolean } = {}) {
+  function mockSupabaseSequence(opts: { submitted?: boolean; prepaid?: boolean } = {}) {
     mockFetchWithTimeout.mockImplementation(async (url: string) => {
       if (typeof url === "string" && url.includes("/rest/v1/survey_partial_save")) {
         return { ok: true, json: async () => [candidateRow] };
       }
       if (typeof url === "string" && url.includes("/rest/v1/survey_submission")) {
         return { ok: true, json: async () => (opts.submitted ? [{ id: 1 }] : []) };
+      }
+      if (typeof url === "string" && url.includes("/rest/v1/prepaid_report_access")) {
+        return { ok: true, json: async () => (opts.prepaid ? [{ id: 12 }] : []) };
       }
       throw new Error(`Unexpected fetchWithTimeout call: ${url}`);
     });
@@ -160,6 +163,24 @@ describe("GET /api/cron/survey-paused", () => {
     expect(body.sent).toBe(0);
     expect(mockResendSend).not.toHaveBeenCalled();
     expect(mockCheckCooldown).not.toHaveBeenCalled(); // cooldown is checked AFTER isSubmitted
+  });
+
+  it("never sends a buyer who paid before the survey the free survey's link", async () => {
+    // Its bare /survey link opens the free survey in another browser (a mail app's): the
+    // purchase would stay unused and the report locked. Their continue link is theirs.
+    mockSupabaseSequence({ prepaid: true });
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    const res = await GET(makeRequest("test-cron-secret"));
+    const body = await res.json();
+    expect(body.skippedPrepaid).toBe(1);
+    expect(body.sent).toBe(0);
+    expect(mockResendSend).not.toHaveBeenCalled();
+    const lookup = mockFetchWithTimeout.mock.calls
+      .map(([url]) => String(url))
+      .find((url) => url.includes("/rest/v1/prepaid_report_access"));
+    expect(lookup).toContain("customer_email=eq.user%40example.com");
+    expect(lookup).toContain("status=eq.succeeded");
+    expect(lookup).toContain("consumed_submission_id=is.null");
   });
 
   it("skips candidates whose email is in the suppression list", async () => {
@@ -259,6 +280,7 @@ describe("GET /api/cron/survey-paused", () => {
         };
       }
       if (url.includes("/rest/v1/survey_submission")) return { ok: true, json: async () => [] };
+      if (url.includes("/rest/v1/prepaid_report_access")) return { ok: true, json: async () => [] };
       throw new Error(`Unexpected fetchWithTimeout call: ${url}`);
     });
     mockIsEmailSuppressed.mockResolvedValue(false);

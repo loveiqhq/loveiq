@@ -496,6 +496,24 @@ describe("AP totals", () => {
     expect(parseFacts([{ ap_facts: raw }], "2026-10-01", "2026-10-01").visits[0]?.n).toBe(3);
   });
 
+  it("leaves the pay-to-start pages' visits out: their visitors can't start the free survey", () => {
+    const raw = {
+      visits: [
+        { day: "2026-10-23", arm: "white_card", src: null, n: 40 },
+        { day: "2026-10-23", arm: "pay_to_start", src: "google", n: 25 },
+      ],
+      starts: [],
+      subs: [],
+      money: [],
+      checkouts: [],
+      intro: [],
+      invites: [],
+      quotes: [],
+    };
+    const facts = parseFacts(raw, "2026-10-23", "2026-10-23");
+    expect(facts.visits.map((v) => [v.arm, v.n])).toEqual([["white_card", 40]]);
+  });
+
   it("reads a Full purchase from its flag, or from the first plan where the function has none", () => {
     const subs = (rows: Array<Record<string, unknown>>) =>
       parseFacts(

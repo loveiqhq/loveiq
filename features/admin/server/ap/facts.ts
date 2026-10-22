@@ -6,10 +6,12 @@
  * Server only: the facts are one row per finished survey. The pages get totals.
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import type { ApFilters, DeviceFilter, Source } from "./filters";
+
 import { markVisitors } from "./posthog";
 
 export interface VisitFact {
@@ -278,12 +280,17 @@ export function parseFacts(
     from,
     to,
     asOf,
-    visits: rows(o.visits, "visits").map((r) => ({
-      day: String(r.day),
-      arm: str(r.arm) ?? "unknown",
-      src: str(r.src),
-      n: num(r.n),
-    })),
+    // The pay-to-start pages' visits are their own funnel's (its AP page reads them): those
+    // visitors can't start the free survey, so every page here leaves them out, as the
+    // digests do, and its starts per visit are not diluted once the campaigns send traffic.
+    visits: rows(o.visits, "visits")
+      .map((r) => ({
+        day: String(r.day),
+        arm: str(r.arm) ?? "unknown",
+        src: str(r.src),
+        n: num(r.n),
+      }))
+      .filter((v) => v.arm !== PAY_TO_START_JOURNEY),
     starts: rows(o.starts, "starts").map((r) => ({
       ...tagged(r),
       ...adTags(r),

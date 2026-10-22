@@ -686,6 +686,20 @@ describe("pay to start — paid before the survey", () => {
     );
   });
 
+  it("names the EUR 1.99 page for a buyer of the initial report", () => {
+    const survey = buildJourneyMessage(
+      journey({
+        arms: { landing: null, survey: null, pricing: null, paywall: null },
+        payToStart: true,
+        payToStartOffer: "pre",
+      }),
+      { kind: "survey_completed", questionCount: 58 }
+    );
+    expect(JSON.stringify(survey.blocks)).toContain(
+      "Landing page design: *Pay to start (/sexual-archetype/initial)*"
+    );
+  });
+
   it("leaves everyone else's landing line as it was", () => {
     const message = buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: 58 });
     expect(JSON.stringify(message.blocks)).not.toContain("Pay to start");

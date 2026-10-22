@@ -6,6 +6,7 @@ const mockResendSend = vi.fn();
 const mockStripePromoCreate = vi.fn();
 const mockStripePromoUpdate = vi.fn();
 const mockGetReportPlan = vi.fn();
+const mockHasInitialUnlock = vi.fn();
 const mockGetStripeClient = vi.fn();
 const mockGetCouponIdForStage = vi.fn();
 
@@ -32,6 +33,7 @@ vi.mock("@shared/observability/logger", () => ({
 
 vi.mock("@features/report/server/planAccess", () => ({
   getReportPlanByPersonalReportId: (...args: unknown[]) => mockGetReportPlan(...args),
+  hasInitialUnlockByPersonalReportId: (...args: unknown[]) => mockHasInitialUnlock(...args),
 }));
 
 vi.mock("@features/checkout/server/stripeCheckout", () => ({
@@ -104,6 +106,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       NEXT_PUBLIC_SITE_URL: "https://test.loveiq.org",
     };
     mockGetReportPlan.mockResolvedValue(null);
+    mockHasInitialUnlock.mockResolvedValue(false);
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockResendSend.mockResolvedValue({ data: { id: "msg_1" }, error: null });
     // Pricing 2.0: the single nurture discount stage is 72h → 50% off.
@@ -260,6 +263,29 @@ describe("GET /api/cron/nurture-sequence", () => {
     const body = await res.json();
     expect(body.summaries["72h_no_unlock"].skippedPaid).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
+  });
+
+  it("skips a buyer of the EUR 1.99 initial report: no 50% code beside their EUR 10 off", async () => {
+    // `initial` is no report plan, so the plan check alone took them for unpaid.
+    mockHasInitialUnlock.mockResolvedValueOnce(true);
+    const candidate = {
+      id: 51,
+      survey_submission_id: 6,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "initial@example.com", first_name: "Ini" } },
+    };
+    mockCandidateWindows({
+      seventyTwoHour: [candidate],
+      quoteMetadata: {},
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    const body = await res.json();
+    expect(mockHasInitialUnlock).toHaveBeenCalledWith(51);
+    expect(body.summaries["72h_no_unlock"].skippedPaid).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(mockStripePromoCreate).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
   });
 
   it("F-06: persists idempotency marker BEFORE Resend send", async () => {

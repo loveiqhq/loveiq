@@ -13,7 +13,8 @@
  * - Paid: their `paid_at` (the charge), status succeeded or refunded, money taken.
  * - Finished survey: the entitlement's `consumed_submission_id` (the survey claimed it).
  * - Report opened: a `report_session` on that submission's report.
- * - Upgraded: a later full-report payment on the same report carrying `initialCredit`.
+ * - Upgraded: a EUR 1.99 buyer's later full-report or All 14 payment on the same report
+ *   (with the EUR 10 credit or not: a code may have beaten it).
  * - Visits: `funnel_event` unique visitors labelled `pay_to_start` (proxy.ts). Both pages share
  *   the label, so visits are the journey's, not an offer's.
  * Staff and test buys are left out (`is_test`, staff addresses), as on every AP page.
@@ -383,8 +384,8 @@ export async function fetchPayToStartRecords(filters: Pick<ApFilters, "from" | "
       ),
       fetchAllRows<{ personal_report_id: number; amount: number | string | null }>(
         `/rest/v1/payment?is_test=is.false&personal_report_id=in.(${ids.join(",")})` +
-          "&status=eq.succeeded&metadata->>plan=eq.full_report" +
-          "&metadata->>initialCredit=not.is.null&select=personal_report_id,amount&order=id.asc"
+          "&status=eq.succeeded&metadata->>plan=in.(full_report,all_reports)" +
+          "&select=personal_report_id,amount&order=id.asc"
       ),
     ]);
     if (!sessions || !payments) throw new Error("the readers' reports could not be read");
