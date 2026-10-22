@@ -49,6 +49,9 @@ const seg = (label: string, finishers: number, sales: number, revenue: number): 
   sales,
   preCvr: null,
   preAvg: null,
+  preBuyers: 0,
+  preSales: 0,
+  preRevenue: 0,
   // Every buyer here bought one full unlock.
   fullCvr: finishers ? sales / finishers : null,
   fullAvg: sales ? revenue / sales : null,

@@ -182,7 +182,7 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
           "/rest/v1/report_session?select=personal_report_id&order=personal_report_id.asc"
         ),
         supabaseFetch(
-          `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,amount&payment_date_time=gte.${since}`,
+          `/rest/v1/payment?is_test=is.false&metadata->>gifted=is.null&select=personal_report_id,status,amount&payment_date_time=gte.${since}`,
           { headers: { Range: "0-49999" } }
         ),
         supabaseFetch(

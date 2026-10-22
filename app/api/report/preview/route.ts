@@ -22,6 +22,7 @@ import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
 import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
+import { buildInitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
 
 /**
  * A report with no reader behind it — for looking at the design on a laptop.
@@ -83,6 +84,15 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
+
+  // `?gate=1`: the EUR 1.99 gate as a gated owner meets it, its payload and nothing else
+  // (features/report/logic/initialUnlockGate.ts).
+  if (url.searchParams.get("gate") === "1") {
+    return NextResponse.json(
+      buildInitialUnlockGatePayload({ reportToken: null, submissionId: null }),
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
 
   const requested = url.searchParams.get("archetype") ?? "Spark Seeker";
   // ReportPage forwards the raw ?archetype= slug, so match on letters alone:

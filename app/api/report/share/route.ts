@@ -12,6 +12,7 @@ import { emailExperimentTags, pickFromVariants } from "@shared/emails/ab-variant
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
+import { ownerMeetsInitialGate } from "@features/report/server/initialUnlockGate";
 import {
   getReportPlanByPersonalReportId,
   SHARE_SEAT_LIMIT,
@@ -89,6 +90,17 @@ export async function POST(request: Request) {
   }
   if (!owner) {
     return NextResponse.json({ error: "Report not found." }, { status: 404 });
+  }
+
+  // Behind the EUR 1.99 gate the owner can't read the report yet, so no one else may either:
+  // a share to a second address of their own would open it for free.
+  if (
+    await ownerMeetsInitialGate({
+      personalReportId: owner.personalReportId,
+      submissionId: owner.submissionId,
+    })
+  ) {
+    return NextResponse.json({ error: "initial_unlock_required" }, { status: 403 });
   }
 
   if (owner.ownerEmail && owner.ownerEmail === recipientEmail) {

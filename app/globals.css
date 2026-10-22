@@ -437,7 +437,8 @@ input.autofill-dark:-internal-autofill-previewed {
    landing, whose arms are under test, renders as before; the landing's `.animate-on-scroll`
    still has no such rule. */
 @media (prefers-reduced-motion: reduce) {
-  .pts-page .animate-on-scroll {
+  .pts-page .animate-on-scroll,
+  .iug-page .animate-on-scroll {
     opacity: 1;
     transform: none;
     transition: none;

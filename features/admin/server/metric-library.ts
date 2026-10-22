@@ -229,7 +229,7 @@ async function fetchReportViewRate(): Promise<number | null> {
 
 async function fetchRevenueTotal(): Promise<number | null> {
   const res = await supabaseFetch(
-    "/rest/v1/payment?is_test=is.false&select=amount&status=eq.succeeded",
+    "/rest/v1/payment?is_test=is.false&metadata->>gifted=is.null&select=amount&status=eq.succeeded",
     {
       headers: { Range: "0-49999" },
     }

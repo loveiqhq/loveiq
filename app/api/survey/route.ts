@@ -33,6 +33,7 @@ import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression"
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
+import { joinInitialGateCohort } from "@features/report/server/initialGateState";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -659,9 +660,12 @@ export async function POST(request: Request) {
       reportToken = token ?? undefined;
     });
 
+    // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
+    // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
+      isExisting ? Promise.resolve() : joinInitialGateCohort(submissionId),
     ]);
 
     // Pay to start: claim what this browser paid for, before the reply, so the report
@@ -871,20 +875,14 @@ export async function POST(request: Request) {
         // gated by report_token, so exposing this int is not a security risk.
         submissionId,
         ...(reportToken ? { reportToken } : {}),
-        ...(scoringSummary
-          ? {
-              primaryArchetype: scoringSummary.primaryArchetype,
-              ...(scoringSummary.v5PrimaryArchetype
-                ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
-                : {}),
-            }
-          : {}),
+        // No archetype: nothing reads it here, and the EUR 1.99 gate sells it. The report
+        // route tells it, to a reader allowed to see it.
         // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
       },
       {
-        // The response carries a fresh report access token + the user's
-        // primary archetype — never let intermediaries cache it.
+        // The response carries a fresh report access token — never let
+        // intermediaries cache it.
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
           "X-Server-Timing": serverTiming,

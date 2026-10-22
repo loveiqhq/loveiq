@@ -78,6 +78,7 @@ transaction (no `BEGIN/COMMIT`); everything else is wrapped.
 | `20260911215422_recover_lost_marketing_opt_in_answers.sql`    | Restored 16015 answers + opt-in flags             | **Yes** — removes restored consent; scoped by audit log |
 | `20261018120000_pay_to_start_entitlement.sql`                 | DROP 7 columns, the flag, `expired`; after 130000 | **Yes** — offer, price, buyer email, times, attribution |
 | `20261018130000_pay_to_start_out_of_free_funnel_readouts.sql` | 7 readouts back to 2026-10-18; DROP the helper    | No — readouts only                                      |
+| `20261020090000_initial_unlock_gate.sql`                      | DROP 4 columns, the 2 flags, the index            | **Yes** — gate cohort, first views, E07 arms and sends  |
 
 ## Writing a new rollback
 

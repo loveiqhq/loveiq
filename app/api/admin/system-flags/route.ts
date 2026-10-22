@@ -39,6 +39,8 @@ const ALLOWED_KEYS = new Set([
   "nurture_sequence",
   "report_paywall_enforced",
   "pay_to_start_checkout",
+  "report_initial_unlock_gate",
+  "initial_unlock_gift_email",
 ]);
 
 export async function GET() {

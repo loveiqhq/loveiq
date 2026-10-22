@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="10.1128" height="10.1128" viewBox="0 0 10.1128 10.1128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="badge/unlocked">
+<path id="lock-open" d="M3.32285 4.47865V3.10619C3.38366 2.73167 3.56566 2.38744 3.84093 2.1263C4.11619 1.86516 4.46953 1.70154 4.84674 1.66054C5.22394 1.61954 5.60419 1.70342 5.92913 1.89932C6.25408 2.09522 6.50578 2.39231 6.64564 2.74502M3.10601 4.47857H7.00667C7.56519 4.47857 8.01795 4.93134 8.01795 5.48986V7.44019C8.01795 7.9987 7.56519 8.45147 7.00667 8.45147H3.10601C2.54749 8.45147 2.09473 7.9987 2.09473 7.44019V5.48986C2.09473 4.93134 2.54749 4.47857 3.10601 4.47857Z" stroke-width="0.939048" stroke-linecap="round" stroke-linejoin="round" stroke="url(#paint0_linear_0_155)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_155" x1="2.96214" y1="2.64636" x2="7.72572" y2="6.79507" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FB683E"/>
+<stop offset="0.52" stop-color="#E88C8C"/>
+<stop offset="1" stop-color="#AC88ED"/>
+</linearGradient>
+</defs>
+</svg>

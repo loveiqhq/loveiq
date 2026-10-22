@@ -31,10 +31,15 @@ import {
 
 const json = (body: unknown, ok = true) => ({ ok, json: async () => body }) as Response;
 
-const quote = (plan: "full_report" | "all_reports", chargedPriceCents: number) =>
+const quote = (
+  plan: "full_report" | "all_reports",
+  chargedPriceCents: number,
+  experimentGroup: "A3" | "B3" = "A3"
+) =>
   ({
     id: 1,
     plan,
+    experimentGroup,
     chargedPriceCents,
     currentPriceCents: chargedPriceCents,
   }) as ReportPriceQuoteSnapshot;
@@ -65,6 +70,31 @@ describe("the initial unlock's credit", () => {
     expect((await getReportCredits(165)).initialCents).toBe(1000);
   });
 
+  it("is EUR 10 for the day-4 gift too (E07): a EUR 0 initial row marked gifted", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      json([
+        {
+          amount: 0,
+          refund_amount: null,
+          currency: "EUR",
+          metadata: { plan: "initial", gifted: "e07", unlockSource: "e07_gift" },
+        },
+      ])
+    );
+    expect(await getReportCredits(165)).toEqual({ upgradeCents: 0, initialCents: 1000 });
+  });
+
+  it("counts only succeeded, non-test rows, and no other EUR 0 initial row", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      json([{ amount: 0, refund_amount: null, currency: "EUR", metadata: { plan: "initial" } }])
+    );
+    expect((await getReportCredits(165)).initialCents).toBe(0);
+    // A refunded or a staff test row never comes back from the read at all.
+    const url = String(mockFetchWithTimeout.mock.calls[0]![0]);
+    expect(url).toContain("status=eq.succeeded");
+    expect(url).toContain("is_test=is.false");
+  });
+
   it("is nothing without an initial unlock", async () => {
     mockFetchWithTimeout.mockResolvedValueOnce(
       json([
@@ -85,6 +115,11 @@ describe("the initial unlock's credit", () => {
     expect(applyInitialCredit(quote("full_report", 499), 1000).chargedPriceCents).toBe(0);
     expect(applyInitialCredit(quote("full_report", 1040), 1000).chargedPriceCents).toBe(0);
     expect(applyInitialCredit(quote("full_report", 1040), 1000).upgradeCreditCents).toBe(1040);
+  });
+
+  it("credits arm A3 alone: a B3 full report (EUR 4.99) is never made free", () => {
+    const b3 = quote("full_report", 499, "B3");
+    expect(applyInitialCredit(b3, 1000)).toBe(b3);
   });
 
   it("leaves All 14, and a report without the unlock, as they are", () => {
@@ -109,15 +144,35 @@ describe("a pay-to-start reader's quotes", () => {
   function routeQuoteFetches({
     entitlement,
     payments,
+    cohortAt = null,
+    storedQuote = null,
   }: {
     entitlement: unknown[];
     payments: unknown[];
+    cohortAt?: string | null;
+    storedQuote?: Record<string, unknown> | null;
   }) {
     const created: Record<string, unknown>[] = [];
     mockFetchWithTimeout.mockImplementation(
       async (url: string, options?: { body?: string; method?: string }) => {
         if (url.includes("/rest/v1/prepaid_report_access?consumed_submission_id=eq.42")) {
           return json(entitlement);
+        }
+        if (url.includes("/rest/v1/personal_report?id=eq.9&select=initial_gate_cohort_at")) {
+          return json([{ initial_gate_cohort_at: cohortAt, initial_gate_seen_at: null }]);
+        }
+        if (
+          storedQuote &&
+          url.includes("/rest/v1/report_price_quote?personal_report_id=eq.9&plan=eq.full_report")
+        ) {
+          return json([storedQuote]);
+        }
+        if (
+          storedQuote &&
+          options?.method === "PATCH" &&
+          url.includes(`/rest/v1/report_price_quote?id=eq.${String(storedQuote.id)}`)
+        ) {
+          return json([{ ...storedQuote, ...(JSON.parse(options.body ?? "{}") as object) }]);
         }
         if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) return json(payments);
         if (url.includes("select=metadata")) return json([]);
@@ -181,6 +236,59 @@ describe("a pay-to-start reader's quotes", () => {
     expect(result?.experimentGroup).toBe("B3");
   });
 
+  it("prices a reader of the EUR 1.99 gate on arm A3, when the report route says so", async () => {
+    const created = routeQuoteFetches({ entitlement: [], payments: [] });
+    const result = await getReportPriceQuoteForContext({
+      initialGateCohort: true,
+      plan: "full_report",
+      submissionId: 42,
+    });
+    expect(result?.experimentGroup).toBe("A3");
+    expect(created[0]).toEqual(expect.objectContaining({ experiment_group: "A3" }));
+    // Told, so not asked: no read of the cohort stamp.
+    const urls = mockFetchWithTimeout.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("select=initial_gate_cohort_at"))).toBe(false);
+  });
+
+  it("looks the gate's cohort up when the caller does not say (a cron's first quote)", async () => {
+    routeQuoteFetches({ entitlement: [], payments: [], cohortAt: "2026-10-20T09:00:00.000Z" });
+    const result = await getReportPriceQuoteForContext({ plan: "full_report", submissionId: 42 });
+    expect(result?.experimentGroup).toBe("A3");
+  });
+
+  it("prices an initial unlock's holder on arm A3: EUR 19.99 for the full report", async () => {
+    routeQuoteFetches({
+      entitlement: [],
+      payments: [
+        { amount: 1.99, refund_amount: null, currency: "EUR", metadata: { plan: "initial" } },
+      ],
+    });
+    const result = await getReportPriceQuoteForContext({ plan: "full_report", submissionId: 42 });
+    expect(result?.experimentGroup).toBe("A3");
+    expect(result?.chargedPriceCents).toBe(1999);
+    expect(result?.creditKind).toBe("initial");
+  });
+
+  it("keeps a stored B3 quote's arm: EUR 4.99 and no credit, initial unlock or not", async () => {
+    routeQuoteFetches({
+      entitlement: [],
+      payments: [
+        { amount: 1.99, refund_amount: null, currency: "EUR", metadata: { plan: "initial" } },
+      ],
+      cohortAt: "2026-10-20T09:00:00.000Z",
+      storedQuote: STORED_B3_FULL_REPORT,
+    });
+    const result = await getReportPriceQuoteForContext({
+      now: new Date("2026-10-21T10:00:00.000Z"),
+      plan: "full_report",
+      submissionId: 42,
+    });
+    expect(result?.experimentGroup).toBe("B3");
+    expect(result?.chargedPriceCents).toBe(499);
+    expect(result?.upgradeCreditCents).toBeUndefined();
+    expect(result?.creditKind).toBeUndefined();
+  });
+
   it("quotes the initial unlock's buyer EUR 19.99 for the full report", async () => {
     routeQuoteFetches({
       entitlement: [{ id: 5, offer: "pre" }],
@@ -198,3 +306,43 @@ describe("a pay-to-start reader's quotes", () => {
     expect(result?.creditKind).toBe("initial");
   });
 });
+
+/** A full-report quote already stored on arm B3 (EUR 4.99), as in reportPricing.test.ts. */
+const STORED_B3_FULL_REPORT = {
+  id: 77,
+  personal_report_id: 9,
+  survey_submission_id: 42,
+  user_id: 7,
+  plan: "full_report",
+  currency: "EUR",
+  experiment_group: "B3",
+  forced_paywall_arm: null,
+  base_price_bucket: "B3",
+  base_price: 4.99,
+  msrp: 4.99,
+  starting_price: 4.99,
+  current_price: 4.99,
+  initial_price: 4.99,
+  discount_step: 0,
+  discount_multiplier: 1,
+  pricing_cluster_id: "B3-full_report-B3-tier_2-desktop-google-serious-engaged-d0",
+  country_tier: "tier_2",
+  country_multiplier: 1,
+  device_type: "Desktop",
+  device_multiplier: 1,
+  traffic_source: "google",
+  traffic_multiplier: 1,
+  behavioral_bucket: "serious",
+  behavioral_multiplier: 1,
+  engagement_score: 40,
+  engagement_multiplier: 1,
+  report_preview_views: 1,
+  fantasy_signal_count: 1,
+  survey_duration_ms: 600000,
+  initial_price_timestamp: "2026-10-20T09:00:00.000Z",
+  expires_at: "2026-11-20T09:00:00.000Z",
+  checkout_started_at: null,
+  purchased_at: null,
+  metadata: null,
+  view_count: 1,
+};

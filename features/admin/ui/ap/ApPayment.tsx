@@ -664,13 +664,21 @@ function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number } {
   const finishers = sum((r) => r.finishers);
   const fullSales = sum((r) => r.fullSales);
   const fullRevenue = Math.round(sum((r) => r.fullRevenue) * 100) / 100;
+  // A row's pre-unlock rate is blank only while the Initial plan isn't on sale.
+  const preOnSale = !rest.some((r) => r.preCvr === null);
+  const preSales = sum((r) => r.preSales);
+  const preRevenue = Math.round(sum((r) => r.preRevenue) * 100) / 100;
   const other: SegmentRow = {
     label: "Other countries",
     finishers,
     sales: sum((r) => r.sales),
-    // Pre-unlock is not on sale: blank, or 0 for every row once it is (see buildPayment).
-    preCvr: rest.some((r) => r.preCvr === null) ? null : 0,
-    preAvg: null,
+    preCvr: preOnSale
+      ? ratio(
+          sum((r) => r.preBuyers),
+          finishers
+        )
+      : null,
+    preAvg: preOnSale ? ratio(preRevenue, preSales) : null,
     fullCvr: ratio(
       sum((r) => r.fullBuyers),
       finishers
@@ -680,6 +688,9 @@ function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number } {
     fullBuyers: sum((r) => r.fullBuyers),
     fullSales,
     fullRevenue,
+    preBuyers: sum((r) => r.preBuyers),
+    preSales,
+    preRevenue,
   };
   return { rows: [...sorted.slice(0, 12), other], merged: rest.length };
 }

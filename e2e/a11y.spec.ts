@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+import { buildInitialGateFixture } from "./fixtures/report";
+
 const criticalRoutes = [
   // Both landing arms by name: question 1 in the hero (A) and the hero video (B).
   // A bare "/" would be a coin flip in CI's production build (see playwright.config.ts).
@@ -235,3 +237,34 @@ for (const route of criticalRoutes) {
     }
   });
 }
+
+/**
+ * The EUR 1.99 gate (Pre-unlock), which only a gated reader reaches: its /api/report answer
+ * mocked as e2e/report-initial-unlock-gate.spec.ts does. Under reduced motion, so the
+ * sections that fly in on scroll are measured as a reader sees them, not mid-fade.
+ */
+test("/report (the EUR 1.99 gate) — no critical accessibility violations", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/report?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(buildInitialGateFixture("rpt_e2eGateAbCdEfGhIjKlM")),
+    });
+  });
+  await page.goto("/report/rpt_e2eGateAbCdEfGhIjKlM");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .exclude("#cookieyes-root") // third-party consent banner
+    .exclude(".bg-clip-text") // gradient text — axe cannot evaluate variable-contrast gradients
+    .analyze();
+  const blocking = results.violations.filter(
+    (v) => v.impact === "critical" || v.impact === "serious"
+  );
+  expect(
+    blocking,
+    `Critical/serious a11y violations on the gate: ${blocking.map((v) => `${v.id}: ${v.description}`).join("; ")}`
+  ).toHaveLength(0);
+});

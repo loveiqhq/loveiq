@@ -12,7 +12,8 @@ import type {
   StripeCheckoutPurchaseAnalytics,
   StripeCheckoutSessionStatusResponse,
 } from "@features/checkout/server/stripeCheckout";
-import type { ReportAccessPlan } from "@features/report/server/access";
+import { INITIAL_UNLOCK_PLAN, isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
+import { INITIAL_UNLOCK_TITLE } from "@features/report/logic/initialUnlockGate";
 import {
   setReportSubmissionContext,
   trackCheckoutAbandonedReturn,
@@ -34,19 +35,20 @@ type ReturnState =
       status: "disabled" | "error" | "missing";
     }
   | {
-      accessPlan: ReportAccessPlan;
       paymentStatus: string | null;
       purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
       status: "ready";
       surveySubmissionId: number | null;
+      /** THIS purchase is recorded: a plan for a report sale, `initialUnlock` for the EUR 1.99. */
+      unlocked: boolean;
     };
 
 interface Props {
   /** Where on the report the checkout started; handed back so it opens there. */
   anchor?: string | null;
   archetype?: string | null;
-  planId: ReportPurchasePlanId;
+  planId: ReportPurchasePlanId | typeof INITIAL_UNLOCK_PLAN;
   sessionId?: string | null;
   token?: string | null;
 }
@@ -63,7 +65,10 @@ const CheckoutReturnPage: FC<Props> = ({
   token = null,
 }) => {
   const router = useRouter();
-  const planTitle = getReportPurchasePlanTitle(planId);
+  const isInitialUnlock = isInitialUnlockPlan(planId);
+  const planTitle = isInitialUnlockPlan(planId)
+    ? INITIAL_UNLOCK_TITLE
+    : getReportPurchasePlanTitle(planId);
   // Say WHAT is now open. A report bought from another archetype's row returns to that
   // report, and "Your report is unlocked" left the buyer unsure which one they had paid for.
   const unlockedWhat =
@@ -97,6 +102,9 @@ const CheckoutReturnPage: FC<Props> = ({
     ? `${baseReportHref}?${reportQueryString}`
     : baseReportHref;
   const backHref = reportHrefWithArchetype;
+  // Once the EUR 1.99 is in, the report opens at its top and starts its tour: it is the
+  // reader's first look at it (ReportPage reads `unlocked` and drops it).
+  const unlockedHref = isInitialUnlock ? `${baseReportHref}?unlocked=initial` : backHref;
 
   useEffect(() => {
     if (!sessionId) return;
@@ -146,10 +154,12 @@ const CheckoutReturnPage: FC<Props> = ({
         const paymentStatus = json.paymentStatus;
         const sessionStatus = json.sessionStatus;
         const accessPlan = json.accessPlan ?? null;
+        // The initial unlock opens no plan, so its own flag says the purchase landed.
+        const unlocked = isInitialUnlock ? json.initialUnlock === true : accessPlan !== null;
         const isPaidAndComplete =
           isSuccessfulPaymentStatus(paymentStatus) && sessionStatus === "complete";
 
-        if (isPaidAndComplete && accessPlan === null && attempts < MAX_UNLOCK_CHECK_ATTEMPTS) {
+        if (isPaidAndComplete && !unlocked && attempts < MAX_UNLOCK_CHECK_ATTEMPTS) {
           attempts += 1;
           setState({
             message: "Payment received. Unlocking your report…",
@@ -162,12 +172,12 @@ const CheckoutReturnPage: FC<Props> = ({
         }
 
         setState({
-          accessPlan,
           paymentStatus,
           purchaseAnalytics: json.purchaseAnalytics ?? null,
           sessionStatus,
           status: "ready",
           surveySubmissionId: json.surveySubmissionId ?? null,
+          unlocked,
         });
       } catch {
         if (!cancelled) {
@@ -187,14 +197,13 @@ const CheckoutReturnPage: FC<Props> = ({
         clearTimeout(timeoutId);
       }
     };
-  }, [sessionId]);
+  }, [isInitialUnlock, sessionId]);
 
   const isPaidAndComplete =
     state.status === "ready" &&
     isSuccessfulPaymentStatus(state.paymentStatus) &&
     state.sessionStatus === "complete";
-  const canReturnToUnlockedReport =
-    state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;
+  const canReturnToUnlockedReport = state.status === "ready" && isPaidAndComplete && state.unlocked;
   const isRedirecting = canReturnToUnlockedReport;
 
   // The email's promo code is spent once Stripe completes the checkout that used it. Left
@@ -225,7 +234,7 @@ const CheckoutReturnPage: FC<Props> = ({
     if (
       state.status !== "ready" ||
       !isPaidAndComplete ||
-      state.accessPlan === null ||
+      !state.unlocked ||
       state.purchaseAnalytics === null
     ) {
       return;
@@ -260,13 +269,13 @@ const CheckoutReturnPage: FC<Props> = ({
     }
 
     const redirectId = setTimeout(() => {
-      router.replace(backHref);
+      router.replace(unlockedHref);
     }, 1_200);
 
     return () => {
       clearTimeout(redirectId);
     };
-  }, [backHref, canReturnToUnlockedReport, router]);
+  }, [canReturnToUnlockedReport, router, unlockedHref]);
 
   return (
     <main className="checkout-page checkout-page--return">
@@ -325,7 +334,7 @@ const CheckoutReturnPage: FC<Props> = ({
 
           <div className="checkout-return__actions">
             <Link
-              href={backHref}
+              href={canReturnToUnlockedReport ? unlockedHref : backHref}
               className="checkout-submit checkout-submit--secondary"
               onClick={() => {
                 // Only count as abandonment if the user did NOT complete

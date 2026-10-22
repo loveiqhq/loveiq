@@ -81,6 +81,10 @@ vi.mock("@features/analytics/client", () => ({
   trackPaywallInitiated: (...args: unknown[]) => mockTrackPaywallInitiated(...args),
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
+  // The EUR 1.99 gate (features/report/ui/gate).
+  trackInitialGateViewed: vi.fn(),
+  trackInitialGateCta: vi.fn(),
+  trackInitialGateBack: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
@@ -3407,6 +3411,65 @@ describe("ReportPage", () => {
         screen.queryByRole("dialog"),
         "the pricing modal reopened itself after the reader dismissed it"
       ).toBeNull();
+    });
+  });
+
+  /**
+   * The EUR 1.99 pre-unlock gate: for a reader it stops, the hook brings the gate's payload
+   * and no report (useReportData "gated"), and the page draws the gate alone.
+   */
+  describe("the EUR 1.99 gate", () => {
+    const GATE = {
+      gate: "initial_unlock" as const,
+      priceCents: 199,
+      currency: "EUR" as const,
+      creditCents: 1000,
+      guaranteeDays: 14,
+      reportToken: "rpt_abcdefghij0123456789",
+      submissionId: 55,
+      viewMode: "owner" as const,
+    };
+
+    it("draws the gate in place of the report, and counts no report view", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue({
+        data: null,
+        status: "gated",
+        error: null,
+        challenge: null,
+        gate: GATE,
+        retry: vi.fn(),
+      });
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        screen.getByRole("heading", { level: 1, name: /find out your sexual archetypes/i })
+      ).toBeInTheDocument();
+      expect(container.querySelector(".report-page")).toBeNull();
+      expect(mockTrackReportViewed).not.toHaveBeenCalled();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("opens a report just bought for EUR 1.99 at its top, and drops ?unlocked=", async () => {
+      const before = `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(
+        null,
+        "",
+        "/report/rpt_abcdefghij0123456789?v4=1&unlocked=initial"
+      );
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1&unlocked=initial"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      try {
+        render(<ReportPage />);
+        await waitFor(() =>
+          expect(mockScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: "instant" })
+        );
+        expect(window.location.search).toBe("?v4=1");
+      } finally {
+        window.history.replaceState(null, "", before);
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
     });
   });
 });

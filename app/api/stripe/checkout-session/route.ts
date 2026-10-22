@@ -27,6 +27,8 @@ import {
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
 import { getReportPurchasePlan } from "@features/checkout/server/reportPurchase";
+import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
+import { buildCancelUrl, buildSuccessUrl } from "@features/checkout/server/reportReturnUrls";
 import {
   NURTURE_PROMO_CODE_REGEX,
   resolveNurturePromo,
@@ -108,63 +110,6 @@ function toStripeMetadataValue(value: string | null) {
   }
 
   return trimmed.slice(0, 500);
-}
-
-function buildSuccessUrl({
-  anchor,
-  archetypeSlug,
-  origin,
-  plan,
-  reportToken,
-}: {
-  anchor?: string | null;
-  archetypeSlug?: string | null;
-  origin: string;
-  plan: ReportPurchasePlanId;
-  reportToken?: string | null;
-}) {
-  const params = [`plan=${encodeURIComponent(plan)}`, "session_id={CHECKOUT_SESSION_ID}"];
-
-  if (reportToken) {
-    params.push(`token=${encodeURIComponent(reportToken)}`);
-  }
-
-  if (archetypeSlug) {
-    params.push(`archetype=${encodeURIComponent(archetypeSlug)}`);
-  }
-
-  if (anchor) {
-    params.push(`anchor=${encodeURIComponent(anchor)}`);
-  }
-
-  return `${origin}/checkout/return?${params.join("&")}`;
-}
-
-/**
- * Where Stripe sends a buyer who backs out.
- *
- * Straight back to the report they came from, since the `/checkout` review page
- * they used to land on was removed on 2026-08-31. An archetype-scoped purchase
- * returns to that archetype's view so the reader is where they left off.
- */
-function buildCancelUrl({
-  anchor,
-  archetypeSlug,
-  origin,
-  reportToken,
-}: {
-  anchor?: string | null;
-  archetypeSlug?: string | null;
-  origin: string;
-  reportToken?: string | null;
-}) {
-  const path = reportToken ? `/report/${encodeURIComponent(reportToken)}` : "/report";
-  const params = new URLSearchParams();
-  if (archetypeSlug) params.set("archetype", archetypeSlug);
-  // Backing out of Stripe returns the reader to where they were too.
-  if (anchor) params.set("anchor", anchor);
-  const query = params.toString();
-  return query ? `${origin}${path}?${query}` : `${origin}${path}`;
 }
 
 export async function POST(request: Request) {
@@ -365,24 +310,28 @@ export async function POST(request: Request) {
       }
     }
 
-    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`),
-    // and the full report the initial unlock's EUR 10 (`applyInitialCredit`, creditKind
-    // "initial"): the line keeps the regular price and the credit is Stripe's discount, so
-    // both the page and the receipt say what was taken off. Stripe takes one discount per
-    // session, so a nurture promo worth more than the credit wins instead.
+    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`):
+    // the line keeps the regular price and the credit is Stripe's discount, so both the page
+    // and the receipt say what was taken off. The full report's EUR 10 from the initial unlock
+    // (`applyInitialCredit`, creditKind "initial") comes off the line itself instead, which
+    // says so: Stripe takes one discount per session, and this way a code typed on its page
+    // still applies (a remainder credited to nothing keeps the coupon, as All 14's does).
+    // A nurture promo worth more than the credit wins instead of it; the two never stack.
     const creditCents = quote.upgradeCreditCents ?? 0;
     const initialCredit = quote.creditKind === "initial";
     const regularCents = quote.chargedPriceCents + creditCents;
     const promoOffCents = nurturePromoMatch
       ? Math.round((regularCents * nurturePromoMatch.percentOff) / 100)
       : 0;
+    const creditApplies = creditCents > 0 && creditCents >= promoOffCents;
+    const creditOnLine = creditApplies && initialCredit && quote.chargedPriceCents > 0;
     const creditCouponId =
-      creditCents > 0 && creditCents >= promoOffCents
+      creditApplies && !creditOnLine
         ? initialCredit
           ? await ensureInitialCreditCoupon(stripe, creditCents)
           : await ensureUpgradeCreditCoupon(stripe, creditCents)
         : null;
-    const appliedPromo = creditCouponId ? null : nurturePromoMatch;
+    const appliedPromo = creditApplies ? null : nurturePromoMatch;
 
     const params: Stripe.Checkout.SessionCreateParams = {
       // Manual promo entry on Stripe's hosted page is intentionally ON (product
@@ -403,15 +352,19 @@ export async function POST(request: Request) {
         {
           price_data: {
             currency: quote.currency.toLowerCase(),
-            // No description: the frame leaves the line under the name empty.
+            // No description, as the frame leaves the line under the name empty, unless the
+            // initial unlock's credit came off the line: then the line says so.
             product_data: {
               name: lineItemName,
+              ...(creditOnLine && {
+                description: `${formatOfferPrice(creditCents)} credit applied`,
+              }),
             },
             // `chargedPriceCents`, never `currentPriceCents`: it is the same number
             // every price surface renders, so
             // the screen and the invoice cannot disagree. An upgrade credit is added
             // back here and taken off again as the discount above.
-            unit_amount: regularCents,
+            unit_amount: creditOnLine ? quote.chargedPriceCents : regularCents,
           },
           quantity: 1,
         },
@@ -447,7 +400,7 @@ export async function POST(request: Request) {
           promoStage: appliedPromo.stage,
           promoPercentOff: String(appliedPromo.percentOff),
         }),
-        ...(creditCouponId &&
+        ...(creditApplies &&
           (initialCredit
             ? { initialCredit: String((creditCents / 100).toFixed(2)) }
             : { upgradeCredit: String((creditCents / 100).toFixed(2)) })),
