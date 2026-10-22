@@ -1,0 +1,18 @@
+{
+  "criterion": "L1",
+  "label": "loop back to an earlier screen",
+  "session_id": "01a16428-4035-7d00-b0a1-a2dbcf6d8148",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a16428-4035-7d00-b0a1-a2dbcf6d8148",
+  "viewport": {
+    "min": 1512,
+    "max": 1512,
+    "os": "Mac OS X"
+  },
+  "probes": [
+    {
+      "file": "paywall-exit-log",
+      "output": "Our own events record the paywall still open when the page changed, with no tap before it — Back took the reader out of their report instead of closing the paywall."
+    }
+  ],
+  "reproduced": true
+}
