@@ -38,34 +38,23 @@ interface Col {
   value: (a: PtsArm) => string;
 }
 
-/** The offers side by side, most decisive figures first: cost, then what it bought. */
-const COLUMNS: Col[] = [
+/** What each offer's ads cost, and what a euro of them bought: the 22.10 sync's focus. */
+const COST_COLUMNS: Col[] = [
   { key: "spend", label: "Ad spend", value: (a) => fmt("eur", a.spend) },
   { key: "clicks", label: "Clicks", value: (a) => fmt("count", a.clicks) },
   { key: "cpc", label: "CPC", value: (a) => fmt("eur", a.cpc, 2) },
   { key: "ctr", label: "CTR", value: (a) => fmt("pct", a.ctr) },
-  { key: "checkouts", label: "Checkouts started", value: (a) => fmt("count", a.checkouts) },
-  { key: "paid", label: "Paid", value: (a) => fmt("count", a.paid) },
   { key: "click-paid", label: "Click → paid", value: (a) => fmt("pct", a.clickToPaid) },
   {
     key: "cost-paid",
     label: "Cost / paying customer",
     value: (a) => fmt("eur", a.costPerPaid, 2),
   },
-  { key: "revenue", label: "Revenue", value: (a) => fmt("eur", a.revenue, 2) },
-  { key: "finished", label: "Finished survey", value: (a) => fmt("count", a.finished) },
   {
     key: "cost-finished",
     label: "Cost / finished survey",
     value: (a) => fmt("eur", a.costPerFinished, 2),
   },
-  { key: "opened", label: "Report opened", value: (a) => fmt("count", a.opened) },
-  {
-    key: "upgrades",
-    label: "€1.99 → full",
-    value: (a) => (a.offer === "full" ? EMPTY : fmt("count", a.upgrades)),
-  },
-  { key: "refunded", label: "Refunded", value: (a) => fmt("count", a.refunded) },
   {
     key: "roas",
     label: "ROAS",
@@ -73,17 +62,45 @@ const COLUMNS: Col[] = [
   },
 ];
 
-function OfferTable({ arms }: { arms: PtsArm[] }) {
+/** How far each offer's buyers got, from checkout to the full report. */
+const BUYER_COLUMNS: Col[] = [
+  { key: "checkouts", label: "Checkouts started", value: (a) => fmt("count", a.checkouts) },
+  { key: "paid", label: "Paid", value: (a) => fmt("count", a.paid) },
+  { key: "refunded", label: "Refunded", value: (a) => fmt("count", a.refunded) },
+  { key: "revenue", label: "Revenue", value: (a) => fmt("eur", a.revenue, 2) },
+  { key: "finished", label: "Finished survey", value: (a) => fmt("count", a.finished) },
+  { key: "opened", label: "Report opened", value: (a) => fmt("count", a.opened) },
+  {
+    key: "upgrades",
+    label: "€1.99 → full",
+    value: (a) => (a.offer === "full" ? EMPTY : fmt("count", a.upgrades)),
+  },
+  {
+    key: "upgrade-revenue",
+    label: "Upgrade revenue",
+    value: (a) => (a.offer === "full" ? EMPTY : fmt("eur", a.upgradeRevenue, 2)),
+  },
+];
+
+function OfferTable({
+  arms,
+  columns,
+  caption,
+}: {
+  arms: PtsArm[];
+  columns: Col[];
+  caption: string;
+}) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] border-collapse text-[13px] tabular-nums">
-        <caption className="sr-only">The pay-to-start offers side by side</caption>
+      <table className="w-full min-w-[720px] border-collapse text-[13px] tabular-nums">
+        <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-ap-line text-left text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted">
             <th scope="col" className="py-2.5 pr-4 font-bold">
               Offer
             </th>
-            {COLUMNS.map((c) => (
+            {columns.map((c) => (
               <th key={c.key} scope="col" className="px-2 py-2.5 text-right font-bold">
                 {c.label}
               </th>
@@ -99,7 +116,7 @@ function OfferTable({ arms }: { arms: PtsArm[] }) {
               <th scope="row" className="py-2.5 pr-4 text-left font-semibold text-ap-ink">
                 {a.label}
               </th>
-              {COLUMNS.map((c) => (
+              {columns.map((c) => (
                 <td key={c.key} className="px-2 py-2.5 text-right text-ap-ink">
                   {c.value(a)}
                 </td>
@@ -271,7 +288,16 @@ export default function ApPayToStart() {
               title="€29.99 full against €1.99 pre"
               description="Each offer's ads are the ones landing on its page (/sexual-archetype or /sexual-archetype/initial), so the split holds whatever the campaigns are called. Paid counts the charge's day; refunds stay in Paid and leave Revenue."
             />
-            <OfferTable arms={data.arms} />
+            <OfferTable
+              arms={data.arms}
+              columns={COST_COLUMNS}
+              caption="What each offer's ads cost"
+            />
+            <OfferTable
+              arms={data.arms}
+              columns={BUYER_COLUMNS}
+              caption="How far each offer's buyers got"
+            />
           </Card>
           <Card id="funnel" labelledBy="pts-funnel">
             <SectionHead
