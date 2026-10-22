@@ -172,12 +172,13 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
   and the disclosure in privacy policy §7.3 and the Q16015 guide line. Resend itself records the
   IP, user agent and clicked link; our record does not. Whether the open image needs consent under
   ePrivacy (§25 TDDDG) has not been reviewed by a lawyer.
-- **The unlock-feedback email (draft, 2026-10-19) asks unpaid readers why they did not buy,
-  and keeps the reason they tap and any words they add with their submission.** Its lawful
-  basis is proposed, not decided (LAWFUL_BASIS A15): like the 72h nurture email it does not
-  check Q16015. The free-text `note` can hold anything a reader types, sexual detail included;
-  it is masked in the admin and the team copy, exported and erased with the submission. The
-  email's footer says "Anonymous by default", which the stored record does not support.
+- **The unlock-feedback email (2026-10-22) asks unpaid readers who opened their report why
+  they did not buy, and keeps the reason they tap and any words they add with their
+  submission.** Its lawful basis is proposed (LAWFUL_BASIS A15); its audience, like the 72h
+  nurture email's, does not check Q16015 (Eman, 2026-10-22). The free-text `note` can hold
+  anything a reader types, sexual detail included; it is masked in the admin and the team copy,
+  exported and erased with the submission. "Anonymous by default" was taken out of the email
+  and /why: the stored record is not anonymous.
 - **No two-admin rule on destructive ops** (R-17 deferred). Acceptable for a 1–2 admin team.
 - **No DSAR E2E test against branch DB** (R-29 deferred).
 
