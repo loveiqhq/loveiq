@@ -15,7 +15,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function WizardPreviewPage() {
+export default async function WizardPreviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ variant?: string | string[] }>;
+}) {
   if (!isNonProdDeploy()) notFound();
-  return <WizardPreviewClient />;
+  // ?variant=pay_to_start shows the four slides the full report's buyer gets before the
+  // report, ?variant=pay_to_start_initial the five the initial report's buyer gets.
+  const { variant } = await searchParams;
+  return (
+    <WizardPreviewClient
+      variant={
+        variant === "pay_to_start" || variant === "pay_to_start_initial" ? variant : "standard"
+      }
+    />
+  );
 }

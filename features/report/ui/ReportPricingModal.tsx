@@ -199,11 +199,15 @@ function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
   const currentCents = quote.chargedPriceCents;
   // All 14 after buying single reports: the price before the credit is struck, and the
   // line says what was already paid (all of it, even past the price) instead of a percentage.
+  // The full report after the initial unlock: struck the same way, "€10.00 credit applied".
   const creditCents = quote.upgradeCreditCents ?? 0;
   if (creditCents > 0) {
     return {
       available: true,
-      offLabel: `${formatReportPurchasePrice(quote.upgradePaidCents ?? creditCents)} already paid`,
+      offLabel:
+        quote.creditKind === "initial"
+          ? `${formatReportPurchasePrice(creditCents)} credit applied`
+          : `${formatReportPurchasePrice(quote.upgradePaidCents ?? creditCents)} already paid`,
       priceLabel: formatReportPurchasePrice(currentCents),
       strikeLabel: formatReportPurchasePrice(currentCents + creditCents),
     } as const;
@@ -336,6 +340,7 @@ const ReportPricingModal: FC<Props> = ({
         msrp: quote.msrpCents / 100,
         initial_price: quote.initialPriceCents / 100,
         ...(quote.upgradeCreditCents ? { upgrade_credit: quote.upgradeCreditCents / 100 } : {}),
+        ...(quote.creditKind ? { credit_kind: quote.creditKind } : {}),
       });
     }
   }, [open, quotes, priceShownFiredRef]);

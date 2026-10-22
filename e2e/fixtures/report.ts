@@ -76,16 +76,43 @@ export function buildReportFixture(discountStep: number, overrides: Record<strin
   };
 }
 
+/**
+ * The guided tour runs over each V4 report on its first open in a browser, and every test
+ * starts in a fresh one. Specs about the page under it open a report that has shown it;
+ * the tour's own spec asks for it with `{ tour: true }`. The record is the tour's own, one
+ * per report (features/report/logic/guidedTour.ts, GUIDED_TOUR_KEY and guidedTourKey).
+ */
+export const GUIDED_TOUR_KEY = "loveiq-report-tour-v1";
+
+/** One report's record, as guidedTourKey names it. A preview's is kept for the tab only. */
+export const guidedTourKey = (submissionId: number | null) =>
+  `${GUIDED_TOUR_KEY}:${submissionId ?? "preview"}`;
+
 export async function mockReport(
   page: Page,
   discountStep: number,
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
+  { tour = false }: { tour?: boolean } = {}
 ) {
+  const report = buildReportFixture(discountStep, overrides);
+  if (!tour) {
+    const submissionId = typeof report.submissionId === "number" ? report.submissionId : null;
+    await page.addInitScript(
+      ({ key, tabOnly }) => {
+        try {
+          (tabOnly ? window.sessionStorage : window.localStorage).setItem(key, "seen");
+        } catch {
+          // No storage: then the tour cannot remember itself and never starts either.
+        }
+      },
+      { key: guidedTourKey(submissionId), tabOnly: submissionId === null }
+    );
+  }
   await page.route("**/api/report?**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(buildReportFixture(discountStep, overrides)),
+      body: JSON.stringify(report),
     });
   });
 }

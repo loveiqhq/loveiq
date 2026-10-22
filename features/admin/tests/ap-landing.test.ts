@@ -300,7 +300,9 @@ describe("buildLanding", () => {
     // 300 visits (the probe's 7 out, every arm in), 30 starts (the probe's 2 out), 2 finishers.
     expect(tile("start-cvr").value).toBeCloseTo(30 / 300);
     expect(tile("complete-cvr").value).toBeCloseTo(2 / 30);
-    expect(tile("pre-cvr")).toMatchObject({ value: null, note: "Initial plan not on sale yet" });
+    // The Initial plan is on sale (19.10); the fixture sold none.
+    expect(tile("pre-cvr").value).toBe(0);
+    expect(tile("pre-cvr").note).toBeUndefined();
     // The fixture's one full-report sale (2 Oct) over the range's finishers.
     expect(tile("full-cvr").value).toBeCloseTo(1 / 2);
     expect(tile("rev-visit").value).toBeCloseTo(6.99 / 300);
@@ -413,7 +415,7 @@ describe("the landing page's screen", () => {
     render(createElement(ApLanding));
     expect(screen.getAllByText("Survey start CVR").length).toBeGreaterThan(0);
     expect(screen.getByText("Revenue / survey complete")).toBeTruthy();
-    expect(screen.getByText("Initial plan not on sale yet")).toBeTruthy();
+    expect(screen.queryByText("Initial plan not on sale yet")).toBeNull();
     const tests = screen.getByRole("table", { name: "Landing tests and variants" });
     const heads = within(tests)
       .getAllByRole("columnheader")

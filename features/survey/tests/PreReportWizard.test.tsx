@@ -21,9 +21,13 @@ const analytics = vi.hoisted(() => ({
 vi.mock("@features/analytics/client", () => analytics);
 
 import PreReportWizard from "@features/survey/ui/PreReportWizard";
-import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
+import {
+  WIZARD_CHAPTER_COUNT,
+  WIZARD_DRAWER,
+  WIZARD_PART_COUNT,
+} from "@features/survey/ui/wizard/wizardContent";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
-import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
+import { REPORT_V4_CHAPTER_COUNT, REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
 
 /**
  * The 30.09 wizard — Figma 1071:2092, "Pre Report Wizard — Mobile (production, 393)".
@@ -33,7 +37,8 @@ import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
  */
 const HEADINGS = [
   "A note before you explore your report.",
-  "6 Parts, 20 Chapters",
+  // The frame's 20, less the three chapters the slimmed report took out (16.10).
+  "6 Parts, 17 Chapters",
   "Unlocking your report is fully risk free.",
   "Take only what resonates.",
   "Rate each report section.",
@@ -308,6 +313,14 @@ describe("PreReportWizard — the report map (slide 2)", () => {
         rows: p.items.map((i) => ({ id: i.id, label: i.label })),
       }))
     );
+  });
+
+  it("counts the pitch's parts and chapters off the drawer, as the report counts them", () => {
+    // Every row from Part 2 on is a chapter; Part 1 is the report's welcome. The premium
+    // card's "+17 chapters" reads the same number off the report's nav.
+    expect(WIZARD_PART_COUNT).toBe(6);
+    expect(WIZARD_CHAPTER_COUNT).toBe(17);
+    expect(WIZARD_CHAPTER_COUNT).toBe(REPORT_V4_CHAPTER_COUNT);
   });
 
   it("the drawer badges the free chapters FREE and opens the four deep dives' locks", () => {
@@ -824,5 +837,149 @@ describe("PreReportWizard — the deep-dive tiles swipe and take a tap (01.10)",
     openDives();
     expect(tiles()).toHaveClass("touch-none");
     expect(screen.getByRole("main").style.touchAction).toBe("pan-y");
+  });
+});
+
+/**
+ * Pay to start: a reader who paid before the survey gets slides 1, 4, 5 and 6 (Figma
+ * Report-3.0 1477:3938, 4018, 4071, 4123): their report opens fully unlocked, so the map
+ * of free chapters and the risk-free unlock have nothing to say. Four segments, "n / 4"
+ * (Fatih, 18.10); the analytics keep each slide's index in the six.
+ */
+describe("PreReportWizard — the pay-to-start variant", () => {
+  const PAID_HEADINGS = [HEADINGS[0], HEADINGS[3], HEADINGS[4], HEADINGS[5]];
+  const filled = () =>
+    document.querySelectorAll("[data-wizard-segment][data-filled='true']").length;
+
+  it("walks four slides, the bar of four and the counter following", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start" />);
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(4);
+    expect(heading()).toBe(PAID_HEADINGS[0]);
+    expect(screen.getByText("1 / 4")).toBeInTheDocument();
+    expect(backButton()).toBeNull();
+    for (let i = 1; i < PAID_HEADINGS.length; i++) {
+      press(continueButton());
+      expect(heading()).toBe(PAID_HEADINGS[i]);
+      expect(screen.getByText(`${i + 1} / 4`)).toBeInTheDocument();
+      expect(filled()).toBe(i + 1);
+    }
+  });
+
+  it("never shows the report map or the risk-free unlock", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start" />);
+    const seen: string[] = [heading() ?? ""];
+    for (let i = 0; i < 3; i++) {
+      press(continueButton());
+      seen.push(heading() ?? "");
+    }
+    expect(seen).not.toContain(HEADINGS[1]);
+    expect(seen).not.toContain(HEADINGS[2]);
+    expect(screen.queryByText(/money-back guarantee/i)).toBeNull();
+  });
+
+  it("goes back through the same four, and ends on the fourth's CONTINUE", () => {
+    const onComplete = vi.fn();
+    render(<PreReportWizard onComplete={onComplete} variant="pay_to_start" />);
+    press(continueButton());
+    press(continueButton());
+    expect(heading()).toBe(PAID_HEADINGS[2]);
+    press(backButton()!);
+    expect(heading()).toBe(PAID_HEADINGS[1]);
+    press(continueButton());
+    press(continueButton());
+    expect(heading()).toBe(PAID_HEADINGS[3]);
+    expect(screen.getByRole("button", { name: "Continue to your report" })).toBeInTheDocument();
+    fireEvent.click(continueButton());
+    flush(950);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports each slide by its index in the six, tagged as this wizard", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start" />);
+    press(continueButton());
+    press(continueButton());
+    press(backButton()!);
+    expect(analytics.trackWizardSlideAdvanced.mock.calls.map(([p]) => p)).toEqual([
+      { from_slide: 0, to_slide: 3, direction: "next", wizard_variant: "pay_to_start" },
+      { from_slide: 3, to_slide: 4, direction: "next", wizard_variant: "pay_to_start" },
+      { from_slide: 4, to_slide: 3, direction: "previous", wizard_variant: "pay_to_start" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    expect(analytics.trackWizardSkipped).toHaveBeenCalledWith({
+      from_slide: 3,
+      wizard_variant: "pay_to_start",
+    });
+  });
+
+  it("leaves the standard wizard's events exactly as they were", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+    expect(analytics.trackWizardSlideAdvanced.mock.calls[0]?.[0]).toEqual({
+      from_slide: 0,
+      to_slide: 1,
+      direction: "next",
+    });
+  });
+});
+
+/**
+ * The initial report (EUR 1.99; Marcus, 20.10: "the Wizard needs to be different for the
+ * 1.99€ pay to start survey version as the report is only partially unlocked"; Figma
+ * 1899:5255 on the board 1741:5587): its report opens only partly, so the map comes back
+ * between the note and "Take only what resonates". Slides 1, 2, 4, 5 and 6, "n / 5".
+ */
+describe("PreReportWizard — the initial report's variant", () => {
+  const INITIAL_HEADINGS = [HEADINGS[0], HEADINGS[1], HEADINGS[3], HEADINGS[4], HEADINGS[5]];
+  const filled = () =>
+    document.querySelectorAll("[data-wizard-segment][data-filled='true']").length;
+
+  it("walks five slides, the map second, the bar of five and the counter following", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(5);
+    expect(heading()).toBe(INITIAL_HEADINGS[0]);
+    expect(screen.getByText("1 / 5")).toBeInTheDocument();
+
+    press(continueButton());
+    expect(heading()).toBe(INITIAL_HEADINGS[1]);
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
+    // The map's overview continues into its deep dives, still slide 2 of 5.
+    press(continueButton());
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
+
+    for (let i = 2; i < INITIAL_HEADINGS.length; i++) {
+      press(continueButton());
+      expect(heading()).toBe(INITIAL_HEADINGS[i]);
+      expect(screen.getByText(`${i + 1} / 5`)).toBeInTheDocument();
+      expect(filled()).toBe(i + 1);
+    }
+    expect(screen.getByRole("button", { name: "Continue to your report" })).toBeInTheDocument();
+  });
+
+  it("never shows the risk-free unlock", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    const seen: string[] = [heading() ?? ""];
+    for (let i = 0; i < 5; i++) {
+      press(continueButton());
+      seen.push(heading() ?? "");
+      expect(screen.queryByText(/money-back guarantee/i)).toBeNull();
+    }
+    expect(seen).not.toContain(HEADINGS[2]);
+  });
+
+  it("reports each slide by its index in the six, tagged as this wizard", () => {
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    press(continueButton()); // 0 -> 1, the map
+    press(continueButton()); // the map's first deep dive: a map step, not a slide
+    press(continueButton()); // 1 -> 3
+    expect(analytics.trackWizardSlideAdvanced.mock.calls.map(([p]) => p)).toEqual([
+      { from_slide: 0, to_slide: 1, direction: "next", wizard_variant: "pay_to_start_initial" },
+      { from_slide: 1, to_slide: 3, direction: "next", wizard_variant: "pay_to_start_initial" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    expect(analytics.trackWizardSkipped).toHaveBeenCalledWith({
+      from_slide: 3,
+      wizard_variant: "pay_to_start_initial",
+    });
   });
 });

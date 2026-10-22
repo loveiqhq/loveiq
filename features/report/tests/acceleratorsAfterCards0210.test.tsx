@@ -49,13 +49,17 @@ describe("Accelerators & Brakes — a paragraph after the two cards (01.10)", ()
       const view = buildAccelerators("With Close", { locked })!;
       // Free copy: as written for a locked reader too.
       expect(view.afterCards).toEqual(CLOSE);
-      const { container, unmount } = render(<V4Accelerators view={view} />);
+      const { container, unmount } = render(<V4Accelerators view={view} archetype="With Close" />);
       const after = container.querySelector(".rv4-ab__after")!;
       expect(after.textContent).toBe("The two lists, closed.");
       const cards = container.querySelectorAll(".rv4-trig");
       expect(cards).toHaveLength(2);
       expect(cards[1]!.nextElementSibling).toBe(after);
-      expect(after.nextElementSibling).toHaveClass("rv4-ab__challenges");
+      // It closes "The <Archetype>" section; "Common Challenges" is the next one (16.10).
+      expect(after.nextElementSibling).toBeNull();
+      const next = after.closest(".rv4-sect")!.nextElementSibling!;
+      expect(next).toHaveClass("rv4-sect");
+      expect(next.querySelector(".rv4-sect__name")!.textContent).toBe("Common Challenges");
       unmount();
     }
   });
@@ -63,8 +67,9 @@ describe("Accelerators & Brakes — a paragraph after the two cards (01.10)", ()
   it("draws nothing there for an archetype without one", () => {
     const view = buildAccelerators("Without Close")!;
     expect(view).not.toHaveProperty("afterCards");
-    const { container } = render(<V4Accelerators view={view} />);
+    const { container } = render(<V4Accelerators view={view} archetype="Without Close" />);
     expect(container.querySelector(".rv4-ab__after")).toBeNull();
+    expect(container.querySelectorAll(".rv4-trig")[1]!.nextElementSibling).toBeNull();
   });
 
   it("ends the paragraph on the chapter's own 16px gap, not a paragraph margin", () => {

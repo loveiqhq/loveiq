@@ -137,6 +137,80 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
   });
 });
 
+describe("DSAR and pay-to-start entitlements (Art. 15 / Art. 17)", () => {
+  const prepaidRow = { id: 3, customer_email: "a@x.com", status: "succeeded" };
+
+  function router(path: string, init?: { method?: string; body?: string }) {
+    const counted = init?.method === "DELETE" || init?.method === "PATCH";
+    const ok = (rows: unknown[] = [], affected = 0) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(counted ? { "content-range": `*/${affected}` } : {}),
+      json: async () => rows,
+      text: async () => "",
+    });
+    if (path.includes("/app_user?email=")) return ok([{ id: 1, email: "a@x.com" }]);
+    if (path.includes("/survey_submission?user_id=")) return ok([{ id: 10 }]);
+    if (path.includes("/payment?user_id=")) return ok([{ id: 99 }]);
+    if (path.includes("/prepaid_report_access?customer_email=")) return ok([prepaidRow], 1);
+    if (path.includes("/prepaid_report_access?consumed_submission_id=")) return ok([prepaidRow], 1);
+    return ok([], 0);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "k";
+    mockSupabaseFetch.mockImplementation(router);
+  });
+
+  it("exports the entitlements an email paid for, and the ones its surveys claimed", async () => {
+    const result = await exportDataSubject("a@x.com");
+    expect(result.exportData?.prepaid_report_access).toEqual([prepaidRow]);
+    expect(result.exportData?.prepaid_report_access_by_submission).toEqual([prepaidRow]);
+    const reads = mockSupabaseFetch.mock.calls
+      .map(([p]) => String(p))
+      .filter((p) => p.includes("/prepaid_report_access?"));
+    expect(reads).toHaveLength(2);
+    // The token opens a paid survey and report: never handed out, not even here.
+    for (const p of reads) expect(p).not.toContain("prepaid_token");
+    // Found through a survey, the payer may be someone else: their address and their
+    // visit's attribution are not the survey taker's to receive.
+    const bySubmission = reads.find((p) => p.includes("consumed_submission_id="))!;
+    expect(bySubmission).not.toContain("customer_email");
+    expect(bySubmission).not.toContain("utm_tracker");
+    expect(reads.find((p) => p.includes("customer_email=eq."))).toContain("customer_email,");
+  });
+
+  it("erases the email and attribution but keeps the payment's record", async () => {
+    const result = await deleteDataSubject("a@x.com");
+    const writes = mockSupabaseFetch.mock.calls.filter(
+      ([p, init]) =>
+        String(p).includes("/prepaid_report_access?") &&
+        (init as { method?: string } | undefined)?.method === "PATCH"
+    );
+    expect(writes.map(([p]) => String(p))).toEqual([
+      expect.stringContaining("/prepaid_report_access?customer_email=eq."),
+    ]);
+    expect(JSON.parse((writes[0]![1] as { body: string }).body)).toEqual({
+      customer_email: null,
+      utm_tracker: null,
+    });
+    expect(result.rowsAffected.prepaid_report_access_pseudonymized).toBe(1);
+  });
+
+  it("never erases a payer's address because someone else's survey claimed their purchase", async () => {
+    await deleteDataSubject("a@x.com");
+    const bySubmissionWrites = mockSupabaseFetch.mock.calls.filter(
+      ([p, init]) =>
+        String(p).includes("/prepaid_report_access?consumed_submission_id=") &&
+        (init as { method?: string } | undefined)?.method !== undefined &&
+        (init as { method?: string }).method !== "GET"
+    );
+    expect(bySubmissionWrites).toEqual([]);
+  });
+});
+
 describe("DSAR delete branches (F-01 / P-02)", () => {
   // Mirrors the routing mock above but lets each test decide whether the user
   // has payments — that flag selects the two distinct erasure branches.

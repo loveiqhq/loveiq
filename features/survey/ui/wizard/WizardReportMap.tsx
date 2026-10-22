@@ -11,7 +11,12 @@ import {
 } from "react";
 import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
-import { WIZARD_DRAWER, type WizardDrawerRow } from "./wizardContent";
+import {
+  WIZARD_CHAPTER_COUNT,
+  WIZARD_DRAWER,
+  WIZARD_PART_COUNT,
+  type WizardDrawerRow,
+} from "./wizardContent";
 
 /**
  * Slide 2 — the report map. Figma 1049:1627 (the overview: drawer + pitch copy) and
@@ -492,9 +497,9 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
         >
           <div className="flex flex-col items-start">
             <h2 className="wz-pitch-title w-full font-serif font-medium leading-[28.8px] text-white">
-              <span className="wz-pitch-big text-[28px]">6 Parts, </span>
+              <span className="wz-pitch-big text-[28px]">{WIZARD_PART_COUNT} Parts, </span>
               <br />
-              <span className="wz-pitch-small text-[20px]">20 Chapters</span>
+              <span className="wz-pitch-small text-[20px]">{WIZARD_CHAPTER_COUNT} Chapters</span>
             </h2>
             <Pitch icon="free" top={20}>
               <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
@@ -523,7 +528,9 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
           style={fade(!overview)}
           aria-hidden={overview ? true : undefined}
         >
-          <h2 className="sr-only">6 Parts, 20 Chapters</h2>
+          <h2 className="sr-only">
+            {`${WIZARD_PART_COUNT} Parts, ${WIZARD_CHAPTER_COUNT} Chapters`}
+          </h2>
           <div className="h-5" />
           <Tiles step={step} onStep={onStep} />
           <div className="h-[14px]" />

@@ -143,12 +143,9 @@ describe("buildAccelerators — locked", () => {
   it("splits Common challenges after its first paragraph (Mark, 22 Sep: the paywall goes right there)", () => {
     expect(ACCELERATORS_CHALLENGES_FREE_BLOCKS).toBe(1);
     expect(view.challenges.free).toEqual(SPARK.challenges.slice(0, 1));
-    expect(view.challenges.rest).toHaveLength(SPARK.challenges.length - 2);
-    view.challenges.rest.forEach((block, i) => {
-      const original = SPARK.challenges[i + 2]!;
-      expect(textOf(block)).toHaveLength(textOf(original).length);
-      expect(textOf(block)).not.toBe(textOf(original));
-    });
+    // The slimmed report (16.10) draws no blurred passage past the wall, only the ramp's
+    // faded head and "Unlock Full Chapter", so nothing after the ramp leaves the server.
+    expect(view.challenges.rest).toEqual([]);
   });
 
   // 314:284 (29.09) fades the blur in over the whole first gated paragraph, sharp at

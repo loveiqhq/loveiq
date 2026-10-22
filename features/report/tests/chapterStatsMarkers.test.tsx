@@ -101,6 +101,8 @@ describe("Report 3.0's controls, as the chapter stats count them", () => {
     expect(persist).toHaveBeenCalledTimes(1);
     expect(persist.mock.calls[0]![0]).toEqual({
       archetype: "Spark Seeker",
+      // Chapter stats are V4's alone, the slimmed report since 16.10.
+      report_layout: "v4_slim",
       chapters: {
         // The Summary has no nav row: it counts under the chapter above it.
         core_archetype: { open: 1, show_all: 1 },

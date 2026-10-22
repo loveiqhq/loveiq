@@ -1,0 +1,114 @@
+/**
+ * The pay-to-start journey's constants, shared by the server routes, the survey and the
+ * readouts. Pure.
+ */
+
+/** The label every record of this journey carries: utm_tracker, payment metadata, events. */
+export const PAY_TO_START_JOURNEY = "pay_to_start" as const;
+export type PayToStartJourney = typeof PAY_TO_START_JOURNEY;
+
+/** utm_tracker's key for it. */
+export const JOURNEY_TRACKER_KEY = "journey";
+
+/**
+ * The pre-report wizard the full report's buyer sees: slides 1, 4, 5 and 6 of the six (Figma
+ * 1477:3938, 1477:4018, 1477:4071, 1477:4123). The report map ("your free chapters") and
+ * "Unlocking your report is fully risk free" are left out. Indices are the standard
+ * wizard's, so analytics read the same slide under the same number.
+ */
+export const PAY_TO_START_WIZARD_SLIDES = [0, 3, 4, 5] as const;
+
+/**
+ * The initial report's buyer (EUR 1.99) also gets slide 2, the report map: their report is
+ * only partly open, so its free, featured and locked chapters are theirs to find too
+ * (Marcus, 20.10: "the Wizard needs to be different for the 1.99€ pay to start survey
+ * version as the report is only partially unlocked"; Figma 1899:5255 on the EUR 1.99 board
+ * 1741:5587, between slides 1 and 4).
+ */
+export const PAY_TO_START_INITIAL_WIZARD_SLIDES = [0, 1, 3, 4, 5] as const;
+
+/** The pre-report wizard each offer's buyer gets (`PayToStartOffer.wizard`). */
+export type PayToStartWizard = "pay_to_start" | "pay_to_start_initial";
+
+/** `rpp_` + 32 base62 characters, about 190 bits: unguessable and database-backed. */
+export const PREPAID_TOKEN_REGEX = /^rpp_[a-zA-Z0-9]{32}$/;
+
+/**
+ * The entitlement cookie. `__Host-` in production (Secure, Path=/, no Domain); the plain
+ * name on http://localhost in development, where a `__Host-` cookie cannot be set.
+ */
+export const PREPAID_COOKIE_PROD = "__Host-liq_pp";
+export const PREPAID_COOKIE_DEV = "__liq_pp";
+
+/**
+ * The names the token is read from. Production reads only the `__Host-` one: a browser
+ * keeps that name only from this exact host, over https, with no Domain, so a sibling
+ * subdomain or an http response before HSTS cannot plant one. Elsewhere either name, so
+ * `next dev` (the plain name, over http) and the tests work.
+ */
+function prepaidCookieNames(): readonly string[] {
+  return process.env.NODE_ENV === "production"
+    ? [PREPAID_COOKIE_PROD]
+    : [PREPAID_COOKIE_PROD, PREPAID_COOKIE_DEV];
+}
+
+/**
+ * The entitlement token from a raw Cookie header, or null. Reads the header rather than
+ * `cookies()` so route handlers and their tests need no request scope.
+ */
+export function readPrepaidToken(cookieHeader: string | null | undefined): string | null {
+  if (!cookieHeader) return null;
+  const names = prepaidCookieNames();
+  for (const part of cookieHeader.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const name = part.slice(0, eq).trim();
+    if (!names.includes(name)) continue;
+    let value = part.slice(eq + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      continue;
+    }
+    if (PREPAID_TOKEN_REGEX.test(value)) return value;
+  }
+  return null;
+}
+
+/**
+ * What /survey's server page tells the survey about a visitor who paid before it (their
+ * entitlement cookie holds an unused, paid or settling entitlement). Null for everyone else.
+ */
+export interface SurveyJourney {
+  kind: PayToStartJourney;
+  /** Paid; false while the payment still settles. */
+  paid: boolean;
+  /** Where the survey's way out leads for that visitor: the page they paid on. */
+  returnPath: string;
+}
+
+/** The full offer's page, under which both offers' pages live (proxy.ts labels them). */
+export const PAY_TO_START_RETURN_PATH = "/sexual-archetype";
+
+/** A Stripe Checkout session id, as the status route accepts it. */
+export const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[A-Za-z0-9]{10,200}$/;
+
+/**
+ * Whether a `utm_tracker` blob carries the server's journey label (`journey`, the
+ * JOURNEY_TRACKER_KEY). Only a buyer whose survey had a tracker carries it: the label
+ * never creates one, so a reader of submissions must also check the claimed entitlement.
+ */
+export function isPayToStartTracker(tracker: string | null | undefined): boolean {
+  if (!tracker || !tracker.includes(PAY_TO_START_JOURNEY)) return false;
+  try {
+    const parsed: unknown = JSON.parse(tracker);
+    return (
+      !!parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      (parsed as { journey?: unknown }).journey === PAY_TO_START_JOURNEY
+    );
+  } catch {
+    return false;
+  }
+}

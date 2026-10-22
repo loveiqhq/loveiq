@@ -98,6 +98,25 @@
 | Testimonials             | `features/landing/ui/white/WTestimonials.tsx`                                                                                                                  |
 | Off-page (kept, unused)  | `WHowItWorks`, `WPerfectFor`, `WProblemValue`, `WArchetypes`, `WReportPreview`, `WAcademicBoard`, `WGlossary`, `WTrustRow`, `WInlineCTA`, `WHeroConstellation` |
 
+## Pay to Start
+
+| Task                                   | Files                                                                                                                                               |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Assessment page (`/sexual-archetype`)  | `app/sexual-archetype/page.tsx`, `features/pay-to-start/ui/landing/PayToStartLanding.tsx`                                                           |
+| Initial report's page (EUR 1.99)       | `app/sexual-archetype/initial/page.tsx`, `PTS_INITIAL` in `features/pay-to-start/ui/landing/payToStartContent.ts`                                   |
+| Its copy, verbatim from Figma          | `features/pay-to-start/ui/landing/payToStartContent.ts`                                                                                             |
+| Its header (the site's own nav)        | `features/pay-to-start/ui/landing/PtsHeader.tsx`, `features/landing/ui/white/WNavSection.tsx`                                                       |
+| Its buttons' checkout                  | `features/pay-to-start/ui/landing/PtsCheckout.tsx`, `app/api/stripe/pay-to-start/route.ts`, `features/pay-to-start/server/checkout.ts`              |
+| Checkout status page                   | `app/sexual-archetype/checkout/page.tsx`, `features/pay-to-start/ui/status/PayToStartStatusPage.tsx`, `app/api/stripe/pay-to-start/status/route.ts` |
+| Confirmation email + continue link     | `features/pay-to-start/server/emails/confirmation.ts`, `app/sexual-archetype/continue/route.ts`, `features/pay-to-start/server/reportLink.ts`       |
+| Entitlement store                      | `features/pay-to-start/server/entitlement.ts`, `supabase/migrations/20261018120000_pay_to_start_entitlement.sql`                                    |
+| Payment confirmation + sweep           | `features/pay-to-start/server/confirm.ts`, `features/checkout/server/fulfillment.ts`, `features/pay-to-start/server/sweep.ts`                       |
+| Survey claim                           | `features/pay-to-start/server/claim.ts`, `app/api/survey/route.ts`                                                                                  |
+| Price setting                          | `features/pay-to-start/server/offer.ts`, `features/pay-to-start/logic/offer.ts`                                                                     |
+| Initial unlock and its €10 credit      | `features/report/logic/initialUnlock.ts`, `features/pricing/logic/reportPricing.ts`, `app/api/report/route.ts`                                      |
+| Kept out of the free funnel's readouts | `supabase/migrations/20261018130000_pay_to_start_out_of_free_funnel_readouts.sql`, `features/admin/server/experiment-readouts.ts`                   |
+| Runbook                                | `docs/runbooks/PAY_TO_START.md`                                                                                                                     |
+
 ## About Page
 
 | Task                   | Files                                          |
@@ -211,6 +230,7 @@
 | Nonce provider (CSP)   | `shared/ui/NonceProvider.tsx`                                                       |
 | Hydration marker       | `shared/ui/HydrationMarker.tsx`                                                     |
 | Smooth scroll          | `shared/ui/SmoothScroll.tsx`                                                        |
+| Report guided tour     | `features/report/ui/v3/V4GuidedTour.tsx`, `features/report/logic/guidedTour.ts`     |
 | Favicon / icons        | `public/favicon.svg`, `public/apple-touch-icon.png`, `public/images/LoveiqLogo.svg` |
 
 ## Documentation

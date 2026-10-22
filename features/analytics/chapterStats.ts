@@ -3,8 +3,10 @@
 import { useEffect, useRef } from "react";
 
 import { isBodyScrollLocked } from "@shared/ui/body-scroll-lock";
+import { isGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 import { persistReportChapterStats } from "./client";
+import { REPORT_LAYOUT_V4_SLIM } from "./reportLayout";
 
 /**
  * Reading per Report 3.0 chapter, for AP-Analytics' Report page (14 Oct 2026): how long each
@@ -108,7 +110,8 @@ interface Options {
 
 /**
  * Counts and saves the chapter reading. Time: every tick goes to the one chapter the scroll
- * tracker marks as current, while the tab is visible and no pop-up is open; one observer
+ * tracker marks as current, while the tab is visible, no pop-up is open and the guided tour
+ * is not the one moving the page (shared/ui/guided-tour-state.ts); one observer
  * per chapter would count the three or four closed chapters on a screen at once. Clicks: a
  * `data-chapter-action` control that OPENS something counts for the chapter it is in.
  * Saved when the tab is hidden or the page left, and before the archetype on screen
@@ -132,7 +135,12 @@ export function useChapterStats({
     if (!enabled) return;
     chapters = ids;
     const tick = window.setInterval(() => {
-      if (document.visibilityState !== "visible" || pausedRef.current || isBodyScrollLocked())
+      if (
+        document.visibilityState !== "visible" ||
+        pausedRef.current ||
+        isBodyScrollLocked() ||
+        isGuidedTourActive()
+      )
         return;
       bump(active.get(), "ms", TICK_MS);
     }, TICK_MS);
@@ -162,7 +170,12 @@ export function useChapterStats({
       const changed = takePending();
       if (!changed) return;
       savedAt = Date.now();
-      persistReportChapterStats({ ...(archetype ? { archetype } : {}), chapters: changed });
+      // Chapter stats are counted on V4 alone, which is the slimmed report since 16.10.
+      persistReportChapterStats({
+        ...(archetype ? { archetype } : {}),
+        report_layout: REPORT_LAYOUT_V4_SLIM,
+        chapters: changed,
+      });
     };
     // `pagehide` unguarded, as useReportEngagementTimers explains: on a real unload it can
     // come while the page still reads visible.

@@ -46,23 +46,52 @@ afterEach(() => {
 });
 
 describe("/wizard-preview", () => {
-  it("404s on the live site", () => {
+  const page = (variant?: string) =>
+    WizardPreviewPage({ searchParams: Promise.resolve(variant ? { variant } : {}) });
+
+  it("404s on the live site", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
-    expect(() => WizardPreviewPage()).toThrow("NEXT_NOT_FOUND");
+    await expect(page()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
-  it("404s where it cannot tell it is off production", () => {
+  it("404s where it cannot tell it is off production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
-    expect(() => WizardPreviewPage()).toThrow("NEXT_NOT_FOUND");
+    await expect(page()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
-  it("renders the wizard on staging", () => {
+  it("renders the wizard on staging", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
-    render(WizardPreviewPage());
+    render(await page());
     expect(heading()).toBe("A note before you explore your report.");
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(6);
+  });
+
+  it("shows the pay-to-start wizard's four slides with ?variant=pay_to_start", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
+    render(await page("pay_to_start"));
+    expect(heading()).toBe("A note before you explore your report.");
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(4);
+    expect(screen.getByText("1 / 4")).toBeTruthy();
+  });
+
+  it("shows the initial report's five, with the map, with ?variant=pay_to_start_initial", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
+    render(await page("pay_to_start_initial"));
+    expect(heading()).toBe("A note before you explore your report.");
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(5);
+    expect(screen.getByText("1 / 5")).toBeTruthy();
+  });
+
+  it("ignores any other variant", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
+    render(await page("something"));
+    expect(document.querySelectorAll("[data-wizard-segment]")).toHaveLength(6);
   });
 
   it("starts over when the wizard ends, and tracks nothing", () => {
@@ -72,7 +101,7 @@ describe("/wizard-preview", () => {
     act(() => {
       vi.advanceTimersByTime(300);
     });
-    expect(heading()).toBe("6 Parts, 20 Chapters");
+    expect(heading()).toBe("6 Parts, 17 Chapters");
     // SKIP INTRO ends the wizard; the real flow would open the report.
     fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
     act(() => {

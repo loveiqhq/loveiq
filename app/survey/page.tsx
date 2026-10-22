@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { after } from "next/server";
 import SurveyPage from "@features/survey/ui/SurveyPage";
+import { readPrepaidToken, type SurveyJourney } from "@features/pay-to-start/logic/journey";
+import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
+import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -38,6 +41,28 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * A visitor who paid before the survey (pay to start): their entitlement cookie holds an
+ * unused entitlement that is paid or still settling. Null for everyone else, and on any
+ * failure, which leaves the survey exactly as it is for everyone.
+ */
+async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJourney | null> {
+  const token = readPrepaidToken(cookieHeader);
+  if (!token) return null;
+  try {
+    const entitlement = await findEntitlementByToken(token);
+    if (!entitlement || entitlement.consumed_submission_id) return null;
+    if (entitlement.status !== "succeeded" && entitlement.status !== "pending") return null;
+    return {
+      kind: "pay_to_start",
+      paid: entitlement.status === "succeeded",
+      returnPath: offerDefinitionOf(entitlement.offer).landingPath,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default async function Page() {
   /**
    * Consent-independent daily survey-page count. Middleware flags the first
@@ -57,5 +82,5 @@ export default async function Page() {
     after(() => recordSurveyPageView(newSurveyVariant, utmSource));
   }
 
-  return <SurveyPage />;
+  return <SurveyPage journey={await payToStartJourney(headersList.get("cookie"))} />;
 }

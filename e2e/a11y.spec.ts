@@ -18,6 +18,11 @@ const criticalRoutes = [
   "/digital-content-terms",
   "/cookies",
   "/imprint",
+  // Pay to start: the pages an ad sends to, and where Stripe returns (no session: the
+  // page says so, which is still a page to read).
+  "/sexual-archetype",
+  "/sexual-archetype/initial",
+  "/sexual-archetype/checkout",
 ];
 
 /**

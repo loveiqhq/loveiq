@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef, type FC } from "react";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
+import { REPORT_V4_CHAPTER_COUNT } from "./reportV3Nav";
 
 /**
  * The paywall card that floats over a gated chapter, practice or article.
@@ -36,23 +37,34 @@ interface Props {
   variant?: "gate" | "body";
   /** The frame's own node, when a chapter's card has one. */
   nodeId?: string;
+  /**
+   * "summary" is Part II's gate under the half-locked Summary (the slimmed report,
+   * 1757:4263). It is not a chapter's paywall: it counts as its own `cta_seen`, and its
+   * `rv4-premium--summary` keeps it out of what waits for the first chapter paywall (the
+   * pay pop-up's "paywall reached"), Fatih, 16.10.
+   */
+  placement?: "chapter" | "summary";
 }
 
-/** 1015:1186 / 1015:1192 / 1015:1199. */
+/**
+ * 1015:1186 / 1015:1192 / 1015:1199. The frame's "+20 chapters" counts the report's
+ * chapters, so the number is the nav's (17 since the slimmed report, 16.10).
+ */
 const FEATURES = [
   "Your complete archetype report",
-  "+20 chapters and personalised growth",
+  `+${REPORT_V4_CHAPTER_COUNT} chapters and personalised growth`,
   "Finally understand old patterns and learn how to move past them",
 ] as const;
 
-const V4PremiumCard: FC<Props> = ({ variant = "gate", nodeId }) => {
+const V4PremiumCard: FC<Props> = ({ variant = "gate", nodeId, placement = "chapter" }) => {
   const body = variant === "body";
+  const summary = placement === "summary";
   // Whether a reader ever had an unlock offer in front of them, as PremiumOverlay reports it.
   const ctaRef = useRef<HTMLButtonElement>(null);
-  useCtaSeen(ctaRef, "locked_chapter");
+  useCtaSeen(ctaRef, summary ? "summary_gate" : "locked_chapter");
   return (
     <div
-      className={`rv4-premium${body ? " rv4-premium--body" : ""}`}
+      className={`rv4-premium${body ? " rv4-premium--body" : ""}${summary ? " rv4-premium--summary" : ""}`}
       data-node-id={nodeId ?? (body ? "1015:1163" : "1015:1207")}
       data-name="Premium content card"
     >

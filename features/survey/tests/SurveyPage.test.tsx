@@ -314,6 +314,30 @@ describe("SurveyPage", () => {
     expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
   });
 
+  it("takes Enter as I agree once both boxes are ticked, and as a tick before that", async () => {
+    // A click leaves focus on the box: after ticking both with the mouse, Enter unticked
+    // the last one (Marcus, 20.10). Space still ticks and unticks.
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    render(<SurveyPage />);
+    const agreeButton = await screen.findByRole("button", { name: /i agree/i });
+    const [age, terms] = screen.getAllByRole("checkbox");
+
+    await user.click(age!);
+    terms!.focus();
+    await user.keyboard("{Enter}");
+    expect(terms).toHaveAttribute("aria-checked", "true");
+    await user.keyboard(" ");
+    expect(terms).toHaveAttribute("aria-checked", "false");
+    expect(agreeButton).toBeDisabled();
+
+    await user.click(terms!);
+    expect(terms).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(terms).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
+  });
+
   /**
    * A disabled button cannot explain itself: it takes no pointer events, so
    * there is no hover, no click, nothing. On production 22 people tapped this
@@ -527,6 +551,98 @@ async function agree() {
   for (const box of screen.getAllByRole("checkbox")) await user.click(box);
   await user.click(agreeButton);
 }
+
+describe("SurveyPage — a visitor who paid before the survey (pay to start)", () => {
+  const journey = { kind: "pay_to_start" as const, paid: true, returnPath: "/sexual-archetype" };
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    __resetSurveyConsentForTests();
+    window.history.replaceState(null, "", "/survey");
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-04T12:00:00.000Z");
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  /** Capture where the page sends the reader. */
+  function captureNavigation(): { navigated: string[]; restore: () => void } {
+    const original = Object.getOwnPropertyDescriptor(window, "location");
+    const navigated: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        get href() {
+          return "/survey";
+        },
+        set href(value: string) {
+          navigated.push(value);
+        },
+      },
+    });
+    return {
+      navigated,
+      restore: () => {
+        if (original) Object.defineProperty(window, "location", original);
+      },
+    };
+  }
+
+  it("starts their paid survey even when this tab finished a free one", async () => {
+    sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_free_run");
+    render(<SurveyPage journey={journey} />);
+    expect(
+      await screen.findByRole("button", { name: /continue to survey introduction/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /already finished/i })).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
+  });
+
+  it("leads the way out back to the page they paid on", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage journey={journey} />);
+      await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
+      expect(nav.navigated).toEqual(["/sexual-archetype"]);
+    } finally {
+      nav.restore();
+    }
+  });
+
+  it("leads a buyer of the initial report back to its own page", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage journey={{ ...journey, returnPath: "/sexual-archetype/initial" }} />);
+      await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
+      expect(nav.navigated).toEqual(["/sexual-archetype/initial"]);
+    } finally {
+      nav.restore();
+    }
+  });
+
+  it("leaves the survey for the same page from the questions", async () => {
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage journey={journey} />);
+      await userEvent.click(await screen.findByRole("button", { name: "Exit Survey" }));
+      expect(nav.navigated).toEqual(["/sexual-archetype"]);
+    } finally {
+      nav.restore();
+    }
+  });
+
+  it("keeps everyone else's finished screen and way out", async () => {
+    sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+    render(<SurveyPage journey={null} />);
+    expect(await screen.findByRole("heading", { name: /already finished/i })).toBeInTheDocument();
+  });
+});
 
 describe("SurveyPage — consent comes before any question", () => {
   // Regression, 2026-10-04: the homepage question card saves its answer, and /survey opened

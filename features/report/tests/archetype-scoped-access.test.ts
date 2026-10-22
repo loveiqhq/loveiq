@@ -145,6 +145,45 @@ describe("archetype names from before the 2026-05-21 rename", () => {
   });
 });
 
+/**
+ * The initial unlock (EUR 1.99, Marcus 19.10): its plan key opens the reader's own card and
+ * Summary through `initialUnlock`. It is no plan and no tier, so every pay screen keeps selling.
+ */
+describe("the initial unlock", () => {
+  beforeEach(() => {
+    mockFetchWithTimeout.mockReset();
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+
+  it("is no plan and no tier, but says so", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "initial" }));
+    const res = await getReportAccessPlanForSubmission(42, row(), OWN);
+    expect(res).toMatchObject({
+      accessPlan: null,
+      anyPlan: null,
+      initialUnlock: true,
+      archetypeTiers: {},
+    });
+  });
+
+  it("stays beside the full report bought after it", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      payments({ plan: "full_report", archetype: OWN }, { plan: "initial" })
+    );
+    const res = await getReportAccessPlanForSubmission(42, row(), OWN);
+    expect(res.accessPlan).toBe("full_report");
+    expect(res.initialUnlock).toBe(true);
+  });
+
+  it("is false without one, and only a succeeded payment counts", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "full_report" }));
+    const res = await getReportAccessPlanForSubmission(42, row(), OWN);
+    expect(res.initialUnlock).toBe(false);
+    expect(String(mockFetchWithTimeout.mock.calls[0]![0])).toContain("status=eq.succeeded");
+  });
+});
+
 describe("ownsFullReportFor (the unlock bar)", () => {
   it("is true on the own report once the own report is bought", () => {
     expect(ownsFullReportFor("full_report", {}, OWN)).toBe(true);

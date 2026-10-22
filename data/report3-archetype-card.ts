@@ -7,13 +7,19 @@
  * Spark Seeker's card is the frame's; since 03.10 every archetype's values and supportive
  * sentences come from Sanjin's five card docs (one table per dimension, a row per
  * archetype), Spark Seeker's included. The meters are the archetype table's
- * (`reportThemes` risk and confidence). The tagline is Spark Seeker's own line; the
- * others show their V2 motto (`reportThemes.motto`) until Sanjin writes card lines.
+ * (`reportThemes` risk and confidence). The slimmed report (1665:3641, 16.10) dropped
+ * the card's motto line (Mark, 14.10: "I took the motto out"), so there is no tagline.
  * `missingReport3CardCopy()` is asserted by a test so a new archetype's gap closes loudly.
+ *
+ * SERVER-ONLY since the slimmed report: a locked reader sees each dimension's first
+ * sentence and the rest under the veil, with a lock (1665:9806 / 9830 / 9853 / 9876),
+ * so the copy is paid like a chapter's and reaches the page through
+ * `buildArchetypeCard`, registered in the premium-content-bundle test.
  *
  * Keyed by the display name used in `archetypePresentation` / `archetypeSlug`.
  */
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { splitRunsAtFirstSentence, veilText } from "@features/report/server/gatedCopy";
 
 /** The four dimensions of the deck, in the fixed order the frames draw them. */
 export type Report3DimensionKey = "communication" | "initiation" | "attachment" | "power";
@@ -34,16 +40,6 @@ export interface Report3Dimension {
 }
 
 export interface Report3CardCopy {
-  /**
-   * The card's pull-quote. NOTE: this is NOT `archetypePresentation.tagline` — that
-   * is a first-person motto ("Tease me, surprise me, chase me a little...") and the
-   * frame shows a different, third-person line. Both now exist; Mark needs to say
-   * whether this replaces the motto or is a second slot.
-   *
-   * The frame opens this with U+201D (a RIGHT double quote) on both sides, which is
-   * a typo in the file; it is written correctly here as U+201C ... U+201D.
-   */
-  tagline: string;
   coreMotivation: { value: string; body: string };
   dimensions: readonly Report3Dimension[];
   meters: readonly { label: string; level: Report3MeterLevel }[];
@@ -51,7 +47,6 @@ export interface Report3CardCopy {
 
 export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
   "Spark Seeker": {
-    tagline: "\u201CFind the spark. Fuel the fire. Keep the heat\u201D",
     coreMotivation: {
       value: "Pleasure & Play",
       body: "Sex is about a sense of aliveness, not milestones. The moment it starts feeling like a duty, sex loses its point.",
@@ -95,10 +90,8 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   // Sanjin's five card docs (03.10), one row per archetype. The meters are the archetype
-  // table's (reportThemes); the tagline is the archetype's V2 motto until Sanjin writes card
-  // lines (Fatih, 03.10).
+  // table's (reportThemes).
   "Sensual Connector": {
-    tagline: "“Touch me with presence and meet me with heart.”",
     coreMotivation: {
       value: "Intimacy & Bonding",
       body: "Sex is a way to feel emotionally close, not just physically satisfied. Without warmth, presence, and genuine connection, something important is missing.",
@@ -139,7 +132,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Relational Nurturer": {
-    tagline: "“Your comfort and pleasure matter—so do mine.”",
     coreMotivation: {
       value: "Healing",
       body: "Sex is a way to restore closeness and feel that the relationship is okay again. Care, reassurance, and emotional repair make desire feel worthwhile.",
@@ -180,7 +172,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Radiant Performer": {
-    tagline: "“Watch me shine.”",
     coreMotivation: {
       value: "Validation",
       body: "Sex feels most powerful when it confirms that you are wanted. Being admired, desired, and responded to makes the experience feel deeply rewarding.",
@@ -221,7 +212,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Explorer of Edges": {
-    tagline: "“Let’s find the edge—and keep going.”",
     coreMotivation: {
       value: "Intensity & Transformation",
       body: "Sex is a place to go beyond the ordinary. Intensity, surrender, challenge, and new experiences help you feel changed rather than simply satisfied.",
@@ -262,7 +252,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Curious Apprentice": {
-    tagline: "“Teach me everything.”",
     coreMotivation: {
       value: "Growth",
       body: "Sex is something to discover and get better at. Learning what works, trying new things, and understanding each other are part of the pleasure.",
@@ -303,7 +292,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Spiritual Lover": {
-    tagline: "“Make love to my soul.”",
     coreMotivation: {
       value: "Meaning",
       body: "Sex matters most when it feels like more than physical pleasure. Emotional depth, intention, and genuine connection are what make it feel significant.",
@@ -344,7 +332,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Minimalist Companion": {
-    tagline: "“Simple is enough.”",
     coreMotivation: {
       value: "Connection",
       body: "Sex is less about intensity and more about simply being close. Affection, comfort, and shared presence matter more than excitement or performance.",
@@ -385,7 +372,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Emotional Voyeur": {
-    tagline: "“I feel more from observing.”",
     coreMotivation: {
       value: "Emotional Fantasy",
       body: "Much of the excitement begins in your inner world. Anticipation, imagination, and emotional tension can be as important as what actually happens physically.",
@@ -426,7 +412,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Authority Conductor": {
-    tagline: "“I set the frame—and we play inside it.”",
     coreMotivation: {
       value: "Power",
       body: "Sex becomes most compelling when there is a clear exchange of control. Leading, directing, and shaping the experience are central to what makes it exciting.",
@@ -467,7 +452,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Loyal Ritualist": {
-    tagline: "“Routine is intimacy.”",
     coreMotivation: {
       value: "Stability",
       body: "Sex is reassuring when it feels dependable and familiar. Trusted patterns, consistency, and knowing what works help desire feel safe enough to return.",
@@ -508,7 +492,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Tender Devotee": {
-    tagline: "“Tell me I’m enough.”",
     coreMotivation: {
       value: "Validation",
       body: "Sex feels most meaningful when it reassures you that you are truly wanted. Feeling chosen, accepted, and desired makes it easier to fully open up.",
@@ -549,7 +532,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Analytical Sexualist": {
-    tagline: "“Explain the system.”",
     coreMotivation: {
       value: "Mastery",
       body: "Sex is rewarding when you understand how to make it work well. Learning, improving, and knowing how to please create confidence and satisfaction.",
@@ -590,7 +572,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
   "Quiet Withdrawer": {
-    tagline: "“I disappear to survive.”",
     coreMotivation: {
       value: "Avoidance",
       body: "Desire depends heavily on not feeling pressured or overwhelmed. Sex becomes possible when you feel safe, unhurried, and free to choose without consequence.",
@@ -631,6 +612,53 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
     ],
   },
 };
+
+/** A dimension as its reader receives it. */
+export interface Report3DimensionView extends Report3Dimension {
+  /**
+   * A locked reader's: everything after the body's first sentence, which is all `body`
+   * then holds. Drawn on its own line under the veil with the lock over it (1665:9806),
+   * as written or as its decoy (lockedBlurCopy.ts).
+   */
+  veiled?: string;
+}
+
+/** The card as its reader receives it — `buildArchetypeCard`. */
+export interface Report3CardView extends Omit<Report3CardCopy, "dimensions"> {
+  /** The dimensions' second sentences are locked: the Summary's gate (Essentials). */
+  locked: boolean;
+  dimensions: readonly Report3DimensionView[];
+}
+
+/**
+ * Server-side assembly, as the chapters' `build*` do. A locked reader receives each
+ * dimension's first sentence verbatim and the rest veiled; everything else on the card
+ * (the values, the core motivation, the meters) is free. A body with no second sentence
+ * stays whole: there is nothing behind its lock. Null for an archetype with no card copy,
+ * which ReportPage falls back to V2's card on.
+ */
+export function buildArchetypeCard(
+  archetype: string,
+  { locked = false }: { locked?: boolean } = {}
+): Report3CardView | null {
+  const copy = report3ArchetypeCard[archetype];
+  if (!copy) return null;
+  return {
+    ...copy,
+    locked,
+    dimensions: copy.dimensions.map((dimension) => {
+      if (!locked) return dimension;
+      const split = splitRunsAtFirstSentence([{ text: dimension.body }]);
+      const rest = split?.[1].map((run) => run.text).join("") ?? "";
+      if (!split || !rest) return dimension;
+      return {
+        ...dimension,
+        body: split[0].map((run) => run.text).join(""),
+        veiled: veilText(rest),
+      };
+    }),
+  };
+}
 
 /** Archetypes still waiting on V4 card copy. Asserted by a test so the gap closes
  * loudly rather than silently shipping a card with holes in it. */

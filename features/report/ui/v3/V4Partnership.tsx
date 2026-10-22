@@ -1,12 +1,12 @@
 "use client";
 
-import { useRef, type FC } from "react";
+import type { FC } from "react";
 import type { Report3PartnershipView } from "@/data/report3-partnership";
 import V4PartnershipLoop from "./V4PartnershipLoop";
-import V4PremiumCard from "./V4PremiumCard";
+import V4Passage from "./V4Passage";
 import V4Prose from "./V4Prose";
+import V4Section from "./V4Section";
 import V4TryThis from "./V4TryThis";
-import { useRampFit } from "./useRampFit";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -24,25 +24,32 @@ import { guardedUnlock } from "./v4Unlock";
  * in the premium-content-bundle test, so the server reads it and threads it down —
  * the wall's position included, so the browser never decides where it falls.
  *
- * THE PAYWALLED STATE — 305:350. Paragraphs 1-4 stay sharp; paragraph 5 ramps in
- * over the blur's ~105px and everything after sits under the full blur at full
- * length, with the chapter-body Premium card 282px in. The loop is blurred behind
- * the brand lock, and the result paragraph is blurred too. Each blurred surface
- * owns the click, which is why the card's own CTA carries no handler.
+ * THE PAYWALLED STATE — 305:350. The loop is blurred behind the brand lock, and the
+ * result paragraph is blurred too; each blurred surface owns the click.
+ *
+ * THE SLIMMED CHAPTER (1665:6941, 16.10; Sanjin's "Slimmed_Intro_Challenges_in_partnership"):
+ * the universal opening (1665:6952), then two sections, each a heading row that folds it
+ * away (1711:1847, 1711:1861):
+ *   "The <Archetype> Challenges" — the archetype's own paragraphs, six lines of them over
+ *   "Show All" (1711:1857), and for a locked reader, at the end of the fold, the paragraph
+ *   the wall falls in fading out into "Unlock Full Chapter", where the blurred passage and
+ *   its card were;
+ *   "Common Challenges" — the first paragraph sharp and the rest folded for a reader who
+ *   has paid (1665:6953); locked for one who has not, its whole text past the wall.
+ * The server cuts the body into the two and keeps the wall where each archetype's cuts put it.
  */
 
 interface Props {
   view: Report3PartnershipView;
-  /** Opens the paywall — from the gated prose, its card, the loop and the result. */
+  /** The archetype on screen, for "The <Archetype> Challenges". */
+  archetype: string;
+  /** Opens the paywall — from the wall's sample, the locked section, the loop and the result. */
   onUnlock?: () => void;
 }
 
-const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
+const V4Partnership: FC<Props> = ({ view, archetype, onUnlock }) => {
   const { locked } = view;
-  const { free, ramp, rest } = view.body;
-  // The fade ends where paragraph 5's veiled tail starts, on a wide column too.
-  const rampRef = useRef<HTMLDivElement>(null);
-  useRampFit(rampRef, ramp !== null);
+  const archetypeTitle = `The ${archetype} Challenges`;
 
   return (
     <>
@@ -51,29 +58,33 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
         data-node-id={locked ? "305:358" : "38:1679"}
         data-name="Chapter — Challenges in Partnership"
       >
-        {/* 38:1681 — a 356px text box in the 361 column. */}
-        <div className="rv4-cip__text" data-node-id={locked ? "305:359" : "38:1681"}>
-          <V4Prose blocks={free} />
-          {ramp ? (
-            /* 305:462 "Paywall sample". The band owns the click. */
-            <div className="rv4-cip__gate" onClick={guardedUnlock(onUnlock)}>
-              <div className="rv4-cip__gated" aria-hidden="true" inert>
-                <div className="rv4-cip__ramp" ref={rampRef}>
-                  <V4Prose blocks={[ramp]} />
-                  <span className="rv4-pblur" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                </div>
-                <div className="rv4-cip__blurred">
-                  <V4Prose blocks={rest} />
-                </div>
-              </div>
-              <V4PremiumCard variant="body" nodeId="1015:1257" />
-            </div>
-          ) : null}
+        {/* 1665:6952 — a 356px text box in the 361 column. */}
+        <div className="rv4-cip__text" data-node-id="1665:6951">
+          <V4Prose blocks={view.intro} />
         </div>
+
+        <V4Section title={archetypeTitle} nodeId="1711:1847">
+          <V4Passage
+            gated={view.archetypeBody}
+            lines={6}
+            label={archetypeTitle}
+            onUnlock={onUnlock}
+          />
+        </V4Section>
+
+        {view.challenges ? (
+          <V4Section title={view.challengesTitle} nodeId="1711:1861">
+            <V4Passage
+              gated={view.challenges}
+              lead={1}
+              lines={6}
+              label={view.challengesTitle}
+              onUnlock={onUnlock}
+            />
+          </V4Section>
+        ) : locked ? (
+          <V4Section title={view.challengesTitle} nodeId="1711:1861" locked onUnlock={onUnlock} />
+        ) : null}
 
         <V4PartnershipLoop stages={view.loop} locked={locked} onUnlock={onUnlock} />
 

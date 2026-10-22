@@ -26,12 +26,15 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary } from "@/data/report3-summary";
+import { buildChapterReadingTimes } from "@features/report/server/chapterReadingTimes";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
-import { buildReport2ChapterCopies } from "@features/report/server/report2ChapterCopies";
+import { buildReport2ChapterCopies, forV4Page } from "@features/report/server/report2ChapterCopies";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
@@ -371,6 +374,9 @@ export async function GET(request: Request) {
     // The strongest plan across EVERY payment, whichever archetype it was for: "has bought
     // anything". Gates the Findings and, on the client, every pay-screen auto-open.
     let purchasedPlan: "essentials" | "full_report" | "core" | "all_reports" | null = null;
+    // The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): opens the
+    // reader's own archetype card and Summary below; not a plan, so pay screens keep selling.
+    let initialUnlock = false;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -403,6 +409,7 @@ export async function GET(request: Request) {
       );
       accessPlan = access.accessPlan;
       purchasedPlan = access.anyPlan;
+      initialUnlock = access.initialUnlock;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
 
@@ -760,6 +767,35 @@ export async function GET(request: Request) {
     };
 
     /**
+     * Part II of the slimmed report (16.10, Figma 1665:3641 / 1665:3796): the archetype
+     * card and the Summary, each half-locked behind the Summary's own gate (Essentials).
+     * A locked reader receives every dimension's first sentence, the Summary's first two
+     * paragraphs and its third's first sentence verbatim; the rest of each dimension and
+     * of that third paragraph, which the page draws under the veil, as lockedBlurCopy.ts
+     * decides; and nothing of the Summary past it. Built for the V4 page only
+     * (isV4Request), from the copy of the archetype on screen.
+     */
+    // The initial unlock opens the same gate in full, for the reader's own archetype only;
+    // a shared view shows it too, as it shows whatever the owner's plan opens.
+    const summaryUnlocked =
+      isSectionUnlockedForPlan({
+        accessPlan,
+        archetypeTier: contentArchetypeTier,
+        isPremium: true,
+        sectionId: "summary",
+      }) ||
+      (initialUnlock && contentArchetype === primaryArchetype);
+    const archetypeCard = isV4Request
+      ? buildArchetypeCard(contentArchetype, { locked: !summaryUnlocked })
+      : null;
+    const summaryChapter = isV4Request
+      ? buildSummary(contentArchetype, { locked: !summaryUnlocked })
+      : null;
+    // "Reading time: ~N min." over each chapter's title (the slimmed report, 16.10):
+    // counted from the full copy on the server, the same for every plan.
+    const chapterReadingTimes = isV4Request ? buildChapterReadingTimes(contentArchetype) : null;
+
+    /**
      * Report 3.0's Typical Beliefs chapter — Figma 304:256, and 348:213 locked.
      *
      * Rides beside beliefsCopy rather than replacing it, because `?v4=1` is a COPY
@@ -814,6 +850,8 @@ export async function GET(request: Request) {
         isPremium: true,
         sectionId,
       });
+    // A V4 page draws three of them no longer (forV4Page), and is sent none of their copy.
+    const report2Copies = buildReport2ChapterCopies(contentArchetype, unlockedChapter);
     const {
       attachmentCopy,
       attachmentFamily,
@@ -842,7 +880,7 @@ export async function GET(request: Request) {
       loveLanguageOrder,
       confidenceCopy,
       confidenceStrip,
-    } = buildReport2ChapterCopies(contentArchetype, unlockedChapter);
+    } = isV4Request ? forV4Page(report2Copies) : report2Copies;
 
     // Report 2.0 Accelerators & Brakes section copy — a Part II, essentials-tier
     // PREMIUM section. The educational slots (`edu.*`, `learn.*`)
@@ -1038,6 +1076,7 @@ export async function GET(request: Request) {
         accessPlan,
         // A recipient never pays, so they get null and every auto-open stays off for them.
         purchasedPlan: isShareAccess ? null : purchasedPlan,
+        initialUnlock,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,
@@ -1059,6 +1098,9 @@ export async function GET(request: Request) {
         practiceTendencies: filteredPracticeTendencies,
         snapshotCopy,
         findingsCopy,
+        archetypeCard,
+        summaryChapter,
+        chapterReadingTimes,
         beliefsCopy,
         typicalBeliefs,
         typicalBeliefsArticle,

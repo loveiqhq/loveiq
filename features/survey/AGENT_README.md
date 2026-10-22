@@ -5,13 +5,14 @@
 **Entry:**
 
 - `ui/SurveyPage.tsx` — orchestrator (intro → wizard → consent → engine).
-- `ui/SurveyEngine.tsx` — question loop + completion phases.
+- `ui/SurveyEngine.tsx` — question loop + completion phases. Enter on the answer already chosen (a click leaves focus there) is Next; on any other button it is that button's own press. The card's top row (`ui/SurveyControls.tsx`) holds the Auto-advance switch (off by default, `localStorage["loveiq-survey-autoadvance"]`; a single choice, scale point or country moves on 350 ms later) and Pause (`ui/SurveyPauseModal.tsx`: the draft is saved, `survey_pause`, "Continue where I left off" or the way out). Both left with the 04.10 redesign and came back on Marcus's review of 20.10.
 - `ui/PreReportWizard.tsx` — 6-slide post-submission wizard (Figma 1071:2092); slide 2, the report map, is `ui/wizard/WizardReportMap.tsx`, its copy `ui/wizard/wizardContent.ts`; its deep-dive tiles step on a vertical swipe and on a tap on the tile peeking in below (pointer shortcuts: the arrows stay the keyboard's way). A phone draws every slide at Figma's 345 x 640, scaled by one factor to fit the screen (`ui/wizard/wizardFit.ts`, measured by `ui/wizard/useWizardFit.ts`: the frame, the safe area, the cookie banner's `--liq-consent-h`), with the footer pinned to the bottom and nothing scrolling; below 0.6 (a phone on its side, or a short one while the cookie banner is up) the slide scrolls at 0.6. From 1024px `ui/wizard/wizard-desktop.css` lays the slides out for a desktop, on `wz-*` hooks inside one media query, so a phone keeps the 393 design. Off production `/wizard-preview` (`app/wizard-preview/`) shows the wizard alone, tracking nothing and starting over at its end, so it can be checked without submitting a survey.
 - `ui/SurveyConfirmation.tsx` — processing/success/error screens.
 - `ui/questions/` — question type components (SingleChoice, Scale, etc.).
 - `ui/hooks/` — survey state, submission, tracking hooks (`useSurveyState`, `useSubmitSurvey`, `useSurveyTracking`).
 - `server/` — types, utils, server-side helpers.
 - API routes inline at `app/api/survey/route.ts`, `app/api/survey-partial/route.ts`, `app/api/survey-tracking/route.ts`.
+- Pay to start (`features/pay-to-start`): a browser holding a paid entitlement's cookie submits a claim on it, so the report opens unlocked (`server/claim.ts`, called from `app/api/survey/route.ts`), and the reply names the offer's wizard: four slides for the full report (`wizardSlideOrder("pay_to_start")`), five with the report map for the initial one (`"pay_to_start_initial"`). `sessionStorage["loveiq-paid-wizard"]` keeps it for a reload mid-wizard; `/wizard-preview?variant=` shows either.
 
 **Belongs:** survey UI, hooks, server helpers, submission validation, type definitions.
 

@@ -13,10 +13,7 @@ const { AFTER, record } = vi.hoisted(() => {
   const para = (text: string) => ({ kind: "para" as const, runs: [{ text }] });
   const AFTER = [para("The two lists, read together.")];
   const record = (withAfter: boolean) => ({
-    lede: [
-      { kind: "heading" as const, text: "The Stand-in belief map", level: 2 as const },
-      para("For the Stand-in, a lede."),
-    ],
+    lede: [para("For the Stand-in, a lede.")],
     turns: Array.from({ length: 10 }, (_, i) => ({
       shadow: `“Shadow ${i}.”`,
       shift: `“Shift ${i}.”`,
@@ -43,17 +40,22 @@ import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 afterEach(cleanup);
 
 describe("Typical Beliefs — a paragraph between the panels and Common challenges (01.10)", () => {
-  it("sets the archetype's paragraph after the sun panel, before the challenges' heading", () => {
+  it("sets the archetype's paragraph after the sun panel, closing its section", () => {
     for (const locked of [false, true]) {
       const view = buildTypicalBeliefs("With After", { locked })!;
       // Free copy: as written for a locked reader too.
       expect(view.afterPanels).toEqual(AFTER);
-      const { container, unmount } = render(<V4TypicalBeliefs view={view} />);
+      const { container, unmount } = render(
+        <V4TypicalBeliefs view={view} archetype="With After" />
+      );
       const sun = container.querySelector(".rv4-sun")!;
       const after = sun.nextElementSibling!;
       expect(after).toHaveClass("rv4-prose__p");
       expect(after.textContent).toBe("The two lists, read together.");
-      expect(after.nextElementSibling).toHaveClass("rv4-tb__h2");
+      // The last of "The <Archetype>"; "Common Challenges" is the next section (16.10).
+      expect(after.nextElementSibling).toBeNull();
+      const next = after.closest(".rv4-sect")!.nextElementSibling!;
+      expect(next.querySelector(".rv4-sect__name")!.textContent).toBe("Common Challenges");
       unmount();
     }
   });
@@ -61,7 +63,7 @@ describe("Typical Beliefs — a paragraph between the panels and Common challeng
   it("draws nothing there for an archetype without one", () => {
     const view = buildTypicalBeliefs("Without After")!;
     expect(view).not.toHaveProperty("afterPanels");
-    const { container } = render(<V4TypicalBeliefs view={view} />);
-    expect(container.querySelector(".rv4-sun")!.nextElementSibling).toHaveClass("rv4-tb__h2");
+    const { container } = render(<V4TypicalBeliefs view={view} archetype="Without After" />);
+    expect(container.querySelector(".rv4-sun")!.nextElementSibling).toBeNull();
   });
 });

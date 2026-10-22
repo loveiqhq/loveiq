@@ -17,7 +17,7 @@ import {
 } from "@features/analytics/client";
 import WizardReportMap, { MAP_STEPS } from "./wizard/WizardReportMap";
 import { useWizardFit } from "./wizard/useWizardFit";
-import { WIZARD_PROOF_CARDS, WIZARD_SLIDE_COUNT } from "./wizard/wizardContent";
+import { WIZARD_PROOF_CARDS, wizardSlideOrder, type WizardVariant } from "./wizard/wizardContent";
 import "./wizard/wizard-desktop.css";
 
 /**
@@ -31,6 +31,11 @@ import "./wizard/wizard-desktop.css";
  * From 1024px a desktop layout in the system of Mark's desktop wizard frames (1:4454):
  * wizard/wizard-desktop.css, on the wz-* hooks named here (Fatih, 01.10). A phone keeps
  * the 393 design exactly.
+ *
+ * A reader who paid before the survey gets four of the six, or five with the map for the
+ * initial report (`variant`, wizardContent.ts). The state is a position in the variant's
+ * order; the analytics keep each slide's index in the six, so slide 4 reads as 3 whichever
+ * wizard showed it.
  */
 
 const MAP_SLIDE = 1;
@@ -290,10 +295,19 @@ interface PreReportWizardProps {
   onComplete: () => void;
   /** Off on /wizard-preview, so a reviewer's clicks never reach the funnel's events. */
   track?: boolean;
+  variant?: WizardVariant;
 }
 
-const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true }) => {
-  const [slideIndex, setSlideIndex] = useState(0);
+const PreReportWizard: FC<PreReportWizardProps> = ({
+  onComplete,
+  track = true,
+  variant = "standard",
+}) => {
+  const order = wizardSlideOrder(variant);
+  const slideCount = order.length;
+  /** Where the reader is in `order`; the slide shown is `order[position]`. */
+  const [position, setPosition] = useState(0);
+  const slideIndex = order[position] ?? 0;
   /** The map's own step: 0 the overview, 1-4 a deep dive. */
   const [mapStep, setMapStep] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -302,7 +316,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
 
   // Mirrors of the state for the handlers, so a key press or a double tap inside one
   // render cannot act twice or on a stale slide.
-  const slideRef = useRef(0);
+  const positionRef = useRef(0);
   const stepRef = useRef(0);
   const busyRef = useRef(false);
   const lastDiveRef = useRef(1);
@@ -324,9 +338,9 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
   }, []);
 
   useEffect(() => {
-    if (slideIndex === 0 && refocusRef.current) continueRef.current?.focus({ preventScroll: true });
+    if (position === 0 && refocusRef.current) continueRef.current?.focus({ preventScroll: true });
     refocusRef.current = false;
-  }, [slideIndex]);
+  }, [position]);
 
   const exit = useCallback(() => {
     busyRef.current = true;
@@ -355,69 +369,80 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
     [track]
   );
 
-  /** Leave the slide (250ms), then land on `to`. */
+  /** Leave the slide (250ms), then land on position `to`. */
   const moveSlide = useCallback(
     (to: number, direction: "next" | "previous") => {
-      const from = slideRef.current;
+      const fromSlide = order[positionRef.current] ?? 0;
+      const toSlide = order[to] ?? 0;
       busyRef.current = true;
       setIsLeaving(true);
       setTimeout(() => {
         busyRef.current = false;
         setIsLeaving(false);
-        if (track) trackWizardSlideAdvanced({ from_slide: from, to_slide: to, direction });
+        if (track) {
+          trackWizardSlideAdvanced({
+            from_slide: fromSlide,
+            to_slide: toSlide,
+            direction,
+            // Only on a paid wizard, so the standard events read as before and the free
+            // funnel's readouts (which skip any wizard_variant) never count a skipped slide.
+            ...(variant !== "standard" ? { wizard_variant: variant } : {}),
+          });
+        }
         // Forward onto the map shows its overview; back from slide 3 shows the deep dive
         // last looked at, the way Figma's separate deep-dive slide would come back.
-        if (to === MAP_SLIDE) {
+        if (toSlide === MAP_SLIDE) {
           const step = direction === "next" ? 0 : lastDiveRef.current;
           stepRef.current = step;
           setMapStep(step);
         }
-        slideRef.current = to;
-        setSlideIndex(to);
+        positionRef.current = to;
+        setPosition(to);
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
       }, LEAVE_MS);
     },
-    [track]
+    [order, track, variant]
   );
 
   const goNext = useCallback(() => {
     if (busyRef.current) return;
-    const slide = slideRef.current;
-    if (slide === MAP_SLIDE && stepRef.current === 0) {
+    const at = positionRef.current;
+    if (order[at] === MAP_SLIDE && stepRef.current === 0) {
       moveMap(1, "continue");
       return;
     }
-    if (slide >= WIZARD_SLIDE_COUNT - 1) {
+    if (at >= slideCount - 1) {
       busyRef.current = true;
       setIsLeaving(true);
       setTimeout(exit, LEAVE_MS);
       return;
     }
-    moveSlide(slide + 1, "next");
-  }, [exit, moveMap, moveSlide]);
+    moveSlide(at + 1, "next");
+  }, [exit, moveMap, moveSlide, order, slideCount]);
 
   const goBack = useCallback(() => {
     if (busyRef.current) return;
-    const slide = slideRef.current;
-    if (slide === MAP_SLIDE && stepRef.current > 0) {
+    const at = positionRef.current;
+    if (order[at] === MAP_SLIDE && stepRef.current > 0) {
       moveMap(0, "back");
       return;
     }
-    if (slide === 0) return;
-    moveSlide(slide - 1, "previous");
-  }, [moveMap, moveSlide]);
+    if (at === 0) return;
+    moveSlide(at - 1, "previous");
+  }, [moveMap, moveSlide, order]);
 
   const handleSkip = useCallback(() => {
     if (busyRef.current) return;
     if (track) {
-      const slide = slideRef.current;
+      const slide = order[positionRef.current] ?? 0;
       trackWizardSkipped({
         from_slide: slide,
         ...(slide === MAP_SLIDE ? { map_step: stepRef.current } : {}),
+        ...(variant !== "standard" ? { wizard_variant: variant } : {}),
       });
     }
     exit();
-  }, [exit, track]);
+  }, [exit, order, track, variant]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -437,7 +462,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
           break;
         case "ArrowDown":
         case "ArrowUp": {
-          if (slideRef.current !== MAP_SLIDE || busyRef.current) return;
+          if (order[positionRef.current] !== MAP_SLIDE || busyRef.current) return;
           const step = stepRef.current;
           const to = e.key === "ArrowDown" ? Math.min(step + 1, MAP_STEPS) : step - 1;
           // ▲ stops at the first deep dive, as its button does.
@@ -450,7 +475,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goBack, goNext, moveMap]);
+  }, [goBack, goNext, moveMap, order]);
 
   // A mostly horizontal swipe of 50px or more moves a slide.
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -472,7 +497,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
     [goBack, goNext]
   );
 
-  const isLast = slideIndex >= WIZARD_SLIDE_COUNT - 1;
+  const isLast = position >= slideCount - 1;
   const textSlide = TEXT_SLIDES[slideIndex];
 
   return (
@@ -570,7 +595,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
              * A desktop keeps CONTINUE at the right, as Mark's desktop frames do. Since Mark's
              * 01.10 round the buttons come first, the bar 24 under them (1049:1234). */}
             <div className="wz-nav flex items-center justify-between pb-6">
-              {slideIndex > 0 ? (
+              {position > 0 ? (
                 <button
                   ref={backRef}
                   type="button"
@@ -619,10 +644,11 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
               </button>
             </div>
 
-            {/* 1049:1219 — six segments, filled up to this slide, 3.2 tall since 01.10. */}
+            {/* 1049:1219 — a segment per slide (six, five or four), filled up to this one,
+             * 3.2 tall since 01.10. */}
             <div className="wz-bar flex h-[3.2px] w-full max-w-[448px] gap-3">
-              {Array.from({ length: WIZARD_SLIDE_COUNT }, (_, i) => {
-                const filled = i <= slideIndex;
+              {Array.from({ length: slideCount }, (_, i) => {
+                const filled = i <= position;
                 return (
                   <div
                     key={i}
@@ -644,7 +670,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
             </div>
             <div className="wz-count relative h-6">
               <span className="absolute left-0 top-1 whitespace-nowrap font-sans text-[12px] font-medium leading-[18px] tracking-[0.5px] text-white/30">
-                {`${slideIndex + 1} / ${WIZARD_SLIDE_COUNT}`}
+                {`${position + 1} / ${slideCount}`}
               </span>
             </div>
           </div>

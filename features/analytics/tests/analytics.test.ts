@@ -423,6 +423,25 @@ describe("analytics", () => {
         report_type: "locked",
       });
     });
+
+    it("adds the layout a V4 page passes: the slimmed report's (16.10)", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportViewed("locked", "The Sage", "v4_slim");
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "report_viewed", {
+        report_type: "locked",
+        archetype: "The Sage",
+        report_layout: "v4_slim",
+      });
+    });
   });
 
   describe("trackPaywallView", () => {

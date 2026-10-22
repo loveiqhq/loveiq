@@ -24,8 +24,11 @@ import { parseFilters } from "@features/admin/server/ap/filters";
 import {
   buildReportPage,
   fetchReportExtras,
+  fetchReportTour,
   twoFigures,
+  wholeShares,
   type ReportExtras,
+  type ReportTour,
 } from "@features/admin/server/ap/report-page";
 import ApReport from "@features/admin/ui/ap/ApReport";
 
@@ -214,12 +217,37 @@ describe("report page", () => {
       foot: "of report openers rated at least one chapter (1 of 1 · 1 vote)",
     });
     // No earlier period: nothing compared, and no grey note either.
-    for (const t of q.tiles.filter((x) => x.key !== "pre")) expect(t.note).toBeUndefined();
+    for (const t of q.tiles) expect(t.note).toBeUndefined();
+    // The Initial plan is on sale (19.10); the fixture's reader bought none.
     expect(q.tiles.find((t) => t.key === "pre")).toMatchObject({
       label: "Pre unlock rate",
-      value: null,
-      note: "Initial plan not on sale yet",
+      value: 0,
     });
+  });
+
+  // The Initial plan (EUR 1.99, the initial report since 19.10): a reader whose first paid
+  // plan is `initial` is a pre-unlock, and an upgrade after it is a full unlock too.
+  it("counts the initial report's buyers as pre-unlocks", () => {
+    const cur = factsFixture({
+      subs: [
+        sub({ id: 1, ...day("2026-10-02"), paidAt: "2026-10-02T10:10:00Z", plan: "initial" }),
+        sub({
+          id: 2,
+          ...day("2026-10-03"),
+          paidAt: "2026-10-03T10:10:00Z",
+          plan: "initial",
+          full: true,
+        }),
+        sub({ id: 3, ...day("2026-10-03") }),
+        sub({ id: 4, ...day("2026-10-04") }),
+      ],
+    });
+    const tiles = page({ facts: cur, benchmark: cur }).tiles;
+    expect(tiles.find((t) => t.key === "pre")).toMatchObject({
+      value: 2 / 4,
+      foot: "Initial plan purchases ÷ report openers",
+    });
+    expect(tiles.find((t) => t.key === "full")?.value).toBe(1 / 4);
   });
 
   it("gives the headline rates two figures and the wizard's none, as the design writes them", () => {
@@ -1053,8 +1081,8 @@ describe("report page, on screen", () => {
     expect(change("Share rate")).toHaveClass("text-ap-good");
     expect(change("Invite rate").textContent).toBe("−50.0%");
     expect(change("Invite rate")).toHaveClass("text-ap-bad");
-    expect(change("Pre unlock rate").textContent).toBe("Initial plan not on sale yet");
-    expect(change("Pre unlock rate")).toHaveClass("text-ap-muted");
+    // On sale since 19.10: a figure like the others (none sold, in either period).
+    expect(change("Pre unlock rate").textContent).toBe("±0%");
 
     const fb = within(document.getElementById("feedback")!);
     expect(fb.queryByRole("group", { name: "Filter feedback" })).toBeNull();
@@ -1563,5 +1591,405 @@ describe("report page, on screen", () => {
     )[0]!;
     expect(head.textContent).toBe(payload.chapters[0]!.name);
     expect(head).toHaveClass("min-w-0");
+  });
+});
+
+describe("the guided tour", () => {
+  const TOUR_TODAY = "2026-10-30";
+  const tourNow = new Date("2026-10-30T10:00:00Z");
+  const week = parseFilters({ period: "custom", from: "2026-10-23", to: "2026-10-29" }, TOUR_TODAY);
+  const on = (d: string) => ({ day: d, at: `${d}T10:00:00Z`, openedAt: `${d}T10:05:00Z` });
+  /** The week's five finishers: four opened their report. */
+  const tourFacts = factsFixture({
+    from: "2026-10-23",
+    to: "2026-10-29",
+    visits: [],
+    starts: [],
+    money: [],
+    subs: [
+      sub({ id: 1, ...on("2026-10-23") }),
+      sub({ id: 2, ...on("2026-10-24") }),
+      sub({ id: 3, ...on("2026-10-25") }),
+      sub({ id: 4, ...on("2026-10-29") }),
+      sub({ id: 5, ...on("2026-10-29"), openedAt: null }),
+    ],
+  });
+  type Day = ReportTour["days"][number];
+  type Stop = ReportTour["stops"][number];
+  const runDay = (day: string, audience: Day["audience"], over: Partial<Day>): Day => ({
+    day,
+    audience,
+    readers: 1,
+    runs: 1,
+    completed: 0,
+    skipped: 0,
+    left: 0,
+    unended: 0,
+    ...over,
+  });
+  const at = (audience: Stop["audience"], id: Stop["id"], over: Partial<Stop>): Stop => ({
+    audience,
+    id,
+    reached: 0,
+    next: 0,
+    back: 0,
+    skip: 0,
+    exit: 0,
+    median_ms: null,
+    timed: 0,
+    ...over,
+  });
+  /**
+   * Free readers: one finished, one skipped on Show all (after going back from it once), one
+   * left the page on the chapter arrow, and one run (a second browser) with no end stored. A
+   * paid reader finished their four stops.
+   */
+  const tourData: ReportTour = {
+    days: [
+      runDay("2026-10-23", "free", { completed: 1 }),
+      runDay("2026-10-24", "free", { skipped: 1 }),
+      runDay("2026-10-25", "free", { runs: 2, left: 1, unended: 1 }),
+      runDay("2026-10-29", "paid", { completed: 1 }),
+    ],
+    stops: [
+      at("free", "chapter_menu", { reached: 3, next: 3, median_ms: 5_200, timed: 3 }),
+      at("free", "show_all", { reached: 3, next: 2, skip: 1, back: 1, median_ms: 4_100, timed: 3 }),
+      at("free", "chapter_toggle", { reached: 2, next: 1, exit: 1, median_ms: 3_000, timed: 2 }),
+      at("free", "try_this", { reached: 1, next: 1, median_ms: 6_000, timed: 1 }),
+      at("free", "unlock", { reached: 1, next: 1, median_ms: 7_000, timed: 1 }),
+      at("paid", "chapter_menu", { reached: 1, next: 1, median_ms: 2_000, timed: 1 }),
+      at("paid", "show_all", { reached: 1, next: 1, median_ms: 2_000, timed: 1 }),
+      at("paid", "chapter_toggle", { reached: 1, next: 1, median_ms: 2_000, timed: 1 }),
+      at("paid", "try_this", { reached: 1, next: 1, median_ms: 2_000, timed: 1 }),
+    ],
+    placed: [
+      { audience: "free", runs: 3 },
+      { audience: "paid", runs: 1 },
+    ],
+  };
+  const tourPage = (over: Partial<Parameters<typeof buildReportPage>[0]> = {}) =>
+    page({
+      facts: tourFacts,
+      benchmark: tourFacts,
+      filters: week,
+      today: TOUR_TODAY,
+      now: tourNow,
+      tour: tourData,
+      ...over,
+    });
+  const audience = (p: ReturnType<typeof page>, key: "free" | "paid") =>
+    p.tour.audiences.find((a) => a.key === key)!;
+  const tileOf = (p: ReturnType<typeof page>, key: "free" | "paid", k: string) =>
+    audience(p, key).tiles.find((t) => t.key === k)!;
+
+  it("whole shares add up to 100, and a share that is not nothing never reads 0%", () => {
+    expect(wholeShares([0, 0, 0])).toBeNull();
+    expect(wholeShares([1, 1, 1])).toEqual([0.34, 0.33, 0.33]);
+    expect(wholeShares([2, 1, 0])).toEqual([0.67, 0.33, 0]);
+    // One skip in 400: 1%, taken from going on, not 0%.
+    expect(wholeShares([399, 1, 0])).toEqual([0.99, 0.01, 0]);
+    expect(wholeShares([998, 1, 1])).toEqual([0.98, 0.01, 0.01]);
+    for (let a = 0; a <= 25; a += 1)
+      for (let b = 0; b <= 25; b += 1)
+        for (let c = 0; c <= 25; c += 1) {
+          const shares = wholeShares([a, b, c]);
+          if (a + b + c === 0) continue;
+          const points = shares!.map((x) => Math.round(x * 100));
+          expect(
+            points.reduce((x, y) => x + y, 0),
+            `${a}/${b}/${c}`
+          ).toBe(100);
+          [a, b, c].forEach((n, i) => expect(points[i]! > 0, `${a}/${b}/${c}`).toBe(n > 0));
+        }
+  });
+
+  it("free readers' five stops and paid readers' four, in the tour's own words", () => {
+    const p = tourPage();
+    expect(p.tour.audiences.map((a) => a.label)).toEqual([
+      "Free readers · 5 stops",
+      "Paid readers · 4 stops",
+    ]);
+    expect(audience(p, "free").stops.map((s) => [s.n, s.name])).toEqual([
+      [1, "Easily Navigate Your Report"],
+      [2, "Read the Full Text"],
+      [3, "Show or Hide Chapters"],
+      [4, "Put Your Insights Into Practice"],
+      [5, "Discover the Full Report"],
+    ]);
+    expect(audience(p, "free").stops[0]).toMatchObject({
+      purpose: "You can read the report in order, or jump to any chapter from the menu above.",
+      target: "Chapter menu: the pill at the top, the sidebar from 1280px",
+    });
+    const paid = audience(p, "paid").stops;
+    expect(paid.map((s) => s.id)).toEqual([
+      "chapter_menu",
+      "show_all",
+      "chapter_toggle",
+      "try_this",
+    ]);
+    // The paid tab's last stop is Try This: its Next is the Finish.
+    expect(paid[3]).toMatchObject({ reached: 1, reachedShare: 1, next: 1, skip: 0, exit: 0 });
+    expect(p.tour).toMatchObject({ from: "23 Oct 2026", before: false, openers: 4 });
+  });
+
+  it("per stop: reached of the runs placed, Next + Skip + Exit making 100%, Back on its own", () => {
+    const free = audience(tourPage(), "free");
+    expect(free).toMatchObject({ placed: 3, unended: 1 });
+    expect(
+      free.stops.map((s) => [s.id, s.reachedShare, s.next, s.skip, s.exit, s.back, s.medianMs])
+    ).toEqual([
+      // The first stop has no Back.
+      ["chapter_menu", 1, 1, 0, 0, null, 5_200],
+      ["show_all", 1, 0.67, 0.33, 0, 1 / 3, 4_100],
+      ["chapter_toggle", 2 / 3, 0.5, 0, 0.5, 0, 3_000],
+      ["try_this", 1 / 3, 1, 0, 0, 0, 6_000],
+      ["unlock", 1 / 3, 1, 0, 0, 0, 7_000],
+    ]);
+    // Three ways out of a stop, a third each: still 100 in whole percentages.
+    const thirds = tourPage({
+      tour: {
+        ...tourData,
+        stops: [at("free", "chapter_menu", { reached: 3, next: 1, skip: 1, exit: 1 })],
+      },
+    });
+    const first = audience(thirds, "free").stops[0]!;
+    expect([first.next, first.skip, first.exit]).toEqual([0.34, 0.33, 0.33]);
+  });
+
+  it("tiles: readers who got it of those who opened, and how the runs ended", () => {
+    const p = tourPage();
+    expect(audience(p, "free").tiles.map((t) => t.label)).toEqual([
+      "Tour started",
+      "Completed",
+      "Skipped tour",
+      "Left the tour / bounced",
+    ]);
+    expect(tileOf(p, "free", "tour-started")).toMatchObject({
+      unit: "count",
+      value: 3,
+      share: "75% of the 4 readers who opened their report",
+      blocked: null,
+    });
+    // Four runs: one completed, one skipped, one left the page, one with no end at all.
+    expect(tileOf(p, "free", "tour-completed")).toMatchObject({ value: 0.25, goodWhen: "up" });
+    expect(tileOf(p, "free", "tour-skipped")).toMatchObject({ value: 0.25, goodWhen: "down" });
+    expect(tileOf(p, "free", "tour-left")).toMatchObject({ value: 0.5, goodWhen: "down" });
+    expect(tileOf(p, "paid", "tour-started")).toMatchObject({
+      value: 1,
+      share: "25% of the 4 readers who opened their report",
+    });
+    expect(tileOf(p, "paid", "tour-completed").value).toBe(1);
+    // A line per day of the week, each day's own runs.
+    expect(tileOf(p, "free", "tour-started").spark).toEqual([1, 1, 1, 0, 0, 0, 0]);
+    expect(tileOf(p, "free", "tour-completed").spark).toEqual([1, 0, 0, null, null, null, null]);
+  });
+
+  it("an empty week reads zero readers and blank shares, not a failure", () => {
+    const p = tourPage({ tour: { days: [], stops: [], placed: [] } });
+    expect(tileOf(p, "free", "tour-started")).toMatchObject({ value: 0, blocked: null });
+    expect(tileOf(p, "free", "tour-started").share).toBe(
+      "0% of the 4 readers who opened their report"
+    );
+    expect(tileOf(p, "free", "tour-completed").value).toBeNull();
+    for (const s of audience(p, "free").stops) {
+      expect([s.reached, s.reachedShare, s.next, s.skip, s.exit, s.medianMs]).toEqual([
+        0,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]);
+    }
+  });
+
+  it("before it was recorded, or unread, the tour is blank and says why", () => {
+    // The fixture's week of 1 to 7 Oct: before 23 Oct, whatever the function says.
+    const early = page({ tour: tourData });
+    expect(early.tour.before).toBe(true);
+    for (const a of early.tour.audiences) {
+      for (const t of a.tiles) {
+        expect(t.blocked).toBe("Recorded from 23 Oct 2026: pick a range from that day on.");
+        expect(t.share).toBeUndefined();
+      }
+      for (const s of a.stops)
+        expect([s.reachedShare, s.next, s.medianMs]).toEqual([null, null, null]);
+    }
+    const unread = tourPage({ tour: null });
+    expect(unread.tour.before).toBe(false);
+    expect(tileOf(unread, "free", "tour-started").blocked).toBe(
+      "The guided tour could not be read just now. Try again in a minute."
+    );
+  });
+
+  it("compares with a period recorded all through, and says so for one that is not", () => {
+    // The week before 23 Oct: not recorded, so not compared.
+    const before = factsFixture({
+      from: "2026-10-16",
+      to: "2026-10-22",
+      visits: [],
+      starts: [],
+      money: [],
+      subs: [sub({ id: 9, ...on("2026-10-17") })],
+    });
+    const p = tourPage({ previous: before, previousTour: tourData });
+    for (const t of audience(p, "free").tiles) {
+      expect(t).toMatchObject({ prev: null, note: "No comparison before 23 Oct 2026" });
+    }
+    // The week after, against this one.
+    const next = factsFixture({
+      from: "2026-10-30",
+      to: "2026-11-05",
+      visits: [],
+      starts: [],
+      money: [],
+      subs: [sub({ id: 21, ...on("2026-10-30") }), sub({ id: 22, ...on("2026-10-31") })],
+    });
+    const q = page({
+      facts: next,
+      benchmark: next,
+      previous: tourFacts,
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-30", to: "2026-11-05" },
+        "2026-11-06"
+      ),
+      today: "2026-11-06",
+      now: new Date("2026-11-06T10:00:00Z"),
+      tour: { days: [runDay("2026-10-30", "free", { completed: 1 })], stops: [], placed: [] },
+      previousTour: tourData,
+    });
+    expect(tileOf(q, "free", "tour-started")).toMatchObject({ value: 1, prev: 3 });
+    expect(tileOf(q, "free", "tour-completed")).toMatchObject({ value: 1, prev: 0.25 });
+    expect(tileOf(q, "free", "tour-left")).toMatchObject({ value: 0, prev: 0.5 });
+    expect(tileOf(q, "free", "tour-left").note).toBeUndefined();
+  });
+
+  it("reads the function's numbers, and leaves out a row for no known audience", async () => {
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        days: [
+          {
+            day: "2026-10-23",
+            audience: "free",
+            readers: "2",
+            runs: "3",
+            completed: 1,
+            skipped: 1,
+            left: 0,
+            unended: 1,
+          },
+          { day: "2026-10-23", audience: "staff", readers: 9, runs: 9 },
+        ],
+        stops: [
+          {
+            audience: "free",
+            id: "show_all",
+            reached: "3",
+            next: 2,
+            back: 1,
+            skip: 1,
+            exit: 0,
+            median_ms: 4100.0,
+            timed: 3,
+          },
+        ],
+        placed: [{ audience: "paid", runs: "1" }],
+      }),
+    });
+    const t = await fetchReportTour("2026-10-23", "2026-10-29");
+    expect(mockSupabaseFetch).toHaveBeenCalledWith(
+      "/rest/v1/rpc/ap_report_tour",
+      expect.objectContaining({
+        body: JSON.stringify({ p_from: "2026-10-23", p_to: "2026-10-29" }),
+      })
+    );
+    expect(t.days).toEqual([
+      runDay("2026-10-23", "free", { readers: 2, runs: 3, completed: 1, skipped: 1, unended: 1 }),
+    ]);
+    expect(t.stops[0]).toMatchObject({ reached: 3, median_ms: 4_100 });
+    expect(t.placed).toEqual([{ audience: "paid", runs: 1 }]);
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ days: [] }),
+    });
+    await expect(fetchReportTour("2026-10-23", "2026-10-29")).rejects.toThrow(/unexpected shape/);
+  });
+
+  describe("on screen", () => {
+    afterEach(() => cleanup());
+
+    it("sits after the wizard in the section nav, with the share under Tour started", () => {
+      screenData.payload = tourPage();
+      render(createElement(ApReport));
+      const nav = within(screen.getByRole("navigation", { name: "Report sections" }));
+      expect(nav.getAllByRole("link").map((l) => l.textContent)).toEqual([
+        "Wizard",
+        "Guided tour",
+        "Time & returns",
+        "Chapters",
+        "Feedback",
+      ]);
+      const section = within(document.getElementById("tour")!);
+      expect(section.getByRole("heading", { name: "Guided tour" })).toBeInTheDocument();
+      expect(section.getByText("75% of the 4 readers who opened their report")).toBeInTheDocument();
+      expect(document.getElementById("wizard")!.nextElementSibling).toBe(
+        document.getElementById("tour")
+      );
+    });
+
+    it("draws the stops: Spotlight, Back from the second, Finish on the last, the design's reds", () => {
+      screenData.payload = tourPage();
+      render(createElement(ApReport));
+      const table = within(screen.getByRole("table", { name: "Guided tour stops" }));
+      const rows = table.getAllByRole("row").slice(1);
+      expect(rows).toHaveLength(5);
+      const cells = (r: HTMLElement) =>
+        within(r)
+          .getAllByRole("cell")
+          .map((c) => c.textContent);
+      // # · Time · Reached · Next · Back · Skip tour · Exit
+      expect(cells(rows[0]!)).toEqual(["1", "0:05.2", "100%", "100%", "—", "—", "0%"]);
+      expect(cells(rows[1]!)).toEqual(["2", "0:04.1", "100%", "67%", "33%", "33%", "0%"]);
+      expect(cells(rows[4]!)).toEqual(["5", "0:07.0", "33%", "Finish 100%", "0%", "—", "0%"]);
+      expect(within(rows[0]!).getByText(/^Spotlight: Chapter menu/)).toBeInTheDocument();
+      // Skip tour from 8%, Exit from 4%: bold red.
+      expect(within(rows[1]!).getAllByRole("cell")[5]).toHaveClass("font-bold", "text-ap-bad");
+      expect(within(rows[2]!).getAllByRole("cell")[6]).toHaveClass("font-bold", "text-ap-bad");
+      expect(within(rows[0]!).getAllByRole("cell")[6]).not.toHaveClass("text-ap-bad");
+      expect(
+        screen.getByText(/also holds the 1 run whose end was never recorded/)
+      ).toBeInTheDocument();
+    });
+
+    it("switches to paid readers' four stops", () => {
+      screenData.payload = tourPage();
+      render(createElement(ApReport));
+      fireEvent.click(screen.getByRole("button", { name: "Paid readers · 4 stops" }));
+      expect(screen.getByRole("button", { name: "Paid readers · 4 stops" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      );
+      const rows = within(screen.getByRole("table", { name: "Guided tour stops" }))
+        .getAllByRole("rowheader")
+        .map((h) => h.querySelector(".font-bold")?.textContent);
+      expect(rows).toEqual([
+        "Easily Navigate Your Report",
+        "Read the Full Text",
+        "Show or Hide Chapters",
+        "Put Your Insights Into Practice",
+      ]);
+    });
+
+    it("before it was recorded, says from when", () => {
+      screenData.payload = page();
+      render(createElement(ApReport));
+      const section = within(document.getElementById("tour")!);
+      expect(
+        section.getByText("Recorded from 23 Oct 2026: pick a range from that day on")
+      ).toBeInTheDocument();
+    });
   });
 });

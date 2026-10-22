@@ -345,6 +345,9 @@ export function KpiTileV2({
           {d?.text ?? EMPTY}
         </span>
       )}
+      {tile.share && !tile.blocked && (
+        <span className="text-xs leading-snug text-ap-muted">{tile.share}</span>
+      )}
       <Spark
         values={tile.blocked ? [] : tile.spark}
         titles={titles}

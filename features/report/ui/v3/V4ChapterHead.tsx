@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, type FC } from "react";
+import { createContext, useContext, useRef, type FC, type ReactNode } from "react";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
 
 /**
@@ -24,30 +24,96 @@ const Chevron: FC = () => (
 );
 
 /**
+ * Each chapter's reading time, in minutes by section id: counted on the server from the
+ * chapter's full copy (chapterReadingTimes.ts) and provided by ReportPage under V4 only.
+ */
+const V4ReadingTimesContext = createContext<Readonly<Record<string, number>> | null>(null);
+
+export const V4ReadingTimesProvider: FC<{
+  value: Readonly<Record<string, number>> | null;
+  children: ReactNode;
+}> = ({ value, children }) => (
+  <V4ReadingTimesContext.Provider value={value}>{children}</V4ReadingTimesContext.Provider>
+);
+
+/** A chapter's reading time in minutes, or null where none is provided. */
+export function useV4ReadingMinutes(sectionId: string | undefined): number | null {
+  const times = useContext(V4ReadingTimesContext);
+  return (sectionId && times?.[sectionId]) || null;
+}
+
+/**
  * The chapter title, with "of the <Archetype>" under it when `archetype` is set —
  * always on a line of its own and with no dash, as Mark redrew every head on 25.09
  * (1:862 / 1942042395; Fatih: the open chapters too). Each line is its own block, so
  * each sits its own height under the last, the way Figma stacks mixed-size lines.
  * The space between the two runs is only for assistive tech: blocks swallow it.
+ *
+ * The slimmed report (16.10) sets "Reading time: ~5 min." over it (1686:10030, and over
+ * every closed row, 1709:1799): "Reading time:" in Light, set in title case, the minutes
+ * in Bold capitals, as the Learn more card's eyebrow splits them. Title and time stack in
+ * one column beside the disc, which keeps to the top of the row.
  */
-export const V4ChapterTitle: FC<{ title: string; archetype?: string }> = ({ title, archetype }) => (
-  <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
-    {archetype ? (
-      <>
-        <span className="rv4-chapter__name">{title}</span>{" "}
-        <span className="rv4-chapter__of">
-          of the <span className="rv4-chapter__archetype">{archetype}</span>
-        </span>
-      </>
-    ) : (
-      title
-    )}
-  </h3>
-);
+export const V4ChapterTitle: FC<{
+  title: string;
+  archetype?: string;
+  readingMinutes?: number | null;
+}> = ({ title, archetype, readingMinutes }) => {
+  const heading = (
+    <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
+      {archetype ? (
+        <>
+          <span className="rv4-chapter__name">{title}</span>{" "}
+          <span className="rv4-chapter__of">
+            of the <span className="rv4-chapter__archetype">{archetype}</span>
+          </span>
+        </>
+      ) : (
+        title
+      )}
+    </h3>
+  );
+  if (!readingMinutes) return heading;
+  return (
+    <span className="rv4-chapter__text">
+      <span className="rv4-chapter__time" data-node-id="1686:10030">
+        <span className="rv4-chapter__time-label">Reading time:</span>{" "}
+        <span className="rv4-chapter__time-value">~{readingMinutes} min.</span>
+      </span>
+      {heading}
+    </span>
+  );
+};
 
 /** 1:867 / 304:261 — "Control / Disc". */
 export const V4ChapterChevron: FC = () => (
   <span className="rv4-chapter__chev" aria-hidden="true">
+    <Chevron />
+  </span>
+);
+
+/**
+ * A section row's disc inside a chapter (the slimmed report's "Button" rows, 1686:10509),
+ * drawn apart from the chapter's so the two levels do not look alike (Mark, 22.10: "They
+ * should be dotted and I made them a bit smaller"): 28px, white, a dotted ring (Figma
+ * 1686:10514, 1.5px inside, 1px dashes and gaps, the violet at 20%) and the chevron
+ * pointing down while the section is open, as every expanded-chapter frame draws it. The
+ * ring is an SVG circle so the dots are the frame's on every browser, where a CSS
+ * `dotted` border draws its own spacing.
+ */
+export const V4SectionChevron: FC = () => (
+  <span className="rv4-sect__chev" aria-hidden="true" data-node-id="1686:10514">
+    <svg className="rv4-sect__ring" viewBox="0 0 28 28" fill="none">
+      <circle
+        cx="14"
+        cy="14"
+        r="13.25"
+        stroke="currentColor"
+        strokeOpacity="0.2"
+        strokeWidth="1.5"
+        strokeDasharray="1 1"
+      />
+    </svg>
     <Chevron />
   </span>
 );

@@ -214,6 +214,8 @@ export function getStripeServerClient() {
 
 /** How the credit reads on Stripe's page and the receipt. */
 export const UPGRADE_CREDIT_COUPON_NAME = "Reports you already bought";
+/** The initial unlock's EUR 10 off the full report, as Stripe's page and the receipt name it. */
+export const INITIAL_CREDIT_COUPON_NAME = "Initial report credit";
 
 /**
  * The coupon that takes a reader's upgrade credit off All 14 (`getUpgradeCreditCents`).
@@ -224,7 +226,36 @@ export async function ensureUpgradeCreditCoupon(
   stripe: Stripe,
   amountOffCents: number
 ): Promise<string> {
-  const id = `upgrade_credit_eur_${amountOffCents}`;
+  return ensureCreditCoupon(
+    stripe,
+    `upgrade_credit_eur_${amountOffCents}`,
+    amountOffCents,
+    UPGRADE_CREDIT_COUPON_NAME
+  );
+}
+
+/**
+ * The coupon that takes the initial unlock's credit off the full report (`applyInitialCredit`),
+ * under its own id and name: the same amount can already exist as an All 14 coupon.
+ */
+export async function ensureInitialCreditCoupon(
+  stripe: Stripe,
+  amountOffCents: number
+): Promise<string> {
+  return ensureCreditCoupon(
+    stripe,
+    `initial_credit_eur_${amountOffCents}`,
+    amountOffCents,
+    INITIAL_CREDIT_COUPON_NAME
+  );
+}
+
+async function ensureCreditCoupon(
+  stripe: Stripe,
+  id: string,
+  amountOffCents: number,
+  name: string
+): Promise<string> {
   try {
     await stripe.coupons.retrieve(id);
     return id;
@@ -237,7 +268,7 @@ export async function ensureUpgradeCreditCoupon(
       amount_off: amountOffCents,
       currency: "eur",
       duration: "once",
-      name: UPGRADE_CREDIT_COUPON_NAME,
+      name,
     });
   } catch (err) {
     // Another checkout made it first.

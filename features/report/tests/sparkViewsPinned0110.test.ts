@@ -21,16 +21,25 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * ramp and rest (Sanjin: open through its first sentence); flattened back into one list,
  * both views hash as before. 06.10: Accelerators & Brakes' intro drops the two doubled
  * spaces it copied from the frame; with them put back, both its views hash as before.
+ * 16.10, the slimmed report: Typical Beliefs, Accelerators & Brakes and Challenges in
+ * Partnerships are cut into sections (the example and framework, the lede, the archetype's
+ * part of A&B's intro and of CiP's body each moved to a field of its own, CiP's "Common
+ * Challenges" split off at its inline heading), the two shared openings are Sanjin's
+ * slimmed ones, and a locked view sends its wall's sample only (toSample), CiP's "Common
+ * Challenges" not at all. Applied to the previous views, that mapping gives the new six
+ * key for key; Fantasy vs. Reality's two hash as before. Then the locked CiP view lost its
+ * tail (the second example), which the slimmed page no longer draws past the blurred
+ * result: the previous locked view less `tail` equals the new one.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const PINNED: Record<string, string> = {
-  "typicalBeliefs:open": "8b929fff8d5d2860ac4bd4e2a949d835ded191f2a2fe47e65678d4d79374ea96",
-  "typicalBeliefs:locked": "82b56e5ab6b95531d26a0e10281d2d19179728c29cea0dbc2ce24813d8463b12",
-  "accelerators:open": "a204b934e1b8df98d6d5f0645cc5f2bf5f72bf7f80d03ac603adca56db8ec124",
-  "accelerators:locked": "46a3fde772f869cd8b48a7bcbbee941546bf0bcbc0b4cec5b4073310a4ebf499",
-  "partnership:open": "8bfc00eb582555e7d1d3552e159d446a3bc611292c7a1047a1d1899dbd243e3e",
-  "partnership:locked": "1bce22c397122f9f5228345b8362341a866a9f404f108293554b7c234e433832",
+  "typicalBeliefs:open": "700a72451cd108f38a4e4ce9aae3153c4cca29002028b13a0a3e16407cc9f200",
+  "typicalBeliefs:locked": "1bdc8433758ae5f3da437b92f82cd8b1c42d4ef246ec18f7a49c112abda55fe9",
+  "accelerators:open": "3d26fdb63fd22af1620004c59b17a16329407087dbb8b8f1d23f1262b71ba1a2",
+  "accelerators:locked": "9ffee0cb4de548ef49268a0dbe5ec0ed958b2dfeab20544fb60413dc25b233c6",
+  "partnership:open": "e2a111545ca4695ca47ffe51bea333b23a26440261dd4b797b13f86fc1396df9",
+  "partnership:locked": "fc332bba45e6f581cc4f44a608c4dc53ea914a5dbf1197b4a285aa28e67a0166",
   "fantasy:open": "905067e47374273b57d651b472432a8c18f74851e3e35dea20b1e8537b7afb6c",
   "fantasy:locked": "9c33a4ba206e387ddcf1fdf2f49012673f17d687debb9efdc78285c97fc9f19e",
 };

@@ -142,7 +142,7 @@ const V4ChapterPart: FC<Props> = ({
             bare={Boolean(beliefs || accel || cip || fvr)}
           >
             {cip ? (
-              <V4Partnership view={cip} onUnlock={onUnlock} />
+              <V4Partnership view={cip} archetype={archetype} onUnlock={onUnlock} />
             ) : entry ? (
               <>
                 {/* 304:256 sits ABOVE the article in 1:849: the chapter body
@@ -150,11 +150,13 @@ const V4ChapterPart: FC<Props> = ({
                  * more". All three share the host's paywall. */}
                 {beliefs ? (
                   <>
-                    <V4TypicalBeliefs view={beliefs} onUnlock={onUnlock} />
+                    <V4TypicalBeliefs view={beliefs} archetype={archetype} onUnlock={onUnlock} />
                     <V4TryThis practice={beliefs.practice} onUnlock={onUnlock} />
                   </>
                 ) : null}
-                {accel ? <V4Accelerators view={accel} onUnlock={onUnlock} /> : null}
+                {accel ? (
+                  <V4Accelerators view={accel} archetype={archetype} onUnlock={onUnlock} />
+                ) : null}
                 {fvr ? <V4Fantasy view={fvr} onUnlock={onUnlock} /> : null}
                 <V4LearnMore article={entry.article} locked={entry.locked} onUnlock={onUnlock} />
               </>

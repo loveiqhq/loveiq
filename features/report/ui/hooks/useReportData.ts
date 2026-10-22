@@ -38,6 +38,11 @@ export interface ReportData {
    * leaves it null; this is what "has the reader paid at all" reads.
    */
   purchasedPlan?: "essentials" | "full_report" | "core" | "all_reports" | null;
+  /**
+   * The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): the reader's own
+   * card and Summary come whole. Not a plan: `accessPlan`/`purchasedPlan` stay null for it.
+   */
+  initialUnlock?: boolean;
   /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
   userName: string | null;
   userEmail: string | null;
@@ -98,6 +103,22 @@ export interface ReportData {
    * essentials tier (`locked: false`). Threaded to `BeliefsSection`.
    */
   beliefsCopy: import("../sections/BeliefsSection").BeliefsCopy | null;
+  /**
+   * Part II's archetype card for `?v4=1`, half-locked behind the Summary's gate since the
+   * slimmed report (16.10). NULL for a name with no card copy: ReportPage keeps V2's card.
+   */
+  archetypeCard?: import("@/data/report3-archetype-card").Report3CardView | null;
+  /**
+   * Part II's "Summary of the <archetype>" for `?v4=1`, half-locked since the slimmed
+   * report (16.10). NULL for a name with no summary: ReportPage keeps V2's section.
+   */
+  summaryChapter?: import("@/data/report3-summary").Report3SummaryView | null;
+  /**
+   * Each V4 chapter's reading time in minutes, by section id (the slimmed report, 16.10):
+   * counted on the server from the chapter's full copy, the same for every plan. NULL
+   * outside `?v4=1`.
+   */
+  chapterReadingTimes?: Readonly<Record<string, number>> | null;
   /**
    * Report 3.0's Typical Beliefs chapter, for `?v4=1`. NULL for any archetype the
    * content has not been scaled to yet, which is what ReportPage falls back on.

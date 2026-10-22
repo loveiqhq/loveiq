@@ -9,6 +9,7 @@ import type {
   ReportPayload,
   ReportTile,
   TimeGroup,
+  TourView,
 } from "@features/admin/server/ap/report-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
@@ -93,6 +94,7 @@ function ChangeBoxView({ box }: { box: ChangeBox }) {
 
 const SECTIONS = [
   { id: "wizard", label: "Wizard" },
+  { id: "tour", label: "Guided tour" },
   { id: "time", label: "Time & returns" },
   { id: "chapters", label: "Chapters" },
   { id: "feedback", label: "Feedback" },
@@ -274,6 +276,33 @@ export default function ApReport() {
                         })),
                       },
                     },
+                    ...data.tour.audiences.map((a) => ({
+                      name: `Guided tour · ${a.label}`,
+                      table: {
+                        columns: [
+                          { label: "Stop", unit: "text" as const },
+                          { label: "Reached (runs)", unit: "count" as const },
+                          { label: "Reached", unit: "pct" as const },
+                          { label: "Median time", unit: "mmss" as const },
+                          { label: "Next", unit: "pct" as const },
+                          { label: "Back", unit: "pct" as const },
+                          { label: "Skip tour", unit: "pct" as const },
+                          { label: "Exit", unit: "pct" as const },
+                        ],
+                        rows: a.stops.map((s) => ({
+                          label: `${s.n} · ${s.name}`,
+                          values: [
+                            s.reached,
+                            s.reachedShare,
+                            s.medianMs,
+                            s.next,
+                            s.back,
+                            s.skip,
+                            s.exit,
+                          ],
+                        })),
+                      },
+                    })),
                     {
                       name: "Chapters",
                       table: {
@@ -469,7 +498,13 @@ export default function ApReport() {
                       },
                     },
                   ],
-                  [...data.tiles, ...data.wizard.tiles]
+                  [
+                    ...data.tiles,
+                    ...data.wizard.tiles,
+                    ...data.tour.audiences.flatMap((a) =>
+                      a.tiles.map((t) => ({ ...t, label: `${t.label} · ${a.label}` }))
+                    ),
+                  ]
                 )
               }
             >
@@ -491,6 +526,7 @@ export default function ApReport() {
             ))}
           </TileGrid>
           <WizardSection data={data} />
+          <TourSection data={data} />
           <section
             id="time"
             aria-labelledby="h-time"
@@ -618,6 +654,131 @@ function WizardSection({ data }: { data: ReportPayload }) {
           . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
           time on the last slide. In red: Skip intro from 11%, Exit from 5%. The CSV also has, for
           slide 2, the readers who stepped through the map&rsquo;s deep dives.
+        </p>
+      </details>
+    </Card>
+  );
+}
+
+const TOUR_GRID = "44px minmax(280px,2.6fr) 74px minmax(130px,1.2fr) 80px 80px 90px 80px";
+
+/**
+ * The guided tour on a reader's first open (Marcus's "Guided tour" section): free readers' five
+ * stops or paid readers' four, its four tiles, and per stop how its readers went on, back, skipped
+ * or left. Drawn as the wizard above it is.
+ */
+function TourSection({ data }: { data: ReportPayload }) {
+  const t = data.tour;
+  const [key, setKey] = useState<TourView["key"]>("free");
+  const a = t.audiences.find((x) => x.key === key) ?? t.audiences[0]!;
+  return (
+    <Card id="tour" labelledBy="h-tour">
+      <SectionHead
+        id="h-tour"
+        title="Guided tour"
+        description="Runs once when a reader first opens the report. Free readers get 5 stops, paid readers 4. Readers move with Next and Back, and can skip at any stop."
+        align="end"
+        right={
+          <Pills
+            label="Readers"
+            options={t.audiences.map((x) => ({ value: x.key, label: x.label }))}
+            value={a.key}
+            onChange={setKey}
+          />
+        }
+      />
+      <AllTraffic note={data.narrowed} />
+      {t.before && <NotTracked>Recorded from {t.from}: pick a range from that day on</NotTracked>}
+      <TileGrid min={200}>
+        {a.tiles.map((k) => (
+          <ReportKpiTile key={k.key} tile={k} range={data.range} />
+        ))}
+      </TileGrid>
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Guided tour stops" style={{ minWidth: 980 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: TOUR_GRID }}>
+            <Th label="#" />
+            <Th label="Stop" />
+            <Th label="Time" right />
+            <Th label="Reached" />
+            <Th label="Next" right />
+            <Th label="Back" right />
+            <Th label="Skip tour" right />
+            <Th label="Exit" right />
+          </div>
+          {a.stops.map((s, i) => (
+            <div
+              key={s.id}
+              role="row"
+              className="grid items-center border-t border-ap-line"
+              style={{ gridTemplateColumns: TOUR_GRID }}
+            >
+              <span role="cell" className="px-3 py-2.5 text-xs tabular-nums text-ap-muted">
+                {s.n}
+              </span>
+              <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
+                <span className="text-sm font-bold">{s.name}</span>
+                <span className="text-xs leading-snug text-ap-muted">{s.purpose}</span>
+                <span className="text-[11px] font-bold text-ap-purple">Spotlight: {s.target}</span>
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {fmt("mmss", s.medianMs)}
+              </span>
+              <span role="cell" className="flex items-center gap-2 px-3 py-2.5">
+                <span className="flex-1">
+                  <Bar pct={s.reachedShare} height={8} />
+                </span>
+                <span className="text-xs font-bold tabular-nums">
+                  {fmt("pct", s.reachedShare, 0)}
+                </span>
+              </span>
+              {/* Next, Skip tour and Exit are whole shares that add up to 100% (wholeShares). */}
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {i === a.stops.length - 1 && s.next !== null ? "Finish " : ""}
+                {fmt("pct", s.next, 0)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {wholePct(s.back)}
+              </span>
+              <span
+                role="cell"
+                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.skip, 8) ? "font-bold text-ap-bad" : ""}`}
+              >
+                {s.skip === 0 ? EMPTY : fmt("pct", s.skip, 0)}
+              </span>
+              <span
+                role="cell"
+                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.exit, 4) ? "font-bold text-ap-bad" : ""}`}
+              >
+                {fmt("pct", s.exit, 0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <details className="text-xs leading-relaxed text-ap-muted">
+        <summary className="cursor-pointer font-semibold text-ap-body">
+          How these are counted
+        </summary>
+        <p className="m-0 mt-1.5">
+          Our own records of each reader&rsquo;s first run of the tour in a browser, from {t.from}
+          (PostHog sees about a quarter of readers); a replay from the chapter menu is left out. All
+          traffic: the runs carry no source, device or tier. Tour started: the range&rsquo;s readers
+          who got the tour, and their share of those who opened their report. A reader who later
+          opened it in another browser got the tour there too: that run counts in the rest.
+          Completed, Skipped tour and Left the tour / bounced are shares of the runs; Left the tour
+          / bounced also holds the {fmt("count", a.unended)} {a.unended === 1 ? "run" : "runs"}{" "}
+          whose end was never recorded (the page went without a word, or the browser kept it and
+          never brought it back), which are on no stop. The table is of the {fmt("count", a.placed)}{" "}
+          {a.placed === 1 ? "run" : "runs"} whose end was recorded with its stops. Reached: of
+          those, the runs that came to the stop; a stop whose control was not on the page is left
+          out of that reader&rsquo;s tour. Next: went on from it, Finish on the last. Skip tour:
+          Skip Tour, Escape or the browser&rsquo;s Back there. Exit: left the page there. A run that
+          went back before it ended is placed on the furthest stop it reached. Next + Skip tour +
+          Exit add up to 100% of the runs on each stop; Back is counted separately, as the share who
+          went back from it at least once. Time: the median time with the stop&rsquo;s bubble up,
+          over every visit to it. From 1280px wide the first stop points at the sidebar, and its
+          text says &ldquo;the menu on the left&rdquo;. In red: Skip tour from 8%, Exit from 4%.
         </p>
       </details>
     </Card>

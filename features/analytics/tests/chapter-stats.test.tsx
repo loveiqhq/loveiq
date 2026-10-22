@@ -14,6 +14,7 @@ import {
 } from "@features/analytics/chapterStats";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
 import { __resetBodyScrollLockForTests, lockBodyScroll } from "@shared/ui/body-scroll-lock";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 /** The chapters in nav order; `summary` is a section of its own with no nav row. */
 const CHAPTERS = ["intro", "core", "beliefs"];
@@ -76,7 +77,16 @@ const setVisibility = (state: DocumentVisibilityState) => {
   document.dispatchEvent(new Event("visibilitychange"));
 };
 const leave = () => window.dispatchEvent(new Event("pagehide"));
-const saves = () => client.persistReportChapterStats.mock.calls.map(([m]) => m);
+/**
+ * Every save, its layout checked and set aside: chapter stats are counted on V4 alone,
+ * the slimmed report since 16.10, so every save says so.
+ */
+const saves = () =>
+  client.persistReportChapterStats.mock.calls.map(([m]) => {
+    const { report_layout: layout, ...rest } = m as { report_layout?: string };
+    expect(layout).toBe("v4_slim");
+    return rest;
+  });
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -92,6 +102,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   __resetBodyScrollLockForTests();
+  __resetGuidedTourForTests();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -121,6 +132,19 @@ describe("reading time", () => {
     leave();
     // Nothing counted, and an empty save is no save.
     expect(saves()).toEqual([]);
+  });
+
+  it("stops while the guided tour moves the page, and runs again once it ends", () => {
+    render(<Page />);
+    setGuidedTourActive(true);
+    current = "beliefs";
+    advance(8000);
+    setGuidedTourActive(false);
+    current = "intro";
+    advance(1000);
+    leave();
+    // The tour's stop in Typical Beliefs is not reading time there.
+    expect(saves()).toEqual([{ archetype: "Spark Seeker", chapters: { intro: { ms: 1000 } } }]);
   });
 });
 

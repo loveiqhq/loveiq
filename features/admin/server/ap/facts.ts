@@ -6,6 +6,7 @@
  * Server only: the facts are one row per finished survey. The pages get totals.
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import type { ApFilters, DeviceFilter, Source } from "./filters";
@@ -177,10 +178,11 @@ export interface CheckoutFact extends Tagged {
 export const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_reports", "core"]);
 
 /**
- * The plans that pre-unlock a report (Marcus's "Initial plan", EUR 1.99): none is on sale yet.
- * Add its plan key here when it ships; until then every pre-unlock figure says so.
+ * The plans that pre-unlock a report (Marcus's "Initial plan", EUR 1.99): the initial unlock
+ * (features/report/logic/initialUnlock.ts), on sale since 19.10 on /sexual-archetype/initial.
+ * With none here, every pre-unlock figure says it is not on sale.
  */
-export const PRE_PLANS: ReadonlySet<string> = new Set<string>();
+export const PRE_PLANS: ReadonlySet<string> = new Set<string>([INITIAL_UNLOCK_PLAN]);
 
 export interface IntroFact {
   day: string;

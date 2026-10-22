@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import V4Fantasy from "@features/report/ui/v3/V4Fantasy";
 import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
+import { REPORT_V4_CHAPTER_COUNT } from "@features/report/ui/v3/reportV3Nav";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import V4TryThis from "@features/report/ui/v3/V4TryThis";
+import { buildFantasy } from "@/data/report3-fantasy";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 
 /**
@@ -94,9 +97,12 @@ describe("V4PremiumCard — the chapter-body card (1015:1163)", () => {
     const feats = [...card.querySelectorAll(".rv4-premium__feats > li")];
     expect(feats.map((li) => li.textContent)).toEqual([
       "Your complete archetype report",
-      "+20 chapters and personalised growth",
+      // The frame's "+20" counts the report's chapters: seventeen since the slimmed
+      // report took three out (16.10), the nav's own count.
+      "+17 chapters and personalised growth",
       "Finally understand old patterns and learn how to move past them",
     ]);
+    expect(REPORT_V4_CHAPTER_COUNT).toBe(17);
     for (const li of feats) {
       const img = li.querySelector("img")!;
       expect(img.getAttribute("src")).toBe("/report/v3/premium/check.svg");
@@ -113,13 +119,24 @@ describe("V4PremiumCard — the chapter-body card (1015:1163)", () => {
 });
 
 describe("where each variant goes", () => {
-  it("puts the body card on Typical Beliefs' body gate (1015:1004)", () => {
+  it("keeps the body card on Fantasy vs. Reality's body gate (1015:1379)", () => {
     const { container } = render(
-      <V4TypicalBeliefs view={buildTypicalBeliefs("Spark Seeker", { locked: true })!} />
+      <V4Fantasy view={buildFantasy("Spark Seeker", { locked: true })!} />
     );
-    const card = container.querySelector(".rv4-tb__gate .rv4-premium")!;
-    expect(card.classList.contains("rv4-premium--body")).toBe(true);
-    expect(card.getAttribute("data-node-id")).toBe("1015:1004");
+    const card = container.querySelector(".rv4-premium--body")!;
+    expect(card).not.toBeNull();
+    expect(card.getAttribute("data-node-id")).toBe("1015:1379");
+  });
+
+  it("draws no card on the slimmed chapters' walls: 'Unlock Full Chapter' instead (16.10)", () => {
+    const { container } = render(
+      <V4TypicalBeliefs
+        view={buildTypicalBeliefs("Spark Seeker", { locked: true })!}
+        archetype="Spark Seeker"
+      />
+    );
+    expect(container.querySelector(".rv4-tb .rv4-premium")).toBeNull();
+    expect(container.querySelector(".rv4-tb .rv4-unlock")).not.toBeNull();
   });
 
   it("keeps the gate card on the practice gate", () => {

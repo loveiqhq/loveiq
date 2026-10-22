@@ -118,6 +118,51 @@ function inFilter(ids: number[]): string | null {
   return `in.(${ids.join(",")})`;
 }
 
+/**
+ * Pay to start (features/pay-to-start): an entitlement row holds the email Stripe collected
+ * for a payment made before the survey, and the visit's attribution. The row stays, with
+ * the payment it records (accounting retention, like `payment`); those two are erased.
+ * Its bearer token is never exported: it opens the survey and report it was bought for.
+ */
+const PREPAID_EXPORT_COLUMNS =
+  "id,offer,plan,status,amount_cents,list_price_cents,currency,customer_email,utm_tracker," +
+  "landing_variant,stripe_session_id,stripe_payment_intent_id,payment_id," +
+  "consumed_submission_id,created_at,paid_at,consumed_at";
+
+/**
+ * An entitlement found through a survey, not through the person's own address: the payer
+ * may be someone else (a gift), so their address and their visit's attribution are theirs,
+ * neither exported to nor erased for the survey's taker. The by-address pass covers a
+ * payer who is the same person.
+ */
+const PREPAID_BY_SUBMISSION_COLUMNS =
+  "id,offer,plan,status,amount_cents,list_price_cents,currency,landing_variant," +
+  "payment_id,consumed_submission_id,created_at,paid_at,consumed_at";
+
+async function pseudonymizePrepaid(path: string, ctx: string, result: DsrResult): Promise<number> {
+  try {
+    const res = await supabaseFetch(path, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal,count=exact" },
+      body: JSON.stringify({ customer_email: null, utm_tracker: null }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status, ctx }, "DSR prepaid pseudonymize non-ok");
+      result.ok = false;
+      result.warnings.push(`${ctx}: HTTP ${res.status}`);
+      return 0;
+    }
+    const total = (res.headers.get("content-range") ?? "").split("/")[1];
+    const count = total && total !== "*" ? parseInt(total, 10) : 0;
+    return Number.isFinite(count) ? count : 0;
+  } catch (err) {
+    logger.warn({ err, ctx }, "DSR prepaid pseudonymize threw");
+    result.ok = false;
+    result.warnings.push(`${ctx}: threw`);
+    return 0;
+  }
+}
+
 interface AppUserRow {
   id: number;
   email: string | null;
@@ -164,6 +209,13 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   result.exportData!.booking_event = bookings;
   result.rowsAffected.booking_event = bookings.length;
 
+  const prepaid = await fetchRows<unknown>(
+    `/rest/v1/prepaid_report_access?customer_email=eq.${enc(emailNorm)}&select=${PREPAID_EXPORT_COLUMNS}`,
+    "prepaid"
+  );
+  result.exportData!.prepaid_report_access = prepaid;
+  result.rowsAffected.prepaid_report_access = prepaid.length;
+
   const users = await fetchRows<AppUserRow>(
     `/rest/v1/app_user?email=eq.${enc(emailNorm)}&select=*`,
     "user"
@@ -201,6 +253,11 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   result.exportData!.booking_event_by_submission = await fetchRows(
     `/rest/v1/booking_event?survey_submission_id=${subFilter}&select=*`,
     "be-sub"
+  );
+  // An entitlement this person's survey claimed, though Stripe took another address.
+  result.exportData!.prepaid_report_access_by_submission = await fetchRows(
+    `/rest/v1/prepaid_report_access?consumed_submission_id=${subFilter}&select=${PREPAID_BY_SUBMISSION_COLUMNS}`,
+    "prepaid-sub"
   );
 
   result.exportData!.survey_submission_answer = await fetchRows(
@@ -319,6 +376,11 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
     "booking",
     result
   );
+  result.rowsAffected.prepaid_report_access_pseudonymized = await pseudonymizePrepaid(
+    `/rest/v1/prepaid_report_access?customer_email=eq.${enc(emailNorm)}`,
+    "prepaid",
+    result
+  );
 
   // Tier 2: app_user-rooted cascade.
   const users = await fetchRows<AppUserRow>(
@@ -383,6 +445,10 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
       "be-sub",
       result
     );
+    // No by-submission pass for pay-to-start entitlements: what such a row holds about a
+    // person (the address Stripe took, the visit's attribution) is the payer's, erased by
+    // the by-address pass above when the payer asks. The survey's link to it goes with the
+    // submission (consumed_submission_id is ON DELETE SET NULL).
 
     // Personal report sub-cascade (must precede survey_submission delete).
     const reports = await fetchRows<PersonalReportRow>(

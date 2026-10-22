@@ -11,6 +11,7 @@ import {
   trackHeroVideoResumed,
 } from "@features/analytics/client";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
+import { HERO_POSTER_SRC, HERO_PREVIEW_SRC, HERO_VIDEO_SRC } from "./heroVideoFiles";
 
 /**
  * Arm B's hero (Figma Report-3.0 `1503:12473`, "B- Landingpage_5.10.26"): the presenter
@@ -29,9 +30,7 @@ import { useCtaSeen } from "@features/analytics/useCtaSeen";
  * Files: encoded from Marcus's VEED export (see public/AGENT_README.md). The captions are
  * burned in, so the silent loop stays readable and no caption track is needed.
  */
-export const HERO_VIDEO_SRC = "/videos/white/emma-intro.96705e65.mp4";
-export const HERO_PREVIEW_SRC = "/videos/white/emma-preview.a47a3687.mp4";
-export const HERO_POSTER_SRC = "/images/white/emma-poster.ab3f901e.jpg";
+export { HERO_POSTER_SRC, HERO_PREVIEW_SRC, HERO_VIDEO_SRC };
 
 /** The full video runs 70.4 s. */
 const DURATION_LABEL = "1:10";

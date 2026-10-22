@@ -94,11 +94,19 @@ const v3Chapter = (id: string): ReportV3Chapter => {
  * Chapters V4 does not carry. The 24.09 review: "Please take out the Arousal, Desire &
  * Sexual Stage Chapter" and "Take out the Summary, Sexual Stage, Importance of Sexuality
  * chapters please". (The Summary it means is V3's closing one; see ReportPage.)
+ *
+ * The slimmed report (16.10, Notion "Rework the report into the slimmed version") takes
+ * out three more, Fatih's call: Core Insecurities (cut at the 06.10 sync), Confidence
+ * Level and Arousal Style. Readers found V4 too long (Mark's PostHog review, 13.10).
+ * V1 to V3 keep all three, and so do the plans' section lists (ESSENTIALS_SECTION_IDS).
  */
 const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
   "background_know_how_arousal_desire_and_pleasure",
   "sexual_stage",
   "the_importance_of_sexuality",
+  "core_insecurities",
+  "confidence_level",
+  "arousal_style",
 ]);
 
 /**
@@ -309,6 +317,17 @@ export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
     ],
   },
 });
+
+/**
+ * How many chapters V4 has, as the pre-report wizard ("6 Parts, 17 Chapters", 1049:1637)
+ * and the premium card ("+17 chapters", 1015:1186) count them: every nav row from Part 2
+ * on, Part 1 being the report's welcome. Derived, so a chapter added or taken out moves
+ * both numbers (20 until the slimmed report, 16.10).
+ */
+export const REPORT_V4_CHAPTER_COUNT: number = REPORT_V4_NAV_PARTS.slice(1).reduce(
+  (count, part) => count + part.items.length,
+  0
+);
 
 /** V4's nav anchors in nav order: what the scroll-spy walks under `?v4=1`. */
 export const REPORT_V4_NAV_IDS: readonly string[] = REPORT_V4_NAV_PARTS.flatMap((part) =>

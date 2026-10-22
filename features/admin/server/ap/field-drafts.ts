@@ -104,7 +104,27 @@ export const DRAFTS: Record<string, TableDraft> = {
       first_seen: "First time that day.",
       utm_source:
         "The visit's utm_source tag: most ad clicks carry none, so it undercounts Google.",
-      landing_variant: "The landing page test arm shown (recorded from 14 Jun 2026).",
+      landing_variant:
+        "The landing page test arm shown (recorded from 14 Jun 2026). pay_to_start marks the pay-first page's visits and its prepaid_* steps (from 18 Oct 2026), never a test arm.",
+    },
+  },
+  prepaid_report_access: {
+    table:
+      "Payments made before the survey: one row per checkout on the pay-first page (/sexual-archetype, from 18 Oct 2026; nine older rows are June's EUR 9.99 test). A row is paid when Stripe confirms it, claimed by the survey its buyer finishes, and becomes a payment row then.",
+    fields: {
+      offer: "What was sold: full (the survey and the full report). Empty on June's rows.",
+      status:
+        "pending (checkout opened), succeeded (paid), expired (left unpaid), refunded (refunded or disputed: it no longer unlocks).",
+      amount_cents: "What was paid, in cents, after any promotion code.",
+      list_price_cents: "The price the page showed, in cents: the price test's arm.",
+      customer_email: "The email Stripe took at checkout.",
+      is_test: "A team member's payment (an @loveiq.org email): left out of the numbers.",
+      consumed_submission_id: "The survey that used it; empty until the buyer finishes one.",
+      payment_id: "The payment row written when the survey claimed it.",
+      paid_at: "When Stripe confirmed the payment.",
+      consumed_at: "When the survey claimed it.",
+      utm_tracker: "The visit's attribution when the checkout started.",
+      landing_variant: "sexual-archetype: the page it was bought on.",
     },
   },
   analytics_event: {

@@ -4,12 +4,18 @@ import { useState, useCallback } from "react";
 import posthog from "posthog-js";
 import { surveyQuestions } from "@/data/survey-data";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
 import { isRandomised } from "@features/survey/questionFlags";
 import { orderedOptions } from "../questionOrder";
-import { getSessionId, rememberCompletedReport, setReportSessionId } from "./surveySession";
+import {
+  getSessionId,
+  rememberCompletedReport,
+  rememberPaidWizard,
+  setReportSessionId,
+} from "./surveySession";
 import {
   clearPendingCompletion,
   clearPersistedSurveyState,
@@ -145,6 +151,11 @@ export function useSubmitSurvey() {
   // PreReportWizard mounts. Without this, wizard_slide_advanced events silently
   // skip durable persistence — see persistAnalyticsEvent in features/analytics/client.ts.
   const [submissionId, setSubmissionId] = useState<number | null>(null);
+  /**
+   * The survey was paid for before it was taken (pay to start) and the reply says the
+   * report is unlocked, or will be when the payment settles: the wizard its offer shows.
+   */
+  const [paidWizard, setPaidWizard] = useState<PayToStartWizard | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -220,7 +231,22 @@ export function useSubmitSurvey() {
             const json = (await res.json()) as {
               reportToken?: string;
               submissionId?: number;
+              journey?: string;
+              unlocked?: boolean;
+              unlockPending?: boolean;
+              wizard?: string;
             };
+            if (
+              json.journey === "pay_to_start" &&
+              (json.unlocked === true || json.unlockPending === true)
+            ) {
+              // A reply that names no wizard (a server from before the EUR 1.99 one) means
+              // the full report's.
+              const wizard: PayToStartWizard =
+                json.wizard === "pay_to_start_initial" ? "pay_to_start_initial" : "pay_to_start";
+              setPaidWizard(wizard);
+              rememberPaidWizard(wizard);
+            }
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
               // Recorded HERE rather than on the way out, because submission
@@ -340,6 +366,7 @@ export function useSubmitSurvey() {
     pendingSentMomentsAgo,
     reportToken,
     submissionId,
+    paidWizard,
     status,
     errorKind,
   };

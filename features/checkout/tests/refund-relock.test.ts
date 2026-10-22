@@ -53,12 +53,15 @@ function db({
   others = [],
   tiers,
   credited = [],
+  initialCredited = [],
 }: {
   paid: Meta;
   others?: Meta[];
   tiers: Record<string, string>;
   /** Later All 14 payments on the report that credited earlier ones. */
   credited?: Array<{ id: number; amount: number; metadata: Meta }>;
+  /** Later full reports on the report that credited an initial unlock's EUR 10. */
+  initialCredited?: Array<{ id: number; amount: number; metadata: Meta }>;
 }) {
   const patches: Array<{ url: string; body: Record<string, unknown> }> = [];
   mockFetchWithTimeout.mockImplementation(
@@ -76,8 +79,9 @@ function db({
       if (url.includes("/payment?id=eq.41&select=metadata")) return json([{ metadata: paid }]);
       if (url.includes("/personal_report?id=eq.5&select=survey_submission_id"))
         return json([{ survey_submission_id: 70, archetype_tiers: tiers }]);
-      if (url.includes("/payment?personal_report_id=eq.5&id=gt.41&status=eq.succeeded"))
-        return json(credited);
+      if (url.includes("/payment?personal_report_id=eq.5&id=gt.41&status=eq.succeeded")) {
+        return json(url.includes("metadata->>plan=eq.all_reports") ? credited : initialCredited);
+      }
       if (url.includes("/payment?personal_report_id=eq.5&status=eq.succeeded&id=neq.41"))
         return json(others.map((metadata) => ({ metadata })));
       if (url.includes("/scoring_result?survey_submission_id=eq.70"))
@@ -264,5 +268,36 @@ describe("a refunded payment that All 14 credited", () => {
     });
     await processStripeWebhookEvent({ event: refund(), stripe });
     expect(alerted()).toHaveLength(0);
+  });
+});
+
+/** The full report credits the initial unlock's EUR 10 the same way (applyInitialCredit). */
+describe("a refunded initial unlock that the full report credited", () => {
+  const initialCredited = [
+    { id: 52, amount: 19.99, metadata: { plan: "full_report", initialCredit: "10.00" } },
+  ];
+  const alerted = () =>
+    mockNotifySlack.mock.calls.filter(
+      ([arg]) => (arg as { kind?: string }).kind === "credited_payment_refunded"
+    );
+
+  it("refund: ops is told, and no archetype comes off (the unlock holds no tier)", async () => {
+    const patches = db({
+      paid: { plan: "initial" },
+      tiers: { "Spark Seeker": "full_report" },
+      initialCredited,
+    });
+    await processStripeWebhookEvent({ event: refund(), stripe });
+    expect(alerted()).toHaveLength(1);
+    expect((alerted()[0]![0] as { text: string }).text).toContain(
+      "took €10.00 off for the initial unlock bought before it, so the reader keeps the full report for €19.99"
+    );
+    expect(tiersPatch(patches)).toBeUndefined();
+  });
+
+  it("chargeback opened: the same", async () => {
+    db({ paid: { plan: "initial" }, tiers: {}, initialCredited });
+    await processStripeWebhookEvent({ event: dispute("charge.dispute.created"), stripe });
+    expect(alerted()).toHaveLength(1);
   });
 });

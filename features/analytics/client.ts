@@ -1,5 +1,15 @@
+import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
+import type {
+  TourAudience,
+  TourReplaySource,
+  TourSkipSource,
+  TourStepId,
+  TourStopSummary,
+  TourTrigger,
+} from "@features/report/logic/guidedTour";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { __resetFunnelVisitorForTests, funnelVisitorId } from "./funnelVisitor";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
@@ -97,6 +107,12 @@ const PERSISTED_EVENTS = new Set([
   // Per-chapter reading and the wizard's Skip Intro (14.10)
   "report_chapter_stats",
   "wizard_skipped",
+  // The report's guided tour: a first run's start and how it ended, and each replay
+  "tour_started",
+  "tour_completed",
+  "tour_skipped",
+  "tour_left",
+  "tour_replayed",
 ]);
 
 /**
@@ -328,6 +344,22 @@ const gtagSend = (...args: GtagCall) => {
   if (gtagQueue.length < QUEUE_LIMIT) gtagQueue.push(args);
   if (!flushGtagQueue()) scheduleFlush();
 };
+
+/**
+ * Resolves once nothing waits in the gtag queue (sent, or dropped when gtag.js never
+ * came), or after `maxMs`. The queue lives in this page's memory and a full-page
+ * navigation throws it away, so a page that leaves right after a purchase waits on this
+ * first, or Google Ads never hears of the sale.
+ */
+export const gtagQueueSettled = (maxMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    const deadline = Date.now() + maxMs;
+    const check = () => {
+      if (!gtagQueue?.length || Date.now() >= deadline) resolve();
+      else setTimeout(check, FLUSH_INTERVAL_MS);
+    };
+    check();
+  });
 
 export const hasCookieYesConsent = (category: ConsentCategory) => {
   const consentValue = getCookieValue(COOKIEYES_CONSENT_COOKIE);
@@ -587,11 +619,13 @@ export const trackSurveyComplete = (durationMs: number, totalQuestions?: number)
 
 export const trackReportViewed = (
   reportType: "essentials" | "full_report" | "core" | "all_reports" | "locked",
-  archetype?: string | null
+  archetype?: string | null,
+  layout?: ReportLayout | null
 ) => {
   const params = {
     report_type: reportType,
     ...(archetype ? { archetype } : {}),
+    ...(layout ? { report_layout: layout } : {}),
   };
   track("report_viewed", params);
   persistAnalyticsEvent("report_viewed", params);
@@ -729,11 +763,14 @@ export interface PriceShownParams {
   /** Initial price before ladder discount. */
   initial_price?: number;
   /**
-   * All 14 only: what the reader already paid for single reports, taken off `price`
-   * (`applyUpgradeCredit`). Absent when nothing was credited, so per-arm price analysis
-   * can leave credited prices out.
+   * The credit taken off `price`: on All 14, what the reader already paid for single
+   * reports (`applyUpgradeCredit`); on the full report, the initial unlock's EUR 10
+   * (`applyInitialCredit`, `credit_kind: "initial"`). Absent when nothing was credited, so
+   * per-arm price analysis can leave credited prices out.
    */
   upgrade_credit?: number;
+  /** "initial" when `upgrade_credit` is the initial unlock's; absent for All 14's. */
+  credit_kind?: "initial";
 }
 
 /**
@@ -855,6 +892,11 @@ export const trackReportEngagement = (
   persistAnalyticsEvent(eventName, params, thresholdSeconds * 1000);
 };
 
+/** The survey's Pause (back since Marcus's review of 20.10): where, and how far in. */
+export const trackSurveyPause = (qId: string, progress: number) => {
+  track("survey_pause", { question_id: qId, progress_pct: progress });
+};
+
 export const trackSurveyInvite = (method: string = "email") => {
   track("survey_invite", { method });
 };
@@ -898,6 +940,8 @@ export interface ReportPurchaseParams {
   discount_amount?: number;
   /** A staff payer, by the rule that sets `payment.is_test` (checkout-session-status). */
   isTest?: boolean;
+  /** "pay_to_start" for a purchase made before the survey; absent for the report's own. */
+  journey?: string;
 }
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
@@ -925,6 +969,7 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
       value: params.value,
       currency: params.currency,
       items: [{ item_name: params.item_name || "LoveIQ Report", price: params.value, quantity: 1 }],
+      ...(params.journey ? { journey: params.journey } : {}),
     });
     trackGoogleAdsPurchaseConversion(params);
     return;
@@ -956,6 +1001,7 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
     promotion_code: params.promotion_code,
     coupon_percent_off: params.coupon_percent_off,
     discount_amount: params.discount_amount,
+    ...(params.journey ? { journey: params.journey } : {}),
   });
 
   trackGoogleAdsPurchaseConversion(params);
@@ -1026,6 +1072,131 @@ export const trackScrollPaywallDismissed = (params: {
   };
   track("scroll_paywall_dismissed", payload);
   persistAnalyticsEvent("scroll_paywall_dismissed", payload, payload.view_duration_ms);
+};
+
+/**
+ * The report's guided tour (features/report/logic/guidedTour.ts). Figma's spec card
+ * (1755:1276) names the events: started, each stop viewed, back, skipped, completed and
+ * replayed; `tour_left` is the reader leaving the page with the tour still up. Every one
+ * goes to PostHog. Only a FIRST run's start and end are stored against the submission,
+ * with each replay: the route stores at most 20 events a minute per submission, shared
+ * with `begin_checkout`, and a reader clicking through five stops would spend a quarter of
+ * that on step views. So the stored end carries the run itself instead: whose tour it was
+ * (`audience`) and, per stop reached, its time and its Back presses (`stops`), which is
+ * what the AP Report page's tour table is counted from. `stops` goes to PostHog and our
+ * own table only: GA4 takes flat parameters.
+ */
+export const trackTourStarted = (params: {
+  trigger: TourTrigger;
+  audience: TourAudience;
+  steps: number;
+}) => {
+  const payload = { trigger: params.trigger, audience: params.audience, steps: params.steps };
+  track("tour_started", payload);
+  if (params.trigger === "auto") persistAnalyticsEvent("tour_started", payload);
+};
+
+/** A run's stops as they are sent: whole milliseconds, never below zero. */
+const tourStops = (stops: TourStopSummary[]) =>
+  stops.map((s) => ({ id: s.id, ms: Math.max(0, Math.round(s.ms)), back: s.back }));
+
+export const trackTourStepViewed = (params: {
+  trigger: TourTrigger;
+  n: number;
+  id: TourStepId;
+  steps: number;
+}) => {
+  track("tour_step_viewed", {
+    trigger: params.trigger,
+    n: params.n,
+    id: params.id,
+    steps: params.steps,
+  });
+};
+
+export const trackTourBack = (params: { trigger: TourTrigger; to: number; steps: number }) => {
+  track("tour_back", { trigger: params.trigger, to: params.to, steps: params.steps });
+};
+
+export const trackTourSkipped = (params: {
+  trigger: TourTrigger;
+  audience: TourAudience;
+  at: number;
+  id: TourStepId;
+  steps: number;
+  source: TourSkipSource;
+  duration_ms: number;
+  stops: TourStopSummary[];
+}) => {
+  const payload = {
+    trigger: params.trigger,
+    audience: params.audience,
+    at: params.at,
+    id: params.id,
+    steps: params.steps,
+    source: params.source,
+    duration_ms: Math.max(0, Math.round(params.duration_ms)),
+  };
+  const stops = tourStops(params.stops);
+  track("tour_skipped", payload, { stops });
+  if (params.trigger === "auto") {
+    persistAnalyticsEvent("tour_skipped", { ...payload, stops }, payload.duration_ms);
+  }
+};
+
+export const trackTourCompleted = (params: {
+  trigger: TourTrigger;
+  audience: TourAudience;
+  steps: number;
+  duration_ms: number;
+  stops: TourStopSummary[];
+}) => {
+  const payload = {
+    trigger: params.trigger,
+    audience: params.audience,
+    steps: params.steps,
+    duration_ms: Math.max(0, Math.round(params.duration_ms)),
+  };
+  const stops = tourStops(params.stops);
+  track("tour_completed", payload, { stops });
+  if (params.trigger === "auto") {
+    persistAnalyticsEvent("tour_completed", { ...payload, stops }, payload.duration_ms);
+  }
+};
+
+/**
+ * The page went for good with the tour still up, at stop `at` (V4GuidedTour says when). A
+ * beacon both ways: PostHog's queue and an ordinary request may not outlive the page.
+ */
+export const trackTourLeft = (params: {
+  trigger: TourTrigger;
+  audience: TourAudience;
+  at: number;
+  id: TourStepId;
+  steps: number;
+  duration_ms: number;
+  stops: TourStopSummary[];
+}) => {
+  const payload = {
+    trigger: params.trigger,
+    audience: params.audience,
+    at: params.at,
+    id: params.id,
+    steps: params.steps,
+    duration_ms: Math.max(0, Math.round(params.duration_ms)),
+  };
+  const stops = tourStops(params.stops);
+  track("tour_left", payload, { stops }, { transport: "sendBeacon" });
+  if (params.trigger === "auto") {
+    persistAnalyticsEvent("tour_left", { ...payload, stops }, payload.duration_ms);
+  }
+};
+
+/** "Replay the Tour" tapped in the chapter menu. The run it starts logs its own events. */
+export const trackTourReplayed = (params: { source: TourReplaySource }) => {
+  const payload = { source: params.source };
+  track("tour_replayed", payload);
+  persistAnalyticsEvent("tour_replayed", payload);
 };
 
 /**
@@ -1159,6 +1330,8 @@ export const trackWizardSlideAdvanced = (params: {
   from_slide: number;
   to_slide: number;
   direction: "next" | "previous";
+  /** Only on a pay-to-start wizard (four of the six slides, or five); absent means the six. */
+  wizard_variant?: PayToStartWizard;
 }) => {
   track("wizard_slide_advanced", params);
   persistAnalyticsEvent("wizard_slide_advanced", params);
@@ -1183,7 +1356,12 @@ export const trackWizardMapStep = (params: {
  * 2) from which of its steps. Its own event: wizard_slide_advanced means "moved to slide
  * 0-5" to the digests, and a skip goes to no slide.
  */
-export const trackWizardSkipped = (params: { from_slide: number; map_step?: number }) => {
+export const trackWizardSkipped = (params: {
+  from_slide: number;
+  map_step?: number;
+  /** Only on a pay-to-start wizard; absent means the six. */
+  wizard_variant?: PayToStartWizard;
+}) => {
   track("wizard_skipped", params);
   persistAnalyticsEvent("wizard_skipped", params);
 };
@@ -1194,6 +1372,7 @@ export const trackWizardSkipped = (params: { from_slide: number; map_step?: numb
  */
 export const persistReportChapterStats = (metadata: {
   archetype?: string;
+  report_layout?: ReportLayout;
   chapters: Record<string, Record<string, number>>;
 }) => persistAnalyticsEvent("report_chapter_stats", metadata);
 
@@ -1340,9 +1519,18 @@ export const trackDeadClick = (params: {
 /**
  * What `cta_seen` names: a locked report chapter's unlock offer, the landing hero's media
  * in each arm of the landing test (the presenter video or question 1), or the landing's
- * sticky bar sliding in. The arm is not a param: it rides on `landing_variant`.
+ * sticky bar sliding in. The arm is not a param: it rides on `landing_variant`. Since the
+ * slimmed report (16.10) Part II has two offers of its own, counted apart so
+ * `locked_chapter` still means a chapter's: the Summary's gate card and the archetype
+ * card's dimension lock.
  */
-export type CtaSeen = "locked_chapter" | "hero_video" | "hero_card" | "sticky_bar";
+export type CtaSeen =
+  | "locked_chapter"
+  | "summary_gate"
+  | "archetype_card_lock"
+  | "hero_video"
+  | "hero_card"
+  | "sticky_bar";
 
 /**
  * A call to action came into view: half of it inside the viewport, the first time on this

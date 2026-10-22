@@ -1,3 +1,4 @@
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import { SURVEY_STATE_KEY } from "./surveyStorage";
 
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
@@ -17,6 +18,12 @@ export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
  * a report token is an access credential that should not outlive the tab.
  */
 export const COMPLETED_REPORT_KEY = "loveiq-completed-report";
+/**
+ * Set when this tab's finished run was paid for before the survey (pay to start), to the
+ * wizard its offer shows, so a reload during the pre-report wizard still shows that one.
+ * "1", written before the EUR 1.99 offer had a wizard of its own, reads as the full one's.
+ */
+export const PAID_WIZARD_KEY = "loveiq-paid-wizard";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -158,6 +165,7 @@ export function getSessionId(): string {
 
 /** The finished report, for a browser that refuses storage: remembered for this page load. */
 let inMemoryCompleted: string | null = null;
+let inMemoryPaidWizard: PayToStartWizard | null = null;
 
 /** Drop the draft's saved id (the run it belonged to is over). */
 export function forgetSessionMirror(): void {
@@ -382,12 +390,40 @@ export function completedReportToken(): string | null {
 export function forgetCompletedReport(): void {
   inMemoryCompleted = null;
   inMemorySessionId = null;
+  inMemoryPaidWizard = null;
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
+    sessionStorage.removeItem(PAID_WIZARD_KEY);
     forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+/** Remember that this tab's finished run was paid for before the survey, and its wizard. */
+export function rememberPaidWizard(wizard: PayToStartWizard): void {
+  inMemoryPaidWizard = wizard;
+  if (!canUseStorage()) return;
+  try {
+    sessionStorage.setItem(PAID_WIZARD_KEY, wizard);
+  } catch {
+    /* kept in memory for this page load */
+  }
+}
+
+function readPaidWizard(value: string | null): PayToStartWizard | null {
+  if (value === "pay_to_start" || value === "pay_to_start_initial") return value;
+  return value === "1" ? "pay_to_start" : null;
+}
+
+/** The wizard of this tab's finished run when it was paid for before the survey, else null. */
+export function paidWizardRemembered(): PayToStartWizard | null {
+  if (!canUseStorage()) return inMemoryPaidWizard;
+  try {
+    return readPaidWizard(sessionStorage.getItem(PAID_WIZARD_KEY)) ?? inMemoryPaidWizard;
+  } catch {
+    return inMemoryPaidWizard;
   }
 }

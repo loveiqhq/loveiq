@@ -7,6 +7,7 @@ import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
 import { useIsV3, useIsV4 } from "./v3/V3Chapter";
+import { TOUR_LABELS } from "./v3/guidedTourContent";
 import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS } from "./v3/reportV3Nav";
 
 interface Props {
@@ -19,6 +20,8 @@ interface Props {
   onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
+  /** "Replay the Tour", the menu's last item; focus comes back to it when the tour ends. */
+  onReplayTour?: (returnTo: HTMLElement | null) => void;
 }
 
 const ReportDesktopSidebar: FC<Props> = ({
@@ -27,6 +30,7 @@ const ReportDesktopSidebar: FC<Props> = ({
   onReferFriend,
   onSectionClick,
   onShareClick,
+  onReplayTour,
 }) => {
   const isV3 = useIsV3();
   const isV4 = useIsV4();
@@ -183,6 +187,16 @@ const ReportDesktopSidebar: FC<Props> = ({
             </div>
           ))}
         </nav>
+        {/* After the list, not in it: the walks count its rows. */}
+        {onReplayTour && (
+          <button
+            type="button"
+            className="report-tour-replay"
+            onClick={(event) => onReplayTour(event.currentTarget)}
+          >
+            {TOUR_LABELS.replay}
+          </button>
+        )}
       </div>
     </aside>
   );

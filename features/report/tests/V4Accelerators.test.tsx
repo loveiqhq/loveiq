@@ -16,51 +16,60 @@ const V3_CSS = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "
 const OPEN = buildAccelerators("Spark Seeker")!;
 const LOCKED = buildAccelerators("Spark Seeker", { locked: true })!;
 
+/** The chapter's two sections (16.10): "The Spark Seeker", then "Common Challenges". */
+const sections = (container: HTMLElement) =>
+  [...container.querySelector(".rv4-ab")!.children].filter((el) =>
+    el.classList.contains("rv4-sect")
+  );
+const firstClass = (el: Element) => el.className.split(" ")[0];
+
 afterEach(cleanup);
 
 describe("the chapter body — 310:229", () => {
   // Figma's two lead lines (311:411, 311:413) went with Sanjin's doc on 02.10: no text before
   // or between the lists.
-  it("runs intro, brakes card, accelerators card, challenges, with no lead lines", () => {
-    const { container } = render(<V4Accelerators view={OPEN} />);
+  it("runs the opening, then 'The Spark Seeker' over both cards, then Common Challenges (16.10)", () => {
+    const { container } = render(<V4Accelerators view={OPEN} archetype="Spark Seeker" />);
     const body = container.querySelector(".rv4-ab")!;
     expect(body.getAttribute("data-node-id")).toBe("310:229");
-    expect([...body.children].map((el) => el.className.split(" ")[0])).toEqual([
-      "rv4-ab__intro",
-      "rv4-trig",
-      "rv4-trig",
-      "rv4-ab__challenges",
-    ]);
-    expect(body.querySelectorAll(".rv4-ab__intro .rv4-prose__p")).toHaveLength(5);
+    expect([...body.children].map(firstClass)).toEqual(["rv4-ab__intro", "rv4-sect", "rv4-sect"]);
+    const [own, challenges] = sections(container);
+    expect(own!.querySelector(".rv4-sect__name")!.textContent).toBe("The Spark Seeker");
+    expect(challenges!.querySelector(".rv4-sect__name")!.textContent).toBe("Common Challenges");
+    // Sanjin's slimmed opening is two paragraphs; the archetype's own two fold under its name.
+    expect(body.querySelectorAll(".rv4-ab__intro .rv4-prose__p")).toHaveLength(2);
+    const inner = own!.querySelector(".rv4-sect__inner")!;
+    expect([...inner.children].map(firstClass)).toEqual(["rv4-fold", "rv4-trig", "rv4-trig"]);
+    expect(inner.querySelectorAll(".rv4-fold .rv4-prose__p")).toHaveLength(2);
+    // Figma's two lead lines (311:411, 311:413) went with Sanjin's doc on 02.10.
     expect(body.querySelectorAll(".rv4-ab__lead")).toHaveLength(0);
-    expect(body.querySelector(".rv4-trig--brake")).not.toBeNull();
-    expect(body.querySelector(".rv4-trig--accel")).not.toBeNull();
+    expect(inner.querySelector(".rv4-trig--brake")).not.toBeNull();
+    expect(inner.querySelector(".rv4-trig--accel")).not.toBeNull();
   });
 
-  it("sets Common challenges' H2 over its seven paragraphs, nothing gated", () => {
-    const { container } = render(<V4Accelerators view={OPEN} />);
-    const challenges = container.querySelector(".rv4-ab__challenges")!;
-    expect(challenges.getAttribute("data-node-id")).toBe("312:211");
-    expect(challenges.querySelector(".rv4-ab__h2")!.textContent).toBe("Common Challenges");
-    expect(challenges.querySelectorAll(".rv4-prose__p")).toHaveLength(7);
-    expect(container.querySelector(".rv4-ab__gate")).toBeNull();
+  it("sets Common Challenges over its seven paragraphs, the first sharp, the rest folded", () => {
+    const { container } = render(<V4Accelerators view={OPEN} archetype="Spark Seeker" />);
+    const inner = sections(container)[1]!.querySelector(".rv4-sect__inner")!;
+    expect(inner.querySelectorAll(".rv4-prose__p")).toHaveLength(7);
+    expect(inner.firstElementChild).toHaveClass("rv4-prose__p");
+    expect(inner.querySelectorAll(".rv4-fold .rv4-prose__p")).toHaveLength(6);
+    expect(container.querySelector(".rv4-unlock")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
   });
 
   it("keeps bold runs in the paragraph's own colour, as 310:231 draws them", () => {
-    const { container } = render(<V4Accelerators view={OPEN} />);
-    const bold = [...container.querySelectorAll(".rv4-ab__intro strong")].map((b) => b.textContent);
-    expect(bold).toEqual([
-      "Dual Control Model",
-      "accelerator",
-      "brakes",
+    const { container } = render(<V4Accelerators view={OPEN} archetype="Spark Seeker" />);
+    const bold = (el: Element) => [...el.querySelectorAll("strong")].map((b) => b.textContent);
+    // Sanjin's slimmed opening bolds the two systems (16.10).
+    expect(bold(container.querySelector(".rv4-ab__intro")!)).toEqual(["accelerator", "brakes"]);
+    expect(bold(sections(container)[0]!.querySelector(".rv4-fold")!)).toEqual([
       "Spark Seeker,",
       "this balance tends to be especially sensitive to play, anticipation and novelty.",
     ]);
   });
 
   it("follows the body with A&B's own practice card, closed", () => {
-    const { container } = render(<V4Accelerators view={OPEN} />);
+    const { container } = render(<V4Accelerators view={OPEN} archetype="Spark Seeker" />);
     const next = container.querySelector(".rv4-ab")!.nextElementSibling!;
     expect(next.classList.contains("rv4-try")).toBe(true);
     expect(next.getAttribute("data-node-id")).toBe("377:221");
@@ -70,51 +79,45 @@ describe("the chapter body — 310:229", () => {
 
 describe("the paywalled chapter — 314:211", () => {
   it("locks both cards at row three, each behind one badge", () => {
-    const { container } = render(<V4Accelerators view={LOCKED} />);
+    const { container } = render(<V4Accelerators view={LOCKED} archetype="Spark Seeker" />);
     expect(container.querySelector(".rv4-ab")!.getAttribute("data-node-id")).toBe("314:219");
     expect(container.querySelectorAll(".rv4-trig .rv4-lockbadge")).toHaveLength(2);
     expect(container.querySelectorAll(".rv4-trig__row.is-locked")).toHaveLength(6);
   });
 
-  it("gates Common challenges after its first paragraph: ramp, blurred rest, and the body card", () => {
-    const { container } = render(<V4Accelerators view={LOCKED} />);
-    const challenges = container.querySelector(".rv4-ab__challenges")!;
-    expect(challenges.getAttribute("data-node-id")).toBe("314:307");
-    const gate = challenges.querySelector(".rv4-ab__gate")!;
-    const gated = gate.querySelector(".rv4-ab__gated")!;
-    expect(gated.getAttribute("aria-hidden")).toBe("true");
-    expect(gated.hasAttribute("inert")).toBe(true);
-    // The ramp's fade band, then the full blur — since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts), hidden with the rest.
-    const ramp = gate.querySelector(".rv4-ab__ramp")!;
-    expect(ramp.textContent).toContain("can create days of tension.");
-    expect(ramp.textContent).toContain("A suggestive message on Wednesday");
-    expect(ramp.querySelector(".rv4-pblur")).not.toBeNull();
-    expect(gate.querySelectorAll(".rv4-ab__blurred .rv4-prose__p")).toHaveLength(5);
-    const card = gate.querySelector(".rv4-premium")!;
-    expect(card.classList.contains("rv4-premium--body")).toBe(true);
-    expect(card.getAttribute("data-node-id")).toBe("1015:1163");
-    // No lock badge on the prose: the frame puts badges only on the cards.
-    expect(gate.querySelector(".rv4-lockbadge")).toBeNull();
-  });
-
-  it("fades the whole ramp paragraph in, with no veiled tail to cut the fade short", () => {
-    // 314:284 (29.09) runs the fade over the first gated paragraph, so none of it is
-    // marked for the full blur: no useRampFit ending the fade where a tail starts.
-    const { container } = render(<V4Accelerators view={LOCKED} />);
-    const ramp = container.querySelector<HTMLElement>(".rv4-ab__ramp")!;
-    expect(ramp.querySelector(".rv4-prose__veiled")).toBeNull();
+  it("keeps Common Challenges' first paragraph sharp, then the wall: the next fading out (1665:6780)", () => {
+    const { container } = render(<V4Accelerators view={LOCKED} archetype="Spark Seeker" />);
+    const challenges = sections(container)[1]!;
+    const inner = challenges.querySelector(".rv4-sect__inner")!;
+    expect([...inner.children].map(firstClass)).toEqual(["rv4-prose__p", "rv4-unlock"]);
+    const wall = inner.querySelector(".rv4-unlock")!;
+    expect(wall.getAttribute("data-node-id")).toBe("1665:6780");
+    const sample = wall.querySelector(".rv4-unlock__sample")!;
+    expect(sample.getAttribute("aria-hidden")).toBe("true");
+    expect(sample.hasAttribute("inert")).toBe(true);
+    // The whole ramp paragraph, real, under the fade; nothing blurred and nothing after it.
+    expect(sample.textContent).toContain("can create days of tension.");
+    expect(sample.textContent).toContain("A suggestive message on Wednesday");
+    expect(sample.querySelectorAll(".rv4-prose__p")).toHaveLength(1);
+    expect(sample.querySelector(".rv4-pblur, .rv4-prose__veiled")).toBeNull();
+    expect(wall.querySelector(".rv4-unlock__pill")!.textContent).toBe("Unlock Full Chapter");
+    // No card on the wall, and no lock badge on the prose: badges stay on the cards.
+    expect(challenges.querySelector(".rv4-premium")).toBeNull();
+    expect(challenges.querySelector(".rv4-lockbadge")).toBeNull();
   });
 
   it("opens the paywall exactly once from every locked surface, never from clear copy", () => {
     const onUnlock = vi.fn();
-    const { container } = render(<V4Accelerators view={LOCKED} onUnlock={onUnlock} />);
+    const { container } = render(
+      <V4Accelerators view={LOCKED} archetype="Spark Seeker" onUnlock={onUnlock} />
+    );
     const surfaces = [
       container.querySelector(".rv4-trig--brake .rv4-tb-lock")!,
       container.querySelector(".rv4-trig--accel .rv4-tb-lock")!,
-      container.querySelector(".rv4-ab__gate")!,
       screen.getAllByRole("button", { name: "Unlock Report" })[0]!,
-      // The paywall card's pill (29.09), named as it reads.
-      container.querySelector(".rv4-ab__gate .rv4-premium__cta")!,
+      // The wall: its faded lines and its pill, which the band's click covers.
+      container.querySelector(".rv4-ab .rv4-unlock__sample")!,
+      container.querySelector(".rv4-ab .rv4-unlock__pill")!,
     ];
     for (const surface of surfaces) {
       onUnlock.mockClear();
@@ -123,12 +126,14 @@ describe("the paywalled chapter — 314:211", () => {
     }
     onUnlock.mockClear();
     fireEvent.click(container.querySelector(".rv4-ab__intro .rv4-prose__p")!);
-    fireEvent.click(container.querySelector(".rv4-ab__challenges .rv4-prose__p")!);
+    fireEvent.click(sections(container)[1]!.querySelector(".rv4-prose__p")!);
+    // The section rows fold, never sell.
+    for (const head of container.querySelectorAll(".rv4-ab .rv4-sect__head")) fireEvent.click(head);
     expect(onUnlock).not.toHaveBeenCalled();
   });
 
   it("hands the locked practice card its gated node", () => {
-    const { container } = render(<V4Accelerators view={LOCKED} />);
+    const { container } = render(<V4Accelerators view={LOCKED} archetype="Spark Seeker" />);
     fireEvent.click(screen.getByRole("button", { name: "Read all of the practice" }));
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("375:221");
   });

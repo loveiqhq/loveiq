@@ -20,6 +20,10 @@
  * Both RPCs are idempotent — re-running on already-fulfilled rows is a
  * no-op. Safe to run hourly.
  *
+ * Pay to start (features/pay-to-start/server/sweep.ts) runs first: a checkout paid
+ * before the survey has no payment row until a survey claims it, so the query above
+ * cannot see one left pending, or one claimed but never applied.
+ *
  * Protected by `Authorization: Bearer ${CRON_SECRET}`.
  */
 
@@ -31,6 +35,8 @@ import { getBreaker } from "@shared/http/circuit-breaker";
 import { KNOWN_ARCHETYPES, isArchetypeName } from "@features/report/server/archetypeSlug";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
+import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
+import { sweepPayToStart, type PayToStartSweepSummary } from "@features/pay-to-start/server/sweep";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -249,6 +255,26 @@ export async function GET(request: Request) {
 
   const summary = { scanned: 0, fixed: 0, skipped: 0, errors: 0 };
 
+  // Pay to start first, and on its own: a checkout paid before the survey has no payment
+  // row yet, so the stuck-payment query below cannot see it (features/pay-to-start).
+  let payToStart: PayToStartSweepSummary | null = null;
+  const stripe = getStripeServerClient();
+  if (stripe) {
+    // Its own 10 s, checked between rows, so the stuck-payment loop below always runs and
+    // the cron_run row is written (50 s ceiling, 40 s of tail, cron-budgets.test.ts).
+    const startedAtMs = Date.now();
+    payToStart = await sweepPayToStart({
+      stripe,
+      shouldStop: () => terminated || Date.now() - startedAtMs > 10_000,
+    });
+    if (payToStart.paid > 0 || payToStart.applied > 0) {
+      logger.warn(
+        payToStart,
+        "Sweep: rescued pay-to-start payments — investigate webhook + status-page health"
+      );
+    }
+  }
+
   try {
     const stuck = await findStuckPayments();
     summary.scanned = stuck.length;
@@ -283,7 +309,7 @@ export async function GET(request: Request) {
       logger.info(summary, "Sweep: no stuck purchases");
     }
 
-    return NextResponse.json({ success: true, ...summary });
+    return NextResponse.json({ success: true, ...summary, payToStart });
   } catch (err) {
     logger.error({ err, summary }, "Sweep: top-level failure");
     cronError = err instanceof Error ? err.message : String(err);

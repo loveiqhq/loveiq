@@ -74,9 +74,16 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: indefinite for accounting; DSAR delete preserves payments (DSAR helper warns "payment data retained, accounting retention")
 - **Subprocessors**: Stripe (separate DPA)
 
+### A7a — Payment before the survey (pay to start, from 2026-10-18)
+
+- **Data**: an opaque entitlement token (httpOnly cookie, 30 days), the email Stripe collects at checkout, the price shown and paid, the Stripe session and payment intent, the visit's attribution (`utm_tracker`), and when it was paid and claimed (`prepaid_report_access`)
+- **Basis**: (b) contract: the buyer pays for a survey and a report delivered after it, and the row is how the paid survey is identified and the confirmation email (with the link back to the survey) is sent
+- **Retention**: with the payment, for accounting; DSAR erasure strips `customer_email` and `utm_tracker`, export returns the rows without the token
+- **Subprocessors**: Stripe, Resend (the confirmation email), Supabase
+
 ### A8 — Engagement analytics
 
-- **Data**: analytics_event rows (event_type + metadata; from 2026-10-16 also `report_chapter_stats`, how long each report chapter was read and which of its actions were used, and `wizard_skipped`, the pre-report slides skipped), survey_behavior_event rows (from 2026-10-16 with `is_tablet`), invite_event rows, scroll depth, time-on-section, click telemetry; funnel_event rows (unique visitor, survey start and, from 2026-10-16, each survey intro card seen and its Back and Skip); client-side: GA4, Microsoft Clarity, PostHog (from 2026-10-16 with the time spent on each landing section, also sent to GA4)
+- **Data**: analytics_event rows (event_type + metadata; from 2026-10-16 also `report_chapter_stats`, how long each report chapter was read and which of its actions were used, and `wizard_skipped`, the pre-report slides skipped; from 2026-10-17 the report's guided tour started, finished, skipped (at which stop) or replayed), survey_behavior_event rows (from 2026-10-16 with `is_tablet`), invite_event rows, scroll depth, time-on-section, click telemetry; funnel_event rows (unique visitor, survey start and, from 2026-10-16, each survey intro card seen and its Back and Skip); client-side: GA4, Microsoft Clarity, PostHog (from 2026-10-16 with the time spent on each landing section, also sent to GA4)
 - **Basis**: our own tables (analytics_event, survey_behavior_event, invite_event): (f) legitimate interest since 2026-09-18 (commit `60924b5ab`, privacy policy §7.4): no cookie set or read, nothing sent to a third party, so these writes no longer check the cookie choice. funnel_event: every visitor from 2026-10-16 (owner decision: measure everyone), keyed by the visitor ID cookie (`__liq_vid`, still set only after consent to the CookieYes "analytics" category, T-02) or, without it, a random id held in the page's memory and never stored (`features/analytics/funnelVisitor.ts`): (f) legitimate interest, as our own tables. GA4: from 2026-10-16 our events go to Google's tag on every visit; without consent the banner's denied signal makes them cookieless pings (Google Consent Mode), (f) legitimate interest; GA4 cookies and identifiers only with (a) consent. Microsoft Clarity and PostHog load on every visit (owner decisions, ROPA #9 note).
 - **Retention**: 180 days (F-02 purge)
 

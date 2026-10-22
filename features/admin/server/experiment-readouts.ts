@@ -19,6 +19,7 @@ import {
 import { readStampedArms } from "@features/attribution/server/traffic";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
 import { isStaffEmail } from "@shared/env/staff-email";
+import { isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { LANDING_TEST_START_AT } from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
 
@@ -280,8 +281,7 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
     "survey_submission"
   );
   // Our own test runs are not readers: the rule that marks a staff payment `is_test`.
-  const submissions = subsPage.rows.filter((s) => !isStaffEmail(s.app_user?.email));
-  const ids = new Set(submissions.map((s) => s.id));
+  const readers = subsPage.rows.filter((s) => !isStaffEmail(s.app_user?.email));
 
   // Join the quotes by SUBMISSION ID RANGE rather than by their own created date:
   // a quote can be created outside the submission window, and filtering it by date
@@ -289,8 +289,28 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
   // largest ids are an index-friendly narrowing that cannot miss one — and it avoids
   // interpolating a huge `in.(...)` list into the URL the way /api/admin/stats does.
   // Oldest quote first within a submission, so its first quote's arm is the one taken.
-  const minId = submissions.length > 0 ? Math.min(...submissions.map((s2) => s2.id)) : 0;
-  const maxId = submissions.length > 0 ? Math.max(...submissions.map((s2) => s2.id)) : 0;
+  const minId = readers.length > 0 ? Math.min(...readers.map((s2) => s2.id)) : 0;
+  const maxId = readers.length > 0 ? Math.max(...readers.map((s2) => s2.id)) : 0;
+
+  // Pay to start (features/pay-to-start): a survey bought before it was taken is in no
+  // experiment here. Its €29 would count as a purchase in whatever arm its session fell
+  // into. The claimed entitlement is the record; the tracker's label, when it has one.
+  const prepaidPage =
+    readers.length > 0
+      ? await fetchAllPages<{ consumed_submission_id: number | null }>(
+          (offset, pageSize) =>
+            `/rest/v1/prepaid_report_access?consumed_submission_id=gte.${minId}` +
+            `&consumed_submission_id=lte.${maxId}` +
+            `&select=consumed_submission_id&order=consumed_submission_id.asc` +
+            `&offset=${offset}&limit=${pageSize}`,
+          "prepaid_report_access"
+        )
+      : { rows: [] as Array<{ consumed_submission_id: number | null }>, truncated: false };
+  const prepaidSubmissions = new Set(prepaidPage.rows.map((r) => r.consumed_submission_id));
+  const submissions = readers.filter(
+    (s) => !prepaidSubmissions.has(s.id) && !isPayToStartTracker(s.utm_tracker)
+  );
+  const ids = new Set(submissions.map((s) => s.id));
   const quotesPage =
     submissions.length > 0
       ? await fetchAllPages<QuoteRow>(
@@ -353,7 +373,8 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
   return {
     submissions,
     bySubmission,
-    truncated: subsPage.truncated || quotesPage.truncated || paymentsPage.truncated,
+    truncated:
+      subsPage.truncated || prepaidPage.truncated || quotesPage.truncated || paymentsPage.truncated,
   };
 }
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  REPORT_V4_SUMMARY,
-  REPORT_V4_TOP_THREE_HEADING,
-  REPORT_V4_TOP_THREE_LEDE,
-} from "@/data/report3-archetype-page";
+import { REPORT_V4_TOP_THREE_HEADING } from "@/data/report3-archetype-page";
+import { REPORT_V4_SUMMARY } from "@/data/report3-summary";
 import { REPORT_V4_TYPICAL_BELIEFS } from "@/data/report3-typical-beliefs";
 
 /**
@@ -16,12 +13,7 @@ describe("top-three heading (1:494, comment 1939883544)", () => {
     expect(REPORT_V4_TOP_THREE_HEADING).toBe("3 Highest Scoring Archetypes");
   });
 
-  it("keeps the lede 1:496 as drawn, one bold run", () => {
-    expect(REPORT_V4_TOP_THREE_LEDE.map((p) => p.map((r) => r.text).join(""))).toEqual([
-      "No one fits a single sexual personality or archetype.",
-      "These are your top 3 archetypes out of 14, ranked by how closely they match your profile.",
-    ]);
-  });
+  // Its lede (1:496) went with the slimmed report, 16.10: v4Slim1610.test.tsx.
 });
 
 describe("Part II summary (1:741, comment 1939884155)", () => {
@@ -30,11 +22,11 @@ describe("Part II summary (1:741, comment 1939884155)", () => {
   const bold = (i: number) =>
     summary.paragraphs[i]!.filter((r) => r.weight).map((r) => [r.weight, r.text.trim()]);
 
-  it("reads word for word as the frame", () => {
-    expect(text(2)).toContain(
-      "emotionally dense. In such moments, arousal can drop quickly, not because attraction is gone"
-    );
-    expect(text(3)).toContain("or to disconnection when a partner asks");
+  // Past its third paragraph's first sentence the Summary sits behind the slimmed report's
+  // wall (16.10), so the paragraphs after the free ones are checked by shape, not words.
+  it("reads word for word as the frame, where it is free", () => {
+    expect(text(0)).toMatch(/^The Spark Seeker experiences sexuality primarily as a space/);
+    expect(text(1)).toMatch(/^They are lively, charismatic, and pleasure-forward lovers/);
   });
 
   it("bolds the runs the frame bolds, and only those", () => {
@@ -42,19 +34,9 @@ describe("Part II summary (1:741, comment 1939884155)", () => {
       [700, "lively, charismatic, and pleasure-forward lovers"],
       [700, "teasing, spontaneity, and emotional lightness"],
     ]);
-    expect(bold(2)).toEqual([
-      [700, "electric, playful, and creatively alive for both partners."],
-      [700, "may struggle when sex becomes predictable, duty-like, or emotionally dense."],
-    ]);
-    expect(bold(3)).toEqual([
-      [
-        800,
-        "hesitate to slow down or go deeper emotionally, fearing it will dull the spark or trap them in expectations.",
-      ],
-    ]);
-    expect(bold(4)).toEqual([
-      [800, "Growth for the Spark Seeker lies in learning to sustain desire beyond novelty,"],
-    ]);
+    expect(bold(2).map(([weight]) => weight)).toEqual([700, 700]);
+    expect(bold(3).map(([weight]) => weight)).toEqual([800]);
+    expect(bold(4).map(([weight]) => weight)).toEqual([800]);
   });
 
   it("drops the closing line the frame no longer draws (1:744)", () => {

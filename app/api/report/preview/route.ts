@@ -5,6 +5,9 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary } from "@/data/report3-summary";
+import { buildChapterReadingTimes } from "@features/report/server/chapterReadingTimes";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -14,10 +17,11 @@ import {
 import { isSectionUnlockedForPlan, isReportPurchasePlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
-import { buildReport2ChapterCopies } from "@features/report/server/report2ChapterCopies";
+import { buildReport2ChapterCopies, forV4Page } from "@features/report/server/report2ChapterCopies";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
+import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 
 /**
  * A report with no reader behind it — for looking at the design on a laptop.
@@ -91,6 +95,9 @@ export async function GET(request: Request) {
   // As on the real route, V4's chapters go only to the V4 page (final review 26.09).
   const isV4Request = url.searchParams.get("v4") === "1";
   const accessPlan: ReportAccessPlan = isReportPurchasePlan(planParam) ? planParam : null;
+  // `?plan=initial`: the initial unlock (EUR 1.99), as its buyer sees the report: no plan,
+  // the card and Summary in full, and the full report EUR 10 off on the pay screen.
+  const initialUnlock = isInitialUnlockPlan(planParam);
 
   // A paid preview owns its own archetype, exactly as a real purchase does.
   const unlockedArchetypes = accessPlan ? [archetype] : [];
@@ -103,6 +110,9 @@ export async function GET(request: Request) {
   const unlocked = (sectionId: string, isPremium = true) =>
     isSectionUnlockedForPlan({ accessPlan, archetypeTier, isPremium, sectionId });
 
+  // Part II of the slimmed report: the card and the Summary, half-locked behind the
+  // Summary's own gate (Essentials), as on the real route.
+  const summaryUnlocked = unlocked("summary") || initialUnlock;
   const beliefsUnlocked = unlocked("typical_beliefs");
   const beliefsSection = getReport2Section(archetype, "beliefs");
   const accelUnlocked = unlocked("typical_arousal_accelerators_turn_ons_of_the_core_archetype");
@@ -123,7 +133,9 @@ export async function GET(request: Request) {
   // Every other Report 2.0 chapter, Attachment Style through Confidence Level, through
   // the real route's own builder. Without them each opened onto an empty body under
   // ?preview=1 — the chapters Mark asked to see in their 2.0 version (review 27.09).
-  const report2Chapters = buildReport2ChapterCopies(archetype, unlocked);
+  // As the real route: a V4 page is sent none of the three chapters it no longer draws.
+  const report2Copies = buildReport2ChapterCopies(archetype, unlocked);
+  const report2Chapters = isV4Request ? forV4Page(report2Copies) : report2Copies;
 
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,
@@ -145,7 +157,8 @@ export async function GET(request: Request) {
     reportDate: new Date().toISOString(),
     diagnostics: null,
     snapshotAnswers: { currentSexualSatisfaction: 3, importanceOfSex: 5 },
-    pricingQuotes: buildPreviewQuotes(),
+    pricingQuotes: buildPreviewQuotes(new Date(), { initialCredit: initialUnlock }),
+    initialUnlock,
     unlockedArchetypes,
     archetypeTiers,
 
@@ -157,6 +170,10 @@ export async function GET(request: Request) {
       unlockedArchetypes,
       archetypeTiers
     ),
+
+    archetypeCard: isV4Request ? buildArchetypeCard(archetype, { locked: !summaryUnlocked }) : null,
+    summaryChapter: isV4Request ? buildSummary(archetype, { locked: !summaryUnlocked }) : null,
+    chapterReadingTimes: isV4Request ? buildChapterReadingTimes(archetype) : null,
 
     beliefsCopy: {
       "edu.eyebrow": beliefsSection["edu.eyebrow"] ?? null,

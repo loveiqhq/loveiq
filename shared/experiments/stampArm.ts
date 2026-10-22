@@ -30,7 +30,13 @@ import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/la
  * directly), which is caught and treated as "no arm" rather than an error.
  */
 export async function stampLandingArm(
-  utmTracker: string | null | undefined
+  utmTracker: string | null | undefined,
+  /**
+   * `arm: false` strips a claimed arm and adds none, cookie or not: a visitor who paid
+   * before the survey (pay to start) is in no landing arm, even holding a cookie from an
+   * earlier visit to the home page, or that arm would be credited with their purchase.
+   */
+  { arm: stampArm = true }: { arm?: boolean } = {}
 ): Promise<string | null> {
   /**
    * `|| null`, not `?? null`: an EMPTY STRING is absence, not a tracker.
@@ -45,7 +51,7 @@ export async function stampLandingArm(
 
   let arm: string | undefined;
   try {
-    arm = (await cookies()).get(LANDING_VARIANT_COOKIE)?.value;
+    if (stampArm) arm = (await cookies()).get(LANDING_VARIANT_COOKIE)?.value;
   } catch {
     /* no request scope — fall through; a body-supplied arm is still stripped */
   }

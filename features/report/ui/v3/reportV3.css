@@ -3088,22 +3088,6 @@
   margin: 0;
   width: 328px;
 }
-/* 1:496 — the frame separates the two paragraphs with a blank line. 33px from the
- * heading: measured against the frame at 2x, 17 left the lede 16px too high. */
-.rv3 .rv4-top3__lede {
-  display: flex;
-  flex-direction: column;
-  gap: 25.6px;
-  padding-top: 33px;
-  width: 356px;
-}
-.rv3 .rv4-top3__lede p {
-  color: var(--rv3-copy);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 25.6px;
-  margin: 0;
-}
 /* 1:497 — V4 draws the three rows straight on the page: no outer card, border or
  * shadow, and no rules between rows; only the lead row keeps its tinted panel.
  * The card's 17px side padding stays, because that is where the frame insets the
@@ -6076,27 +6060,19 @@ html {
 .rv3:is(.rv4, .rv4-doc) .rv3-arch {
   padding: 18px 0 44px;
 }
-/* 15:816 is a fixed 191: the match row (15:819) grows into the slack and the tagline
- * sits in a fixed 70px box (15:828), so the core motivation panel starts at y=210.
- * Minimums, so a longer tagline grows the header instead of spilling out of it.
+/* 15:816 was a fixed 191 with the motto line in a 70px box (15:828); the slimmed report
+ * (1665:3642, 16.10) took the motto out and the header is 111: the match row (15:819)
+ * grows into the slack, so the core motivation panel starts at the same place on every
+ * card. A minimum, so a long name grows the header instead of spilling out of it.
  *
- * Both rows are 323 wide in the frame, 8px into the header's right padding. Fixed,
- * they ran out of the card below 393, which clips: at 360 "43%" lost its last 19px
- * and the tagline 13. 100% + 8 is exactly 323 at 393 and keeps the 15px inset below. */
+ * The match row is 323 wide in the frame, 8px into the header's right padding. Fixed,
+ * it ran out of the card below 393, which clips: at 360 "43%" lost its last 19px.
+ * 100% + 8 is exactly 323 at 393 and keeps the 15px inset below. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__head {
-  min-height: 191px;
+  min-height: 111px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__match {
   flex-grow: 1;
-  width: min(323px, calc(100% + 8px));
-}
-/* Mark, 28.09 (1943978527): "Decreased Font size here". 15:829 is Lora 16/24, and
- * sets no tracking. */
-.rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline {
-  font-size: 16px;
-  letter-spacing: 0;
-  line-height: 24px;
-  min-height: 70px;
   width: min(323px, calc(100% + 8px));
 }
 /* Mark, 30.09 (1947975917): "We have update the Core Motivation card". 870:7166 is a
@@ -6680,7 +6656,9 @@ html {
  * (713:6178 / 713:6226, now 979:567 / 979:573) is the same pill. */
 .rv3 .rv4-fvt__pill,
 .rv3 .rv4-trig__pill,
-.rv3 .rv4-summary__pill {
+.rv3 .rv4-summary__pill,
+.rv3 .rv4-fold__pill,
+.rv3 .rv4-unlock__pill {
   align-items: center;
   background:
     linear-gradient(#fff, #fff) padding-box,
@@ -6709,14 +6687,18 @@ html {
  * drawn pill, 31 + 2 x 6.5 = 44 (at -6.5 it came to 41). */
 .rv3 .rv4-fvt__pill::after,
 .rv3 .rv4-trig__pill::after,
-.rv3 .rv4-summary__pill::after {
+.rv3 .rv4-summary__pill::after,
+.rv3 .rv4-fold__pill::after,
+.rv3 .rv4-unlock__pill::after {
   content: "";
   inset: -8px 0;
   position: absolute;
 }
 .rv3 .rv4-fvt__pill:focus-visible,
 .rv3 .rv4-trig__pill:focus-visible,
-.rv3 .rv4-summary__pill:focus-visible {
+.rv3 .rv4-summary__pill:focus-visible,
+.rv3 .rv4-fold__pill:focus-visible,
+.rv3 .rv4-unlock__pill:focus-visible {
   outline: 2px solid var(--rv3-violet);
   outline-offset: 2px;
 }
@@ -6725,7 +6707,9 @@ html {
  * Marcus's grey "for better readability and contrast", 1944661166). */
 .rv3 .rv4-fvt__pill-label,
 .rv3 .rv4-trig__pill-label,
-.rv3 .rv4-summary__pill-label {
+.rv3 .rv4-summary__pill-label,
+.rv3 .rv4-fold__pill-label,
+.rv3 .rv4-unlock__pill-label {
   color: #575757;
 }
 /* 639:498 — Mark's 28.09 update (1944175761) sets it centred in the table (x 121 + 43
@@ -6751,6 +6735,8 @@ html {
   .rv3 .rv4-trig__pill,
   .rv3 .rv4-fvt__pill,
   .rv3 .rv4-summary__pill,
+  .rv3 .rv4-fold__pill,
+  .rv3 .rv4-unlock__pill,
   .rv3 .rv4-learn__showmore,
   .rv3 .rv4-try__open,
   .rv3 .rv4-learn__open {
@@ -6762,6 +6748,8 @@ html {
   .rv3 .rv4-trig__pill:hover,
   .rv3 .rv4-fvt__pill:hover,
   .rv3 .rv4-summary__pill:hover,
+  .rv3 .rv4-fold__pill:hover,
+  .rv3 .rv4-unlock:hover .rv4-unlock__pill,
   .rv3 .rv4-learn__showmore:hover,
   .rv3 .rv4-try__open:hover,
   .rv3 .rv4-learn__open:hover {
@@ -6770,7 +6758,9 @@ html {
   }
   .rv3 .rv4-trig__pill:hover,
   .rv3 .rv4-fvt__pill:hover,
-  .rv3 .rv4-summary__pill:hover {
+  .rv3 .rv4-summary__pill:hover,
+  .rv3 .rv4-fold__pill:hover,
+  .rv3 .rv4-unlock:hover .rv4-unlock__pill {
     background:
       linear-gradient(#faf7ff, #faf7ff) padding-box,
       linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%) border-box;
@@ -6783,6 +6773,8 @@ html {
   .rv3 .rv4-trig__pill:hover .rv4-trig__pill-label,
   .rv3 .rv4-fvt__pill:hover .rv4-fvt__pill-label,
   .rv3 .rv4-summary__pill:hover .rv4-summary__pill-label,
+  .rv3 .rv4-fold__pill:hover .rv4-fold__pill-label,
+  .rv3 .rv4-unlock:hover .rv4-unlock__pill-label,
   .rv3 .rv4-learn__showmore:hover .rv4-learn__showmore-label {
     color: #3f3a4d;
   }
@@ -7422,21 +7414,22 @@ html {
   }
 }
 
-/* ── Top three — the rows Mark enlarged for Sanjin's descriptions (1:498, 25.09) ──
- * Every archetype now has a two-sentence description (report4ArchetypeBlurbs), so
- * the frame sets it at 12/19.2 in a 100px track — five lines — on each row: 191 /
- * 184.08 / 184 tall, 10 apart. The lead row is fixed at 191: 14 + its 1px ring
- * above the name, the rest below. `minmax` lets a narrow phone's sixth line grow
- * the row rather than spill. The rows start 36 under the lede (16 + the card's 20)
- * and the rating sits 10 under the last row, both inside 1:497. V3's card
- * (`?v3=1`) is untouched: every rule here is scoped to `.rv4-top3`. */
+/* ── Top three — the rows Mark sized for Sanjin's descriptions (1:498, 25.09) ──
+ * The slimmed report (1665:3553, 16.10) cut every description to one line, set at
+ * 12/19.2 in a 50px track (two lines) instead of 100 (five): the lead row is 141
+ * tall, 14 + its 1px ring above the name, the rest below; rows stay 10 apart.
+ * `minmax` lets a narrow phone's third line grow the row rather than spill. With the
+ * lede gone the rows start 33 + the card's 20 under the heading's 24px line: Figma
+ * draws the heading in a 41px box, 16 above the card. The rating sits 10 under the
+ * last row, inside 1:497. V3's card (`?v3=1`) is untouched: every rule here is
+ * scoped to `.rv4-top3`. */
 .rv3 .rv4-top3 .rv3-top3 {
-  margin: 16px 0 10px;
+  margin: 33px 0 10px;
   padding-bottom: 0;
   padding-top: 20px;
 }
 .rv3 .rv4-top3 .rv3-top3__row {
-  grid-template-rows: 26px minmax(100px, auto) 17.08px;
+  grid-template-rows: 26px minmax(50px, auto) 17.08px;
   padding: 14px 12px 15px;
 }
 .rv3 .rv4-top3 .rv3-top3__row.is-lead {
@@ -7597,7 +7590,6 @@ html {
     .rv4-copy,
     .rv4-copy > p,
     .rv4-top3__heading,
-    .rv4-top3__lede,
     .rv4-summary__inner,
     .rv4-summary__copy,
     .rv4-summary__closer
@@ -7884,8 +7876,7 @@ html {
   .rv3.rv4 .rv4-summary__inner,
   .rv3.rv4 .rv4-summary__copy,
   .rv3.rv4 .rv4-summary__closer,
-  .rv3.rv4 .rv4-top3__heading,
-  .rv3.rv4 .rv4-top3__lede {
+  .rv3.rv4 .rv4-top3__heading {
     width: 100%;
   }
   /* A ceiling for a phone narrower than 393, not a design width. */
@@ -8385,11 +8376,6 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   transition: width 1800ms cubic-bezier(0.645, 0.045, 0.355, 1);
   width: var(--rv3-arch-match);
 }
-.rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__tagline {
-  transition:
-    opacity 600ms ease-out 500ms,
-    transform 600ms ease-out 500ms;
-}
 .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__motive-wrap {
   transition:
     opacity 600ms ease-out 800ms,
@@ -8398,7 +8384,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__bar-fill {
   width: 0;
 }
-.rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending :is(.rv3-arch__tagline, .rv3-arch__motive-wrap) {
+.rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__motive-wrap {
   opacity: 0;
   transform: translateY(8px);
 }
@@ -8429,7 +8415,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__bar-fill {
     width: var(--rv3-arch-match);
   }
-  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending :is(.rv3-arch__tagline, .rv3-arch__motive-wrap) {
+  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__motive-wrap {
     opacity: 1;
     transform: none;
   }
@@ -8440,7 +8426,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     color: var(--rv3-accent-ink);
   }
   .rv3:is(.rv4, .rv4-doc) .rv3-arch__bar-fill,
-  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated :is(.rv3-arch__tagline, .rv3-arch__motive-wrap),
+  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__motive-wrap,
   .rv3:is(.rv4, .rv4-doc) .rv3-arch__seg.is-on::after,
   .rv3:is(.rv4, .rv4-doc) .rv3-arch__stop.is-current {
     transition: none;
@@ -8658,6 +8644,341 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   }
 }
 
+/* ══ The slimmed report — 16.10 (Figma 1665:3278 · Sanjin's Slimmed_* docs) ═════════════
+ * Readers found V4 too long (Mark's PostHog review, 13.10; the 14.10 sync), so the report
+ * says less: shorter Part I and II copy, fewer chapters, folds instead of blurred walls,
+ * and Part II's own locks. These are the phone's and the 393 preview's rules; the desktop
+ * tail below (700px) keeps its own. */
+
+/* 1665:9806 / 9830 / 9853 / 9876 — a locked dimension card: its first sentence, then the
+ * rest on a line of its own under the veil with the 38px brand lock (1665:9910) over it,
+ * centred on the blurred lines. The lead gives its foot to the lock below it. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__body.is-lead {
+  padding-bottom: 0;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__lock {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  margin: 0;
+  padding: 0 0 13.5px;
+  position: relative;
+  text-align: left;
+  user-select: none;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__lock {
+  cursor: inherit;
+  padding-bottom: 12.69px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__lock:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid var(--rv3-arch-glyph, #ff6a3d);
+  outline-offset: 4px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__veil {
+  color: var(--rv3-muted);
+  display: block;
+  filter: blur(var(--rv4-veil, 5px));
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__veil {
+  font-size: 14px;
+  line-height: 22.4px;
+  width: 230px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__veil {
+  font-size: 12px;
+  line-height: 19.2px;
+  width: 216.2px;
+}
+/* The lock tile's own disc (979:510): the brand gradient under the frame's shadow, the
+ * 17px lock 10 in. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__disc {
+  background: linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);
+  border-radius: 50%;
+  box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3);
+  height: 38px;
+  left: 50%;
+  position: absolute;
+  top: calc(50% - 6.75px);
+  transform: translate(-50%, -50%);
+  width: 38px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__disc img {
+  display: block;
+  left: 10.5px;
+  position: absolute;
+  top: 10.5px;
+}
+@media (hover: hover) {
+  .rv3:is(.rv4, .rv4-doc) .rv3-deck__lock:hover .rv3-deck__disc {
+    filter: brightness(1.06);
+  }
+}
+
+/* 1665:3796 — the half-locked Summary: two paragraphs and a sentence, then the rest of
+ * the third under the veil, three lines of it fading out (1665:9926), and the gate card
+ * under them, in the flow rather than over the blur (1757:4263). The veil is the third
+ * paragraph's continuation, so nothing separates it from the sentence above. */
+.rv3 .rv4-summary.is-locked .rv4-summary__body {
+  gap: 0;
+}
+.rv3 .rv4-summary__gate {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  width: 356px;
+}
+.rv3 .rv4-summary__veil {
+  max-height: 76.8px;
+  overflow-x: visible;
+  overflow-y: clip;
+  position: relative;
+  user-select: none;
+  width: 100%;
+}
+.rv3 .rv4-summary__veil p {
+  color: var(--rv3-copy);
+  filter: blur(var(--rv4-veil, 5px));
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+}
+.rv3 .rv4-summary__veil-fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 40%,
+    #fff 85%
+  );
+  bottom: 0;
+  height: 64px;
+  left: -16px;
+  pointer-events: none;
+  position: absolute;
+  right: -16px;
+}
+.rv3 .rv4-summary__gate .rv4-premium {
+  flex: none;
+  left: auto;
+  position: relative;
+  top: auto;
+  transform: none;
+}
+/* From 700px the Summary's copy takes the whole column (896 at most), so the gate does too:
+ * the veiled lines keep the copy's measure, and the card sits in the column's middle rather
+ * than in a phone-wide box at its left edge (Fatih, 17.10). */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv4-summary__gate {
+    width: 100%;
+  }
+}
+
+/* ── The slimmed chapters — sections, folds and the wall (1686:10036, 1665:6726, 1665:6950)
+ * Each chapter body runs its opening, then sections: a heading row (Lora Bold 18/21.6 and
+ * the chapter's 34px disc, 11 above, 361 wide) over its copy, 16 below and 16 between, in
+ * block flow so a paragraph's own 16px margin collapses into the gap instead of doubling. */
+.rv3 .rv4-tb.is-slim {
+  gap: 16px;
+}
+.rv3 .rv4-tb__intro > :last-child,
+.rv3 .rv4-sect__inner > :last-child,
+.rv3 .rv4-fold__copy > :last-child {
+  margin-bottom: 0;
+}
+.rv3 .rv4-sect {
+  width: 100%;
+}
+.rv3 .rv4-sect__title {
+  margin: 0;
+}
+.rv3 .rv4-sect__head {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--rv3-ink);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0;
+  padding: 11px 0 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3 .rv4-sect__head:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 4px;
+}
+.rv3 .rv4-sect__name {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 21.6px;
+  min-width: 0;
+}
+/* A section's own disc (Mark, 22.10; Figma 1686:10514, 1954:4425): not the chapter's.
+ * 28px and white, its dotted ring drawn by .rv4-sect__ring (the violet at 20%), the
+ * chevron pointing down while the section is open, as the expanded-chapter frames draw
+ * it, and up once it is shut. No lavender fill and no solid ring: those are the
+ * chapter's. */
+.rv3 .rv4-sect__chev {
+  align-items: center;
+  background: #fff;
+  border-radius: 50%;
+  color: var(--rv3-violet);
+  display: flex;
+  flex-shrink: 0;
+  height: 28px;
+  justify-content: center;
+  position: relative;
+  width: 28px;
+}
+.rv3 .rv4-sect__ring {
+  height: 28px;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 28px;
+}
+.rv3 .rv4-sect__chev svg:not(.rv4-sect__ring) {
+  display: block;
+  height: 15px;
+  position: relative;
+  transition: transform 260ms ease;
+  width: 15px;
+}
+.rv3 .rv4-sect:not(.is-open) .rv4-sect__chev svg:not(.rv4-sect__ring) {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-sect__chev svg:not(.rv4-sect__ring) {
+    transition: none;
+  }
+}
+.rv3 .rv4-sect__inner {
+  display: block;
+  padding-top: 16px;
+}
+.rv3 .rv4-sect__inner[hidden] {
+  display: none;
+}
+.rv3 .rv4-sect__inner > * + * {
+  margin-top: 16px;
+}
+
+/* 1709:1486 — the fold: its first lines, the last two fading to white under a 63px fade
+ * (clear, 66% at 42%, white), and "Show All" just under them, the expand pills' own. */
+.rv3 .rv4-fold {
+  position: relative;
+  width: 100%;
+}
+.rv3 .rv4-fold.is-folded .rv4-fold__copy {
+  max-height: var(--rv4-fold-peek, 153.6px);
+  overflow: hidden;
+}
+.rv3 .rv4-fold__copy:focus:not(:focus-visible) {
+  outline: none;
+}
+.rv3 .rv4-fold__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.66) 42%,
+    #fff 100%
+  );
+  height: 63px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: calc(var(--rv4-fold-peek, 153.6px) - 63px);
+}
+.rv3 .rv4-fold__pill {
+  margin: 2px auto 0;
+  width: max-content;
+}
+
+/* 1665:6780 — the wall: three lines of the next paragraph fading out to white, and
+ * "Unlock Full Chapter" under them. The band is the click. */
+.rv3 .rv4-unlock {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.rv3 .rv4-unlock__sample {
+  max-height: 76.8px;
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  width: 100%;
+}
+.rv3 .rv4-unlock__sample .rv4-prose__p {
+  margin: 0;
+}
+.rv3 .rv4-unlock__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.85) 55%,
+    #fff 100%
+  );
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-unlock__pill {
+  width: max-content;
+}
+/* A section wholly behind the wall: its heading keeps the row, the lock takes the disc's. */
+.rv3 .rv4-sect.is-locked .rv4-sect__head {
+  align-items: flex-start;
+}
+
+/* 1686:10029 — a chapter head's text: "Reading time: ~5 min." in its 25px box, then the
+ * title, in one column beside the disc, which keeps to the row's top (1686:10028). Plus
+ * Jakarta Sans 10/12 in the sun panel's green: "Reading time:" Light in title case, the
+ * minutes Bold in capitals, as the frame sets them. */
+.rv3 .rv4-chapter__text {
+  display: flex;
+  flex: 330 0 0;
+  flex-direction: column;
+  min-width: 0;
+}
+.rv3 .rv4-chapter__text > .rv4-chapter__title {
+  flex: none;
+}
+.rv3 .rv4-chapter__time {
+  color: #2e7d5b;
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 12px;
+  min-height: 25px;
+}
+.rv3 .rv4-chapter__time-label {
+  text-transform: capitalize;
+}
+.rv3 .rv4-chapter__time-value {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
  * properly to not have these huge gaps and spaces". Production's column (991cb18c) is
@@ -8672,18 +8993,13 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
  * now, at the end of the file.) The live page only (`.rv3.rv4`) and only from 700px, so
  * the phone and the 393 preview are exactly as before. */
 @media (min-width: 700px) {
-  /* 15:815 — the match row, the tagline and the motivation body run the card rather
-   * than the phone's 323 and 281. The header and the panel size to their content: the
-   * phone frame's fixed 191 and 197 (and the 70 under the tagline) left white under a
-   * one-line tagline and a one-line body here. */
+  /* 15:815 — the match row and the motivation body run the card rather than the phone's
+   * 323 and 281. The header and the panel size to their content: the phone frame's fixed
+   * header and 197 panel left white under a one-line body here. */
   .rv3.rv4 .rv3-arch__head {
     min-height: 0;
   }
   .rv3.rv4 .rv3-arch__match {
-    width: 100%;
-  }
-  .rv3.rv4 .rv3-arch__tagline {
-    min-height: 0;
     width: 100%;
   }
   .rv3.rv4 .rv3-arch__motive {

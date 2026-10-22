@@ -23,6 +23,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { classifyTraffic, readStampedArms, type TrafficInfo } from "./traffic";
+import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 
 export interface JourneyArms {
   /** Raw stored values — "white" | "white_prev" | "control" | null etc. Label via labels.ts. */
@@ -106,6 +107,11 @@ export interface SubmissionJourney {
   /** How many plan quotes exist — a rough proxy for paywall exposure. */
   quoteCount: number;
   /**
+   * Paid before the survey (pay to start, /sexual-archetype): no landing arm and no
+   * quote, and the purchase comes from its payment row. Absent means no.
+   */
+  payToStart?: boolean;
+  /**
    * PostHog `$session_id` captured at submit, or null. Null is the ordinary case for
    * anything submitted before 2026-08-27, and for a visitor whose replay never ran
    * (no project token, ad blocker, sampled out) — so a reader must treat "no link"
@@ -148,6 +154,9 @@ interface QuoteRow {
 interface PaymentRow {
   amount: number | string | null;
   is_test: boolean | null;
+  payment_date_time: string | null;
+  currency: string | null;
+  metadata: { journey?: unknown; plan?: unknown } | null;
 }
 
 interface AnalyticsRow {
@@ -449,7 +458,7 @@ export async function buildSubmissionJourney(
      * embed ambiguous.
      */
     fetchJson<PaymentRow>(
-      `/rest/v1/payment?select=amount,is_test,` +
+      `/rest/v1/payment?select=amount,is_test,payment_date_time,currency,metadata,` +
         `personal_report!fk_payment_personal_report!inner(survey_submission_id)` +
         `&personal_report.survey_submission_id=eq.${submissionId}&status=eq.succeeded`,
       "payment"
@@ -495,7 +504,15 @@ export async function buildSubmissionJourney(
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??
     null;
-  const purchasedAt = purchased?.purchased_at ?? null;
+  /**
+   * Pay to start: the purchase has no quote (it happened before the survey), so its
+   * payment row stands in for one. Its date is the payment's, before the survey ended,
+   * which leaves the timings to the purchase blank (msBetween refuses a negative gap).
+   */
+  const payToStartPayment = purchased
+    ? null
+    : (payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY) ?? null);
+  const purchasedAt = purchased?.purchased_at ?? payToStartPayment?.payment_date_time ?? null;
 
   return {
     submissionId,
@@ -547,11 +564,21 @@ export async function buildSubmissionJourney(
           amount: toNumber(purchased.current_price),
           currency: (purchased.currency ?? "EUR").toUpperCase(),
         }
-      : null,
+      : payToStartPayment
+        ? {
+            plan:
+              typeof payToStartPayment.metadata?.plan === "string"
+                ? payToStartPayment.metadata.plan
+                : null,
+            amount: toNumber(payToStartPayment.amount),
+            currency: (payToStartPayment.currency ?? "EUR").toUpperCase(),
+          }
+        : null,
     noMoneyTaken:
       payments.length > 0 && !payments.some((p) => (toNumber(p.amount) ?? 0) > 0 && !p.is_test),
     quoteCount: quotes.length,
     recordingSessionId: sub.posthog_session_id?.trim() || null,
+    ...(payToStartPayment || isPayToStartTracker(sub.utm_tracker) ? { payToStart: true } : {}),
   };
 }
 

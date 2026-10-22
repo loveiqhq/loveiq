@@ -7,6 +7,7 @@ import {
   type ReportEngagementType,
 } from "@features/analytics/client";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 const MILESTONES: ReadonlyArray<ReportEngagementThreshold> = [60, 300, 600];
 
@@ -74,6 +75,8 @@ export function useReportEngagementTimers({
     let intervalId: number | null = null;
 
     const updateScrollDepth = () => {
+      // The guided tour's own trip down the page is not how far the reader read.
+      if (isGuidedTourActive()) return;
       const docEl = document.documentElement;
       const scrollable = docEl.scrollHeight - window.innerHeight;
       const pct =

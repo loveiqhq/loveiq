@@ -1,0 +1,265 @@
+import {
+  applyPayToStartEntitlement,
+  settlePayToStartSession,
+} from "@features/checkout/server/fulfillment";
+import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
+import logger from "@shared/observability/logger";
+import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
+import {
+  getOfferDefinition,
+  offerDefinitionOf,
+  type PayToStartOfferId,
+} from "@features/pay-to-start/logic/offer";
+import { escapeSlack, notifySlack } from "@shared/observability/slack";
+import {
+  bindEntitlement,
+  findEntitlementByConsumedSubmission,
+  findEntitlementById,
+  findEntitlementByToken,
+  type Entitlement,
+} from "./entitlement";
+
+/**
+ * A submitted survey claiming the entitlement its browser holds: bind it to this one
+ * submission, then apply it (the payment row, report link and, for the full report, its
+ * tier), before the survey's response goes out, so the reader opens a report that is
+ * already unlocked as the offer says.
+ *
+ * Never throws: the survey is saved whatever happens here. An error is returned for the
+ * caller to report after the response, and the sweep finishes any bound, paid entitlement
+ * left unapplied.
+ */
+
+export type ClaimOutcome =
+  /**
+   * Bound and applied: the report is unlocked (or, for the initial report, pre-unlocked).
+   * `offer` is what was bought, for the wizard the reader gets next.
+   */
+  | { outcome: "unlocked"; entitlementId: number; paymentId: number; offer: PayToStartOfferId }
+  /** Bound, and the money is on its way (a delayed method): it unlocks when it settles. */
+  | { outcome: "pending"; entitlementId: number; offer: PayToStartOfferId }
+  /**
+   * Bound, but nothing was paid: a checkout opened and left. Paying that checkout later
+   * unlocks this report by itself; a new one from the page is a new purchase.
+   */
+  | { outcome: "unpaid"; entitlementId: number }
+  /** Nothing this submission may claim. */
+  | {
+      outcome: "refused";
+      reason: "not_found" | "used" | "refunded" | "expired";
+      entitlementId?: number;
+    }
+  /** Something failed; the reader gets the free report until the sweep catches up. */
+  | { outcome: "error"; entitlementId?: number; error: unknown };
+
+export async function claimPayToStartForSubmission({
+  reportToken,
+  submissionId,
+  token,
+}: {
+  reportToken: string | null;
+  submissionId: number;
+  token: string;
+}): Promise<ClaimOutcome> {
+  let entitlementId: number | undefined;
+  try {
+    let entitlement = await findEntitlementByToken(token);
+    if (!entitlement) return { outcome: "refused", reason: "not_found" };
+    entitlementId = entitlement.id;
+
+    if (entitlement.consumed_submission_id !== submissionId) {
+      if (entitlement.consumed_submission_id || entitlement.payment_id) {
+        return { outcome: "refused", reason: "used", entitlementId };
+      }
+      if (entitlement.status === "refunded") {
+        return { outcome: "refused", reason: "refunded", entitlementId };
+      }
+      // An expired checkout, never paid: the bind filter would refuse it anyway.
+      if (entitlement.status === "expired") {
+        return { outcome: "refused", reason: "expired", entitlementId };
+      }
+      const won = await bindEntitlement({ id: entitlement.id, submissionId });
+      const fresh = await findEntitlementById(entitlement.id);
+      if (!fresh || fresh.consumed_submission_id !== submissionId) {
+        // Another submission (a second tab) bound it first, or it was refunded meanwhile.
+        logger.warn({ entitlementId, submissionId, won }, "pay-to-start: claim lost");
+        return {
+          outcome: "refused",
+          reason: fresh?.status === "refunded" ? "refunded" : "used",
+          entitlementId,
+        };
+      }
+      entitlement = fresh;
+    }
+
+    return await applyClaimed(entitlement, reportToken);
+  } catch (error) {
+    return { outcome: "error", entitlementId, error };
+  }
+}
+
+/**
+ * Apply, and once more if that throws: a reader whose apply fails sees the free report
+ * until the sweep (half-hourly) finishes it, and in between the report's own paywall would
+ * sell it to them a second time. A passing blip should not cost that. Idempotent.
+ */
+async function applyWithRetry(
+  entitlement: Entitlement,
+  reportToken: string | null
+): Promise<number | null> {
+  try {
+    return await applyPayToStartEntitlement({ entitlement, reportToken });
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err, entitlementId: entitlement.id },
+      "pay-to-start: apply failed once; trying again"
+    );
+    return await applyPayToStartEntitlement({ entitlement, reportToken });
+  }
+}
+
+/** Apply a bound entitlement, or say why it does not unlock (yet). */
+async function applyClaimed(
+  entitlement: Entitlement,
+  reportToken: string | null
+): Promise<ClaimOutcome> {
+  const entitlementId = entitlement.id;
+  const offer = offerDefinitionOf(entitlement.offer).id;
+  if (entitlement.payment_id) {
+    return { outcome: "unlocked", entitlementId, paymentId: entitlement.payment_id, offer };
+  }
+  switch (entitlement.status) {
+    case "succeeded": {
+      const paymentId = await applyWithRetry(entitlement, reportToken);
+      return paymentId
+        ? { outcome: "unlocked", entitlementId, paymentId, offer }
+        : { outcome: "error", entitlementId, error: new Error("pts_apply_returned_nothing") };
+    }
+    case "refunded":
+      return { outcome: "refused", reason: "refunded", entitlementId };
+    case "expired":
+      return { outcome: "unpaid", entitlementId };
+    case "pending":
+      break;
+  }
+
+  // Still pending at the end of a nine-minute survey: a webhook that has not arrived, a
+  // delayed method, or a checkout left open. Ask Stripe once; settling applies it when
+  // it turns out paid.
+  const stripe = getStripeServerClient();
+  if (!entitlement.stripe_session_id || !stripe) return { outcome: "unpaid", entitlementId };
+  const settled = await settlePayToStartSession({
+    sessionId: entitlement.stripe_session_id,
+    source: "claim",
+    stripe,
+  });
+  switch (settled.state) {
+    case "paid":
+      return settled.paymentId
+        ? { outcome: "unlocked", entitlementId, paymentId: settled.paymentId, offer }
+        : { outcome: "error", entitlementId, error: new Error("pts_apply_after_settle_failed") };
+    case "processing":
+      return { outcome: "pending", entitlementId, offer };
+    case "refunded":
+      return { outcome: "refused", reason: "refunded", entitlementId };
+    default:
+      return { outcome: "unpaid", entitlementId };
+  }
+}
+
+/**
+ * A replayed submit (a lost response, a reload) without the cookie: the entitlement this
+ * submission already claimed, so the reply still says it is unlocked. Null when none.
+ *
+ * Almost every replay is a free reader's, so a lookup that fails is "none known", never a
+ * claim error: an error would put the journey in the reply (the paid wizard for a reader
+ * who did not pay) and report a failed claim to #ops for them. Only applying an entitlement
+ * that was found can fail as a claim; its buyer's report is finished by the sweep.
+ */
+export async function claimedEntitlementFor(submissionId: number): Promise<ClaimOutcome | null> {
+  let entitlement: Entitlement | null;
+  try {
+    entitlement = await findEntitlementByConsumedSubmission(submissionId);
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err, submissionId },
+      "pay-to-start: claimed-entitlement lookup failed on a replay; treated as none"
+    );
+    return null;
+  }
+  if (!entitlement) return null;
+  try {
+    return await applyClaimed(entitlement, null);
+  } catch (error) {
+    return { outcome: "error", entitlementId: entitlement.id, error };
+  }
+}
+
+/**
+ * What the survey's response tells the page, from a claim: whether the report opens
+ * unlocked (or will once the payment settles) and, when it does, the pre-report wizard its
+ * offer shows (four slides for the full report, five with the map for the initial one).
+ */
+export function claimResponseFields(claim: ClaimOutcome): {
+  journey: "pay_to_start";
+  unlocked: boolean;
+  unlockPending?: true;
+  wizard?: PayToStartWizard;
+} {
+  return {
+    journey: "pay_to_start",
+    unlocked: claim.outcome === "unlocked",
+    ...(claim.outcome === "pending" ? { unlockPending: true as const } : {}),
+    ...(claim.outcome === "unlocked" || claim.outcome === "pending"
+      ? { wizard: getOfferDefinition(claim.offer).wizard }
+      : {}),
+  };
+}
+
+/**
+ * Whether the browser's cookie has done its job. Cleared once the entitlement is bound
+ * to this submission or can never be claimed; kept after an error, so a retry can claim.
+ *
+ * An unpaid claim clears it too. The row is bound, so the checkout left open still
+ * unlocks this report if it is paid. Kept, the cookie would hand this survey to the next
+ * purchase in the browser: someone else's on a shared device, a second payment for a
+ * report already bought from its paywall, and every later survey here labelled pay to
+ * start.
+ */
+export function claimSettlesCookie(claim: ClaimOutcome): boolean {
+  return claim.outcome !== "error";
+}
+
+/**
+ * After the reply. An error goes to #ops: the reader got the free report, and while the
+ * sweep finishes an entitlement that was bound and paid, one that never bound needs a
+ * person. A refusal or an unpaid claim is only logged, for support to find.
+ */
+export async function reportClaimProblem(claim: ClaimOutcome, submissionId: number): Promise<void> {
+  if (claim.outcome === "refused" || claim.outcome === "unpaid") {
+    logger.info(
+      {
+        submissionId,
+        outcome: claim.outcome,
+        ...(claim.outcome === "refused" ? { reason: claim.reason } : {}),
+        entitlementId: claim.entitlementId ?? null,
+      },
+      "pay-to-start: survey submitted without unlocking"
+    );
+    return;
+  }
+  if (claim.outcome !== "error") return;
+  const message = claim.error instanceof Error ? claim.error.message : "unknown";
+  logger.error(
+    { submissionId, entitlementId: claim.entitlementId ?? null, message },
+    "pay-to-start: claim failed"
+  );
+  await notifySlack({
+    channel: "ops",
+    kind: "pts_claim_failed",
+    text: `:rotating_light: Pay to start: submission #${submissionId} came with a paid-for entitlement${
+      claim.entitlementId ? ` (#${claim.entitlementId})` : ""
+    }, but claiming it failed (${escapeSlack(message)}). The reader sees the free report for now. The payment sweep finishes an entitlement that is bound and paid; one that never bound needs attaching by hand.`,
+    username: "ops_alerts",
+  }).catch(() => undefined);
+}

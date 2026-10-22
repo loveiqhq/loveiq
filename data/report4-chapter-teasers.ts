@@ -21,22 +21,20 @@
  * Keyed by section id. The four chapters V4 opens by default have none (Figma draws
  * them open). Reward System came last: review 26.09, Mark put it back into Part 4
  * (1:1017, "We missed this chapter", 1942400765) and Sanjin wrote its teaser in 1:1026.
+ * Core Insecurities, Confidence Level and Arousal Style left V4 with the slimmed report
+ * (16.10, reportV3Nav.ts), and their teasers with them: like Importance of Sexuality, a
+ * row only the Figma-faithful preview (/report-v4-preview) still draws keeps the
+ * frame's placeholder there.
  */
 export const REPORT_V4_CHAPTER_TEASERS: Readonly<Record<string, string>> = {
-  // Part III — 1:871 / 1:882 / 1:893
-  core_insecurities:
-    "This chapter explores how your fears about rejection, inadequacy or abandonment can quietly influence when you open up, pull away, overthink, or seek reassurance in sex and relationships.",
-  confidence_level:
-    "This chapter explores where your confidence feels solid, where it wavers, and how that may shape how you express desire, handle uncertainty and vulnerability, and your sexual experience as a whole.",
+  // Part III — 1:893
   power_orientation:
     "This chapter explores the balance of dominance, submission, and equality that feels most natural to you, and how that shows up in your sexual experiences.",
-  // Part IV — 1:1004 / 1:1026 / 792:6965 / 1:1037 / 1:1048
+  // Part IV — 1:1004 / 1:1026 / 1:1037 / 1:1048
   libido_challenges_in_relationships:
     "This chapter helps you understand what may be influencing your libido and why your desire can change across different moments and relationships.",
   biochemical_reward_system_dynamics:
     "This chapter helps you understand how your reward system shapes what draws you in, why some experiences develop a stronger pull than others, and how those patterns can influence your sexuality.",
-  arousal_style:
-    "Your arousal style is the way sexual excitement tends to begin, build, and respond to different kinds of stimulation. This chapter explores the conditions that tend to bring your arousal to life and what can make it fade.",
   initiation_style:
     "This chapter explores the patterns behind how you start and respond to sexual connection, and what those moments can reveal about how you experience desire, interest, and mutual attraction.",
   energy_level:

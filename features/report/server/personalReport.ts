@@ -7,6 +7,7 @@ import {
   type ReportAccessPlan,
 } from "@features/report/server/access";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
+import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import {
   KNOWN_ARCHETYPES,
   isArchetypeName,
@@ -408,6 +409,12 @@ export async function getReportAccessPlanForSubmission(
   accessPlan: ReportAccessPlan;
   /** The strongest plan across EVERY payment, archetype ignored: "has bought anything". */
   anyPlan: ReportAccessPlan;
+  /**
+   * The initial unlock ("Core Archetype unlocked", EUR 1.99): a succeeded payment with its
+   * plan key. Not a plan in `accessPlan`/`anyPlan` (features/report/logic/initialUnlock.ts):
+   * it opens the reader's own card and Summary, and the pay screens keep selling.
+   */
+  initialUnlock: boolean;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
@@ -421,6 +428,7 @@ export async function getReportAccessPlanForSubmission(
     return {
       accessPlan: null,
       anyPlan: null,
+      initialUnlock: false,
       archetypeTiers: {},
       personalReportId: null,
       unlockedArchetypeColumn: [],
@@ -475,6 +483,7 @@ export async function getReportAccessPlanForSubmission(
         isReportPurchasePlan(payment.metadata?.plan) ? payment.metadata.plan : null
       )
     ),
+    initialUnlock: payments.some((payment) => isInitialUnlockPlan(payment.metadata?.plan)),
     archetypeTiers: sanitizeArchetypeTierMap(personalReport.archetype_tiers ?? {}),
     personalReportId: personalReport.id,
     unlockedArchetypeColumn: columnValues,

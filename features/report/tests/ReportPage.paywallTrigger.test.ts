@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readAppCss } from "@shared/testing/read-app-css";
+import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/paywallSelector";
 
 /**
  * When the plans pop-up appears, and how gently.
@@ -34,13 +35,35 @@ describe("plans pop-up trigger", () => {
     // the pop-up sat on the FIRST paywalled chapter that could not happen: no card was
     // ever on screen before it fired. Now that it waits for Attachment, the two
     // half-shown chapters come first, so the first card arms the clock instead.
-    // V4's in-flow "Premium content" card (.rv4-premium, the Typical Beliefs gate)
-    // counts as that first offer too — whichever comes first in the page.
-    expect(SOURCE).toContain('document.querySelector(".report-premium-overlay, .rv4-premium")');
+    // V4's in-flow paywall counts as that first offer too, whichever comes first in the
+    // page: FIRST_PAYWALL_SELECTOR (logic/paywallSelector.ts), which since the slimmed
+    // report (16.10) is a chapter's wall or the fold that holds it, and never Part II's
+    // Summary gate.
+    expect(SOURCE).toContain("document.querySelector(FIRST_PAYWALL_SELECTOR)");
+    expect(FIRST_PAYWALL_SELECTOR.split(", ")).toEqual([
+      ".report-premium-overlay",
+      ".rv4-premium:not(.rv4-premium--summary)",
+      ".rv4-fold.has-wall",
+      ".rv4-unlock",
+    ]);
     const block = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
     expect(block.slice(0, 900)).toMatch(/notifyPaywallReached\(\)/);
     // ...and it is torn down with the rest of the effect.
     expect(SOURCE).toMatch(/cardObserver\?\.disconnect\(\)/);
+  });
+
+  it("stands down while the guided tour scrolls the page, still watching for the reader", () => {
+    // The tour's trip down the page (V4GuidedTour) is not the reader arriving, and the
+    // pop-up fires once a visit. Each path returns BEFORE stop() or disconnect(), so it
+    // still fires when the reader gets there themselves.
+    const card = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
+    expect(card.slice(0, card.indexOf("cardObserver?.disconnect();"))).toContain(
+      "if (isGuidedTourActive()) return;"
+    );
+    const io = SOURCE.slice(SOURCE.indexOf("const observer = new IntersectionObserver("));
+    expect(io.slice(0, io.indexOf("stop();"))).toContain("if (isGuidedTourActive()) return;");
+    expect(SOURCE).toContain("if (!isGuidedTourActive() && hasReachedTrigger())");
+    expect(SOURCE).toContain("if (isGuidedTourActive() || !hasReachedTrigger()) return;");
   });
 
   it("waits until the section has risen into the viewport, not merely touched its edge", () => {

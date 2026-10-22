@@ -330,19 +330,37 @@ describe("reportV3.css — fantasy table contracts", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
+  /**
+   * The rule every expand pill shares: the table's, the A&B cards', the Summary's, and the
+   * slimmed chapters' "Show all" and "Unlock Full Chapter" (16.10).
+   */
+  const pillRule = (suffix = "") => {
+    const list = [
+      ".rv4-fvt__pill",
+      ".rv4-trig__pill",
+      ".rv4-summary__pill",
+      ".rv4-fold__pill",
+      ".rv4-unlock__pill",
+    ]
+      .map((pill) => `.rv3 ${pill}${suffix}`)
+      .join(",\n");
+    const at = V3_CSS.indexOf(`${list} {`);
+    expect(at, list).toBeGreaterThan(0);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
   // The hit area is laid from the padding box, inside the 1.5px outline: -6.5px there
   // reached 5px past the drawn pill, 41 tall in all. -8px makes it 31 + 2 x 6.5 = 44.
   it("gives the pill a 44px hit area, counted from inside its outline", () => {
-    // One rule for the table's, the A&B cards' and the Summary's pills; it ends on the last.
-    expect(ruleOf(".rv3 .rv4-summary__pill::after")).toContain("inset: -8px 0");
+    expect(pillRule("::after")).toContain("inset: -8px 0");
   });
 
   // The A&B cards' "Show all" is the same pill (713:6178), so the rule is shared.
   it("holds the pill at 31 however the browser rounds its 1.5px outline", () => {
     expect(V3_CSS).toContain(
-      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill {"
+      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill,\n.rv3 .rv4-fold__pill,\n.rv3 .rv4-unlock__pill {"
     );
-    expect(ruleOf(".rv3 .rv4-summary__pill")).toContain("height: 31px");
+    expect(pillRule()).toContain("height: 31px");
   });
 
   // 639:335 and its siblings: the 14.39px button 5.6 after the last word, 3.2 down from

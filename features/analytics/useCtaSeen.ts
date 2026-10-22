@@ -2,6 +2,8 @@
 
 import { useEffect, type RefObject } from "react";
 
+import { isGuidedTourActive } from "@shared/ui/guided-tour-state";
+
 import { recordPaywallSeen } from "./chapterStats";
 import { trackCtaSeen, type CtaSeen } from "./client";
 
@@ -36,8 +38,15 @@ export function useCtaSeen(
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting && e.intersectionRatio >= 0.5)) return;
+        // The guided tour scrolls past locks the reader has not reached yet: still watched,
+        // so the card counts when they scroll to it themselves.
+        if (isGuidedTourActive()) return;
         observer.disconnect();
-        if (cta === "locked_chapter") recordPaywallSeen(el);
+        // Every report paywall is its chapter's paywall seen: Part II's two count for the
+        // chapter they sit in (core_archetype) like a locked chapter's card does.
+        if (cta === "locked_chapter" || cta === "summary_gate" || cta === "archetype_card_lock") {
+          recordPaywallSeen(el);
+        }
         if (seen.has(key)) return;
         seen.add(key);
         trackCtaSeen({ cta });

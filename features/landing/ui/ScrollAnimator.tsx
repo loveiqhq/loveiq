@@ -8,6 +8,13 @@ const ScrollAnimator = () => {
     const elements = Array.from(document.querySelectorAll<HTMLElement>(".animate-on-scroll"));
     if (!elements.length) return;
 
+    // A browser without the observer (and jsdom) gets the content at once, not a page of
+    // `.animate-on-scroll` elements left at opacity 0.
+    if (typeof IntersectionObserver === "undefined") {
+      elements.forEach((el) => el.classList.add("animate"));
+      return;
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {

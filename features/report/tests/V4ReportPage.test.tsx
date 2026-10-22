@@ -8,7 +8,8 @@ import V4Part2 from "@features/report/ui/v3/V4Part2";
 import V4ChapterPart from "@features/report/ui/v3/V4ChapterPart";
 import V4Report from "@features/report/ui/v3/V4Report";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
-import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary, missingReport3Summary } from "@/data/report3-summary";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import {
@@ -17,7 +18,6 @@ import {
   REPORT_V4_PART4_CHAPTERS,
   REPORT_V4_PART5_CHAPTERS,
   REPORT_V4_PART6_CHAPTERS,
-  missingReport3Summary,
   REPORT_V4_PARTS,
   TEASER_PLACEHOLDER,
 } from "@/data/report3-archetype-page";
@@ -30,7 +30,9 @@ import {
  */
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
-const card = report3ArchetypeCard["Spark Seeker"]!;
+// The views the server builds (buildArchetypeCard / buildSummary), unlocked.
+const card = buildArchetypeCard("Spark Seeker")!;
+const summary = buildSummary("Spark Seeker");
 
 afterEach(cleanup);
 
@@ -97,7 +99,7 @@ describe("V3Methodology chrome", () => {
 
 describe("V4Part2", () => {
   const renderPart2 = () =>
-    render(<V4Part2 archetype="Spark Seeker" matchStrength={43} card={card} />);
+    render(<V4Part2 archetype="Spark Seeker" matchStrength={43} card={card} summary={summary} />);
 
   it("renders every block the frame lists, in order", () => {
     const { container } = renderPart2();
@@ -115,7 +117,12 @@ describe("V4Part2", () => {
 
   it("draws every archetype's own summary, from Sanjin's docs (03.10)", () => {
     const { container } = render(
-      <V4Part2 archetype="Quiet Withdrawer" matchStrength={12} card={card} />
+      <V4Part2
+        archetype="Quiet Withdrawer"
+        matchStrength={12}
+        card={card}
+        summary={buildSummary("Quiet Withdrawer")}
+      />
     );
     expect(container.querySelector(".rv4-summary")).toBeInTheDocument();
     expect(container.querySelector(".rv4-nudges")).toBeNull();
@@ -136,14 +143,12 @@ describe("V4ChapterPart", () => {
 
   it("shows Sanjin's teasers where they are written, the frame's placeholders elsewhere", () => {
     renderPart3();
-    // 1:860 carries [Chapter Copy]. Core Insecurities, Confidence Level and Power
-    // Orientation carry their teasers (1:871 / 1:882 / 1:893); Importance of
-    // Sexuality, a row only the preview still draws, keeps [Teaser Text].
+    // 1:860 carries [Chapter Copy]. Power Orientation carries its teaser (1:893); Core
+    // Insecurities, Confidence Level (out of V4 since the slimmed report, 16.10) and
+    // Importance of Sexuality, rows only the preview still draws, keep [Teaser Text].
     expect(screen.getByText(CHAPTER_COPY_PLACEHOLDER)).toBeInTheDocument();
-    expect(screen.getAllByText(TEASER_PLACEHOLDER)).toHaveLength(1);
-    for (const id of ["core_insecurities", "confidence_level", "power_orientation"]) {
-      expect(screen.getByText(REPORT_V4_CHAPTER_TEASERS[id]!)).toBeInTheDocument();
-    }
+    expect(screen.getAllByText(TEASER_PLACEHOLDER)).toHaveLength(3);
+    expect(screen.getByText(REPORT_V4_CHAPTER_TEASERS.power_orientation!)).toBeInTheDocument();
     // No part introductions since the 01.10 sync: the 185 box holds only the heading.
     expect(screen.queryByText("[Part Introductory Text]")).toBeNull();
   });
@@ -242,7 +247,7 @@ describe("Parts IV, V and VI", () => {
 
 describe("V4Report — the whole page", () => {
   const renderAll = () =>
-    render(<V4Report archetype="Spark Seeker" matchStrength={43} card={card} />);
+    render(<V4Report archetype="Spark Seeker" matchStrength={43} card={card} summary={summary} />);
 
   it("renders all six parts as one continuous flow, not tabs", () => {
     const { container } = renderAll();
@@ -376,15 +381,17 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
       [...c.querySelectorAll(".rv3-sci__list li")].map((li) => li.textContent),
     ]);
     expect(cards).toEqual([
+      // The slimmed report (16.10) took Arousal Style and Core Insecurities out of V4, so
+      // its tiles name only the chapters it still carries.
       [
         "Neuroscience",
         "What happens in the brain when you feel desire?",
-        ["Reward System", "Arousal Style", "Energy & Risk"],
+        ["Reward System", "Energy & Risk"],
       ],
       [
         "Psychology",
         "Which beliefs about sex do you hold that you never chose?",
-        ["Typical Beliefs", "Core Insecurities"],
+        ["Typical Beliefs"],
       ],
       [
         "Relationship Research",

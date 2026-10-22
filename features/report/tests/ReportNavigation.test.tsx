@@ -10,6 +10,7 @@ import ReportMobileNav from "@features/report/ui/ReportMobileNav";
 import type { ReportNavAccess } from "@features/report/ui/ReportNavBadge";
 import { REPORT_NAV_IDS, REPORT_NAV_PARTS } from "@features/report/ui/reportNav";
 import { __resetBodyScrollLockForTests } from "@shared/ui/body-scroll-lock";
+import { __resetOverlayHistoryForTests } from "@shared/ui/overlay-history";
 
 // Without this the file's renders accumulate, and "which link is aria-current"
 // then answers for every navigation rendered so far rather than this one.
@@ -265,6 +266,76 @@ describe("ReportMobileNav — tapping a chapter", () => {
 });
 
 /**
+ * "Replay the Tour", the chapter menu's last item (the guided tour's spec card, 1755:1276).
+ * Below the list, never in it: the persona walks take `nav[aria-label="Report sections"]`
+ * buttons and links by position (`.last()`), and e2e/paywall-back counts the drawer's rows.
+ */
+describe("the chapter menu's Replay the Tour", () => {
+  afterEach(() => {
+    // Unmount first: a drawer left open lets go of the page as it goes. Then its history
+    // entry, which a closing drawer is still taking off as the test ends.
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    __resetBodyScrollLockForTests();
+    __resetOverlayHistoryForTests();
+    window.history.replaceState(null, "");
+  });
+
+  it("is the drawer's last item, after the list and outside it, and only where the tour can run", () => {
+    const { unmount } = render(<ReportMobileNav activeSectionId="snapshot" />);
+    fireEvent.click(screen.getByRole("button", { name: /chapter:/i }));
+    expect(screen.queryByRole("button", { name: "Replay the Tour" })).toBeNull();
+    unmount();
+
+    render(<ReportMobileNav activeSectionId="snapshot" onReplayTour={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /chapter:/i }));
+    const replay = screen.getByRole("button", { name: "Replay the Tour" });
+    const nav = screen.getByRole("navigation", { name: "Report sections" });
+    expect(nav.contains(replay)).toBe(false);
+    expect(nav.nextElementSibling).toBe(replay);
+    expect(replay.classList.contains("report-chapter-panel__item")).toBe(false);
+  });
+
+  it("starts the tour from the drawer only once the drawer has let go of the page", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const onReplayTour = vi.fn();
+    render(<ReportMobileNav activeSectionId="snapshot" onReplayTour={onReplayTour} />);
+    fireEvent.click(screen.getByRole("button", { name: /chapter:/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Replay the Tour" }));
+    expect(onReplayTour).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(document.body.style.position).toBe("");
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await vi.waitFor(() => expect(onReplayTour).toHaveBeenCalledTimes(1));
+    // Focus goes back to the floating pill when the tour ends.
+    const pill = document.querySelector(".report-chapter-pill > .report-chapter-pill__btn");
+    expect(onReplayTour).toHaveBeenCalledWith(pill);
+  });
+
+  it("is the sidebar's last item too, and hands itself back for focus", () => {
+    const onReplayTour = vi.fn();
+    render(<ReportDesktopSidebar activeSectionId="core_archetype" onReplayTour={onReplayTour} />);
+    const replay = screen.getByRole("button", { name: "Replay the Tour" });
+    const nav = screen.getByRole("navigation", { name: "Report sections" });
+    expect(nav.contains(replay)).toBe(false);
+    expect(nav.nextElementSibling).toBe(replay);
+    fireEvent.click(replay);
+    expect(onReplayTour).toHaveBeenCalledWith(replay);
+  });
+
+  it("is not in the sidebar where the tour cannot run", () => {
+    render(<ReportDesktopSidebar activeSectionId="core_archetype" />);
+    expect(screen.queryByRole("button", { name: "Replay the Tour" })).toBeNull();
+  });
+});
+
+/**
  * Where a V4 chapter lands. The floating chrome covers the top 136px (header 8-56,
  * chapter pill 80-136, V4BackToTop.tsx), and the V4 and V3 chapter rows carried no
  * scroll margin, so a chapter reached from the drawer put its title under the bar.
@@ -341,7 +412,9 @@ describe("V4 — the finalised nav (961:333)", () => {
   const ACCESS: ReadonlyMap<string, ReportNavAccess> = new Map<string, ReportNavAccess>([
     ["core_archetype", "free"],
     ["typical_beliefs", "unlocked"],
-    ["core_insecurities", "locked"],
+    // Power Orientation: a locked Part 3 row V4 still carries (the slimmed report, 16.10,
+    // took Core Insecurities out).
+    ["power_orientation", "locked"],
   ]);
   const row = (id: string) => document.querySelector<HTMLElement>(`a[href="#${id}"]`)!;
   const parts = () =>
@@ -414,7 +487,7 @@ describe("V4 — the finalised nav (961:333)", () => {
     expect(img.getAttribute("height")).toBe("14");
     expect(img.getAttribute("alt")).toBe("");
     expect(open.querySelector(".sr-only")?.textContent).toBe("Unlocked chapter");
-    const shut = row("core_insecurities").querySelector(".report-nav-badge--locked")!;
+    const shut = row("power_orientation").querySelector(".report-nav-badge--locked")!;
     expect(shut.querySelector("svg")).not.toBeNull();
     expect(shut.querySelector(".sr-only")?.textContent).toBe("Locked chapter");
   });
@@ -435,13 +508,13 @@ describe("V4 — the finalised nav (961:333)", () => {
     );
     expect(row("core_archetype").dataset.access).toBe("free");
     expect(row("typical_beliefs").dataset.access).toBe("unlocked");
-    expect(row("core_insecurities").dataset.access).toBe("locked");
+    expect(row("power_orientation").dataset.access).toBe("locked");
     unmount();
 
     await inV4(<ReportMobileNav activeSectionId="core_archetype" accessById={ACCESS} />);
     fireEvent.click(screen.getByRole("button", { name: /^chapter:/i }));
     expect(row("typical_beliefs").dataset.access).toBe("unlocked");
-    expect(row("core_insecurities").dataset.access).toBe("locked");
+    expect(row("power_orientation").dataset.access).toBe("locked");
     // An id the map does not list is free, as its badge is.
     expect(row("introduction").dataset.access).toBe("free");
   });

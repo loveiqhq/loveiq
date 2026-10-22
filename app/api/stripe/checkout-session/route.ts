@@ -11,10 +11,15 @@ import {
   UNLOCK_ANCHOR_REGEX,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/fulfillment";
+import {
+  applyPayToStartEntitlement,
+  lookupPrimaryArchetypeForSubmission,
+} from "@features/checkout/server/fulfillment";
+import { findEntitlementByConsumedSubmission } from "@features/pay-to-start/server/entitlement";
 import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  ensureInitialCreditCoupon,
   ensureUpgradeCreditCoupon,
   getStripeCheckoutCustomerEmail,
   getStripeServerClient,
@@ -214,6 +219,37 @@ export async function POST(request: Request) {
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.reportToken ?? null,
     });
+
+    // Resolve the submission once — reused by the already-owns precheck AND by
+    // per-user promo ownership below, so session-only checkouts (not just token
+    // ones) can resolve a user's own nurture code. [Audit L6]
+    let accessContext: Awaited<ReturnType<typeof resolveSubmissionAccessContext>> = null;
+    try {
+      accessContext = await resolveSubmissionAccessContext({
+        reportSessionId: parsed.data.reportSessionId ?? null,
+        reportToken: parsed.data.reportToken ?? null,
+      });
+    } catch (err) {
+      logger.warn({ err }, "checkout-session: access-context resolve failed; continuing");
+    }
+
+    // Pay to start: paid before the survey and claimed by it, but the payment row not
+    // written yet (an apply that failed; the sweep retries it). Apply it now, before the
+    // quote (that payment is upgrade credit) and the check below (which then sees the
+    // report as bought, rather than sell it a second time). On its own: a failure here
+    // must never skip that check.
+    if (accessContext && stripe) {
+      const submissionId = accessContext.submissionId;
+      try {
+        const prepaid = await findEntitlementByConsumedSubmission(submissionId);
+        if (prepaid?.status === "succeeded" && !prepaid.payment_id) {
+          await applyPayToStartEntitlement({ entitlement: prepaid, stripe });
+        }
+      } catch (err) {
+        logger.warn({ err, submissionId }, "checkout-session: prepaid apply failed");
+      }
+    }
+
     const quote = await getReportPriceQuoteForContext({
       plan: parsed.data.plan,
       pricingSessionId: parsed.data.pricingSessionId ?? null,
@@ -234,19 +270,6 @@ export async function POST(request: Request) {
     // archetype X does NOT block buying the same tier on archetype Y.
     // Best-effort: a Supabase blip drops to a warn-log and lets checkout
     // proceed (webhook idempotency is the secondary defense).
-    // Resolve the submission once — reused by the already-owns precheck AND by
-    // per-user promo ownership below, so session-only checkouts (not just token
-    // ones) can resolve a user's own nurture code. [Audit L6]
-    let accessContext: Awaited<ReturnType<typeof resolveSubmissionAccessContext>> = null;
-    try {
-      accessContext = await resolveSubmissionAccessContext({
-        reportSessionId: parsed.data.reportSessionId ?? null,
-        reportToken: parsed.data.reportToken ?? null,
-      });
-    } catch (err) {
-      logger.warn({ err }, "checkout-session: access-context resolve failed; continuing");
-    }
-
     try {
       if (accessContext) {
         const access = await getReportAccessPlanForSubmission(accessContext.submissionId);
@@ -342,18 +365,22 @@ export async function POST(request: Request) {
       }
     }
 
-    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`):
-    // the line keeps the regular price and the credit is Stripe's discount, so both the page
-    // and the receipt say what was taken off. Stripe takes one discount per session, so a
-    // nurture promo worth more than the credit wins instead.
+    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`),
+    // and the full report the initial unlock's EUR 10 (`applyInitialCredit`, creditKind
+    // "initial"): the line keeps the regular price and the credit is Stripe's discount, so
+    // both the page and the receipt say what was taken off. Stripe takes one discount per
+    // session, so a nurture promo worth more than the credit wins instead.
     const creditCents = quote.upgradeCreditCents ?? 0;
+    const initialCredit = quote.creditKind === "initial";
     const regularCents = quote.chargedPriceCents + creditCents;
     const promoOffCents = nurturePromoMatch
       ? Math.round((regularCents * nurturePromoMatch.percentOff) / 100)
       : 0;
     const creditCouponId =
       creditCents > 0 && creditCents >= promoOffCents
-        ? await ensureUpgradeCreditCoupon(stripe, creditCents)
+        ? initialCredit
+          ? await ensureInitialCreditCoupon(stripe, creditCents)
+          : await ensureUpgradeCreditCoupon(stripe, creditCents)
         : null;
     const appliedPromo = creditCouponId ? null : nurturePromoMatch;
 
@@ -420,7 +447,10 @@ export async function POST(request: Request) {
           promoStage: appliedPromo.stage,
           promoPercentOff: String(appliedPromo.percentOff),
         }),
-        ...(creditCouponId && { upgradeCredit: String((creditCents / 100).toFixed(2)) }),
+        ...(creditCouponId &&
+          (initialCredit
+            ? { initialCredit: String((creditCents / 100).toFixed(2)) }
+            : { upgradeCredit: String((creditCents / 100).toFixed(2)) })),
         requestIp: toStripeMetadataValue(ip),
         requestUserAgent: toStripeMetadataValue(userAgent),
         reportSessionId: parsed.data.reportSessionId ?? "",

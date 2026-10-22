@@ -5,7 +5,9 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import {
+  INITIAL_CREDIT_COUPON_NAME,
   UPGRADE_CREDIT_COUPON_NAME,
+  ensureInitialCreditCoupon,
   ensureUpgradeCreditCoupon,
 } from "@features/checkout/server/stripeCheckout";
 
@@ -64,5 +66,26 @@ describe("ensureUpgradeCreditCoupon", () => {
       async () => ({})
     );
     await expect(ensureUpgradeCreditCoupon(stripe, 500)).rejects.toThrow("api_connection_error");
+  });
+});
+
+describe("ensureInitialCreditCoupon", () => {
+  it("is a coupon of its own, so the receipt names the initial unlock's credit", async () => {
+    const stripe = fakeStripe(
+      async () => {
+        throw stripeError("resource_missing");
+      },
+      async () => ({})
+    );
+    expect(await ensureInitialCreditCoupon(stripe, 1000)).toBe("initial_credit_eur_1000");
+    expect(
+      (stripe as { coupons: { create: ReturnType<typeof vi.fn> } }).coupons.create
+    ).toHaveBeenCalledWith({
+      id: "initial_credit_eur_1000",
+      amount_off: 1000,
+      currency: "eur",
+      duration: "once",
+      name: INITIAL_CREDIT_COUPON_NAME,
+    });
   });
 });

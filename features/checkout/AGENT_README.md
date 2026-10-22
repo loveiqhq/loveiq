@@ -8,7 +8,7 @@
 - `ui/CheckoutReturnPage.tsx` — `/checkout/return` post-payment landing.
 - `server/stripeCheckout.ts` — Stripe SDK client + checkout-session builder.
 - `server/reportPurchase.ts` — plan IDs, access token regex, purchase helpers.
-- `server/fulfillment.ts` — webhook event processor; grants access on payment events.
+- `server/fulfillment.ts` — webhook event processor; grants access on payment events. A session whose `metadata.journey` is `pay_to_start` (a payment made before the survey, `features/pay-to-start`) is settled there first and never reaches the report's own fulfillment; its refunds and disputes are handled before and after the survey claims it.
 - API routes (still in `app/api/`): `stripe/checkout-session`, `stripe/checkout-session-status`, `stripe/webhook`, `price`.
 
 **Belongs:** anything specific to the checkout flow — UI, Stripe wiring, fulfillment, tests.

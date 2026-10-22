@@ -94,6 +94,14 @@ vi.mock("@features/analytics/client", () => ({
   trackExperimentExposure: vi.fn(),
   // Report 3.0's reading per chapter, saved when the page goes (chapterStats).
   persistReportChapterStats: vi.fn(),
+  // The guided tour on a V4 report's first open (V4GuidedTour, useGuidedTour).
+  trackTourStarted: vi.fn(),
+  trackTourStepViewed: vi.fn(),
+  trackTourBack: vi.fn(),
+  trackTourSkipped: vi.fn(),
+  trackTourCompleted: vi.fn(),
+  trackTourLeft: vi.fn(),
+  trackTourReplayed: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -141,6 +149,7 @@ vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
 import ReportPage from "@features/report/ui/ReportPage";
 import { UNLOCK_ANCHOR_REGEX } from "@features/checkout/server/reportPurchase";
 import * as analytics from "@features/analytics/client";
+import { GUIDED_TOUR_KEY, guidedTourKey } from "@features/report/logic/guidedTour";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
@@ -376,6 +385,13 @@ describe("ReportPage", () => {
     mockTrackReportViewed.mockReset();
     mockTrackPaywallView.mockReset();
     mockTrackBeginCheckout.mockReset();
+    // A V4 report's first open starts the guided tour over the page. These cases are about
+    // the page itself, so every report they open has shown it (a preview: in this tab);
+    // the tour's own block clears its report's record.
+    for (const id of [42, 1920, 2063, 3011]) {
+      window.localStorage.setItem(guidedTourKey(id), "seen");
+    }
+    window.sessionStorage.setItem(guidedTourKey(null), "seen");
 
     vi.stubGlobal(
       "IntersectionObserver",
@@ -576,7 +592,20 @@ describe("ReportPage", () => {
     render(<ReportPage />);
 
     await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
-    expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur");
+    // ?v2=1 here: an older layout sends none.
+    expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur", null);
+  });
+
+  it("tags report_viewed with the slimmed layout on a V4 page (16.10)", async () => {
+    mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+    try {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+      expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur", "v4_slim");
+    } finally {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    }
   });
 
   // `accessPlan` covers the reader's own report only (2026-10-06), so a reader who bought
@@ -601,7 +630,8 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
-        expect(mockTrackReportViewed).toHaveBeenCalledWith(reportType, archetype);
+        // No ?v2=1: the default, V4, which is the slimmed report.
+        expect(mockTrackReportViewed).toHaveBeenCalledWith(reportType, archetype, "v4_slim");
         expect(engagementTimers.calls.at(-1)).toEqual({ reportType, archetype });
       } finally {
         mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
@@ -1595,7 +1625,8 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(withChapter(true));
 
       const { container, unmount } = render(<ReportPage />);
-      await user.click(container.querySelector<HTMLElement>(".rv4-cip__gate")!);
+      // The slimmed chapter's wall (16.10): its "Unlock Full Chapter".
+      await user.click(container.querySelector<HTMLElement>(".rv4-cip .rv4-unlock__pill")!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
@@ -2102,7 +2133,7 @@ describe("ReportPage", () => {
       expect([...REPORT_V4_DESIGNED_CHAPTER_IDS].sort()).toEqual([...DESIGNED].sort());
       const locked = lockedIds(container);
       expect(locked).toContain("biochemical_reward_system_dynamics");
-      expect(locked).toContain("core_insecurities");
+      expect(locked).toContain("power_orientation");
       expect(locked).not.toContain("constellation");
       for (const id of DESIGNED) expect(locked).not.toContain(id);
       // The fixture sends no V4 chapter, as for a name with no V4 copy: its designed
@@ -2120,10 +2151,24 @@ describe("ReportPage", () => {
 
       const locked = lockedIds(container);
       expect(locked).toContain(LIBIDO);
-      expect(locked).not.toContain("core_insecurities");
-      expect(locked).not.toContain("confidence_level");
+      expect(locked).toContain("power_orientation");
+      // Of Essentials' chapters V4 still carries Attachment Style (and the designed two);
+      // Core Insecurities and Confidence Level left it with the slimmed report (16.10).
       expect(locked).not.toContain("attachment_style");
-      expect(container.querySelector("#core_insecurities [aria-expanded]")).not.toBeNull();
+      expect(container.querySelector("#attachment_style [aria-expanded]")).not.toBeNull();
+    });
+
+    it("draws none of the three chapters the slimmed report took out (16.10)", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      for (const plan of [null, "essentials", "full_report"]) {
+        mockUseReportData.mockReturnValue(withPlan(plan));
+        const { container, unmount } = render(<ReportPage />);
+        for (const id of ["core_insecurities", "confidence_level", "arousal_style"]) {
+          expect(container.querySelector(`#${id}`), `${plan} ${id}`).toBeNull();
+          expect(container.querySelector(`a[href="#${id}"]`), `${plan} ${id}`).toBeNull();
+        }
+        unmount();
+      }
     });
 
     it("locks nothing for a full-report reader", () => {
@@ -2167,7 +2212,7 @@ describe("ReportPage", () => {
       }
       // The four designed chapters open, in part, to every reader.
       for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
-      for (const id of ["core_insecurities", LIBIDO, "biochemical_reward_system_dynamics"]) {
+      for (const id of ["power_orientation", LIBIDO, "biochemical_reward_system_dynamics"]) {
         expect(tier.get(id), id).toBe("locked");
       }
       // Other Archetypes opens for everyone (above), so its badge says so.
@@ -2185,7 +2230,7 @@ describe("ReportPage", () => {
       const tier = tiers(container);
 
       expect([...tier.values()]).not.toContain("locked");
-      expect(tier.get("core_insecurities")).toBe("unlocked");
+      expect(tier.get("power_orientation")).toBe("unlocked");
       expect(tier.get(LIBIDO)).toBe("unlocked");
       expect(tier.get("introduction")).toBe("free");
     });
@@ -2197,9 +2242,9 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
       const tier = tiers(container);
 
-      expect(tier.get("core_insecurities")).toBe("unlocked");
       expect(tier.get("attachment_style")).toBe("unlocked");
       expect(tier.get(LIBIDO)).toBe("locked");
+      expect(tier.get("power_orientation")).toBe("locked");
       for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
     });
   });
@@ -2231,6 +2276,16 @@ describe("ReportPage", () => {
       "learn.body": "What sexual insecurity is.",
       locked: false,
     };
+    // Initiation Style: a 2.0 practice chapter V4 still carries (Insecurities left it,
+    // 16.10). V2 and V3 keep Insecurities, and its own panel below.
+    const INITIATION = {
+      "practical.label": "The fix: one conversation",
+      "practical.teaser": "One small conversation.",
+      "practical.line1": "1. Ask it.",
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "How you start.",
+      locked: false,
+    };
     const withCopies = (
       plan: string | null = "full_report",
       extra: Record<string, unknown> = {}
@@ -2240,6 +2295,7 @@ describe("ReportPage", () => {
         accessPlan: plan,
         powerCopy: POWER,
         insecuritiesCopy: INSECURITIES,
+        initiationCopy: INITIATION,
         ...extra,
       });
       return response;
@@ -2269,20 +2325,19 @@ describe("ReportPage", () => {
       ]);
     });
 
-    it("gives Insecurities a Try this card, its 2.0 label for the eyebrow", () => {
+    it("gives Initiation Style a Try this card, its 2.0 label for the eyebrow", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withCopies());
 
       const { container } = render(<ReportPage />);
 
-      const chapter = container.querySelector("#core_insecurities")!;
-      expect(chapter.querySelector(".report-insecurities__details")).toBeNull();
+      const chapter = container.querySelector("#initiation_style")!;
       const practice = chapter.querySelector(".rv4-chapter__extras .rv4-try")!;
       expect(practice.querySelector(".rv4-try__label")!.textContent).toBe(
         "Try This & See What Shifts"
       );
       expect(practice.querySelector(".rv4-try__eyebrow")!.textContent).toBe(
-        INSECURITIES["practical.label"]
+        INITIATION["practical.label"]
       );
     });
 
@@ -2815,6 +2870,196 @@ describe("ReportPage", () => {
 
   // Fatih, 03.10: each archetype's own colours. The live root is the only place a V4 reader
   // gets the inks, so the page is what this pins.
+  describe("V4 — the guided tour on the first open", () => {
+    const TOUR_TOKEN = "rpt_guided_tour";
+    /** The record of the report these cases open (`tourV4`'s submission). */
+    const TOUR_KEY = guidedTourKey(3011);
+    let rects: { mockRestore: () => void } | null = null;
+
+    beforeEach(() => {
+      vi.useFakeTimers({
+        toFake: [
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval",
+          "requestAnimationFrame",
+          "cancelAnimationFrame",
+          "performance",
+          "Date",
+        ],
+      });
+      // This report's first open.
+      window.localStorage.removeItem(TOUR_KEY);
+      // The reader has answered the cookie banner, and is at the top of the page.
+      document.cookie = "cookieyes-consent=consent:yes,action:yes; path=/";
+      Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+      // jsdom lays nothing out: every element gets a box, so the tour finds its controls.
+      rects = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+        () =>
+          ({
+            top: 300,
+            bottom: 334,
+            left: 20,
+            right: 140,
+            width: 120,
+            height: 34,
+            x: 20,
+            y: 300,
+            toJSON: () => ({}),
+          }) as DOMRect
+      );
+      vi.mocked(analytics.trackTourStarted).mockClear();
+      vi.mocked(analytics.trackTourReplayed).mockClear();
+    });
+
+    afterEach(() => {
+      rects?.mockRestore();
+      vi.useRealTimers();
+      document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      document.cookie = "loveiq_probe=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    /** A locked V4 reader, with nothing opening by itself over the report. */
+    function tourV4(query = "", data: Record<string, unknown> = {}) {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(`v4=1&popup=off${query}`));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue({
+        ...response,
+        data: { ...response.data, submissionId: 3011, ...data },
+      });
+    }
+
+    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+    /**
+     * Two steps: `act` renders what a timer set only once it returns, so the tour the hook
+     * starts is mounted after the first, and its frames run in the second.
+     */
+    const settle = () => {
+      advance(4_000);
+      advance(2_000);
+    };
+    const tourBubble = () => screen.queryByRole("dialog", { name: "Easily Navigate Your Report" });
+
+    it("starts by itself on a V4 owner's first open, over a page held inert but not blurred", () => {
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+
+      expect(tourBubble()).toBeInTheDocument();
+      // A locked reader's tour has the unlock stop: a free reader's.
+      expect(analytics.trackTourStarted).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "auto", audience: "free" })
+      );
+      expect(window.localStorage.getItem(TOUR_KEY), "remembered once started").not.toBeNull();
+      const shell = document.querySelector(".report-page__shell-wrap")!;
+      expect(shell.parentElement!.hasAttribute("inert")).toBe(true);
+      expect(shell.className).not.toContain("report-page__shell-wrap--obscured");
+      expect(document.querySelector(".report-sticky-unlock")?.getAttribute("aria-hidden")).toBe(
+        "true"
+      );
+    });
+
+    it("lets go of the page when the reader ends it", () => {
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      advance(100);
+
+      expect(tourBubble()).toBeNull();
+      const shell = document.querySelector(".report-page__shell-wrap")!;
+      expect(shell.parentElement!.hasAttribute("inert")).toBe(false);
+    });
+
+    it("does not start again on a report that has shown it", () => {
+      window.localStorage.setItem(TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeNull();
+      expect(analytics.trackTourStarted).not.toHaveBeenCalled();
+    });
+
+    it("starts on a reader's next report, though this browser has seen it on another", () => {
+      // Marcus, 20.10: "Tutorial should start on the report page". It was remembered per
+      // browser, so a reader who had met it once never met it on the report after their
+      // survey. Other reports' records (seeded above) and the old per-browser one don't count.
+      window.localStorage.setItem(GUIDED_TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeInTheDocument();
+    });
+
+    it("does not start for a probe, a shared view or a return from checkout", () => {
+      const notStarted = (why: string) => {
+        expect(tourBubble(), why).toBeNull();
+        expect(window.localStorage.getItem(TOUR_KEY), why).toBeNull();
+      };
+      document.cookie = "loveiq_probe=1; path=/";
+      tourV4();
+      const probe = render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      notStarted("a probe (the persona walks)");
+      probe.unmount();
+      document.cookie = "loveiq_probe=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+
+      tourV4("", { viewMode: "shared" });
+      const shared = render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      notStarted("a shared view");
+      shared.unmount();
+
+      tourV4("&anchor=c-typical_beliefs");
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      notStarted("back from checkout");
+      expect(analytics.trackTourStarted).not.toHaveBeenCalled();
+    });
+
+    it("replays from the chapter menu for a reader who has seen it", () => {
+      window.localStorage.setItem(TOUR_KEY, "2026-10-17T09:00:00.000Z");
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeNull();
+
+      // The desktop sidebar's item (both menus are in the page; CSS shows one).
+      const replay = document.querySelector<HTMLButtonElement>(
+        ".report-sidebar .report-tour-replay"
+      )!;
+      fireEvent.click(replay);
+      settle();
+
+      expect(tourBubble()).toBeInTheDocument();
+      expect(analytics.trackTourReplayed).toHaveBeenCalledWith({ source: "sidebar" });
+      expect(analytics.trackTourStarted).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "replay" })
+      );
+    });
+
+    it("offers no replay where the tour cannot run: a shared view", () => {
+      tourV4("", { viewMode: "shared" });
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(document.querySelector(".report-tour-replay")).toBeNull();
+    });
+
+    it("gives way to a reader who has already started scrolling", () => {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: 640 });
+      tourV4();
+      render(<ReportPage token={TOUR_TOKEN} />);
+      settle();
+      expect(tourBubble()).toBeNull();
+      expect(window.localStorage.getItem(TOUR_KEY), "kept for their next open").toBeNull();
+    });
+  });
+
   describe("V4 — the report root carries the archetype's own inks", () => {
     afterEach(() => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));

@@ -31,22 +31,26 @@ const REPORT_PAGE = readFileSync(join(__dirname, "..", "ui", "ReportPage.tsx"), 
 const AB = "typical_arousal_accelerators_turn_ons_of_the_core_archetype";
 
 // Review 24.09: "Please take out the Arousal, Desire & Sexual Stage Chapter" and "Take out
-// the Summary, Sexual Stage, Importance of Sexuality chapters please".
+// the Summary, Sexual Stage, Importance of Sexuality chapters please". The slimmed report
+// (16.10, Fatih's call): Core Insecurities, Confidence Level and Arousal Style too.
 const REMOVED_IN_V4 = [
   "background_know_how_arousal_desire_and_pleasure",
   "sexual_stage",
   "the_importance_of_sexuality",
+  "core_insecurities",
+  "confidence_level",
+  "arousal_style",
 ];
 
 describe("the V4 chapter order", () => {
-  it("has V3's ids minus the three the 24.09 review took out", () => {
+  it("has V3's ids minus the six the 24.09 review and the slimmed report took out", () => {
     expect([...REPORT_V4_SECTION_ORDER].sort()).toEqual(
       REPORT_V3_SECTION_ORDER.filter((id) => !REMOVED_IN_V4.includes(id)).sort()
     );
     for (const id of REMOVED_IN_V4) {
       expect(REPORT_V4_SECTION_ORDER).not.toContain(id);
       expect(REPORT_V4_NAV_PARTS.flatMap((p) => p.items.map((i) => i.id))).not.toContain(id);
-      // V3 keeps all three.
+      // V3 keeps all six.
       expect(REPORT_V3_SECTION_ORDER).toContain(id);
     }
   });
@@ -76,11 +80,9 @@ describe("the V4 chapter order", () => {
   });
 
   it("opens 'How your archetype works' with Typical Beliefs, and closes it before A&B", () => {
-    expect(REPORT_V4_SECTION_ORDER.slice(0, 7)).toEqual([
+    expect(REPORT_V4_SECTION_ORDER.slice(0, 5)).toEqual([
       "core_archetype",
       "typical_beliefs",
-      "core_insecurities",
-      "confidence_level",
       "power_orientation",
       AB,
       "libido_challenges_in_relationships",
@@ -90,12 +92,12 @@ describe("the V4 chapter order", () => {
   it("numbers each part from 1 in body order, with A&B as 3.1", () => {
     expect(REPORT_V4_CHAPTERS.slice(0, 7).map((c) => [c.id, c.number])).toEqual([
       ["typical_beliefs", "2.1"],
-      ["core_insecurities", "2.2"],
-      ["confidence_level", "2.3"],
-      ["power_orientation", "2.4"],
+      ["power_orientation", "2.2"],
       [AB, "3.1"],
       ["libido_challenges_in_relationships", "3.2"],
       ["biochemical_reward_system_dynamics", "3.3"],
+      ["initiation_style", "3.4"],
+      ["energy_level", "3.5"],
     ]);
     // Every part counts 1, 2, 3 … with no gaps or repeats, so the V3 eyebrows the
     // other chapters still carry keep counting up.
@@ -188,8 +190,6 @@ describe("the V4 chapter order", () => {
   it("lists the nav in the same order as the body", () => {
     expect(REPORT_V4_NAV_PARTS[2]!.items.map((i) => i.id)).toEqual([
       "typical_beliefs",
-      "core_insecurities",
-      "confidence_level",
       "power_orientation",
     ]);
     expect(REPORT_V4_NAV_PARTS[3]!.items.slice(0, 2).map((i) => [i.id, i.label])).toEqual([

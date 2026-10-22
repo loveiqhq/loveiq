@@ -67,6 +67,7 @@ import { GET } from "@/app/api/report/route";
 import {
   getReportAccessPlanForSubmission,
   recordReportSessionView,
+  resolveUnlockedArchetypes,
 } from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
@@ -607,14 +608,18 @@ describe("GET /api/report", () => {
  * data/report3-copy). A name with no V4 copy gets null: the builders' own tests.
  */
 describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
-  const AB_PROBES = [
+  /** What a locked reader's page draws blurred: the locked rows, the practice past its ramp. */
+  const AB_BLURRED = [
     "Low-energy, passive encounters",
     "Spontaneity and controlled unpredictability",
-    // Common challenges past its ramp paragraph, which fades in whole and is sent as
-    // written since 314:284 (29.09): the probe sits in the paragraph after it.
-    "common brakes is sex that feels predictable",
     "Respect brakes that are protecting something real.",
   ];
+  /**
+   * Common challenges past its sample, which the slimmed page draws nothing of for a locked
+   * reader (16.10): never sent to one, whichever way the blur switch is set.
+   */
+  const AB_PAST_WALL = ["common brakes is sex that feels predictable"];
+  const AB_PROBES = [...AB_BLURRED, ...AB_PAST_WALL];
 
   const queueSubmission = (primary: string) => {
     mockFetchWithTimeout
@@ -692,7 +697,8 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
       expect(json.accelerators.lockedFrom).toBe(2);
       expect(json.accelerators.practice.locked).toBe(true);
       const body = JSON.stringify(json);
-      for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
+      for (const probe of AB_BLURRED) expect(body, probe).toContain(probe);
+      for (const probe of AB_PAST_WALL) expect(body, probe).not.toContain(probe);
     } finally {
       blurCopy.mode = "decoy";
     }
@@ -922,5 +928,100 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     expect(json.fantasy).toMatchObject({ locked: true });
     expect(json.fantasyArticle).toMatchObject({ locked: true });
     expect(json.fantasyCopy).not.toBeNull();
+  });
+});
+
+/**
+ * The initial unlock (EUR 1.99, Marcus 19.10): the reader's own Core Archetype card and
+ * Summary in full (the `summary` gate), and every other gate as a free reader has it.
+ */
+describe("GET /api/report — the initial unlock", () => {
+  const queueSubmission = (primary: string) => {
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman", email: "eman@example.com" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: primary,
+            v5_primary_archetype: primary,
+            percentages: { [primary]: 43 },
+            v5_percentages: { [primary]: 43 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+  };
+  const access = (initialUnlock: boolean) => ({
+    accessPlan: null,
+    anyPlan: null,
+    initialUnlock,
+    archetypeTiers: {},
+    personalReportId: 99,
+    unlockedArchetypeColumn: [],
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
+    vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    allowCsrf();
+    allowRateLimit();
+  });
+
+  it("opens the reader's own card and Summary, and no chapter", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue(access(true));
+    queueSubmission("Spark Seeker");
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.initialUnlock).toBe(true);
+    // No plan: the pay screens keep selling, and every chapter stays as a free reader has it.
+    expect(json.accessPlan).toBeNull();
+    expect(json.purchasedPlan).toBeNull();
+    expect(json.archetypeCard.locked).toBe(false);
+    expect(json.summaryChapter.locked).toBe(false);
+    expect(json.accelerators.lockedFrom).toBe(2);
+    expect(json.fantasy.locked).toBe(true);
+  });
+
+  it("leaves them locked without it", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue(access(false));
+    queueSubmission("Spark Seeker");
+    const json = await (
+      await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
+    ).json();
+    expect(json.initialUnlock).toBe(false);
+    expect(json.archetypeCard.locked).toBe(true);
+    expect(json.summaryChapter.locked).toBe(true);
+  });
+
+  it("never opens another archetype's card", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue(access(true));
+    vi.mocked(resolveUnlockedArchetypes).mockReturnValue(["Spark Seeker", "Loyal Ritualist"]);
+    queueSubmission("Spark Seeker");
+    const json = await (
+      await GET(
+        makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1&archetype=loyal-ritualist")
+      )
+    ).json();
+    expect(json.contentArchetype).toBe("Loyal Ritualist");
+    expect(json.archetypeCard.locked).toBe(true);
+    expect(json.summaryChapter.locked).toBe(true);
   });
 });
