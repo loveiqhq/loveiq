@@ -219,6 +219,23 @@ describe("a survey submitted by a buyer who paid before it", () => {
     const tracker = JSON.parse(String(seen.rpcBody?.p_utm_tracker)) as Record<string, unknown>;
     expect(tracker).toMatchObject({ utm_source: "google", journey: "pay_to_start" });
     expect(tracker).not.toHaveProperty("landing_variant");
+    // Nor in the email question's test: the browser showed a buyer today's question.
+    expect(tracker).not.toHaveProperty("contact_question_arm");
+  });
+
+  it("stamps no email-question arm on a buyer's submission, whatever the session draws", async () => {
+    // This session id draws the anonymous arm for everyone else.
+    const seen = routeSupabase();
+    await submit(
+      {
+        sessionId: "00000000-0000-4000-8000-000000000000",
+        utmTracker: '{"utm_source":"google"}',
+      },
+      cookie
+    );
+    const tracker = JSON.parse(String(seen.rpcBody?.p_utm_tracker)) as Record<string, unknown>;
+    expect(tracker).toMatchObject({ journey: "pay_to_start" });
+    expect(tracker).not.toHaveProperty("contact_question_arm");
   });
 
   it("says pending while the payment settles, without unlocking", async () => {
@@ -268,6 +285,31 @@ describe("a survey submitted by a buyer who paid before it", () => {
     expect(payload.tags).toEqual([
       { name: "journey", value: "pay_to_start" },
       { name: "email", value: "pts_report_unlocked" },
+    ]);
+  });
+
+  it("sends the EUR 1.99 buyer E06, their Core Archetype, never the full-report email", async () => {
+    // The initial report opens the Core Archetype and Summary only (Figma 1669:2703).
+    routeSupabase();
+    vi.mocked(claimPayToStartForSubmission).mockResolvedValue({
+      outcome: "unlocked",
+      entitlementId: 7,
+      paymentId: 55,
+      offer: "pre",
+    });
+    await submit({}, cookie);
+    await flushAfterResponse();
+    const payload = mockEmailsSend.mock.calls[0]?.[0] as {
+      subject: string;
+      html: string;
+      tags: Array<{ name: string; value: string }>;
+    };
+    expect(payload.subject).toBe("Your Core Archetype is unlocked");
+    expect(payload.html).toContain("You&rsquo;ve unlocked your Core Archetype.");
+    expect(payload.html).not.toMatch(/full report is (ready|unlocked)/i);
+    expect(payload.tags).toEqual([
+      { name: "journey", value: "pay_to_start" },
+      { name: "email", value: "pts_initial_unlocked" },
     ]);
   });
 

@@ -63,6 +63,13 @@ interface SurveyEngineProps {
   onComplete: (reportToken?: string | null) => void;
   /** Discard this run and begin again. Without it the error screen offers no Start Over. */
   onStartOver?: () => void;
+  /**
+   * A buyer who paid before the survey (pay to start): in no survey test. Their email
+   * question stays today's: the anonymous arm's "feel free to use an anonymous one" would
+   * part the survey's address from the one they paid with, and the purchase's continue
+   * link opens a report only under that one.
+   */
+  payToStart?: boolean;
 }
 
 const TEXT_ENTRY_TYPES = /^(text|email|search|tel|url|number|password)$/;
@@ -108,7 +115,12 @@ const RESUME_AFTER_MS = 2000;
 /** Where a touch never starts a swipe between questions. */
 const NO_SWIPE = "input, textarea, select, [contenteditable], [data-no-swipe]";
 
-const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }) => {
+const SurveyEngine: FC<SurveyEngineProps> = ({
+  onExit,
+  onComplete,
+  onStartOver,
+  payToStart = false,
+}) => {
   const {
     answers,
     currentIndex,
@@ -182,6 +194,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // `?email=control|anonymous` previews either arm on dev and staging, never on
   // production.
   const [emailArm] = useState<EmailQuestionArm>(() => {
+    if (payToStart) return "control";
     const devParam =
       typeof window === "undefined"
         ? null
@@ -243,7 +256,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const emailExposureFired = useRef(false);
   const onEmailQuestion = question?.qId === EMAIL_QID;
   useEffect(() => {
-    if (!onEmailQuestion || emailExposureFired.current) return;
+    if (!onEmailQuestion || emailExposureFired.current || payToStart) return;
     emailExposureFired.current = true;
     setEmailQuestionArm(emailArm);
     trackExperimentExposure({
@@ -251,7 +264,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       variant: emailArm,
       surface: "survey_email_question",
     });
-  }, [onEmailQuestion, emailArm]);
+  }, [onEmailQuestion, emailArm, payToStart]);
 
   // Post-survey completion phase management
   // Mounting onto a finished run: a pending submission shows its retry screen. With none,

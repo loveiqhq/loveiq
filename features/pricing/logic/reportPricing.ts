@@ -1659,8 +1659,10 @@ export async function getUpgradeCreditCents(personalReportId: number): Promise<n
  * - `upgradeCents`, All 14's (`getUpgradeCreditCents` above);
  * - `initialCents`, the initial unlock's EUR 10 off the full report
  *   (`features/report/logic/initialUnlock.ts`): granted by a succeeded, non-test EUR 1.99
- *   payment that was not refunded in full. Its money counts towards All 14 like any
- *   single's, so the two never stack on one plan.
+ *   payment that was not refunded in full, and used up by the report's first full-report
+ *   purchase: one EUR 10, "toward the full Premium Report" (Marcus, 14.10: a EUR 10
+ *   voucher), never off every single report bought after it. Its money counts towards
+ *   All 14 like any single's, so the two never stack on one plan.
  */
 export async function getReportCredits(
   personalReportId: number
@@ -1679,8 +1681,10 @@ export async function getReportCredits(
   }>;
   let upgradeCents = 0;
   let initialCents = 0;
+  let fullReportBought = false;
   for (const row of rows) {
     if (row.metadata?.plan === "all_reports") continue;
+    if (row.metadata?.plan === "full_report") fullReportBought = true;
     if ((row.currency ?? "EUR").toUpperCase() !== "EUR") continue;
     const paid =
       fromEuroAmount(Number(row.amount)) - fromEuroAmount(Number(row.refund_amount ?? 0));
@@ -1689,7 +1693,7 @@ export async function getReportCredits(
       initialCents = INITIAL_UNLOCK_CREDIT_CENTS;
     }
   }
-  return { upgradeCents, initialCents };
+  return { upgradeCents, initialCents: fullReportBought ? 0 : initialCents };
 }
 
 /** Take the credit off an All 14 quote; every other plan comes back as it is. */
@@ -1710,14 +1714,18 @@ export function applyUpgradeCredit(
 
 /**
  * Take the initial unlock's EUR 10 off a full-report quote; every other plan comes back as
- * it is. A remainder under Stripe's minimum is credited too, as for All 14. Pay to start's
- * readers are quoted on arm A3 (`resolveQuote`), so theirs is EUR 29.99 - 10 = EUR 19.99.
+ * it is. Pay to start's readers are quoted on arm A3 (`resolveQuote`), so theirs is
+ * EUR 29.99 - 10 = EUR 19.99; a quote stored on another arm (a failed lookup on the first
+ * quote, a purchase attached by hand) keeps its own price, so B3's EUR 4.99 is never made
+ * free by the credit. A remainder under Stripe's minimum is credited too, as for All 14.
  */
 export function applyInitialCredit(
   quote: ReportPriceQuoteSnapshot,
   creditCents: number
 ): ReportPriceQuoteSnapshot {
-  if (quote.plan !== "full_report" || creditCents <= 0) return quote;
+  if (quote.plan !== "full_report" || quote.experimentGroup !== "A3" || creditCents <= 0) {
+    return quote;
+  }
   let charged = Math.max(0, quote.chargedPriceCents - creditCents);
   if (charged < STRIPE_MIN_CHARGE_CENTS) charged = 0;
   return {

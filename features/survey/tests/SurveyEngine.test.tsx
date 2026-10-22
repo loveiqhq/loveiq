@@ -1507,6 +1507,20 @@ describe("SurveyEngine — the email question test", () => {
     expect(screen.getByTestId("open-response")).toHaveAttribute("data-email-arm", "anonymous");
   });
 
+  it("keeps a buyer who paid before the survey on today's question, outside the test", () => {
+    // This session id hashes to the anonymous arm: a buyer still gets the control copy (and
+    // so the address they paid with), and no exposure counts them into the test.
+    emailStep();
+    mockNonProd = false;
+    window.sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000000");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} payToStart />);
+    const question = screen.getByTestId("open-response");
+    expect(question).toHaveAttribute("data-email-arm", "control");
+    expect(question).toHaveTextContent("What is your email?");
+    expect(trackExperimentExposure).not.toHaveBeenCalled();
+    expect(setEmailQuestionArm).not.toHaveBeenCalled();
+  });
+
   it("records one exposure when the email question shows, with its arm", () => {
     emailStep();
     preview("anonymous");

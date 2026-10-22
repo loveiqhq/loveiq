@@ -37,7 +37,10 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
-import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
+import {
+  getReportPlanByPersonalReportId,
+  hasInitialUnlockByPersonalReportId,
+} from "@features/report/server/planAccess";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
 import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
@@ -603,6 +606,12 @@ async function processCandidate(
     try {
       const currentPlan = await getReportPlanByPersonalReportId(candidate.id);
       if (currentPlan) {
+        summary.skippedPaid++;
+        return;
+      }
+      // The EUR 1.99 initial report's buyer has paid too, and holds EUR 10 off the full
+      // report: no 50% code beside it (as the pre-unlock gate skips its own readers).
+      if (await hasInitialUnlockByPersonalReportId(candidate.id)) {
         summary.skippedPaid++;
         return;
       }

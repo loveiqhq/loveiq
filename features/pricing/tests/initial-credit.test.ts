@@ -31,10 +31,15 @@ import {
 
 const json = (body: unknown, ok = true) => ({ ok, json: async () => body }) as Response;
 
-const quote = (plan: "full_report" | "all_reports", chargedPriceCents: number) =>
+const quote = (
+  plan: "full_report" | "all_reports",
+  chargedPriceCents: number,
+  experimentGroup: "A3" | "B3" = "A3"
+) =>
   ({
     id: 1,
     plan,
+    experimentGroup,
     chargedPriceCents,
     currentPriceCents: chargedPriceCents,
   }) as ReportPriceQuoteSnapshot;
@@ -74,6 +79,32 @@ describe("the initial unlock's credit", () => {
     expect((await getReportCredits(165)).initialCents).toBe(0);
   });
 
+  it("is used up by the first full report bought: one EUR 10, not one per report", async () => {
+    // Marcus, 14.10: a EUR 10 voucher toward the full report. Bought once (own archetype or
+    // another's), the next single report is quoted at its list price; All 14 still counts
+    // every euro paid.
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      json([
+        { amount: 1.99, refund_amount: null, currency: "EUR", metadata: { plan: "initial" } },
+        {
+          amount: 19.99,
+          refund_amount: null,
+          currency: "EUR",
+          metadata: { plan: "full_report", initialCredit: "10.00" },
+        },
+      ])
+    );
+    expect(await getReportCredits(165)).toEqual({ upgradeCents: 2198, initialCents: 0 });
+  });
+
+  it("comes back when that full report is refunded: the refunded row is no longer read", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      json([{ amount: 1.99, refund_amount: null, currency: "EUR", metadata: { plan: "initial" } }])
+    );
+    expect((await getReportCredits(165)).initialCents).toBe(1000);
+    expect(String(mockFetchWithTimeout.mock.calls[0]![0])).toContain("status=eq.succeeded");
+  });
+
   it("takes EUR 10 off the full report: EUR 29.99 is EUR 19.99", () => {
     const credited = applyInitialCredit(quote("full_report", 2999), 1000);
     expect(credited.chargedPriceCents).toBe(1999);
@@ -85,6 +116,11 @@ describe("the initial unlock's credit", () => {
     expect(applyInitialCredit(quote("full_report", 499), 1000).chargedPriceCents).toBe(0);
     expect(applyInitialCredit(quote("full_report", 1040), 1000).chargedPriceCents).toBe(0);
     expect(applyInitialCredit(quote("full_report", 1040), 1000).upgradeCreditCents).toBe(1040);
+  });
+
+  it("credits arm A3 alone: a B3 full report (EUR 4.99) is never made free", () => {
+    const b3 = quote("full_report", 499, "B3");
+    expect(applyInitialCredit(b3, 1000)).toBe(b3);
   });
 
   it("leaves All 14, and a report without the unlock, as they are", () => {

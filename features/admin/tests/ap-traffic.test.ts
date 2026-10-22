@@ -211,6 +211,33 @@ describe("Traffic page builder", () => {
     expect(hero[1]!.why).toBe("Visits don't record the device.");
   });
 
+  it("reads the price test without readers who paid before the survey (pay to start)", () => {
+    // Pinned to A3 and paid with no report checkout: no arm's price decided that sale.
+    const w = parseFilters({ period: "custom", from: "2026-10-09", to: "2026-10-12" }, TODAY);
+    const paid = { paidAt: "2026-10-10T11:00:00Z", sales: 1, revenue: 29.99, plan: "full_report" };
+    const p = traffic({
+      filters: w,
+      facts: factsFixture({
+        from: "2026-10-09",
+        to: "2026-10-12",
+        subs: [
+          sub({
+            id: 1,
+            day: "2026-10-10",
+            priceArm: "A3",
+            ...paid,
+            checkoutAt: "2026-10-10T10:50:00Z",
+          }),
+          sub({ id: 2, day: "2026-10-10", priceArm: "A3" }),
+          sub({ id: 3, day: "2026-10-10", priceArm: "A3", ...paid, checkoutAt: null }),
+          sub({ id: 4, day: "2026-10-10", priceArm: "B3" }),
+        ],
+      }),
+    });
+    const a3 = p.experiments.arms.find((a) => a.test === "Pricing 3.0" && a.control)!;
+    expect(a3).toMatchObject({ submissions: 2, paymentCvr: 0.5, revPerSub: 14.995 });
+  });
+
   it("says exactly why survey starts are blank", () => {
     expect(traffic().tiles.blocked.starts).toBeNull();
     expect(traffic({ filters: { ...filters, tier: "tier_1" } }).tiles.blocked.starts).toBe(

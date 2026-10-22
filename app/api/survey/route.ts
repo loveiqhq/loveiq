@@ -63,6 +63,7 @@ import {
   PREPAID_COOKIE,
   clearedPrepaidCookieOptions,
 } from "@features/pay-to-start/server/entitlement";
+import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 
 let _resend: Resend | null = null;
@@ -555,7 +556,9 @@ export async function POST(request: Request) {
   mergedUtmTracker = mergeTrackerArm(
     mergedUtmTracker,
     EMAIL_QUESTION_ARM_KEY,
-    sessionId ? assignEmailQuestionArm(sessionId) : null
+    // A buyer who paid before the survey is in no survey test: the browser showed them
+    // today's question (SurveyEngine's payToStart), so no arm is stamped.
+    sessionId && !prepaidToken ? assignEmailQuestionArm(sessionId) : null
   );
 
   if (website) {
@@ -770,31 +773,45 @@ export async function POST(request: Request) {
         ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
         : `${siteUrl}/report?from=email`;
 
+      // An unlocked pay-to-start report's email is a purchase email: its unsubscribes are
+      // counted with the purchase emails', as fulfillment's are.
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret
         ? buildUnsubscribeUrl(
             normalizedEmail,
             siteUrl,
             unsubSecret,
-            UNSUBSCRIBE_CAMPAIGNS.surveyComplete
+            claim?.outcome === "unlocked"
+              ? UNSUBSCRIBE_CAMPAIGNS.reportUnlocked
+              : UNSUBSCRIBE_CAMPAIGNS.surveyComplete
           )
         : undefined;
 
       /**
-       * Pay to start: a reader whose report is unlocked gets the full-report email (its A
-       * copy, as a purchase does), and any other reader who came that way the survey
-       * email's A copy. Neither carries the A/B tags: these readers are in neither test.
+       * Pay to start: a reader whose report is unlocked gets the email for what opened, the
+       * full-report email (its A copy, as a purchase does) or, for the EUR 1.99 initial
+       * report, E06 "You've unlocked your Core Archetype" (Figma 1669:2703); any other reader
+       * who came that way the survey email's A copy. None carries the A/B tags: these readers
+       * are in neither test.
        */
       const experiment = claim ? null : "survey-complete";
       const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
+      const unlockedInitial = claim?.outcome === "unlocked" && claim.offer === "pre";
       const tpl =
         claim?.outcome === "unlocked"
-          ? reportFullEmail({
-              firstName: normalizedFirstName,
-              reportUrl,
-              siteUrl,
-              unsubscribeUrl,
-            })
+          ? unlockedInitial
+            ? initialUnlockEmail({
+                firstName: normalizedFirstName,
+                reportUrl,
+                siteUrl,
+                unsubscribeUrl,
+              })
+            : reportFullEmail({
+                firstName: normalizedFirstName,
+                reportUrl,
+                siteUrl,
+                unsubscribeUrl,
+              })
           : variant === "b"
             ? surveyCompleteBEmail({
                 firstName: normalizedFirstName,
@@ -825,8 +842,11 @@ export async function POST(request: Request) {
                   { name: "journey", value: PAY_TO_START_JOURNEY },
                   {
                     name: "email",
-                    value:
-                      claim?.outcome === "unlocked" ? "pts_report_unlocked" : "pts_report_ready",
+                    value: unlockedInitial
+                      ? "pts_initial_unlocked"
+                      : claim?.outcome === "unlocked"
+                        ? "pts_report_unlocked"
+                        : "pts_report_ready",
                   },
                 ],
             headers: {

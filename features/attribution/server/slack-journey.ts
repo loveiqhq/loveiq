@@ -247,8 +247,12 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * this message; no /admin screen renders it, which is the point of retiring the
  * axis rather than the arm.
  */
-/** Where a pay-to-start buyer came in: the assessment page, paid before the survey. */
-const PAY_TO_START_PAGE_LABEL = "Pay to start (/sexual-archetype)";
+/** Where a pay-to-start buyer came in: the offer's page, paid before the survey. */
+function payToStartPageLabel(journey: SubmissionJourney): string {
+  return journey.payToStartOffer === "pre"
+    ? "Pay to start (/sexual-archetype/initial)"
+    : "Pay to start (/sexual-archetype)";
+}
 
 function armFields(journey: SubmissionJourney): SlackBlock {
   // `landing` is live again for its round 3 (V2's question card vs V3's hero video), so
@@ -266,7 +270,7 @@ function armFields(journey: SubmissionJourney): SlackBlock {
       // Paid on the pay-to-start page: in no landing arm, by design (app/api/survey).
       const value =
         axis === "landing" && journey.payToStart
-          ? PAY_TO_START_PAGE_LABEL
+          ? payToStartPageLabel(journey)
           : label.retired
             ? `${label.short} _(retired arm)_`
             : label.short;
@@ -414,7 +418,7 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   const landing = armLabel("landing", journey.arms.landing);
   lines.push(
     journey.payToStart
-      ? `Landing page design: ${bold(PAY_TO_START_PAGE_LABEL)}`
+      ? `Landing page design: ${bold(payToStartPageLabel(journey))}`
       : `Landing page design: ${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`
   );
 

@@ -324,6 +324,21 @@ describe("buildSubmissionJourney", () => {
       expect(journey?.timings.msToPurchase).toBeNull();
     });
 
+    it("knows which page they paid on, also after a later upgrade on the report", async () => {
+      route({
+        quotes: [QUOTE_PURCHASED],
+        payments: [
+          {
+            ...PAID_BEFORE,
+            amount: 1.99,
+            metadata: { journey: "pay_to_start", plan: "initial", offer: "pre" },
+          },
+        ],
+      });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.payToStartOffer).toBe("pre");
+    });
+
     it("knows the journey from the tracker's label before any payment row", async () => {
       route({
         sub: [
