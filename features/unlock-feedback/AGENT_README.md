@@ -39,9 +39,9 @@ report for free and asks an optional follow-up. The admin's "Unlock feedback" pa
   A re-tap of another email button only counts in `answer_loads` (which also counts reloads).
   Every detail post replaces `chips` and `note` and sets `detail_at`, a change of answer alone
   included: "added detail" means chips or words, not `detail_at`. `device` is the first answer's.
-- **Never for a buyer:** the send skips anyone with any paid plan or the EUR 1.99 initial report
-  (and fails closed), and `/why` grants nothing to someone who bought after the email
-  (`already_paid`).
+- **Never for a buyer:** the send skips anyone with any paid plan or the EUR 1.99 initial report,
+  on this report or another of theirs (and fails closed), and `/why` grants nothing to someone
+  who bought after the email (`already_paid`).
 - **Only readers who opened their report** (a `report_session` row): the email says they
   reviewed their results (Eman, 22 Oct).
 - **The unlock is a succeeded 0 payment** with `metadata.plan = "full_report"`,
@@ -57,6 +57,13 @@ report for free and asks an optional follow-up. The admin's "Unlock feedback" pa
   hours old, any date, after a dry run and the typed words "send N"; the admin's test goes to
   their own unpaid, opened report and replaces their earlier test row. Each row says which
   sender claimed it (`send_batch`); the AP page leaves staff out, so tests never count.
+- **One sender at a time:** the cron, a test and each tranche call that sends hold one Redis
+  lock (75 s), so two of them never email one person for two of their reports. Each stops
+  after three failed sends (`MAX_FAILED_SENDS`): a send without a clear answer keeps its
+  claim, so carrying on through a Resend outage would use up every reader in reach. The
+  hourly send's flag fails closed: if it cannot be read, nothing is sent.
+- **A link works as long as its row exists:** the token is only in that email, so `/why`
+  accepts it even when the send had no clear answer and `sent_at` was never written.
 - **Personal data:** `note` is the reader's own words. Masked in the team export and in the
   admin (emails, report links and phone numbers scrubbed), erased with the submission and by
   the data-subject paths. Not in the retention purge: an answer, like report feedback.

@@ -3382,6 +3382,16 @@ const PRIVATE_EXACT = [
   "access_key",
 ];
 
+/**
+ * Private only in their own table, where the name is too common to mask everywhere: the
+ * team's own notes (`admin_strategy_bet.decision_note`, `admin_chart_annotation.note` and
+ * nine more) stay readable, while `unlock_feedback.note` is a reader's own words, typed on
+ * /why, like `report_section_feedback.comment` above.
+ */
+const PRIVATE_IN_TABLE: Record<string, readonly string[]> = {
+  unlock_feedback: ["note"],
+};
+
 const PRIVATE_COLUMN = new RegExp(
   `^(?:.*_)?(?:${PRIVATE_SUFFIXES.join("|")})$|^(?:${PRIVATE_EXACT.join("|")})$`,
   "i"
@@ -3832,7 +3842,8 @@ const MAX_SELECT_CHARS = 1000;
  * Exported for test, in the house style of `parseFiltersForTest`.
  */
 export function planSelectForTest(
-  select: string
+  select: string,
+  table = ""
 ): { select: string; privateKeys: string[] } | { refusal: string } {
   /**
    * LENGTH FIRST, before any pattern runs. Review of #598 measured the old embed-name regex
@@ -3905,7 +3916,8 @@ export function planSelectForTest(
     if (!SELECT_NAME.test(column) || keys.some((k) => !k.trim() || /[:"]/.test(k))) {
       return unreadable;
     }
-    if (!isPrivateName(column) && !keys.some((k) => isPrivateName(k.trim()))) {
+    const privateHere = PRIVATE_IN_TABLE[table]?.includes(column) ?? false;
+    if (!privateHere && !isPrivateName(column) && !keys.some((k) => isPrivateName(k.trim()))) {
       out.push(item);
       continue;
     }
@@ -6360,7 +6372,7 @@ async function callTool(
      */
     const plan =
       typeof args.select === "string" && args.select.trim()
-        ? planSelectForTest(args.select.trim())
+        ? planSelectForTest(args.select.trim(), table)
         : { select: "*", privateKeys: [] };
     if ("refusal" in plan) return textResult(plan.refusal, true);
     const selectList = plan.select;
@@ -6514,7 +6526,10 @@ async function callTool(
     // BEFORE rendering, so no path can print a raw value: the rpc branch and the table
     // branch both land here, which is why the gate is at the render step rather than in
     // the two request builders.
-    const { rows: safeRows, redacted } = redactPrivateColumns(rows, new Set(plan.privateKeys));
+    const { rows: safeRows, redacted } = redactPrivateColumns(
+      rows,
+      new Set([...plan.privateKeys, ...(PRIVATE_IN_TABLE[table] ?? [])])
+    );
     // Reserve room for the header itself so the notice never gets cut off.
     const { text: bodyText, shown } = renderRowsForTest(safeRows, MAX_RESULT_CHARS - 600);
     const dropped = rows.length - shown;

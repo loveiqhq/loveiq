@@ -33,6 +33,8 @@ interface TrancheReply {
   nextBefore: string;
   done: boolean;
   exhausted: boolean;
+  /** The call stopped after too many failed sends (MAX_FAILED_SENDS). */
+  halted: boolean;
 }
 
 const SKIP_WORDS: Record<string, string> = {
@@ -124,6 +126,7 @@ export default function UnlockFeedbackSend() {
     let oldest: string | null = null;
     const skipped: Record<string, number> = {};
     let exhausted = false;
+    let finished = false;
     try {
       while (!stop.current) {
         const r = (await post({
@@ -142,7 +145,15 @@ export default function UnlockFeedbackSend() {
         before = r.nextBefore;
         exhausted = r.exhausted;
         setProgress(`Counting… ${eligible} of ${size - already} found so far.`);
-        if (r.done) break;
+        if (r.done) {
+          finished = true;
+          break;
+        }
+      }
+      // A count cut short is no count: the send stays locked until one finishes.
+      if (!finished) {
+        setProgress("Dry run stopped before it finished. Run it again to send.");
+        return;
       }
       setDry({ batch, size, already, eligible, newest, oldest, skipped, exhausted });
       setProgress(null);
@@ -173,6 +184,12 @@ export default function UnlockFeedbackSend() {
           ? ` ${r.failed} failed${r.problems.length ? ` (${r.problems[0]})` : ""}.`
           : "";
         setProgress(`Sent ${r.batchSent} of ${size}.${extra}`);
+        if (r.halted) {
+          setFailure(
+            `${r.failed} sends failed${r.problems.length ? ` (${r.problems[0]})` : ""}. Check Resend, then send again: it carries on where it stopped.`
+          );
+          break;
+        }
         if (r.done) {
           setProgress(
             `Done: ${r.batchSent} of ${size} sent${r.exhausted ? ", every eligible reader reached" : ""}.${extra}`

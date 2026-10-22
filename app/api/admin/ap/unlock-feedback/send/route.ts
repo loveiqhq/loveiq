@@ -11,6 +11,9 @@ import {
   fetchCandidateForSubmission,
   fetchCandidatesBefore,
   getResend,
+  MAX_FAILED_SENDS,
+  releaseSendLock,
+  takeSendLock,
   type Eligible,
   type SendContext,
 } from "@features/unlock-feedback/server/send";
@@ -100,9 +103,13 @@ async function ownTestReport(
   return null;
 }
 
+/**
+ * The tranche's emails so far: every row it claimed, those whose send had no clear answer
+ * included, since they may have arrived (a refused send leaves no row).
+ */
 async function batchSent(batch: string): Promise<number> {
   const res = await supabaseFetch(
-    `/rest/v1/unlock_feedback?send_batch=eq.${encodeURIComponent(batch)}&sent_at=not.is.null&select=id&limit=1000`
+    `/rest/v1/unlock_feedback?send_batch=eq.${encodeURIComponent(batch)}&select=id&limit=1000`
   );
   if (!res.ok) throw new Error(`batch_count_failed:${res.status}`);
   return ((await res.json()) as unknown[]).length;
@@ -147,10 +154,11 @@ export async function POST(request: Request) {
       }
       const submissionId = own.row.survey_submission_id;
       await audit(admin.email, request, body, `test:${submissionId}`);
+      if (!(await takeSendLock())) return busy();
       const outcome = await claimAndSend(own.row, own.eligible, ctx, {
         batch: "test",
         arm: body.arm,
-      });
+      }).finally(releaseSendLock);
       if (!outcome.sent) {
         const why = "skip" in outcome ? outcome.skip : outcome.failed;
         return NextResponse.json({ error: `Not sent: ${why}` }, { status: 502 });
@@ -167,77 +175,107 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Type "send ${body.size}" to confirm.` }, { status: 400 });
     }
     await audit(admin.email, request, body, batch);
-    const startedAt = Date.now();
-    const already = await batchSent(batch);
-    let before = body.before ?? new Date(startedAt - TRANCHE_AGE_MS).toISOString();
-    let sent = 0;
-    let eligibleCount = 0;
-    let failed = 0;
-    let newestEligible: string | null = null;
-    let oldestEligible: string | null = null;
-    const skipped: Record<string, number> = {};
-    const problems: string[] = [];
-    const goal = body.size - already - (body.dryRun ? body.counted : 0);
-    let exhausted = false;
-
-    outer: while (goal > 0 && Date.now() - startedAt < BUDGET_MS) {
-      const rows = await fetchCandidatesBefore(before, PAGE);
-      if (rows.length === 0) {
-        exhausted = true;
-        break;
-      }
-      for (const row of rows) {
-        if (Date.now() - startedAt >= BUDGET_MS) break outer;
-        const eligible = await eligibility(row);
-        before = row.created_date_time ?? before;
-        if ("skip" in eligible) {
-          skipped[eligible.skip] = (skipped[eligible.skip] ?? 0) + 1;
-          continue;
-        }
-        newestEligible ??= row.created_date_time ?? null;
-        oldestEligible = row.created_date_time ?? oldestEligible;
-        if (body.dryRun) {
-          eligibleCount++;
-          if (eligibleCount >= goal) break outer;
-          continue;
-        }
-        const outcome = await claimAndSend(row, eligible, ctx, { batch });
-        if (outcome.problem) problems.push(outcome.problem);
-        if (outcome.sent) {
-          sent++;
-          if (sent >= goal) break outer;
-        } else if ("skip" in outcome) {
-          skipped[outcome.skip] = (skipped[outcome.skip] ?? 0) + 1;
-        } else {
-          failed++;
-          problems.push(outcome.failed);
-        }
-      }
+    // A dry run sends nothing, so it may run beside a send; a send waits its turn.
+    if (!body.dryRun && !(await takeSendLock())) return busy();
+    try {
+      return await tranche(body, batch, ctx);
+    } finally {
+      if (!body.dryRun) await releaseSendLock();
     }
-
-    const batchTotal = already + sent;
-    const reached = body.dryRun ? eligibleCount >= goal : batchTotal >= body.size;
-    return NextResponse.json(
-      {
-        dryRun: body.dryRun,
-        batch,
-        size: body.size,
-        batchSent: batchTotal,
-        sent,
-        eligible: eligibleCount,
-        failed,
-        skipped,
-        problems: [...new Set(problems)].slice(0, 5),
-        newestEligible,
-        oldestEligible,
-        nextBefore: before,
-        done: reached || exhausted || goal <= 0,
-        exhausted,
-      },
-      { headers: NO_STORE }
-    );
   } catch (err) {
     logger.error({ err }, "unlock-feedback admin send failed");
     return NextResponse.json({ error: "Unable to send." }, { status: 500 });
   }
+}
+
+function busy(): NextResponse {
+  return NextResponse.json(
+    { error: "Another unlock-feedback send is running. Try again in a minute." },
+    { status: 409 }
+  );
+}
+
+async function tranche(
+  body: Extract<Body, { mode: "tranche" }>,
+  batch: `tranche:${string}`,
+  ctx: SendContext
+): Promise<NextResponse> {
+  const startedAt = Date.now();
+  const already = await batchSent(batch);
+  // Never newer than three hours, whatever the caller sends.
+  const floor = startedAt - TRANCHE_AGE_MS;
+  let before =
+    body.before && Date.parse(body.before) < floor ? body.before : new Date(floor).toISOString();
+  let sent = 0;
+  let eligibleCount = 0;
+  let failed = 0;
+  let newestEligible: string | null = null;
+  let oldestEligible: string | null = null;
+  const skipped: Record<string, number> = {};
+  const problems: string[] = [];
+  const goal = body.size - already - (body.dryRun ? body.counted : 0);
+  let exhausted = false;
+  let halted = false;
+
+  outer: while (goal > 0 && Date.now() - startedAt < BUDGET_MS) {
+    const rows = await fetchCandidatesBefore(before, PAGE);
+    if (rows.length === 0) {
+      exhausted = true;
+      break;
+    }
+    for (const row of rows) {
+      if (Date.now() - startedAt >= BUDGET_MS) break outer;
+      const eligible = await eligibility(row);
+      before = row.created_date_time ?? before;
+      if ("skip" in eligible) {
+        skipped[eligible.skip] = (skipped[eligible.skip] ?? 0) + 1;
+        continue;
+      }
+      newestEligible ??= row.created_date_time ?? null;
+      oldestEligible = row.created_date_time ?? oldestEligible;
+      if (body.dryRun) {
+        eligibleCount++;
+        if (eligibleCount >= goal) break outer;
+        continue;
+      }
+      const outcome = await claimAndSend(row, eligible, ctx, { batch });
+      if (outcome.problem) problems.push(outcome.problem);
+      if (outcome.sent) {
+        sent++;
+        if (sent >= goal) break outer;
+      } else if ("skip" in outcome) {
+        skipped[outcome.skip] = (skipped[outcome.skip] ?? 0) + 1;
+      } else {
+        failed++;
+        problems.push(outcome.failed);
+        if (failed >= MAX_FAILED_SENDS) {
+          halted = true;
+          break outer;
+        }
+      }
+    }
+  }
+
+  const batchTotal = already + sent;
+  const reached = body.dryRun ? eligibleCount >= goal : batchTotal >= body.size;
+  return NextResponse.json(
+    {
+      dryRun: body.dryRun,
+      batch,
+      size: body.size,
+      batchSent: batchTotal,
+      sent,
+      eligible: eligibleCount,
+      failed,
+      skipped,
+      problems: [...new Set(problems)].slice(0, 5),
+      newestEligible,
+      oldestEligible,
+      nextBefore: before,
+      done: reached || exhausted || goal <= 0,
+      exhausted,
+      halted,
+    },
+    { headers: NO_STORE }
+  );
 }

@@ -26,7 +26,7 @@ export type Device = "mobile" | "tablet" | "desktop";
 
 /** What the /why page shows once the answer is in. */
 export interface AnswerResult {
-  /** The reader's own archetype, for "All 50+ pages for [ARCHETYPE]"; null without scoring. */
+  /** The reader's own archetype; null without scoring. */
   archetypeName: string | null;
   reportPath: string;
   /** The answer as kept: the first one, or what the page changed it to since. */
@@ -35,10 +35,14 @@ export interface AnswerResult {
   alreadyPaid: boolean;
 }
 
-/** The row an emailed link opens: only one the send actually sent. */
+/**
+ * The row an emailed link opens. The token is in no other place than that email, so holding
+ * it proves the email arrived, also when its send had no clear answer and `sent_at` was never
+ * written: those readers' links must work too. A refused send leaves no row.
+ */
 async function findSentRow(token: string): Promise<FeedbackRow | null> {
   const response = await supabaseServiceFetch(
-    `/rest/v1/unlock_feedback?link_hash=eq.${hashLinkToken(token)}&sent_at=not.is.null&select=${COLUMNS}&limit=1`
+    `/rest/v1/unlock_feedback?link_hash=eq.${hashLinkToken(token)}&select=${COLUMNS}&limit=1`
   );
   if (!response.ok) throw new Error("unlock_feedback_lookup_failed");
   const rows = (await response.json()) as FeedbackRow[];

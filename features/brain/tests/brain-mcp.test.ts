@@ -5741,6 +5741,8 @@ describe("/api/mcp", () => {
       definitions: {
         payment: { properties: { id: {}, amount: {}, created_date_time: {} } },
         resend_webhook_event: { properties: { id: {}, type: {}, received_at: {} } },
+        unlock_feedback: { properties: { id: {}, reason: {}, note: {} } },
+        admin_chart_annotation: { properties: { id: {}, note: {} } },
       },
       paths: {
         "/payment": {},
@@ -5828,6 +5830,23 @@ describe("/api/mcp", () => {
         { id: 2, email: "someone@example.com", amount: 9.99, status: "succeeded" },
         { id: 3, email: "other@example.com", amount: 4.99, status: "failed" },
       ];
+
+      it("masks a reader's own words on /why, and not the team's notes of the same name", async () => {
+        const WORDS = "Too personal to pay for, my partner reads my bank statements";
+        for (const [select, key] of [
+          [undefined, "note"],
+          ["id,note", "note"],
+          ["id,words:note", "words"],
+        ] as const) {
+          wire([{ id: 1, reason: "privacy", [key]: WORDS }]);
+          const r = await call({ table: "unlock_feedback", ...(select ? { select } : {}) });
+          expect(r.content[0].text).not.toContain(WORDS);
+          expect(r.content[0].text).toMatch(new RegExp(`Masked as private[^\n]*${key}`));
+        }
+        wire([{ id: 1, note: "Ads paused for the holiday" }]);
+        const team = await call({ table: "admin_chart_annotation" });
+        expect(team.content[0].text).toContain("Ads paused for the holiday");
+      });
 
       it("masks the value of every private column and says which", async () => {
         wire(ROWS);

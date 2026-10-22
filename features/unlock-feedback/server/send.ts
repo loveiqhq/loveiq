@@ -12,16 +12,23 @@ import { newLinkToken } from "@features/unlock-feedback/server/link";
 import { emailExperimentTags } from "@shared/emails/ab-variant";
 import { suppressionState } from "@shared/emails/suppression";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
+import { checkCooldown, releaseCooldown } from "@shared/http/ratelimit";
 
 /**
  * Who gets the unlock-feedback email and how one goes out, shared by its three senders: the
- * hourly cron (reports 3 to 5 hours old), and the admin's two buttons on AP-Analytics › Unlock
- * feedback: a test to the admin's own report, and a tranche to the newest readers who never got
- * it (Mark and Eman, 22.10: the first 250). One set of rules, so a tranche can't reach someone
- * the cron would have left out.
+ * hourly cron (reports 3 to 5 hours old, from the launch date), and the admin's two buttons on
+ * AP-Analytics › Unlock feedback: a test to the admin's own report, and a tranche to the newest
+ * readers who never got it, any date (Mark and Eman, 22.10: the first 250). Which reports each
+ * looks at differs; who among them may get the email does not.
  */
 
 export const STAGE = "unlock_feedback";
+/**
+ * Failed sends after which a run or a tranche call stops. A send without a clear answer keeps
+ * its claim, so that reader never gets the email: during a Resend outage, carrying on would use
+ * up every reader in reach.
+ */
+export const MAX_FAILED_SENDS = 3;
 const RESEND_TIMEOUT_MS = 8_000;
 export const CANDIDATE_LIMIT = 200;
 const RESEND_ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -110,6 +117,30 @@ async function emailedBefore(userId: number): Promise<boolean> {
 }
 
 /**
+ * Whether the person paid for another of their reports: someone who bought and then took the
+ * test again is a buyer, not a reader who stopped at the paywall.
+ */
+async function paidAnotherReport(userId: number, row: CandidateRow): Promise<boolean> {
+  const subs = await supabaseFetch(
+    `/rest/v1/survey_submission?user_id=eq.${userId}&select=id&limit=50`
+  );
+  if (!subs.ok) throw new Error(`other_submissions_lookup_failed:${subs.status}`);
+  const others = ((await subs.json()) as Array<{ id: number }>)
+    .map((s) => s.id)
+    .filter((id) => id !== row.survey_submission_id);
+  if (others.length === 0) return false;
+  const reports = await supabaseFetch(
+    `/rest/v1/personal_report?survey_submission_id=in.(${others.join(",")})&select=id`
+  );
+  if (!reports.ok) throw new Error(`other_reports_lookup_failed:${reports.status}`);
+  for (const { id } of (await reports.json()) as Array<{ id: number }>) {
+    if (await getReportPlanByPersonalReportId(id)) return true;
+    if (await hasInitialUnlockByPersonalReportId(id)) return true;
+  }
+  return false;
+}
+
+/**
  * Whether the reader opened their report, by the server's own report_session (written on
  * every open, not consent-gated): the email says they "reviewed your results" (Eman, 22.10:
  * only readers who opened it).
@@ -163,10 +194,11 @@ export interface Eligible {
  * The reader to email, or why not. Throws when payments cannot be read, so the reader waits:
  * a buyer must never be offered the report free. A buyer of any plan is left out, the EUR 1.99
  * initial report too (it is no report plan, and its buyer already has EUR 10 off the full
- * report: a free full report would undo the offer).
+ * report: a free full report would undo the offer), and so is someone who bought another of
+ * their reports.
  *
- * `staffTest` is the admin's own test: their address is staff and they may have had it
- * before; everything else holds.
+ * `staffTest` is the admin's own test: their address is staff, they may have had it before
+ * and bought other reports; everything else holds, this report's own payments included.
  */
 export async function eligibility(
   row: CandidateRow,
@@ -178,6 +210,8 @@ export async function eligibility(
     return { skip: "emailed_before" };
   if (await getReportPlanByPersonalReportId(row.id)) return { skip: "paid" };
   if (await hasInitialUnlockByPersonalReportId(row.id)) return { skip: "paid" };
+  if (!opts.staffTest && r.userId !== null && (await paidAnotherReport(r.userId, row)))
+    return { skip: "paid" };
   const suppression = await suppressionState(r.email);
   if (suppression !== "clear") return { skip: suppression };
   if (!(await reportOpened(row.id))) return { skip: "not_opened" };
@@ -369,4 +403,19 @@ export async function claimAndSend(
       };
   }
   return { sent: false, failed: result.reason };
+}
+
+const LOCK = { key: "run", bucket: "unlock-feedback-send", ms: 75_000 } as const;
+
+/**
+ * One sender at a time: the hourly run, a test and each call of a tranche hold this lock
+ * (75 s, past the 60 s any of them can run), so two of them never both find a person not yet
+ * emailed and email them twice for two of their reports. Without Redis it is always free.
+ */
+export async function takeSendLock(): Promise<boolean> {
+  return (await checkCooldown(LOCK.key, LOCK.bucket, LOCK.ms)).allowed;
+}
+
+export function releaseSendLock(): Promise<void> {
+  return releaseCooldown(LOCK.key, LOCK.bucket);
 }

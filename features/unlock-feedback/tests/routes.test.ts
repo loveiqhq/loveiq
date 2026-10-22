@@ -155,17 +155,22 @@ describe("POST /api/unlock-feedback/answer", () => {
     expect(state.db.feedback().answered_at).toBeNull();
   });
 
-  it("404 alike for no cookie, a malformed one, an unknown token and an unsent email", async () => {
+  it("404 alike for no cookie, a malformed one and an unknown token", async () => {
     state.cookie = null;
     expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     state.cookie = "not-a-token";
     expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     state.cookie = "B".repeat(43);
     expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
-    state.cookie = READER.linkToken;
-    state.db.feedback().sent_at = null;
-    expect((await answer(post("answer", { r: "time_commitment" }))).status).toBe(404);
     expect(state.db.grants()).toHaveLength(0);
+  });
+
+  it("opens a link whose send had no clear answer: the token is only in that email", async () => {
+    state.db.feedback().sent_at = null;
+    const res = await answer(post("answer", { r: "time_commitment" }));
+    expect(res.status).toBe(200);
+    expect(state.db.feedback().answered_at).toEqual(expect.any(String));
+    expect(state.db.grants()).toHaveLength(1);
   });
 
   it("records the first answer and unlocks the report", async () => {

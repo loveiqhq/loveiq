@@ -35,6 +35,9 @@ import {
   eligibility,
   fetchCandidatesInWindow,
   getResend,
+  MAX_FAILED_SENDS,
+  releaseSendLock,
+  takeSendLock,
   type SendContext,
 } from "@features/unlock-feedback/server/send";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -78,9 +81,13 @@ export async function GET(request: Request) {
   if (!isProdCronHost()) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
-  // Off until the team turns the hourly sends on (seeded off, 20261022200000); the admin's
-  // test and tranche buttons are their own decision and do not read it.
-  if (!(await isFeatureEnabled("unlock_feedback"))) {
+  const startedAtMs = Date.now();
+  // Off until the team turns the hourly sends on (seeded off, 20261022200000), and off when
+  // the flag cannot be read: these emails give a report away, so no answer means no. The
+  // admin's test and tranche buttons are their own decision and do not read it. The run is
+  // recorded either way, or the stall watch would call the cron dead every day it is off.
+  if (!(await isFeatureEnabled("unlock_feedback", false))) {
+    await recordCronRun("unlock-feedback", startedAtMs, "success", "skipped: the flag is off");
     return NextResponse.json({ skipped: true, reason: "kill_switch" });
   }
   const resend = getResend();
@@ -90,7 +97,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
-  const startedAtMs = Date.now();
+  // One sender at a time (server/send.ts): an admin's tranche may be running.
+  if (!(await takeSendLock())) {
+    await recordCronRun("unlock-feedback", startedAtMs, "success", "skipped: another send runs");
+    return NextResponse.json({ skipped: true, reason: "another_send_running" });
+  }
   const checkSlow = startCronTimer("unlock-feedback", maxDuration);
   // New candidates stop here; the one in flight (one Resend call, at most 8 s) and the run's
   // own writes finish well inside the 60 s ceiling.
@@ -105,11 +116,11 @@ export async function GET(request: Request) {
     const candidates = window ? await fetchCandidatesInWindow(window) : [];
     summary.candidates = candidates.length;
     for (const [i, row] of candidates.entries()) {
-      if (isOutOfTime()) {
+      if (isOutOfTime() || summary.failed >= MAX_FAILED_SENDS) {
         summary.deferred = candidates.length - i;
         logger.warn(
-          { deferred: summary.deferred },
-          "unlock-feedback: time budget reached; the rest wait for the next run"
+          { deferred: summary.deferred, failed: summary.failed },
+          "unlock-feedback: out of time or too many failures; the rest wait for the next run"
         );
         break;
       }
@@ -154,6 +165,7 @@ export async function GET(request: Request) {
     logger.error({ err }, "unlock-feedback cron failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
+    await releaseSendLock();
     await checkSlow();
     await recordCronRun(
       "unlock-feedback",

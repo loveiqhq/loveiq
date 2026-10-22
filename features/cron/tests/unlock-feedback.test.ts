@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockFetch = vi.fn();
 const mockSend = vi.fn();
 const mockNotifySlack = vi.fn();
+const mockCooldown = vi.fn();
+const mockRelease = vi.fn();
 let prodHost = true;
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
@@ -18,6 +20,12 @@ vi.mock("@shared/observability/logger", () => ({
 vi.mock("@shared/observability/slack", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/observability/slack")>()),
   notifySlack: (...args: unknown[]) => mockNotifySlack(...args),
+}));
+// The send lock (server/send.ts) is a Redis SET NX; free unless a test holds it.
+vi.mock("@shared/http/ratelimit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/http/ratelimit")>()),
+  checkCooldown: (...args: unknown[]) => mockCooldown(...args),
+  releaseCooldown: (...args: unknown[]) => mockRelease(...args),
 }));
 vi.mock("resend", () => ({
   Resend: class {
@@ -36,6 +44,9 @@ const NOW = "2026-10-21T12:41:00Z";
 
 interface Db {
   candidates: unknown[];
+  /** The reader's other reports, by id, and what was paid on each. */
+  otherReports?: Array<{ id: number; plan?: string }>;
+  flagsDown?: boolean;
   payments?: Array<{ metadata: { plan: string } }>;
   paymentsDown?: boolean;
   notOpened?: boolean;
@@ -68,12 +79,27 @@ function withDb(db: Db) {
     const call = `${method} ${path.split("&")[0]}`;
     log.push(call);
     if (init.body) bodies[call] = JSON.parse(init.body);
+    if (path.startsWith("/rest/v1/system_flags?")) return json({}, db.flagsDown ? 503 : 200);
+    if (path.startsWith("/rest/v1/survey_submission?user_id=eq.")) {
+      return json([{ id: 201 }, ...(db.otherReports ?? []).map((r) => ({ id: r.id + 1000 }))]);
+    }
+    if (path.startsWith("/rest/v1/personal_report?survey_submission_id=in.")) {
+      return json((db.otherReports ?? []).map((r) => ({ id: r.id })));
+    }
     if (path.startsWith("/rest/v1/personal_report?")) return json(db.candidates);
     if (path.startsWith("/rest/v1/unlock_feedback?select=")) {
       return json(db.emailedBefore ? [{ id: 9 }] : []);
     }
     if (path.startsWith("/rest/v1/payment?")) {
       if (db.paymentsDown) return json({}, 500);
+      const other = (db.otherReports ?? []).find((r) =>
+        path.includes(`personal_report_id=eq.${r.id}&`)
+      );
+      if (other) {
+        const wants = /metadata->>plan=eq\.([a-z_]+)/.exec(path)?.[1];
+        const paid = other.plan && (!wants || wants === other.plan);
+        return json(paid ? [{ metadata: { plan: other.plan } }] : []);
+      }
       // The EUR 1.99 check asks for its own plan; the plan check reads every payment.
       const plan = /metadata->>plan=eq\.([a-z_]+)/.exec(path)?.[1];
       return json((db.payments ?? []).filter((p) => !plan || p.metadata.plan === plan));
@@ -132,6 +158,8 @@ beforeEach(() => {
   log = [];
   bodies = {};
   __resetSystemFlagsCacheForTests({ unlock_feedback: true });
+  mockCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+  mockRelease.mockResolvedValue(undefined);
   process.env = {
     ...ORIGINAL_ENV,
     CRON_SECRET: "test-cron-secret",
@@ -168,8 +196,35 @@ describe("GET /api/cron/unlock-feedback: the gates", () => {
     prodHost = true;
     __resetSystemFlagsCacheForTests({ unlock_feedback: false });
     expect((await run()).body).toEqual({ skipped: true, reason: "kill_switch" });
-    expect(mockFetch).not.toHaveBeenCalled();
+    // Only the run's record: the stall watch must see a cron that is alive and switched off.
+    expect(log).toEqual(["POST /rest/v1/cron_run"]);
+    expect(bodies["POST /rest/v1/cron_run"]).toMatchObject({
+      cron_name: "unlock-feedback",
+      status: "success",
+      error_message: "skipped: the flag is off",
+    });
     expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("stays off when the flag cannot be read: a free report is never given on a guess", async () => {
+    __resetSystemFlagsCacheForTests();
+    withDb({ candidates: [candidate()], flagsDown: true });
+    expect((await run()).body).toEqual({ skipped: true, reason: "kill_switch" });
+    expect(log).toContain("GET /rest/v1/system_flags?key=eq.unlock_feedback");
+    expect(log.some((c) => c.includes("personal_report"))).toBe(false);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("waits while another send holds the lock, and frees the lock after its own run", async () => {
+    withDb({ candidates: [candidate()] });
+    mockCooldown.mockResolvedValueOnce({ allowed: false, retryAfterMs: 30_000 });
+    expect((await run()).body).toEqual({ skipped: true, reason: "another_send_running" });
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(mockRelease).not.toHaveBeenCalled();
+
+    expect((await run()).body.summary.sent).toBe(1);
+    expect(mockCooldown).toHaveBeenLastCalledWith("run", "unlock-feedback-send", 75_000);
+    expect(mockRelease).toHaveBeenCalledWith("run", "unlock-feedback-send");
   });
 
   it("sends nothing without the unsubscribe secret: the footer's link must work", async () => {
@@ -321,6 +376,16 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
       "paid",
     ],
     ["a reader who never opened their report", { notOpened: true }, "not_opened"],
+    [
+      "someone who bought another of their reports",
+      { otherReports: [{ id: 77, plan: "full_report" }] },
+      "paid",
+    ],
+    [
+      "someone who bought the EUR 1.99 report for another test",
+      { otherReports: [{ id: 77, plan: "initial" }] },
+      "paid",
+    ],
   ] as const)("%s", async (_label, db, reason) => {
     withDb({ candidates: [candidate()], ...db });
     const { body } = await run();
@@ -366,6 +431,24 @@ describe("GET /api/cron/unlock-feedback: what the full report is worth", () => {
     expect(mockSend.mock.calls[0]![0].text).toContain(
       `we unlock the full report${worth} with all its chapters`
     );
+  });
+});
+
+describe("GET /api/cron/unlock-feedback: when Resend fails", () => {
+  it("stops after three failed sends, so an outage never uses up every reader", async () => {
+    withDb({ candidates: [1, 2, 3, 4, 5].map((n) => candidate(n)) });
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { name: "application_error", message: "Internal server error", statusCode: 500 },
+    });
+    const { body } = await run();
+    expect(body.summary).toMatchObject({ candidates: 5, sent: 0, failed: 3, deferred: 2 });
+    expect(mockSend).toHaveBeenCalledTimes(3);
+  });
+
+  it("a reader with another, unpaid report is still emailed", async () => {
+    withDb({ candidates: [candidate()], otherReports: [{ id: 77 }] });
+    expect((await run()).body.summary.sent).toBe(1);
   });
 });
 

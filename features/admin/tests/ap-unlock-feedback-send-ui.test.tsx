@@ -23,6 +23,7 @@ const tranche = (over: Record<string, unknown>) => ({
   nextBefore: "2026-09-14T08:00:00Z",
   done: true,
   exhausted: false,
+  halted: false,
   ...over,
 });
 
@@ -161,6 +162,51 @@ describe("the admin's tranche", () => {
       })
     );
     expect(await screen.findByText("Sent 40 of 250. Stopped.")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a dry run stopped part-way is no count: the send stays locked", async () => {
+    let finish: (r: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((r) => (finish = r)));
+    const user = userEvent.setup();
+    render(<UnlockFeedbackSend />);
+    await user.click(screen.getByRole("button", { name: "Dry run (sends nothing)" }));
+    await user.click(await screen.findByRole("button", { name: "Stop" }));
+    finish(new Response(JSON.stringify(tranche({ eligible: 12, done: false })), { status: 200 }));
+
+    expect(
+      await screen.findByText("Dry run stopped before it finished. Run it again to send.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/readers qualify|Would go to/)).toBeNull();
+    expect(confirmBox()).toBeDisabled();
+    expect(sendButton()).toBeDisabled();
+  });
+
+  it("stops when sends keep failing, and says to check Resend", async () => {
+    fetchMock
+      .mockImplementationOnce(() => reply(tranche({ eligible: 250 })))
+      .mockImplementationOnce(() =>
+        reply(
+          tranche({
+            failed: 3,
+            halted: true,
+            done: false,
+            problems: ["application_error: Internal server error"],
+          })
+        )
+      );
+    const user = userEvent.setup();
+    render(<UnlockFeedbackSend />);
+    await user.click(screen.getByRole("button", { name: "Dry run (sends nothing)" }));
+    await screen.findByText(/Would go to 250 readers/);
+    await user.type(confirmBox(), "send 250");
+    await user.click(sendButton());
+
+    expect(
+      await screen.findByText(
+        "Stopped: 3 sends failed (application_error: Internal server error). Check Resend, then send again: it carries on where it stopped."
+      )
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

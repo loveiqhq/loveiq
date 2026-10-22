@@ -9,7 +9,7 @@ import {
 } from "@features/unlock-feedback/server/link";
 
 /**
- * GET /api/unlock-feedback/open?r=<reason>&t=<token>: where each of the email's nine answers
+ * GET /api/unlock-feedback/open?r=<reason>&t=<token>: where each of the email's eight answers
  * links. It records NOTHING: mail scanners (Outlook, Gmail, company filters) open every link
  * with a plain GET, so an answer counts only when /why has loaded in a browser and posted it.
  *

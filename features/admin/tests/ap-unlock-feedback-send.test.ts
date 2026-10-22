@@ -5,6 +5,8 @@ const mockSend = vi.fn();
 const mockSession = vi.fn();
 const mockCsrf = vi.fn();
 const mockRateLimit = vi.fn();
+const mockCooldown = vi.fn();
+const mockRelease = vi.fn();
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetch(...args),
@@ -17,6 +19,9 @@ vi.mock("@shared/http/csrf", () => ({ verifyCsrfToken: () => mockCsrf() }));
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockRateLimit(...args),
   getClientIp: () => "203.0.113.9",
+  // The send lock (server/send.ts).
+  checkCooldown: (...args: unknown[]) => mockCooldown(...args),
+  releaseCooldown: (...args: unknown[]) => mockRelease(...args),
 }));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -51,6 +56,8 @@ interface Db {
   emailed?: number[];
   /** Rows a tranche already sent, as the table counts them. */
   batchSent?: number;
+  /** Rows it claimed whose send had no clear answer (sent_at null). */
+  batchUnclear?: number;
   auditDown?: boolean;
 }
 
@@ -93,8 +100,18 @@ function withDb(db: Db) {
     if (path.startsWith("/rest/v1/admin_audit_log")) {
       return Promise.resolve(new Response(null, { status: db.auditDown ? 500 : 201 }));
     }
+    if (path.startsWith("/rest/v1/survey_submission?user_id=eq.")) {
+      const user = Number(param(/user_id=eq\.(\d+)/));
+      return json(db.reports.filter((r) => r.user === user).map((r) => ({ id: r.sub })));
+    }
     if (path.startsWith("/rest/v1/survey_submission?")) {
       return json((db.own ?? []).map((id) => ({ id })));
+    }
+    if (path.startsWith("/rest/v1/personal_report?survey_submission_id=in.")) {
+      const subs = param(/survey_submission_id=in\.\(([^)]*)\)/)!
+        .split(",")
+        .map(Number);
+      return json(db.reports.filter((r) => subs.includes(r.sub)).map((r) => ({ id: r.id })));
     }
     if (path.startsWith("/rest/v1/personal_report?survey_submission_id=eq.")) {
       const sub = Number(param(/survey_submission_id=eq\.(\d+)/));
@@ -116,7 +133,9 @@ function withDb(db: Db) {
       return json((db.emailed ?? []).includes(user) ? [{ id: 1 }] : []);
     }
     if (path.startsWith("/rest/v1/unlock_feedback?send_batch=eq.")) {
-      return json(Array.from({ length: db.batchSent ?? 0 }, (_, i) => ({ id: i })));
+      const n =
+        (db.batchSent ?? 0) + (path.includes("sent_at=not.is.null") ? 0 : (db.batchUnclear ?? 0));
+      return json(Array.from({ length: n }, (_, i) => ({ id: i })));
     }
     if (path.startsWith("/rest/v1/payment?")) {
       const report = db.reports.find((r) => r.id === Number(param(/personal_report_id=eq\.(\d+)/)));
@@ -191,6 +210,8 @@ beforeEach(() => {
   mockCsrf.mockResolvedValue(true);
   mockRateLimit.mockResolvedValue({ allowed: true });
   mockSession.mockResolvedValue({ email: "ec@loveiq.org", role: "admin" });
+  mockCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+  mockRelease.mockResolvedValue(undefined);
   process.env = {
     ...ORIGINAL_ENV,
     RESEND_API_KEY: "re_test_key",
@@ -292,7 +313,33 @@ describe("the admin's test", () => {
     expect(release).toBeLessThan(
       log.indexOf("POST /rest/v1/unlock_feedback?on_conflict=survey_submission_id")
     );
-    expect(path(log.find((c) => c.startsWith("DELETE"))!)).not.toContain("send_batch=eq.hourly");
+    // Only the admin's own test row, never a reader's.
+    const deletes = mockFetch.mock.calls
+      .filter(([, init]) => (init as { method?: string } | undefined)?.method === "DELETE")
+      .map(([u]) => decodeURIComponent(String(u)));
+    expect(deletes).toEqual([
+      "https://test.supabase.co/rest/v1/unlock_feedback?survey_submission_id=eq.2318&send_batch=eq.test",
+    ]);
+  });
+
+  it("is not stopped by the admin's other, bought reports", async () => {
+    withDb({
+      own: [2416, 2318],
+      reports: [own({ id: 70, sub: 2416, plan: "full_report" }), own()],
+    });
+    const { status, body } = await send({ mode: "test", arm: "A" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ sent: true, submissionId: 2318 });
+  });
+
+  it("waits while another send runs, and sends nothing", async () => {
+    withDb({ own: [2318], reports: [own()] });
+    mockCooldown.mockResolvedValue({ allowed: false, retryAfterMs: 30_000 });
+    const { status, body } = await send({ mode: "test", arm: "A" });
+    expect(status).toBe(409);
+    expect(body.error).toBe("Another unlock-feedback send is running. Try again in a minute.");
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(claims()).toEqual([]);
   });
 
   it("is in the audit log before the email goes", async () => {
@@ -489,6 +536,7 @@ describe("a tranche", () => {
     mockSend.mockClear();
     vi.setSystemTime(new Date(NOW));
     withDb({ reports: readers(4), batchSent: 1, emailed: [301] });
+    const from = mockFetch.mock.calls.length;
     mockSend.mockImplementation(async () => ({ data: { id: "x2" }, error: null }));
     const next = await send({
       mode: "tranche",
@@ -499,14 +547,99 @@ describe("a tranche", () => {
       before: first.body.nextBefore,
     });
     expect(next.body).toMatchObject({ sent: 3, batchSent: 4, done: true });
+    // It read on from the cursor, not from the top again.
+    const page = mockFetch.mock.calls
+      .slice(from)
+      .map(([u]) => decodeURIComponent(String(u)))
+      .find((u) => u.includes("created_date_time=lt."))!;
+    expect(page).toContain(`created_date_time=lt.${first.body.nextBefore}&`);
     expect(mockSend.mock.calls.map(([e]) => e.to)).toEqual([
       "reader2@example.com",
       "reader3@example.com",
       "reader4@example.com",
     ]);
   });
-});
 
-function path(call: string): string {
-  return call.slice(call.indexOf(" ") + 1);
-}
+  it("leaves out someone who bought another of their reports", async () => {
+    const earlier: Report = {
+      id: 500,
+      sub: 999,
+      user: 301,
+      email: "reader1@example.com",
+      createdAt: "2026-09-01T10:00:00Z",
+      plan: "full_report",
+    };
+    withDb({ reports: [...readers(3), earlier] });
+    const { body } = await send({ mode: "tranche", batch: "b", size: 10, dryRun: true });
+    // Reader 1's new report for the earlier purchase, and the earlier report itself.
+    expect(body).toMatchObject({ eligible: 2, skipped: { paid: 2 } });
+  });
+
+  it("stops after three failed sends and says so, so an outage cannot use up every reader", async () => {
+    withDb({ reports: readers(6) });
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { name: "application_error", message: "Internal server error", statusCode: 500 },
+    });
+    const { body } = await send({
+      mode: "tranche",
+      batch: "b",
+      size: 6,
+      dryRun: false,
+      confirm: "send 6",
+    });
+    expect(body).toMatchObject({ sent: 0, failed: 3, halted: true, done: false });
+    expect(mockSend).toHaveBeenCalledTimes(3);
+  });
+
+  it("counts a send that had no clear answer toward its size: it may have arrived", async () => {
+    withDb({ reports: readers(5), batchSent: 1, batchUnclear: 1 });
+    const { body } = await send({
+      mode: "tranche",
+      batch: "b",
+      size: 3,
+      dryRun: false,
+      confirm: "send 3",
+    });
+    expect(body).toMatchObject({ sent: 1, batchSent: 3, done: true });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("never reads reports newer than three hours, whatever the page sends", async () => {
+    withDb({ reports: readers(1) });
+    await send({ mode: "tranche", batch: "b", size: 5, dryRun: true, before: NOW });
+    const page = mockFetch.mock.calls
+      .map(([u]) => decodeURIComponent(String(u)))
+      .find((u) => u.includes("created_date_time=lt."))!;
+    expect(page).toContain(
+      `created_date_time=lt.${new Date(Date.parse(NOW) - 3 * HOUR).toISOString()}&`
+    );
+  });
+
+  it("a real send waits while another runs, a dry run does not, and a send frees the lock", async () => {
+    withDb({ reports: readers(2) });
+    mockCooldown.mockResolvedValue({ allowed: false, retryAfterMs: 30_000 });
+    const busy = await send({
+      mode: "tranche",
+      batch: "b",
+      size: 1,
+      dryRun: false,
+      confirm: "send 1",
+    });
+    expect(busy.status).toBe(409);
+    expect(mockSend).not.toHaveBeenCalled();
+    expect((await send({ mode: "tranche", batch: "b", size: 1, dryRun: true })).status).toBe(200);
+
+    mockCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    const ok = await send({
+      mode: "tranche",
+      batch: "b",
+      size: 1,
+      dryRun: false,
+      confirm: "send 1",
+    });
+    expect(ok.body).toMatchObject({ sent: 1 });
+    expect(mockCooldown).toHaveBeenLastCalledWith("run", "unlock-feedback-send", 75_000);
+    expect(mockRelease).toHaveBeenCalledWith("run", "unlock-feedback-send");
+  });
+});
