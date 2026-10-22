@@ -304,6 +304,7 @@ export function KpiTileV2({
   suffix = "",
   negativeBad = false,
   titles,
+  foot = false,
 }: {
   tile: Tile;
   level?: boolean;
@@ -315,6 +316,11 @@ export function KpiTileV2({
   negativeBad?: boolean;
   /** Each trend point's period, for its read-out. */
   titles?: string[];
+  /**
+   * The tile's own grey line after the change, where the design writes one under every value
+   * ("96.6% of 1,240 sent") and the page compares too (Unlock feedback).
+   */
+  foot?: boolean;
 }) {
   const d =
     tile.blocked || tile.note !== undefined ? null : deltaRel(tile.value, tile.prev, tile.goodWhen);
@@ -337,6 +343,11 @@ export function KpiTileV2({
           className={`text-sm font-bold leading-[1.4] tabular-nums ${TONE_TEXT[tile.noteTone ?? "flat"]}`}
         >
           {tile.note}
+        </span>
+      ) : foot ? (
+        <span className="text-sm font-bold leading-[1.4] tabular-nums text-ap-muted">
+          {d && <span className={`whitespace-nowrap ${TONE_TEXT[d.tone]}`}>{d.text} · </span>}
+          {tile.foot}
         </span>
       ) : (
         <span

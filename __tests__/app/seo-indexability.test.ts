@@ -35,6 +35,7 @@ const PRIVATE_ROUTES = [
   "sexual-archetype",
   "sexual-archetype/initial",
   "sexual-archetype/checkout",
+  "why",
 ];
 
 describe("legal pages are indexable", () => {
@@ -67,6 +68,7 @@ describe("private pages stay out of the index", () => {
       "/admin",
       "/sexual-archetype",
       "/sexual-archetype/initial",
+      "/why",
     ]) {
       expect(urls).not.toContain(route);
     }

@@ -156,11 +156,13 @@ describe("GET /api/cron/nurture-sequence", () => {
     quoteMetadata = {},
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
+    unlockFeedback = jsonResponse([]),
   }: {
     seventyTwoHour: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
     patchSpy?: () => unknown;
+    unlockFeedback?: unknown;
   }) {
     let personalReportCalls = 0;
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
@@ -169,6 +171,7 @@ describe("GET /api/cron/nurture-sequence", () => {
         if (personalReportCalls === 1) return Promise.resolve(jsonResponse(seventyTwoHour));
         return Promise.resolve(jsonResponse([]));
       }
+      if (url.includes("/rest/v1/unlock_feedback")) return Promise.resolve(unlockFeedback);
       if (url.includes("/rest/v1/report_price_quote") && init?.method !== "PATCH") {
         return Promise.resolve(jsonResponse([{ id: 101, metadata: quoteMetadata }]));
       }
@@ -244,6 +247,49 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(body.summaries["72h_no_unlock"].skippedAlreadySent).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("skips a reader the unlock-feedback email went to, before any code or send", async () => {
+    const candidate = {
+      id: 60,
+      survey_submission_id: 6,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "asked@example.com", first_name: "As" } },
+    };
+    mockCandidateWindows({
+      seventyTwoHour: [candidate],
+      unlockFeedback: jsonResponse([{ id: 1 }]),
+    });
+
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.summaries["72h_no_unlock"].skippedUnlockFeedback).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(mockStripePromoCreate).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
+    // Only an email that went counts: a claim whose send failed has no sent_at.
+    const [lookup] = mockFetchWithTimeout.mock.calls.find(([u]) =>
+      String(u).includes("/rest/v1/unlock_feedback")
+    )!;
+    expect(String(lookup)).toContain("unlock_feedback?survey_submission_id=eq.6&select=id");
+    expect(String(lookup)).not.toContain("sent_at");
+  });
+
+  it("still sends the 72h email when the unlock-feedback lookup fails", async () => {
+    const candidate = {
+      id: 61,
+      survey_submission_id: 16,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "blip@example.com", first_name: "Bl" } },
+    };
+    mockCandidateWindows({
+      seventyTwoHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: [] },
+      unlockFeedback: jsonResponse({ message: "boom" }, 503),
+    });
+
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].skippedUnlockFeedback).toBe(0);
   });
 
   it("skips a candidate who already has a paid plan", async () => {

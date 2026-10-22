@@ -851,7 +851,7 @@ async function fetchExistingPayment({
   return rows[0] ?? null;
 }
 
-async function upsertPaymentRecord({
+export async function upsertPaymentRecord({
   amount,
   buyerEmail,
   cardBrand,
@@ -1006,7 +1006,7 @@ async function upsertPaymentRecord({
   return rows[0]?.id ?? null;
 }
 
-async function ensurePaymentItem({
+export async function ensurePaymentItem({
   amount,
   itemName,
   paymentId,
@@ -1050,7 +1050,7 @@ async function ensurePaymentItem({
   return rows[0]?.id ?? null;
 }
 
-async function updatePersonalReportPayment({
+export async function updatePersonalReportPayment({
   amount,
   paymentId,
   personalReportId,

@@ -125,6 +125,9 @@ const PERSONAL_IN: Record<string, string[]> = {
   report_access_token: ["token"],
   booking_event: ["raw"],
   payment_webhook_event: ["event_data"],
+  // An unlock-feedback answer's own words and chips, masked like the admin's view of them, and
+  // the hash of the link that opens the reader's /why page.
+  unlock_feedback: ["note", "chips", "link_hash"],
 };
 /**
  * Keys inside JSON values that hold a credential, an address, a name or an answer, written
@@ -451,7 +454,8 @@ export function readme(
     "  code in every file of this copy, so tables still join on it; the codes change with every",
     "  copy. Names, birthdays, IP addresses, report links and access tokens, card details,",
     "  receipt links, promo codes, messages to a partner, PostHog and Hotjar session ids, the",
-    "  email, name and postcode answers, and the raw Stripe and Calendly payloads read [masked].",
+    "  email, name and postcode answers, the words, chips and link hash of an unlock-feedback",
+    "  answer, and the raw Stripe and Calendly payloads read [masked].",
     "- Kept: every answer, including the two open questions as typed (any email address or",
     "  report link in them masked; a name someone typed can remain), demographics, archetypes",
     "  and scores, payments (amounts, plans, dates) and events.",

@@ -715,8 +715,8 @@ async function fetchDistinctReportViewers(sinceIso: string, untilIso: string): P
 }
 
 /**
- * Fetches every succeeded payment in the window and aggregates: count,
- * revenue by currency, plan mix, promo redemptions. One query, many derived
+ * Fetches every succeeded payment in the window and aggregates: count and plan
+ * mix (sales, amount over 0), revenue by currency, promo redemptions. One query, many derived
  * metrics. Capped at 1000 payments per window — beyond that we'd need to
  * paginate, which yesterday's volume is nowhere near.
  */
@@ -742,12 +742,20 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
   const byCurrency: Record<string, number> = {};
   const planMix = { essentials: 0, full_report: 0, core: 0, all_reports: 0 };
   let promoRedemptions = 0;
+  let count = 0;
 
   for (const row of rows) {
     const amount = typeof row.amount === "string" ? parseFloat(row.amount) : (row.amount ?? 0);
     const currency = (row.currency || "EUR").toUpperCase();
     byCurrency[currency] = (byCurrency[currency] ?? 0) + (Number.isFinite(amount) ? amount : 0);
 
+    const promo = row.metadata && (row.metadata.promotionCode as string | undefined);
+    if (promo) promoRedemptions += 1;
+
+    // A purchase is a sale: a 0 unlock (a 100%-off comp, or the full report an answer to
+    // the unlock-feedback email gives) is gifted, never counted as one (2026-09-19).
+    if (!(amount > 0)) continue;
+    count += 1;
     const plan = row.metadata && (row.metadata.plan as string | undefined);
     if (
       plan === "essentials" ||
@@ -757,11 +765,9 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
     ) {
       planMix[plan] += 1;
     }
-    const promo = row.metadata && (row.metadata.promotionCode as string | undefined);
-    if (promo) promoRedemptions += 1;
   }
 
-  return { count: rows.length, byCurrency, planMix, promoRedemptions };
+  return { count, byCurrency, planMix, promoRedemptions };
 }
 
 async function fetchRefunds(
@@ -1767,8 +1773,9 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
       `/rest/v1/analytics_event?select=survey_submission_id&event_type=eq.paywall_initiated&${dateRange("event_time", sinceIso, untilIso)}`,
       "survey_submission_id"
     ),
+    // Buyers only: a 0 unlock is gifted, never a purchase (see fetchRevenue).
     supabaseFetch(
-      `/rest/v1/payment?is_test=is.false&select=user_id&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+      `/rest/v1/payment?is_test=is.false&amount=gt.0&select=user_id&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
       { headers: { Range: "0-999" } }
     ),
   ]);

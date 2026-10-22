@@ -14,6 +14,7 @@
  *   chapter_nudge
  *   pricing_uplift_enabled   — when OFF, all per-visitor price boosts are paused (base prices only)
  *   pay_to_start_checkout    — when OFF, /sexual-archetype sells nothing (20261018120000)
+ *   unlock_feedback          — when OFF, the "why didn't you unlock?" email stops (20261019120000)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -30,7 +31,8 @@ export type SystemFlagKey =
   | "chapter_nudge"
   | "pricing_uplift_enabled"
   | "ux_review_alerts"
-  | "pay_to_start_checkout";
+  | "pay_to_start_checkout"
+  | "unlock_feedback";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

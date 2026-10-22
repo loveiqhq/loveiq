@@ -117,6 +117,7 @@ export const UNSUBSCRIBE_CAMPAIGNS = {
   chapterNudge: "chapter_nudge",
   postCallCoupon: "post_call_coupon",
   testLink: "test_link",
+  unlockFeedback: "unlock_feedback",
 } as const;
 
 /**
@@ -134,6 +135,7 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   [UNSUBSCRIBE_CAMPAIGNS.chapterNudge]: "Chapter nudge drip",
   [UNSUBSCRIBE_CAMPAIGNS.postCallCoupon]: "Post-call 100% coupon",
   [UNSUBSCRIBE_CAMPAIGNS.testLink]: "Test link (landing email capture)",
+  [UNSUBSCRIBE_CAMPAIGNS.unlockFeedback]: "Unlock feedback (why didn't you unlock?)",
   // Nurture-sequence stages
   "6h_no_view": "Nurture 6h (report ready)",
   "6h_no_unlock": "Nurture 6h (unlock nudge)",
