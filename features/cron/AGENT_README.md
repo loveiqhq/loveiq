@@ -5,8 +5,8 @@
 **Entry:** Routes inline at `app/api/cron/<job>/route.ts`. Tests in `tests/`.
 
 **`vercel.json` and `brain-daily.yml` are the source of truth for WHICH of them run** — a
-route on disk is not a scheduled job, and the difference has hidden a dead job before. 42
-routes exist: 29 are scheduled in `vercel.json`, 6 run in GitHub Actions, 1 is started on demand
+route on disk is not a scheduled job, and the difference has hidden a dead job before. 43
+routes exist: 30 are scheduled in `vercel.json`, 6 run in GitHub Actions, 1 is started on demand
 by Jarvis, and 6 do not run at all (a test in `tests/cron-stall.test.ts` keeps these lists true):
 
 - _Product & ops_ — invite-reminders, survey-paused, nurture-sequence, unlock-feedback, initial-unlock-gift,
