@@ -3145,7 +3145,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
     // reporting it again later is a no-op.
     // V4's in-flow paywall card (.rv4-premium) counts too — whichever offer comes
-    // first in the page. Not Part II's Summary gate: the leave offer's own selector.
+    // first in the page. Not Part II's Summary gate (logic/paywallSelector.ts).
     const firstOfferCard = document.querySelector(FIRST_PAYWALL_SELECTOR);
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {

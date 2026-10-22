@@ -18,7 +18,7 @@ import { guardedUnlock } from "./v4Unlock";
  * the faded lines opens the paywall too, and the pill carries no handler of its own (the
  * premium card's rule: two would open the pricing modal twice). The pill is the chapter's
  * paywall: its `cta_seen` and the chapter's "paywall seen" are a locked chapter's, and
- * `.rv4-unlock` is what the founder-call offer and "paywall reached" wait for.
+ * `.rv4-unlock` is what "paywall reached" waits for.
  */
 
 interface Props {

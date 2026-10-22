@@ -41,7 +41,7 @@ interface Props {
    * "summary" is Part II's gate under the half-locked Summary (the slimmed report,
    * 1757:4263). It is not a chapter's paywall: it counts as its own `cta_seen`, and its
    * `rv4-premium--summary` keeps it out of what waits for the first chapter paywall (the
-   * founder-call offer, the pay pop-up's "paywall reached"), Fatih, 16.10.
+   * pay pop-up's "paywall reached"), Fatih, 16.10.
    */
   placement?: "chapter" | "summary";
 }

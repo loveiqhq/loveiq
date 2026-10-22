@@ -144,7 +144,7 @@ describe("Part II's half-locked Summary (1665:3796)", () => {
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
-  it("is not the first paywall the founder-call offer and 'paywall reached' wait for", () => {
+  it("is not the first paywall that 'paywall reached' waits for", () => {
     const { container } = render(
       <>
         <V4PremiumCard placement="summary" />

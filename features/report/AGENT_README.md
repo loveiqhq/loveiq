@@ -117,7 +117,7 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
   overflow, Lenis stopped, swipes cancelled. `shared/ui/guided-tour-state.ts` tells the
   scroll-driven signals the scrolling is the tour's: the plans pop-up trigger, the paywall ping,
   chapter time, `cta_seen`, scroll depth and Typical Beliefs' midline rows stand down without
-  letting go, and the leave offer is off.
+  letting go.
 - **Analytics.** `tour_started`, `tour_step_viewed {n, id}`, `tour_back {to}`,
   `tour_skipped {at, source}`, `tour_completed` and `tour_replayed` go to PostHog; a first run's
   start and outcome, and each replay, are also stored (`analytics_event`, the submission
