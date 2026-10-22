@@ -209,10 +209,11 @@ describe("a tile with its own line", () => {
 });
 
 describe("the sidebar", () => {
-  it("lists Unlock feedback right after Payment, and lights it on its page", () => {
+  it("lists Unlock feedback after Payment and Pay to start, and lights it on its page", () => {
     const items = NAV.flatMap((g) => g.items);
     const i = items.findIndex((x) => x.key === "a-payment");
-    expect(items[i + 1]).toMatchObject({
+    expect(items[i + 1]).toMatchObject({ key: "a-pay-to-start" });
+    expect(items[i + 2]).toMatchObject({
       key: "a-unlock",
       label: "Unlock feedback",
       href: "/admin/ap/assessment-a/unlock-feedback",
