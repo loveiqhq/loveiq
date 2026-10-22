@@ -251,10 +251,11 @@ export async function fetchReportTour(from: string, to: string): Promise<ReportT
 
 /**
  * The guided tour's first day on production with every first run's start and end stored, with
- * whose tour it was and its stops (the lead sets it at release). A range starting earlier shows
- * no tour figures, and a period starting earlier is not compared.
+ * whose tour it was and its stops: the first whole day after its release on the evening of
+ * 22 Oct (#631), whose earlier readers met no tour. A range starting earlier shows no tour
+ * figures, and a period starting earlier is not compared.
  */
-export const TOUR_TRACKING_FROM = "2026-10-20";
+export const TOUR_TRACKING_FROM = "2026-10-23";
 
 /** What each stop's spotlight frames, as the reader sees it (ui/v3/guidedTourAnchors.ts). */
 const TOUR_TARGETS: Record<TourStepId, string> = {

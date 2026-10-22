@@ -1595,23 +1595,23 @@ describe("report page, on screen", () => {
 });
 
 describe("the guided tour", () => {
-  const TOUR_TODAY = "2026-10-27";
-  const tourNow = new Date("2026-10-27T10:00:00Z");
-  const week = parseFilters({ period: "custom", from: "2026-10-20", to: "2026-10-26" }, TOUR_TODAY);
+  const TOUR_TODAY = "2026-10-30";
+  const tourNow = new Date("2026-10-30T10:00:00Z");
+  const week = parseFilters({ period: "custom", from: "2026-10-23", to: "2026-10-29" }, TOUR_TODAY);
   const on = (d: string) => ({ day: d, at: `${d}T10:00:00Z`, openedAt: `${d}T10:05:00Z` });
   /** The week's five finishers: four opened their report. */
   const tourFacts = factsFixture({
-    from: "2026-10-20",
-    to: "2026-10-26",
+    from: "2026-10-23",
+    to: "2026-10-29",
     visits: [],
     starts: [],
     money: [],
     subs: [
-      sub({ id: 1, ...on("2026-10-20") }),
-      sub({ id: 2, ...on("2026-10-21") }),
-      sub({ id: 3, ...on("2026-10-22") }),
-      sub({ id: 4, ...on("2026-10-26") }),
-      sub({ id: 5, ...on("2026-10-26"), openedAt: null }),
+      sub({ id: 1, ...on("2026-10-23") }),
+      sub({ id: 2, ...on("2026-10-24") }),
+      sub({ id: 3, ...on("2026-10-25") }),
+      sub({ id: 4, ...on("2026-10-29") }),
+      sub({ id: 5, ...on("2026-10-29"), openedAt: null }),
     ],
   });
   type Day = ReportTour["days"][number];
@@ -1646,10 +1646,10 @@ describe("the guided tour", () => {
    */
   const tourData: ReportTour = {
     days: [
-      runDay("2026-10-20", "free", { completed: 1 }),
-      runDay("2026-10-21", "free", { skipped: 1 }),
-      runDay("2026-10-22", "free", { runs: 2, left: 1, unended: 1 }),
-      runDay("2026-10-26", "paid", { completed: 1 }),
+      runDay("2026-10-23", "free", { completed: 1 }),
+      runDay("2026-10-24", "free", { skipped: 1 }),
+      runDay("2026-10-25", "free", { runs: 2, left: 1, unended: 1 }),
+      runDay("2026-10-29", "paid", { completed: 1 }),
     ],
     stops: [
       at("free", "chapter_menu", { reached: 3, next: 3, median_ms: 5_200, timed: 3 }),
@@ -1729,7 +1729,7 @@ describe("the guided tour", () => {
     ]);
     // The paid tab's last stop is Try This: its Next is the Finish.
     expect(paid[3]).toMatchObject({ reached: 1, reachedShare: 1, next: 1, skip: 0, exit: 0 });
-    expect(p.tour).toMatchObject({ from: "20 Oct 2026", before: false, openers: 4 });
+    expect(p.tour).toMatchObject({ from: "23 Oct 2026", before: false, openers: 4 });
   });
 
   it("per stop: reached of the runs placed, Next + Skip + Exit making 100%, Back on its own", () => {
@@ -1804,12 +1804,12 @@ describe("the guided tour", () => {
   });
 
   it("before it was recorded, or unread, the tour is blank and says why", () => {
-    // The fixture's week of 1 to 7 Oct: before 20 Oct, whatever the function says.
+    // The fixture's week of 1 to 7 Oct: before 23 Oct, whatever the function says.
     const early = page({ tour: tourData });
     expect(early.tour.before).toBe(true);
     for (const a of early.tour.audiences) {
       for (const t of a.tiles) {
-        expect(t.blocked).toBe("Recorded from 20 Oct 2026: pick a range from that day on.");
+        expect(t.blocked).toBe("Recorded from 23 Oct 2026: pick a range from that day on.");
         expect(t.share).toBeUndefined();
       }
       for (const s of a.stops)
@@ -1823,39 +1823,39 @@ describe("the guided tour", () => {
   });
 
   it("compares with a period recorded all through, and says so for one that is not", () => {
-    // The week before 20 Oct: not recorded, so not compared.
+    // The week before 23 Oct: not recorded, so not compared.
     const before = factsFixture({
-      from: "2026-10-13",
-      to: "2026-10-19",
+      from: "2026-10-16",
+      to: "2026-10-22",
       visits: [],
       starts: [],
       money: [],
-      subs: [sub({ id: 9, ...on("2026-10-14") })],
+      subs: [sub({ id: 9, ...on("2026-10-17") })],
     });
     const p = tourPage({ previous: before, previousTour: tourData });
     for (const t of audience(p, "free").tiles) {
-      expect(t).toMatchObject({ prev: null, note: "No comparison before 20 Oct 2026" });
+      expect(t).toMatchObject({ prev: null, note: "No comparison before 23 Oct 2026" });
     }
     // The week after, against this one.
     const next = factsFixture({
-      from: "2026-10-27",
-      to: "2026-11-02",
+      from: "2026-10-30",
+      to: "2026-11-05",
       visits: [],
       starts: [],
       money: [],
-      subs: [sub({ id: 21, ...on("2026-10-27") }), sub({ id: 22, ...on("2026-10-28") })],
+      subs: [sub({ id: 21, ...on("2026-10-30") }), sub({ id: 22, ...on("2026-10-31") })],
     });
     const q = page({
       facts: next,
       benchmark: next,
       previous: tourFacts,
       filters: parseFilters(
-        { period: "custom", from: "2026-10-27", to: "2026-11-02" },
-        "2026-11-03"
+        { period: "custom", from: "2026-10-30", to: "2026-11-05" },
+        "2026-11-06"
       ),
-      today: "2026-11-03",
-      now: new Date("2026-11-03T10:00:00Z"),
-      tour: { days: [runDay("2026-10-27", "free", { completed: 1 })], stops: [], placed: [] },
+      today: "2026-11-06",
+      now: new Date("2026-11-06T10:00:00Z"),
+      tour: { days: [runDay("2026-10-30", "free", { completed: 1 })], stops: [], placed: [] },
       previousTour: tourData,
     });
     expect(tileOf(q, "free", "tour-started")).toMatchObject({ value: 1, prev: 3 });
@@ -1871,7 +1871,7 @@ describe("the guided tour", () => {
       json: async () => ({
         days: [
           {
-            day: "2026-10-20",
+            day: "2026-10-23",
             audience: "free",
             readers: "2",
             runs: "3",
@@ -1880,7 +1880,7 @@ describe("the guided tour", () => {
             left: 0,
             unended: 1,
           },
-          { day: "2026-10-20", audience: "staff", readers: 9, runs: 9 },
+          { day: "2026-10-23", audience: "staff", readers: 9, runs: 9 },
         ],
         stops: [
           {
@@ -1898,15 +1898,15 @@ describe("the guided tour", () => {
         placed: [{ audience: "paid", runs: "1" }],
       }),
     });
-    const t = await fetchReportTour("2026-10-20", "2026-10-26");
+    const t = await fetchReportTour("2026-10-23", "2026-10-29");
     expect(mockSupabaseFetch).toHaveBeenCalledWith(
       "/rest/v1/rpc/ap_report_tour",
       expect.objectContaining({
-        body: JSON.stringify({ p_from: "2026-10-20", p_to: "2026-10-26" }),
+        body: JSON.stringify({ p_from: "2026-10-23", p_to: "2026-10-29" }),
       })
     );
     expect(t.days).toEqual([
-      runDay("2026-10-20", "free", { readers: 2, runs: 3, completed: 1, skipped: 1, unended: 1 }),
+      runDay("2026-10-23", "free", { readers: 2, runs: 3, completed: 1, skipped: 1, unended: 1 }),
     ]);
     expect(t.stops[0]).toMatchObject({ reached: 3, median_ms: 4_100 });
     expect(t.placed).toEqual([{ audience: "paid", runs: 1 }]);
@@ -1915,7 +1915,7 @@ describe("the guided tour", () => {
       status: 200,
       json: async () => ({ days: [] }),
     });
-    await expect(fetchReportTour("2026-10-20", "2026-10-26")).rejects.toThrow(/unexpected shape/);
+    await expect(fetchReportTour("2026-10-23", "2026-10-29")).rejects.toThrow(/unexpected shape/);
   });
 
   describe("on screen", () => {
@@ -1988,7 +1988,7 @@ describe("the guided tour", () => {
       render(createElement(ApReport));
       const section = within(document.getElementById("tour")!);
       expect(
-        section.getByText("Recorded from 20 Oct 2026: pick a range from that day on")
+        section.getByText("Recorded from 23 Oct 2026: pick a range from that day on")
       ).toBeInTheDocument();
     });
   });

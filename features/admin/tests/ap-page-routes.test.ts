@@ -128,7 +128,7 @@ describe("GET /api/admin/ap/report: the guided tour", () => {
   // A week from the day the tour is recorded, read the day after it ends.
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-11-03T10:00:00Z"));
+    vi.setSystemTime(new Date("2026-11-06T10:00:00Z"));
   });
   afterEach(() => vi.useRealTimers());
 
@@ -172,20 +172,20 @@ describe("GET /api/admin/ap/report: the guided tour", () => {
   });
 
   it("reads it for the range and the period before, once each is recorded all through", async () => {
-    const tiles = await tourPage("2026-10-27", "2026-11-02", (from) =>
-      week(from, from === "2026-10-27" ? 1 : 0)
+    const tiles = await tourPage("2026-10-30", "2026-11-05", (from) =>
+      week(from, from === "2026-10-30" ? 1 : 0)
     );
-    expect(tourReads()).toEqual(["2026-10-20", "2026-10-27"]);
+    expect(tourReads()).toEqual(["2026-10-23", "2026-10-30"]);
     expect(tiles.find((t) => t.key === "tour-completed")).toMatchObject({ value: 1, prev: 0 });
 
-    // A range before 20 Oct has no tour to read.
+    // A range before 23 Oct has no tour to read.
     mockSupabaseFetch.mockClear();
-    await tourPage("2026-10-06", "2026-10-12", (from) => week(from, 1));
+    await tourPage("2026-10-09", "2026-10-15", (from) => week(from, 1));
     expect(tourReads()).toEqual([]);
   });
 
   it("keeps the page when the tour cannot be read, and says so in its tiles", async () => {
-    const tiles = await tourPage("2026-10-27", "2026-11-02", () => undefined);
+    const tiles = await tourPage("2026-10-30", "2026-11-05", () => undefined);
     expect(tiles[0]).toMatchObject({
       blocked: "The guided tour could not be read just now. Try again in a minute.",
     });
