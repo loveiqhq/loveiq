@@ -304,6 +304,11 @@ describe("the admin's test", () => {
     expect(sent.to).toBe("ec@loveiq.org");
     expect(sent.subject).toBe(subjectFor("D", "The Spiritual Lover"));
     expect(sent.text).toContain("Hi Ana,");
+    // Delivery is kept per reader; the subject test's daily counts leave tests out.
+    expect(sent.tags).toEqual([
+      { name: "stage", value: "unlock_feedback" },
+      { name: "sub", value: "2318" },
+    ]);
     expect(claims()).toEqual([
       expect.objectContaining({ survey_submission_id: 2318, subject_arm: "D", send_batch: "test" }),
     ]);
@@ -484,6 +489,10 @@ describe("a tranche", () => {
       "reader3@example.com",
     ]);
     expect(claims().map((c) => c.send_batch)).toEqual(Array(3).fill("tranche:first-250"));
+    // A tranche's readers count in the subject test.
+    for (const [email] of mockSend.mock.calls) {
+      expect(email.tags).toContainEqual({ name: "exp", value: "unlock_feedback_subject" });
+    }
     // Each send is recorded with its time.
     expect(log.filter((c) => c.startsWith("PATCH /rest/v1/unlock_feedback?id=eq."))).toHaveLength(
       3

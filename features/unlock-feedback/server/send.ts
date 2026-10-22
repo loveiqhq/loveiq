@@ -226,6 +226,7 @@ interface Claim {
   token: string;
   arm: SubjectArm;
   order: UnlockReason[];
+  batch: SendBatch;
 }
 
 /** The row, written before the email goes; null when another run holds it already. */
@@ -254,7 +255,7 @@ async function claim(
   );
   if (!res.ok) throw new Error(`claim_failed:${res.status}`);
   const [inserted] = (await res.json()) as Array<{ id: number }>;
-  return inserted ? { id: inserted.id, token: link.token, arm, order } : null;
+  return inserted ? { id: inserted.id, token: link.token, arm, order, batch } : null;
 }
 
 /**
@@ -325,7 +326,10 @@ async function send(
         tags: [
           { name: "stage", value: STAGE },
           { name: "sub", value: String(row.survey_submission_id) },
-          ...emailExperimentTags("unlock_feedback_subject", claimed.arm),
+          // Not for an admin's test: the subject test's daily counts are readers only.
+          ...(claimed.batch === "test"
+            ? []
+            : emailExperimentTags("unlock_feedback_subject", claimed.arm)),
         ],
       }),
       new Promise<never>((_, reject) => {
