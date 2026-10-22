@@ -47,7 +47,7 @@ export type Reader = {
   email: string;
   userId: number | null;
   archetypeName: string;
-  /** The greeting's name, as the survey took it; null when the reader gave none. */
+  /** The greeting's name (greetingName); null gives "Hi there,". */
   firstName: string | null;
 };
 
@@ -80,6 +80,27 @@ export function readerOf(
     email,
     userId: sub?.user_id ?? null,
     archetypeName: `The ${archetype}`,
-    firstName: sub?.app_user?.first_name?.trim() || null,
+    firstName: greetingName(sub?.app_user?.first_name),
   };
+}
+
+/**
+ * The name the email greets, from what the reader typed as their first name: its first word,
+ * without a trailing full stop, in Title Case when they typed it all in lower or upper case
+ * ("ANA" and "ana" read "Ana"). Initials ("J", "JD"), digits, an @ or an underscore are no
+ * name, and the email says "Hi there,". On 22.10 one in five readers' names needed this.
+ */
+export function greetingName(raw: string | null | undefined): string | null {
+  const word = (raw ?? "").trim().split(/\s+/)[0]!.replace(/\.+$/, "");
+  if (!word || /[\d@_]/.test(word)) return null;
+  const lower = word.toLowerCase();
+  const upper = word.toUpperCase();
+  // Scripts without case (Chinese, Japanese) have one-character names; Latin ones have initials.
+  const cased = lower !== upper;
+  if (cased && (word.length === 1 || (word.length === 2 && word === upper))) return null;
+  if (word !== lower && word !== upper) return word;
+  return lower.replace(
+    /(^|[-'’])(\p{L})/gu,
+    (_m, before: string, letter: string) => before + letter.toUpperCase()
+  );
 }
