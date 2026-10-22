@@ -675,14 +675,35 @@ describe("SurveyPage — the intro's own records", () => {
     });
     await screen.findByRole("button", { name: /continue to survey introduction/i });
 
-    expect(sent()).toEqual([
-      "intro_slide_2",
-      "intro_back_2",
-      "intro_slide_1",
-      "intro_back_1",
-      // Back on the intro: it records its view as it shows.
-      "intro_view",
-    ]);
+    await waitFor(() =>
+      expect(sent()).toEqual([
+        "intro_slide_2",
+        "intro_back_2",
+        "intro_slide_1",
+        "intro_back_1",
+        // Back on the intro: it records its view as it shows.
+        "intro_view",
+      ])
+    );
+  });
+
+  it("records the browser's Back from a slide the moment it shows, before its effects run", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "2");
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: /judgment-free zone/i });
+    // A mutation observer runs right after React puts slide 1 on screen, before that
+    // render's passive effects: Back there once read the step before it, slide 2.
+    const observer = new MutationObserver(() => {
+      if (!screen.queryByRole("heading", { name: /quality in/i })) return;
+      observer.disconnect();
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 0 } }));
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    await user.click(screen.getByRole("button", { name: /go to previous slide/i }));
+    await screen.findByRole("button", { name: /continue to survey introduction/i });
+
+    await waitFor(() => expect(sent()).toContain("intro_back_1"));
   });
 
   it("records the browser's Back from the consent, and each step once a page", async () => {
