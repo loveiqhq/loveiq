@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   candidateWindow,
+  greetingName,
   readerOf,
   type CandidateRow,
 } from "@features/unlock-feedback/logic/audience";
@@ -28,6 +29,49 @@ describe("who the unlock feedback email goes to", () => {
       archetypeName: "The Spiritual Lover",
       firstName: "Ana",
     });
+  });
+
+  it("greets by the first word of the name, tidied, and says there for initials and junk", () => {
+    const cases: Array<[string | null | undefined, string | null]> = [
+      ["Ana", "Ana"],
+      ["  Ana  ", "Ana"],
+      ["ana", "Ana"],
+      ["ANA", "Ana"],
+      ["Eman test", "Eman"],
+      ["ana maria", "Ana"],
+      ["McKenzie", "McKenzie"],
+      ["DeShawn", "DeShawn"],
+      ["JEAN-PIERRE", "Jean-Pierre"],
+      ["o’neil", "O’Neil"],
+      ["Dave.", "Dave"],
+      ["Jo", "Jo"],
+      ["jo", "Jo"],
+      ["ÉLODIE", "Élodie"],
+      ["伟", "伟"],
+      ["J", null],
+      ["j", null],
+      ["JD", null],
+      ["J D", null],
+      ["Anna99", null],
+      ["123", null],
+      ["ana@example.com", null],
+      ["jenny_smith", null],
+      ["", null],
+      ["   ", null],
+      [null, null],
+      [undefined, null],
+    ];
+    for (const [typed, greeted] of cases)
+      expect([typed, greetingName(typed)]).toEqual([typed, greeted]);
+  });
+
+  it("hands the email the tidied name, not the raw one", () => {
+    expect(
+      readerOf(row({ ...reader, app_user: { ...reader.app_user, first_name: "ANA maria" } }))
+    ).toMatchObject({ firstName: "Ana" });
+    expect(
+      readerOf(row({ ...reader, app_user: { ...reader.app_user, first_name: "J" } }))
+    ).toMatchObject({ firstName: null });
   });
 
   it("greets by first name only when the reader gave one", () => {
