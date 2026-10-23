@@ -10,8 +10,8 @@ import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnloc
 /**
  * E06, "Core Archetype unlocked" (Figma Report-3.0 1669:2703, the Pre-Paywall board): sent
  * once, when a reader's EUR 1.99 Core Archetype opens: pay to start's initial report, as its
- * survey ends (app/api/survey/route.ts). Copy as the frame has it; the subject and preview
- * line are the board's.
+ * survey ends (app/api/survey/route.ts), or right after the EUR 1.99 from the pre-unlock gate
+ * is paid. Copy as the frame has it; the subject and preview line are the board's.
  */
 
 export interface InitialUnlockEmailParams {

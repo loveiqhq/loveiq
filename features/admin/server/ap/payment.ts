@@ -19,6 +19,7 @@ import {
   deviceClass,
   FULL_PLANS,
   PRE_PLANS,
+  preBuysOf,
   type CheckoutFact,
   type Facts,
   type MoneyFact,
@@ -90,6 +91,9 @@ export interface SegmentRow {
   fullBuyers: number;
   fullSales: number;
   fullRevenue: number;
+  preBuyers: number;
+  preSales: number;
+  preRevenue: number;
 }
 
 export interface SegmentTable {
@@ -490,18 +494,26 @@ export function buildPayment(input: {
         const fullBuyers = xs.filter((s) => s.full);
         // Their full unlocks only: a buyer's other sale is no full-unlock price.
         const fullSalesN = fullBuyers.reduce((n, s) => n + s.fullSales, 0);
+        // And their pre-unlocks only, the same way.
+        const preBuys = xs.map(preBuysOf);
+        const preBuyers = preBuys.filter((b) => b.length > 0).length;
+        const preSalesN = preBuys.reduce((n, b) => n + b.length, 0);
+        const preRevenue = round2(preBuys.flat().reduce((n, [, amount]) => n + amount, 0));
         return {
           label: k,
           finishers: xs.length,
           sales: xs.reduce((n, s) => n + s.sales, 0),
-          preCvr: preOnSale ? 0 : null,
-          preAvg: null,
+          preCvr: preOnSale ? ratio(preBuyers, xs.length) : null,
+          preAvg: preOnSale ? ratio(preRevenue, preSalesN) : null,
           fullCvr: ratio(fullBuyers.length, xs.length),
           fullAvg: ratio(round2(fullBuyers.reduce((n, s) => n + s.fullRevenue, 0)), fullSalesN),
           revenue: round2(xs.reduce((n, s) => n + s.revenue, 0)),
           fullBuyers: fullBuyers.length,
           fullSales: fullSalesN,
           fullRevenue: round2(fullBuyers.reduce((n, s) => n + s.fullRevenue, 0)),
+          preBuyers,
+          preSales: preSalesN,
+          preRevenue,
         };
       }),
       note: "",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { reportCoreEmail } from "@features/report/server/emails/report-core";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
+import { initialUnlockGiftEmail } from "@features/report/server/emails/initial-unlock-gift";
 import { reportAllEmail } from "@features/report/server/emails/report-all";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
 import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
@@ -25,9 +26,12 @@ const SITE = "http://localhost:3001";
 const REPORT_URL = `${SITE}/report/preview?from=email`;
 
 const TEMPLATES: Record<string, () => { subject: string; html: string }> = {
-  // E06 — the EUR 1.99 Core Archetype, pay to start's initial report (Figma 1669:2703)
+  // E06 — the EUR 1.99 Core Archetype: pay to start's initial report, or the pre-unlock gate (Figma 1669:2703)
   "initial-unlock": () =>
     initialUnlockEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
+  // E07 — the Core Archetype gifted on day 4 to a reader the gate stopped (Figma 1669:2835)
+  "initial-unlock-gift": () =>
+    initialUnlockGiftEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
   // Tier 1 — "Just a snapshot" (reuses the full-report confirmation)
   full: () =>
     reportFullEmail({

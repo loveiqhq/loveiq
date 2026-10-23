@@ -129,6 +129,8 @@ export async function loadPriceListChanges(): Promise<PriceListChange[]> {
 
 interface PaymentRow {
   amount: number | string | null;
+  /** `metadata->>plan`: "initial" is the EUR 1.99 Core Archetype, not a report bought. */
+  plan: string | null;
   personal_report: { survey_submission_id: number | null } | null;
 }
 
@@ -307,6 +309,22 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
         )
       : { rows: [] as Array<{ consumed_submission_id: number | null }>, truncated: false };
   const prepaidSubmissions = new Set(prepaidPage.rows.map((r) => r.consumed_submission_id));
+  // The EUR 1.99 gate's readers (Pre-unlock) are in no PRICE list: pricing pins them to A3,
+  // so their list was not drawn. They stay in every other test (the gate meets both arms of
+  // a landing or survey test alike). Read whatever the gate's switch says now: a window can
+  // cover days it was on.
+  const gatedPage =
+    readers.length > 0
+      ? await fetchAllPages<{ survey_submission_id: number | null }>(
+          (offset, pageSize) =>
+            `/rest/v1/personal_report?survey_submission_id=gte.${minId}` +
+            `&survey_submission_id=lte.${maxId}&initial_gate_cohort_at=not.is.null` +
+            `&select=survey_submission_id&order=survey_submission_id.asc` +
+            `&offset=${offset}&limit=${pageSize}`,
+          "personal_report"
+        )
+      : { rows: [] as Array<{ survey_submission_id: number | null }>, truncated: false };
+  const gatedSubmissions = new Set(gatedPage.rows.map((r) => r.survey_submission_id));
   const submissions = readers.filter(
     (s) => !prepaidSubmissions.has(s.id) && !isPayToStartTracker(s.utm_tracker)
   );
@@ -327,14 +345,15 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
 
   // Purchases are money that settled, not a quote's purchased_at: that is also set by a
   // 100%-off unlock and a staff test, and its price is the list price, not what was paid.
-  // A payment comes after its survey, so one for this window was created inside it.
+  // A payment comes after its survey, so one for this window was created inside it. The
+  // EUR 1.99 Core Archetype (plan "initial") is not a report bought: left out below.
   const paymentsPage =
     submissions.length > 0
       ? await fetchAllPages<PaymentRow>(
           (offset, pageSize) =>
             `/rest/v1/payment?status=eq.succeeded&is_test=is.false&amount=gt.0` +
             `&created_date_time=gte.${since}` +
-            `&select=amount,personal_report!fk_payment_personal_report(survey_submission_id)` +
+            `&select=amount,plan:metadata->>plan,personal_report!fk_payment_personal_report(survey_submission_id)` +
             `&order=id.asc&offset=${offset}&limit=${pageSize}`,
           "payment"
         )
@@ -359,12 +378,17 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
     const existing = entry(q.survey_submission_id);
     if (q.checkout_started_at) existing.startedCheckout = true;
     // Only a quote that existed in the window says which list the reader saw in it: one
-    // first made after a test ended was priced by whatever came next.
-    if (Date.parse(q.created_date_time) < windowEnd) existing.pricing ??= dealtArm(q);
+    // first made after a test ended was priced by whatever came next. A gated reader's list
+    // was pinned, not drawn: no arm.
+    if (
+      Date.parse(q.created_date_time) < windowEnd &&
+      !gatedSubmissions.has(q.survey_submission_id)
+    )
+      existing.pricing ??= dealtArm(q);
   }
   for (const p of paymentsPage.rows) {
     const id = p.personal_report?.survey_submission_id;
-    if (id == null || !ids.has(id)) continue;
+    if (id == null || !ids.has(id) || p.plan === "initial") continue;
     const existing = entry(id);
     existing.purchased = true;
     existing.revenue += num(p.amount);
@@ -374,7 +398,11 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
     submissions,
     bySubmission,
     truncated:
-      subsPage.truncated || prepaidPage.truncated || quotesPage.truncated || paymentsPage.truncated,
+      subsPage.truncated ||
+      prepaidPage.truncated ||
+      gatedPage.truncated ||
+      quotesPage.truncated ||
+      paymentsPage.truncated,
   };
 }
 

@@ -15,6 +15,16 @@ import {
   resolveUnlockedArchetypes,
 } from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
+import {
+  isInitialUnlockGateEnabled,
+  readInitialGateState,
+  stampInitialGateSeen,
+} from "@features/report/server/initialGateState";
+import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
+import {
+  buildInitialUnlockGatePayload,
+  needsInitialUnlockGate,
+} from "@features/report/logic/initialUnlockGate";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   buildArchetypeContentForUser,
@@ -390,6 +400,22 @@ export async function GET(request: Request) {
     const paywallEnforcedPromise = isShareAccess
       ? null
       : isFeatureEnabled("report_paywall_enforced", true).catch(() => true);
+    // The EUR 1.99 gate's switch, kicked off for the same reason. Off on any error.
+    const initialGatePromise = isShareAccess
+      ? null
+      : isInitialUnlockGateEnabled().catch(() => false);
+
+    // Kept from the access lookup for the EUR 1.99 gate below: the report row its stamps
+    // live on, and whether the purchases were read at all (an unread one gates nobody).
+    let personalReportId: number | null = null;
+    let accessLookupOk = false;
+    // For pricing's A3 pin: known only while the gate is on and its state was read.
+    let initialGateCohort: boolean | undefined;
+    // The open's session row and Slack journey step, recorded once the EUR 1.99 gate below
+    // has had its say: a reader it stops has not opened the report (the gate's own first view
+    // is initial_gate_seen_at), so neither may count them, or every gated reader would read
+    // as a report open on AP-Analytics.
+    let recordReportOpen: (() => Promise<void>) | null = null;
 
     try {
       // `ensure` reads the personal_report row and returns it; handing that row
@@ -412,6 +438,8 @@ export async function GET(request: Request) {
       initialUnlock = access.initialUnlock;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
+      personalReportId = access.personalReportId;
+      accessLookupOk = true;
 
       /**
        * A PROBE IS NOT A READER.
@@ -442,36 +470,31 @@ export async function GET(request: Request) {
         logger.info({ path: "/api/report" }, "probe request — report_session row skipped");
       }
 
-      if (isProbe) {
-        // no row
-      } else if (access.personalReportId && !accessPlan) {
-        await recordReportSessionView({
-          ipAddress: ip,
-          personalReportId: access.personalReportId,
-          userAgent,
-          userId: submission.user_id,
-          utmTracker: submission.utm_tracker,
-        });
-      } else if (access.personalReportId) {
-        scheduleAfterResponse("report-session-capture", async () => {
-          await recordReportSessionView({
-            ipAddress: ip,
-            personalReportId: access.personalReportId!,
-            userAgent,
-            userId: submission.user_id,
-            utmTracker: submission.utm_tracker,
-          });
-        });
-      }
-
-      // Advance the Slack journey message now that the report has actually been
-      // opened. report_session is the server-side truth here — analytics_event's
-      // report_viewed sits behind the consent gate and undercounts it by ~31%.
-      // After-response and self-skipping, so a re-read costs nothing.
       if (access.personalReportId) {
-        scheduleAfterResponse("journey-message-report-open", async () => {
-          await refreshJourneyMessage(submission.id, "report_opened");
-        });
+        const openedReportId = access.personalReportId;
+        // An unpaid reader's row lands before the reply, a buyer's after it, as before.
+        const unpaid = !accessPlan;
+        recordReportOpen = async () => {
+          if (!isProbe) {
+            const record = () =>
+              recordReportSessionView({
+                ipAddress: ip,
+                personalReportId: openedReportId,
+                userAgent,
+                userId: submission.user_id,
+                utmTracker: submission.utm_tracker,
+              });
+            if (unpaid) await record();
+            else scheduleAfterResponse("report-session-capture", record);
+          }
+          // Advance the Slack journey message now that the report has actually been
+          // opened. report_session is the server-side truth here — analytics_event's
+          // report_viewed sits behind the consent gate and undercounts it by ~31%.
+          // After-response and self-skipping, so a re-read costs nothing.
+          scheduleAfterResponse("journey-message-report-open", async () => {
+            await refreshJourneyMessage(submission.id, "report_opened");
+          });
+        };
       }
     } catch (err) {
       logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
@@ -487,8 +510,63 @@ export async function GET(request: Request) {
     // absent or Supabase is unreachable, so an infra blip can never give the
     // product away. Share-link viewers keep their curated gift view; the switch
     // only lifts the owner's paywall.
-    if (paywallEnforcedPromise && !(await paywallEnforcedPromise)) {
+    const paywallEnforced = paywallEnforcedPromise ? await paywallEnforcedPromise : true;
+    if (!paywallEnforced) {
       accessPlan = "all_reports";
+    }
+
+    // Pre-unlock (features/report/logic/initialUnlockGate.ts): an owner in the gate's cohort
+    // who bought nothing is sent the EUR 1.99 gate in place of the report, and no quote is
+    // made for them. Decided here, once purchases and the kill switch are known and before
+    // any copy is built: the free payload carries real copy under the blur, so a gate drawn
+    // over the report would hide nothing from the network tab.
+    if (initialGatePromise && (await initialGatePromise)) {
+      // Only a reader who holds nothing can meet the gate, so a buyer (after launch, almost
+      // every reader who gets in) never waits on the two reads below; pricing looks the
+      // cohort up itself for their first quote.
+      const mayMeetGate =
+        accessLookupOk && accessPlan === null && purchasedPlan === null && !initialUnlock;
+      const gateState =
+        mayMeetGate && personalReportId ? await readInitialGateState(personalReportId) : null;
+      const inCohort = Boolean(gateState?.cohortAt);
+      if (gateState) initialGateCohort = inCohort;
+      const livePayToStart = inCohort ? await hasLivePayToStartEntitlement(submission.id) : false;
+      if (
+        needsInitialUnlockGate({
+          gateEnabled: true,
+          paywallEnforced,
+          viewMode: "owner",
+          inCohort,
+          accessPlan,
+          purchasedPlan,
+          initialUnlock,
+          livePayToStart,
+          accessLookupFailed: !accessLookupOk,
+        })
+      ) {
+        if (personalReportId && !gateState?.seenAt) {
+          const seenReportId = personalReportId;
+          scheduleAfterResponse("initial-gate-seen", () => stampInitialGateSeen(seenReportId));
+        }
+        const gated = NextResponse.json(
+          buildInitialUnlockGatePayload({
+            reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
+            submissionId: submission.id,
+          })
+        );
+        gated.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+        gated.headers.set("Pragma", "no-cache");
+        return gated;
+      }
+    }
+
+    // Not gated: the report is opened.
+    if (recordReportOpen) {
+      try {
+        await recordReportOpen();
+      } catch (err) {
+        logger.warn({ err, submissionId: submission.id }, "Unable to record the report open");
+      }
     }
 
     // Fetch quotes for any user who can still upgrade (no plan, or essentials/
@@ -506,6 +584,9 @@ export async function GET(request: Request) {
           reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
           submissionId: submission.id,
           userAgent,
+          // What this read already knows; pricing looks up the rest for a first quote.
+          initialGateCohort,
+          initialUnlock: accessLookupOk ? initialUnlock : undefined,
         });
       } catch (err) {
         logger.warn({ err, submissionId: submission.id }, "Unable to resolve report pricing");

@@ -1,0 +1,892 @@
+/* ════════════════════════════════════════════════════════════════════════
+   THE EUR 1.99 PRE-UNLOCK GATE — Figma Report-3.0 1604:2374 (paygate-mobile, 383 wide)
+   and its sticky bar 1650:2667. ReportPage draws it in place of the report.
+   The card, the payment marks, the benefit cards and the reviews are the pricing modal's
+   (paygate.css), whose tokens this page shares; what differs is here, under .iug-page.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.iug-page {
+  --iug-gradient: linear-gradient(105.76deg, #ff6a3a 0%, #cf5afb 52%, #7d88ff 100%);
+  --iug-sticky-h: 56px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding-top: env(safe-area-inset-top, 0px);
+  /* Room for the sticky bar, so the last review is never under it. */
+  padding-bottom: calc(
+    var(--iug-sticky-h) + env(safe-area-inset-bottom, 0px) + var(--liq-consent-h, 0px)
+  );
+  overflow-x: clip;
+  background: #ffffff;
+  color: var(--rpg-ink);
+  font-family: var(--font-jakarta), var(--font-sans), system-ui, sans-serif;
+}
+
+.iug-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── 1609:11160: the back arrow (only when we have somewhere to go back to) ── */
+.iug-header {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 16px;
+}
+
+/* A 44px target, its 12px arrow where the frame draws it (16px in). */
+.iug-header__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -16px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  cursor: pointer;
+}
+
+.iug-header__back:focus-visible {
+  outline: 2px solid var(--rpg-purple);
+  outline-offset: -6px;
+}
+
+/* ── 1612:2670: the badge and the headline ─────────────────────────────── */
+.iug-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  text-align: center;
+}
+
+/* The progress bar and the badge share one cell: the bar fills, then the badge takes over. */
+.iug-hero__status {
+  display: grid;
+  place-items: center;
+}
+
+.iug-hero__status > * {
+  grid-area: 1 / 1;
+}
+
+/* 1610:2667 */
+.iug-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(167, 139, 250, 0.57);
+  border-radius: 999px;
+  background: #f4f1fd;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #6b6678;
+  white-space: nowrap;
+}
+
+/* The frame's 13 × 9.5 mark, its stroke's overhang (15 × 11.5) left outside the box. */
+.iug-badge__check {
+  flex: none;
+  margin: -1px;
+}
+
+/* Mark, on the frame: a progress bar first, 0 → 100%, then the badge. */
+.iug-progress {
+  display: block;
+  width: 200px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #efeafb;
+}
+
+.iug-progress__fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--iug-gradient);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* 1604:2387. Figma's 87px box sets the first baseline 1px lower than CSS's 42 + 44 line boxes,
+ * and the second one a further 1px (each line spaced by its own height; measured on the
+ * render), so the padding moves both and the nudge the second alone. */
+.iug-hero__title {
+  margin: 0;
+  padding-top: 1px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 32px;
+  color: var(--rpg-ink-strong);
+}
+
+.iug-hero__lead {
+  display: block;
+  font-weight: 700;
+  line-height: 42px;
+  letter-spacing: -0.64px;
+}
+
+.iug-hero__emph {
+  position: relative;
+  top: 1px;
+  display: block;
+  /* The italic leans past its box; the padding widens what the gradient paints. */
+  padding: 0 0.14em;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 44px;
+  letter-spacing: -0.9px;
+  background-image: var(--iug-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 1610:2667 + 1604:2387 pulse together, one 2.5 s loop (get_motion_context: one cohort). */
+.iug-hero--motion .iug-progress {
+  animation: iug-fade-away 200ms ease 1250ms forwards;
+}
+.iug-hero--motion .iug-progress__fill {
+  animation: iug-fill 1200ms cubic-bezier(0.3, 0, 0.2, 1) forwards;
+}
+.iug-hero--motion .iug-badge {
+  opacity: 0;
+  animation:
+    iug-appear 300ms ease 1300ms forwards,
+    iug-badge-pulse 2.5s ease-in-out 1600ms infinite;
+}
+.iug-hero--motion .iug-hero__title {
+  animation: iug-headline-pulse 2.5s ease-in-out 1600ms infinite;
+}
+
+@keyframes iug-fill {
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes iug-fade-away {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@keyframes iug-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes iug-badge-pulse {
+  0% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 0.72;
+  }
+  38% {
+    opacity: 1;
+  }
+  66% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes iug-headline-pulse {
+  0% {
+    opacity: 1;
+  }
+  26% {
+    opacity: 1;
+  }
+  44% {
+    opacity: 0.86;
+  }
+  66% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ── 1604:2388: the card (paygate.css `rpg-card--hero`), where the gate's frame differs ── */
+.iug-pricing {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 20px 0;
+}
+
+/* The frame's 1.5px stroke is drawn inside its edge, and Chrome floors a fractional border to
+ * 1px at every DPR: an inset shadow keeps the weight and the frame's own 32/20/24 insets, so
+ * the card is its 373px; forced colours drop shadows, so a border stands in there.
+ * The pricing modal's tablet and desktop rules (paygate.css, from 640 and 960px) restyle the
+ * classes this page shares; the gate is the phone frame at every width, so the values those
+ * rules change are pinned here and below (gap, radius, the badge's padding, the type). */
+.iug-page .iug-card {
+  gap: 16px;
+  padding: 32px 20px 24px;
+  border: 0;
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 1.5px rgba(139, 92, 246, 0.55);
+}
+
+@media (forced-colors: active) {
+  .iug-page .iug-card {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* 1604:2389: 12px over the card's edge, its centre 0.5px right of the card's. */
+.iug-card .iug-card__badge {
+  top: -12px;
+  left: calc(50% + 0.5px);
+  padding: 5px 12px;
+  line-height: normal;
+}
+
+.iug-page .iug-card .rpg-card__head {
+  gap: 6px;
+}
+
+.iug-card .iug-card__title {
+  font-size: 22px;
+  line-height: normal;
+}
+
+.iug-page .iug-card .rpg-card__desc {
+  font-size: 13px;
+  color: var(--rpg-ink);
+}
+
+.iug-page .iug-card .rpg-card__price {
+  gap: 4px;
+}
+
+.iug-page .iug-card .rpg-card__amount {
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.iug-page .iug-card .rpg-card__cta--filled {
+  height: 45px;
+}
+
+.iug-card .iug-card__suffix {
+  color: #000000;
+}
+
+/* The frame's #00892F on the card's tint is 4.2:1 at 18px bold, under WCAG AA's 4.5 (the
+ * a11y spec's axe run): a shade darker of the same green, 4.8:1. Flagged for Mark. */
+.iug-card .iug-card__guarantee {
+  justify-content: center;
+  font-size: 18px;
+  line-height: normal;
+  color: #007f2d;
+}
+
+.iug-card .rpg-card__cta[aria-busy="true"] {
+  opacity: 0.85;
+}
+
+.iug-card__error {
+  margin: -4px 0 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #a62700;
+  text-align: center;
+}
+
+/* The four lines come in one after the other (Mark, on the frame); the delay is inline. */
+@media (prefers-reduced-motion: no-preference) {
+  .iug-card__feature {
+    animation: iug-feature-in 450ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both;
+  }
+}
+
+@keyframes iug-feature-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 1604:2426: the payment marks (paygate.css `rpg__payments-*`) ───────── */
+/* The frame's #9CA3AF is 2.5:1 on white at 11px; the next grey of its family is 4.8:1, the
+ * WCAG AA the a11y spec holds every page to. Flagged for Mark. */
+.iug-page .rpg__payments-label {
+  color: #6b7280;
+}
+
+/* 48px under the card, as the frame's auto layout; its section runs 28px past the marks. */
+.iug-payments {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 20px 28px;
+}
+
+/* ── 1651:2943: a hairline across the page, 24px in from each edge ─────── */
+.iug-divider {
+  position: relative;
+  flex: none;
+  height: 64px;
+}
+
+.iug-divider::before {
+  position: absolute;
+  top: 31px;
+  right: 24px;
+  left: 24px;
+  height: 1px;
+  background: rgba(23, 18, 31, 0.0784);
+  content: "";
+}
+
+/* ── 1604:2494: the chapter map, then why to unlock ─────────────────────── */
+.iug-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 0 20px;
+}
+
+.iug-map-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* 1665:3276, 1604:2512: the frame's 28/34 against the modal's 30/36. */
+.iug-page .iug-section-title {
+  font-size: 28px;
+  line-height: 34px;
+}
+
+/* 1665:3096: 358 wide in the 383 frame, so it reaches 7.5px into the page's side padding.
+ * The pitch column stops at the frame's 168px, so the questions break as drawn; on a wider
+ * phone the map stays centred, on a narrower one the pitches give up the width. */
+.iug-map {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 168px);
+  justify-content: center;
+  column-gap: 22px;
+  width: calc(100% + 15px);
+  margin: 0 -7.5px;
+}
+
+/* Its one column is the card's width, or the longest row would push the chips out of view. */
+.iug-map__card {
+  display: grid;
+  grid-row: 1 / span var(--iug-lines);
+  grid-column: 1;
+  grid-template-rows: subgrid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0 0 14px;
+  border: 1.178px solid rgba(167, 139, 250, 0.35);
+  border-radius: 16.494px;
+  background: #ffffff;
+  box-shadow: 0 14.137px 37.7px 0 rgba(13, 5, 20, 0.45);
+}
+
+/* A part's name: the nav's gradient caps (measured on the frame's render: 19px from its caps
+ * to the first chapter's, 29px from the last chapter's). */
+.iug-map__part {
+  margin: 0;
+  padding: 10.4px 8px 2.4px 8.7px;
+  background: linear-gradient(90deg, #d05976 0%, #c167cf 48%, #8887f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-size: 6.36px;
+  font-weight: 700;
+  line-height: 11px;
+  letter-spacing: 1.04px;
+  text-transform: uppercase;
+}
+
+.iug-map__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 24.67px;
+  margin: 0;
+  padding: 0 8px 0 22.7px;
+  font-size: 8.4px;
+  font-weight: 600;
+  line-height: 12px;
+  color: #3f3a4d;
+}
+
+.iug-map__row--locked {
+  font-weight: 400;
+}
+
+/* The chapter it sells, as the drawer marks the one being read: a violet wash and dot. */
+.iug-map__row.is-active::before {
+  position: absolute;
+  inset: 1.5px 6.7px;
+  border-radius: 9px;
+  background: rgba(192, 132, 252, 0.1);
+  content: "";
+}
+
+.iug-map__dot {
+  position: absolute;
+  top: 50%;
+  left: 8.64px;
+  transform: translateY(-50%);
+}
+
+.iug-map__label {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The frame's drawer chip (31 x 11 on its render), a touch smaller than the live drawer's. */
+.iug-map__chip {
+  position: relative;
+  flex: none;
+  padding: 2.46px 4.37px;
+  border: 0.578px solid rgba(22, 16, 33, 0.13);
+  border-radius: 3.5px;
+  background: #ffffff;
+  font-size: 4.93px;
+  font-weight: 600;
+  line-height: 4.93px;
+  letter-spacing: 0.51px;
+  color: #4a4657;
+  white-space: nowrap;
+}
+
+.iug-map__lock {
+  position: relative;
+  flex: none;
+}
+
+/* A pitch: zero height on its chapter's line, its text hung 10px above the line's centre
+ * (where the frame's connector meets it), the connector reaching back to the drawer. */
+.iug-map__pitch {
+  position: relative;
+  grid-column: 2;
+  align-self: center;
+  height: 0;
+}
+
+.iug-map__pitch::before {
+  position: absolute;
+  top: 0;
+  left: -19px;
+  width: 14px;
+  height: 1px;
+  background: rgba(229, 115, 102, 0.6);
+  content: "";
+}
+
+.iug-map__pitch-body {
+  position: absolute;
+  top: -10px;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.iug-map__chip--pitch {
+  padding: 2.889px 5.779px;
+  border-width: 0.722px;
+  border-radius: 4.334px;
+  font-size: 6.646px;
+  line-height: 6.646px;
+  letter-spacing: 0.3987px;
+}
+
+.iug-map__partly {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iug-map__partly-text {
+  background: linear-gradient(90deg, #d05976 0%, #c167cf 48%, #8887f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: 0.72px;
+}
+
+.iug-map__pitch-title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--rpg-ink);
+}
+
+.iug-map__pitch-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--rpg-muted);
+}
+
+/* Narrower phones give the pitches less width, so their type steps down to keep each
+ * question clear of the next: Typical Beliefs and Accelerators & Brakes are only three nav
+ * lines apart, which leaves the first question room for two lines at 15px, three at 13px
+ * (measured from 320 to 390). */
+@media (max-width: 389px) {
+  .iug-map {
+    column-gap: 18px;
+  }
+  .iug-map__pitch::before {
+    left: -15px;
+    width: 10px;
+  }
+  .iug-map__pitch-title {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 374px) {
+  .iug-map {
+    column-gap: 16px;
+  }
+  .iug-map__pitch::before {
+    left: -13px;
+    width: 8px;
+  }
+  .iug-map__pitch-title {
+    font-size: 13px;
+  }
+  .iug-map__pitch-text {
+    font-size: 11px;
+  }
+}
+
+/* 1604:2495, 1604:2496: "Why unlock your Archetype?" and the modal's benefit cards. The frame
+ * opens the title with an empty 36px line, and its map frame runs 5.6px past the drawer. */
+.iug-why {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding-top: 41.6px;
+}
+
+/* Broken where the width runs out, as drawn ("Why unlock your / Archetype?"), not balanced. */
+.iug-page .iug-why__title {
+  font-size: 30px;
+  line-height: 36px;
+  text-wrap: wrap;
+}
+
+/* One card a row at every width (the modal goes two a row from 640). */
+.iug-page .rpg__why-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* The frames' 16px insets include their 1px inside strokes (99 / 164px cards, not 101 / 166);
+ * below 360px the modal's tighter review card stands. */
+.iug-page .rpg-why {
+  gap: 8px;
+  padding: 15px;
+  border-radius: 16px;
+}
+
+.iug-page .rpg-why__title {
+  font-size: 18px;
+}
+
+.iug-page .rpg-why__body {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+@media (min-width: 360px) {
+  .iug-page .rpg-review {
+    padding: 15px;
+  }
+}
+
+/* 1604:2511 */
+.iug-reviews {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 0 20px 44px;
+}
+
+.iug-reviews__list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── 1650:2667: the sticky bar ──────────────────────────────────────────── */
+.iug-sticky {
+  position: fixed;
+  right: 0;
+  bottom: var(--liq-consent-h, 0px);
+  left: 0;
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid #e5e5e5;
+  background: #ffffff;
+  transition:
+    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s;
+}
+
+.iug-sticky[data-visible="false"] {
+  visibility: hidden;
+  transform: translateY(calc(100% + 1px));
+  transition:
+    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s 240ms;
+}
+
+.iug-sticky__error {
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 8px 19px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #a62700;
+  text-align: center;
+}
+
+/* The frame is 401 wide, with 19px insets; narrower phones (390, 393) take 3px off each side
+ * and 4px off the gap, so "Guaranteed, no questions asked." still fits on one line. */
+.iug-sticky__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 430px;
+  /* The frame's 54.8px; on a 320 phone the guarantee takes four lines and the bar grows. */
+  min-height: 54.8px;
+  margin: 0 auto;
+  padding: 6px 16px;
+}
+
+@media (min-width: 401px) {
+  .iug-sticky__row {
+    gap: 12px;
+    padding: 6px 19px;
+  }
+}
+
+.iug-sticky__guarantee {
+  display: flex;
+  align-items: center;
+  gap: 7.84px;
+  min-width: 0;
+}
+
+.iug-sticky__shield {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 20.08px;
+  height: 20.08px;
+}
+
+.iug-sticky__shield-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.iug-sticky__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The frame's #009148 is 4.1:1 on white at 12px bold; a shade darker, 5.0:1 (WCAG AA). */
+.iug-sticky__days {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 15.25px;
+  color: #00803f;
+}
+
+.iug-sticky__line {
+  font-size: 10px;
+  line-height: 10.89px;
+  color: #6b6678;
+}
+
+/* 1650:2670: a 163px pill whose label, wider than the frame's 22px padding allows, runs into
+ * it centred; here the pill keeps the 163px and only grows if a label ever needs more. */
+.iug-sticky__cta {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 163px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(168.89deg, #fb683e 14.64%, #e88c8c 51.41%, #ac88ed 85.36%);
+  box-shadow: 0 4px 12px rgba(168, 90, 76, 0.3);
+  font-family: var(--font-jakarta), var(--font-sans), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 12px;
+  color: #ffffff;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.iug-sticky__cta:focus-visible {
+  outline: 2px solid var(--rpg-purple);
+  outline-offset: 3px;
+}
+
+.iug-sticky__cta:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* ── Tablet and desktop: the frame has no desktop sibling, so the phone frame stands in a
+ * centred 560px column (an extrapolation, for Mark to check). From 1024 the column stands on
+ * the status pages' wash (checkout's), the drawer is drawn 1.25× (zoom keeps its pitches on
+ * their rows), and the sticky bar is the column's width. ───────────────────────────────── */
+.iug-shell {
+  min-height: 100dvh;
+  background: #ffffff;
+}
+
+@media (min-width: 768px) {
+  .iug-page {
+    max-width: 560px;
+  }
+  .iug-sticky__row {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .iug-shell {
+    background:
+      radial-gradient(circle at top, rgba(156, 125, 255, 0.1), transparent 34%),
+      radial-gradient(circle at bottom, rgba(254, 104, 57, 0.06), transparent 28%), #fbf9ff;
+    background-attachment: fixed;
+  }
+  .iug-page {
+    box-shadow: 0 0 0 1px rgba(23, 18, 31, 0.06);
+  }
+  .iug-map {
+    zoom: 1.25;
+  }
+  .iug-sticky {
+    right: calc(50% - 280px);
+    left: calc(50% - 280px);
+    box-shadow:
+      1px 0 0 rgba(23, 18, 31, 0.06),
+      -1px 0 0 rgba(23, 18, 31, 0.06);
+  }
+}
+
+/* A pointer that can hover: the sticky pill lifts as the card's button does (paygate.css). */
+@media (hover: hover) and (pointer: fine) {
+  .iug-sticky__cta {
+    transition:
+      transform 200ms ease,
+      filter 200ms ease,
+      box-shadow 200ms ease;
+  }
+  .iug-sticky__cta:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+    box-shadow: 0 8px 20px -6px rgba(168, 90, 76, 0.45);
+  }
+  .iug-sticky__cta:active:not(:disabled) {
+    transform: none;
+  }
+  .iug-header__back:hover {
+    background: rgba(23, 18, 31, 0.04);
+  }
+}
+
+/* Reduced motion: nothing moves or pulses, and the bar simply appears. */
+@media (prefers-reduced-motion: reduce) {
+  .iug-sticky__cta,
+  .iug-sticky__cta:hover:not(:disabled) {
+    transform: none;
+    transition: none;
+  }
+  .iug-hero--motion .iug-badge,
+  .iug-hero--motion .iug-hero__title,
+  .iug-hero--motion .iug-progress,
+  .iug-hero--motion .iug-progress__fill {
+    animation: none;
+  }
+  .iug-hero--motion .iug-badge {
+    opacity: 1;
+  }
+  .iug-hero--motion .iug-progress {
+    display: none;
+  }
+  .iug-sticky,
+  .iug-sticky[data-visible="false"] {
+    transition: none;
+  }
+}

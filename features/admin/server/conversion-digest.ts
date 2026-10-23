@@ -1413,7 +1413,7 @@ export async function fetchUnitEconomics(
       // currency for exactly this reason. 53/53 succeeded non-test rows are EUR
       // today, so this is a guard against a future MXN row silently inflating
       // "earned EUR …" and every ratio built on it — not a bug biting now.
-      "/rest/v1/payment?select=amount,currency&status=eq.succeeded&is_test=is.false" +
+      "/rest/v1/payment?select=amount,currency&status=eq.succeeded&is_test=is.false&metadata->>gifted=is.null" +
         `&created_date_time=gte.${encodeURIComponent(sinceIso)}` +
         `&created_date_time=lt.${encodeURIComponent(untilIso)}&limit=1000`
     );

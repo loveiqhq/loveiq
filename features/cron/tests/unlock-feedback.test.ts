@@ -47,6 +47,13 @@ interface Db {
   /** The reader's other reports, by id, and what was paid on each. */
   otherReports?: Array<{ id: number; plan?: string }>;
   flagsDown?: boolean;
+  /** The EUR 1.99 gate is switched on (its flag reads true); off by default. */
+  gateOn?: boolean;
+  /** The gate's switch can't be read (its system_flags read answers 503). */
+  gateSwitchDown?: boolean;
+  /** In the EUR 1.99 gate's cohort; cohortDown answers that read with a 500. */
+  cohort?: boolean;
+  cohortDown?: boolean;
   payments?: Array<{ metadata: { plan: string } }>;
   paymentsDown?: boolean;
   notOpened?: boolean;
@@ -79,9 +86,17 @@ function withDb(db: Db) {
     const call = `${method} ${path.split("&")[0]}`;
     log.push(call);
     if (init.body) bodies[call] = JSON.parse(init.body);
-    if (path.startsWith("/rest/v1/system_flags?")) return json({}, db.flagsDown ? 503 : 200);
+    if (path.startsWith("/rest/v1/system_flags?")) {
+      if (db.flagsDown) return json({}, 503);
+      const gate = path.includes("key=eq.report_initial_unlock_gate");
+      if (gate && db.gateSwitchDown) return json({}, 503);
+      return json(gate && db.gateOn ? [{ enabled: true }] : []);
+    }
     if (path.startsWith("/rest/v1/survey_submission?user_id=eq.")) {
       return json([{ id: 201 }, ...(db.otherReports ?? []).map((r) => ({ id: r.id + 1000 }))]);
+    }
+    if (path.includes("initial_gate_cohort_at=not.is.null")) {
+      return db.cohortDown ? json({}, 500) : json(db.cohort ? [{ id: 101 }] : []);
     }
     if (path.startsWith("/rest/v1/personal_report?survey_submission_id=in.")) {
       return json((db.otherReports ?? []).map((r) => ({ id: r.id })));
@@ -377,6 +392,11 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
     ],
     ["a reader who never opened their report", { notOpened: true }, "not_opened"],
     [
+      "a reader behind the EUR 1.99 gate: its offer stands",
+      { gateOn: true, cohort: true },
+      "gate_cohort",
+    ],
+    [
       "someone who bought another of their reports",
       { otherReports: [{ id: 77, plan: "full_report" }] },
       "paid",
@@ -406,12 +426,33 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
   it.each([
     ["payments", { paymentsDown: true }],
     ["report opens", { sessionsDown: true }],
+    ["EUR 1.99 gate cohort", { gateOn: true, cohortDown: true }],
+    [
+      "EUR 1.99 gate cohort, with the switch unreadable too",
+      { gateSwitchDown: true, cohortDown: true },
+    ],
+    // In the cohort with the switch unread: neither a skip (final for a tranche) nor a send.
+    ["EUR 1.99 gate switch, for a reader in its cohort,", { gateSwitchDown: true, cohort: true }],
   ] as const)("a reader whose %s cannot be read waits for the next run", async (_label, db) => {
     withDb({ candidates: [candidate()], ...db });
     const { body } = await run();
     expect(body.summary).toMatchObject({ sent: 0, failed: 1 });
     expect(log.some((c) => c.startsWith("POST /rest/v1/unlock_feedback"))).toBe(false);
     expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a reader the gate stamped is emailed like anyone", { cohort: true }],
+    // Before the gate's migration the column isn't there: the read would answer 400.
+    ["the cohort is never read, so an unapplied migration costs nothing", { cohortDown: true }],
+  ] as const)("while the EUR 1.99 gate is off, %s", async (_label, db) => {
+    withDb({ candidates: [candidate()], ...db });
+    const { body } = await run();
+    expect(body.summary).toMatchObject({ candidates: 1, sent: 1, failed: 0 });
+    // The raw URLs: the log keeps each path only up to its first "&".
+    expect(
+      mockFetch.mock.calls.some(([url]) => String(url).includes("initial_gate_cohort_at"))
+    ).toBe(false);
   });
 });
 

@@ -160,6 +160,41 @@ describe("Payment page builder", () => {
     });
   });
 
+  it("who pays: a segment's pre-unlock rate and average, from each finisher's paid sales", () => {
+    const at = Date.parse("2026-10-02T10:00:00Z") / 1000;
+    const p = payment("2026-10-01", "2026-10-07", {
+      subs: [
+        sub({ id: 1, gender: "Woman", sales: 1, revenue: 1.99, pays: [[at, 1.99, "initial"]] }),
+        // The Core Archetype, then the full report: one pre-unlock, one full unlock.
+        sub({
+          id: 2,
+          gender: "Woman",
+          sales: 2,
+          revenue: 31.98,
+          pays: [
+            [at, 1.99, "initial"],
+            [at + 60, 29.99, "full_report"],
+          ],
+          full: true,
+          fullSales: 1,
+          fullRevenue: 29.99,
+        }),
+        // E07's day-4 gift: a EUR 0 Initial row, never a sale.
+        sub({ id: 3, gender: "Woman", gifted: true, pays: [[at, 0, "initial"]] }),
+        sub({ id: 4, gender: "Woman" }),
+      ],
+    });
+    const women = p.segments.find((s) => s.key === "gender")!.rows[0]!;
+    expect(women).toMatchObject({
+      finishers: 4,
+      preCvr: 0.5,
+      preAvg: 1.99,
+      preBuyers: 2,
+      preSales: 2,
+      preRevenue: 3.98,
+    });
+  });
+
   it("the headline figures: revenue, paid sales and free unlocks, full-unlock and payment CVR", () => {
     const p = payment("2026-10-01", "2026-10-07", {
       money: [

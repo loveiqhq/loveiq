@@ -78,6 +78,70 @@ import {
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 
+/** The EUR 1.99 gate's checkout: the initial unlock is no plan, so `accessPlan` can't say it landed. */
+describe("GET /api/stripe/checkout-session-status — the initial unlock", () => {
+  function initialSession() {
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 63,
+      userEmail: "test@example.com",
+      userId: 7,
+    });
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      personalReportId: 2,
+    } as never);
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_initial_1",
+            metadata: {
+              plan: "initial",
+              reportSessionId: "",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              unlockSource: "report_gate",
+            },
+            amount_total: 199,
+            currency: "eur",
+            payment_status: "paid",
+            status: "complete",
+          }),
+        },
+      },
+      getApiField: () => "2025-01-01",
+    } as never);
+  }
+  const get = async () =>
+    (
+      await GET(
+        new Request("http://localhost/api/stripe/checkout-session-status?session_id=cs_initial_1")
+      )
+    ).json();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reports initialUnlock once this purchase is recorded, accessPlan staying null", async () => {
+    initialSession();
+    vi.mocked(isCheckoutSessionRecorded).mockResolvedValue(true);
+    expect(await get()).toMatchObject({
+      enabled: true,
+      accessPlan: null,
+      initialUnlock: true,
+      paymentStatus: "paid",
+      sessionStatus: "complete",
+    });
+  });
+
+  it("keeps initialUnlock false until it is", async () => {
+    initialSession();
+    vi.mocked(isCheckoutSessionRecorded).mockResolvedValue(false);
+    expect(await get()).toMatchObject({ enabled: true, initialUnlock: false });
+  });
+});
+
 describe("GET /api/stripe/checkout-session-status", () => {
   beforeEach(() => {
     vi.clearAllMocks();

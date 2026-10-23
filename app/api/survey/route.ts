@@ -33,6 +33,7 @@ import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression"
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
+import { joinInitialGateCohort } from "@features/report/server/initialGateState";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -696,9 +697,13 @@ export async function POST(request: Request) {
       reportToken = token ?? undefined;
     });
 
+    // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
+    // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
+    // A reader who came with a pay-to-start token joins only after their claim, below.
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
+      isExisting || prepaidToken ? Promise.resolve() : joinInitialGateCohort(submissionId),
     ]);
 
     // Pay to start: claim what this browser paid for, before the reply, so the report
@@ -713,6 +718,22 @@ export async function POST(request: Request) {
       : null;
     if (claim) {
       scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, submissionId));
+    }
+    // A token that bought nothing for this survey joins the cohort like anyone: unknown,
+    // used, refunded, expired, or a checkout left open (Stripe expires it in a day, and the
+    // gate then applies). Out: a paid claim; a failed one, whose reader may have paid
+    // without the entitlement being bound yet (the free report until the sweep binds it,
+    // claim.ts); and money still settling. The gate stands aside for a pending entitlement,
+    // and pay to start never moves a delayed payment that fails off pending, so in the
+    // cohort that reader would meet no gate and lose the emails that skip it.
+    if (
+      !isExisting &&
+      claim &&
+      claim.outcome !== "unlocked" &&
+      claim.outcome !== "error" &&
+      claim.outcome !== "pending"
+    ) {
+      await joinInitialGateCohort(submissionId);
     }
 
     // End of user-blocking work. Everything below is fire-and-forget via
@@ -896,20 +917,14 @@ export async function POST(request: Request) {
         // gated by report_token, so exposing this int is not a security risk.
         submissionId,
         ...(reportToken ? { reportToken } : {}),
-        ...(scoringSummary
-          ? {
-              primaryArchetype: scoringSummary.primaryArchetype,
-              ...(scoringSummary.v5PrimaryArchetype
-                ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
-                : {}),
-            }
-          : {}),
+        // No archetype: nothing reads it here, and the EUR 1.99 gate sells it. The report
+        // route tells it, to a reader allowed to see it.
         // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
       },
       {
-        // The response carries a fresh report access token + the user's
-        // primary archetype — never let intermediaries cache it.
+        // The response carries a fresh report access token — never let
+        // intermediaries cache it.
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
           "X-Server-Timing": serverTiming,

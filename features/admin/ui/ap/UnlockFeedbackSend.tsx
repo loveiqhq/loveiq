@@ -41,6 +41,7 @@ const SKIP_WORDS: Record<string, string> = {
   emailed_before: "had it already",
   paid: "bought",
   not_opened: "never opened the report",
+  gate_cohort: "behind the €1.99 gate",
   test: "staff or test",
   suppressed: "unsubscribed or bounced",
   unknown: "unsubscribe list not readable",

@@ -7,6 +7,10 @@ import {
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
+import {
+  isInitialUnlockGatePayload,
+  type InitialUnlockGatePayload,
+} from "@features/report/logic/initialUnlockGate";
 
 export interface ReportPracticeTendencyRowData {
   practice: string;
@@ -328,7 +332,15 @@ export interface ShareVerificationChallenge {
   ownerFirstName: string | null;
 }
 
-type Status = "idle" | "loading" | "error" | "success" | "missing" | "needs_verification";
+type Status =
+  | "idle"
+  | "loading"
+  | "error"
+  | "success"
+  | "missing"
+  | "needs_verification"
+  // The EUR 1.99 pre-unlock gate: the API sent its payload (`gate`) in place of the report.
+  | "gated";
 
 interface ReportIdentifier {
   sessionId?: string | null;
@@ -341,6 +353,8 @@ interface ReportIdentifier {
   preview?: boolean;
   /** `?plan=` in preview mode: which purchase to pretend the reader made. */
   previewPlan?: string | null;
+  /** `?gate=1` in preview mode: the EUR 1.99 gate, as a reader it stops meets it. */
+  previewGate?: boolean;
   /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
@@ -379,8 +393,16 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
 }
 
 export function useReportData(identifier: ReportIdentifier) {
-  const { sessionId, token, pricingSessionIdOverride, archetypeSlug, preview, previewPlan, v4 } =
-    identifier;
+  const {
+    sessionId,
+    token,
+    pricingSessionIdOverride,
+    archetypeSlug,
+    preview,
+    previewPlan,
+    previewGate,
+    v4,
+  } = identifier;
   // A preview needs no identifier: there is no reader to identify. Without this
   // the effect never runs on a machine with no session and no token, which is
   // every machine the preview exists for.
@@ -391,12 +413,14 @@ export function useReportData(identifier: ReportIdentifier) {
     status: Status;
     error: ReportRequestError | null;
     challenge: ShareVerificationChallenge | null;
+    gate: InitialUnlockGatePayload | null;
     refreshKey: number;
   }>({
     data: null,
     status: "idle",
     error: null,
     challenge: null,
+    gate: null,
     refreshKey: 0,
   });
 
@@ -412,6 +436,7 @@ export function useReportData(identifier: ReportIdentifier) {
         status: "loading",
         error: null,
         challenge: null,
+        gate: null,
       }));
 
       try {
@@ -437,6 +462,7 @@ export function useReportData(identifier: ReportIdentifier) {
               archetype: archetypeSlug ?? "",
               plan: previewPlan ?? "",
               ...(v4 ? { v4: "1" } : {}),
+              ...(previewGate ? { gate: "1" } : {}),
             }).toString()}`
           : `/api/report?${params.toString()}`;
 
@@ -464,6 +490,7 @@ export function useReportData(identifier: ReportIdentifier) {
                   recipientEmailHint: json.recipientEmailHint ?? null,
                   ownerFirstName: json.ownerFirstName ?? null,
                 },
+                gate: null,
                 refreshKey: prev.refreshKey,
               }));
               return;
@@ -485,14 +512,27 @@ export function useReportData(identifier: ReportIdentifier) {
           return;
         }
 
-        const json = (await res.json()) as ReportData;
+        const json = (await res.json()) as unknown;
         if (sessionId) finalizeReportSession(sessionId);
+        // The EUR 1.99 gate: the API holds the report back and sends what the gate shows.
+        if (isInitialUnlockGatePayload(json)) {
+          setState((prev) => ({
+            ...prev,
+            data: null,
+            status: "gated",
+            error: null,
+            challenge: null,
+            gate: json,
+          }));
+          return;
+        }
         setState((prev) => ({
           ...prev,
-          data: json,
+          data: json as ReportData,
           status: "success",
           error: null,
           challenge: null,
+          gate: null,
         }));
       } catch {
         if (!cancelled) {
@@ -520,6 +560,7 @@ export function useReportData(identifier: ReportIdentifier) {
     state.refreshKey,
     preview,
     previewPlan,
+    previewGate,
     v4,
   ]);
 
@@ -531,6 +572,7 @@ export function useReportData(identifier: ReportIdentifier) {
       status: "missing" as const,
       error: null,
       challenge: null,
+      gate: null,
       retry,
     };
   }
@@ -541,6 +583,7 @@ export function useReportData(identifier: ReportIdentifier) {
       status: "loading" as const,
       error: null,
       challenge: null,
+      gate: null,
       retry,
     };
   }
@@ -550,6 +593,7 @@ export function useReportData(identifier: ReportIdentifier) {
     status: state.status,
     error: state.error,
     challenge: state.challenge,
+    gate: state.gate,
     retry,
   };
 }

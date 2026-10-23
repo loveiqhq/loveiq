@@ -383,7 +383,7 @@ export async function fetchPayToStartRecords(filters: Pick<ApFilters, "from" | "
           "&select=personal_report_id&order=personal_report_id.asc"
       ),
       fetchAllRows<{ personal_report_id: number; amount: number | string | null }>(
-        `/rest/v1/payment?is_test=is.false&personal_report_id=in.(${ids.join(",")})` +
+        `/rest/v1/payment?is_test=is.false&metadata->>gifted=is.null&personal_report_id=in.(${ids.join(",")})` +
           "&status=eq.succeeded&metadata->>plan=in.(full_report,all_reports)" +
           "&select=personal_report_id,amount&order=id.asc"
       ),

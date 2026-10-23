@@ -164,3 +164,4 @@ crosstab
 crosstabs
 Benjamini
 Hochberg
+Studenovic

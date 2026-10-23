@@ -15,6 +15,8 @@ import {
   INITIAL_UNLOCK_CREDIT_CENTS,
   isInitialUnlockPlan,
 } from "@features/report/logic/initialUnlock";
+import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
+import { readInitialGateState } from "@features/report/server/initialGateState";
 import logger from "@shared/observability/logger";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
@@ -453,6 +455,53 @@ interface PricingContext {
   utmTracker: string | null;
   countryCode: string | null;
   behavioralAnswer: string | null;
+  /**
+   * The EUR 1.99 gate's two facts, when the caller already has them (the report route):
+   * the report is in the gate's cohort, the reader holds the initial unlock. Left undefined,
+   * a first quote looks them up (`pinsListPrice`).
+   */
+  initialGateCohort?: boolean;
+  initialUnlock?: boolean;
+}
+
+/**
+ * Who is quoted on arm A3, the list price, instead of their report's hash arm: pay to
+ * start's readers (either offer, bound to this survey) and the EUR 1.99 gate's (its cohort,
+ * and anyone holding the initial unlock, paid or gifted). They are out of the price test's
+ * readouts, the EUR 10 initial credit must leave EUR 19.99 rather than make the EUR 4.99
+ * arm free (`applyInitialCredit` credits A3 alone), and a full-journey buyer on B3 got All
+ * 14 (EUR 6.99 less what they paid) for nothing. What the caller says in the context is
+ * taken as said; the rest is looked up, so a first quote a cron makes is pinned too. A
+ * failed lookup counts as no: the hash arm, as before. Once per context: its plans share it.
+ */
+const listPricePins = new WeakMap<PricingContext, Promise<boolean>>();
+
+function pinsListPrice(
+  context: PricingContext,
+  loadCredits: () => ReturnType<typeof getReportCredits>
+): Promise<boolean> {
+  let pinned = listPricePins.get(context);
+  if (!pinned) {
+    pinned =
+      context.initialGateCohort === true || context.initialUnlock === true
+        ? Promise.resolve(true)
+        : Promise.all([
+            context.initialGateCohort === undefined
+              ? readInitialGateState(context.personalReportId).then(
+                  (state) => state?.cohortAt != null
+                )
+              : false,
+            context.initialUnlock === undefined
+              ? loadCredits().then(
+                  (credits) => credits.initialCents > 0,
+                  () => false
+                )
+              : false,
+            hasBoundEntitlement(context.submissionId),
+          ]).then((pins) => pins.some(Boolean));
+    listPricePins.set(context, pinned);
+  }
+  return pinned;
 }
 
 function getSupabaseServiceConfig() {
@@ -1446,11 +1495,13 @@ async function persistQuote({
 
 async function resolveQuote({
   context,
+  loadCredits,
   now,
   plan,
   pricingSessionId,
 }: {
   context: PricingContext;
+  loadCredits: () => ReturnType<typeof getReportCredits>;
   now: Date;
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
@@ -1459,16 +1510,11 @@ async function resolveQuote({
     personalReportId: context.personalReportId,
     plan,
   });
-  /**
-   * Pay to start's readers (either offer) are quoted on arm A3, the list price, instead of
-   * their report's hash arm: they are out of the price test's readouts already, the EUR 10
-   * initial credit must leave EUR 19.99 rather than make the EUR 4.99 arm free, and a
-   * full-journey buyer on B3 got All 14 (EUR 6.99 less what they paid) for nothing. Asked
-   * only for a first quote: a stored one keeps its arm, and the survey's claim binds the
-   * purchase before the report is first opened. A failed lookup falls back to the hash.
-   */
+  // Arm A3 for the readers `pinsListPrice` names. Asked only for a first quote: a stored
+  // one keeps its arm (the survey's claim binds a pay-to-start purchase, and the gate's
+  // cohort is stamped, before the report is first opened).
   const pinnedArm =
-    !existingQuote && (await hasBoundEntitlement(context.submissionId)) ? ("A3" as const) : null;
+    !existingQuote && (await pinsListPrice(context, loadCredits)) ? ("A3" as const) : null;
 
   const isExpired =
     existingQuote?.expires_at != null &&
@@ -1532,6 +1578,8 @@ async function getValidatedQuoteForContext({
 }
 
 export async function getReportPriceQuoteForContext({
+  initialGateCohort,
+  initialUnlock,
   now = new Date(),
   plan = DEFAULT_REPORT_PURCHASE_PLAN_ID,
   pricingSessionId,
@@ -1541,7 +1589,7 @@ export async function getReportPriceQuoteForContext({
   strictUpgradeCredit = false,
   submissionId,
   userAgent,
-}: {
+}: InitialGateFacts & {
   now?: Date;
   plan?: ReportPurchasePlanId;
   pricingSessionId?: string | null;
@@ -1553,16 +1601,20 @@ export async function getReportPriceQuoteForContext({
   submissionId?: number | null;
   userAgent?: string | null;
 }) {
-  const context = await getPricingContext({
+  const found = await getPricingContext({
     reportSessionId,
     reportToken,
     submissionId,
     userAgent,
   });
 
-  if (!context) {
+  if (!found) {
     return null;
   }
+  const context: PricingContext = { ...found, initialGateCohort, initialUnlock };
+  // The pin and the credit read the same payments: once for both.
+  let credits: ReturnType<typeof getReportCredits> | null = null;
+  const loadCredits = () => (credits ??= getReportCredits(context.personalReportId));
 
   if (typeof quoteId === "number") {
     const validatedQuote = await getValidatedQuoteForContext({
@@ -1574,30 +1626,45 @@ export async function getReportPriceQuoteForContext({
     });
 
     if (validatedQuote) {
-      return withUpgradeCredit(validatedQuote, context.personalReportId, strictUpgradeCredit);
+      return withUpgradeCredit(
+        validatedQuote,
+        context.personalReportId,
+        strictUpgradeCredit,
+        loadCredits
+      );
     }
   }
 
   return withUpgradeCredit(
     await resolveQuote({
       context,
+      loadCredits,
       now,
       plan,
       pricingSessionId,
     }),
     context.personalReportId,
-    strictUpgradeCredit
+    strictUpgradeCredit,
+    loadCredits
   );
 }
 
+/** The EUR 1.99 gate's facts a caller may already hold (`PricingContext`). */
+interface InitialGateFacts {
+  initialGateCohort?: boolean;
+  initialUnlock?: boolean;
+}
+
 export async function getReportPriceQuotesForContext({
+  initialGateCohort,
+  initialUnlock,
   now = new Date(),
   pricingSessionId,
   reportSessionId,
   reportToken,
   submissionId,
   userAgent,
-}: {
+}: InitialGateFacts & {
   now?: Date;
   pricingSessionId?: string | null;
   reportSessionId?: string | null;
@@ -1605,16 +1672,17 @@ export async function getReportPriceQuotesForContext({
   submissionId?: number | null;
   userAgent?: string | null;
 }) {
-  const context = await getPricingContext({
+  const found = await getPricingContext({
     reportSessionId,
     reportToken,
     submissionId,
     userAgent,
   });
 
-  if (!context) {
+  if (!found) {
     return null;
   }
+  const context: PricingContext = { ...found, initialGateCohort, initialUnlock };
 
   // Only the plans the paygate sells. Quoting the retired ones as well would write
   // a row per reader that nothing can show or buy — and throw, since no 3.0 arm
@@ -1626,6 +1694,7 @@ export async function getReportPriceQuotesForContext({
     OFFERED_REPORT_PURCHASE_PLAN_IDS.map(async (plan) => {
       const quote = await resolveQuote({
         context,
+        loadCredits,
         now,
         plan,
         pricingSessionId,
@@ -1659,7 +1728,8 @@ export async function getUpgradeCreditCents(personalReportId: number): Promise<n
  * - `upgradeCents`, All 14's (`getUpgradeCreditCents` above);
  * - `initialCents`, the initial unlock's EUR 10 off the full report
  *   (`features/report/logic/initialUnlock.ts`): granted by a succeeded, non-test EUR 1.99
- *   payment that was not refunded in full, and used up by the report's first full-report
+ *   payment that was not refunded in full, or by E07's day-4 gift (a EUR 0 row marked
+ *   `gifted`), which promises the same EUR 10; used up by the report's first full-report
  *   purchase: one EUR 10, "toward the full Premium Report" (Marcus, 14.10: a EUR 10
  *   voucher), never off every single report bought after it. Its money counts towards
  *   All 14 like any single's, so the two never stack on one plan.
@@ -1689,7 +1759,10 @@ export async function getReportCredits(
     const paid =
       fromEuroAmount(Number(row.amount)) - fromEuroAmount(Number(row.refund_amount ?? 0));
     upgradeCents += Math.max(0, paid);
-    if (isInitialUnlockPlan(row.metadata?.plan) && paid > 0) {
+    if (
+      isInitialUnlockPlan(row.metadata?.plan) &&
+      (paid > 0 || row.metadata?.gifted === INITIAL_UNLOCK_GIFT)
+    ) {
       initialCents = INITIAL_UNLOCK_CREDIT_CENTS;
     }
   }
@@ -1713,11 +1786,12 @@ export function applyUpgradeCredit(
 }
 
 /**
- * Take the initial unlock's EUR 10 off a full-report quote; every other plan comes back as
- * it is. Pay to start's readers are quoted on arm A3 (`resolveQuote`), so theirs is
- * EUR 29.99 - 10 = EUR 19.99; a quote stored on another arm (a failed lookup on the first
- * quote, a purchase attached by hand) keeps its own price, so B3's EUR 4.99 is never made
- * free by the credit. A remainder under Stripe's minimum is credited too, as for All 14.
+ * Take the initial unlock's EUR 10 off a full-report quote on arm A3; every other plan, and
+ * a quote on any other arm, comes back as it is. Its readers (pay to start's, and the
+ * pre-unlock gate's) are quoted on A3 (`pinsListPrice`), so theirs is EUR 29.99 - 10 =
+ * EUR 19.99; a quote stored on another arm before (B3's full report is EUR 4.99) keeps its
+ * own price, never made free by the credit. A remainder under Stripe's minimum is credited
+ * too, as for All 14.
  */
 export function applyInitialCredit(
   quote: ReportPriceQuoteSnapshot,

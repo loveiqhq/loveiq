@@ -198,4 +198,67 @@ describe("useReportData", () => {
       message: "Unable to process request.",
     });
   });
+
+  /**
+   * The EUR 1.99 pre-unlock gate (features/report/logic/initialUnlockGate.ts): for a gated
+   * owner the API sends the gate's payload in place of the report, and the page draws the
+   * gate. Like share verification, it is a state of its own with no report data.
+   */
+  describe("the EUR 1.99 gate", () => {
+    const GATE = {
+      gate: "initial_unlock",
+      priceCents: 199,
+      currency: "EUR",
+      creditCents: 1000,
+      guaranteeDays: 14,
+      reportToken: "rpt_abcdefghij0123456789",
+      submissionId: 55,
+      viewMode: "owner",
+    };
+
+    it("turns the gate's payload into the gated state, with no report", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => GATE,
+      }) as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+
+      await waitFor(() => expect(result.current.status).toBe("gated"));
+      expect(result.current.data).toBeNull();
+      expect(result.current.gate).toEqual(GATE);
+    });
+
+    it("has no gate for a report", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Emotional Voyeur", percentages: {} }),
+      }) as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      expect(result.current.gate).toBeNull();
+    });
+
+    it("asks the preview for the gate with previewGate", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...GATE, reportToken: null, submissionId: null }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() =>
+        useReportData({ preview: true, previewGate: true, v4: true })
+      );
+
+      await waitFor(() => expect(result.current.status).toBe("gated"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report/preview");
+      expect(url).toContain("gate=1");
+    });
+  });
 });
