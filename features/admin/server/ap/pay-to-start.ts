@@ -36,7 +36,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 import { isInitialUnlockGateEnabled } from "@features/report/server/initialGateState";
 
 import { fetchAllRows } from "../supabase";
-import { shortDate } from "./days";
+import { addDays, shortDate } from "./days";
 import { FULL_PLANS, classifySource, preBuysOf, type Facts, type SubFact } from "./facts";
 import { buckets, windowOf, type ApFilters } from "./filters";
 
@@ -118,6 +118,11 @@ export interface PtsView {
   finished: number;
   paid: number;
   revenue: number;
+  /**
+   * The revenue of those who finished the survey: all of it after the report; before it, a
+   * buyer who has not taken the survey yet paid too, and is no survey completion's money.
+   */
+  revenueFinished: number;
 }
 
 /** The board's measures. Rates are 0..1; each is null when what it divides by is missing or 0. */
@@ -218,7 +223,7 @@ export function measuresOf(spend: number | null, clicks: number | null, v: PtsVi
     cvr: ratio(v.paid, v.visits),
     clickCvr: ratio(v.paid, clicks),
     rpv: ratio(v.revenue, v.visits),
-    rpf: ratio(v.revenue, v.finished),
+    rpf: ratio(v.revenueFinished, v.finished),
     cac: ratio(paidFor, v.paid),
     cpf: ratio(paidFor, v.finished),
     roas: ratio(v.revenue, paidFor),
@@ -406,7 +411,9 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
   // Pay to start's buyers: who paid in the range (refunded since or not), and what they kept
   // of it and of what they bought on the report after.
   const rows = input.entitlements.filter(counts);
-  const bought = rows.filter((e) => isPaid(e) && inRange(e.paid_at));
+  // A 100% code's checkout completes at EUR 0: that buyer came in too, and what they buy later
+  // is the journey's money (a paying customer only once something was paid).
+  const bought = rows.filter((e) => isCompleted(e) && inRange(e.paid_at));
   const later = (e: EntitlementRow) =>
     e.consumed_submission_id === null ? [] : (input.laterPays.get(e.consumed_submission_id) ?? []);
   const kept = (e: EntitlementRow) => e.status === "succeeded";
@@ -426,7 +433,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       .map((v) => v.day)
   );
   const soldUnsplit = (offer: PtsOffer, ds: string[] = days) =>
-    bought.some(
+    customers(bought).some(
       (e) =>
         e.offer === offer &&
         unsplitDays.has(dayOf(e.paid_at as string)) &&
@@ -444,11 +451,18 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     );
   };
 
-  const view = (visits: number | null, finished: number, paid: number, revenue: number) => ({
+  const view = (
+    visits: number | null,
+    finished: number,
+    paid: number,
+    revenue: number,
+    revenueFinished = revenue
+  ): PtsView => ({
     visits,
     finished,
     paid,
     revenue: cents(revenue),
+    revenueFinished: cents(revenueFinished),
   });
   const withMeasures = (a: Ads | null, v: PtsView) => ({
     ...v,
@@ -526,12 +540,19 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     const adBuyers = mine.filter((e) => isAd(taggedOf(e.utm_tracker)));
     const finished = (xs: EntitlementRow[]) => xs.filter((e) => e.consumed_submission_id !== null);
     const visits = ptsVisitsOf(offer);
-    const all = view(visits, finished(mine).length, customers(mine).length, sumBy(mine, moneyOf));
+    const all = view(
+      visits,
+      finished(mine).length,
+      customers(mine).length,
+      sumBy(mine, moneyOf),
+      sumBy(finished(mine), moneyOf)
+    );
     const paidView = view(
       ads ? ads.clicks : null,
       finished(adBuyers).length,
       customers(adBuyers).length,
-      sumBy(adBuyers, moneyOf)
+      sumBy(adBuyers, moneyOf),
+      sumBy(finished(adBuyers), moneyOf)
     );
     const price = euros(input.prices[offer]);
     const steps: PtsStep[] = [
@@ -544,7 +565,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
           .length,
         pays: false,
       },
-      { label: `Paid ${price}`, n: mine.filter(kept).length, pays: true },
+      { label: `Paid ${price}`, n: mine.filter((e) => kept(e) && isPaid(e)).length, pays: true },
       { label: "Survey finished", n: finished(mine).length, pays: false },
       {
         label: "Report opened",
@@ -651,6 +672,11 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     );
   if (to >= input.today)
     notes.push("Today is still running: its figures are so far, and the ads lag a few hours.");
+  // Since June, 9 in 10 of pay after the report's customers paid within 4 days of their survey.
+  if (to >= addDays(input.today, -4))
+    notes.push(
+      "Pay after the report is paid after the survey, sometimes days later (the 72-hour email): its last few days here will still grow."
+    );
 
   return { range: { from, to }, funnels, weeks, notes };
 }

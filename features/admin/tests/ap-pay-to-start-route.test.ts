@@ -166,7 +166,9 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     // 700 was paid for first and 702 bought with a 100% code: pay to start's. 701's browser
     // never paid: it took the free survey like anyone, so it is pay after the report's.
     expect(by("after").all).toMatchObject({ visits: 300, finished: 2 });
-    expect(by("full").all).toMatchObject({ visits: 2, paid: 1, finished: 1, revenue: 29.99 });
+    // The 100% code's buyer came in and finished too; paying, only the EUR 29.99 one.
+    expect(by("full").all).toMatchObject({ visits: 2, paid: 1, finished: 2, revenue: 29.99 });
+    expect(by("full").steps.find((s) => s.label === "Paid €29.99")!.n).toBe(1);
     expect(by("pre").all).toMatchObject({ visits: 1, paid: 0, finished: 0 });
     expect(by("gate").live).toBe(false);
 

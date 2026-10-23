@@ -61,8 +61,8 @@ const payload: PtsPayload = {
       true,
       900,
       1200,
-      { visits: 6000, finished: 300, paid: 2, revenue: 59.98 },
-      { visits: 1200, finished: 260, paid: 1, revenue: 29.99 },
+      { visits: 6000, finished: 300, paid: 2, revenue: 59.98, revenueFinished: 59.98 },
+      { visits: 1200, finished: 260, paid: 1, revenue: 29.99, revenueFinished: 29.99 },
       [
         s("Visits", 6000),
         s("Survey started", 500),
@@ -78,8 +78,8 @@ const payload: PtsPayload = {
       true,
       450,
       600,
-      { visits: 500, finished: 5, paid: 6, revenue: 179.94 },
-      { visits: 600, finished: 5, paid: 6, revenue: 179.94 },
+      { visits: 500, finished: 5, paid: 6, revenue: 179.94, revenueFinished: 179.94 },
+      { visits: 600, finished: 5, paid: 6, revenue: 179.94, revenueFinished: 179.94 },
       [
         s("Visits", 500),
         s("Checkout started", 26),
@@ -94,8 +94,8 @@ const payload: PtsPayload = {
       true,
       450,
       640,
-      { visits: 560, finished: 29, paid: 31, revenue: 121.66 },
-      { visits: 640, finished: 28, paid: 30, revenue: 117.67 },
+      { visits: 560, finished: 29, paid: 31, revenue: 121.66, revenueFinished: 121.66 },
+      { visits: 640, finished: 28, paid: 30, revenue: 117.67, revenueFinished: 117.67 },
       [
         s("Visits", 560),
         s("Checkout started", 70),
@@ -111,8 +111,8 @@ const payload: PtsPayload = {
       false,
       0,
       0,
-      { visits: 0, finished: 0, paid: 0, revenue: 0 },
-      { visits: 0, finished: 0, paid: 0, revenue: 0 },
+      { visits: 0, finished: 0, paid: 0, revenue: 0, revenueFinished: 0 },
+      { visits: 0, finished: 0, paid: 0, revenue: 0, revenueFinished: 0 },
       [s("Visits", 0), s("Paid €1.99", 0, true)]
     ),
   ],

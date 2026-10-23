@@ -619,9 +619,83 @@ describe("buildPayToStart, the edges", () => {
   });
 });
 
+describe("buildPayToStart, round two", () => {
+  it("keeps a 100% code's buyer in pay to start, with what they buy later as its money", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({
+            offer: "pre",
+            amount_cents: 0,
+            list_price_cents: 199,
+            consumed_submission_id: 900,
+          }),
+        ],
+        laterPays: new Map([[900, [{ amount: 29.99, plan: "full_report" }]]]),
+      })
+    );
+    const pre = funnel(p, "pre");
+    expect(pre.all).toMatchObject({ finished: 1, paid: 1, revenue: 29.99 });
+    // Its EUR 0 is no sale.
+    expect(step(p, "pre", "Paid €1.99")).toBe(0);
+    expect(step(p, "pre", "Bought the full report")).toBe(1);
+  });
+
+  it("reads revenue per survey completion from the finishers' money only", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, consumed_submission_id: 901 }),
+          ent({ id: 2, consumed_submission_id: 902 }),
+          // Paid, survey not taken yet: no completion's money.
+          ent({ id: 3 }),
+          ent({ id: 4 }),
+        ],
+      })
+    );
+    const full = funnel(p, "full");
+    expect(full.all).toMatchObject({ finished: 2, revenue: 119.96, revenueFinished: 59.98 });
+    expect(full.all.m.rpf).toBeCloseTo(29.99);
+  });
+
+  it("blanks an offer's rates only for a sale on such a day, never for a EUR 0 one", () => {
+    const p = buildPayToStart(
+      input({
+        ptsVisits: [
+          { day: "2026-10-23", offer: null, src: null, n: 4 },
+          { day: "2026-10-24", offer: "full", src: null, n: 20 },
+        ],
+        entitlements: [
+          ent({
+            amount_cents: 0,
+            created_at: "2026-10-23T09:00:00Z",
+            paid_at: "2026-10-23T09:01:00Z",
+          }),
+        ],
+      })
+    );
+    expect(funnel(p, "full").all.visits).toBe(20);
+  });
+
+  it("says pay after the report's last days still grow when the range ends near today", () => {
+    const note = (today: string) =>
+      buildPayToStart(input({ to: "2026-10-25", today })).notes.some((n) =>
+        n.startsWith("Pay after the report is paid after the survey")
+      );
+    expect(note("2026-10-29")).toBe(true);
+    expect(note("2026-10-30")).toBe(false);
+  });
+});
+
 describe("measuresOf", () => {
   it("blanks a cost and ROAS without ad spend, and a rate without its divisor", () => {
-    const m = measuresOf(0, 0, { visits: null, finished: 2, paid: 1, revenue: 29.99 });
+    const m = measuresOf(0, 0, {
+      visits: null,
+      finished: 2,
+      paid: 1,
+      revenue: 29.99,
+      revenueFinished: 29.99,
+    });
     expect(m).toMatchObject({
       cpc: null,
       cac: null,
@@ -634,7 +708,9 @@ describe("measuresOf", () => {
     });
     // Nor a return on ad spend: no ad ran.
     expect(m.net).toBeNull();
-    expect(measuresOf(10, 4, { visits: 4, finished: 1, paid: 1, revenue: 1.99 }).net).toBe(-8.01);
+    expect(
+      measuresOf(10, 4, { visits: 4, finished: 1, paid: 1, revenue: 1.99, revenueFinished: 0 }).net
+    ).toBe(-8.01);
     expect(m.rpf).toBeCloseTo(14.995);
   });
 });
