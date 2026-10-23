@@ -25,7 +25,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { reportingDay } from "@shared/time/reporting-day";
 
-import { Failed, FilterIcon, Loading, PageHeader, SortIcon } from "./kit";
+import { Failed, FilterIcon, ICON_BTN, Loading, PageHeader, SortIcon } from "./kit";
 import { useApRole, useApStatus } from "./status";
 
 const OP_LABELS: Record<Op, string> = {
@@ -1024,7 +1024,7 @@ export default function ApExplorer() {
                                 onClick={() =>
                                   setPreset((p) => ({ at, column: c, n: (p?.n ?? 0) + 1 }))
                                 }
-                                className={`ml-1 inline-flex cursor-pointer border-0 bg-transparent p-0 align-[-1px] ${filters.some((x) => x[0] === c) ? "text-ap-violet" : "text-ap-muted"}`}
+                                className={`ml-0.5 ${ICON_BTN} ${filters.some((x) => x[0] === c) ? "text-ap-violet" : "text-ap-muted"}`}
                               >
                                 <FilterIcon />
                               </button>
@@ -1039,7 +1039,7 @@ export default function ApExplorer() {
                                     dir: sort === c && dir === "desc" ? "asc" : "desc",
                                   })
                                 }
-                                className={`ml-1 inline-flex cursor-pointer border-0 bg-transparent p-0 align-[-1px] ${sort === c ? "text-ap-violet" : "text-ap-muted"}`}
+                                className={`ml-0.5 ${ICON_BTN} ${sort === c ? "text-ap-violet" : "text-ap-muted"}`}
                               >
                                 <SortIcon dir={sort === c ? (dir === "asc" ? 1 : -1) : null} />
                               </button>

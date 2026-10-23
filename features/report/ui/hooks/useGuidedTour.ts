@@ -15,7 +15,7 @@ import {
   type TourReplaySource,
   type TourTrigger,
 } from "@features/report/logic/guidedTour";
-import { findOpenOverlay } from "@features/report/logic/leaveIntent";
+import { findOpenOverlay } from "@features/report/logic/openOverlay";
 import { findTourAnchor } from "@features/report/ui/v3/guidedTourAnchors";
 import { openV4Chapter } from "@features/report/ui/v3/v4OpenChapter";
 import { isProbeRequest } from "@shared/http/probe-cookie";
@@ -104,7 +104,7 @@ let runIds = 0;
  * "Starts on first open, straight at step 1"; `guidedTourKey`), and again whenever the
  * reader asks for it from the chapter menu. The page renders V4GuidedTour from `run`.
  *
- * Remembered as soon as it starts, like the leave offer's record: a reader who reloads in
+ * Remembered as soon as it starts: a reader who reloads in
  * the middle of it has seen it, and can replay it. Never started over something else that
  * is open, before the cookie question is settled, in a hidden tab, or for a reader who has
  * already begun to scroll (they are reading; it waits for their next visit).

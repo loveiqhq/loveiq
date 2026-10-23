@@ -87,7 +87,7 @@ For admin work, start with [docs/admin/AGENT_README.md](docs/admin/AGENT_README.
 - [docs/api.md](docs/api.md) - public API reference
 - [docs/survey.md](docs/survey.md) - survey runtime, persistence, and recovery flow
 - [docs/admin-api.md](docs/admin-api.md) - admin API route catalog
-- [docs/admin-dashboard.md](docs/admin-dashboard.md) - admin shell, command center, and stats dashboard reference
+- [docs/admin-dashboard.md](docs/admin-dashboard.md) - admin pages (AP-Analytics), shell, and sign-in reference
 - [docs/admin/AGENT_README.md](docs/admin/AGENT_README.md) - admin domain router across routes, APIs, UI, and logic
 - [docs/versions.md](docs/versions.md) - single source of truth for pinned versions
 - [docs/doc-inventory.md](docs/doc-inventory.md) - project documentation inventory

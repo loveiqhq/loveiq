@@ -31,6 +31,22 @@ export type TourOutcome = "completed" | "skipped";
 export type TourSkipSource = "skip_button" | "escape" | "browser_back";
 /** Where "Replay the Tour" was tapped: the phone's chapter drawer or the desktop sidebar. */
 export type TourReplaySource = "drawer" | "sidebar";
+/**
+ * Whose tour it is, from whether it has the unlock stop: a stop whose control is missing is
+ * dropped, so the number of stops alone cannot tell a free reader from a paid one.
+ */
+export type TourAudience = "free" | "paid";
+
+/**
+ * One stop a run reached, as its stored end carries it (tour_completed, tour_skipped,
+ * tour_left): how long its bubble was up over every visit, and how often the reader went
+ * Back from it. A run's stops come in its own order, from its first.
+ */
+export interface TourStopSummary {
+  id: TourStepId;
+  ms: number;
+  back: number;
+}
 
 /** Every stop, in order. The last is only for readers who have not paid. */
 export const TOUR_STEP_IDS: readonly TourStepId[] = [

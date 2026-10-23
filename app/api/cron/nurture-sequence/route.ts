@@ -9,6 +9,9 @@
  *                        email; the 6h "report ready"/"unlock" reminders and the
  *                        old 30h/54h discount ladder were retired — no more nudges)
  *
+ * Skips every reader the unlock-feedback email was sent or may have been sent to (an
+ * `unlock_feedback` row).
+ *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
  * of stage strings) on the `full_report` quote row for the submission. Per-
  * user Stripe promotion codes are stored alongside in
@@ -37,10 +40,17 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
-import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
+import {
+  getReportPlanByPersonalReportId,
+  hasInitialUnlockByPersonalReportId,
+} from "@features/report/server/planAccess";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
 import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
+import {
+  readInitialGateCohortIds,
+  readInitialUnlockGateSwitch,
+} from "@features/report/server/initialGateState";
 // The 50%-off template is timing-agnostic (it references the code's 24h expiry,
 // not the send hour), so the single 72h discount stage reuses it as-is.
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
@@ -204,6 +214,22 @@ async function fetchFullReportQuote(submissionId: number): Promise<FullReportQuo
   if (!r.ok) return null;
   const rows = (await r.json()) as FullReportQuote[];
   return rows[0] ?? null;
+}
+
+/**
+ * Whether the unlock-feedback email went, or may have gone, to this reader
+ * (app/api/cron/unlock-feedback): it offers the full report free for one answer, so a -50%
+ * code days later would undercut it, and Eman decided on 18 Oct that it skips them. Any row
+ * counts, not only one with `sent_at`: the send keeps its claim without a time when Resend
+ * timed out, and that email may well have arrived. A claim freed after a refusal is deleted.
+ */
+async function unlockFeedbackSent(submissionId: number): Promise<boolean> {
+  const r = await supabaseFetch(
+    // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
+    `/rest/v1/unlock_feedback?survey_submission_id=eq.${submissionId}&select=id&limit=1`
+  );
+  if (!r.ok) throw new Error(`unlock_feedback_lookup_failed:${r.status}`);
+  return ((await r.json()) as unknown[]).length > 0;
 }
 
 async function fetchAccessToken(submissionId: number): Promise<string | null> {
@@ -521,6 +547,9 @@ interface StageSummary {
   skippedNoToken: number;
   skippedNoQuote: number;
   skippedNoPromo: number;
+  skippedUnlockFeedback: number;
+  /** In the EUR 1.99 gate's cohort: the gate and its day-4 gift (E07) are their offer. */
+  skippedInitialGate: number;
   failed: number;
 }
 
@@ -535,6 +564,8 @@ function newStageSummary(): StageSummary {
     skippedNoToken: 0,
     skippedNoQuote: 0,
     skippedNoPromo: 0,
+    skippedUnlockFeedback: 0,
+    skippedInitialGate: 0,
     failed: 0,
   };
 }
@@ -549,6 +580,9 @@ interface RouteContext {
   // Run-level collector of "<stage>: <reason>" strings for failed sends/rows so
   // the aggregate alert is self-diagnosing instead of forcing a Vercel log dive.
   failureReasons: string[];
+  // The batch's reports in the EUR 1.99 gate's cohort, read once per run unless the gate is
+  // switched off; empty when it is, so everyone is emailed as before.
+  initialGateCohort: ReadonlySet<number>;
 }
 
 async function processCandidate(
@@ -573,6 +607,27 @@ async function processCandidate(
     if (!email) {
       summary.skippedNoEmail++;
       return;
+    }
+
+    // The EUR 1.99 gate's readers (Pre-unlock): no 50% code beside the gate's own EUR 1.99,
+    // its EUR 10 credit and the day-4 gift. Before the token, so no quote is made for them.
+    if (ctx.initialGateCohort.has(candidate.id)) {
+      summary.skippedInitialGate++;
+      return;
+    }
+
+    // Before the token and quote lookups, which a reader skipped here does not need. A failed
+    // lookup carries on, like the paid check below: it must not stop every discount email.
+    try {
+      if (await unlockFeedbackSent(candidate.survey_submission_id)) {
+        summary.skippedUnlockFeedback++;
+        return;
+      }
+    } catch (err) {
+      logger.warn(
+        { err, submissionId: candidate.survey_submission_id },
+        "nurture-sequence: unlock-feedback check failed; continuing"
+      );
     }
 
     // Token resolves first because (a) it's needed for the CTA URL and (b) the
@@ -603,6 +658,12 @@ async function processCandidate(
     try {
       const currentPlan = await getReportPlanByPersonalReportId(candidate.id);
       if (currentPlan) {
+        summary.skippedPaid++;
+        return;
+      }
+      // The EUR 1.99 initial report's buyer has paid too, and holds EUR 10 off the full
+      // report: no 50% code beside it (as the pre-unlock gate skips its own readers).
+      if (await hasInitialUnlockByPersonalReportId(candidate.id)) {
         summary.skippedPaid++;
         return;
       }
@@ -816,6 +877,7 @@ export async function GET(request: Request) {
     unsubSecret: process.env.UNSUBSCRIBE_SECRET,
     deadlineAtMs: startMs + resolveTimeBudgetMs(),
     failureReasons: [],
+    initialGateCohort: new Set<number>(),
   };
 
   const summaries: Record<Stage, StageSummary> = {
@@ -824,6 +886,17 @@ export async function GET(request: Request) {
 
   try {
     const seventyTwoCandidates = await fetchCandidatesByAge(AGE_WINDOWS.seventyTwo);
+    // Unless the gate is switched off: a switch that can't be read reads the cohort as if
+    // it were on, so a failed read never sends the cohort a 50% code.
+    if (seventyTwoCandidates.length > 0 && (await readInitialUnlockGateSwitch()) !== false) {
+      const cohort = await readInitialGateCohortIds(
+        seventyTwoCandidates.map((candidate) => candidate.id)
+      );
+      // Unread, the run stops: a gated reader must not get a 50% code on a guess (it beats the
+      // gate's EUR 10 credit). The 72h window spans two runs, so the next hour tries again.
+      if (cohort === null) throw new Error("initial_gate_cohort_unreadable");
+      ctx.initialGateCohort = cohort;
+    }
 
     // Single discount stage (pricing 2.0): one −50% code at 72h. The prior 6h
     // "report ready"/"unlock" reminders and the 30h(50%)/54h(75%) discount

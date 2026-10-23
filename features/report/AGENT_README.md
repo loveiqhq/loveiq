@@ -24,16 +24,9 @@ countdown).
 - `ui/reportPlaceholders.ts` — `{{USER_NAME}}`-style substitution, shared by both.
 - `ui/ReportPricingModal.tsx` + `ui/paygate.css` — the Pricing 3.0 paygate (Figma 842:584 phone, 963:6 desktop).
 - `ui/unlockAnchor.ts` — returns a buyer to the spot they paid from, through Stripe's success and cancel URLs.
-- `logic/leaveIntent.ts` + `ui/hooks/useLeaveIntent.ts` — the founder-call leave offer's trigger
-  (dialog: `features/booking/ui/FounderCallDialog.tsx`). An unpaid V4 owner who just finished the
-  survey in this tab is offered their full report free for a 20-minute call, once per submission,
-  1.6 s after the first chapter's paywall comes into view (on every device; Fatih, 14.10): its
-  "Unlock Full Chapter" wall, or the fold that holds it (`FIRST_PAYWALL_SELECTOR`). Part II's
-  Summary gate does not count. Anything in
-  the way only delays it: another window, the cookie banner, a hidden tab, or the 30 s after the
-  pay pop-up test's point (`logic/plansOffer.ts` shares that test's key). Never on a return
-  visit. Off without `NEXT_PUBLIC_FOUNDER_CALL_URL`;
-  `?leave=on|off|show` previews it off production.
+- `logic/paywallSelector.ts` — `FIRST_PAYWALL_SELECTOR`, where the page reports "paywall reached":
+  the first chapter's "Unlock Full Chapter" wall, or the fold that holds it. Part II's Summary
+  gate does not count (Fatih, 16.10).
 - `logic/guidedTour.ts` + `ui/hooks/useGuidedTour.ts` + `ui/v3/V4GuidedTour.tsx` — the guided
   tour (see "The guided tour" below).
 - `ui/ShareReportModal.tsx`, `ui/SharedViewerBanner.tsx`, `ui/ShareVerifyGate.tsx` — share flow.
@@ -124,15 +117,68 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
   overflow, Lenis stopped, swipes cancelled. `shared/ui/guided-tour-state.ts` tells the
   scroll-driven signals the scrolling is the tour's: the plans pop-up trigger, the paywall ping,
   chapter time, `cta_seen`, scroll depth and Typical Beliefs' midline rows stand down without
-  letting go, and the leave offer is off.
+  letting go.
 - **Analytics.** `tour_started`, `tour_step_viewed {n, id}`, `tour_back {to}`,
-  `tour_skipped {at, source}`, `tour_completed` and `tour_replayed` go to PostHog; a first run's
-  start and outcome, and each replay, are also stored (`analytics_event`, the submission
-  timeline).
+  `tour_skipped {at, source}`, `tour_completed`, `tour_left {at}` and `tour_replayed` go to
+  PostHog; a first run's start and end, and each replay, are also stored (`analytics_event`).
+  Starts and ends carry `audience` (`free` with the unlock stop, `paid`
+  without); each end carries `stops: [{id, ms, back}]`, every stop the run reached with its time
+  on screen and its Back presses, so the AP Report page's tour table needs no event per step.
+  `tour_left` is sent on `pagehide` alone, when the page goes for good (not `persisted`): a tab
+  switched away and back has not left, and a page kept in the back-forward cache may come back
+  with the tour still up. A run with no end at all counts as left, at no stop.
 - **Tests.** `tests/guidedTour.test.ts`, `tests/guidedTourAnchors.test.ts`,
   `tests/V4GuidedTour.test.tsx`, `tests/hooks/useGuidedTour.test.tsx`, the tour block of
   `tests/ReportPage.test.tsx`, and `e2e/report-guided-tour.spec.ts`. The other report e2e specs
   start as a browser that has seen it (`mockReport` seeds the key).
+
+**The EUR 1.99 pre-unlock gate (2026-10-20).** A reader who finished the free survey meets a
+forced EUR 1.99 "Core Archetype" page before their report (Figma Report-3.0 `1604:2328`, the
+page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runbook:
+`docs/runbooks/PRE_UNLOCK.md`.
+
+- **Who meets it.** Decided on the server, in `/api/report`, by `needsInitialUnlockGate`
+  (`logic/initialUnlockGate.ts`): the gate is on, the paywall is enforced, the reader is the
+  owner, their report is in the cohort, and they hold nothing — no plan on any archetype, no
+  initial unlock (paid or gifted), no live pay-to-start entitlement. Any lookup that fails opens
+  the report: an outage never asks a buyer for EUR 1.99. Shared views and old reports never meet
+  it, and a gated owner can't mint share links (403 `initial_unlock_required`).
+- **The cohort.** `personal_report.initial_gate_cohort_at`, stamped when the survey is submitted
+  while `report_initial_unlock_gate` is on (a pay-to-start reader only after their claim, and
+  never one who paid or whose claim failed); `initial_gate_seen_at` is the gate's first view
+  (its "paywall reached", and E07's clock). Read only through `server/initialGateState.ts`,
+  which fails soft; never in the report lookup's select. A gate view is not a report open: no
+  `report_session` row and no Slack journey step until the gate lets the reader through.
+- **Who else reads it.** While the gate is on, the 72h 50% email (which stops its run if the
+  cohort can't be read) and the unlock-feedback email skip the cohort; an unreadable switch
+  reads as on for them (`readInitialUnlockGateSwitch`). The brain's A/B readouts leave it out
+  of the price lists whatever the switch says (pricing pins it to A3) and never count a
+  EUR 1.99 as a report bought; the digest's SQL readouts don't yet (see the runbook).
+- **The answer.** A gated owner gets `buildInitialUnlockGatePayload` instead of the report —
+  price, credit, guarantee, the token and the submission id, nothing of the report —
+  `useReportData` turns it into `status: "gated"`, and `ReportPage` draws
+  `ui/gate/InitialUnlockGate.tsx` in its place: a page of its own, never a pop-up.
+- **Buying it.** `POST /api/stripe/initial-unlock` (plan `initial`, EUR 1.99 from pay to start's
+  `PRE_OFFER`) → Stripe → fulfillment records a payment with `metadata.plan = "initial"` and
+  never touches `personal_report.payment_*` (pay to start's EUR 1.99 does, and so do its
+  refunds: `wroteReportPaymentFields`) → E06 (`server/emails/initial-unlock.ts`) → the
+  return page sends the reader to `/report/<token>?unlocked=initial`, which opens at the top.
+  The reader then has the Core Archetype card and the Summary, and EUR 10 off the full report
+  on arm A3 (EUR 19.99, the credit on Stripe's line, so codes still work).
+- **E07, day 4.** `app/api/cron/initial-unlock-gift` gives 80% of the readers still unpaid four
+  days after the gate the unlock as a EUR 0 payment (`metadata.gifted = "e07"`) and E07
+  (`server/emails/initial-unlock-gift.ts`); 20% are held out (`initial_gift_arm`). Behind
+  `initial_unlock_gift_email`. Left out of both arms: a reader who paid (refunded or disputed
+  included), one whose address is suppressed or can't be checked yet, and a report whose
+  person already has an arm on another one (a retake). The gift is never a sale: admin readers leave it out
+  (`features/admin/tests/payment-gift-exclusion.test.ts`).
+- **Previews.** `/report?preview=1&v4=1&gate=1` draws the gate off production;
+  `/report?preview=1&v4=1&plan=initial` the report after the EUR 1.99; the emails at
+  `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`.
+- **Tests.** `tests/initialUnlockGate.test.ts`, `tests/initialGateState.test.ts`,
+  `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`, the gate blocks of
+  `tests/report-handler.test.ts`, `tests/ReportPage.test.tsx` and
+  `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`.
 
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 

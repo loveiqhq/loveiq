@@ -10,7 +10,7 @@ import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
 import V4SummaryChapter from "@features/report/ui/v3/V4SummaryChapter";
 import V4TopThreeSection from "@features/report/ui/v3/V4TopThreeSection";
 import { reportThemes } from "@features/report/ui/reportTheme";
-import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/leaveIntent";
+import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/paywallSelector";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { report4ArchetypeBlurbs } from "@/data/report3-archetype-blurbs";
 import { buildArchetypeCard } from "@/data/report3-archetype-card";
@@ -144,7 +144,7 @@ describe("Part II's half-locked Summary (1665:3796)", () => {
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
-  it("is not the first paywall the founder-call offer and 'paywall reached' wait for", () => {
+  it("is not the first paywall that 'paywall reached' waits for", () => {
     const { container } = render(
       <>
         <V4PremiumCard placement="summary" />

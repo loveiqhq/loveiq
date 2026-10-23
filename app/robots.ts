@@ -9,7 +9,8 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 //   /survey    — interactive UX flow, indexable rendering would be misleading
 //   /checkout  — transactional flow, no SEO value
 //   /login     — auth/staging gate, no SEO value
-const SHARED_DISALLOW = ["/api/", "/admin", "/report", "/survey", "/checkout", "/login"];
+//   /why       — one reader's answer to the unlock-feedback email, reached only from it
+const SHARED_DISALLOW = ["/api/", "/admin", "/report", "/survey", "/checkout", "/login", "/why"];
 
 // Explicit allowlist for the major AI-training and AI-search crawlers, so
 // our policy toward them is intentional rather than defaulted-to via the `*`

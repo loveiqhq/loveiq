@@ -13,10 +13,19 @@ import {
   deltaRel,
   EMPTY,
   fmt,
-  sparkPoints,
+  sparkGeometry,
   type Tone,
   type Unit,
 } from "@features/admin/server/ap/format";
+
+import { IndexHover } from "./hover";
+
+/**
+ * A table heading's sort or filter icon: a 24 × 24 target (WCAG 2.2's minimum) around the
+ * 11px icon, its margin pulled in so the heading keeps its height.
+ */
+export const ICON_BTN =
+  "-my-[5px] inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 align-middle";
 
 const TONE_TEXT: Record<Tone, string> = {
   good: "text-ap-good",
@@ -92,36 +101,106 @@ export function SectionHead({
   );
 }
 
-/** A trend line in a 120 × 36 box. */
+/**
+ * A trend line in a 120 × 36 box, broken where a point has no figure. Given each point's
+ * title, it reads out its point on hover, tap or (when focusable) the arrow keys.
+ */
 export function Spark({
   values,
   color = "#795fc8",
   height = 36,
+  titles,
+  name = "Value",
+  unit = "count",
+  digits,
+  suffix = "",
+  focusable = true,
+  onPick,
+  tapReads,
 }: {
   values: Array<number | null>;
   color?: string;
   height?: number;
+  /** Each point's period ("5 Oct – 11 Oct 2026"), for the read-out; none, no read-out. */
+  titles?: string[];
+  /** The figure in the read-out ("Revenue"). */
+  name?: string;
+  unit?: Unit;
+  digits?: number;
+  /** After each value, as the tile writes it ("0.02×"). */
+  suffix?: string;
+  /** Off inside a link or a picked row, which keep the keyboard. */
+  focusable?: boolean;
+  onPick?: (i: number) => void;
+  /** A tap only reads, where picking takes the reader away. */
+  tapReads?: boolean;
 }) {
-  const points = sparkPoints(values, height);
-  if (!points) return <div aria-hidden="true" style={{ height }} />;
+  const g = sparkGeometry(values, height);
+  if (!g) return <div aria-hidden="true" style={{ height }} />;
+  const n = values.length;
+  const read = Boolean(titles && titles.length === n && n > 0);
+  const xs = values.map((_, i) => (g.x(i) / 120) * 100);
+  const yPct = (v: number) => ((height - g.y(v)) / height) * 100;
+  // The tile's decimals, unless they round a point to nothing ("0%" for 0.4%): fmt's own then.
+  const show = (v: number) => {
+    if (digits === undefined || v === 0) return fmt(unit, v, digits);
+    const scaled = Math.abs(v) * (unit === "pct" ? 100 : 1) * 10 ** digits;
+    return fmt(unit, v, Math.round(scaled) === 0 ? undefined : digits);
+  };
   return (
-    <svg
-      viewBox={`0 0 120 ${height}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-      className="w-full"
-      style={{ height }}
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+    <div className="relative" style={{ height }}>
+      <svg
+        viewBox={`0 0 120 ${height}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full overflow-visible"
+      >
+        {g.runs.map((points) => (
+          <polyline
+            key={points}
+            points={points}
+            fill="none"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+      {read && (
+        <IndexHover
+          xs={xs}
+          label={`${name}, trend`}
+          focusable={focusable}
+          onPick={onPick}
+          tapReads={tapReads}
+          tip={(i) => {
+            const v = values[i];
+            const has = v !== null && v !== undefined && Number.isFinite(v);
+            return {
+              title: titles![i]!,
+              rows: [
+                {
+                  label: name,
+                  value: has ? show(v) + suffix : EMPTY,
+                  color,
+                  mark: "line",
+                  muted: !has,
+                },
+              ],
+              note: has ? null : "No figure for this period.",
+            };
+          }}
+          markers={(i) => {
+            const v = values[i];
+            return v !== null && v !== undefined && Number.isFinite(v)
+              ? [{ y: yPct(v), color }]
+              : [];
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -136,10 +215,13 @@ export function KpiTile({
   tile,
   size = "lg",
   level = false,
+  titles,
 }: {
   tile: Tile;
   size?: "lg" | "md";
   level?: boolean;
+  /** Each trend point's period, for its read-out. */
+  titles?: string[];
 }) {
   const d = tile.blocked
     ? null
@@ -164,7 +246,13 @@ export function KpiTile({
             </span>
           )}
         </span>
-        <Spark values={tile.blocked ? [] : tile.spark} />
+        <Spark
+          values={tile.blocked ? [] : tile.spark}
+          titles={titles}
+          name={tile.line ?? tile.label}
+          unit={tile.unit}
+          focusable={!tile.href}
+        />
         <span className="text-xs leading-normal text-ap-muted">{tile.blocked ?? tile.foot}</span>
       </>
     ) : (
@@ -176,7 +264,13 @@ export function KpiTile({
           {d ? " " : ""}
           {tile.blocked ?? tile.foot}
         </span>
-        <Spark values={tile.blocked ? [] : tile.spark} />
+        <Spark
+          values={tile.blocked ? [] : tile.spark}
+          titles={titles}
+          name={tile.line ?? tile.label}
+          unit={tile.unit}
+          focusable={!tile.href}
+        />
         {!tile.blocked && tile.trend && (
           <span className="text-[11px] text-ap-muted">{tile.trend}</span>
         )}
@@ -209,6 +303,8 @@ export function KpiTileV2({
   digits,
   suffix = "",
   negativeBad = false,
+  titles,
+  foot = false,
 }: {
   tile: Tile;
   level?: boolean;
@@ -218,6 +314,13 @@ export function KpiTileV2({
   suffix?: string;
   /** A value below zero in red, as the design draws a loss. */
   negativeBad?: boolean;
+  /** Each trend point's period, for its read-out. */
+  titles?: string[];
+  /**
+   * The tile's own grey line after the change, where the design writes one under every value
+   * ("96.6% of 1,240 sent") and the page compares too (Unlock feedback).
+   */
+  foot?: boolean;
 }) {
   const d =
     tile.blocked || tile.note !== undefined ? null : deltaRel(tile.value, tile.prev, tile.goodWhen);
@@ -241,6 +344,11 @@ export function KpiTileV2({
         >
           {tile.note}
         </span>
+      ) : foot ? (
+        <span className="text-sm font-bold leading-[1.4] tabular-nums text-ap-muted">
+          {d && <span className={`whitespace-nowrap ${TONE_TEXT[d.tone]}`}>{d.text} · </span>}
+          {tile.foot}
+        </span>
       ) : (
         <span
           className={`whitespace-nowrap text-sm font-bold leading-[1.4] tabular-nums ${TONE_TEXT[d?.tone ?? "flat"]}`}
@@ -248,7 +356,17 @@ export function KpiTileV2({
           {d?.text ?? EMPTY}
         </span>
       )}
-      <Spark values={tile.blocked ? [] : tile.spark} />
+      {tile.share && !tile.blocked && (
+        <span className="text-xs leading-snug text-ap-muted">{tile.share}</span>
+      )}
+      <Spark
+        values={tile.blocked ? [] : tile.spark}
+        titles={titles}
+        name={tile.line ?? tile.label}
+        unit={tile.unit}
+        digits={digits}
+        suffix={suffix}
+      />
     </div>
   );
 }
@@ -580,7 +698,7 @@ export function DataTable({
                         if (filtering) setFilter("");
                         setFiltering(!filtering);
                       }}
-                      className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
+                      className={`ml-0.5 ${ICON_BTN} ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
                     >
                       <FilterIcon />
                     </button>
@@ -596,7 +714,7 @@ export function DataTable({
                             : { col: i, dir: i ? -1 : 1 }
                         )
                       }
-                      className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
+                      className={`ml-0.5 ${ICON_BTN} ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
                     >
                       <SortIcon dir={sort?.col === i ? sort.dir : null} />
                     </button>

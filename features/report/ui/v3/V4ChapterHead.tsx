@@ -93,12 +93,27 @@ export const V4ChapterChevron: FC = () => (
 );
 
 /**
- * The same disc on a section row inside a chapter (the slimmed report's "Button" rows,
- * 1686:10509), under its own class: the chapter's open state styles every
- * `.rv4-chapter__chev` inside it, and a section opens and closes on its own.
+ * A section row's disc inside a chapter (the slimmed report's "Button" rows, 1686:10509),
+ * drawn apart from the chapter's so the two levels do not look alike (Mark, 22.10: "They
+ * should be dotted and I made them a bit smaller"): 28px, white, a dotted ring (Figma
+ * 1686:10514, 1.5px inside, 1px dashes and gaps, the violet at 20%) and the chevron
+ * pointing down while the section is open, as every expanded-chapter frame draws it. The
+ * ring is an SVG circle so the dots are the frame's on every browser, where a CSS
+ * `dotted` border draws its own spacing.
  */
 export const V4SectionChevron: FC = () => (
-  <span className="rv4-sect__chev" aria-hidden="true">
+  <span className="rv4-sect__chev" aria-hidden="true" data-node-id="1686:10514">
+    <svg className="rv4-sect__ring" viewBox="0 0 28 28" fill="none">
+      <circle
+        cx="14"
+        cy="14"
+        r="13.25"
+        stroke="currentColor"
+        strokeOpacity="0.2"
+        strokeWidth="1.5"
+        strokeDasharray="1 1"
+      />
+    </svg>
     <Chevron />
   </span>
 );

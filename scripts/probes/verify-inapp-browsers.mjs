@@ -33,6 +33,21 @@ import { touchScroll } from "./touch.mjs";
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
 const TOKEN = process.env.QA_TOKEN_LOCKED ?? "rpt_a9LY0Obbla1FVsclJ1nM";
 
+/**
+ * A site that does not answer is "could not measure", said at once. WebKit waits out its
+ * whole 90s goto timeout on a refused connection, twice here, and the contract check stops
+ * a probe at 120s: the stopped run exits 1, read as a defect, and the probe guard was red
+ * every day from 2026-10-05 for that alone. /api/health is outside the staging gate and
+ * records nothing.
+ */
+const reachable = await fetch(`${ORIGIN}/api/health`, { signal: AbortSignal.timeout(15_000) })
+  .then((r) => r.status < 500)
+  .catch(() => false);
+if (!reachable) {
+  console.log(`INCONCLUSIVE (3) — ${ORIGIN} did not answer; nothing was measured`);
+  process.exit(3);
+}
+
 const IG_IOS =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 300.0.0.29.110 (iPhone15,3; iOS 18_7; en_US; en; scale=3.00; 1179x2556; 500000000)";
 const IG_ANDROID =

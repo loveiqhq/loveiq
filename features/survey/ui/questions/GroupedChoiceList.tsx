@@ -102,9 +102,13 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
     // resizes the list, and the count read during either was off by a heading.
     window.addEventListener("animationend", measure);
     window.addEventListener("transitionend", measure);
-    // Opening or closing a category changes the list's height without a scroll.
+    // Opening or closing a category changes the list's height without a scroll, and the
+    // footer grows when it shows a blocked Next's hint: the pill stayed on the old edge,
+    // over the hint.
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(list);
+    const footer = document.querySelector("[data-survey-footer]");
+    if (footer) observer?.observe(footer);
     return () => {
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);

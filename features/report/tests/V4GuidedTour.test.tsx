@@ -8,6 +8,7 @@ const analytics = vi.hoisted(() => ({
   trackTourBack: vi.fn(),
   trackTourSkipped: vi.fn(),
   trackTourCompleted: vi.fn(),
+  trackTourLeft: vi.fn(),
 }));
 vi.mock("@features/analytics/client", () => analytics);
 
@@ -147,7 +148,11 @@ describe("the guided tour", () => {
     expect(button("Skip Tour")).toBeTruthy();
     expect(button("Next")).toBeTruthy();
     expect(button("Back")).toBeNull();
-    expect(analytics.trackTourStarted).toHaveBeenCalledWith({ trigger: "auto", steps: 5 });
+    expect(analytics.trackTourStarted).toHaveBeenCalledWith({
+      trigger: "auto",
+      audience: "free",
+      steps: 5,
+    });
     expect(analytics.trackTourStepViewed).toHaveBeenCalledWith({
       trigger: "auto",
       n: 1,
@@ -199,6 +204,11 @@ describe("the guided tour", () => {
     render(<V4GuidedTour trigger="auto" includeUnlock={false} onDone={vi.fn()} />);
     arrive();
     expect(stepLabel()).toBe("Step 1 of 4");
+    expect(analytics.trackTourStarted).toHaveBeenCalledWith({
+      trigger: "auto",
+      audience: "paid",
+      steps: 4,
+    });
     for (let n = 1; n < 4; n += 1) {
       fireEvent.click(button("Next")!);
       arrive();
@@ -216,6 +226,12 @@ describe("the guided tour", () => {
     render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);
     arrive();
     expect(stepLabel()).toBe("Step 1 of 4");
+    // Four stops, and still a free reader's tour: whose it is comes from the unlock stop.
+    expect(analytics.trackTourStarted).toHaveBeenCalledWith({
+      trigger: "auto",
+      audience: "free",
+      steps: 4,
+    });
     fireEvent.click(button("Next")!);
     arrive();
     expect(document.querySelector(".rv4-tour__title")?.textContent).toBe("Show or Hide Chapters");
@@ -254,12 +270,49 @@ describe("the guided tour", () => {
     expect(analytics.trackTourSkipped).toHaveBeenCalledWith(
       expect.objectContaining({
         trigger: "auto",
+        audience: "free",
         at: 3,
         id: "chapter_toggle",
         steps: 5,
         source: "escape",
+        stops: [
+          { id: "chapter_menu", ms: expect.any(Number), back: 0 },
+          { id: "show_all", ms: expect.any(Number), back: 0 },
+          { id: "chapter_toggle", ms: expect.any(Number), back: 0 },
+        ],
       })
     );
+  });
+
+  it("gives each stop reached its time on screen, over every visit, and its Back presses", () => {
+    render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);
+    arrive();
+    run(3_000);
+    // Five seconds in, Next: the menu's bubble came up a few frames after the start.
+    fireEvent.click(button("Next")!);
+    arrive();
+    fireEvent.click(button("Next")!);
+    arrive();
+    fireEvent.click(button("Back")!);
+    arrive();
+    fireEvent.click(button("Back")!);
+    arrive();
+    fireEvent.click(button("Next")!);
+    arrive();
+    fireEvent.click(button("Skip Tour")!);
+    const [skipped] = analytics.trackTourSkipped.mock.calls[0]!;
+    expect(skipped).toMatchObject({ at: 2, id: "show_all", steps: 5 });
+    expect(skipped.stops.map(({ id, back }: { id: string; back: number }) => [id, back])).toEqual([
+      ["chapter_menu", 0],
+      ["show_all", 1],
+      ["chapter_toggle", 1],
+    ]);
+    // The menu was up twice: just under five seconds, then again after the two Backs. The
+    // scrolling and the spotlight's travel between stops are the tour's, not the reader's.
+    const [menu, showAll, toggle] = skipped.stops as Array<{ ms: number }>;
+    expect(menu!.ms).toBeGreaterThan(5_000);
+    expect(menu!.ms).toBeLessThan(7_000);
+    for (const stop of [showAll!, toggle!]) expect(stop.ms).toBeGreaterThan(0);
   });
 
   it("ends from its Skip Tour link", () => {
@@ -289,8 +342,76 @@ describe("the guided tour", () => {
     expect(window.scrollY).toBe(0);
     expect(onDone).toHaveBeenCalledWith("completed");
     expect(analytics.trackTourCompleted).toHaveBeenCalledWith(
-      expect.objectContaining({ trigger: "auto", steps: 5 })
+      expect.objectContaining({ trigger: "auto", audience: "free", steps: 5 })
     );
+    const [completed] = analytics.trackTourCompleted.mock.calls[0]!;
+    expect(completed.stops.map(({ id }: { id: string }) => id)).toEqual([
+      "chapter_menu",
+      "show_all",
+      "chapter_toggle",
+      "try_this",
+      "unlock",
+    ]);
+    for (const stop of completed.stops) expect(stop).toMatchObject({ back: 0 });
+    for (const stop of completed.stops) expect(stop.ms).toBeGreaterThan(0);
+  });
+
+  it("tells the reader left when the page goes with the tour up: once, at the stop on screen", () => {
+    render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);
+    arrive();
+    fireEvent.click(button("Next")!);
+    arrive();
+    // A tab switched away and back has not left: the tour is still there on return.
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    // Kept in the back-forward cache, the page may come back with the tour up: not yet.
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    expect(analytics.trackTourLeft).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
+    expect(analytics.trackTourLeft).toHaveBeenCalledTimes(1);
+    expect(analytics.trackTourLeft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: "auto",
+        audience: "free",
+        at: 2,
+        id: "show_all",
+        steps: 5,
+        stops: [
+          { id: "chapter_menu", ms: expect.any(Number), back: 0 },
+          { id: "show_all", ms: expect.any(Number), back: 0 },
+        ],
+      })
+    );
+    const [left] = analytics.trackTourLeft.mock.calls[0]!;
+    // The stop on screen counts up to the moment the page went.
+    expect(left.stops[1].ms).toBeGreaterThan(0);
+  });
+
+  it("never tells a run left before it starts, or once it was skipped or seen through", () => {
+    const hide = () =>
+      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
+    const first = render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);
+    // Before its first frame: no stop yet, and no start told.
+    hide();
+    arrive();
+    fireEvent.click(button("Skip Tour")!);
+    hide();
+    first.unmount();
+
+    render(<V4GuidedTour trigger="auto" includeUnlock={false} onDone={vi.fn()} />);
+    arrive();
+    for (let n = 1; n < 4; n += 1) {
+      fireEvent.click(button("Next")!);
+      arrive();
+    }
+    fireEvent.click(button("Finish")!);
+    // The dim is still fading out, and the run is over all the same.
+    hide();
+    expect(analytics.trackTourLeft).not.toHaveBeenCalled();
   });
 
   it("holds the page while it runs and lets go of all of it when it unmounts", () => {
@@ -396,7 +517,11 @@ describe("the guided tour", () => {
   it("logs a replay's run as a replay", () => {
     render(<V4GuidedTour trigger="replay" includeUnlock={false} onDone={vi.fn()} />);
     arrive();
-    expect(analytics.trackTourStarted).toHaveBeenCalledWith({ trigger: "replay", steps: 4 });
+    expect(analytics.trackTourStarted).toHaveBeenCalledWith({
+      trigger: "replay",
+      audience: "paid",
+      steps: 4,
+    });
   });
 
   it("does not start at all when none of its controls is on the page", () => {

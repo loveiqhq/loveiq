@@ -83,7 +83,7 @@ const SLACK_TEXT_SOFT_CAP = 2800;
  */
 export function clampToSlackLimit(text: string): string {
   if (text.length <= SLACK_TEXT_SOFT_CAP) return text;
-  const tail = "\n…_(see /admin for full details — digest truncated)_";
+  const tail = "\n…_(see /admin/ap for full details — digest truncated)_";
   const cut = SLACK_TEXT_SOFT_CAP - tail.length;
   return text.slice(0, cut) + tail;
 }
@@ -658,7 +658,7 @@ export function formatAlertLines(curr: DailyMetrics): string[] {
     lines.push(`${emoji} ${escapeSlack(item.title)}: ${escapeSlack(item.detail)}`);
   }
   if (breaches.length > 5) {
-    lines.push(`• …and ${breaches.length - 5} more (see /admin/anomalies)`);
+    lines.push(`• …and ${breaches.length - 5} more (see /admin/ap)`);
   }
   return lines;
 }

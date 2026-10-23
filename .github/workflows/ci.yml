@@ -328,10 +328,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: no-database-in-e2e
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
           NEXT_PUBLIC_SUPABASE_ANON_KEY: no-database-in-e2e
-          # A stub booking page, so the founder-call leave offer is on for
-          # e2e/report-founder-call.spec.ts. Inlined at build time; the test step
-          # passes the same value for the spec to compare against.
-          NEXT_PUBLIC_FOUNDER_CALL_URL: https://calendar.app.google/e2e-founder-call
       #
       # Visual regression is EXCLUDED, and not because it is inconvenient: Playwright
       # names baselines per platform, so this job can only compare `*-linux.png`, and
@@ -346,7 +342,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: no-database-in-e2e
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
           NEXT_PUBLIC_SUPABASE_ANON_KEY: no-database-in-e2e
-          NEXT_PUBLIC_FOUNDER_CALL_URL: https://calendar.app.google/e2e-founder-call
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:

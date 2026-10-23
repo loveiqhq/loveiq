@@ -16,7 +16,11 @@ vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-import { isFeatureEnabled, __resetSystemFlagsCacheForTests } from "@shared/flags/system-flags";
+import {
+  isFeatureEnabled,
+  readFeatureFlag,
+  __resetSystemFlagsCacheForTests,
+} from "@shared/flags/system-flags";
 
 describe("isFeatureEnabled (F-12)", () => {
   beforeEach(() => {
@@ -78,5 +82,47 @@ describe("isFeatureEnabled (F-12)", () => {
     __resetSystemFlagsCacheForTests({ survey_submissions: false });
     await expect(isFeatureEnabled("survey_submissions")).resolves.toBe(false);
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+});
+
+describe("readFeatureFlag: for a caller that must not guess", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    __resetSystemFlagsCacheForTests();
+  });
+
+  it("answers the row's value, and whenMissing when there is no row", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: true, json: async () => [{ enabled: true }] });
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBe(true);
+    __resetSystemFlagsCacheForTests();
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBe(false);
+  });
+
+  it("answers null, never the default, when Supabase errors, throws or answers no list", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: false, status: 503 });
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBeNull();
+    mockFetchWithTimeout.mockRejectedValueOnce(new Error("timeout"));
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBeNull();
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBeNull();
+  });
+
+  it("caches what it read, never a failure", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: false, status: 503 });
+    await readFeatureFlag("report_initial_unlock_gate", false);
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: true, json: async () => [{ enabled: true }] });
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBe(true);
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBe(true);
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(2);
+  });
+
+  it("is not fooled by isFeatureEnabled's default cached after a failure", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: false, status: 503 });
+    await expect(isFeatureEnabled("report_initial_unlock_gate", false)).resolves.toBe(false);
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: false, status: 503 });
+    await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBeNull();
   });
 });

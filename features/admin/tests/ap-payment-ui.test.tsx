@@ -49,6 +49,9 @@ const seg = (label: string, finishers: number, sales: number, revenue: number): 
   sales,
   preCvr: null,
   preAvg: null,
+  preBuyers: 0,
+  preSales: 0,
+  preRevenue: 0,
   // Every buyer here bought one full unlock.
   fullCvr: finishers ? sales / finishers : null,
   fullAvg: sales ? revenue / sales : null,
@@ -532,6 +535,35 @@ describe("the Payment page as drawn", () => {
     expect(tileText("At €20.00")).toBe(
       "At €20.000.56%Predicted payment CVR · €0.108 net per submission"
     );
+  });
+
+  it("price elasticity: a price picked on the chart is the one its card shows", () => {
+    render(<ApPayment />);
+    const card = region("Price elasticity prediction");
+    const chart = within(card).getByRole("group", { name: /^Price elasticity\./ });
+    fireEvent.focus(chart);
+    fireEvent.keyDown(chart, { key: "Home" });
+    // The read-out stops where the slider does: €3.00, then €3.50.
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €3.50");
+    fireEvent.keyDown(chart, { key: "Enter" });
+    expect(within(card).getByLabelText("Test a price · €3.50")).toBeTruthy();
+    // The pointer finds the same stops: €20 sits 17/37 of the way along a €3–€40 axis.
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 740,
+      bottom: 280,
+      width: 740,
+      height: 280,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.pointerMove(chart, { clientX: (17 / 37) * 740, clientY: 100, pointerType: "mouse" });
+    expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €20.00");
+    fireEvent.click(chart);
+    expect(within(card).getByLabelText("Test a price · €20.00")).toBeTruthy();
   });
 
   it("price elasticity: says why in place of the model when there is no fit", () => {

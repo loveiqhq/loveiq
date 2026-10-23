@@ -6,6 +6,7 @@ const mockResendSend = vi.fn();
 const mockStripePromoCreate = vi.fn();
 const mockStripePromoUpdate = vi.fn();
 const mockGetReportPlan = vi.fn();
+const mockHasInitialUnlock = vi.fn();
 const mockGetStripeClient = vi.fn();
 const mockGetCouponIdForStage = vi.fn();
 
@@ -32,6 +33,7 @@ vi.mock("@shared/observability/logger", () => ({
 
 vi.mock("@features/report/server/planAccess", () => ({
   getReportPlanByPersonalReportId: (...args: unknown[]) => mockGetReportPlan(...args),
+  hasInitialUnlockByPersonalReportId: (...args: unknown[]) => mockHasInitialUnlock(...args),
 }));
 
 vi.mock("@features/checkout/server/stripeCheckout", () => ({
@@ -104,6 +106,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       NEXT_PUBLIC_SITE_URL: "https://test.loveiq.org",
     };
     mockGetReportPlan.mockResolvedValue(null);
+    mockHasInitialUnlock.mockResolvedValue(false);
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockResendSend.mockResolvedValue({ data: { id: "msg_1" }, error: null });
     // Pricing 2.0: the single nurture discount stage is 72h → 50% off.
@@ -153,19 +156,39 @@ describe("GET /api/cron/nurture-sequence", () => {
     quoteMetadata = {},
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
+    unlockFeedback = jsonResponse([]),
+    cohortIds,
+    gateSwitchDown = false,
   }: {
     seventyTwoHour: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
     patchSpy?: () => unknown;
+    unlockFeedback?: unknown;
+    /** The EUR 1.99 gate's cohort among the candidates; null answers the read with a 500. */
+    cohortIds?: number[] | null;
+    /** The gate's switch can't be read (its system_flags read answers 503). */
+    gateSwitchDown?: boolean;
   }) {
     let personalReportCalls = 0;
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
+      if (
+        gateSwitchDown &&
+        url.includes("/rest/v1/system_flags") &&
+        url.includes("report_initial_unlock_gate")
+      ) {
+        return Promise.resolve(jsonResponse({ message: "slow" }, 503));
+      }
+      if (url.includes("/rest/v1/personal_report") && url.includes("initial_gate_cohort_at")) {
+        if (cohortIds === null) return Promise.resolve(jsonResponse({ message: "boom" }, 500));
+        return Promise.resolve(jsonResponse((cohortIds ?? []).map((id) => ({ id }))));
+      }
       if (url.includes("/rest/v1/personal_report")) {
         personalReportCalls += 1;
         if (personalReportCalls === 1) return Promise.resolve(jsonResponse(seventyTwoHour));
         return Promise.resolve(jsonResponse([]));
       }
+      if (url.includes("/rest/v1/unlock_feedback")) return Promise.resolve(unlockFeedback);
       if (url.includes("/rest/v1/report_price_quote") && init?.method !== "PATCH") {
         return Promise.resolve(jsonResponse([{ id: 101, metadata: quoteMetadata }]));
       }
@@ -243,6 +266,49 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(mockResendSend).not.toHaveBeenCalled();
   });
 
+  it("skips a reader the unlock-feedback email went to, before any code or send", async () => {
+    const candidate = {
+      id: 60,
+      survey_submission_id: 6,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "asked@example.com", first_name: "As" } },
+    };
+    mockCandidateWindows({
+      seventyTwoHour: [candidate],
+      unlockFeedback: jsonResponse([{ id: 1 }]),
+    });
+
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.summaries["72h_no_unlock"].skippedUnlockFeedback).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(mockStripePromoCreate).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
+    // Only an email that went counts: a claim whose send failed has no sent_at.
+    const [lookup] = mockFetchWithTimeout.mock.calls.find(([u]) =>
+      String(u).includes("/rest/v1/unlock_feedback")
+    )!;
+    expect(String(lookup)).toContain("unlock_feedback?survey_submission_id=eq.6&select=id");
+    expect(String(lookup)).not.toContain("sent_at");
+  });
+
+  it("still sends the 72h email when the unlock-feedback lookup fails", async () => {
+    const candidate = {
+      id: 61,
+      survey_submission_id: 16,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "blip@example.com", first_name: "Bl" } },
+    };
+    mockCandidateWindows({
+      seventyTwoHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: [] },
+      unlockFeedback: jsonResponse({ message: "boom" }, 503),
+    });
+
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].skippedUnlockFeedback).toBe(0);
+  });
+
   it("skips a candidate who already has a paid plan", async () => {
     mockGetReportPlan.mockResolvedValueOnce("full_report");
     const candidate = {
@@ -260,6 +326,29 @@ describe("GET /api/cron/nurture-sequence", () => {
     const body = await res.json();
     expect(body.summaries["72h_no_unlock"].skippedPaid).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
+  });
+
+  it("skips a buyer of the EUR 1.99 initial report: no 50% code beside their EUR 10 off", async () => {
+    // `initial` is no report plan, so the plan check alone took them for unpaid.
+    mockHasInitialUnlock.mockResolvedValueOnce(true);
+    const candidate = {
+      id: 51,
+      survey_submission_id: 6,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "initial@example.com", first_name: "Ini" } },
+    };
+    mockCandidateWindows({
+      seventyTwoHour: [candidate],
+      quoteMetadata: {},
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    const body = await res.json();
+    expect(mockHasInitialUnlock).toHaveBeenCalledWith(51);
+    expect(body.summaries["72h_no_unlock"].skippedPaid).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(mockStripePromoCreate).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
   });
 
   it("F-06: persists idempotency marker BEFORE Resend send", async () => {
@@ -324,6 +413,106 @@ describe("GET /api/cron/nurture-sequence", () => {
     const body = await res.json();
     expect(body.summaries["72h_no_unlock"].sent).toBe(0);
     expect(body.summaries["72h_no_unlock"].failed).toBe(1);
+  });
+
+  describe("readers behind the EUR 1.99 gate", () => {
+    const candidate = {
+      id: 42,
+      survey_submission_id: 7,
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "gate@example.com", first_name: "Ga" } },
+    };
+    const urls = () => mockFetchWithTimeout.mock.calls.map((call) => String(call[0]));
+    const gateOn = () =>
+      __resetSystemFlagsCacheForTests({ nurture_sequence: true, report_initial_unlock_gate: true });
+
+    it("skips the gate's cohort: no promo, no email, no quote made for them", async () => {
+      gateOn();
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [42],
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(1);
+      expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+      expect(mockStripePromoCreate).not.toHaveBeenCalled();
+      expect(mockResendSend).not.toHaveBeenCalled();
+      expect(urls().some((url) => url.includes("/rest/v1/report_access_token"))).toBe(false);
+      expect(urls().some((url) => url.includes("/rest/v1/report_price_quote"))).toBe(false);
+    });
+
+    it("emails everyone outside the cohort as today", async () => {
+      gateOn();
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [],
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+      expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(0);
+    });
+
+    it("reads the cohort as if the gate were on when its switch can't be read", async () => {
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [42],
+        gateSwitchDown: true,
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(1);
+      expect(mockResendSend).not.toHaveBeenCalled();
+    });
+
+    it("still emails a reader outside the cohort when only the switch can't be read", async () => {
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [],
+        gateSwitchDown: true,
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+    });
+
+    it("reads no cohort while the gate is switched off", async () => {
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [42],
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+      expect(urls().some((url) => url.includes("initial_gate_cohort_at"))).toBe(false);
+    });
+
+    it("sends nothing when the cohort can't be read, and fails the run for the next to retry", async () => {
+      gateOn();
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: null,
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      expect(res.status).toBe(500);
+      expect(mockStripePromoCreate).not.toHaveBeenCalled();
+      expect(mockResendSend).not.toHaveBeenCalled();
+      // Nothing marked sent, so the reader is still a candidate on the next run.
+      expect(urls().some((url) => url.includes("/rest/v1/report_price_quote"))).toBe(false);
+    });
   });
 
   it("time-budget guard: defers all candidates when the wall-clock budget is exhausted", async () => {

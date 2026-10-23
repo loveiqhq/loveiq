@@ -125,6 +125,23 @@ function clampDuration(ms: number): number {
   return Math.min(Math.max(Math.round(ms), 0), MAX_DURATION_MS);
 }
 
+/**
+ * How long after it was sent a pending submission still counts as in flight. The page can
+ * load again while one is being sent, and that loses the reply, not the submission: the
+ * server answers a repeat with the submission that landed (replyWithExistingSubmission in
+ * app/api/survey/route.ts, "a reload mid-submit").
+ */
+const IN_FLIGHT_MS = 2 * 60_000;
+
+/** A pending submission sent moments ago, so the page loaded again while it was in flight. */
+export function sentMomentsAgo(
+  pending: PendingSurveyCompletion | null,
+  now: number = Date.now()
+): boolean {
+  const age = now - (pending ? Date.parse(pending.savedAt) : Number.NaN);
+  return age >= 0 && age < IN_FLIGHT_MS;
+}
+
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [errorKind, setErrorKind] = useState<SubmitErrorKind | null>(null);
@@ -142,6 +159,8 @@ export function useSubmitSurvey() {
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
+  // Read once, as this page loads: whether what it found pending was still being sent.
+  const [pendingSentMomentsAgo] = useState(() => sentMomentsAgo(pendingCompletion));
 
   const syncPendingCompletion = useCallback((payload: PendingSurveyCompletion | null) => {
     setPendingCompletion(payload);
@@ -344,6 +363,7 @@ export function useSubmitSurvey() {
     retryPending,
     clearPendingCompletion: () => syncPendingCompletion(null),
     hasPendingCompletion: !!pendingCompletion,
+    pendingSentMomentsAgo,
     reportToken,
     submissionId,
     paidWizard,

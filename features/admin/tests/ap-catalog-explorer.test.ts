@@ -166,6 +166,7 @@ describe("data catalog", () => {
     expect(groupOf("admin_users")).toBe("Admin & tools");
     expect(groupOf("funnel_event")).toBe("Traffic");
     expect(groupOf("analytics_event")).toBe("Traffic");
+    expect(groupOf("unlock_feedback")).toBe("People & email");
     expect(
       dateFieldsOf([
         { name: "saved_at", type: "timestamptz" },

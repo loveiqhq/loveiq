@@ -47,7 +47,7 @@ describe("GET /admin/auth/callback", () => {
   it("stamps fresh activity on a sign-in, so an old stamp cannot bounce it to 'idle timeout'", async () => {
     const before = Date.now();
     const res = await callback();
-    expect(res.headers.get("location")).toBe("http://localhost/admin");
+    expect(res.headers.get("location")).toBe("http://localhost/admin/ap");
     const stamp = res.cookies.get("__admin_activity");
     expect(Number(stamp?.value)).toBeGreaterThanOrEqual(before);
     expect(stamp).toMatchObject({ httpOnly: true, path: "/", maxAge: 7 * 24 * 60 * 60 });
@@ -59,6 +59,38 @@ describe("GET /admin/auth/callback", () => {
     const res = await callback();
     expect(res.headers.get("location")).toContain("error=auth_failed");
     expect(res.cookies.get("__admin_activity")).toBeUndefined();
+  });
+
+  const callbackTo = (next: string) =>
+    GET(
+      new NextRequest(
+        `http://localhost/admin/auth/callback?token_hash=abc&type=magiclink&next=${encodeURIComponent(next)}`
+      )
+    );
+
+  it("lands on the page the sign-in was for", async () => {
+    const res = await callbackTo("/admin/ap/assessment-a?period=7d&device=phone");
+    expect(res.headers.get("location")).toBe(
+      "http://localhost/admin/ap/assessment-a?period=7d&device=phone"
+    );
+    // A link that was already used still lands there, when the session is valid.
+    auth.verifyOtp.mockResolvedValue({ error: { message: "used" } });
+    const again = await callbackTo("/admin/ap/assessment-a?period=7d");
+    expect(again.headers.get("location")).toBe("http://localhost/admin/ap/assessment-a?period=7d");
+  });
+
+  it.each([
+    "//evil.com",
+    "/\\evil.com",
+    "/admin/..//evil",
+    "%2F%2Fevil.com",
+    "/admin/%2F%2Fevil.com",
+    "https://evil.com",
+    "/admin@evil.com",
+    "javascript:alert(1)",
+  ])("never follows a next off the admin: %j", async (next) => {
+    const res = await callbackTo(next);
+    expect(res.headers.get("location")).toBe("http://localhost/admin/ap");
   });
 
   it("stamps nothing for someone not on the admin list", async () => {

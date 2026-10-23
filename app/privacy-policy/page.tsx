@@ -208,6 +208,18 @@ export default function PrivacyPolicyPage() {
                 or unsubscribe with the link in our emails. You may object under Art. 21 GDPR using
                 the contact details in section 1.
               </p>
+              <p className="mb-4">
+                If you do not unlock your full report, we may email you once to ask why, usually a
+                few hours after your result. Each answer in that email is a link. When you tap one,
+                we keep the reason you chose with your survey submission, together with the device
+                type and any tags or words you choose to add, and we unlock your full report for
+                free. We use your answer only to improve LoveIQ. We send this email on the basis of
+                your consent to our emails where you gave it, and otherwise of our legitimate
+                interest in understanding why people do not buy and improving our offer (Art.
+                6(1)(a) and (f) GDPR). Your answer is deleted with your survey data. You can
+                unsubscribe with the link in the email, and you may object under Art. 21 GDPR using
+                the contact details in section 1.
+              </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.4 Analytics and product insight</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">

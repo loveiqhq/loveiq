@@ -216,6 +216,13 @@ interface DropoutByArmPayload {
   /** Overrides the "not enough per-arm traffic" copy, which is wrong for a site metric. */
   emptyLabel?: string;
   /**
+   * What an all-null series is said to be, after its name in the legend and in the default
+   * headline: "no data yet" when absent. The brain's show_chart sends "could not be read" for
+   * a series whose read failed, so its picture never calls an outage no data.
+   */
+  missingFirst?: string;
+  missingLast?: string;
+  /**
    * The colour each series is drawn in, decided by the PRODUCER from the arm's
    * identity (`armColor()` in features/attribution/server/labels.ts) rather than
    * here from its position in the payload.
@@ -1402,6 +1409,10 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
   const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1)}\u2026` : t);
   const legendFirst = clip(legendFirstRaw, 34);
   const legendLast = clip(legendLastRaw, 34);
+  const missing = (v: unknown) =>
+    typeof v === "string" && v.trim() ? clip(v.trim(), 24) : "no data yet";
+  const missingFirst = missing(p.missingFirst);
+  const missingLast = missing(p.missingLast);
 
   // Short names for the end labels: keep only the words that DIFFER between the
   // arms, so "Current homepage" / "Previous homepage" become "Current" /
@@ -1506,8 +1517,8 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         {/* A single series is named by the title, so it gets no legend at all —
             two swatches for one line is the "(unused) — no data yet" row this
             renderer produced the first time it was handed one series. */}
-        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
-        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast} — no data yet`)}
+        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — ${missingFirst}`)}
+        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast} — ${missingLast}`)}
       </div>
 
       {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
@@ -1628,8 +1639,8 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
             : hasFirst && hasLast
               ? `Latest — ${withUnit(endFirst)} vs ${withUnit(endLast)}`
               : hasFirst
-                ? `Latest — ${withUnit(endFirst)} (${shortLast}: no data yet)`
-                : `Latest — ${withUnit(endLast)} (${shortFirst}: no data yet)`)}
+                ? `Latest — ${withUnit(endFirst)} (${shortLast}: ${missingLast})`
+                : `Latest — ${withUnit(endLast)} (${shortFirst}: ${missingFirst})`)}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
         {footnote}

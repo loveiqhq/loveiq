@@ -38,13 +38,10 @@ const QUOTE_COLUMNS = [
   "experiment_group",
   "base_price_bucket",
   "checkout_started_at",
+  "created_date_time",
+  // Every change to the quote's arm or list price, oldest first (`dealtArm`).
+  "report_price_quote_arm_history(old_experiment_group)",
 ].join(",");
-
-/**
- * Pricing 3.0's arms. A reader re-priced at its launch also holds retired essentials and
- * core quotes on list B, so their arm is read from these and nothing else.
- */
-const PRICING_3_ARMS = new Set(["A3", "B3"]);
 
 export interface ArmStat {
   arm: string;
@@ -72,6 +69,8 @@ export interface ExperimentReadout {
 export interface ConcludedExperiment {
   title: string;
   outcome: string;
+  /** Its dates, for a test whose final numbers can still be read (Berlin days, inclusive). */
+  window?: { axis: ExperimentAxis; from: string; to: string };
 }
 
 interface SubmissionRow {
@@ -85,10 +84,53 @@ interface QuoteRow {
   experiment_group: string | null;
   base_price_bucket: string | null;
   checkout_started_at: string | null;
+  created_date_time: string;
+  report_price_quote_arm_history: Array<{ old_experiment_group: string | null }> | null;
+}
+
+/**
+ * The price list a quote was DEALT: the old arm of its first recorded change, else the arm it
+ * carries. Not the stamp on the row, which says what the quote is now: a re-sync moves every
+ * unpaid quote onto the next test's lists (20261005120100 rewrote the 2.x test's A/B quotes to
+ * A3/B3), and report_price_quote_arm_history keeps what each one was moved from. SQL reads it
+ * the same way (get_arm_cohorts, get_axis_funnel_daily: 20261016170000).
+ */
+export function dealtArm(
+  q: Pick<QuoteRow, "experiment_group" | "base_price_bucket" | "report_price_quote_arm_history">
+): string | null {
+  return (
+    q.report_price_quote_arm_history?.[0]?.old_experiment_group ??
+    q.experiment_group ??
+    q.base_price_bucket
+  );
+}
+
+/** A price list taking effect: from `changed_at`, arm `arm` sold `plan` at `starting_price`. */
+export interface PriceListChange {
+  changed_at: string;
+  arm: string;
+  plan: string;
+  starting_price: number | string;
+}
+
+/**
+ * Every change of a price list, oldest first (get_price_list_changes, 20261016170000): the
+ * 2.x changes from before the arm history, pinned there with where each moment came from,
+ * then every re-sync the history recorded.
+ */
+export async function loadPriceListChanges(): Promise<PriceListChange[]> {
+  const res = await supabaseFetch("/rest/v1/rpc/get_price_list_changes", {
+    method: "POST",
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(`get_price_list_changes: ${res.status}`);
+  return (await res.json()) as PriceListChange[];
 }
 
 interface PaymentRow {
   amount: number | string | null;
+  /** `metadata->>plan`: "initial" is the EUR 1.99 Core Archetype, not a report bought. */
+  plan: string | null;
   personal_report: { survey_submission_id: number | null } | null;
 }
 
@@ -100,6 +142,10 @@ interface PaymentRow {
  * route during validation: two independently-capped fetches covered different
  * submissions, which inflated "unattributed" to 667 and under-counted purchases
  * per arm. Page explicitly with Range, and report truncation honestly.
+ *
+ * A failed page throws. It used to end the scan as if the list were complete, so a
+ * read that failed outright (the quote read embeds the arm history, and fails while
+ * that table is missing) printed every reader as "not attributable" with no error.
  */
 export async function fetchAllPages<T>(
   buildPath: (offset: number, pageSize: number) => string,
@@ -113,7 +159,7 @@ export async function fetchAllPages<T>(
     });
     if (!res.ok) {
       logger.warn({ status: res.status, what, offset }, "ab-overview: page fetch failed");
-      break;
+      throw new Error(`${what}: ${res.status}`);
     }
     const page = (await res.json()) as T[];
     rows.push(...page);
@@ -219,7 +265,11 @@ export interface ArmOutcomes {
   truncated: boolean;
 }
 
-export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
+/**
+ * The window's finishers and what each one did. `until` (exclusive) closes the window for a
+ * test that has ended; their purchases are still followed with no end date.
+ */
+export async function loadArmOutcomes(since: string, until?: string): Promise<ArmOutcomes> {
   const subsPage = await fetchAllPages<
     SubmissionRow & { app_user: { email: string | null } | null }
   >(
@@ -227,6 +277,7 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
       // status=eq.completed is what fetchFunnelStages counts as a completion. /admin's
       // "Finished the survey" step is this scan's count, so it and the headline agree.
       `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
+      (until ? `&created_date_time=lt.${until}` : "") +
       `&select=id,created_date_time,utm_tracker,app_user!fk_survey_submission_user(email)` +
       `&order=id.asc&offset=${offset}&limit=${pageSize}`,
     "survey_submission"
@@ -236,10 +287,12 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
 
   // Join the quotes by SUBMISSION ID RANGE rather than by their own created date:
   // a quote can be created outside the submission window, and filtering it by date
-  // silently drops real purchases. Ids are monotonic, so ">= the smallest id in the
-  // window" is an index-friendly narrowing that cannot miss one — and it avoids
+  // silently drops real purchases. Ids are monotonic, so the window's smallest and
+  // largest ids are an index-friendly narrowing that cannot miss one — and it avoids
   // interpolating a huge `in.(...)` list into the URL the way /api/admin/stats does.
+  // Oldest quote first within a submission, so its first quote's arm is the one taken.
   const minId = readers.length > 0 ? Math.min(...readers.map((s2) => s2.id)) : 0;
+  const maxId = readers.length > 0 ? Math.max(...readers.map((s2) => s2.id)) : 0;
 
   // Pay to start (features/pay-to-start): a survey bought before it was taken is in no
   // experiment here. Its €29 would count as a purchase in whatever arm its session fell
@@ -249,12 +302,29 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
       ? await fetchAllPages<{ consumed_submission_id: number | null }>(
           (offset, pageSize) =>
             `/rest/v1/prepaid_report_access?consumed_submission_id=gte.${minId}` +
+            `&consumed_submission_id=lte.${maxId}` +
             `&select=consumed_submission_id&order=consumed_submission_id.asc` +
             `&offset=${offset}&limit=${pageSize}`,
           "prepaid_report_access"
         )
       : { rows: [] as Array<{ consumed_submission_id: number | null }>, truncated: false };
   const prepaidSubmissions = new Set(prepaidPage.rows.map((r) => r.consumed_submission_id));
+  // The EUR 1.99 gate's readers (Pre-unlock) are in no PRICE list: pricing pins them to A3,
+  // so their list was not drawn. They stay in every other test (the gate meets both arms of
+  // a landing or survey test alike). Read whatever the gate's switch says now: a window can
+  // cover days it was on.
+  const gatedPage =
+    readers.length > 0
+      ? await fetchAllPages<{ survey_submission_id: number | null }>(
+          (offset, pageSize) =>
+            `/rest/v1/personal_report?survey_submission_id=gte.${minId}` +
+            `&survey_submission_id=lte.${maxId}&initial_gate_cohort_at=not.is.null` +
+            `&select=survey_submission_id&order=survey_submission_id.asc` +
+            `&offset=${offset}&limit=${pageSize}`,
+          "personal_report"
+        )
+      : { rows: [] as Array<{ survey_submission_id: number | null }>, truncated: false };
+  const gatedSubmissions = new Set(gatedPage.rows.map((r) => r.survey_submission_id));
   const submissions = readers.filter(
     (s) => !prepaidSubmissions.has(s.id) && !isPayToStartTracker(s.utm_tracker)
   );
@@ -264,7 +334,9 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
       ? await fetchAllPages<QuoteRow>(
           (offset, pageSize) =>
             `/rest/v1/report_price_quote?survey_submission_id=gte.${minId}` +
-            `&select=${QUOTE_COLUMNS}&order=survey_submission_id.asc` +
+            `&survey_submission_id=lte.${maxId}&select=${QUOTE_COLUMNS}` +
+            `&report_price_quote_arm_history.order=changed_at.asc,id.asc` +
+            `&order=survey_submission_id.asc,created_date_time.asc,id.asc` +
             `&offset=${offset}&limit=${pageSize}`,
           "report_price_quote"
         )
@@ -273,21 +345,23 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
 
   // Purchases are money that settled, not a quote's purchased_at: that is also set by a
   // 100%-off unlock and a staff test, and its price is the list price, not what was paid.
-  // A payment comes after its survey, so one for this window was created inside it.
+  // A payment comes after its survey, so one for this window was created inside it. The
+  // EUR 1.99 Core Archetype (plan "initial") is not a report bought: left out below.
   const paymentsPage =
     submissions.length > 0
       ? await fetchAllPages<PaymentRow>(
           (offset, pageSize) =>
             `/rest/v1/payment?status=eq.succeeded&is_test=is.false&amount=gt.0` +
             `&created_date_time=gte.${since}` +
-            `&select=amount,personal_report!fk_payment_personal_report(survey_submission_id)` +
+            `&select=amount,plan:metadata->>plan,personal_report!fk_payment_personal_report(survey_submission_id)` +
             `&order=id.asc&offset=${offset}&limit=${pageSize}`,
           "payment"
         )
       : { rows: [] as PaymentRow[], truncated: false };
 
   // One entry per submission: did they start checkout, did they pay and how much, and
-  // which Pricing 3.0 arm they were in.
+  // which price list they were dealt.
+  const windowEnd = until ? Date.parse(until) : Infinity;
   const bySubmission: ArmOutcomes["bySubmission"] = new Map();
   const entry = (id: number) => {
     const existing = bySubmission.get(id) ?? {
@@ -303,12 +377,18 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
     if (!ids.has(q.survey_submission_id)) continue;
     const existing = entry(q.survey_submission_id);
     if (q.checkout_started_at) existing.startedCheckout = true;
-    const arm = q.experiment_group ?? q.base_price_bucket;
-    if (arm && PRICING_3_ARMS.has(arm)) existing.pricing ??= arm;
+    // Only a quote that existed in the window says which list the reader saw in it: one
+    // first made after a test ended was priced by whatever came next. A gated reader's list
+    // was pinned, not drawn: no arm.
+    if (
+      Date.parse(q.created_date_time) < windowEnd &&
+      !gatedSubmissions.has(q.survey_submission_id)
+    )
+      existing.pricing ??= dealtArm(q);
   }
   for (const p of paymentsPage.rows) {
     const id = p.personal_report?.survey_submission_id;
-    if (id == null || !ids.has(id)) continue;
+    if (id == null || !ids.has(id) || p.plan === "initial") continue;
     const existing = entry(id);
     existing.purchased = true;
     existing.revenue += num(p.amount);
@@ -318,7 +398,11 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
     submissions,
     bySubmission,
     truncated:
-      subsPage.truncated || prepaidPage.truncated || quotesPage.truncated || paymentsPage.truncated,
+      subsPage.truncated ||
+      prepaidPage.truncated ||
+      gatedPage.truncated ||
+      quotesPage.truncated ||
+      paymentsPage.truncated,
   };
 }
 
@@ -397,9 +481,10 @@ export function tallyAxis(
  * the forced paywall was removed on 2026-08-31, so that axis reads nothing.
  *
  * Pricing counts only readers who finished after the current price lists went live
- * (PRICE_TEST_START_AT: list B was lowered on 2026-10-08). Each repricing re-priced
- * everyone who had not bought yet, after they had seen the earlier prices, so their
- * A3/B3 stamp is not the test's. They read as unattributed rather than in either list.
+ * (PRICE_TEST_START_AT: list B was lowered on 2026-10-08). A reader is read in the list
+ * their quote was dealt (`dealtArm`), but a list can change its prices and keep its
+ * letter: readers dealt B3 before the cut saw list B's old prices, so they read as
+ * unattributed rather than in either list.
  */
 export function armReader(
   axis: ExperimentAxis,
@@ -497,6 +582,9 @@ export const CONCLUDED: ConcludedExperiment[] = [
     title: "Report pricing (A vs B)",
     outcome:
       "Finished on 31 August 2026. We dropped the more expensive of the two price lists, so everyone now sees the same prices. The cheaper list had taken more money over the test as a whole, but the two prices were swapped over on 24 August, which means the before and after are not really one comparison — with 1 sale against 2 since the swap there was nothing to call it on. It was a decision to simplify, not a verdict.",
+    // The Test Repository's dates. Its unpaid quotes were moved to Pricing 3.0's lists on
+    // 6 Oct, so its readers are read in the list they were dealt (`dealtArm`).
+    window: { axis: "pricing", from: "2026-08-03", to: "2026-08-31" },
   },
   {
     title: "Paywall style",

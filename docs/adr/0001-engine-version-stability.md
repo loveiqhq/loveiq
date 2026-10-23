@@ -19,7 +19,7 @@ since the V5 path was added. Two downstream consumers depend on this exact
 literal:
 
 - `features/admin/server/metric-library.ts:86` filters rows by `engine_version='v4+v5'`
-- `app/api/admin/scoring/comparison/route.ts:79` does the same
+- `app/api/admin/scoring/comparison/route.ts:79` did the same, until that route was removed with the old admin pages on 2026-10-16
 
 If `engine_version` were bumped to `"v9"` on V9 cutover, those queries would
 exclude every pre-V9 row, breaking historical dashboards.

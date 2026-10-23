@@ -2,14 +2,16 @@
 
 import {
   Fragment,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from "react";
 
-import type { Grain } from "@features/admin/server/ap/filters";
+import { type Grain } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type {
   AudienceDim,
@@ -32,6 +34,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { bucketTitles, IndexHover, periodTitle, PointHover, ROW_HOVER, type TipRow } from "./hover";
 import {
   Bar,
   BlackButton,
@@ -39,6 +42,7 @@ import {
   Card,
   Eyebrow,
   Failed,
+  ICON_BTN,
   KpiTileV2,
   Loading,
   NotTracked,
@@ -181,6 +185,7 @@ export default function ApTraffic() {
                 suffix={spec.suffix}
                 negativeBad={spec.negativeBad}
                 level
+                titles={bucketTitles(data.range.from, data.range.to)}
               />
             ))}
           </TileGrid>
@@ -615,122 +620,160 @@ function StackFigure({
   return (
     <figure className="m-0 flex flex-col gap-2">
       {caption}
-      <div
-        aria-hidden="true"
-        className="relative ml-[52px] mt-2 h-[280px] border-b border-ap-line sm:mr-[210px]"
-      >
-        {chart.grid.map((gl) => (
-          <Fragment key={gl.y}>
-            <span
-              className="absolute inset-x-0 border-t border-ap-track"
-              style={{ bottom: `${gl.y}%` }}
-            />
-            <span
-              className="absolute -left-[52px] w-11 translate-y-1/2 text-right text-[11px] tabular-nums text-ap-muted"
-              style={{ bottom: `${gl.y}%` }}
-            >
-              {gl.label}
-            </span>
-          </Fragment>
-        ))}
-        <svg
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          className="absolute inset-0 h-full w-full overflow-visible"
-        >
-          {chart.layers.map((l, i) => (
-            <polygon
-              key={trend.channels[i]?.key ?? i}
-              points={l.pts}
-              fill={colourOf(trend.channels[i]?.key).fill}
-              fillOpacity={0.88}
-              stroke="#ffffff"
-              strokeWidth={1.2}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-        </svg>
-        {chart.layers.map((l, i) =>
-          l.marks.map((m) => (
-            <span
-              key={`${i}-${m.x}`}
-              className={`pointer-events-none absolute whitespace-nowrap text-[11px] font-bold tabular-nums ${crowded}`}
-              style={{
-                left: `${m.x}%`,
-                bottom: `${m.y}%`,
-                transform: `translate(${INSET[m.anchor]}, 50%)`,
-                color: colourOf(trend.channels[i]?.key).ink,
-              }}
-            >
-              {m.label}
-            </span>
-          ))
-        )}
-        {chart.layers.map((l, i) => (
-          <span
-            key={`end-${trend.channels[i]?.key ?? i}`}
-            className="absolute left-full hidden items-baseline gap-1.5 whitespace-nowrap text-xs tabular-nums sm:flex"
-            style={{ bottom: `${l.endY}%`, transform: "translate(10px, 50%)" }}
-          >
-            <span
-              className="h-2 w-2 self-center rounded-sm"
-              style={{ background: colourOf(trend.channels[i]?.key).fill }}
-            />
-            <span className="font-bold text-ap-ink">{l.endVal}</span>
-            <span className="text-ap-muted">
-              {l.endShare} · {trend.channels[i]?.short}
-            </span>
-          </span>
-        ))}
-        {chart.tops.map((t, w) => (
-          <span
-            key={`top-${w}`}
-            className={`absolute whitespace-nowrap text-xs font-bold tabular-nums text-ap-ink ${crowded}`}
-            style={{
-              left: `${t.x}%`,
-              bottom: `${t.y}%`,
-              transform: `translate(${SHIFT[t.anchor]}, -6px)`,
-            }}
-          >
-            {t.label}
-          </span>
-        ))}
-        {line && (
-          <>
-            <svg
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              className="absolute inset-0 h-full w-full overflow-visible"
-            >
-              {line.segments.map((s) => (
-                <polyline
-                  key={s}
-                  points={s}
-                  fill="none"
-                  stroke="#161021"
-                  strokeWidth={2}
-                  strokeDasharray="2 5"
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-            </svg>
-            {line.labels.map((l) => (
+      <div className="relative ml-[52px] mt-2 h-[280px] border-b border-ap-line sm:mr-[210px]">
+        <div aria-hidden="true" className="absolute inset-0">
+          {chart.grid.map((gl) => (
+            <Fragment key={gl.y}>
               <span
-                key={`cost-${l.x}`}
-                className={`absolute whitespace-nowrap rounded bg-white/90 px-1 text-[11px] font-bold tabular-nums text-ap-ink ${crowded}`}
+                className="absolute inset-x-0 border-t border-ap-track"
+                style={{ bottom: `${gl.y}%` }}
+              />
+              <span
+                className="absolute -left-[52px] w-11 translate-y-1/2 text-right text-[11px] tabular-nums text-ap-muted"
+                style={{ bottom: `${gl.y}%` }}
+              >
+                {gl.label}
+              </span>
+            </Fragment>
+          ))}
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="absolute inset-0 h-full w-full overflow-visible"
+          >
+            {chart.layers.map((l, i) => (
+              <polygon
+                key={trend.channels[i]?.key ?? i}
+                points={l.pts}
+                fill={colourOf(trend.channels[i]?.key).fill}
+                fillOpacity={0.88}
+                stroke="#ffffff"
+                strokeWidth={1.2}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+          {chart.layers.map((l, i) =>
+            l.marks.map((m) => (
+              <span
+                key={`${i}-${m.x}`}
+                className={`pointer-events-none absolute whitespace-nowrap text-[11px] font-bold tabular-nums ${crowded}`}
                 style={{
-                  left: `${l.x}%`,
-                  bottom: `${l.y}%`,
-                  transform: `translate(${SHIFT[l.anchor]}, -8px)`,
+                  left: `${m.x}%`,
+                  bottom: `${m.y}%`,
+                  transform: `translate(${INSET[m.anchor]}, 50%)`,
+                  color: colourOf(trend.channels[i]?.key).ink,
                 }}
               >
-                {l.label}
-                <span className="max-sm:hidden"> / submission</span>
+                {m.label}
               </span>
-            ))}
-          </>
-        )}
+            ))
+          )}
+          {chart.layers.map((l, i) => (
+            <span
+              key={`end-${trend.channels[i]?.key ?? i}`}
+              className="absolute left-full hidden items-baseline gap-1.5 whitespace-nowrap text-xs tabular-nums sm:flex"
+              style={{ bottom: `${l.endY}%`, transform: "translate(10px, 50%)" }}
+            >
+              <span
+                className="h-2 w-2 self-center rounded-sm"
+                style={{ background: colourOf(trend.channels[i]?.key).fill }}
+              />
+              <span className="font-bold text-ap-ink">{l.endVal}</span>
+              <span className="text-ap-muted">
+                {l.endShare} · {trend.channels[i]?.short}
+              </span>
+            </span>
+          ))}
+          {chart.tops.map((t, w) => (
+            <span
+              key={`top-${w}`}
+              className={`absolute whitespace-nowrap text-xs font-bold tabular-nums text-ap-ink ${crowded}`}
+              style={{
+                left: `${t.x}%`,
+                bottom: `${t.y}%`,
+                transform: `translate(${SHIFT[t.anchor]}, -6px)`,
+              }}
+            >
+              {t.label}
+            </span>
+          ))}
+          {line && (
+            <>
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="absolute inset-0 h-full w-full overflow-visible"
+              >
+                {line.segments.map((s) => (
+                  <polyline
+                    key={s}
+                    points={s}
+                    fill="none"
+                    stroke="#161021"
+                    strokeWidth={2}
+                    strokeDasharray="2 5"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </svg>
+              {line.labels.map((l) => (
+                <span
+                  key={`cost-${l.x}`}
+                  className={`absolute whitespace-nowrap rounded bg-white/90 px-1 text-[11px] font-bold tabular-nums text-ap-ink ${crowded}`}
+                  style={{
+                    left: `${l.x}%`,
+                    bottom: `${l.y}%`,
+                    transform: `translate(${SHIFT[l.anchor]}, -8px)`,
+                  }}
+                >
+                  {l.label}
+                  <span className="max-sm:hidden"> / submission</span>
+                </span>
+              ))}
+            </>
+          )}
+        </div>
+        <IndexHover
+          xs={trend.points.map((_, w) => xOf(w, n))}
+          label={title}
+          tip={(w) => {
+            const p = trend.points[w]!;
+            const total = chart.totals[w] ?? 0;
+            const rows: TipRow[] = [...trend.channels.keys()].reverse().map((i) => {
+              const v = series[i]?.[w] ?? 0;
+              return {
+                label: trend.channels[i]!.name,
+                value: `${fmt("count", v)} · ${total ? `${((v / total) * 100).toFixed(1)}%` : EMPTY}`,
+                color: colourOf(trend.channels[i]!.key).fill,
+                mark: "square",
+                muted: v === 0,
+              };
+            });
+            rows.push({ label: "All channels", value: fmt("count", total), strong: true });
+            if (cost) {
+              const c = cost[w];
+              rows.push({
+                label: "Avg. cost per survey submission",
+                value: fmt("eur", c ?? null, 2),
+                color: "#161021",
+                mark: "dotted",
+                muted: c === null || c === undefined,
+              });
+            }
+            return { title: periodTitle(p, !p.full), rows };
+          }}
+          markers={(w) => {
+            let cum = 0;
+            return trend.channels.map((ch, i) => {
+              const v = series[i]?.[w] ?? 0;
+              const total = chart.totals[w] ?? 0;
+              cum += scale === "share" ? (total ? (v / total) * 100 : 0) : v;
+              return { y: (cum / chart.max) * 100, color: colourOf(ch.key).fill };
+            });
+          }}
+        />
       </div>
       <div aria-hidden="true" className="relative ml-[52px] h-4 sm:mr-[210px]">
         {trend.points.map((p, w) => (
@@ -913,7 +956,7 @@ function Performance({
             type="button"
             aria-label={`Sort by ${label}`}
             onClick={() => sortBy(k, better)}
-            className="inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] text-inherit"
+            className={`ml-0.5 ${ICON_BTN} text-inherit`}
           >
             <SortIcon dir={on ? (dir === "asc" ? 1 : -1) : null} />
           </button>
@@ -1102,7 +1145,7 @@ function RankChart({
         return (
           <div
             key={x.r.key}
-            className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_72px] items-center gap-3 text-[13px] sm:grid-cols-[220px_minmax(0,1fr)_96px]"
+            className={`grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_72px] items-center gap-3 py-0.5 text-[13px] sm:grid-cols-[220px_minmax(0,1fr)_96px] ${ROW_HOVER}`}
           >
             <span className="break-words font-semibold">{x.r.name}</span>
             <span aria-hidden="true" className="relative h-3.5 rounded-full bg-ap-ground">
@@ -1631,7 +1674,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
           {d.values.map((v, i) => (
             <div
               key={v.label}
-              className="grid items-center gap-2.5 text-[13px]"
+              className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
               style={{ gridTemplateColumns: "150px minmax(0, 1fr) 52px" }}
             >
               <span className="font-semibold leading-[1.3]">{v.label}</span>
@@ -1756,10 +1799,110 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
 // ---------------------------------------------------------------------------------------------
 // Cost vs quality
 
+/**
+ * Where a bubble's name may sit, by its radius: right of it, left, above, over its top right
+ * and top left corners, below, under its corners.
+ */
+const NAME_SIDES = (r: number) => [
+  `translate(${r + 6}px, 50%)`,
+  `translate(calc(-100% - ${r + 6}px), 50%)`,
+  `translate(-50%, -${r + 4}px)`,
+  `translate(${r * 0.7 + 2}px, -${r * 0.7 + 2}px)`,
+  `translate(calc(-100% - ${r * 0.7 + 2}px), -${r * 0.7 + 2}px)`,
+  `translate(-50%, calc(100% + ${r + 4}px))`,
+  `translate(${r * 0.7 + 2}px, calc(100% + ${r * 0.7 + 2}px))`,
+  `translate(calc(-100% - ${r * 0.7 + 2}px), calc(100% + ${r * 0.7 + 2}px))`,
+];
+
+/**
+ * Keeps the scatter's words apart once drawn. A corner's word gives way to a bubble on it.
+ * Each bubble's name takes the first side clear of the plot's edge, the corners, the names
+ * before it and the other bubbles; failing that, the first clear of all but the corners,
+ * whose words then give way (the campaigns before the decoration); failing that, it hides
+ * (the card and the list under the chart still name it). An equal-CAC label takes the first
+ * of its spots clear of everything, or hides.
+ */
+function declutter(plot: HTMLElement) {
+  const box = plot.getBoundingClientRect();
+  const all = (k: string) => [...plot.querySelectorAll<HTMLElement>(`[data-ap-label="${k}"]`)];
+  const drawn = (el: HTMLElement) => el.getClientRects().length > 0;
+  const touch = (a: DOMRect, b: DOMRect, pad = 3) =>
+    a.left < b.right + pad &&
+    b.left < a.right + pad &&
+    a.top < b.bottom + pad &&
+    b.top < a.bottom + pad;
+  const inside = (r: DOMRect) =>
+    r.left >= box.left - 1 &&
+    r.right <= box.right + 1 &&
+    r.top >= box.top - 1 &&
+    r.bottom <= box.bottom + 1;
+  const bubbles = [...plot.querySelectorAll<HTMLElement>("[data-ap-bubble]")].map((b) =>
+    b.getBoundingClientRect()
+  );
+  const corners = all("corner").map((el) => ({ el, r: el.getBoundingClientRect(), on: true }));
+  for (const c of corners) c.on = !bubbles.some((b) => touch(c.r, b, 0));
+  const names: DOMRect[] = [];
+  const clear = (r: DOMRect, others: DOMRect[], withCorners: boolean) =>
+    inside(r) &&
+    !names.some((p) => touch(r, p)) &&
+    !others.some((b) => touch(r, b, 0)) &&
+    !(withCorners && corners.some((c) => c.on && touch(r, c.r)));
+  for (const el of all("name")) {
+    if (!drawn(el)) continue;
+    const own = Number(el.dataset.bubble);
+    const others = bubbles.filter((_, i) => i !== own);
+    const sides = NAME_SIDES(Number(el.dataset.r));
+    let at: DOMRect | null = null;
+    for (const withCorners of [true, false]) {
+      for (const side of sides) {
+        el.style.transform = side;
+        const r = el.getBoundingClientRect();
+        if (clear(r, others, withCorners)) {
+          at = r;
+          break;
+        }
+      }
+      if (at) break;
+    }
+    el.style.visibility = at ? "" : "hidden";
+    if (!at) continue;
+    names.push(at);
+    for (const c of corners) if (c.on && touch(at, c.r)) c.on = false;
+  }
+  for (const c of corners) c.el.style.visibility = c.on ? "" : "hidden";
+  const words = [...names, ...corners.filter((c) => c.on).map((c) => c.r)];
+  for (const el of all("iso")) {
+    const spots = JSON.parse(el.dataset.spots ?? "[]") as Array<[number, number]>;
+    let at: DOMRect | null = null;
+    for (const [x, y] of spots) {
+      el.style.left = `${x.toFixed(1)}%`;
+      el.style.bottom = `${y.toFixed(1)}%`;
+      const r = el.getBoundingClientRect();
+      if (inside(r) && !words.some((p) => touch(r, p)) && !bubbles.some((b) => touch(r, b, 0))) {
+        at = r;
+        break;
+      }
+    }
+    el.style.visibility = at ? "" : "hidden";
+    if (at) words.push(at);
+  }
+}
+
 function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
   const s = scatter(quality.dots);
   const nobodyPaid = s.dots.every((p) => p.d.payers === 0);
   const corner = "absolute max-w-[45%] text-[11px] font-bold uppercase tracking-[0.08em]";
+  const plot = useRef<HTMLDivElement>(null);
+  // After every draw, and whenever the plot's size changes.
+  useLayoutEffect(() => {
+    const el = plot.current;
+    if (!el) return;
+    declutter(el);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => declutter(el));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   return (
     <Card id="quality" labelledBy="h-q">
       <SectionHead
@@ -1772,84 +1915,130 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
       ) : (
         <div className="flex min-w-0 flex-col gap-1.5">
           <div
-            aria-hidden="true"
+            ref={plot}
             className="relative ml-11 h-[340px] border-b border-l border-ap-line"
             style={{ background: "linear-gradient(to right, transparent 50%, #f5f6f8 50%)" }}
           >
-            <svg
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              className="absolute inset-0 h-full w-full"
-            >
-              {s.iso.map((c) => (
-                <polyline
-                  key={c.cac}
-                  points={c.pts}
-                  fill="none"
-                  stroke="#c0b4e6"
-                  strokeWidth={1.2}
-                  strokeDasharray="4 4"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-            </svg>
-            {s.iso.map((c) => (
-              <span
-                key={c.cac}
-                className="absolute whitespace-nowrap text-[11px] font-bold text-ap-plum"
-                style={{ left: `${c.lx.toFixed(1)}%`, bottom: `${c.ly.toFixed(1)}%` }}
+            <div aria-hidden="true" className="absolute inset-0">
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="absolute inset-0 h-full w-full"
               >
-                CAC {fmt("eur", c.cac)}
-              </span>
-            ))}
-            <span className={`${corner} left-2 top-1.5 text-ap-good`}>Cheap &amp; converting</span>
-            <span className={`${corner} right-2 top-1.5 text-right text-ap-muted`}>
-              Expensive &amp; converting
-            </span>
-            <span className={`${corner} bottom-1.5 left-2 text-ap-muted`}>Cheap curiosity</span>
-            <span className={`${corner} bottom-1.5 right-2 text-right text-ap-bad`}>
-              Expensive &amp; weak
-            </span>
-            {s.dots.map((p, i) => {
-              // Right of the bubble, as drawn; on the bottom line, where the corner labels
-              // are, over it. A phone names the bubbles in the list under the chart.
-              const low = p.y < 5;
-              return (
-                <Fragment key={`${p.name}-${i}`}>
-                  <span
-                    className="absolute rounded-full opacity-90 shadow-[0_0_0_2px_#ffffff]"
-                    style={{
-                      left: `${p.x.toFixed(1)}%`,
-                      bottom: `${p.y.toFixed(1)}%`,
-                      width: p.size,
-                      height: p.size,
-                      transform: "translate(-50%, 50%)",
-                      background: p.color,
-                    }}
+                {s.iso.map((c) => (
+                  <polyline
+                    key={c.cac}
+                    points={c.pts}
+                    fill="none"
+                    stroke="#c0b4e6"
+                    strokeWidth={1.2}
+                    strokeDasharray="4 4"
+                    vectorEffect="non-scaling-stroke"
                   />
-                  <span
-                    className={`absolute whitespace-nowrap text-xs font-bold max-sm:hidden ${low ? "-translate-x-1/2" : "-translate-y-1 translate-x-[10px]"}`}
-                    style={{
-                      left: `${p.x.toFixed(1)}%`,
-                      bottom: low
-                        ? `calc(${p.y.toFixed(1)}% + ${p.size / 2 + 4}px)`
-                        : `${p.y.toFixed(1)}%`,
-                    }}
-                  >
-                    {p.name}
-                  </span>
-                </Fragment>
-              );
-            })}
-            {s.yTicks.map((t) => (
-              <span
-                key={t}
-                className="absolute -left-11 w-[38px] translate-y-1/2 text-right text-[11px] text-ap-muted"
-                style={{ bottom: `${s.yMax ? ((t / s.yMax) * 100).toFixed(1) : 0}%` }}
-              >
-                {t.toFixed(3)}%
+                ))}
+              </svg>
+              {s.iso.map((c) => (
+                <span
+                  key={c.cac}
+                  data-ap-label="iso"
+                  data-spots={JSON.stringify(c.spots)}
+                  className="absolute whitespace-nowrap text-[11px] font-bold text-ap-plum"
+                  style={{ left: `${c.lx.toFixed(1)}%`, bottom: `${c.ly.toFixed(1)}%` }}
+                >
+                  CAC {fmt("eur", c.cac)}
+                </span>
+              ))}
+              <span data-ap-label="corner" className={`${corner} left-2 top-1.5 text-ap-good`}>
+                Cheap &amp; converting
               </span>
-            ))}
+              <span
+                data-ap-label="corner"
+                className={`${corner} right-2 top-1.5 text-right text-ap-muted`}
+              >
+                Expensive &amp; converting
+              </span>
+              <span data-ap-label="corner" className={`${corner} bottom-1.5 left-2 text-ap-muted`}>
+                Cheap curiosity
+              </span>
+              <span
+                data-ap-label="corner"
+                className={`${corner} bottom-1.5 right-2 text-right text-ap-bad`}
+              >
+                Expensive &amp; weak
+              </span>
+              {s.dots.map((p, i) => {
+                // Right of the bubble, as drawn, until declutter finds it a clear side. A phone
+                // names the bubbles in the list under the chart.
+                return (
+                  <Fragment key={`${p.name}-${i}`}>
+                    <span
+                      data-ap-bubble=""
+                      className="absolute rounded-full opacity-90 shadow-[0_0_0_2px_#ffffff]"
+                      style={{
+                        left: `${p.x.toFixed(1)}%`,
+                        bottom: `${p.y.toFixed(1)}%`,
+                        width: p.size,
+                        height: p.size,
+                        transform: "translate(-50%, 50%)",
+                        background: p.color,
+                      }}
+                    />
+                    <span
+                      data-ap-label="name"
+                      data-bubble={i}
+                      data-r={p.size / 2}
+                      className="absolute whitespace-nowrap text-xs font-bold max-sm:hidden"
+                      style={{
+                        left: `${p.x.toFixed(1)}%`,
+                        bottom: `${p.y.toFixed(1)}%`,
+                        transform: NAME_SIDES(p.size / 2)[0],
+                      }}
+                    >
+                      {p.name}
+                    </span>
+                  </Fragment>
+                );
+              })}
+              {s.yTicks.map((t) => (
+                <span
+                  key={t}
+                  className="absolute -left-11 w-[38px] translate-y-1/2 text-right text-[11px] text-ap-muted"
+                  style={{ bottom: `${s.yMax ? ((t / s.yMax) * 100).toFixed(1) : 0}%` }}
+                >
+                  {t.toFixed(3)}%
+                </span>
+              ))}
+            </div>
+            <PointHover
+              label="Cost vs quality"
+              points={s.dots.map((p) => ({ x: p.x, y: p.y, size: p.size }))}
+              tip={(i) => {
+                const p = s.dots[i]!;
+                return {
+                  title: p.name,
+                  rows: [
+                    {
+                      label: "Cost per click",
+                      value: fmt("eur", p.d.cpc, 2),
+                      color: p.color,
+                      mark: "dot",
+                    },
+                    { label: "Click → paid", value: fmt("pct", p.d.clickToPaid, 3) },
+                    { label: "Clicks", value: fmt("count", p.d.clicks) },
+                    { label: "Purchases", value: fmt("count", p.d.payers) },
+                    { label: "Spend", value: fmt("eur", p.d.spend, 0) },
+                    {
+                      label: "CAC",
+                      value: p.d.payers ? fmt("eur", p.d.spend / p.d.payers, 0) : EMPTY,
+                      muted: !p.d.payers,
+                    },
+                  ],
+                  note: p.d.payers
+                    ? null
+                    : "No purchase from this campaign's clicks in this range.",
+                };
+              }}
+            />
           </div>
           <div aria-hidden="true" className="relative ml-11 h-[18px]">
             {s.xTicks.map((t) => (

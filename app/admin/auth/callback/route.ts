@@ -5,6 +5,7 @@ import { logAdminAction } from "@features/admin/server/audit";
 import { getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+import { ADMIN_HOME, safeAdminNext } from "@shared/url/admin-next";
 
 /**
  * Creates a Supabase client that reads cookies from the request and writes
@@ -52,8 +53,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/login?error=missing_code", origin));
   }
 
-  // Create redirect response first — auth cookies will be set on this object
-  const redirectToAdmin = NextResponse.redirect(new URL("/admin", origin));
+  // Create redirect response first — auth cookies will be set on this object. A sign-in lands
+  // on the page its link was for (`next`, only ever a same-site admin path: safeAdminNext),
+  // else on AP-Analytics' Dashboard, the whole admin since 16 Oct 2026.
+  const back = safeAdminNext(searchParams.get("next")) ?? ADMIN_HOME;
+  const redirectToAdmin = NextResponse.redirect(new URL(back, origin));
   const supabase = createCallbackClient(request, redirectToAdmin);
 
   // verifyOtp with token_hash does not require PKCE code_verifier,

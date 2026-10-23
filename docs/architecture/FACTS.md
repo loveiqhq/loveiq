@@ -18,13 +18,16 @@ down the list.
 So, plainly: **if the question counts people, payments, reports, emails, invites,
 shares, refunds or anyone on the waitlist, no written page is the answer.** Those
 numbers change hourly. Read them live with `list_product_tables` then
-`query_product_data`, or `get_business_numbers` for revenue, ad spend and the funnel.
-The `analytics` rows ("LoveIQ numbers — …") carry the same figures already summed by
-day, month and all-time, and each one is dated.
+`query_product_data`, or `get_business_numbers` for revenue, ad spend and the funnel,
+which gives them as the AP-Analytics dashboard counts them, with a link to the view. The
+`analytics` rows ("LoveIQ numbers — …") are the older daily rollup's figures, summed by
+day, month and all-time and each one dated. They count differently from the dashboard
+(UTC days, staff included, survey starts only after the cookie banner), so for any figure
+the dashboard shows, quote `get_business_numbers`.
 
 Traffic is the one place where two different numbers are both correct, so say which you
 mean. **Our own** visit count is live in the database like everything else
-(`brain_daily_rollup`, or `get_business_numbers`). **Google's** measurement — GA4
+(`get_business_numbers`, as the dashboard counts it). **Google's** measurement — GA4
 sessions, Search Console clicks and impressions — is not in our database at all; it
 exists only as dated `ga4` and `gsc` rows in the index.
 
@@ -201,6 +204,22 @@ List B3 was EUR 19.99 (strike 29.99) and EUR 14.99 until 2026-10-08, when the
 `Pricing_3.0` tab lowered it; every unpaid B3 quote was moved to the new prices
 (migration 20261008120000). List A3 has not changed.
 
+**Which list a reader was on during a test that has ended.** A quote's
+`experiment_group` is the list it is on now. A re-sync moves every unpaid quote to the
+next test's lists: on 2026-10-06 the 2.x test's unpaid A and B quotes became A3 and B3.
+So the stamp alone cannot measure an ended test. That is why the 2.x split read as "can't
+be measured" on 2026-10-14. Since 2026-10-16 a trigger keeps every change to a quote's
+arm or list price in `report_price_quote_arm_history`, one row each. The table is
+backfilled from the 2026-10-06 and 2026-10-08 re-syncs. The list a quote was dealt is the
+`old_experiment_group` of its earliest row (by `changed_at`), else its own
+`experiment_group`. `experiments` and the digest's arm readouts read it that way. A
+finished price test is read one stretch of unchanged prices at a time, because list A
+changed its prices in the middle of the 2.x test, on 2026-08-24. `rpc/get_price_list_changes`
+lists every change: the three 2.x ones are pinned there, with the deploy each moment comes
+from, and the history records every later one. A payment's own
+`metadata.experimentGroup` is stamped at checkout and never changes, so sales by price
+list (`get_business_numbers` with `group_by: price_list`) were always right.
+
 `essentials` (EUR 9.99) and `core` (EUR 39) are no longer sold; their buyers keep what they
 bought. Before 3.0, `full_report` was EUR 29 and `all_reports` EUR 49 for everyone.
 
@@ -233,7 +252,9 @@ A discount also arrives from the nurture email. There is **one** stage —
 does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a per-user
 50%-off Stripe promotion code from `STRIPE_COUPON_50` with a 24-hour expiry.
 The 78h call invite was removed with the Calendly integration on 2026-09-14, so one
-nurture email goes out per unconverted reader. The manual 100% grant remains.
+nurture email goes out per unconverted reader. The manual 100% grant remains. The one
+exception: while the EUR 1.99 gate is on, a reader in its cohort gets no nurture email
+(`skippedInitialGate`); the gate and its day-4 gift are their offer.
 
 Pricing 2.0 retired the earlier escalating ladder; the 6h reminders and the 30h/54h
 discounts are gone. This paragraph previously described that retired ladder, copied from

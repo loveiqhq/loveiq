@@ -75,15 +75,15 @@ const ALLOWED_EVENTS = [
   // Per-chapter reading and the wizard's Skip Intro (14.10)
   "report_chapter_stats",
   "wizard_skipped",
-  // The report's leave offer: the full report free for a call with the founders
-  "leave_offer_shown",
-  "leave_offer_clicked",
-  "leave_offer_dismissed",
   // The report's guided tour: a first run's start and how it ended, and each replay
   "tour_started",
   "tour_completed",
   "tour_skipped",
+  "tour_left",
   "tour_replayed",
+  // The EUR 1.99 pre-unlock gate: seen, and its two buttons
+  "initial_gate_viewed",
+  "initial_gate_cta_click",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -112,6 +112,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "tour_started":
     case "tour_completed":
     case "tour_skipped":
+    case "tour_left":
     case "tour_replayed":
       return "report";
     case "paywall_view":
@@ -120,6 +121,8 @@ function entityTypeFor(event: AllowedEvent): string {
     case "paywall_dismissed":
     case "scroll_paywall_dismissed":
     case "lock_icon_clicked":
+    case "initial_gate_viewed":
+    case "initial_gate_cta_click":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
@@ -144,9 +147,6 @@ function entityTypeFor(event: AllowedEvent): string {
       return "ux";
     case "scroll_paywall_shown":
     case "locked_card_price_shown":
-    case "leave_offer_shown":
-    case "leave_offer_clicked":
-    case "leave_offer_dismissed":
       return "paywall";
     case "experiment_exposure":
     case "experiment_card_flipped":

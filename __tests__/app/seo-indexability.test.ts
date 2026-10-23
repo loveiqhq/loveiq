@@ -30,11 +30,12 @@ const PRIVATE_ROUTES = [
   "checkout/return",
   "login",
   "admin/login",
-  "admin/submissions",
+  "admin/ap",
   // Pay to start: an ad's landing pages, sold to, never searched for, and their checkout status.
   "sexual-archetype",
   "sexual-archetype/initial",
   "sexual-archetype/checkout",
+  "why",
 ];
 
 describe("legal pages are indexable", () => {
@@ -67,6 +68,7 @@ describe("private pages stay out of the index", () => {
       "/admin",
       "/sexual-archetype",
       "/sexual-archetype/initial",
+      "/why",
     ]) {
       expect(urls).not.toContain(route);
     }

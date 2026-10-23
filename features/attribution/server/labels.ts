@@ -76,7 +76,7 @@ const UNKNOWN: ArmLabel = {
 const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   landing: {
     // Marketing's naming convention (2026-08-27), adopted verbatim so the words in
-    // Slack, in /admin and in a meeting are the same words. It replaced "Landing
+    // Slack, in AP-Analytics and in a meeting are the same words. It replaced "Landing
     // page A / B (current / previous design)", which had two problems: the A/B
     // letters carried no hint of WHICH came first, and "current design" is a name
     // that goes stale the next time the page is rebuilt — the same failure already

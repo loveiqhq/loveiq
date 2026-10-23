@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
 import { rangeLabel, SURVEY_TRACKING_FROM } from "@features/admin/server/ap/filters";
-import { fmt } from "@features/admin/server/ap/format";
+import { delta, EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type {
   Benchmark,
@@ -16,6 +16,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { bucketTitles, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -23,17 +24,18 @@ import {
   Busy,
   Card,
   Failed,
+  ICON_BTN,
   KpiTileV2,
   LiveBadge,
   Loading,
   NotTracked,
   PageHeader,
+  RangeLine,
   SectionHead,
   SortIcon,
   Spark,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -173,7 +175,11 @@ export default function ApSurvey() {
           <RangeLine data={data} sources="Production database and PostHog" />
           <TileGrid min={200}>
             {data.tiles.map((t) => (
-              <KpiTileV2 key={t.key} tile={t} />
+              <KpiTileV2
+                key={t.key}
+                tile={t}
+                titles={bucketTitles(data.range.from, data.range.to)}
+              />
             ))}
           </TileGrid>
 
@@ -242,8 +248,10 @@ export default function ApSurvey() {
 
 function DemographicCard({ card }: { card: DemoCard }) {
   const max = Math.max(0.0001, ...card.rows.map((r) => Math.max(r.share, r.bench ?? 0)));
+  const rowTip = useRowTip();
   return (
     <div className="flex flex-col gap-3 rounded-[18px] bg-ap-ground p-[18px]">
+      {rowTip.card}
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="m-0 font-serif text-lg font-semibold">{card.title}</h3>
         <LiveBadge />
@@ -254,11 +262,40 @@ function DemographicCard({ card }: { card: DemoCard }) {
         return (
           <div
             key={r.label}
-            className="grid items-center gap-2.5 text-[13px]"
+            className="-mx-2 grid items-center gap-2.5 rounded-lg px-2 py-0.5 text-[13px] hover:bg-white"
             style={{ gridTemplateColumns: "minmax(70px,120px) minmax(48px,1fr) 46px 58px" }}
+            {...(r.pending
+              ? {}
+              : rowTip.bind(() => ({
+                  title: `${card.title}: ${r.label}`,
+                  rows: [
+                    {
+                      label: "This survey",
+                      value: fmt("pct", r.share, 1),
+                      color: DEMO_COLORS[ri % DEMO_COLORS.length],
+                      mark: "square",
+                    },
+                    {
+                      label: "Benchmark",
+                      value: fmt("pct", r.bench, 1),
+                      color: "#161021",
+                      mark: "line",
+                      muted: r.bench === null,
+                    },
+                    {
+                      label: "Difference",
+                      value: delta("pct", r.share, r.bench, "either")?.text ?? EMPTY,
+                      strong: r.bench !== null,
+                      muted: r.bench === null,
+                    },
+                  ],
+                })))}
           >
             <span className="truncate font-semibold" title={r.label}>
               {r.label}
+              {r.bench !== null && !r.pending && (
+                <span className="sr-only">, benchmark {fmt("pct", r.bench, 1)}</span>
+              )}
             </span>
             {r.pending ? (
               <span className="col-span-3 text-xs text-ap-muted">{r.pending}</span>
@@ -353,6 +390,7 @@ function IntroSection({ data }: { data: SurveyPayload }) {
                   ? 1
                   : 0
             }
+            titles={bucketTitles(data.range.from, data.range.to)}
           />
         ))}
       </TileGrid>
@@ -481,6 +519,7 @@ function QuestionDetail({
 }) {
   const { params } = useApFilters();
   const [dim, setDim] = useState<Dimension>("none");
+  const answerTip = useRowTip();
   const countable = rows.filter(
     (r) => r.id !== q.id && ["scale", "single", "multiple", "country"].includes(r.type)
   );
@@ -603,11 +642,22 @@ function QuestionDetail({
                 </p>
               ) : (
                 <div className="flex max-w-[820px] flex-col gap-3.5">
+                  {answerTip.card}
                   {data.answers.map((a) => (
                     <div
                       key={a.label}
-                      className="grid items-center gap-3 text-[13px]"
+                      className="-mx-2 grid items-center gap-3 rounded-lg px-2 py-1 text-[13px] hover:bg-white"
                       style={{ gridTemplateColumns: "140px minmax(0,1fr)" }}
+                      {...answerTip.bind(() => ({
+                        title: a.label,
+                        rows: data.segments.map((sg, i) => ({
+                          label: `${sg.name} · n=${fmt("count", sg.n)}`,
+                          value: fmt("pct", a.shares[i] ?? null, 1),
+                          color: SEGMENT_COLORS[i],
+                          mark: "square" as const,
+                          muted: a.shares[i] === null,
+                        })),
+                      }))}
                     >
                       <span className="font-semibold leading-snug">{a.label}</span>
                       <div className="flex flex-col gap-[3px]">
@@ -722,6 +772,7 @@ function FunnelSection({
     steps.filter((x) => matches(x.r, term)),
     sort
   );
+  const exitTitles = bucketTitles(data.range.from, data.range.to);
   return (
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
@@ -881,7 +932,25 @@ function FunnelSection({
                   {fmt("mmss", x.time)}
                 </span>
                 <span role="cell" className="px-3 py-2">
-                  <Spark values={x.r.exitsTrend} height={26} />
+                  {/* Over the row's button, the line only: the cell's edges still open the row. */}
+                  <span className="relative z-[1] block">
+                    <Spark
+                      values={x.r.exitsTrend}
+                      height={26}
+                      titles={exitTitles.length === x.r.exitsTrend.length ? exitTitles : undefined}
+                      name="Exits"
+                      focusable={false}
+                      // A tap reads the line; opening the question (and scrolling to it) is
+                      // the row's own tap, or a click here.
+                      tapReads
+                      onPick={() => {
+                        onSelect(x.r.id);
+                        document
+                          .getElementById("question-detail")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    />
+                  </span>
                 </span>
               </div>
             );
@@ -962,7 +1031,7 @@ function Th<K extends string>({
               dir: dir === null ? (text ? 1 : -1) : dir === 1 ? -1 : 1,
             })
           }
-          className={`ml-1 inline-flex cursor-pointer border-0 bg-transparent p-0 align-[-1px] ${dir ? "text-ap-violet" : "text-ap-muted"}`}
+          className={`ml-0.5 ${ICON_BTN} ${dir ? "text-ap-violet" : "text-ap-muted"}`}
         >
           <SortIcon dir={dir} />
         </button>

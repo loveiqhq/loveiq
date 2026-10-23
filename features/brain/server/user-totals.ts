@@ -115,6 +115,8 @@ interface Row {
   } | null;
   report_price_quote?: Array<{ reminders: unknown }> | null;
   answer?: Array<{
+    /** Read only when several questions come in one read, to split the answers between them. */
+    survey_question_id?: number | string | null;
     normalized_value: number | string | null;
     answer_option: { option_text: string | null } | null;
     survey_submission_answer_options: Array<{
@@ -139,6 +141,8 @@ const clean = (v: string | null | undefined) =>
 
 /** "Which age range are you in?", by the survey's own question id, which outlives row ids. */
 const AGE_QUESTION = "15003";
+/** "What kind of relationship setup are you in right now?" */
+const RELATIONSHIP_QUESTION = "15004";
 
 /** Who unsubscribed, bounced or complained, and who invited someone, keyed by email. */
 export interface MailFacts {
@@ -148,9 +152,14 @@ export interface MailFacts {
   sharers?: Set<string>;
 }
 
-export function toPerson(r: Row, mail?: MailFacts): Person | null {
+export function toPerson(
+  r: Row,
+  mail?: MailFacts,
+  labels?: ReadonlyMap<string, string>
+): Person | null {
   if (isStaffEmail(r.app_user?.email)) return null;
   const p = r.app_user?.user_profile ?? null;
+  const relationship = clean(p?.relationship_status);
   let revenue = 0;
   let sales = 0;
   let otherCurrency = 0;
@@ -172,7 +181,8 @@ export function toPerson(r: Row, mail?: MailFacts): Person | null {
     gender: clean(p?.gender),
     age: clean(r.age?.[0]?.answer_option?.option_text),
     orientation: clean(p?.sexual_orientation),
-    relationship: clean(p?.relationship_status),
+    // An early profile holds the option's short label ("Monogamous"), a later one its wording.
+    relationship: labels?.get(relationship.toLowerCase()) ?? relationship,
     country: clean(p?.location_primary),
     archetype: clean(
       r.scoring_result?.v5_primary_archetype ?? r.scoring_result?.primary_archetype ?? "not scored"
@@ -338,6 +348,8 @@ export interface LoadOptions {
   measure?: Measure;
   /** answers: the survey_question row id of the question asked about. */
   questionId?: number;
+  /** answers: several questions' row ids, read together (see loadPeopleByQuestion). */
+  questionIds?: number[];
 }
 
 /** Everyone who finished the survey in the window, as totals-ready records. Null when unreadable. */
@@ -346,13 +358,79 @@ export async function loadPeople(
   until?: string,
   opts: LoadOptions = {}
 ): Promise<Person[] | null> {
-  const question = await supabaseFetch(
-    `/rest/v1/survey_question?select=id&frontend_qid=eq.${AGE_QUESTION}&limit=1`
+  const read = await readSubmissions(since, until, opts);
+  return read ? peopleOf(read.rows, read.mail, read.labels) : null;
+}
+
+/**
+ * SEVERAL QUESTIONS' ANSWERS FROM ONE READ, each question's people built exactly as a
+ * one-question read builds them: every row keeps only that question's answers, then the same
+ * toPerson and onePerPerson. So each question is grouped, hidden and protected exactly as
+ * its own call would be. On 11 Oct 2026, 61 questions were read one call each in 70 seconds;
+ * 25 questions' answers for 1,000 submissions took 165 ms of SQL, measured 2026-10-16.
+ */
+export async function loadPeopleByQuestion(
+  since: string | undefined,
+  until: string | undefined,
+  questionIds: number[]
+): Promise<Map<number, Person[]> | null> {
+  const read = await readSubmissions(since, until, { measure: "answers", questionIds });
+  if (!read) return null;
+  return new Map(
+    questionIds.map((id) => [
+      id,
+      peopleOf(
+        read.rows.map((r) => ({
+          ...r,
+          answer: (r.answer ?? []).filter((a) => Number(a.survey_question_id) === id),
+        })),
+        read.mail,
+        read.labels
+      ),
+    ])
   );
+}
+
+const peopleOf = (rows: Row[], mail?: MailFacts, labels?: ReadonlyMap<string, string>) =>
+  onePerPerson(rows.map((r) => toPerson(r, mail, labels)).filter((p): p is Person => p !== null));
+
+/**
+ * The relationship options' short labels, which early profiles hold ("Monogamous", 114 of them
+ * on 21 Oct 2026), to the survey's wording, which later ones hold, so one answer is one group.
+ * From the option table itself (option_value to option_text), not a list kept here.
+ */
+async function relationshipLabels(): Promise<Map<string, string> | null> {
+  const res = await supabaseFetch(
+    `/rest/v1/survey_question?select=answer_option(option_value,option_text)&frontend_qid=eq.${RELATIONSHIP_QUESTION}&limit=1`
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json().catch(() => [])) as Array<{
+    answer_option?: Array<{ option_value: string | null; option_text: string | null }>;
+  }>;
+  const out = new Map<string, string>();
+  for (const o of rows[0]?.answer_option ?? []) {
+    if (!o.option_value || !o.option_text) continue;
+    const from = clean(o.option_value).toLowerCase();
+    const to = clean(o.option_text);
+    if (from !== to.toLowerCase()) out.set(from, to);
+  }
+  return out;
+}
+
+/** The finished submissions in the window, read once with what the measure needs. */
+async function readSubmissions(
+  since: string | undefined,
+  until: string | undefined,
+  opts: LoadOptions
+): Promise<{ rows: Row[]; mail?: MailFacts; labels: Map<string, string> } | null> {
+  const [question, labels] = await Promise.all([
+    supabaseFetch(`/rest/v1/survey_question?select=id&frontend_qid=eq.${AGE_QUESTION}&limit=1`),
+    relationshipLabels(),
+  ]);
   const ageId = question.ok
     ? ((await question.json().catch(() => [])) as Array<{ id?: number }>)[0]?.id
     : undefined;
-  if (typeof ageId !== "number") return null;
+  if (typeof ageId !== "number" || !labels) return null;
   const range =
     (since ? `&created_date_time=gte.${since}T00:00:00Z` : "") +
     (until ? `&created_date_time=lt.${nextDay(until)}T00:00:00Z` : "");
@@ -362,10 +440,11 @@ export async function loadPeople(
   const reminders =
     opts.measure === "emails" ? ",report_price_quote(reminders:metadata->nurtureEmailsSent)" : "";
   const sessions = opts.measure === "reading" ? ",report_session(started_at,ended_at)" : "";
+  const ids = opts.questionIds ?? (opts.questionId !== undefined ? [opts.questionId] : []);
   const answer =
-    opts.measure === "answers" && opts.questionId !== undefined
-      ? ",answer:survey_submission_answer(normalized_value,answer_option(option_text)," +
-        "survey_submission_answer_options(answer_option(option_text)))"
+    opts.measure === "answers" && ids.length
+      ? ",answer:survey_submission_answer(survey_question_id,normalized_value," +
+        "answer_option(option_text),survey_submission_answer_options(answer_option(option_text)))"
       : "";
   const rows = await readAll<Row>(
     `/rest/v1/survey_submission?select=user_id,created_date_time,` +
@@ -375,12 +454,14 @@ export async function loadPeople(
       `personal_report(payment!fk_payment_personal_report(amount,currency,status,is_test)${sessions})` +
       `${reminders}${answer}` +
       `&age.survey_question_id=eq.${ageId}` +
-      (answer ? `&answer.survey_question_id=eq.${opts.questionId}` : "") +
+      (answer
+        ? ids.length === 1
+          ? `&answer.survey_question_id=eq.${ids[0]}`
+          : `&answer.survey_question_id=in.(${ids.join(",")})`
+        : "") +
       `&status=eq.completed${range}&order=id.asc`
   );
-  return rows
-    ? onePerPerson(rows.map((r) => toPerson(r, mail)).filter((p): p is Person => p !== null))
-    : null;
+  return rows ? { rows, mail, labels } : null;
 }
 
 /**
@@ -855,6 +936,11 @@ export function renderAnswers(req: TotalsRequest, people: Person[], q: AskedQues
   const line = (label: string, ps: Person[]) => {
     const a = answered(ps);
     if (a.length < MIN_GROUP) return `- ${label}: too few picked an option to show.`;
+    // Shares over a count shown only as "all but under 5" pin that count down (rounded shares
+    // fit few counts), and with it the 1 to 4 who did not answer (review of #624).
+    if (a.length !== ps.length && ps.length - a.length < MIN_GROUP) {
+      return `- ${label} (all but under 5 of ${n(ps.length)} answered): shares withheld, since they would give back how many did not answer.`;
+    }
     const counts = new Map<string, number>(universe.map((o) => [o, 0]));
     for (const p of a) for (const o of p.answer ?? []) counts.set(o, (counts.get(o) ?? 0) + 1);
     const ordered =
@@ -892,9 +978,7 @@ export function renderAnswers(req: TotalsRequest, people: Person[], q: AskedQues
       ' An option chosen by fewer than 5, or by all but fewer than 5, reads "under 5" or "all but under 5".',
     // Grouped, the All line is only its size: its counts minus the groups' would give back
     // the hidden cells.
-    req.groupBy.length
-      ? `- All: ${n(answered(g.matches).length)} answered`
-      : line("All", g.matches),
+    req.groupBy.length ? allAnswered(g, answered) : line("All", g.matches),
   ];
   if (req.groupBy.length) {
     out.push(
@@ -906,6 +990,27 @@ export function renderAnswers(req: TotalsRequest, people: Person[], q: AskedQues
   }
   out.push("", "Written-in answers are never read or shown, only the options people picked.");
   return out.join("\n");
+}
+
+/**
+ * How many of everyone answered, grouped. Minus the groups whose count is exact it gives back
+ * the rest's, which may be a group shown as "all but under 5" or a hidden one: so it is exact
+ * only when that rest is nobody, all answered, or 5 or more each way.
+ */
+function allAnswered(g: Grouped, answered: (ps: Person[]) => Person[]): string {
+  const exact = (ps: Person[]) => {
+    const a = answered(ps).length;
+    return a === ps.length || (a >= MIN_GROUP && ps.length - a >= MIN_GROUP);
+  };
+  const known = g.shown.filter(([, ps]) => exact(ps));
+  const restPeople = g.matches.length - known.reduce((s, [, ps]) => s + ps.length, 0);
+  const restAnswered =
+    answered(g.matches).length - known.reduce((s, [, ps]) => s + answered(ps).length, 0);
+  return restPeople === 0 ||
+    restAnswered === restPeople ||
+    (restAnswered >= MIN_GROUP && restPeople - restAnswered >= MIN_GROUP)
+    ? `- All: ${n(answered(g.matches).length)} answered`
+    : `- All: ${n(g.matches.length)} finished; how many answered is withheld, since the groups' counts would give back a hidden one`;
 }
 
 /** Which country do you live in? Stored as text, and already a way to group (`country`). */

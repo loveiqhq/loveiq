@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readAppCss } from "@shared/testing/read-app-css";
-import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/leaveIntent";
+import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/paywallSelector";
 
 /**
  * When the plans pop-up appears, and how gently.
@@ -36,8 +36,9 @@ describe("plans pop-up trigger", () => {
     // ever on screen before it fired. Now that it waits for Attachment, the two
     // half-shown chapters come first, so the first card arms the clock instead.
     // V4's in-flow paywall counts as that first offer too, whichever comes first in the
-    // page: the leave offer's own selector (leaveIntent.ts), which since the slimmed report
-    // (16.10) is a chapter's wall or the fold that holds it, and never Part II's Summary gate.
+    // page: FIRST_PAYWALL_SELECTOR (logic/paywallSelector.ts), which since the slimmed
+    // report (16.10) is a chapter's wall or the fold that holds it, and never Part II's
+    // Summary gate.
     expect(SOURCE).toContain("document.querySelector(FIRST_PAYWALL_SELECTOR)");
     expect(FIRST_PAYWALL_SELECTOR.split(", ")).toEqual([
       ".report-premium-overlay",
@@ -63,8 +64,6 @@ describe("plans pop-up trigger", () => {
     expect(io.slice(0, io.indexOf("stop();"))).toContain("if (isGuidedTourActive()) return;");
     expect(SOURCE).toContain("if (!isGuidedTourActive() && hasReachedTrigger())");
     expect(SOURCE).toContain("if (isGuidedTourActive() || !hasReachedTrigger()) return;");
-    // And the leave offer is off while it runs, so the wall it passes cannot arm it.
-    expect(SOURCE).toContain('mode: tour.running ? "off" : leaveOfferMode');
   });
 
   it("waits until the section has risen into the viewport, not merely touched its edge", () => {

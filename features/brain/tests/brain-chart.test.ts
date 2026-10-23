@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaySeries } from "@features/brain/server/jumps";
 
-type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown> };
+type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown> | null };
 
 /**
  * loadSeries(until, extra) returns every day from `until - (29 + extra)` to `until`, oldest
  * first. The fake honours exactly that, so the slice to `days` is exercised for real.
  */
 let dayOf: (day: string) => Day = () => ({});
-const mockLoad = vi.fn(async (until: string, extra = 0): Promise<DaySeries[]> => {
+const mockLoad = vi.fn(async (until: string, extra = 0): Promise<DaySeries[] | null> => {
   const out: DaySeries[] = [];
   const end = Date.parse(`${until}T00:00:00Z`);
   for (let i = 29 + extra; i >= 0; i -= 1) {
@@ -31,6 +31,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
 }));
 
+import { renderDropoutByArm } from "@/app/api/admin/digest-image/[kind]/route";
 import { CHART_METRICS, chartPng, drawChart } from "@features/brain/server/chart";
 import { METRICS } from "@features/brain/server/jumps";
 import { verifyImagePayload } from "@shared/url/signed-image-url";
@@ -43,6 +44,18 @@ const payloadOf = async (url: string) => {
     u.searchParams.get("s")
   ))!;
 };
+/** Every string the rendered picture prints (as digest-image-units.test.ts reads it). */
+function textsIn(node: unknown, out: string[] = []): string[] {
+  if (typeof node === "string" || typeof node === "number") out.push(String(node));
+  else if (Array.isArray(node)) for (const child of node) textsIn(child, out);
+  else if (node && typeof node === "object") {
+    const children = (node as { props?: { children?: unknown } }).props?.children;
+    if (children !== undefined) textsIn(children, out);
+  }
+  return out;
+}
+const pictureTexts = (payload: Record<string, unknown>) =>
+  textsIn(renderDropoutByArm(payload as never).element);
 const draw = async (req: Record<string, unknown>) => {
   const r = await drawChart(req as never, NOW);
   if (!r.ok) throw new Error(`refused: ${r.message}`);
@@ -92,7 +105,7 @@ describe("show_chart: what gets drawn", () => {
     expect(payload.title).toBe("Visitors (our own count)");
     expect(payload.headline).toBe("Over the 7 days: 854, 122 a day");
     // No gap on the chart, so no sentence explaining gaps under it.
-    expect(payload.footnote).toBe("daily, UTC");
+    expect(payload.footnote).toBe("daily");
     expect(url.startsWith("https://loveiq.example/api/admin/digest-image/metric-trend?d=")).toBe(
       true
     );
@@ -155,7 +168,7 @@ describe("show_chart: what gets drawn", () => {
     expect(payload.colorFirst).toBe("#334155");
     expect(payload.colorLast).toBe("#9333ea");
     expect(payload.headline).toBe("Over the 30 days: 20% · 40%");
-    expect(payload.footnote).toBe("daily, UTC");
+    expect(payload.footnote).toBe("daily");
     expect(text).toContain("Visitors who start: 20% (3,000 of 15,000 visitors).");
     expect(text).toContain("Starters who finish: 40% (1,200 of 3,000 surveys started).");
   });
@@ -167,7 +180,7 @@ describe("show_chart: what gets drawn", () => {
     expect(await refusal({ metrics: ["revenue", "reports_paid"] })).toMatch(/different kinds/);
   });
 
-  it("charts revenue from the rollup, and ad spend only on days the ad data covers", async () => {
+  it("charts the revenue it is given, and ad spend only on days the ad data covers", async () => {
     dayOf = (day) => ({ rollup: { revenue: day === "2026-09-24" ? "19.90" : 0 } });
     mockAd.mockResolvedValue({
       byDay: new Map([
@@ -188,9 +201,69 @@ describe("show_chart: what gets drawn", () => {
     expect(both.text).toContain("19 Sep –");
     expect(both.text).not.toContain("GA4 misses");
     expect(both.payload.title).toBe("Revenue and Google Ads spend");
-    expect(both.payload.footnote).toBe(
-      "daily, UTC · a gap is a day with no record · amounts in EUR"
+    expect(both.payload.footnote).toBe("daily · a gap is a day with no record · amounts in EUR");
+    // Which days each figure is counted on, since they are not all the same days.
+    expect(both.text).toContain("revenue are counted as the AP-Analytics dashboard counts them");
+  });
+
+  it("says it drew the dashboard's counting, and draws nothing when that cannot be read", async () => {
+    dayOf = () => ({ rollup: { unique_visitors: 120 } });
+    const drawn = await draw({ metrics: ["visitors"], days: 7 });
+    expect(drawn.text).toContain("counted as the AP-Analytics dashboard counts them");
+    expect(drawn.payload.footnote).toBe("daily");
+    // The dashboard's facts could not be read: no chart, and no other counting in its place.
+    mockLoad.mockResolvedValueOnce(null);
+    expect(await refusal({ metrics: ["visitors"], days: 7 })).toBe(
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+        "give, and none counted another way in their place. This is an outage, not a flat " +
+        "line. Ask again in a few minutes."
     );
+  });
+
+  it("ends on Berlin's day, not UTC's, between midnight in Berlin and in London", async () => {
+    // 22:30 UTC on 26 Sep is 00:30 on 27 Sep in Berlin: the 26th is whole, the 27th is today.
+    const night = Date.parse("2026-09-26T22:30:00Z");
+    const byDefault = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
+    expect(byDefault.ok && byDefault.text).toContain("7 days to 26 Sep 2026");
+    const whole = await drawChart(
+      { metrics: ["visitors"], days: 7, until: "2026-09-26" } as never,
+      night
+    );
+    expect(whole.ok && whole.text).not.toContain("Today is still going");
+    const today = await drawChart(
+      { metrics: ["visitors"], days: 7, until: "2026-09-27" } as never,
+      night
+    );
+    expect(today.ok && today.text).toContain("Today is still going, so its numbers are partial.");
+  });
+
+  it("says reports opened are not in for a day still running in UTC, not that it had no record", async () => {
+    // 22:30 UTC on 26 Sep is 00:30 on 27 Sep in Berlin: the 26th is whole for the dashboard,
+    // and its UTC day runs on, so the rollup's reports opened are blank (as loadSeries leaves them).
+    const night = Date.parse("2026-09-26T22:30:00Z");
+    dayOf = (day) => ({
+      rollup: { report_opens: day >= "2026-09-26" ? null : 10, unique_visitors: 200 },
+    });
+    const opened = await drawChart({ metrics: ["report_opens"], days: 7 } as never, night);
+    if (!opened.ok) throw new Error(opened.message);
+    expect(opened.text).toContain(
+      "Reports opened and paid are counted by UTC day, and 2026-09-26 is not over yet in UTC, " +
+        "so their figures for it are not complete and are left out."
+    );
+    expect((await payloadOf(opened.url)).footnote).toBe(
+      "daily · a day not over yet in UTC is left blank"
+    );
+    // To Berlin's today: two days the UTC rollup has not finished.
+    const today = await drawChart(
+      { metrics: ["report_opens"], days: 7, until: "2026-09-27" } as never,
+      night
+    );
+    expect(today.ok && today.text).toContain("2026-09-26 and 2026-09-27 are not over yet in UTC");
+    // A chart of the dashboard's own figures is whole that night, and in the day so is this one.
+    const visitors = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
+    expect(visitors.ok && visitors.text).not.toContain("not over yet in UTC");
+    const day = await drawChart({ metrics: ["report_opens"], days: 7 } as never, NOW);
+    expect(day.ok && day.text).not.toContain("not over yet in UTC");
   });
 
   it("groups thousands in an amount, as the reader would write it", async () => {
@@ -200,11 +273,56 @@ describe("show_chart: what gets drawn", () => {
     expect(text).toContain("- Revenue: 19 Sep 250.00 · 20 Sep 250.00");
   });
 
-  it("leaves ad spend blank, and says why, when it cannot be read", async () => {
+  it("says ad spend could not be read, never a chart of blanks, and still draws revenue", async () => {
+    const outage =
+      "Google Ads spend could not be read just now, so it is left out: this is an outage, not zero.";
+    // adCostByDay swallows a failed read and returns no window.
+    mockAd.mockResolvedValue({ byDay: new Map(), from: null, to: null });
+    expect(await refusal({ metrics: ["ad_spend"], days: 7 })).toBe(outage);
     mockAd.mockRejectedValue(new Error("down"));
-    const { payload, text } = await draw({ metrics: ["ad_spend"], days: 7 });
-    expect(payload.first).toEqual([null, null, null, null, null, null, null]);
-    expect(text).toContain("Google Ads spend could not be read just now");
+    expect(await refusal({ metrics: ["ad_spend"], days: 7 })).toBe(outage);
+    // Beside the dashboard's revenue: revenue drawn, spend left out and said so.
+    mockAd.mockResolvedValue({ byDay: new Map(), from: null, to: null });
+    dayOf = () => ({ rollup: { revenue: "10" } });
+    const both = await draw({ metrics: ["revenue", "ad_spend"], days: 7 });
+    expect(both.text).toContain("Revenue: EUR 70.00.\nGoogle Ads spend: could not be read.");
+    expect(both.text).toContain(outage);
+    expect(both.text).toContain("- Google Ads spend: left out, as it could not be read just now");
+    expect(both.payload.footnote).toBe(
+      "daily · Google Ads spend could not be read · amounts in EUR"
+    );
+    expect(both.text).not.toMatch(/nothing recorded/i);
+    // The picture's legend too, never "no data yet".
+    const picture = pictureTexts(both.payload);
+    expect(picture).toContain("Google Ads spend — could not be read");
+    expect(picture.join(" ")).not.toMatch(/no data/);
+  });
+
+  it("leaves out Google Analytics when it cannot be read, says so, and keeps our own figures", async () => {
+    const outage =
+      "Google Analytics could not be read just now, so its figures are left out: this is an " +
+      "outage, not zero.";
+    // loadSeries marks every day's GA4 null when its read failed.
+    dayOf = () => ({ rollup: { unique_visitors: 200 }, ga4: null });
+    expect(await refusal({ metrics: ["sessions"], days: 7 })).toBe(outage);
+    expect(await refusal({ metrics: ["engaged_rate"], days: 7 })).toBe(outage);
+    const both = await draw({ metrics: ["visitors", "sessions"], days: 7 });
+    expect(both.text).toContain("Visitors: 1,400, 200 a day.\nGA4 sessions: could not be read.");
+    expect(both.text).toContain(outage);
+    expect(both.text).toContain("- GA4 sessions: left out, as it could not be read just now");
+    expect(both.payload.headline).toBe("Over the 7 days: 1,400 · could not be read");
+    expect(both.payload.footnote).toBe("daily · GA4 sessions could not be read");
+    const picture = pictureTexts(both.payload);
+    expect(picture).toContain("GA4 sessions — could not be read");
+    expect(picture).toContain("Visitors");
+    expect(picture.join(" ")).not.toMatch(/no data/);
+    // Named first, the same.
+    const first = await draw({ metrics: ["sessions", "visitors"], days: 7 });
+    expect(pictureTexts(first.payload)).toContain("GA4 sessions — could not be read");
+    expect(both.text).not.toMatch(/nothing recorded|no record|decline cookies/i);
+    // A chart of our own figures alone says nothing of it.
+    const visitors = await draw({ metrics: ["visitors"], days: 7 });
+    expect(visitors.text).not.toContain("Google Analytics");
   });
 
   it("does not read ad spend for a chart that does not show it", async () => {

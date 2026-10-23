@@ -35,6 +35,7 @@ vi.mock("@features/admin/server/emails/admin-magic-link", () => ({
 }));
 
 import { POST } from "@/app/api/admin/login/route";
+import { adminMagicLinkEmail } from "@features/admin/server/emails/admin-magic-link";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
@@ -237,5 +238,34 @@ describe("POST /api/admin/login (magic link)", () => {
 
     const res = await POST(makeRequest({ email: "admin@test.com" }));
     expect(res.status).toBe(500);
+  });
+
+  /** The magic link the email was given. */
+  const sentLink = () => vi.mocked(adminMagicLinkEmail).mock.calls.at(-1)![0].magicLink;
+
+  it("puts the page the sign-in was for on the magic link, so the link opens it", async () => {
+    const next = "/admin/ap/assessment-a?period=custom&from=2026-10-01&to=2026-10-07";
+    const res = await POST(makeRequest({ email: "admin@test.com", next }));
+    expect(res.status).toBe(200);
+    const link = new URL(sentLink());
+    expect(link.pathname).toBe("/admin/auth/callback");
+    expect(link.searchParams.get("next")).toBe(next);
+    expect(link.searchParams.get("token_hash")).toBe("test-hashed-token");
+  });
+
+  it.each([
+    "//evil.com",
+    "/\\evil.com",
+    "/admin/..//evil",
+    "%2F%2Fevil.com",
+    "/admin/%2F%2Fevil.com",
+    "https://evil.com/admin/ap",
+    "/admin@evil.com",
+    42,
+  ])("leaves a next that is not an admin page off the link: %j", async (next) => {
+    const res = await POST(makeRequest({ email: "admin@test.com", next }));
+    // The sign-in itself still works: a bad next is dropped, never an error.
+    expect(res.status).toBe(200);
+    expect(new URL(sentLink()).searchParams.has("next")).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
@@ -25,11 +25,18 @@ import {
   noticeJumps,
   parseGa4Day,
   readMetric,
+  partialDay,
   renderDay,
+  utcNote,
+  GA4_UNREAD,
+  ga4Down,
   type Around,
   type DaySeries,
   type Ga4Day,
 } from "@features/brain/server/jumps";
+import { clearFactsCache } from "@features/admin/server/ap/facts";
+import { CircuitOpenError } from "@shared/http/circuit-breaker";
+import { buildNoticeRow } from "@features/brain/server/notice";
 
 const metric = (id: string) => METRICS.find((m) => m.id === id)!;
 const dayN = (i: number) =>
@@ -270,6 +277,14 @@ describe("explainMetric", () => {
     );
   });
 
+  it("splits nothing, rather than every source at zero, when the day has no breakdown yet", () => {
+    // Berlin's yesterday at night: the dashboard's visitors are in, the rollup's sources are not.
+    const s = build((i) => (i === 29 ? { visitors: 700 } : {}));
+    s[29]!.rollup!.top_sources = null;
+    const lines = explainMetric(readMetric(metric("visitors"), s, LAST)!, s);
+    expect(lines.some((l) => /traffic source/.test(l))).toBe(false);
+  });
+
   it("claims no single source when the move is spread", () => {
     const s = build((i) =>
       i === 29 ? { visitors: 700, sources: { direct: 410, google: 290 } } : {}
@@ -402,6 +417,15 @@ describe("explainDay", () => {
     );
     expect(evidence).toContain("What shipped could not be read from GitHub.");
   });
+
+  it("says the decisions could not be read rather than implying nothing was decided", () => {
+    const { evidence } = explainDay(
+      build(() => ({})),
+      LAST,
+      { shipped: [], decisions: null }
+    );
+    expect(evidence).toContain("What was decided could not be read just now.");
+  });
 });
 
 describe("renderDay", () => {
@@ -427,33 +451,99 @@ describe("renderDay", () => {
   });
 });
 
+/** ap_facts' answer: 200 visitors a day unless `visitors` says otherwise, nothing else. */
+const factsFor =
+  (visitors: (day: string) => number = () => 200) =>
+  (from: string, to: string) => {
+    const days: string[] = [];
+    for (
+      let t = Date.parse(`${from}T00:00:00Z`);
+      t <= Date.parse(`${to}T00:00:00Z`);
+      t += 86_400_000
+    )
+      days.push(new Date(t).toISOString().slice(0, 10));
+    return {
+      visits: days.map((day) => ({ day, src: null, n: visitors(day) })),
+      ...{ starts: [], subs: [], money: [], checkouts: [], intro: [], invites: [], quotes: [] },
+    };
+  };
+/** The database: ap_facts from `facts` (a failure without it), every other read an empty list. */
+const database = (facts?: ReturnType<typeof factsFor>) =>
+  mockSupabaseFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path !== "/rest/v1/rpc/ap_facts") return { ok: true, status: 200, json: async () => [] };
+    if (!facts) return { ok: false, status: 503, json: async () => ({}) };
+    const { p_from, p_to } = JSON.parse(String(init?.body));
+    return { ok: true, status: 200, json: async () => facts(p_from, p_to) };
+  });
+
 describe("loadSeries", () => {
   beforeEach(() => {
-    mockSupabaseFetch.mockReset();
+    clearFactsCache();
     mockRollup.mockReset();
   });
 
-  it("merges the rollup with the GA4 days, oldest first, and survives GA4 being unreadable", async () => {
+  it("merges the rollup with the dashboard's days and the GA4 days, oldest first", async () => {
     mockRollup.mockResolvedValue([
-      { day: "2026-09-10", unique_visitors: 300, top_sources: {} },
-      { day: "2026-09-09", unique_visitors: 250, top_sources: {} },
+      { day: "2026-09-10", unique_visitors: 300, report_opens: 7, top_sources: {} },
+      { day: "2026-09-09", unique_visitors: 250, report_opens: 6, top_sources: {} },
     ]);
-    mockSupabaseFetch.mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
-    const s = await loadSeries("2026-09-10");
+    database(factsFor());
+    const s = (await loadSeries("2026-09-10"))!;
     // The day before `until` needs its own 28 days, so the series starts 29 days back.
     expect(s[0]!.day).toBe("2026-08-12");
     expect(s.at(-1)!.day).toBe("2026-09-10");
     expect(s).toHaveLength(30);
-    expect(s.at(-1)!.rollup?.unique_visitors).toBe(300);
+    expect(s.at(-1)!.rollup?.unique_visitors).toBe(200);
+    expect(s.at(-1)!.rollup?.report_opens).toBe(7);
+    // No GA4 record for the day: no GA4 figures for it, the rest standing.
     expect(s.at(-1)!.ga4).toBeUndefined();
+  });
+
+  it("keeps the dashboard's figures when only Google Analytics cannot be read, and marks it", async () => {
+    mockRollup.mockResolvedValue([
+      { day: "2026-09-10", unique_visitors: 300, report_opens: 7, top_sources: {} },
+    ]);
+    database(factsFor());
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      String(path).includes("source=eq.ga4")
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : facts(path, init)
+    );
+    const s = (await loadSeries("2026-09-10"))!;
+    expect(s.at(-1)!.rollup).toMatchObject({ unique_visitors: 200, report_opens: 7 });
+    // Every day's GA4 is null, an outage, never a day without a record (undefined).
+    expect(s.every((d) => d.ga4 === null)).toBe(true);
+    expect(ga4Down(s)).toBe(true);
+    expect(metric("sessions").count!(s.at(-1)!)).toBeNull();
+  });
+
+  it("gives no series when the rollup or every read fails", async () => {
+    mockRollup.mockResolvedValue([{ day: "2026-09-10", unique_visitors: 300, top_sources: {} }]);
+    // The rollup cannot be read.
+    clearFactsCache();
+    database(factsFor());
+    mockRollup.mockRejectedValue(new Error("brain_daily_rollup failed (500)"));
+    expect(await loadSeries("2026-09-10")).toBeNull();
+    // An open circuit breaker refuses every read before it is made.
+    clearFactsCache();
+    mockSupabaseFetch.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    mockRollup.mockRejectedValue(new CircuitOpenError("supabase"));
+    expect(await loadSeries("2026-09-10")).toBeNull();
+  });
+
+  it("gives no series, never the rollup's alone, when the dashboard's facts cannot be read", async () => {
+    mockRollup.mockResolvedValue([{ day: "2026-09-10", unique_visitors: 300, top_sources: {} }]);
+    database();
+    expect(await loadSeries("2026-09-10")).toBeNull();
   });
 });
 
 describe("noticeJumps", () => {
   beforeEach(() => {
-    mockSupabaseFetch
-      .mockReset()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+    clearFactsCache();
+    // The dashboard's visitors: 900 on the day under test, 200 on every other.
+    database(factsFor((day) => (day === "2026-09-23" ? 900 : 200)));
     mockFetchShipped.mockReset().mockResolvedValue({ ok: true, commits: [], truncated: false });
     // Newest first, as the database function returns it; the day under test is 2026-09-23.
     mockRollup.mockReset().mockResolvedValue(
@@ -484,6 +574,7 @@ describe("noticeJumps", () => {
   });
 
   it("does not repeat a level that was already unusual the day before", async () => {
+    database(factsFor((day) => (day === "2026-09-23" || day === "2026-09-22" ? 900 : 200)));
     mockRollup.mockResolvedValue(
       Array.from({ length: 60 }, (_, i) => {
         const day = new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10);
@@ -513,6 +604,7 @@ describe("noticeJumps", () => {
   });
 
   it("writes nothing on a day with nothing unusual", async () => {
+    database(factsFor());
     mockRollup.mockResolvedValue(
       Array.from({ length: 60 }, (_, i) => ({
         day: new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10),
@@ -527,5 +619,256 @@ describe("noticeJumps", () => {
     const record = vi.fn();
     expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBe(0);
     expect(record).not.toHaveBeenCalled();
+  });
+
+  it("still notices the dashboard's numbers when Google Analytics cannot be read, and says so", async () => {
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      String(path).includes("source=eq.ga4")
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : facts(path, init)
+    );
+    const record = vi.fn().mockResolvedValue(true);
+    expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBeGreaterThan(0);
+    const input = record.mock.calls[0]![0];
+    expect(input.headline).toBe(
+      "Unusual numbers on Wednesday 23 September 2026, without Google Analytics"
+    );
+    expect(input.detail).toContain("Visitors (our own count): 900 against a usual 200");
+    expect(input.detail.endsWith(`\n\n${GA4_UNREAD}`)).toBe(true);
+  });
+
+  it("says GA4 went unchecked on a quiet day, and never overwrites a notice of a GA4 jump", async () => {
+    const at = new Date("2026-09-24T08:05:00Z");
+    // GA4's day records: 150 sessions a day, 900 on the day under test.
+    const ga4Rows = Array.from({ length: 40 }, (_, i) => {
+      const day = new Date(Date.UTC(2026, 8, 23) - i * 86_400_000).toISOString().slice(0, 10);
+      const n = day === "2026-09-23" ? 900 : 150;
+      return {
+        body: `Sessions: ${n} · Users: ${n} · New users: ${n - 10}\nEngaged sessions: ${n / 2}`,
+        meta: { sessions: n, users: n },
+        period_end: day,
+      };
+    });
+    const withGa4 = (up: boolean, visitors: (day: string) => number) => {
+      database(factsFor(visitors));
+      const facts = mockSupabaseFetch.getMockImplementation()!;
+      mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+        String(path).includes("source=eq.ga4")
+          ? up
+            ? { ok: true, status: 200, json: async () => ga4Rows }
+            : { ok: false, status: 503, json: async () => ({}) }
+          : facts(path, init)
+      );
+    };
+    const flat = () => 200;
+    mockRollup.mockResolvedValue(
+      Array.from({ length: 60 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10),
+        unique_visitors: 200,
+        survey_starts: 28,
+        submissions: 10,
+        report_opens: 12,
+        reports_paid: 0,
+        top_sources: {},
+      }))
+    );
+    const runs: Array<{ headline: string; detail: string; kind: string }> = [];
+    const record = vi.fn(async (input: { headline: string; detail: string; kind: string }) => {
+      runs.push(input);
+      return true;
+    });
+    // 08:05, GA4 up: its sessions jump is the notice.
+    withGa4(true, flat);
+    expect(await noticeJumps(at, record)).toBeGreaterThan(0);
+    expect(runs[0]!.headline).toBe("Unusual numbers on Wednesday 23 September 2026");
+    expect(runs[0]!.detail).toContain("GA4 sessions: 900 against a usual 150");
+    // 09:05, GA4 down and nothing else unusual: said, and under an id of its own.
+    clearFactsCache();
+    withGa4(false, flat);
+    expect(await noticeJumps(at, record)).toBe(0);
+    expect(runs[1]!.headline).toBe(
+      "Google Analytics figures for Wednesday 23 September 2026 could not be checked"
+    );
+    expect(runs[1]!.detail).toContain("this is an outage, not a quiet day");
+    // 10:05, GA4 down and the visitors jump: its own id too.
+    clearFactsCache();
+    withGa4(false, (day) => (day === "2026-09-23" ? 900 : 200));
+    expect(await noticeJumps(at, record)).toBeGreaterThan(0);
+    const id = (i: number) => buildNoticeRow(runs[i]!, at).source_id;
+    expect(id(1)).not.toBe(id(0));
+    expect(id(2)).not.toBe(id(0));
+    // With GA4 up again, a run rewrites the first notice: one per day and headline.
+    clearFactsCache();
+    withGa4(true, flat);
+    await noticeJumps(at, record);
+    expect(id(3)).toBe(id(0));
+  });
+
+  it("says the day could not be checked, with no numbers, when the circuit breaker is open", async () => {
+    mockSupabaseFetch.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    mockRollup.mockReset().mockRejectedValue(new CircuitOpenError("supabase"));
+    const record = vi.fn().mockResolvedValue(true);
+    expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBe(0);
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0]![0].headline).toBe(
+      "The numbers for Wednesday 23 September 2026 could not be checked"
+    );
+  });
+
+  it("says the day could not be checked, with no numbers, when the dashboard cannot be read", async () => {
+    database();
+    const record = vi.fn().mockResolvedValue(true);
+    expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBe(0);
+    expect(record).toHaveBeenCalledTimes(1);
+    const input = record.mock.calls[0]![0];
+    expect(input.headline).toBe("The numbers for Wednesday 23 September 2026 could not be checked");
+    expect(input.detail).toBe(
+      "At 08:05 UTC the AP-Analytics dashboard's numbers could not be read, so Wednesday 23 " +
+        "September 2026 was not checked for unusual numbers, and no other counting was used in " +
+        "their place. This is an outage, not a quiet day: explain_change with day 2026-09-23 " +
+        "checks it once they can be read."
+    );
+  });
+});
+
+describe("loadSeries counts as the AP-Analytics dashboard does", () => {
+  /** What ap_facts answers: 200 visitors (and a probe's 5), 40 starts, 4 finishers a day. */
+  const facts = (from: string, to: string) => {
+    const days: string[] = [];
+    for (
+      let t = Date.parse(`${from}T00:00:00Z`);
+      t <= Date.parse(`${to}T00:00:00Z`);
+      t += 86_400_000
+    )
+      days.push(new Date(t).toISOString().slice(0, 10));
+    return {
+      visits: days.flatMap((day) => [
+        { day, src: null, n: 200 },
+        { day, src: "prod-verification", n: 5 },
+      ]),
+      starts: days.map((day) => ({ day, known: true, finished: false, n: 40 })),
+      subs: days.flatMap((day, i) => [0, 1, 2, 3].map((k) => ({ id: 4 * i + k, day }))),
+      money: [{ day: "2026-09-20", sid: 1, amount: 29 }],
+      ...{ checkouts: [], intro: [], invites: [], quotes: [] },
+    };
+  };
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-16T10:00:00Z"));
+    clearFactsCache();
+    mockRollup.mockReset().mockResolvedValue(
+      Array.from({ length: 60 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 8, 25) - i * 86_400_000).toISOString().slice(0, 10),
+        unique_visitors: 300,
+        survey_starts: 3,
+        submissions: 9,
+        report_opens: 12,
+        reports_paid: 1,
+        revenue: 5,
+        top_sources: {},
+      }))
+    );
+    mockSupabaseFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path !== "/rest/v1/rpc/ap_facts") return { ok: true, status: 200, json: async () => [] };
+      const { p_from, p_to } = JSON.parse(String(init?.body));
+      return { ok: true, status: 200, json: async () => facts(p_from, p_to) };
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("reads visitors, starts, finished surveys and revenue from the dashboard, the rest from the rollup", async () => {
+    const s = (await loadSeries("2026-09-25"))!;
+    const day = s.find((d) => d.day === "2026-09-20")!;
+    expect(day.rollup).toMatchObject({
+      unique_visitors: 200,
+      survey_starts: 40,
+      submissions: 4,
+      revenue: 29,
+      report_opens: 12,
+      reports_paid: 1,
+    });
+    // The start rate's halves are the dashboard's: 40 of 200, never the rollup's 3 of 300.
+    expect([metric("start_rate").rate!.num(day), metric("start_rate").rate!.den(day)]).toEqual([
+      40, 200,
+    ]);
+  });
+
+  it("gives a day whose starts the dashboard does not hold every one of no starts, never a low count", async () => {
+    const s = (await loadSeries("2026-09-25"))!;
+    // Before 18 Sep 2026 and over 30 days before the facts were read: incomplete.
+    expect(s.find((d) => d.day === "2026-09-01")!.rollup!.survey_starts).toBeNull();
+    expect(metric("survey_starts").count!(s.find((d) => d.day === "2026-09-01")!)).toBeNull();
+    // So 25 Sep has 7 comparable days of starts before it, too few for a usual range.
+    expect(readMetric(metric("survey_starts"), s, "2026-09-25")).toBeNull();
+    expect(readMetric(metric("visitors"), s, "2026-09-25")).not.toBeNull();
+  });
+
+  it("has the dashboard's figures for Berlin's today before the UTC rollup reaches it", async () => {
+    // 00:30 in Berlin on the 26th: the rollup's newest day is UTC's 25th.
+    vi.setSystemTime(new Date("2026-09-25T22:30:00Z"));
+    const s = (await loadSeries("2026-09-26"))!;
+    const today = s.find((d) => d.day === "2026-09-26")!;
+    expect(today.rollup).toMatchObject({ unique_visitors: 200, submissions: 4, revenue: 0 });
+    // The rollup's own figures for it are unknown, never zero.
+    expect(metric("report_opens").count!(today)).toBeNull();
+    expect(metric("reports_paid").count!(today)).toBeNull();
+  });
+
+  it("keeps a UTC day still running at night whole for the dashboard, blank for the rollup's own", async () => {
+    // 22:30 UTC on the 25th is 00:30 on the 26th in Berlin: the 25th is a whole Berlin day,
+    // but its UTC day runs on.
+    vi.setSystemTime(new Date("2026-09-25T22:30:00Z"));
+    const s = (await loadSeries("2026-09-25"))!;
+    // The dashboard's four keep their figures; every one of the rollup's own is blank.
+    expect(s.find((d) => d.day === "2026-09-25")!.rollup).toEqual({
+      day: "2026-09-25",
+      unique_visitors: 200,
+      survey_starts: 40,
+      submissions: 4,
+      revenue: 0,
+      intro_completed: null,
+      reports_created: null,
+      reports_paid: null,
+      report_opens: null,
+      invites_sent: null,
+      top_sources: null,
+    });
+    // A UTC day that has ended keeps the rollup's.
+    expect(metric("report_opens").count!(s.find((d) => d.day === "2026-09-24")!)).toBe(12);
+    // In the day, today is Berlin's and UTC's at once: it keeps them, and is said to be partial.
+    vi.setSystemTime(new Date("2026-09-25T10:00:00Z"));
+    clearFactsCache();
+    const day = (await loadSeries("2026-09-25"))!.find((d) => d.day === "2026-09-25")!;
+    expect(metric("report_opens").count!(day)).toBe(12);
+  });
+
+  it("says which figures of a day are part of one: Berlin's today, and the UTC day's", () => {
+    const night = new Date("2026-09-25T22:30:00Z"); // 00:30 on the 26th in Berlin
+    const today = "Today is still going, so its numbers are partial.";
+    const utc25 =
+      "Reports opened and paid are counted by UTC day, and 2026-09-25 is not over yet in UTC, " +
+      "so their figures for it are not complete and are left out.";
+    // Berlin's yesterday at night: whole for the dashboard, not over in UTC for the rollup's.
+    expect(partialDay("2026-09-25", true, night)).toBe(utc25);
+    expect(partialDay("2026-09-25", false, night)).toBe("");
+    // Berlin's today at night, before its UTC day has begun.
+    expect(partialDay("2026-09-26", false, night)).toBe(today);
+    expect(partialDay("2026-09-26", true, night)).toBe(`${today} ${utcNote(["2026-09-26"])}`);
+    expect(partialDay("2026-09-24", true, night)).toBe("");
+    // In the day, today is UTC's too: partial, and the rollup's figures stay.
+    expect(partialDay("2026-09-25", true, new Date("2026-09-25T10:00:00Z"))).toBe(today);
+    expect(utcNote(["2026-09-25", "2026-09-26"])).toBe(
+      "Reports opened and paid are counted by UTC day, and 2026-09-25 and 2026-09-26 are not " +
+        "over yet in UTC, so their figures for them are not complete and are left out."
+    );
+  });
+
+  it("gives no series when the dashboard's facts cannot be read, even with the rollup at hand", async () => {
+    mockSupabaseFetch
+      .mockReset()
+      .mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+    expect(await loadSeries("2026-09-25")).toBeNull();
+    expect(mockRollup).toHaveBeenCalled();
   });
 });

@@ -32,8 +32,8 @@ question rows are marked `status = 'retired'` rather than deleted: nothing refer
 
    Skipping this does **not** break submission (`submit_survey` looks a question up by
    `frontend_qid`, not by status), so the restored question would collect answers
-   normally — but it would show up as config drift on /admin/health and would be missed
-   by `scripts/check-survey-db-sync.js`, which only reads active rows.
+   normally — but it would be missed by `scripts/check-survey-db-sync.js`, which only
+   reads active rows.
 
 Do not hand-edit `data/survey-data.ts` — it is generated, and the next regeneration would
 silently drop the change.

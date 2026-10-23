@@ -4,6 +4,8 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
+// Kept beside device_type, which stays the price quote's class (migration 20261014120100).
+import { isTablet } from "@shared/http/tablet";
 import logger from "@shared/observability/logger";
 import { getDeviceTypeFromUserAgent } from "@features/pricing/logic/reportPricing";
 
@@ -31,20 +33,6 @@ const batchSchema = z.object({
   // Mac User-Agent. A bad value reads as unknown and never refuses the batch.
   touch: z.boolean().optional().catch(undefined),
 });
-
-/**
- * A tablet: "iPad" in the User-Agent, a Mac User-Agent with touch (iPadOS Safari), or Android
- * without "Mobile". Kept beside device_type, which stays the price quote's class (migration
- * 20261014120100).
- */
-function isTablet(userAgent: string, touch: boolean | undefined): boolean {
-  const ua = userAgent.toLowerCase();
-  return (
-    ua.includes("ipad") ||
-    (ua.includes("macintosh") && touch === true) ||
-    (ua.includes("android") && !ua.includes("mobile"))
-  );
-}
 
 const RATE_LIMIT_CONFIG = {
   bucket: "survey-tracking",

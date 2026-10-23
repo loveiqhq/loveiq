@@ -251,9 +251,10 @@ describe("POST /api/survey-partial", () => {
     expect(JSON.parse(row.utm_tracker)).toEqual({ landing_variant: "white", ...EMAIL });
   });
 
-  it("labels a pay-to-start buyer's draft with the journey and no landing arm", async () => {
+  it("labels a pay-to-start buyer's draft with the journey and no test arm", async () => {
     // A buyer may hold an arm cookie from an earlier visit to the home page: that arm
-    // must not be credited with how far a paid survey got.
+    // must not be credited with how far a paid survey got. Nor is the email question's
+    // arm stamped: a buyer is shown today's question, in no survey test.
     mockCookieGet.mockReturnValue({ value: "white_prev" });
     await POST(
       new Request("http://localhost/api/survey-partial", {
@@ -273,7 +274,6 @@ describe("POST /api/survey-partial", () => {
     expect(JSON.parse(row.utm_tracker)).toEqual({
       utm_source: "google",
       journey: "pay_to_start",
-      ...EMAIL,
     });
   });
 

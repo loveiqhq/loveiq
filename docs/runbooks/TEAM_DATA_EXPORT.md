@@ -46,6 +46,8 @@ its older versions, so the first masked copy removes the unmasked one from Drive
     (their recordings show the person) and admins' searches read `[masked]`;
   - so do the answers to the email, name and ZIP or postcode questions (`00000`, `00001`,
     `15002`), in submissions and in drafts, and the history of answer edits;
+  - and an unlock-feedback answer's own words, chips and link hash (`unlock_feedback.note`,
+    `chips`, `link_hash`): the reason they picked stays;
   - and the raw Stripe and Calendly payloads, which repeat all of the above.
   - If the survey's email, name or postcode question cannot be found, the export stops and
     writes nothing, rather than copy those answers unmasked.

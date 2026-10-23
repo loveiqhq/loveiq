@@ -129,8 +129,8 @@ export async function resolveNurturePromo({
     for (const [stage, entry] of Object.entries(codes)) {
       // The `partner` code is minted for a DIFFERENT person (the buyer's partner)
       // to type on their OWN hosted checkout — it must never auto-apply as the
-      // owner's promo. `post_call` stays resolvable: it is granted to the same
-      // user to redeem via their own ?promo= one-tap link.
+      // owner's promo. `post_call` stays resolvable (the same user's own ?promo= link),
+      // though its admin grant was removed on 16 Oct 2026 without ever issuing one.
       if (stage === "partner") continue;
       const storedCode = asString(entry?.code);
       if (storedCode !== userCode) continue;
@@ -179,9 +179,9 @@ export function getCouponIdForStage(stage: string): string | null {
   // (never re-minted here), so the retired mappings are safe to drop.
   if (stage === "72h_no_unlock") return process.env.STRIPE_COUPON_50 ?? null;
   // Post-call goodwill grant + tier-3 partner code: both are one-time 100%-off
-  // codes drawn from the same coupon. post_call is minted by the admin "grant
-  // call coupon" action; partner is minted on a tier-3 purchase for the buyer to
-  // share. Both resolve here at checkout like any nurture code.
+  // codes drawn from the same coupon. post_call was minted by the admin's grant
+  // action (removed 16 Oct 2026, none ever issued); partner is minted on a tier-3
+  // purchase for the buyer to share. Both resolve here at checkout like any code.
   if (stage === "post_call" || stage === "partner") return process.env.STRIPE_COUPON_100 ?? null;
   return null;
 }

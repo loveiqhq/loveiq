@@ -201,38 +201,62 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       entity_type: "experiment",
       metadata: { to: "pricing", forced_paywall_arm: "treatment" },
     },
-    // The report's leave offer: paywall events, so they sit with the paywall's
-    // in the timeline and the funnel.
-    {
-      event_type: "leave_offer_shown",
-      entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "paywall_reached", armed_ms: 31000 },
-    },
-    {
-      event_type: "leave_offer_clicked",
-      entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "paywall_reached", view_duration_ms: 4000 },
-    },
-    {
-      event_type: "leave_offer_dismissed",
-      entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "paywall_reached", source: "not_now" },
-    },
     // The report's guided tour: report events, beside the chapters' reading stats.
     {
       event_type: "tour_started",
       entity_type: "report",
       metadata: { trigger: "auto", steps: 5 },
     },
+    // A first run's stored end carries whose tour it was and each stop it reached.
     {
       event_type: "tour_completed",
       entity_type: "report",
-      metadata: { trigger: "auto", steps: 5, duration_ms: 12000 },
+      metadata: {
+        trigger: "auto",
+        audience: "paid",
+        steps: 4,
+        duration_ms: 12000,
+        stops: [
+          { id: "chapter_menu", ms: 4000, back: 0 },
+          { id: "show_all", ms: 3000, back: 1 },
+          { id: "chapter_toggle", ms: 2000, back: 0 },
+          { id: "try_this", ms: 3000, back: 0 },
+        ],
+      },
     },
     {
       event_type: "tour_skipped",
       entity_type: "report",
-      metadata: { trigger: "auto", at: 2, id: "show_all", steps: 5, source: "skip_button" },
+      metadata: {
+        trigger: "auto",
+        audience: "free",
+        at: 2,
+        id: "show_all",
+        steps: 5,
+        source: "skip_button",
+        stops: [
+          { id: "chapter_menu", ms: 5000, back: 0 },
+          { id: "show_all", ms: 1200, back: 0 },
+        ],
+      },
+    },
+    // The page went with the tour still up (V4GuidedTour's pagehide).
+    {
+      event_type: "tour_left",
+      entity_type: "report",
+      metadata: {
+        trigger: "auto",
+        audience: "free",
+        at: 3,
+        id: "chapter_toggle",
+        steps: 5,
+        duration_ms: 9000,
+        stops: [
+          { id: "chapter_menu", ms: 4000, back: 0 },
+          { id: "show_all", ms: 3000, back: 0 },
+          { id: "chapter_toggle", ms: 2000, back: 0 },
+        ],
+      },
     },
     {
       event_type: "tour_replayed",
@@ -264,6 +288,8 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       expect(sentBody.metadata.forced_paywall_arm).toBe(
         (metadata as { forced_paywall_arm: string }).forced_paywall_arm
       );
+      // So must nested metadata: a tour run's stops are stored whole.
+      expect(sentBody.metadata).toEqual(metadata);
     }
   );
 });

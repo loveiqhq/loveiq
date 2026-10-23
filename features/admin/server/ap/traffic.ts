@@ -1239,7 +1239,11 @@ function buildExperiments(
     const to = facts.to < last ? facts.to : last;
     return from > to ? null : { from, to };
   };
-  const subsW = (w: { from: string; to: string }) => subsIn(facts, scope, w.from, w.to);
+  // A reader who paid with no report checkout paid before the survey (pay to start, its A3
+  // pin included): no arm's price, hero or email question decided that sale, so the tests
+  // read without them, as the registry's readouts do (pay_to_start_submission()).
+  const subsW = (w: { from: string; to: string }) =>
+    subsIn(facts, scope, w.from, w.to).filter((x) => !(x.paidAt && !x.checkoutAt));
   const payersOf = (xs: SubFact[]) => xs.filter((x) => x.paidAt).length;
   const revOf = (xs: SubFact[]) => round2(xs.reduce((n, x) => n + x.revenue, 0));
 

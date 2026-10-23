@@ -71,6 +71,20 @@ describe("POST /api/funnel-event", () => {
       expect(await bucketOf(e)).toBe("funnel-event-intro");
   });
 
+  it("writes nothing for our own probes, and answers them the same", async () => {
+    mockSupabaseFetch.mockResolvedValue(new Response(null, { status: 201 }));
+    const probe = makeRequest({ event: "intro_view", visitor_id: VALID_UUID });
+    probe.headers.set("cookie", "__Host-csrf=t; loveiq_probe=1");
+    const res = await POST(probe);
+    expect(res.status).toBe(204);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+    // A look-alike cookie is a visitor.
+    const visitor = makeRequest({ event: "intro_view", visitor_id: VALID_UUID });
+    visitor.headers.set("cookie", "not_loveiq_probe=1");
+    expect((await POST(visitor)).status).toBe(204);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 400 when event_type is invalid", async () => {
     const res = await POST(makeRequest({ event: "bogus", visitor_id: VALID_UUID }));
     expect(res.status).toBe(400);

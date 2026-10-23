@@ -1,12 +1,13 @@
 # Admin Domain Router
 
-Use this directory when the task is described in product language and you need the shortest path to the right admin code.
+Use this directory when the task is described in product language and you need the shortest path to the right admin code. Since 16 Oct 2026 the admin is AP-Analytics only.
 
 ## Domain map
 
-| If the task is about...                                                               | Start here                         |
-| ------------------------------------------------------------------------------------- | ---------------------------------- |
-| Submission review, moderation, notes, exports, saved views, or survey-status controls | [`submissions.md`](submissions.md) |
+| If the task is about...                                                                        | Start here                                                                              |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| An AP-Analytics page, its figures, the data catalog or the raw data explorer                   | [`docs/admin-dashboard.md`](../../admin-dashboard.md), then `features/admin/server/ap/` |
+| One submission (read, correct, delete), a GDPR request, test submissions or closing the survey | [`submissions.md`](submissions.md)                                                      |
 
 ## Root jump points
 

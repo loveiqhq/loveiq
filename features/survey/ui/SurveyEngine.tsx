@@ -11,6 +11,7 @@ import SurveyPauseModal from "./SurveyPauseModal";
 import SurveyProgress from "./SurveyProgress";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
+import AlertCircleIcon from "./questions/AlertCircleIcon";
 import ScaleQuestion from "./questions/ScaleQuestion";
 import SingleChoiceQuestion from "./questions/SingleChoiceQuestion";
 import MultipleChoiceQuestion from "./questions/MultipleChoiceQuestion";
@@ -62,6 +63,13 @@ interface SurveyEngineProps {
   onComplete: (reportToken?: string | null) => void;
   /** Discard this run and begin again. Without it the error screen offers no Start Over. */
   onStartOver?: () => void;
+  /**
+   * A buyer who paid before the survey (pay to start): in no survey test. Their email
+   * question stays today's: the anonymous arm's "feel free to use an anonymous one" would
+   * part the survey's address from the one they paid with, and the purchase's continue
+   * link opens a report only under that one.
+   */
+  payToStart?: boolean;
 }
 
 const TEXT_ENTRY_TYPES = /^(text|email|search|tel|url|number|password)$/;
@@ -98,10 +106,21 @@ function entriesAboveBase(currentIndex: number): number {
   return Math.max(0, q - base);
 }
 
+/** The line that says what a blocked Next is missing; Next names it (aria-describedby). */
+const NEXT_HINT_ID = "survey-next-hint";
+
+/** How long a page that loaded mid-submit waits before sending the run again. */
+const RESUME_AFTER_MS = 2000;
+
 /** Where a touch never starts a swipe between questions. */
 const NO_SWIPE = "input, textarea, select, [contenteditable], [data-no-swipe]";
 
-const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }) => {
+const SurveyEngine: FC<SurveyEngineProps> = ({
+  onExit,
+  onComplete,
+  onStartOver,
+  payToStart = false,
+}) => {
   const {
     answers,
     currentIndex,
@@ -118,6 +137,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     retryPending,
     clearPendingCompletion,
     hasPendingCompletion,
+    pendingSentMomentsAgo,
     reportToken,
     submissionId,
     paidWizard,
@@ -174,6 +194,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // `?email=control|anonymous` previews either arm on dev and staging, never on
   // production.
   const [emailArm] = useState<EmailQuestionArm>(() => {
+    if (payToStart) return "control";
     const devParam =
       typeof window === "undefined"
         ? null
@@ -235,7 +256,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const emailExposureFired = useRef(false);
   const onEmailQuestion = question?.qId === EMAIL_QID;
   useEffect(() => {
-    if (!onEmailQuestion || emailExposureFired.current) return;
+    if (!onEmailQuestion || emailExposureFired.current || payToStart) return;
     emailExposureFired.current = true;
     setEmailQuestionArm(emailArm);
     trackExperimentExposure({
@@ -243,18 +264,39 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       variant: emailArm,
       surface: "survey_email_question",
     });
-  }, [onEmailQuestion, emailArm]);
+  }, [onEmailQuestion, emailArm, payToStart]);
 
   // Post-survey completion phase management
   // Mounting onto a finished run: a pending submission shows its retry screen. With none,
   // nothing is in flight (it landed while the reader was elsewhere), so the screens that
   // lead to the report. "processing" here waited for a submit that would never come, at
   // 95%, with no button.
+  /**
+   * Mounting onto a finished run whose submit was sent moments ago: the page loaded again
+   * while it was in flight. In a restored tab (a reopened tab, or a phone bringing the
+   * browser back) the finish's step back through history loads the survey anew, and 2 of
+   * 195 finishers (1-15 Oct 2026) met "Submission Interrupted" for answers the server had
+   * already saved. Sent again, it gets that submission back, so the reader carries on.
+   */
+  const [resumesSubmit] = useState(
+    () => currentIndex >= totalQuestions && hasPendingCompletion && pendingSentMomentsAgo
+  );
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() => {
     if (currentIndex < totalQuestions) return "processing";
-    if (hasPendingCompletion) return "done";
+    if (hasPendingCompletion) return resumesSubmit ? "processing" : "done";
     return submitStatus === "idle" ? "wizard" : "processing";
   });
+  const retryRef = useRef(retryPending);
+  useEffect(() => {
+    retryRef.current = retryPending;
+  }, [retryPending]);
+  useEffect(() => {
+    if (!resumesSubmit) return;
+    // Not at once: a repeat that beats the original's insert meets the email cooldown
+    // ("Almost There") instead of the submission it would have found.
+    const timer = window.setTimeout(() => void retryRef.current(), RESUME_AFTER_MS);
+    return () => window.clearTimeout(timer);
+  }, [resumesSubmit]);
 
   // Track survey start once
   useEffect(() => {
@@ -354,7 +396,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     return currentAnswer.length <= question.maxSelections;
   }, [question, currentAnswer]);
 
-  const [attemptedNext, setAttemptedNext] = useState(false);
+  /**
+   * Why the last move on was refused. "missing": the footer says what is needed. "invalid":
+   * the fields say what is wrong, as you type (forceValidation). Kept apart: a tap on the
+   * empty email question turned on as-you-type errors, so its first letter read as invalid.
+   */
+  const [blocked, setBlocked] = useState<null | "missing" | "invalid">(null);
 
   const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
 
@@ -379,7 +426,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       cancelBackFallback();
       cancelAutoAdvance();
       setAnimKey((k) => k + 1);
-      setAttemptedNext(false);
+      setBlocked(null);
       // Clear transient email-confirm state when leaving the email question
       const targetQuestion = orderedQuestions[index];
       if (targetQuestion?.inputType !== "email") {
@@ -413,7 +460,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // hasCompleted, and ArrowRight, Enter or a left swipe there re-ran the whole
     // completion: a second survey_completed, and a new payload under this tab's session.
     if (currentIndex >= totalQuestions) return;
-    if (!isEmailValid || !isSelectionCountValid) {
+    // A tap on the blocked Next lands here now (it used to be a disabled button), so an
+    // unanswered required question must stop here too, not only at the keyboard's gate.
+    const missingAnswer = !!question?.required && !hasAnswer;
+    if (missingAnswer || !isEmailValid || !isSelectionCountValid) {
       /**
        * A blocked Next is the only "form error" this survey can produce, and
        * until now nothing recorded it: `trackSurveyFormError` was defined in
@@ -434,10 +484,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       if (question?.qId) {
         trackSurveyFormError({
           question_id: question.qId,
-          error_kind: !isEmailValid ? "invalid_email" : "out_of_range",
+          error_kind: missingAnswer ? "required" : !isEmailValid ? "invalid_email" : "out_of_range",
         });
       }
-      setAttemptedNext(true);
+      setBlocked(missingAnswer ? "missing" : "invalid");
       return;
     }
     if (currentIndex >= totalQuestions - 1) {
@@ -495,6 +545,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // committed the last answer still sends it.
     getLatestAnswers,
     trackNavigation,
+    hasAnswer,
     isEmailValid,
     isSelectionCountValid,
     utmTracker,
@@ -566,6 +617,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const navigateFromHistory = useRef<(index: number) => void>(() => {});
   // What a Next press would accept here: the button's rule and goNext's own checks.
   const mayMoveOn = (hasAnswer || !question?.required) && isEmailValid && isSelectionCountValid;
+  const answerMissing = !!question?.required && !hasAnswer;
   useEffect(() => {
     navigateFromHistory.current = (index: number) => {
       // Finished, including a run restored onto its completion screen (hasCompleted is
@@ -580,7 +632,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       // go() by the question gap could overshoot. A refused jump therefore ends one
       // question on, if this one passes, or back on this one.
       if (index > currentIndex && (index > currentIndex + 1 || !mayMoveOn)) {
-        setAttemptedNext(true);
+        setBlocked(answerMissing ? "missing" : "invalid");
         window.history.back();
         return;
       }
@@ -590,7 +642,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
     };
-  }, [currentIndex, totalQuestions, goTo, trackNavigation, mayMoveOn]);
+  }, [currentIndex, totalQuestions, goTo, trackNavigation, mayMoveOn, answerMissing]);
 
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
@@ -893,6 +945,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     );
   }
   const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
+  // Only for an answer that is missing: a wrong one (an email, too many picks) is already
+  // explained at the field.
+  const blockedHint =
+    blocked === "missing" && !hasAnswer ? "Answer this question to continue." : null;
 
   return (
     // The question screen, Figma 11303:174 (ready for dev 2026-10-06): one card holding
@@ -972,7 +1028,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                   question={question}
                   value={currentAnswer as string | null}
                   onChange={handleChange}
-                  forceValidation={attemptedNext}
+                  forceValidation={blocked === "invalid"}
                   confirmValue={emailConfirmValue}
                   onConfirmChange={setEmailConfirmValue}
                   emailArm={emailArm}
@@ -1001,7 +1057,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                   onChange={handleChange}
                   otherText={otherText}
                   onOtherTextChange={handleOtherTextChange}
-                  forceValidation={attemptedNext}
+                  forceValidation={blocked === "invalid"}
                 />
               )}
               {question.answerType === "country" && (
@@ -1028,6 +1084,26 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 footerFloating ? "shadow-[0_-12px_24px_-16px_rgba(22,16,33,0.2)]" : ""
               }`}
             >
+              {/* What a blocked Next is missing, next to the button the reader just tapped:
+                  under a long list (58's 53 topics) the end of the answers is off screen.
+                  Answering, or moving on, clears it. 20px on top: 58's "more categories"
+                  pill is centred on this footer's top edge, half of it over this line. */}
+              <p
+                id={NEXT_HINT_ID}
+                aria-live="polite"
+                className={
+                  blockedHint
+                    ? "flex items-center gap-1.5 px-[18.4px] pt-5 font-sans text-[13px] font-medium text-[#ef4444] sm:px-[35px]"
+                    : "sr-only"
+                }
+              >
+                {blockedHint ? (
+                  <>
+                    <AlertCircleIcon />
+                    {blockedHint}
+                  </>
+                ) : null}
+              </p>
               <SurveyNav
                 canGoBack={currentIndex > 0}
                 canGoNext={canGoNext}
@@ -1036,6 +1112,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 hasAnswer={hasAnswer || !question.required}
                 onPrevious={goPrev}
                 onNext={goNext}
+                nextHintId={NEXT_HINT_ID}
                 progress={<SurveyProgress index={currentIndex} total={totalQuestions} />}
               />
             </div>

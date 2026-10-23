@@ -8,7 +8,12 @@ import {
   parseFilters,
 } from "@features/admin/server/ap/filters";
 import { fetchReportReturns, POSTHOG_FROM, postHogFailed } from "@features/admin/server/ap/posthog";
-import { buildReportPage, fetchReportExtras } from "@features/admin/server/ap/report-page";
+import {
+  buildReportPage,
+  fetchReportExtras,
+  fetchReportTour,
+  TOUR_TRACKING_FROM,
+} from "@features/admin/server/ap/report-page";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { addDays } from "@features/admin/server/dropoff-weekly";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -27,28 +32,49 @@ export async function GET(request: Request) {
   const filters = parseFilters(new URL(request.url).searchParams, today);
   const cmp = comparisonRange(filters);
 
+  // The guided tour is read only for a period it was recorded all through. Without it, its
+  // section says it could not be read: the rest of the page does not wait on it.
+  const tourOf = (range: { from: string; to: string } | null) =>
+    range && range.from >= TOUR_TRACKING_FROM
+      ? fetchReportTour(range.from, range.to).catch((err: unknown) => {
+          logger.warn({ err }, "AP report: the guided tour unavailable");
+          return null;
+        })
+      : Promise.resolve(null);
+
   try {
     const compared = cmp && !beforeData(cmp) ? cmp : null;
-    const [facts, previous, benchmark, extras, previousExtras, returns, previousReturns] =
-      await Promise.all([
-        fetchFactsFor(filters.from, filters.to, filters),
-        compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
-        fetchFacts(DATA_START, addDays(today, -1)),
-        fetchReportExtras(filters.from, filters.to),
-        // The earlier period's Skip Intro presses, for that tile's change only: without them the
-        // tile is shown uncompared rather than the page failing.
-        compared
-          ? fetchReportExtras(compared.from, compared.to).catch((err: unknown) => {
-              logger.warn({ err }, "AP report: earlier period's extras unavailable");
-              return null;
-            })
-          : Promise.resolve(null),
-        fetchReportReturns(filters.from, filters.to).catch(postHogFailed),
-        // The period before's ways back, for "Returned via email"'s change, when PostHog saw it all.
-        compared && compared.from >= POSTHOG_FROM
-          ? fetchReportReturns(compared.from, compared.to).catch(postHogFailed)
-          : Promise.resolve(null),
-      ]);
+    const [
+      facts,
+      previous,
+      benchmark,
+      extras,
+      previousExtras,
+      returns,
+      previousReturns,
+      tour,
+      previousTour,
+    ] = await Promise.all([
+      fetchFactsFor(filters.from, filters.to, filters),
+      compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
+      fetchFacts(DATA_START, addDays(today, -1)),
+      fetchReportExtras(filters.from, filters.to),
+      // The earlier period's Skip Intro presses, for that tile's change only: without them the
+      // tile is shown uncompared rather than the page failing.
+      compared
+        ? fetchReportExtras(compared.from, compared.to).catch((err: unknown) => {
+            logger.warn({ err }, "AP report: earlier period's extras unavailable");
+            return null;
+          })
+        : Promise.resolve(null),
+      fetchReportReturns(filters.from, filters.to).catch(postHogFailed),
+      // The period before's ways back, for "Returned via email"'s change, when PostHog saw it all.
+      compared && compared.from >= POSTHOG_FROM
+        ? fetchReportReturns(compared.from, compared.to).catch(postHogFailed)
+        : Promise.resolve(null),
+      tourOf(filters),
+      tourOf(compared),
+    ]);
     return NextResponse.json(
       buildReportPage({
         facts,
@@ -58,6 +84,8 @@ export async function GET(request: Request) {
         previousExtras,
         returns,
         previousReturns,
+        tour,
+        previousTour,
         filters,
         today,
         now,

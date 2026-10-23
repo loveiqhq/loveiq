@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import type { Column, Table } from "@features/admin/server/ap/common";
 import { rangeLabel, type Grain } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt, niceMax } from "@features/admin/server/ap/format";
+import { EMPTY, fmt, quarterTop } from "@features/admin/server/ap/format";
 import type {
   CheckoutPoint,
   OverTimeRow,
@@ -18,6 +18,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { bucketTitles, IndexHover, periodTitle, ROW_HOVER } from "./hover";
 import {
   Bar,
   BlackButton,
@@ -45,11 +46,6 @@ const LINK_ICON =
   "M10 10.5l4-5M8.5 6.5L7 8a2.5 2.5 0 0 0 3.5 3.5L12 10M15.5 9.5L17 8a2.5 2.5 0 0 0-3.5-3.5L12 6";
 const CARD_ICON =
   "M3 2.5h18a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 12V4A1.5 1.5 0 0 1 3 2.5zM1.5 6h21M5 10.5h4";
-/**
- * Finer axis tops than the Dashboard's, so a top sits close over the figures: on today's they
- * come out at the design's own 16 sales, 600 submissions, 4% and €0.40.
- */
-const STEPS = [1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10];
 const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
 const NOT_ON_SALE = "The Initial plan (pre-unlock) isn't on sale yet.";
 const GRAIN_NAME: Record<Grain, string> = { day: "Day", week: "Week", month: "Month" };
@@ -82,8 +78,6 @@ const SEGMENTS = [
 ];
 
 const ratio = (a: number, b: number | null) => (b !== null && b > 0 ? a / b : null);
-/** A count axis tops at 4 at least: an empty one reads 0 to 4, not 0, 0, 1, 1, 1. */
-const countTop = (v: number) => Math.max(4, niceMax(v, STEPS));
 
 type Shade = "plain" | "good" | "bad";
 const SHADE: Record<Shade, string> = {
@@ -227,21 +221,21 @@ function SubHead({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Paid sales stacked by unlock (bars, left axis) under the finishers (dotted, right axis). */
-function SalesChart({ rows }: { rows: OverTimeRow[] }) {
+/** A point's period as its read-out's title: its days where the server sent them. */
+const pointTitle = (p: { label: string; from?: string; to?: string; partial: boolean }) =>
+  p.from && p.to ? periodTitle({ from: p.from, to: p.to }, p.partial) : p.label;
+
+function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boolean }) {
   const n = rows.length;
   const H = 240;
-  const sTop = countTop(Math.max(...rows.map((r) => r.preSales + r.fullSales)) * 1.1);
-  const fTop = countTop(Math.max(...rows.map((r) => r.finishers)) * 1.1);
+  const sTop = quarterTop(Math.max(...rows.map((r) => r.preSales + r.fullSales)) * 1.1);
+  const fTop = quarterTop(Math.max(...rows.map((r) => r.finishers)) * 1.1);
   const x = (i: number) => ((i + 0.5) / n) * 100;
   const fy = (v: number) => (Math.min(v, fTop) / fTop) * 100;
   const margin = "0 56px 0 40px";
+  // Scrolls sideways where narrow: the chart inside takes the keys and scrolls each point in.
   return (
-    <div
-      tabIndex={0}
-      role="region"
-      aria-label="Paid sales over time, chart"
-      className="overflow-x-auto"
-    >
+    <div className="overflow-x-auto">
       <div className="pt-2" style={{ minWidth: n * 56 + 96 }}>
         <div className="relative border-b border-ap-line" style={{ height: H, margin }}>
           {QUARTERS.map((f) => (
@@ -309,6 +303,47 @@ function SalesChart({ rows }: { rows: OverTimeRow[] }) {
               {fmt("count", r.finishers)}
             </span>
           ))}
+          <IndexHover
+            xs={rows.map((_, i) => x(i))}
+            label="Paid sales over time"
+            band={(i) => ({ left: (i / n) * 100, width: 100 / n })}
+            markers={(i) => [{ y: fy(rows[i]!.finishers), color: INK }]}
+            tip={(i) => {
+              const r = rows[i]!;
+              const paid = r.preSales + r.fullSales;
+              return {
+                title: pointTitle(r),
+                rows: [
+                  {
+                    label: "Pre-unlock sales",
+                    value: preOnSale ? fmt("count", r.preSales) : "not on sale",
+                    color: PRE,
+                    mark: "square",
+                    muted: !preOnSale,
+                  },
+                  {
+                    label: "Full-unlock sales",
+                    value: fmt("count", r.fullSales),
+                    color: FULL,
+                    mark: "square",
+                  },
+                  { label: "Paid sales", value: fmt("count", paid), strong: true },
+                  { label: "Revenue", value: fmt("eur", r.revenue, 2) },
+                  {
+                    label: "Survey submissions",
+                    value: fmt("count", r.finishers),
+                    color: INK,
+                    mark: "dotted",
+                  },
+                  {
+                    label: "Payment CVR",
+                    value: fmt("pct", ratio(paid, r.finishers), 2),
+                    muted: !r.finishers,
+                  },
+                ],
+              };
+            }}
+          />
         </div>
         <div className="flex" style={{ margin: "18px 56px 0 40px" }}>
           {rows.map((r) => (
@@ -343,7 +378,7 @@ function OverTime({ d }: { d: PaymentPayload }) {
           Survey submissions
         </span>
       </div>
-      {rows.length > 0 && <SalesChart rows={rows} />}
+      {rows.length > 0 && <SalesChart rows={rows} preOnSale={preOnSale} />}
       <PayTable
         label="Payments over time"
         columns="minmax(120px, 1.2fr) repeat(7, minmax(90px, 1fr))"
@@ -382,14 +417,10 @@ function OverTime({ d }: { d: PaymentPayload }) {
 function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
   // The top 40px of the 220 hold the counts over the bars.
   const H = 180;
-  const top = countTop(Math.max(...points.flatMap((p) => [p.reached, p.attempted, p.paid])));
+  const top = quarterTop(Math.max(...points.flatMap((p) => [p.reached, p.attempted, p.paid])));
+  // Scrolls sideways where narrow: the chart inside takes the keys and scrolls each point in.
   return (
-    <div
-      tabIndex={0}
-      role="region"
-      aria-label="Checkouts over time, chart"
-      className="overflow-x-auto"
-    >
+    <div className="overflow-x-auto">
       <div style={{ minWidth: points.length * 96 + 40 }}>
         <div
           className="relative border-b border-ap-line"
@@ -410,11 +441,11 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
               </span>
             </Fragment>
           ))}
-          <div className="absolute inset-0 flex items-end gap-6 px-3">
+          <div className="absolute inset-0 flex items-end">
             {points.map((p) => (
               <div
                 key={p.label}
-                className="flex h-full min-w-0 flex-1 items-end justify-center gap-1"
+                className="flex h-full min-w-0 flex-1 items-end justify-center gap-1 px-3"
               >
                 {[
                   { v: p.reached, color: PRE },
@@ -437,14 +468,46 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
               </div>
             ))}
           </div>
+          <IndexHover
+            xs={points.map((_, i) => ((i + 0.5) / points.length) * 100)}
+            label="Checkouts over time"
+            band={(i) => ({ left: (i / points.length) * 100, width: 100 / points.length })}
+            tip={(i) => {
+              const p = points[i]!;
+              return {
+                title: pointTitle(p),
+                rows: [
+                  {
+                    label: "Reached payment page",
+                    value: fmt("count", p.reached),
+                    color: PRE,
+                    mark: "square",
+                  },
+                  {
+                    label: "Attempted payment",
+                    value: fmt("count", p.attempted),
+                    color: ATTEMPTED,
+                    mark: "square",
+                  },
+                  { label: "Succeeded", value: fmt("count", p.paid), color: GREEN, mark: "square" },
+                  {
+                    label: "Checkout success",
+                    value: fmt("pct", ratio(p.paid, p.reached), 0),
+                    strong: Boolean(p.reached),
+                    muted: !p.reached,
+                  },
+                ],
+              };
+            }}
+          />
         </div>
-        <div className="flex gap-6 px-3" style={{ margin: "10px 0 0 40px" }}>
+        <div className="flex" style={{ margin: "10px 0 0 40px" }}>
           {points.map((p) => {
             const s = ratio(p.paid, p.reached);
             return (
               <span
                 key={p.label}
-                className="min-w-0 flex-1 text-center text-xs leading-[1.4] text-ap-muted"
+                className="min-w-0 flex-1 px-3 text-center text-xs leading-[1.4] text-ap-muted"
               >
                 {p.label}
                 <br />
@@ -624,7 +687,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
             {steps.map((s) => (
               <div
                 key={s.label}
-                className="grid grid-cols-[minmax(0,1fr)_minmax(44px,auto)_minmax(84px,auto)] items-center gap-x-3 gap-y-1 text-[13px] sm:grid-cols-[230px_minmax(0,1fr)_70px_120px]"
+                className={`grid grid-cols-[minmax(0,1fr)_minmax(44px,auto)_minmax(84px,auto)] items-center gap-x-3 gap-y-1 py-0.5 text-[13px] sm:grid-cols-[230px_minmax(0,1fr)_70px_120px] ${ROW_HOVER}`}
               >
                 <span className="col-span-3 font-semibold text-ap-ink sm:col-span-1">
                   {s.label}
@@ -664,13 +727,21 @@ function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number } {
   const finishers = sum((r) => r.finishers);
   const fullSales = sum((r) => r.fullSales);
   const fullRevenue = Math.round(sum((r) => r.fullRevenue) * 100) / 100;
+  // A row's pre-unlock rate is blank only while the Initial plan isn't on sale.
+  const preOnSale = !rest.some((r) => r.preCvr === null);
+  const preSales = sum((r) => r.preSales);
+  const preRevenue = Math.round(sum((r) => r.preRevenue) * 100) / 100;
   const other: SegmentRow = {
     label: "Other countries",
     finishers,
     sales: sum((r) => r.sales),
-    // Pre-unlock is not on sale: blank, or 0 for every row once it is (see buildPayment).
-    preCvr: rest.some((r) => r.preCvr === null) ? null : 0,
-    preAvg: null,
+    preCvr: preOnSale
+      ? ratio(
+          sum((r) => r.preBuyers),
+          finishers
+        )
+      : null,
+    preAvg: preOnSale ? ratio(preRevenue, preSales) : null,
     fullCvr: ratio(
       sum((r) => r.fullBuyers),
       finishers
@@ -680,6 +751,9 @@ function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number } {
     fullBuyers: sum((r) => r.fullBuyers),
     fullSales,
     fullRevenue,
+    preBuyers: sum((r) => r.preBuyers),
+    preSales,
+    preRevenue,
   };
   return { rows: [...sorted.slice(0, 12), other], merged: rest.length };
 }
@@ -918,6 +992,8 @@ const P0 = 3;
 const P1 = 40;
 /** €3 to €40 in 25-cent steps: where the best price is looked for and the lines are drawn. */
 const PRICES = Array.from({ length: (P1 - P0) / 0.25 + 1 }, (_, i) => P0 + i * 0.25);
+/** The prices the read-out stops at: the slider's, so a click tests the price its card shows. */
+const STOPS = PRICES.filter((p) => Number.isInteger(p * 2));
 /** A price's place across the chart, in %. */
 const xP = (p: number) => Math.max(0, Math.min(100, ((p - P0) / (P1 - P0)) * 100));
 
@@ -944,8 +1020,9 @@ function modelOf(el: PaymentPayload["elasticity"]): Model | null {
     cvrAt,
     netAt,
     best,
-    cvrTop: niceMax(cap * 1.1, STEPS),
-    netTop: niceMax(Math.max(0, netAt(best)) * 1.1, STEPS),
+    // Quarter lines written exactly: the rate to a tenth of a point, the money to the cent.
+    cvrTop: quarterTop(cap * 1.1, 0.001),
+    netTop: quarterTop(Math.max(0, netAt(best)) * 1.1, 0.01),
   };
 }
 
@@ -982,7 +1059,7 @@ function Elasticity({ el }: { el: PaymentPayload["elasticity"] }) {
         }
       />
       {model ? (
-        <ElasticityModel el={el} m={model} probe={probe} />
+        <ElasticityModel el={el} m={model} probe={probe} onProbe={setProbe} />
       ) : (
         <p className="m-0 text-[13px] leading-relaxed text-ap-muted">
           {el.why ?? "The model could not be fitted to this range."}
@@ -996,10 +1073,13 @@ function ElasticityModel({
   el,
   m,
   probe,
+  onProbe,
 }: {
   el: PaymentPayload["elasticity"];
   m: Model;
   probe: number;
+  /** A click on the chart tests that price, as the slider does. */
+  onProbe: (price: number) => void;
 }) {
   const { e, cvrAt, netAt, best, cvrTop, netTop } = m;
   const n = el.points.length;
@@ -1079,12 +1159,8 @@ function ElasticityModel({
           Observed months
         </span>
       </div>
-      <div
-        tabIndex={0}
-        role="region"
-        aria-label="Price elasticity, chart"
-        className="overflow-x-auto"
-      >
+      {/* Scrolls sideways where narrow: the chart inside takes the keys. */}
+      <div className="overflow-x-auto">
         <div className="pt-2" style={{ minWidth: 520 }}>
           <div
             className="relative border-b border-l border-ap-line"
@@ -1165,6 +1241,44 @@ function ElasticityModel({
                 </span>
               </Fragment>
             ))}
+            <IndexHover
+              xs={STOPS.map(xP)}
+              label="Price elasticity"
+              onPick={(i) => onProbe(STOPS[i]!)}
+              markers={(i) => [
+                { y: yC(cvrAt(STOPS[i]!)), color: "#795fc8" },
+                { y: yN(netAt(STOPS[i]!)), color: GREEN },
+              ]}
+              tip={(i) => {
+                const p = STOPS[i]!;
+                // Each observed month at the stop nearest its price.
+                const seen = el.points.filter((o) => Math.round(o.price * 2) / 2 === p);
+                return {
+                  title: `At ${fmt("eur", p, 2)}`,
+                  rows: [
+                    {
+                      label: "Predicted payment CVR",
+                      value: fmt("pct", cvrAt(p), 2),
+                      color: "#795fc8",
+                      mark: "line",
+                    },
+                    {
+                      label: "Net revenue per submission",
+                      value: fmt("eur", netAt(p), 3),
+                      color: GREEN,
+                      mark: "line",
+                    },
+                    ...seen.map((o) => ({
+                      label: `Observed, ${pointTitle(o)}`,
+                      value: fmt("pct", o.cvr, 2),
+                      color: INK,
+                      mark: "dot" as const,
+                    })),
+                  ],
+                  note: "Click, tap or press Enter to test this price.",
+                };
+              }}
+            />
           </div>
           <div className="relative h-4" style={{ margin: "18px 56px 0 44px" }}>
             {[5, 10, 15, 20, 25, 30, 35, 40].map((p) => (
@@ -1402,7 +1516,12 @@ export default function ApPayment() {
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
           >
             {data.tiles.map((t) => (
-              <KpiTileV2 key={t.key} tile={t} digits={TILE_DIGITS[t.key]} />
+              <KpiTileV2
+                key={t.key}
+                tile={t}
+                digits={TILE_DIGITS[t.key]}
+                titles={bucketTitles(data.range.from, data.range.to)}
+              />
             ))}
           </div>
           <OverTime d={data} />

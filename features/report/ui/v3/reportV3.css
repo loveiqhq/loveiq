@@ -8827,31 +8827,44 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   line-height: 21.6px;
   min-width: 0;
 }
-/* The chapter's disc (1:867): lavender and pointing down when the section is shut, white
- * on a violet ring and pointing up when it is open, as the chapter rows draw it. */
+/* A section's own disc (Mark, 22.10; Figma 1686:10514, 1954:4425): not the chapter's.
+ * 28px and white, its dotted ring drawn by .rv4-sect__ring (the violet at 20%), the
+ * chevron pointing down while the section is open, as the expanded-chapter frames draw
+ * it, and up once it is shut. No lavender fill and no solid ring: those are the
+ * chapter's. */
 .rv3 .rv4-sect__chev {
   align-items: center;
-  background: rgba(121, 95, 200, 0.1);
-  border-radius: 17px;
+  background: #fff;
+  border-radius: 50%;
   color: var(--rv3-violet);
   display: flex;
   flex-shrink: 0;
-  height: 34px;
+  height: 28px;
   justify-content: center;
-  width: 34px;
+  position: relative;
+  width: 28px;
 }
-.rv3 .rv4-sect__chev svg {
+.rv3 .rv4-sect__ring {
+  height: 28px;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 28px;
+}
+.rv3 .rv4-sect__chev svg:not(.rv4-sect__ring) {
   display: block;
   height: 15px;
+  position: relative;
   transition: transform 260ms ease;
   width: 15px;
 }
-.rv3 .rv4-sect.is-open .rv4-sect__chev {
-  background: #fff;
-  box-shadow: inset 0 0 0 1.5px var(--rv3-violet);
-}
-.rv3 .rv4-sect.is-open .rv4-sect__chev svg {
+.rv3 .rv4-sect:not(.is-open) .rv4-sect__chev svg:not(.rv4-sect__ring) {
   transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-sect__chev svg:not(.rv4-sect__ring) {
+    transition: none;
+  }
 }
 .rv3 .rv4-sect__inner {
   display: block;

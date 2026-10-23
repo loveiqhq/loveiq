@@ -33,6 +33,7 @@ import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression"
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
+import { joinInitialGateCohort } from "@features/report/server/initialGateState";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -63,6 +64,7 @@ import {
   PREPAID_COOKIE,
   clearedPrepaidCookieOptions,
 } from "@features/pay-to-start/server/entitlement";
+import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 
 let _resend: Resend | null = null;
@@ -139,6 +141,35 @@ async function reportTokenFor(submissionId: number): Promise<string | null> {
 }
 
 /**
+ * Once the submission is persisted, the partial-save row is dead weight and contains PII
+ * (raw answers). Delete it so we don't retain drafts past the point of need. A pg_cron job
+ * sweeps any stragglers (e.g. session_id mismatch or pre-cleanup-deploy rows).
+ */
+function scheduleDraftCleanup(sessionId: string, submissionId: number): void {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return;
+  scheduleAfterResponse("survey-partial-cleanup", async () => {
+    try {
+      await fetchWithTimeout(
+        `${supabaseUrl}/rest/v1/survey_partial_save?session_id=eq.${encodeURIComponent(sessionId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            Prefer: "return=minimal",
+          },
+          timeoutMs: 5000,
+        }
+      );
+    } catch (err) {
+      logger.warn({ err, sessionId, submissionId }, "Failed to delete partial save");
+    }
+  });
+}
+
+/**
  * The reply for a submit whose session already has a submission (see POST). Sends
  * nothing: the email and the Slack post went out with the first one.
  *
@@ -165,6 +196,10 @@ async function replyWithExistingSubmission(
       await ensurePersonalReportForSubmission({ reportToken, submissionId: existing.id });
     });
   }
+  // A repeat re-saves the draft on its way here (the client's recovery snapshot): Retry, a
+  // page that loaded mid-submit and resent, an admin recovery. The first submit's delete
+  // has run already, so without this one the answers and IP sat in it for 30 days.
+  scheduleDraftCleanup(sessionId, existing.id);
   const claim = prepaidToken
     ? await claimPayToStartForSubmission({
         reportToken,
@@ -376,7 +411,8 @@ export async function POST(request: Request) {
   }
 
   // F-04: reject new submissions while the survey is paused/closed. Admins
-  // toggle `survey.status` via /admin/survey-status; isSurveyClosed() reads it
+  // set `survey.status` in the database (the admin's switch was removed with the old admin
+  // on 16 Oct 2026); isSurveyClosed() reads it
   // (30s in-process cache, fails OPEN on Supabase trouble so infra blips never
   // block real users).
   if (await isSurveyClosed()) {
@@ -521,7 +557,9 @@ export async function POST(request: Request) {
   mergedUtmTracker = mergeTrackerArm(
     mergedUtmTracker,
     EMAIL_QUESTION_ARM_KEY,
-    sessionId ? assignEmailQuestionArm(sessionId) : null
+    // A buyer who paid before the survey is in no survey test: the browser showed them
+    // today's question (SurveyEngine's payToStart), so no arm is stamped.
+    sessionId && !prepaidToken ? assignEmailQuestionArm(sessionId) : null
   );
 
   if (website) {
@@ -659,9 +697,13 @@ export async function POST(request: Request) {
       reportToken = token ?? undefined;
     });
 
+    // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
+    // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
+    // A reader who came with a pay-to-start token joins only after their claim, below.
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
+      isExisting || prepaidToken ? Promise.resolve() : joinInitialGateCohort(submissionId),
     ]);
 
     // Pay to start: claim what this browser paid for, before the reply, so the report
@@ -676,6 +718,22 @@ export async function POST(request: Request) {
       : null;
     if (claim) {
       scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, submissionId));
+    }
+    // A token that bought nothing for this survey joins the cohort like anyone: unknown,
+    // used, refunded, expired, or a checkout left open (Stripe expires it in a day, and the
+    // gate then applies). Out: a paid claim; a failed one, whose reader may have paid
+    // without the entitlement being bound yet (the free report until the sweep binds it,
+    // claim.ts); and money still settling. The gate stands aside for a pending entitlement,
+    // and pay to start never moves a delayed payment that fails off pending, so in the
+    // cohort that reader would meet no gate and lose the emails that skip it.
+    if (
+      !isExisting &&
+      claim &&
+      claim.outcome !== "unlocked" &&
+      claim.outcome !== "error" &&
+      claim.outcome !== "pending"
+    ) {
+      await joinInitialGateCohort(submissionId);
     }
 
     // End of user-blocking work. Everything below is fire-and-forget via
@@ -708,36 +766,7 @@ export async function POST(request: Request) {
       });
     });
 
-    // Once the submission is persisted, the partial-save row is dead weight
-    // and contains PII (raw answers). Delete it so we don't retain abandoned
-    // drafts past the point of need. A pg_cron job sweeps any stragglers
-    // (e.g. session_id mismatch or pre-cleanup-deploy rows).
-    if (sessionId) {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (supabaseUrl && serviceKey) {
-        scheduleAfterResponse("survey-partial-cleanup", async () => {
-          try {
-            await fetchWithTimeout(
-              `${supabaseUrl}/rest/v1/survey_partial_save?session_id=eq.${encodeURIComponent(
-                sessionId
-              )}`,
-              {
-                method: "DELETE",
-                headers: {
-                  apikey: serviceKey,
-                  Authorization: `Bearer ${serviceKey}`,
-                  Prefer: "return=minimal",
-                },
-                timeoutMs: 5000,
-              }
-            );
-          } catch (err) {
-            logger.warn({ err, sessionId, submissionId }, "Failed to delete partial save");
-          }
-        });
-      }
-    }
+    if (sessionId) scheduleDraftCleanup(sessionId, submissionId);
 
     scheduleAfterResponse("survey-complete-email", async () => {
       if (isExisting) return;
@@ -765,31 +794,45 @@ export async function POST(request: Request) {
         ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
         : `${siteUrl}/report?from=email`;
 
+      // An unlocked pay-to-start report's email is a purchase email: its unsubscribes are
+      // counted with the purchase emails', as fulfillment's are.
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret
         ? buildUnsubscribeUrl(
             normalizedEmail,
             siteUrl,
             unsubSecret,
-            UNSUBSCRIBE_CAMPAIGNS.surveyComplete
+            claim?.outcome === "unlocked"
+              ? UNSUBSCRIBE_CAMPAIGNS.reportUnlocked
+              : UNSUBSCRIBE_CAMPAIGNS.surveyComplete
           )
         : undefined;
 
       /**
-       * Pay to start: a reader whose report is unlocked gets the full-report email (its A
-       * copy, as a purchase does), and any other reader who came that way the survey
-       * email's A copy. Neither carries the A/B tags: these readers are in neither test.
+       * Pay to start: a reader whose report is unlocked gets the email for what opened, the
+       * full-report email (its A copy, as a purchase does) or, for the EUR 1.99 initial
+       * report, E06 "You've unlocked your Core Archetype" (Figma 1669:2703); any other reader
+       * who came that way the survey email's A copy. None carries the A/B tags: these readers
+       * are in neither test.
        */
       const experiment = claim ? null : "survey-complete";
       const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
+      const unlockedInitial = claim?.outcome === "unlocked" && claim.offer === "pre";
       const tpl =
         claim?.outcome === "unlocked"
-          ? reportFullEmail({
-              firstName: normalizedFirstName,
-              reportUrl,
-              siteUrl,
-              unsubscribeUrl,
-            })
+          ? unlockedInitial
+            ? initialUnlockEmail({
+                firstName: normalizedFirstName,
+                reportUrl,
+                siteUrl,
+                unsubscribeUrl,
+              })
+            : reportFullEmail({
+                firstName: normalizedFirstName,
+                reportUrl,
+                siteUrl,
+                unsubscribeUrl,
+              })
           : variant === "b"
             ? surveyCompleteBEmail({
                 firstName: normalizedFirstName,
@@ -820,8 +863,11 @@ export async function POST(request: Request) {
                   { name: "journey", value: PAY_TO_START_JOURNEY },
                   {
                     name: "email",
-                    value:
-                      claim?.outcome === "unlocked" ? "pts_report_unlocked" : "pts_report_ready",
+                    value: unlockedInitial
+                      ? "pts_initial_unlocked"
+                      : claim?.outcome === "unlocked"
+                        ? "pts_report_unlocked"
+                        : "pts_report_ready",
                   },
                 ],
             headers: {
@@ -871,20 +917,14 @@ export async function POST(request: Request) {
         // gated by report_token, so exposing this int is not a security risk.
         submissionId,
         ...(reportToken ? { reportToken } : {}),
-        ...(scoringSummary
-          ? {
-              primaryArchetype: scoringSummary.primaryArchetype,
-              ...(scoringSummary.v5PrimaryArchetype
-                ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
-                : {}),
-            }
-          : {}),
+        // No archetype: nothing reads it here, and the EUR 1.99 gate sells it. The report
+        // route tells it, to a reader allowed to see it.
         // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
       },
       {
-        // The response carries a fresh report access token + the user's
-        // primary archetype — never let intermediaries cache it.
+        // The response carries a fresh report access token — never let
+        // intermediaries cache it.
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
           "X-Server-Timing": serverTiming,
