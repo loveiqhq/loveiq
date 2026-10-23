@@ -22,8 +22,11 @@ with it. Everything ships switched off.
    `{"key":"report_initial_unlock_gate","enabled":true}`. Only surveys submitted from then on
    are gated; the change reaches every instance within 30 seconds (the flags' cache). The
    price test stops drawing new readers at the switch (the cohort is quoted on A3): conclude
-   it in the experiment registry. The brain's readouts leave the cohort out of the price
-   lists and never count a EUR 1.99 as a report bought; other tests (landing, survey) go on.
+   it in the experiment registry and take `pricing` out of `LIVE_AXES`
+   (`features/admin/server/experiment-readouts.ts`), or the brain's tool keeps reading it as a
+   live test whose new readers are all "not attributable". The brain's readouts leave the
+   cohort out of the price lists and never count a EUR 1.99 as a report bought; other tests
+   (landing, survey) go on.
    **Before switching on**, do the same in the SQL readouts the daily digest and
    brain-reconcile use (`get_axis_funnel_daily`, `get_arm_cohorts`), as
    `20261018130000` did for pay to start: today they count the cohort in A3 and a EUR 1.99

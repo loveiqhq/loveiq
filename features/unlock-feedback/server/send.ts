@@ -234,8 +234,13 @@ export async function eligibility(
   if (await hasInitialUnlockByPersonalReportId(row.id)) return { skip: "paid" };
   if (!opts.staffTest && r.userId !== null && (await paidAnotherReport(r.userId, row)))
     return { skip: "paid" };
-  if ((await readInitialUnlockGateSwitch()) !== false && (await inInitialGateCohort(row.id)))
+  const gateSwitch = await readInitialUnlockGateSwitch();
+  if (gateSwitch !== false && (await inInitialGateCohort(row.id))) {
+    // In the cohort with the switch unread: skip (gate on) or send (off) can't be told apart,
+    // and a skip is final for a tranche, whose cursor moves past it. The reader waits.
+    if (gateSwitch === null) throw new Error("gate_switch_unreadable");
     return { skip: "gate_cohort" };
+  }
   const suppression = await suppressionState(r.email);
   if (suppression !== "clear") return { skip: suppression };
   if (!(await reportOpened(row.id))) return { skip: "not_opened" };

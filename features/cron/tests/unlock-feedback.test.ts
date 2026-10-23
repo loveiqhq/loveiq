@@ -397,11 +397,6 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
       "gate_cohort",
     ],
     [
-      "a reader in the gate's cohort while its switch can't be read",
-      { gateSwitchDown: true, cohort: true },
-      "gate_cohort",
-    ],
-    [
       "someone who bought another of their reports",
       { otherReports: [{ id: 77, plan: "full_report" }] },
       "paid",
@@ -436,6 +431,8 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
       "EUR 1.99 gate cohort, with the switch unreadable too",
       { gateSwitchDown: true, cohortDown: true },
     ],
+    // In the cohort with the switch unread: neither a skip (final for a tranche) nor a send.
+    ["EUR 1.99 gate switch, for a reader in its cohort,", { gateSwitchDown: true, cohort: true }],
   ] as const)("a reader whose %s cannot be read waits for the next run", async (_label, db) => {
     withDb({ candidates: [candidate()], ...db });
     const { body } = await run();
