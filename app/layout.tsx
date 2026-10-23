@@ -191,7 +191,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const newVisitVariant = headersList.get("x-liq-new-visit");
   if (newVisitVariant) {
     const newVisitUtm = headersList.get("x-liq-new-visit-utm") ?? undefined;
-    after(() => recordUniqueVisit(newVisitVariant, newVisitUtm));
+    const newVisitOffer = headersList.get("x-liq-new-visit-offer") ?? undefined;
+    after(() => recordUniqueVisit(newVisitVariant, newVisitUtm, newVisitOffer));
   }
 
   return (

@@ -10,8 +10,9 @@ vi.mock("@shared/http/ratelimit", () => ({
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 const mockFetchAllRows = vi.fn();
+const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: vi.fn(),
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
   fetchAllRows: (...args: unknown[]) => mockFetchAllRows(...args),
   countRows: vi.fn(),
   POSTGREST_MAX_ROWS: 1000,
@@ -20,23 +21,73 @@ const mockAds = vi.fn();
 vi.mock("@shared/http/google-ads", () => ({
   googleAdsSearch: (...args: unknown[]) => mockAds(...args),
 }));
+const mockGateOn = vi.fn();
+vi.mock("@features/report/server/initialGateState", () => ({
+  isInitialUnlockGateEnabled: () => mockGateOn(),
+}));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { GET } from "@/app/api/admin/ap/pay-to-start/route";
+import { clearFactsCache } from "@features/admin/server/ap/facts";
+import type { PtsPayload } from "@features/admin/server/ap/pay-to-start";
+
+import { sub } from "./ap-fixtures";
 
 const req = () =>
   new Request(
     "http://localhost/api/admin/ap/pay-to-start?period=custom&from=2026-10-20&to=2026-10-20"
   );
 
+const json = (body: unknown, init?: ResponseInit) =>
+  new Response(JSON.stringify(body), { status: 200, ...init });
+
+const facts = (over: Record<string, unknown> = {}) => ({
+  visits: [
+    { day: "2026-10-20", arm: "white_card", src: null, n: 300 },
+    // The pay-to-start pages' visits are that funnel's: never the free survey's.
+    { day: "2026-10-20", arm: "pay_to_start", src: null, n: 40 },
+  ],
+  starts: [],
+  subs: [
+    sub({ id: 1, day: "2026-10-20", at: "2026-10-20T10:00:00Z" }),
+    // Claimed by a pay-to-start purchase.
+    sub({ id: 700, day: "2026-10-20", at: "2026-10-20T10:00:00Z" }),
+    // Its tracker carries the journey: a claim that failed before it bound.
+    sub({ id: 701, day: "2026-10-20", at: "2026-10-20T11:00:00Z" }),
+  ],
+  money: [],
+  checkouts: [],
+  intro: [],
+  invites: [],
+  quotes: [],
+  ...over,
+});
+
+const JOURNEY = JSON.stringify({ utm_source: "google", gclid: "x", journey: "pay_to_start" });
+
+const rows: Record<string, unknown[]> = {};
+const respond = (path: string) => {
+  const key = Object.keys(rows).find((k) => path.startsWith(k));
+  return key ? rows[key] : [];
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  clearFactsCache();
+  for (const k of Object.keys(rows)) delete rows[k];
   mockVerifyAdminSession.mockResolvedValue({ email: "ec@loveiq.org", role: "admin" });
   mockCheckRateLimit.mockResolvedValue({ allowed: true });
   mockAds.mockResolvedValue([]);
+  mockGateOn.mockResolvedValue(false);
+  mockSupabaseFetch.mockImplementation(async (path: string) =>
+    path === "/rest/v1/rpc/ap_facts" ? json(facts()) : json(null, { status: 404 })
+  );
+  mockFetchAllRows.mockImplementation(async (path: string) => respond(path));
 });
+
+const paths = () => mockFetchAllRows.mock.calls.map(([p]) => String(p));
 
 describe("GET /api/admin/ap/pay-to-start", () => {
   it("refuses without an admin session, before reading anything", async () => {
@@ -44,6 +95,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     const res = await GET(req());
     expect(res.status).toBe(401);
     expect(mockFetchAllRows).not.toHaveBeenCalled();
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 
   it("is rate limited", async () => {
@@ -51,78 +103,242 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect((await GET(req())).status).toBe(429);
   });
 
-  it("reads the journey's entitlements and visits, not June's prepaid rows", async () => {
-    mockFetchAllRows.mockImplementation(async (path: string) => {
-      if (path.startsWith("/rest/v1/prepaid_report_access?"))
-        return [
-          {
-            id: 1,
-            offer: "full",
-            status: "succeeded",
-            amount_cents: 2999,
-            list_price_cents: 2999,
-            is_test: false,
-            customer_email: "reader@example.com",
-            created_at: "2026-10-20T10:00:00Z",
-            paid_at: "2026-10-20T10:02:00Z",
-            consumed_submission_id: null,
-          },
-        ];
-      if (path.startsWith("/rest/v1/funnel_event?")) return [{ day: "2026-10-20" }];
-      return [];
-    });
+  it("reads the journey's purchases, its visits by page, and the free survey from ap_facts", async () => {
+    rows["/rest/v1/prepaid_report_access?"] = [
+      {
+        id: 1,
+        offer: "full",
+        status: "succeeded",
+        amount_cents: 2999,
+        list_price_cents: 2999,
+        is_test: false,
+        customer_email: "reader@example.com",
+        created_at: "2026-10-20T09:00:00Z",
+        paid_at: "2026-10-20T09:02:00Z",
+        consumed_submission_id: 700,
+        utm_tracker: null,
+      },
+    ];
+    rows["/rest/v1/funnel_event?"] = [
+      { day: "2026-10-20", offer: "full", utm_source: "google" },
+      { day: "2026-10-20", offer: "full", utm_source: "google" },
+      { day: "2026-10-20", offer: "pre", utm_source: null },
+    ];
+    rows["/rest/v1/survey_submission?status=eq.completed&utm_tracker"] = [
+      {
+        id: 701,
+        session_id: "s-701",
+        start_date_time: "2026-10-20T10:40:00Z",
+        created_date_time: "2026-10-20T11:00:00Z",
+        utm_tracker: JOURNEY,
+      },
+    ];
     const res = await GET(req());
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.arms.find((a: { offer: string }) => a.offer === "all").paid).toBe(1);
-    expect(body.visits).toBe(1);
-    const paths = mockFetchAllRows.mock.calls.map(([p]) => String(p));
-    expect(paths.find((p) => p.startsWith("/rest/v1/prepaid_report_access?"))).toContain(
+    const body = (await res.json()) as PtsPayload;
+    const by = (k: string) => body.funnels.find((f) => f.key === k)!;
+    // Sub 1 only: 700 was claimed, 701 carries the journey.
+    expect(by("after").all).toMatchObject({ visits: 300, finished: 1 });
+    expect(by("full").all).toMatchObject({ visits: 2, paid: 1, finished: 1, revenue: 29.99 });
+    expect(by("pre").all.visits).toBe(1);
+    expect(by("gate").live).toBe(false);
+
+    const p = paths();
+    expect(p.find((x) => x.startsWith("/rest/v1/prepaid_report_access?"))).toContain(
       "offer=not.is.null"
     );
-    expect(paths.find((p) => p.startsWith("/rest/v1/funnel_event?"))).toContain(
-      "landing_variant=eq.pay_to_start"
+    expect(p.find((x) => x.startsWith("/rest/v1/prepaid_report_access?"))).toContain("utm_tracker");
+    const visits = p.find((x) => x.startsWith("/rest/v1/funnel_event?"))!;
+    expect(visits).toContain("landing_variant=eq.pay_to_start");
+    expect(visits).toContain("select=day,offer,utm_source");
+    expect(mockSupabaseFetch.mock.calls[0]![0]).toBe("/rest/v1/rpc/ap_facts");
+    // Google Ads by landing page and by day.
+    expect(String(mockAds.mock.calls[0]![0])).toContain("segments.date");
+    expect(String(mockAds.mock.calls[0]![0])).toContain("FROM landing_page_view");
+  });
+
+  it("takes buyers' survey starts out once each, as ap_facts counts a start", async () => {
+    mockSupabaseFetch.mockImplementation(async () =>
+      json(
+        facts({
+          starts: [
+            {
+              day: "2026-10-20",
+              known: true,
+              src: "google",
+              med: "cpc",
+              ads: true,
+              arm: null,
+              device: "iOS",
+              finished: false,
+              camp: null,
+              term: null,
+              cq: null,
+              email: false,
+              n: 10,
+            },
+          ],
+        })
+      )
+    );
+    rows["/rest/v1/prepaid_report_access?"] = [
+      {
+        id: 1,
+        offer: "pre",
+        status: "succeeded",
+        amount_cents: 199,
+        list_price_cents: 199,
+        is_test: true,
+        customer_email: "fatih@loveiq.org",
+        created_at: "2026-10-20T09:00:00Z",
+        paid_at: "2026-10-20T09:02:00Z",
+        consumed_submission_id: 702,
+        utm_tracker: null,
+      },
+    ];
+    rows["/rest/v1/survey_partial_save?"] = [
+      // Past the first question, labelled: a buyer's start.
+      {
+        session_id: "a",
+        started_at: "2026-10-20T08:00:00Z",
+        current_index: 3,
+        utm_tracker: JOURNEY,
+      },
+      // Never answered: no start.
+      {
+        session_id: "b",
+        started_at: "2026-10-20T08:00:00Z",
+        current_index: 0,
+        utm_tracker: JOURNEY,
+      },
+      // The like filter's look-alike without the label: not a buyer.
+      {
+        session_id: "c",
+        started_at: "2026-10-20T08:00:00Z",
+        current_index: 5,
+        utm_tracker: JSON.stringify({ utm_campaign: "pay_to_start_brand" }),
+      },
+      // The same session as the finished survey below: one start.
+      {
+        session_id: "s-701",
+        started_at: "2026-10-20T10:40:00Z",
+        current_index: 9,
+        utm_tracker: JOURNEY,
+      },
+    ];
+    rows["/rest/v1/survey_submission?status=eq.completed&utm_tracker"] = [
+      {
+        id: 701,
+        session_id: "s-701",
+        start_date_time: "2026-10-20T10:41:00Z",
+        created_date_time: "2026-10-20T11:00:00Z",
+        utm_tracker: JOURNEY,
+      },
+    ];
+    // A staff member's claimed survey: ap_facts never counted its start, so none comes off.
+    rows["/rest/v1/survey_submission?id=in."] = [
+      {
+        id: 702,
+        session_id: "staff",
+        start_date_time: "2026-10-20T09:10:00Z",
+        created_date_time: "2026-10-20T09:30:00Z",
+      },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const after = body.funnels.find((f) => f.key === "after")!;
+    // 10 starts, the buyers' "a" and "s-701" out.
+    expect(after.steps.find((s) => s.label === "Survey started")!.n).toBe(8);
+    expect(paths().find((x) => x.startsWith("/rest/v1/survey_submission?id=in."))).toContain(
+      "id=in.(702)"
     );
   });
 
-  it("counts a EUR 1.99 buyer's full report or All 14 as an upgrade, credit or not", async () => {
-    mockFetchAllRows.mockImplementation(async (path: string) => {
-      if (path.startsWith("/rest/v1/prepaid_report_access?"))
-        return [
-          {
-            id: 2,
-            offer: "pre",
-            status: "succeeded",
-            amount_cents: 199,
-            list_price_cents: 199,
-            is_test: false,
-            customer_email: "reader@example.com",
-            created_at: "2026-10-20T10:00:00Z",
-            paid_at: "2026-10-20T10:02:00Z",
-            consumed_submission_id: 700,
-          },
-        ];
-      if (path.startsWith("/rest/v1/personal_report?"))
-        return [{ id: 9700, survey_submission_id: 700 }];
-      if (path.startsWith("/rest/v1/payment?")) return [{ personal_report_id: 9700, amount: 38 }];
-      return [];
-    });
-    const body = await (await GET(req())).json();
-    expect(body.arms.find((a: { offer: string }) => a.offer === "pre")).toMatchObject({
-      upgrades: 1,
-      upgradeRevenue: 38,
-    });
-    const paths = mockFetchAllRows.mock.calls.map(([p]) => String(p));
-    const query = paths.find((p) => p.startsWith("/rest/v1/payment?"))!;
-    expect(query).toContain("metadata->>plan=in.(full_report,all_reports)");
-    expect(query).not.toContain("initialCredit");
+  it("counts what a buyer bought on the report afterwards, never the purchase twice", async () => {
+    rows["/rest/v1/prepaid_report_access?"] = [
+      {
+        id: 2,
+        offer: "pre",
+        status: "succeeded",
+        amount_cents: 199,
+        list_price_cents: 199,
+        is_test: false,
+        customer_email: "reader@example.com",
+        created_at: "2026-10-20T10:00:00Z",
+        paid_at: "2026-10-20T10:02:00Z",
+        consumed_submission_id: 700,
+        utm_tracker: null,
+      },
+    ];
+    rows["/rest/v1/personal_report?survey_submission_id=in."] = [
+      { id: 9700, survey_submission_id: 700 },
+    ];
+    rows["/rest/v1/report_session?"] = [{ personal_report_id: 9700 }];
+    rows["/rest/v1/payment?"] = [
+      // The purchase itself, written on the report at the claim.
+      { personal_report_id: 9700, amount: 1.99, plan: "initial", journey: "pay_to_start" },
+      { personal_report_id: 9700, amount: 19.99, plan: "full_report", journey: null },
+      // E07's gift and the feedback grant are EUR 0: never revenue.
+      { personal_report_id: 9700, amount: 0, plan: "initial", journey: null },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const pre = body.funnels.find((f) => f.key === "pre")!;
+    expect(pre.all).toMatchObject({ paid: 1, finished: 1, revenue: 21.98 });
+    expect(pre.steps.find((s) => s.label === "Report opened")!.n).toBe(1);
+    expect(pre.steps.find((s) => s.label === "Bought the full report")!.n).toBe(1);
+    const query = paths().find((x) => x.startsWith("/rest/v1/payment?"))!;
     expect(query).toContain("is_test=is.false");
+    expect(query).toContain("status=eq.succeeded");
+    expect(query).toContain("journey:metadata->>journey");
   });
 
-  it("answers a failed read with a generic 500", async () => {
-    mockFetchAllRows.mockResolvedValue(null);
+  it("reads the gate's cohort and switch, and its members leave pay after the report", async () => {
+    mockGateOn.mockResolvedValue(true);
+    rows["/rest/v1/personal_report?initial_gate_cohort_at"] = [
+      {
+        survey_submission_id: 1,
+        initial_gate_cohort_at: "2026-10-20T10:00:04Z",
+        initial_gate_seen_at: "2026-10-20T10:01:00Z",
+      },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const gate = body.funnels.find((f) => f.key === "gate")!;
+    expect(gate.live).toBe(true);
+    expect(gate.all.finished).toBe(1);
+    expect(gate.steps.find((s) => s.label === "Saw the €1.99 page")!.n).toBe(1);
+    // Sub 1 is the gate's; 700 and 701 (no purchase claims them here) stay.
+    expect(body.funnels.find((f) => f.key === "after")!.all.finished).toBe(2);
+    const q = paths().find((x) => x.startsWith("/rest/v1/personal_report?initial_gate_cohort_at"))!;
+    expect(q).toContain("initial_gate_cohort_at=gte.");
+  });
+
+  it("still answers when only the visits can't be read, and says so", async () => {
+    mockFetchAllRows.mockImplementation(async (path: string) =>
+      path.startsWith("/rest/v1/funnel_event?") ? null : respond(path)
+    );
     const res = await GET(req());
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Unable to load the pay-to-start page." });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PtsPayload;
+    expect(body.notes).toContain("Pay to start's visits could not be read just now.");
+    expect(body.funnels.find((f) => f.key === "full")!.all.visits).toBeNull();
+  });
+
+  it("answers a failed read with a generic 500, never a page of zeros", async () => {
+    for (const failing of [
+      "/rest/v1/prepaid_report_access?",
+      "/rest/v1/survey_partial_save?",
+      "/rest/v1/personal_report?initial_gate_cohort_at",
+    ]) {
+      clearFactsCache();
+      mockFetchAllRows.mockImplementation(async (path: string) =>
+        path.startsWith(failing) ? null : respond(path)
+      );
+      const res = await GET(req());
+      expect(res.status, failing).toBe(500);
+      expect(await res.json()).toEqual({ error: "Unable to load the pay-to-start page." });
+    }
+    clearFactsCache();
+    mockFetchAllRows.mockImplementation(async (path: string) => respond(path));
+    mockSupabaseFetch.mockResolvedValue(json(null, { status: 500 }));
+    expect((await GET(req())).status).toBe(500);
   });
 });

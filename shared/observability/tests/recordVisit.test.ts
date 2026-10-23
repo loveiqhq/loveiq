@@ -102,6 +102,23 @@ describe("server-side funnel writers", () => {
     expect(insertedBody().landing_variant).toBe("pay_to_start");
   });
 
+  it("writes which pay-to-start page a visit landed on, and nothing on any other visit", async () => {
+    await recordUniqueVisit("pay_to_start", "google", "pre");
+    expect(insertedBody().offer).toBe("pre");
+    mockFetch.mockClear();
+    await recordUniqueVisit("pay_to_start", undefined, "full");
+    expect(insertedBody().offer).toBe("full");
+    // Clamped like the label: the header comes from a request, and the column's CHECK would
+    // refuse the whole row (the visit with it) for anything else.
+    mockFetch.mockClear();
+    await recordUniqueVisit("pay_to_start", undefined, "free");
+    expect(insertedBody()).not.toHaveProperty("offer");
+    // An arm's visit never carries an offer, whatever the header said.
+    mockFetch.mockClear();
+    await recordUniqueVisit("white_card", undefined, "pre");
+    expect(insertedBody()).not.toHaveProperty("offer");
+  });
+
   it("omits utm_source entirely for direct traffic", async () => {
     await recordSurveyPageView("white");
     expect(insertedBody()).not.toHaveProperty("utm_source");
