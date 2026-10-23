@@ -62,8 +62,11 @@ process.env.RESEND_API_KEY = "re_test";
 import { POST } from "@/app/api/survey/route";
 import { __resetSurveyStatusCacheForTests } from "@features/survey/server/server";
 import { checkCooldown, checkRateLimit } from "@shared/http/ratelimit";
+import { claimPayToStartForSubmission } from "@features/pay-to-start/server/claim";
+import { PREPAID_COOKIE_PROD } from "@features/pay-to-start/logic/journey";
 
 const SESSION = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+const PREPAID_COOKIE = `${PREPAID_COOKIE_PROD}=rpp_${"a1B2c3D4".repeat(4)}`;
 const COHORT_STAMP = "/rest/v1/personal_report?id=eq.10&initial_gate_cohort_at=is.null";
 
 function routeSupabase({
@@ -83,11 +86,11 @@ function routeSupabase({
   });
 }
 
-function submit(body: Record<string, unknown> = {}) {
+function submit(body: Record<string, unknown> = {}, cookie?: string) {
   return POST(
     new Request("https://www.loveiq.org/api/survey", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
       body: JSON.stringify({
         email: "alice@example.com",
         firstName: "Alice",
@@ -132,6 +135,21 @@ describe("a survey submitted while the EUR 1.99 gate is on", () => {
     expect(cohortStamps()).toHaveLength(1);
   });
 
+  it.each([
+    ["an unknown one", { outcome: "refused", reason: "not_found" }],
+    ["one already used", { outcome: "refused", reason: "used", entitlementId: 7 }],
+    ["a checkout left open", { outcome: "unpaid", entitlementId: 7 }],
+  ])(
+    "joins it too, before the reply, with a pay-to-start token that bought nothing: %s",
+    async (_label, outcome) => {
+      vi.mocked(claimPayToStartForSubmission).mockResolvedValueOnce(outcome as never);
+      routeSupabase();
+      const response = await submit({}, PREPAID_COOKIE);
+      expect(response.status).toBe(200);
+      expect(cohortStamps()).toHaveLength(1);
+    }
+  );
+
   it("is still saved and answered when the stamp fails", async () => {
     routeSupabase({ stampFails: true });
     const response = await submit();
@@ -146,6 +164,24 @@ describe("no survey joins the cohort", () => {
     routeSupabase();
     await submit();
     await runWhatComesAfterTheReply();
+    expect(cohortStamps()).toHaveLength(0);
+  });
+
+  it.each([
+    [
+      "it paid before the survey",
+      { outcome: "unlocked", entitlementId: 7, paymentId: 70, offer: "full" },
+    ],
+    ["its money is still settling", { outcome: "pending", entitlementId: 7, offer: "pre" }],
+    // A blip before the claim binds: the free report until the sweep binds it, never the gate.
+    ["its claim failed", { outcome: "error", error: new Error("supabase blip") }],
+  ])("when it came with a pay-to-start token and %s", async (_label, outcome) => {
+    vi.mocked(claimPayToStartForSubmission).mockResolvedValueOnce(outcome as never);
+    routeSupabase();
+    const response = await submit({}, PREPAID_COOKIE);
+    expect(response.status).toBe(200);
+    await runWhatComesAfterTheReply();
+    expect(claimPayToStartForSubmission).toHaveBeenCalledTimes(1);
     expect(cohortStamps()).toHaveLength(0);
   });
 

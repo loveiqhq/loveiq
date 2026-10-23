@@ -699,10 +699,11 @@ export async function POST(request: Request) {
 
     // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
     // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
+    // A reader who came with a pay-to-start token joins only after their claim, below.
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
-      isExisting ? Promise.resolve() : joinInitialGateCohort(submissionId),
+      isExisting || prepaidToken ? Promise.resolve() : joinInitialGateCohort(submissionId),
     ]);
 
     // Pay to start: claim what this browser paid for, before the reply, so the report
@@ -717,6 +718,13 @@ export async function POST(request: Request) {
       : null;
     if (claim) {
       scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, submissionId));
+    }
+    // Their token bought nothing for this survey (unknown, used, refunded, expired, or a
+    // checkout left open): they join the cohort like anyone. One that paid, or whose claim
+    // failed and reads the free report until the sweep binds it (claim.ts), never meets the
+    // EUR 1.99 gate.
+    if (!isExisting && (claim?.outcome === "refused" || claim?.outcome === "unpaid")) {
+      await joinInitialGateCohort(submissionId);
     }
 
     // End of user-blocking work. Everything below is fire-and-forget via
