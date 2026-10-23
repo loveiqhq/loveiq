@@ -800,11 +800,10 @@ export async function fetchPayToStartRecords(
   }
   const boughtFirstStarts: Record<string, number> = {};
   for (const x of claimedSubs) {
-    const at = Date.parse(x.start_date_time ?? x.created_date_time);
-    if (at < since.getTime() || at >= until.getTime()) continue;
+    // A day outside the range matches none of ap_facts' starts, so it takes nothing off.
     if ((x.user_id !== null && staff.has(x.user_id)) || isOurTest(taggedOf(x.utm_tracker)))
       continue;
-    const day = reportingDay(new Date(at));
+    const day = reportingDay(new Date(x.start_date_time ?? x.created_date_time));
     boughtFirstStarts[day] = (boughtFirstStarts[day] ?? 0) + 1;
   }
 
