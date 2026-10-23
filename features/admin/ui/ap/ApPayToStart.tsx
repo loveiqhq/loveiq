@@ -68,7 +68,7 @@ function show(unit: Unit, v: number | null): string {
     case "count":
       return fmt("count", v);
     case "x":
-      return `${v.toFixed(2)}×`;
+      return v > 0 && v < 0.005 ? "<0.01×" : `${v.toFixed(2)}×`;
     case "net":
       return v >= 0 ? `${NET_PLUS}${fmt("eur", v, 2)}` : fmt("eur", v, 2);
   }
@@ -77,9 +77,10 @@ function show(unit: Unit, v: number | null): string {
 /** The same figure for a spreadsheet: plain digits, the unit in the row's name. */
 function csvValue(unit: Unit, v: number | null): string {
   if (v === null || !Number.isFinite(v)) return "";
-  if (unit === "pct") return String(Math.round(v * 10000) / 100);
+  // Four decimals for rates, ROAS and per-visit money: a small figure is never written as 0.
+  if (unit === "pct") return String(Math.round(v * 1_000_000) / 10_000);
   if (unit === "count") return String(Math.round(v));
-  if (unit === "eur3") return String(Math.round(v * 1000) / 1000);
+  if (unit === "eur3" || unit === "x") return String(Math.round(v * 10_000) / 10_000);
   return String(Math.round(v * 100) / 100);
 }
 
@@ -261,7 +262,9 @@ function Tag({ live }: { live: boolean }) {
 function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Traffic }) {
   const running = funnels.filter((f) => f.live);
   return (
-    <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+    // `relative`: the cells' sr-only words are placed absolutely, and without a placed box to
+    // hold them they widen the page on a phone (round 3: 756px on a 375px screen).
+    <div className="relative overflow-x-auto rounded-[14px] border border-ap-line">
       <table className="w-full min-w-[920px] border-collapse text-[13px] tabular-nums">
         <caption className="sr-only">
           Funnel metrics compared, {traffic === "ads" ? "paid traffic only" : "paid and organic"}
@@ -386,7 +389,9 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
                           </strong>{" "}
                           {share !== null && (
                             <span className="text-ap-muted">
-                              {fmt("pct", share, share < 0.01 ? 2 : 1)}
+                              {share > 0 && share < 0.00005
+                                ? "<0.01%"
+                                : fmt("pct", share, share < 0.01 ? 2 : 1)}
                             </span>
                           )}
                         </span>
@@ -517,7 +522,7 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="pt-2" style={{ minWidth: n * 36 + 80 }}>
+          <div className="pt-2" style={{ minWidth: Math.ceil(n / labelStep) * 48 + 80 }}>
             <div
               className="relative border-b border-ap-line"
               style={{ height: H, margin: "0 12px 0 56px" }}
@@ -611,8 +616,11 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
             </div>
             <div className="flex" style={{ margin: "6px 12px 0 56px" }}>
               {weeks.map((w, i) => (
-                <span key={w.from} className="flex-1 text-center text-xs text-ap-muted">
-                  {/* Every week named up to 14 weeks; past that, every other one (the latest always). */}
+                <span
+                  key={w.from}
+                  className="flex-1 whitespace-nowrap text-center text-xs text-ap-muted"
+                >
+                  {/* Up to 14 weeks each is named; past that every 2nd, 3rd…, the latest always. */}
                   {(n - 1 - i) % labelStep === 0 ? w.label : ""}
                 </span>
               ))}

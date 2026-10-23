@@ -80,6 +80,7 @@ const input = (over: Partial<PtsInput> = {}): PtsInput => ({
   ptsVisits: [],
   boughtFirst: new Set(),
   boughtFirstStarts: {},
+  ourClaims: new Set(),
   openedSubmissions: new Set(),
   laterPays: new Map(),
   gateMembers: [],
@@ -684,6 +685,101 @@ describe("buildPayToStart, round two", () => {
       );
     expect(note("2026-10-29")).toBe(true);
     expect(note("2026-10-30")).toBe(false);
+  });
+});
+
+describe("buildPayToStart, round three", () => {
+  it("leaves out a purchase whose survey was staff's or our own check, whatever address paid", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, consumed_submission_id: 901 }),
+          ent({ id: 2, consumed_submission_id: 902 }),
+        ],
+        ourClaims: new Set([902]),
+      })
+    );
+    expect(funnel(p, "full").all).toMatchObject({ paid: 1, finished: 1, revenue: 29.99 });
+    expect(step(p, "full", "Checkout started")).toBe(1);
+  });
+
+  it("counts a checkout only when it started or was paid in the range", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({
+            id: 1,
+            status: "expired",
+            amount_cents: null,
+            created_at: "2026-10-10T10:00:00Z",
+            paid_at: null,
+          }),
+          ent({ id: 2, created_at: "2026-10-10T10:00:00Z", paid_at: "2026-10-12T10:00:00Z" }),
+        ],
+      })
+    );
+    expect(step(p, "full", "Checkout started")).toBe(0);
+  });
+
+  it("counts a report opened only when it was, and a full report only as one", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, offer: "pre", amount_cents: 199, consumed_submission_id: 901 }),
+          ent({ id: 2, offer: "pre", amount_cents: 199, consumed_submission_id: 902 }),
+        ],
+        openedSubmissions: new Set([901]),
+        laterPays: new Map([
+          [901, [{ amount: 19.99, plan: "full_report" }]],
+          // Not a full report: no "Bought the full report", though it is money.
+          [902, [{ amount: 4.99, plan: "essentials" }]],
+        ]),
+      })
+    );
+    expect(step(p, "pre", "Survey finished")).toBe(2);
+    expect(step(p, "pre", "Report opened")).toBe(1);
+    expect(step(p, "pre", "Bought the full report")).toBe(1);
+    expect(funnel(p, "pre").all.revenue).toBeCloseTo(1.99 * 2 + 19.99 + 4.99);
+  });
+
+  it("never takes our own check's visit for a missing visitor", () => {
+    const p = buildPayToStart(
+      input({
+        ptsVisits: [
+          { day: "2026-10-20", offer: null, src: "prod-verification", n: 1 },
+          { day: "2026-10-20", offer: "full", src: null, n: 10 },
+        ],
+        entitlements: [ent({ id: 1 })],
+      })
+    );
+    expect(funnel(p, "full").all.visits).toBe(10);
+    expect(p.notes.some((n) => n.includes("counted apart"))).toBe(false);
+  });
+
+  it("blanks only the weeks and visits it must: our checks' visits never do", () => {
+    const p = buildPayToStart(
+      input({
+        from: "2026-10-12",
+        to: "2026-10-25",
+        ptsVisits: [
+          // A check of ours before the split, on the day of a sale: not a missing visitor.
+          { day: "2026-10-14", offer: null, src: "prod-verification", n: 1 },
+          { day: "2026-10-14", offer: "full", src: null, n: 10 },
+          // A real one before the split, with a sale: the first week only.
+          { day: "2026-10-16", offer: null, src: null, n: 3 },
+          { day: "2026-10-21", offer: "full", src: null, n: 10 },
+        ],
+        entitlements: [
+          ent({ id: 1, created_at: "2026-10-14T10:00:00Z", paid_at: "2026-10-14T10:01:00Z" }),
+          ent({ id: 2, created_at: "2026-10-16T10:00:00Z", paid_at: "2026-10-16T10:01:00Z" }),
+          ent({ id: 3, created_at: "2026-10-21T10:00:00Z", paid_at: "2026-10-21T10:01:00Z" }),
+        ],
+      })
+    );
+    expect(p.weeks[0]!.funnels.full.cvr).toBeNull();
+    expect(p.weeks[1]!.funnels.full.cvr).toBeCloseTo(0.1);
+    expect(funnel(p, "full").all.visits).toBeNull();
+    expect(p.notes.find((n) => n.startsWith("3 visits"))).toBeDefined();
   });
 });
 

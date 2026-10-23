@@ -264,7 +264,8 @@ describe("ApPayToStart", () => {
     ]);
     const all = exported.sections[0]!.table;
     const cvr = all.rows.find((r) => r.label === "Conversion: Visit → paying customer (%)")!;
-    expect(cvr.values).toEqual(["0.03", "1.2", "5.54", ""]);
+    // Four decimals: a small rate is never written as 0.
+    expect(cvr.values).toEqual(["0.0333", "1.2", "5.5357", ""]);
     const paid = exported.sections[1]!.table.rows.find((r) => r.label === "Conversion: Visits")!;
     expect(paid.values).toEqual(["1200", "600", "640", ""]);
     // The gate is off: no steps of its own.
@@ -289,12 +290,15 @@ describe("ApPayToStart", () => {
   it("never writes a figure above zero as zero, and a break-even as +€0.00", () => {
     const tiny = structuredClone(payload);
     const after = tiny.funnels[0]!;
-    after.all.m = { ...after.all.m, rpv: 0.0002, cvr: 0.00002, net: 0 };
+    after.all.m = { ...after.all.m, rpv: 0.0002, cvr: 0.00002, net: 0, roas: 0.004 };
+    // Revenue per visit keeps three decimals above €1 too.
+    tiny.funnels[1]!.all.m = { ...tiny.funnels[1]!.all.m, rpv: 1.2 };
     view.payload = tiny;
     render(<ApPayToStart />);
-    expect(cells("Revenue per visit")[0]).toBe("<€0.001");
+    expect(cells("Revenue per visit").slice(0, 2)).toEqual(["<€0.001", "€1.200"]);
     expect(cells("Visit → paying customer")[0]).toBe("<0.01%");
     expect(cells("Return on ad spend (€)")[0]).toBe("+€0.00");
+    expect(cells("ROAS")[0]).toBe("<0.01×");
   });
 
   it("says so when no funnel has a figure for the measure, instead of an empty axis", () => {
@@ -304,21 +308,39 @@ describe("ApPayToStart", () => {
     view.payload = none;
     render(<ApPayToStart />);
     expect(screen.getByText("No funnel has a figure for this in the range.")).toBeTruthy();
+    // No axis, no read-out: the chart itself is gone.
+    expect(screen.queryByRole("group", { name: /per week, per funnel/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "ROAS" }));
     expect(screen.queryByText("No funnel has a figure for this in the range.")).toBeNull();
+    expect(screen.getByRole("group", { name: /ROAS per week, per funnel/ })).toBeTruthy();
   });
 
-  it("names every other week once there are more than 14, the latest always", () => {
-    const long = structuredClone(payload);
-    long.weeks = Array.from({ length: 20 }, (_, i) => ({
-      ...payload.weeks[0]!,
-      from: `2026-${String(5 + Math.floor(i / 4)).padStart(2, "0")}-${String(1 + (i % 4) * 7).padStart(2, "0")}`,
-      label: `W${i + 1}`,
-    }));
-    view.payload = long;
+  it("names every week up to 14, then every other one, the latest always", () => {
+    const named = (n: number) => {
+      const long = structuredClone(payload);
+      long.weeks = Array.from({ length: n }, (_, i) => ({
+        ...payload.weeks[0]!,
+        from: `2026-${String(1 + Math.floor(i / 4)).padStart(2, "0")}-${String(1 + (i % 4) * 7).padStart(2, "0")}`,
+        label: `W${i + 1}`,
+      }));
+      view.payload = long;
+      const { unmount } = render(<ApPayToStart />);
+      const out = screen.queryAllByText(/^W\d+$/).map((x) => x.textContent);
+      unmount();
+      return out;
+    };
+    expect(named(14)).toHaveLength(14);
+    expect(named(15)).toEqual(["W1", "W3", "W5", "W7", "W9", "W11", "W13", "W15"]);
+    expect(named(20)).toEqual(["W2", "W4", "W6", "W8", "W10", "W12", "W14", "W16", "W18", "W20"]);
+  });
+
+  it("keeps the table's screen-reader words inside its own scroll box", () => {
+    view.payload = payload;
     render(<ApPayToStart />);
-    const named = screen.queryAllByText(/^W\d+$/).map((x) => x.textContent);
-    expect(named).toEqual(["W2", "W4", "W6", "W8", "W10", "W12", "W14", "W16", "W18", "W20"]);
+    // Absolutely placed sr-only words need a placed box, or they widen the page on a phone.
+    const box = table().parentElement!;
+    expect(box.className).toContain("overflow-x-auto");
+    expect(box.className).toContain("relative");
   });
 
   it("shows the notes under the page", () => {

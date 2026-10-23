@@ -108,7 +108,12 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     mockSupabaseFetch.mockImplementation(async () =>
       json({
         ...base,
-        subs: [...base.subs, sub({ id: 702, day: "2026-10-20", at: "2026-10-20T10:00:00Z" })],
+        subs: [
+          ...base.subs,
+          sub({ id: 702, day: "2026-10-20", at: "2026-10-20T10:00:00Z" }),
+          sub({ id: 703, day: "2026-10-20", at: "2026-10-20T10:30:00Z" }),
+          sub({ id: 704, day: "2026-10-20", at: "2026-10-20T10:30:00Z" }),
+        ],
       })
     );
     rows["/rest/v1/prepaid_report_access?"] = [
@@ -139,6 +144,34 @@ describe("GET /api/admin/ap/pay-to-start", () => {
         consumed_submission_id: 702,
         utm_tracker: null,
       },
+      // Refunded before it was ever confirmed (no payment date): never the journey's.
+      {
+        id: 4,
+        offer: "pre",
+        status: "refunded",
+        amount_cents: null,
+        list_price_cents: 199,
+        is_test: false,
+        customer_email: null,
+        created_at: "2026-10-20T10:20:00Z",
+        paid_at: null,
+        consumed_submission_id: 703,
+        utm_tracker: null,
+      },
+      // Paid, then refunded: it bought first all the same.
+      {
+        id: 5,
+        offer: "pre",
+        status: "refunded",
+        amount_cents: 199,
+        list_price_cents: 199,
+        is_test: false,
+        customer_email: "back@example.com",
+        created_at: "2026-10-20T10:25:00Z",
+        paid_at: "2026-10-20T10:26:00Z",
+        consumed_submission_id: 704,
+        utm_tracker: null,
+      },
       // A checkout opened and never paid: the claim binds it to the survey all the same.
       {
         id: 2,
@@ -163,13 +196,14 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as PtsPayload;
     const by = (k: string) => body.funnels.find((f) => f.key === k)!;
-    // 700 was paid for first and 702 bought with a 100% code: pay to start's. 701's browser
-    // never paid: it took the free survey like anyone, so it is pay after the report's.
-    expect(by("after").all).toMatchObject({ visits: 300, finished: 2 });
+    // 700 was paid for first, 702 bought with a 100% code and 704 paid then refunded: pay to
+    // start's. 701's and 703's browsers never paid: free surveys like anyone's, with sub 1.
+    expect(by("after").all).toMatchObject({ visits: 300, finished: 3 });
     // The 100% code's buyer came in and finished too; paying, only the EUR 29.99 one.
     expect(by("full").all).toMatchObject({ visits: 2, paid: 1, finished: 2, revenue: 29.99 });
     expect(by("full").steps.find((s) => s.label === "Paid €29.99")!.n).toBe(1);
-    expect(by("pre").all).toMatchObject({ visits: 1, paid: 0, finished: 0 });
+    // The refunded EUR 1.99 buyer came in and finished, and kept nothing: no paying customer.
+    expect(by("pre").all).toMatchObject({ visits: 1, paid: 0, finished: 1, revenue: 0 });
     expect(by("gate").live).toBe(false);
 
     const p = paths();
@@ -274,6 +308,8 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     const after = body.funnels.find((f) => f.key === "after")!;
     // 10 starts; only 701's is a paid buyer's that ap_facts counted.
     expect(after.steps.find((s) => s.label === "Survey started")!.n).toBe(9);
+    // 702 (a staff survey) and 704 (our check) bought nothing that counts: 701 and 705 did.
+    expect(body.funnels.find((f) => f.key === "full")!.all.paid).toBe(2);
     const p = paths();
     expect(p.find((x) => x.startsWith("/rest/v1/survey_submission?id=in."))).toContain(
       "id=in.(701,702,704,705)"

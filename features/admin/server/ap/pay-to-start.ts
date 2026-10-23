@@ -91,6 +91,12 @@ export interface PtsRecords {
   boughtFirst: ReadonlySet<number>;
   /** Pay-to-start buyers' survey starts per Berlin day: ap_facts counts them among its starts. */
   boughtFirstStarts: Readonly<Record<string, number>>;
+  /**
+   * Claimed surveys taken by staff (app_user's address) or by our own checks (the survey's
+   * tracker): their purchases are left out, as ap_facts leaves those surveys out, whatever
+   * address paid.
+   */
+  ourClaims: ReadonlySet<number>;
   /** Pay-to-start buyers' submissions whose report was opened. */
   openedSubmissions: ReadonlySet<number>;
   /** Per pay-to-start buyer's submission: what they bought on the report after the purchase. */
@@ -410,7 +416,11 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
 
   // Pay to start's buyers: who paid in the range (refunded since or not), and what they kept
   // of it and of what they bought on the report after.
-  const rows = input.entitlements.filter(counts);
+  const rows = input.entitlements.filter(
+    (e) =>
+      counts(e) &&
+      !(e.consumed_submission_id !== null && input.ourClaims.has(e.consumed_submission_id))
+  );
   // A 100% code's checkout completes at EUR 0: that buyer came in too, and what they buy later
   // is the journey's money (a paying customer only once something was paid).
   const bought = rows.filter((e) => isCompleted(e) && inRange(e.paid_at));
@@ -827,11 +837,13 @@ export async function fetchPayToStartRecords(
     );
     for (const u of people) if (isStaffEmail(u.email)) staff.add(u.id);
   }
+  const ours = (x: SubmissionRow) =>
+    (x.user_id !== null && staff.has(x.user_id)) || isOurTest(taggedOf(x.utm_tracker));
+  const ourClaims = new Set(claimedSubs.filter(ours).map((x) => x.id));
   const boughtFirstStarts: Record<string, number> = {};
   for (const x of claimedSubs) {
     // A day outside the range matches none of ap_facts' starts, so it takes nothing off.
-    if ((x.user_id !== null && staff.has(x.user_id)) || isOurTest(taggedOf(x.utm_tracker)))
-      continue;
+    if (ourClaims.has(x.id)) continue;
     const day = reportingDay(new Date(x.start_date_time ?? x.created_date_time));
     boughtFirstStarts[day] = (boughtFirstStarts[day] ?? 0) + 1;
   }
@@ -883,6 +895,7 @@ export async function fetchPayToStartRecords(
     ptsVisits: visitRows ? [...visitCount.values()] : null,
     boughtFirst,
     boughtFirstStarts,
+    ourClaims,
     openedSubmissions,
     laterPays,
     gateMembers: cohort.map((c) => ({
