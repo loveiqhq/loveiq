@@ -461,7 +461,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       expect(urls().some((url) => url.includes("initial_gate_cohort_at"))).toBe(false);
     });
 
-    it("sends as today when the cohort can't be read", async () => {
+    it("sends nothing when the cohort can't be read, and fails the run for the next to retry", async () => {
       gateOn();
       mockCandidateWindows({
         seventyTwoHour: [candidate],
@@ -470,8 +470,11 @@ describe("GET /api/cron/nurture-sequence", () => {
       });
 
       const res = await GET(makeRequest("test-cron-secret"));
-      const body = await res.json();
-      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
+      expect(res.status).toBe(500);
+      expect(mockStripePromoCreate).not.toHaveBeenCalled();
+      expect(mockResendSend).not.toHaveBeenCalled();
+      // Nothing marked sent, so the reader is still a candidate on the next run.
+      expect(urls().some((url) => url.includes("/rest/v1/report_price_quote"))).toBe(false);
     });
   });
 

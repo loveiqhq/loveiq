@@ -100,10 +100,13 @@ export async function readInitialGateState(
 }
 
 /**
- * Which of a batch of reports are in the gate's cohort. An empty set when the read fails,
- * so a batch job then treats its readers as it did before the gate.
+ * Which of a batch of reports are in the gate's cohort, or null when the read fails: the
+ * caller decides, and an email offering the cohort something the gate undercuts must not
+ * guess (the 72h email stops its run).
  */
-export async function readInitialGateCohortIds(personalReportIds: number[]): Promise<Set<number>> {
+export async function readInitialGateCohortIds(
+  personalReportIds: number[]
+): Promise<Set<number> | null> {
   const ids = [...new Set(personalReportIds.filter(isRowId))];
   if (ids.length === 0) return new Set();
   try {
@@ -112,13 +115,14 @@ export async function readInitialGateCohortIds(personalReportIds: number[]): Pro
     );
     if (!response.ok) {
       logger.warn({ status: response.status }, "pre-unlock: cohort read failed");
-      return new Set();
+      return null;
     }
     const rows = (await response.json()) as Array<{ id?: unknown }>;
-    return new Set(Array.isArray(rows) ? rows.map((row) => row.id).filter(isRowId) : []);
+    if (!Array.isArray(rows)) return null;
+    return new Set(rows.map((row) => row.id).filter(isRowId));
   } catch (err) {
     logger.warn({ err }, "pre-unlock: cohort read failed");
-    return new Set();
+    return null;
   }
 }
 

@@ -581,7 +581,7 @@ interface RouteContext {
   // the aggregate alert is self-diagnosing instead of forcing a Vercel log dive.
   failureReasons: string[];
   // The batch's reports in the EUR 1.99 gate's cohort, read once per run while the gate is
-  // on; empty when it is off or the read failed, so everyone is emailed as before.
+  // on; empty when it is off, so everyone is emailed as before.
   initialGateCohort: ReadonlySet<number>;
 }
 
@@ -890,9 +890,13 @@ export async function GET(request: Request) {
       seventyTwoCandidates.length > 0 &&
       (await isInitialUnlockGateEnabled().catch(() => false))
     ) {
-      ctx.initialGateCohort = await readInitialGateCohortIds(
+      const cohort = await readInitialGateCohortIds(
         seventyTwoCandidates.map((candidate) => candidate.id)
       );
+      // Unread, the run stops: a gated reader must not get a 50% code on a guess (it beats the
+      // gate's EUR 10 credit). The 72h window spans two runs, so the next hour tries again.
+      if (cohort === null) throw new Error("initial_gate_cohort_unreadable");
+      ctx.initialGateCohort = cohort;
     }
 
     // Single discount stage (pricing 2.0): one −50% code at 72h. The prior 6h

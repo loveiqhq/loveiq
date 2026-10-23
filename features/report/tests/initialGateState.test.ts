@@ -161,11 +161,13 @@ describe("readInitialGateCohortIds", () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it("returns an empty set when the read fails, so the batch is treated as before the gate", async () => {
+  it("returns null when the read fails, never an empty set a caller would take as no cohort", async () => {
     mockFetchWithTimeout.mockResolvedValueOnce(reply({ message: "nope" }, 400));
-    await expect(readInitialGateCohortIds([1, 2])).resolves.toEqual(new Set());
+    await expect(readInitialGateCohortIds([1, 2])).resolves.toBeNull();
     mockFetchWithTimeout.mockRejectedValueOnce(new Error("down"));
-    await expect(readInitialGateCohortIds([1, 2])).resolves.toEqual(new Set());
+    await expect(readInitialGateCohortIds([1, 2])).resolves.toBeNull();
+    mockFetchWithTimeout.mockResolvedValueOnce(reply({ not: "a list" }));
+    await expect(readInitialGateCohortIds([1, 2])).resolves.toBeNull();
   });
 });
 
