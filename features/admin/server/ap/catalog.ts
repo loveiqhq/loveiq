@@ -180,7 +180,7 @@ const GROUPS: Array<[RegExp, string]> = [
   [/^(report|report_.*|personal_report.*)$/, "Report"],
   [/^(funnel_event|analytics_event|user_interactions)$/, "Traffic"],
   [
-    /^(app_user|user_profile|waitlist_.*|invite_event|booking_event|email_.*|resend_webhook_event)$/,
+    /^(app_user|user_profile|waitlist_.*|invite_event|booking_event|email_.*|resend_webhook_event|unlock_feedback)$/,
     "People & email",
   ],
   [/^marketing_spend$/, "Spend"],

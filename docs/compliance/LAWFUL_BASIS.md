@@ -127,6 +127,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Basis**: (c) legal obligation — Art. 17 / Art. 20
 - **Retention**: indefinite — the audit log is the only evidence we honoured the request
 
+### A15 — Unlock feedback email and answer (draft, 2026-10-19)
+
+- **Data**: the reader's email, first name and archetype name, and the full report's price as they were quoted it (in the email); in `unlock_feedback`, the reason they tapped (first and current), the optional chips and their own words (`note`), the device class, when it was claimed, sent, answered and changed, the subject line arm and the answer order shown, a sha256 hash of the link token and Resend's id; per email, delivered, opened, clicked or bounced (`email_message_event`, as A6); the free unlock as a 0 payment
+- **Basis (proposed; the audience is Eman's decision of 2026-10-22)**: the email goes to the 72h nurture email's audience, unpaid readers who opened their report, without checking Q16015, so it stands where A6 stands: (a) consent for readers who said Yes, (f) legitimate interest otherwise (learning why readers do not buy, to improve the offer); the A6 correction applies. The answer is given by choice, and the unlock it triggers is (b) contract. Balancing test: one email per person, never to buyers, staff, restricted or suppressed readers; the answer is used only to improve LoveIQ; the note and chips are masked in the admin and the team copy. Not reviewed by a lawyer. The first readers get it from an admin's tranche of earlier reports (the newest 250 on 2026-10-22), by the same rules; the privacy policy says "usually a few hours after your result". "Anonymous by default" was taken out of the email and /why on 2026-10-22: the answer is stored with the submission.
+- **Retention**: with the submission: erased by a DSAR delete and by the cascade. Not in the retention purge (an answer, like report feedback, not telemetry)
+- **Withdraw**: the one-click unsubscribe in the email, or a DSAR delete; Art. 21 objection by email
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
@@ -138,6 +145,7 @@ For activities under basis (a):
 | A6 marketing   | One-click unsubscribe in every email                                                                 | Adds to suppression_list + marks the Resend contact unsubscribed (R-05)                                                                                                                |
 | A8 analytics   | Art. 21 objection (privacy policy §1, §7.4); CookieYes preference centre for cookies and identifiers | Declining: `__liq_vid` and GA4 cookies are not set; funnel_event rows use a page-only id, GA4 receives cookieless events (consent mode), our own tables continue (legitimate interest) |
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
+| A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 
 ## Outstanding work
 

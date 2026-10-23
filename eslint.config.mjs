@@ -18,6 +18,19 @@ const eslintConfig = [
   },
   ...nextConfig,
   {
+    // eslint-config-next 16.4 brings eslint-plugin-react-hooks 7.1, whose React Compiler rules
+    // fail five existing components that 7.0 passed (2026-10-21): ContactSection, ApExplorer
+    // (two), SectionFeedback and useReportShares. Fixing them changes when those screens
+    // render, which a dependency bump should not do untested, so they warn until each is
+    // refactored and checked in the browser. Same files as Next's own config, which is where the
+    // plugin is registered.
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
+    },
+  },
+  {
     // Type-aware rules for server-side code. no-floating-promises catches async
     // calls without await/.catch — a recurring class of silent failures in
     // API routes (e.g., logger.error not awaited inside a handler).

@@ -197,7 +197,8 @@ describe("buildLanding", () => {
       paid: 1,
       revenue: 6.99,
       status: "Ended",
-      preCvr: null,
+      // The Initial plan is on sale; this arm's one submitter didn't buy it.
+      preCvr: 0,
     });
     // A full unlock per visit, as the table's other rates are.
     expect(a?.fullCvr).toBeCloseTo(0.01);
@@ -208,6 +209,32 @@ describe("buildLanding", () => {
       "#6 · Hero video vs Q1",
       "Landing rebuild V1 vs V2",
     ]);
+  });
+
+  it("counts a pre-unlock per visit, as its other rates are", () => {
+    const facts = armFacts();
+    const at = Date.parse("2026-10-07T12:00:00Z") / 1000;
+    facts.subs = facts.subs.map((s) =>
+      s.id === 1
+        ? {
+            ...s,
+            pays: [
+              [at, 1.99, "initial"],
+              [at + 60, 6.99, "full_report"],
+            ],
+          }
+        : s
+    );
+    const p = buildLanding({
+      facts,
+      previous: null,
+      filters,
+      today: "2026-10-13",
+      now,
+      armEngagement: {},
+      engagement: null,
+    });
+    expect(p.rows[0]?.preCvr).toBeCloseTo(0.01);
   });
 
   it("takes bounce, time, CTA clicks and scroll from PostHog where it saw 30 visits an arm", () => {

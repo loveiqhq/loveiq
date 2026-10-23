@@ -538,7 +538,7 @@ describe("guards the alert footer and the price chart depend on", () => {
     }));
     const lines = formatAlertLines(mkDaily({ anomalies: { items } }) as never);
     expect(lines.join("\n")).not.toMatch(/…and -\d+ more/);
-    expect(lines.some((l) => l.includes("more (see /admin/anomalies)"))).toBe(false);
+    expect(lines.some((l) => l.includes("more (see /admin/ap)"))).toBe(false);
 
     // And with more than five it DOES say so, with a positive count — otherwise
     // the assertion above passes on a footer that never mentions extras at all.
@@ -548,7 +548,7 @@ describe("guards the alert footer and the price chart depend on", () => {
       detail: "x",
     }));
     const manyLines = formatAlertLines(mkDaily({ anomalies: { items: many } }) as never);
-    expect(manyLines.join("\n")).toContain("…and 3 more");
+    expect(manyLines.join("\n")).toContain("…and 3 more (see /admin/ap)");
   });
 
   it("drops a price bucket nobody was ever shown", async () => {

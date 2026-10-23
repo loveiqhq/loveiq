@@ -172,6 +172,15 @@ describe("GET /api/cron/invite-reminders", () => {
     expect(html).not.toMatch(/\/report\?invite=1/);
   });
 
+  it("reads only full-report and All 14 payments, so EUR 1.99 rows never take the 200 slots", async () => {
+    mockSupabaseSequence();
+    await GET(makeRequest("test-cron-secret"));
+    const query = mockFetchWithTimeout.mock.calls
+      .map(([url]) => String(url))
+      .find((url) => url.includes("/rest/v1/payment"));
+    expect(query).toContain("metadata->>plan=in.(full_report,all_reports)");
+  });
+
   it("finds an older buyer's link through their report's submission", async () => {
     mockResendSend.mockResolvedValue({ data: { id: "e1" } });
     mockSupabaseSequence({

@@ -3,7 +3,6 @@ import { nurture6hNoViewEmail } from "@features/report/server/emails/nurture/nur
 import { nurture6hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-6h-no-unlock";
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
 import { nurture54hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-54h-no-unlock";
-import { postCallCouponEmail } from "@features/report/server/emails/nurture/post-call-coupon";
 import {
   chapterNudgeEmail,
   pluralizeArchetype,
@@ -149,20 +148,6 @@ describe("nurture email templates", () => {
     const introMatch = out.html.match(/Hi Marcus,([\s\S]*?)<\/p>/);
     expect(introMatch).toBeTruthy();
     expect(introMatch![1]).not.toContain("\n");
-  });
-
-  it("post-call-coupon email injects the 100% code + unlock CTA", () => {
-    const cta = "https://loveiq.org/report/rpt_abc?promo=LIQ-100-Ab7K9xQ2&offer=1";
-    const out = postCallCouponEmail({
-      firstName: "Sam",
-      ctaUrl: cta,
-      promoCode: "LIQ-100-Ab7K9xQ2",
-      siteUrl: SITE,
-    });
-    expect(out.subject.length).toBeLessThanOrEqual(50);
-    expect(out.html).toContain("LIQ-100-Ab7K9xQ2");
-    expect(out.html).toContain("Unlock your full report");
-    expect(out.text).toContain("LIQ-100-Ab7K9xQ2");
   });
 });
 

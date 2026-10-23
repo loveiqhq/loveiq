@@ -292,6 +292,12 @@ test.describe("pay to start: the initial report's page", () => {
     const card = page.locator("#price");
     await expect(card).toBeVisible();
     await expect(card).toContainText("SURVEY + INITIAL REPORT");
+    // The film flies up 24 px on load (its .animate-on-load wrapper, 0.85 s ease-out): measured
+    // in that tail it sits a few pixels low (WebKit, 2 runs in 5). Measure where it settles.
+    await page.getByTestId("pts-hero-media").evaluate(async (el) => {
+      const owner = el.closest(".animate-on-load") ?? el;
+      await Promise.all(owner.getAnimations({ subtree: true }).map((a) => a.finished));
+    });
     const cardBox = (await card.boundingBox())!;
     const filmBox = (await page.getByTestId("pts-hero-media").boundingBox())!;
     if ((page.viewportSize()?.width ?? 0) >= 1280) {

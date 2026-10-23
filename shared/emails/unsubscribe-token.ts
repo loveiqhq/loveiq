@@ -114,9 +114,12 @@ export const UNSUBSCRIBE_CAMPAIGNS = {
   invite: "invite",
   reportShared: "report_shared",
   reportUnlocked: "report_unlocked",
+  initialUnlocked: "initial_unlocked",
+  initialGift: "initial_gift",
   chapterNudge: "chapter_nudge",
   postCallCoupon: "post_call_coupon",
   testLink: "test_link",
+  unlockFeedback: "unlock_feedback",
 } as const;
 
 /**
@@ -131,9 +134,12 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   [UNSUBSCRIBE_CAMPAIGNS.invite]: "Partner invite",
   [UNSUBSCRIBE_CAMPAIGNS.reportShared]: "Report shared with you",
   [UNSUBSCRIBE_CAMPAIGNS.reportUnlocked]: "Report unlocked (purchase confirmation)",
+  [UNSUBSCRIBE_CAMPAIGNS.initialUnlocked]: "Core Archetype unlocked (EUR 1.99 confirmation)",
+  [UNSUBSCRIBE_CAMPAIGNS.initialGift]: "Core Archetype gift (E07, day 4)",
   [UNSUBSCRIBE_CAMPAIGNS.chapterNudge]: "Chapter nudge drip",
   [UNSUBSCRIBE_CAMPAIGNS.postCallCoupon]: "Post-call 100% coupon",
   [UNSUBSCRIBE_CAMPAIGNS.testLink]: "Test link (landing email capture)",
+  [UNSUBSCRIBE_CAMPAIGNS.unlockFeedback]: "Unlock feedback (why didn't you unlock?)",
   // Nurture-sequence stages
   "6h_no_view": "Nurture 6h (report ready)",
   "6h_no_unlock": "Nurture 6h (unlock nudge)",

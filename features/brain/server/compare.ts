@@ -41,6 +41,11 @@ const NUMERIC_KEYS = [
   "survey_starts",
   "intro_completed",
   "submissions",
+  // The AP-Analytics rows' own (features/brain/server/ap-numbers.ts).
+  "reports_opened",
+  "paid_so_far",
+  "paid_sales",
+  "free_unlocks",
   "reports_created",
   "reports_paid",
   "revenue",
@@ -118,6 +123,20 @@ export function bucketRows(rows: DayRow[], g: Granularity): Bucket[] {
 export interface Period {
   since: string;
   until: string;
+}
+
+/**
+ * A period's whole days: those before `today`, which is still running. Null when it has none.
+ * `today` is the day the figures are counted in: Berlin's for the dashboard's, UTC's for the
+ * daily rollup's own rows.
+ */
+export function wholeDays(p: Period, today: string): Period | null {
+  const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return p.since > yesterday
+    ? null
+    : { since: p.since, until: p.until < today ? p.until : yesterday };
 }
 
 /**

@@ -1,5 +1,7 @@
 # Admin 56-Item Roadmap Handoff
 
+> The admin these plans describe was removed on 16 Oct 2026; the admin is now AP-Analytics only (`/admin/ap`).
+
 ## Purpose
 
 Use this file as the continuation point if work moves to another Codex account.
@@ -157,20 +159,20 @@ If another Codex account continues this work, this is the recommended sequence.
 
 These are key places already built and should be extended, not replaced.
 
-- [CommandCenterDashboard.tsx](../../features/admin/ui/CommandCenterDashboard.tsx)
-- [RoleCockpitDashboard.tsx](../../features/admin/ui/RoleCockpitDashboard.tsx)
-- [GrowthDashboard.tsx](../../features/admin/ui/GrowthDashboard.tsx)
-- [StrategyHubDashboard.tsx](../../features/admin/ui/StrategyHubDashboard.tsx)
-- [ProductKpiDashboard.tsx](../../features/admin/ui/ProductKpiDashboard.tsx)
-- [ImpactComparisonTab.tsx](../../features/admin/ui/funnel-tabs/ImpactComparisonTab.tsx)
-- [HealthDashboard.tsx](../../features/admin/ui/HealthDashboard.tsx)
-- [ResearchIntelligenceDashboard.tsx](../../features/admin/ui/ResearchIntelligenceDashboard.tsx)
-- [ResearchRepositoryPanel.tsx](../../features/admin/ui/ResearchRepositoryPanel.tsx)
-- [ExperimentRegistry.tsx](../../features/admin/ui/ExperimentRegistry.tsx)
-- [MetricRegistryTab.tsx](../../features/admin/ui/MetricRegistryTab.tsx)
-- [MetricImpactTab.tsx](../../features/admin/ui/MetricImpactTab.tsx)
-- [ReviewQueueTab.tsx](../../features/admin/ui/tools-tabs/ReviewQueueTab.tsx)
-- [AccessRiskTab.tsx](../../features/admin/ui/tools-tabs/AccessRiskTab.tsx)
+- `features/admin/ui/CommandCenterDashboard.tsx`
+- `features/admin/ui/RoleCockpitDashboard.tsx`
+- `features/admin/ui/GrowthDashboard.tsx`
+- `features/admin/ui/StrategyHubDashboard.tsx`
+- `features/admin/ui/ProductKpiDashboard.tsx`
+- `features/admin/ui/funnel-tabs/ImpactComparisonTab.tsx`
+- `features/admin/ui/HealthDashboard.tsx`
+- `features/admin/ui/ResearchIntelligenceDashboard.tsx`
+- `features/admin/ui/ResearchRepositoryPanel.tsx`
+- `features/admin/ui/ExperimentRegistry.tsx`
+- `features/admin/ui/MetricRegistryTab.tsx`
+- `features/admin/ui/MetricImpactTab.tsx`
+- `features/admin/ui/tools-tabs/ReviewQueueTab.tsx`
+- `features/admin/ui/tools-tabs/AccessRiskTab.tsx`
 
 ## Existing Admin OS Pieces Already In Place
 

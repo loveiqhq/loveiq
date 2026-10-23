@@ -1,6 +1,7 @@
 /**
  * The hash every SESSION-DERIVED experiment arm is drawn from: C13's opening order
- * (`questionOrderArm.ts`) and the email question test (`emailQuestionArm.ts`). One
+ * (`questionOrderArm.ts`) and the email question test (`emailQuestionArm.ts`); E07's gift
+ * holdout (`initialGiftArm.ts`) draws from it too, keyed on the report id. One
  * implementation, so the two can never drift apart, and each experiment salts it with
  * its own name so their splits are independent of each other.
  *

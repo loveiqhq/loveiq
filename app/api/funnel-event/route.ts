@@ -26,6 +26,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { sanitizeUtmSource } from "@shared/url/utm";
 import { cookies } from "next/headers";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 import logger from "@shared/observability/logger";
 import { PAY_TO_START_JOURNEY, readPrepaidToken } from "@features/pay-to-start/logic/journey";
 
@@ -119,6 +120,12 @@ export async function POST(request: Request) {
   });
   if (!rateLimit.allowed) {
     return NextResponse.json({ error: "Rate limited." }, { status: 429 });
+  }
+
+  // Our own site checks are not visitors (shared/http/probe-cookie.ts): their intro steps
+  // would read as real people's in AP-Analytics. Same answer, no row.
+  if (isProbeRequest(request.headers.get("cookie"))) {
+    return new NextResponse(null, { status: 204 });
   }
 
   const { event, visitor_id, utm_source } = parsed.data;

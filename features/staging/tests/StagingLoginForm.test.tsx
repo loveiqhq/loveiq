@@ -14,7 +14,7 @@ vi.mock("@shared/http/csrf-client", () => ({
   getCsrfToken: () => "test-csrf-token",
 }));
 
-import StagingLoginForm from "@features/staging/ui/StagingLoginForm";
+import StagingLoginForm, { getSafeNextPath } from "@features/staging/ui/StagingLoginForm";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -73,6 +73,32 @@ describe("StagingLoginForm", () => {
         "/checkout/return?plan=full_report&session_id=cs_test_123"
       );
     });
+  });
+
+  it("never sends the browser off the site after login", () => {
+    for (const hostile of [
+      "//evil.com",
+      "/\\evil.com",
+      "/\\/evil.com",
+      "\\\\evil.com",
+      "/\t/evil.com",
+      "/\n/evil.com",
+      "https://evil.com",
+      "javascript:alert(1)",
+      "evil.com",
+      "",
+      // Dot segments that resolve to a path starting with "//".
+      "/.//evil.com",
+      "/a/..//evil.com",
+      "/./\\evil.com",
+      "/%2e//evil.com",
+      "/%2E%2E//evil.com",
+    ]) {
+      expect(getSafeNextPath(hostile), JSON.stringify(hostile)).toBe("/");
+    }
+    expect(getSafeNextPath(null)).toBe("/");
+    expect(getSafeNextPath("/report?token=a#ch2")).toBe("/report?token=a#ch2");
+    expect(getSafeNextPath("/admin/../survey")).toBe("/survey");
   });
 
   it("shows error on incorrect password", async () => {

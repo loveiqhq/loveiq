@@ -584,7 +584,9 @@ describe("page builders", () => {
     const cac = p.tiles.find((t) => t.key === "cac")!;
     // A sale is too rare to draw: 1 Oct, no spend for one finisher; 2 Oct, €40 for one.
     expect(cac.spark.slice(0, 2)).toEqual([0, 40]);
-    expect(cac.trend).toContain("line: € per submission");
+    expect(cac.trend).toContain("line: ad spend per submission");
+    // Its line is not CAC: the read-out names what it draws.
+    expect(cac.line).toBe("Ad spend per submission");
   });
 
   it("dashboard: partial spend is flagged and never compared", () => {
@@ -627,8 +629,8 @@ describe("page builders", () => {
     expect(aov.deltaAs).toBe("abs");
     expect(p.tiles.find((t) => t.key === "cac")?.deltaAs).toBe("abs");
     expect(p.tiles.find((t) => t.key === "revenue")?.deltaAs).toBeUndefined();
-    // The fixture's one sale is on 2 Oct: every point carries it, and the caption names the day.
-    expect(new Set(aov.spark)).toEqual(new Set([6.99]));
+    // The fixture's one sale is on 2 Oct: the line is that one point, and the caption names the day.
+    expect(aov.spark.filter((v) => v !== null)).toEqual([6.99]);
     expect(aov.trend).toMatch(/only 2 Oct had a sale$/);
     expect(p.questions).toBeGreaterThan(40);
   });
@@ -824,8 +826,9 @@ describe("blanks say why, and notes say what the numbers are", () => {
     const chart = (k: string) => f.charts.find((c) => c.key === k)!;
     for (const k of ["start-cvr", "completion"]) {
       expect(chart(k).blocked).toBeNull();
+      // From the earlier of 18 Sep 2026 and the drafts' 30 days (13 Sep, 30 days before 13 Oct).
       expect(chart(k).note).toBe(
-        "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out."
+        "Survey starts before 13 Sep are left out: until 18 Sep 2026 a start was kept only with its draft, and drafts are cleared after 30 days."
       );
     }
     // Months before 18 Sep have no point; October's has one.

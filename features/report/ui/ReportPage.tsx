@@ -24,8 +24,6 @@ import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import InviteModal from "@features/invite/ui/InviteModal";
-import FounderCallDialog from "@features/booking/ui/FounderCallDialog";
-import { getFounderCallUrl } from "@features/booking/logic/founderCall";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
 import MeansForYouSection from "./sections/MeansForYouSection";
@@ -85,9 +83,9 @@ import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
 import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
+import InitialUnlockGate from "./gate/InitialUnlockGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
-  completedReportToken,
   getReportPricingSessionId,
   getReportSessionId,
   setReportNurturePromo,
@@ -187,16 +185,9 @@ import {
 import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { REPORT_LAYOUT_V4_SLIM } from "@features/analytics/reportLayout";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
-import {
-  FIRST_PAYWALL_SELECTOR,
-  isFirstVisit,
-  leaveMode,
-  resolveLeaveOverride,
-} from "../logic/leaveIntent";
-import { plansOfferedKey } from "../logic/plansOffer";
+import { FIRST_PAYWALL_SELECTOR } from "../logic/paywallSelector";
 import { INITIAL_UNLOCK_SECTION_ID } from "../logic/initialUnlock";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
-import { useLeaveIntent } from "./hooks/useLeaveIntent";
 import { useGuidedTour } from "./hooks/useGuidedTour";
 import V4GuidedTour from "./v3/V4GuidedTour";
 import type { TourReplaySource } from "../logic/guidedTour";
@@ -217,7 +208,7 @@ interface SnapshotAnswers {
 }
 
 const subscribeNoop = () => () => {};
-/** Our own probes and persona walks carry this cookie; they never get the leave offer. */
+/** Our own probes and persona walks carry this cookie; the guided tour never starts on its own for them. */
 const readProbeCookie = () => isProbeRequest(document.cookie);
 
 // Report 2.0 part dividers (Figma 8427:794 / 1440 / 1751 / 2554) — the big
@@ -251,7 +242,7 @@ function recentTapTarget(tap: { at: number; el: Element | null }): Element | nul
  */
 function claimPlansOffer(submissionId: number | null | undefined): boolean {
   if (!submissionId) return true;
-  const key = plansOfferedKey(submissionId);
+  const key = `loveiq-report-plans-offered:${submissionId}`;
   try {
     if (sessionStorage.getItem(key)) return false;
     sessionStorage.setItem(key, "1");
@@ -469,8 +460,6 @@ interface ReportExperienceProps {
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
   isShareModalOpen: boolean;
-  /** The founder-call leave offer is open over the report. */
-  isLeaveOfferOpen?: boolean;
   /** The guided tour runs over the report, which is inert under it (no blur). */
   isTourRunning?: boolean;
   /** "Replay the Tour" in the chapter menu; only where the tour can run. */
@@ -620,7 +609,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   feedbacks,
   isPricingModalOpen,
   isShareModalOpen,
-  isLeaveOfferOpen = false,
   isTourRunning = false,
   onReplayTour,
   matchScore,
@@ -1128,8 +1116,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           containing-block bug stays gone. The guided tour holds the page here
           too, without the shell's blur: its spotlight shows the page as it is. */}
       <div
-        aria-hidden={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen || isTourRunning}
-        inert={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen || isTourRunning}
+        aria-hidden={isPricingModalOpen || isShareModalOpen || isTourRunning}
+        inert={isPricingModalOpen || isShareModalOpen || isTourRunning}
       >
         <WithActiveSection store={activeSection}>
           {(activeSectionId) => (
@@ -1164,9 +1152,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <div
           className={[
             "report-page__shell-wrap",
-            isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen
-              ? "report-page__shell-wrap--obscured"
-              : "",
+            isPricingModalOpen || isShareModalOpen ? "report-page__shell-wrap--obscured" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -2788,7 +2774,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     });
   }, [promoFromUrl, sessionId, token]);
 
-  const { data, status, error, challenge, retry } = useReportData({
+  const { data, status, error, challenge, gate, retry } = useReportData({
     token,
     sessionId: token ? null : sessionId,
     pricingSessionIdOverride: pricingSessionIdFromUrl,
@@ -2800,6 +2786,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // production, and /api/report is untouched either way.
     preview: searchParams.get("preview") === "1",
     previewPlan: searchParams.get("plan"),
+    // `?preview=1&gate=1`: the EUR 1.99 pre-unlock gate, as a reader it stops meets it.
+    previewGate: searchParams.get("preview") === "1" && searchParams.get("gate") === "1",
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,
@@ -2964,43 +2952,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     archetype: viewArchetype || null,
   });
 
-  /**
-   * The leave offer (features/report/logic/leaveIntent.ts): an unpaid reader's full
-   * report, free for a 20-minute call with Mark and Marcus, offered once as they reach the
-   * first paywall card (1.6 s after it comes into view).
-   * Off unless the booking page is configured. The tab's survey token and the probe
-   * cookie are read from the browser like the session id above.
-   */
-  const founderCallUrl = getFounderCallUrl();
-  const completedToken = useSyncExternalStore(subscribeNoop, completedReportToken, () => null);
   const isProbe = useSyncExternalStore(subscribeNoop, readProbeCookie, () => false);
-  const [pageOpenedAt] = useState(() => Date.now());
-  const leaveOfferMode = leaveMode({
-    override: resolveLeaveOverride(searchParams.get("leave")),
-    bookingUrl: founderCallUrl,
-    isV4,
-    viewMode,
-    hasPurchased,
-    viewingOwnArchetype:
-      Boolean(primaryArchetypeFromData) && viewArchetype === primaryArchetypeFromData,
-    submissionId: data?.submissionId,
-    userEmail: data?.userEmail,
-    firstVisit: isFirstVisit({
-      urlToken: token ?? null,
-      completedToken,
-      reportDate: data?.reportDate,
-      now: pageOpenedAt,
-      search: searchParams,
-    }),
-    isProbe,
-  });
 
   /**
    * The guided tour (features/report/logic/guidedTour.ts), on each V4 report's first open
    * on this browser and from the chapter menu. Its owner's or a preview's, never a shared
    * view's; never a probe's (the persona walks carry the cookie); never on a return from
-   * checkout, which restores the reader's place instead. While it runs the leave offer is
-   * off, so the paywall the tour scrolls past does not arm it.
+   * checkout, which restores the reader's place instead.
    */
   // Read once: the page drops `?anchor=` from the address as soon as it has restored it.
   const [arrivedFromCheckout] = useState(() => searchParams.get("anchor") !== null);
@@ -3016,15 +2974,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
     submissionId: data?.submissionId ?? null,
   });
-
-  const leaveOffer = useLeaveIntent({
-    mode: tour.running ? "off" : leaveOfferMode,
-    submissionId: data?.submissionId ?? null,
-    overlayOpen: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
-    plansOpen: isPricingModalOpen,
-    popupArm,
-  });
-  const { dismiss: dismissLeaveOffer } = leaveOffer;
 
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
@@ -3119,6 +3068,26 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (anchor) restoreUnlockAnchor(anchor);
   }, [anchorFromUrl, status]);
 
+  // Back from the EUR 1.99 checkout with `?unlocked=initial`: the reader's first look at the
+  // report, so it opens at its top rather than where the browser left off, and the guided
+  // tour may start (it skips only `?anchor` returns). The parameter goes once it is read.
+  const unlockedFromUrl = searchParams.get("unlocked");
+  const unlockedHandledRef = useRef(false);
+  useEffect(() => {
+    if (unlockedHandledRef.current || unlockedFromUrl !== "initial" || status !== "success") {
+      return;
+    }
+    unlockedHandledRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("unlocked");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [status, unlockedFromUrl]);
+
   useEffect(() => {
     if (!data) return;
     if (hasPurchased) return;
@@ -3199,7 +3168,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
     // reporting it again later is a no-op.
     // V4's in-flow paywall card (.rv4-premium) counts too — whichever offer comes
-    // first in the page. Not Part II's Summary gate: the leave offer's own selector.
+    // first in the page. Not Part II's Summary gate (logic/paywallSelector.ts).
     const firstOfferCard = document.querySelector(FIRST_PAYWALL_SELECTOR);
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {
@@ -3504,11 +3473,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // useCloseOnBack for the readers it was losing.
   useCloseOnBack(isPricingModalOpen, closePricingModal);
   useCloseOnBack(isShareModalOpen, closeShareModal);
-  const closeLeaveOfferOnBack = useCallback(
-    () => dismissLeaveOffer("browser_back"),
-    [dismissLeaveOffer]
-  );
-  useCloseOnBack(leaveOffer.open, closeLeaveOfferOnBack);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
       // Scope the modal to the archetype the user is currently upgrading. If
@@ -3546,6 +3510,20 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           ownerFirstName={challenge?.ownerFirstName ?? null}
           recipientEmailHint={challenge?.recipientEmailHint ?? null}
           onVerified={() => retry()}
+        />
+      </>
+    );
+  }
+
+  // The EUR 1.99 pre-unlock gate: the API sent no report, only what the gate shows.
+  if (status === "gated" && gate) {
+    return (
+      <>
+        {v4ThemeColor}
+        <InitialUnlockGate
+          gate={gate}
+          reportToken={token ?? null}
+          reportSessionId={token ? null : sessionId}
         />
       </>
     );
@@ -3721,7 +3699,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               feedbacks={feedbacks}
               isPricingModalOpen={isPricingModalOpen}
               isShareModalOpen={isShareModalOpen}
-              isLeaveOfferOpen={leaveOffer.open}
               isTourRunning={tour.running}
               onReplayTour={tour.available ? tour.replay : undefined}
               matchScore={matchScore}
@@ -3878,14 +3855,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           </div>
         </div>
       )}
-      {founderCallUrl && leaveOfferMode !== "off" && (
-        <FounderCallDialog
-          open={leaveOffer.open}
-          bookingUrl={founderCallUrl}
-          onDismiss={leaveOffer.dismiss}
-          onBook={leaveOffer.book}
-        />
-      )}
       {/* The guided tour: the unlock stop only for a reader who has not paid for the
           report on screen (Fatih, 17.10: Essentials buyers count as paid). */}
       {tour.running && tour.run && (
@@ -3909,7 +3878,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <ReportStickyUnlockBar
             quote={pricingQuotes?.full_report ?? null}
             onUnlock={() => openPricingModal(effectiveViewArchetype)}
-            hidden={isPricingModalOpen || isShareModalOpen || leaveOffer.open || tour.running}
+            hidden={isPricingModalOpen || isShareModalOpen || tour.running}
             archetype={effectiveViewArchetype}
             v4={isV4}
           />

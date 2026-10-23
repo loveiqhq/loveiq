@@ -11,7 +11,7 @@ import {
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
-import { classifySource, FULL_PLANS, PRE_PLANS, type Facts } from "./facts";
+import { classifySource, FULL_PLANS, PRE_PLANS, preBuysOf, type Facts } from "./facts";
 import { rangeLabel, trendBuckets, type ApFilters } from "./filters";
 import {
   armStartsComplete,
@@ -229,8 +229,10 @@ function armRow(
     startCvr: complete ? ratio(starts, visits) : null,
     submitCvr: ratio(subs.length, visits),
     paymentCvr: ratio(payers.length, visits),
-    // The Initial plan (pre-unlock) isn't on sale: no arm has a rate for it yet.
-    preCvr: null,
+    // Pre-unlocks (the Initial plan) per visit, as the other rates; blank while not on sale.
+    preCvr: PRE_PLANS.size
+      ? ratio(subs.filter((s) => preBuysOf(s).length > 0).length, visits)
+      : null,
     fullCvr: ratio(subs.filter((s) => s.full).length, visits),
     perVisit: ratio(revenue, visits),
     phSessions: phOk ? ph.sessions : null,

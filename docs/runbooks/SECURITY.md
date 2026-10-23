@@ -6,7 +6,7 @@
 
 ## Environment & secrets
 
-- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `SLACK_PAYMENTS_WEBHOOK_URL`, `STAGING_PASSWORD`, `SURVEY_CLOSE_PASSWORD`, `GA4_API_SECRET`.
+- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `SLACK_PAYMENTS_WEBHOOK_URL`, `STAGING_PASSWORD`, `GA4_API_SECRET`.
 - **Server config** (not secret but server-only): `SUPABASE_URL`, `RESEND_FROM`, `RESEND_REPLY_TO`, `CONTACT_TO_EMAIL`.
 - **Client-safe** (`NEXT_PUBLIC_*` prefix, exposed in browser bundles by design): `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_GTM_ID`.
 - Never expose the Supabase service role key to the client; keep all DB access server-side.
@@ -20,7 +20,6 @@
 | `RECAPTCHA_SECRET_KEY`           | Annually / on incident  | Google reCAPTCHA Admin → Settings → Regenerate                                                                                                                                                                                                             |
 | `SLACK_*_WEBHOOK_URL`            | On incident only        | Slack App → Incoming Webhooks → Add new → Remove old                                                                                                                                                                                                       |
 | `STAGING_PASSWORD`               | On incident only        | Update in Vercel env vars → Redeploy                                                                                                                                                                                                                       |
-| `SURVEY_CLOSE_PASSWORD`          | On incident only        | Update in Vercel env vars → Redeploy                                                                                                                                                                                                                       |
 | `STRIPE_WEBHOOK_SECRET`          | Annually / on incident  | See §Webhook secret rotation below                                                                                                                                                                                                                         |
 | `RESEND_WEBHOOK_SECRET`          | Annually / on incident  | See §Webhook secret rotation below                                                                                                                                                                                                                         |
 | `UNSUBSCRIBE_SECRET`             | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. Existing unsubscribe links in already-sent emails break — accept that or schedule rotation to coincide with low-email-volume window.                                                     |
@@ -271,6 +270,23 @@ detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
   therefore grants nothing but the Jarvis sign-in.
 - **The shared `LOVEIQ_MCP_TOKEN`** remains for the unattended jobs. Rotate it after
   everyone has connected as themselves. Its calls log as `actor = 'shared'`.
+
+## Admin sign-in return path (`next`)
+
+Since 2026-10-16 a link to an AP-Analytics view keeps its view through the sign-in. `proxy.ts`
+sends a signed-out (or idle) visitor to `/admin/login?next=<the page>`, the login page posts
+`next` with the email, `/api/admin/login` puts it on the magic link, and
+`/admin/auth/callback` redirects there after the usual session, allowlist and audit checks.
+
+- **Every hop reads it through `safeAdminNext` (`shared/url/admin-next.ts`)**, so it cannot
+  become an open redirect. Only a same-site path passes: it starts with `/admin/`, uses only
+  letters, digits and `- . _ ~ / ? & = #`, and has no `//` and no `..` segment. That leaves out
+  backslashes, schemes, `@`, whitespace and all percent-encoding (an encoded `//` or `\`).
+  Anything else is dropped and the sign-in lands on `/admin/ap`, as before.
+- `shared/url/tests/admin-next.test.ts` lists the hostile forms it refuses (`//evil.com`,
+  `/\evil.com`, `/admin/..//evil`, `%2F%2F`, `https://…`, `/admin@evil.com` and more), and the
+  login, callback and proxy tests check each hop. The login's CSRF check, rate limit and
+  allowlist are unchanged; a bad `next` never fails a sign-in, it is only left off the link.
 
 ## Abuse protection
 

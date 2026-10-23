@@ -72,7 +72,7 @@ function getSupabaseServiceConfig() {
   return { serviceRoleKey, url };
 }
 
-async function supabaseServiceFetch(path: string, options: ServiceFetchOptions = {}) {
+export async function supabaseServiceFetch(path: string, options: ServiceFetchOptions = {}) {
   const { url, serviceRoleKey } = getSupabaseServiceConfig();
   const { method = "GET", body, headers = {}, timeoutMs = SUPABASE_TIMEOUT_MS } = options;
 

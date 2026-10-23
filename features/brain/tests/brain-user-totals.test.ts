@@ -77,6 +77,72 @@ describe("toPerson", () => {
   it("leaves staff out", () => {
     expect(toPerson(row([], "eman@loveiq.org"))).toBeNull();
   });
+
+  it("files an early profile's short relationship label under the survey's wording", () => {
+    const labels = new Map([["monogamous", "In one exclusive relationship (only each other)"]]);
+    const as = (status: string) => {
+      const r = row([]);
+      r.app_user.user_profile.relationship_status = status;
+      return toPerson(r, undefined, labels)!.relationship;
+    };
+    expect(as("Monogamous")).toBe("In one exclusive relationship (only each other)");
+    expect(as("monogamous ")).toBe("In one exclusive relationship (only each other)");
+    expect(as("In one exclusive relationship (only each other)")).toBe(
+      "In one exclusive relationship (only each other)"
+    );
+    // Anything else is kept as it is, and without a map nothing changes.
+    expect(as("Married")).toBe("Married");
+    expect(toPerson(row([]))!.relationship).toBe("Married");
+  });
+
+  it("reads the label map from the relationship question's own options", async () => {
+    vi.resetModules();
+    vi.doMock("@features/admin/server/supabase", () => ({
+      supabaseFetch: async (path: string) => ({
+        ok: true,
+        status: 200,
+        json: async () =>
+          path.includes("answer_option(option_value,option_text)") &&
+          path.includes("frontend_qid=eq.15004")
+            ? [
+                {
+                  answer_option: [
+                    { option_value: "Single", option_text: "Single" },
+                    {
+                      option_value: "Open",
+                      option_text: "Non-exclusive, with agreed limits — known as 'open'",
+                    },
+                  ],
+                },
+              ]
+            : [{ id: 41 }],
+      }),
+    }));
+    vi.doMock("@features/brain/server/read-all", () => ({
+      readAll: async () => [
+        {
+          ...row([]),
+          app_user: {
+            email: "x@example.com",
+            user_profile: {
+              gender: "Woman",
+              sexual_orientation: null,
+              relationship_status: "Open",
+              location_primary: "Canada",
+            },
+          },
+        },
+      ],
+    }));
+    const mod = await import("@features/brain/server/user-totals");
+    const people = await mod.loadPeople("2026-09-01", "2026-09-30");
+    // The em dash is cleaned to a hyphen, as every stored value is.
+    expect(people!.map((p) => p.relationship)).toEqual([
+      "Non-exclusive, with agreed limits - known as 'open'",
+    ]);
+    vi.doUnmock("@features/admin/server/supabase");
+    vi.doUnmock("@features/brain/server/read-all");
+  });
 });
 
 describe("onePerPerson", () => {
@@ -347,6 +413,69 @@ describe("the other measures: traits, emails and answers", () => {
     expect(typeof loadPeople).toBe("function");
   });
 
+  it("reads several questions in one query, and builds each question's people as its own read would", async () => {
+    vi.resetModules();
+    const paths: string[] = [];
+    const row = (user: string, answers: Array<[number, string]>) => ({
+      user_id: user,
+      created_date_time: "2026-09-10T12:00:00Z",
+      age: [{ answer_option: { option_text: "25-34" } }],
+      app_user: { email: `${user}@example.com`, user_profile: null },
+      scoring_result: null,
+      personal_report: null,
+      answer: answers.map(([q, text]) => ({
+        survey_question_id: q,
+        normalized_value: null,
+        answer_option: { option_text: text },
+        survey_submission_answer_options: [],
+      })),
+    });
+    // The same user twice: the latest finish's answers count, per question, as onePerPerson says.
+    const rows = [
+      row("u1", [
+        [77, "No"],
+        [78, "Seven"],
+      ]),
+      row("u1", [[77, "Yes"]]),
+      row("u2", [[78, "Two"]]),
+    ];
+    vi.doMock("@features/admin/server/supabase", () => ({
+      supabaseFetch: async (path: string) => {
+        paths.push(path);
+        return { ok: true, status: 200, json: async () => [{ id: 41 }] };
+      },
+    }));
+    vi.doMock("@features/brain/server/read-all", () => ({
+      readAll: async (path: string) => {
+        paths.push(path);
+        // A one-question read returns only that question's answers.
+        const one = /answer\.survey_question_id=eq\.(\d+)/.exec(path)?.[1];
+        return one
+          ? rows.map((r) => ({
+              ...r,
+              answer: r.answer.filter((a) => a.survey_question_id === Number(one)),
+            }))
+          : rows;
+      },
+    }));
+    const mod = await import("@features/brain/server/user-totals");
+    const both = await mod.loadPeopleByQuestion("2026-09-01", "2026-09-30", [77, 78]);
+    const main = paths.filter((p) => p.startsWith("/rest/v1/survey_submission"));
+    expect(main).toHaveLength(1);
+    expect(main[0]).toContain("&answer.survey_question_id=in.(77,78)");
+    for (const q of [77, 78]) {
+      const alone = await mod.loadPeople("2026-09-01", "2026-09-30", {
+        measure: "answers",
+        questionId: q,
+      });
+      expect(both!.get(q)).toEqual(alone);
+    }
+    expect(both!.get(77)!.map((p) => p.answer)).toEqual([["Yes"], undefined]);
+    expect(both!.get(78)!.map((p) => p.answer)).toEqual([["Seven"], ["Two"]]);
+    vi.doUnmock("@features/admin/server/supabase");
+    vi.doUnmock("@features/brain/server/read-all");
+  });
+
   it("files a paying user's traits and answers with the finish they paid under", () => {
     const [p] = onePerPerson([
       person({
@@ -539,6 +668,46 @@ describe("the other measures: traits, emails and answers", () => {
     const emails = renderEmails(byGender, people, null);
     expect(emails).toContain("- All: 20 finished\n");
     expect(emails).toContain("- Woman: 12 finished");
+  });
+
+  it("withholds shares beside an answered count shown as 'all but under 5', which they would give back", () => {
+    const single = { id: 8, qid: "03012", type: "single", question: "Q" };
+    // 27 of 30 answered: 15/27 and 12/27 are 56% and 44%, which fit 27 and no other count from
+    // 26 to 29, so printing them would say that exactly 3 did not answer.
+    const people = [
+      ...many(15, { answer: ["A"] }),
+      ...many(12, { answer: ["B"] }),
+      ...many(3, { answer: undefined }),
+    ];
+    const text = renderAnswers(req(), people, single);
+    expect(text).toContain(
+      "- All (all but under 5 of 30 answered): shares withheld, since they would give back how many did not answer."
+    );
+    expect(text).not.toMatch(/56%|44%/);
+    // With five or more not answering, the count is exact and the shares come back.
+    const fewer = [...people.slice(0, 25), ...many(5, { answer: undefined })];
+    expect(renderAnswers(req(), fewer, single)).toContain(
+      "- All (25 of 30 answered): A 60% · B 40%"
+    );
+  });
+
+  it("withholds everyone's answered count when grouped, if the groups' counts would give back a hidden one", () => {
+    const single = { id: 8, qid: "03012", type: "single", question: "Q" };
+    const byGender = req({ groupBy: ["gender"] });
+    // Men: 18 of 20 answered, shown as "all but under 5". Everyone's 30 minus the women's exact
+    // 12 would say the men are 18, so 2 did not answer.
+    const people = [
+      ...many(12, { gender: "Woman", answer: ["A"] }),
+      ...many(18, { gender: "Man", answer: ["B"] }),
+      ...many(2, { gender: "Man", answer: undefined }),
+    ];
+    const text = renderAnswers(byGender, people, single);
+    expect(text).toContain("- All: 32 finished; how many answered is withheld");
+    expect(text).not.toContain("30 answered");
+    expect(text).toContain("- Man (all but under 5 of 20 answered): shares withheld");
+    // Everyone answered: nothing to give back, so the count is exact.
+    const all = people.filter((p) => p.answer);
+    expect(renderAnswers(byGender, all, single)).toContain("- All: 30 answered\n");
   });
 
   it("says a question stored as text is not summarised, rather than that nobody answered it", () => {

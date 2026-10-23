@@ -5,6 +5,7 @@ import {
   isReportPurchasePlan,
   type ReportAccessPlan,
 } from "@features/report/server/access";
+import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 
 export type { ReportAccessPlan } from "@features/report/server/access";
 
@@ -49,6 +50,25 @@ async function supabaseGet(path: string) {
       timeoutMs: SUPABASE_TIMEOUT_MS,
     })
   );
+}
+
+/**
+ * Whether a personal_report holds the initial unlock (EUR 1.99, pay to start's initial
+ * report): a succeeded payment whose plan is `initial`. It is no report purchase plan, so
+ * `getReportPlanByPersonalReportId` returns null for its buyer, who has still paid.
+ */
+export async function hasInitialUnlockByPersonalReportId(
+  personalReportId: number
+): Promise<boolean> {
+  const response = await supabaseGet(
+    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&metadata->>plan=eq.${INITIAL_UNLOCK_PLAN}&select=id&limit=1`
+  );
+
+  if (!response.ok) {
+    throw new Error("payment_lookup_failed");
+  }
+
+  return ((await response.json()) as unknown[]).length > 0;
 }
 
 /**

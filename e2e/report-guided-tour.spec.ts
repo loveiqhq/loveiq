@@ -13,8 +13,7 @@ import { instantScroll } from "./fixtures/instant-scroll";
  *
  * Every case is a fresh browser, so a first open. The report carries Typical Beliefs' V4
  * copy, where four of the five stops are. Submission 1 is the pay pop-up test's no_popup
- * arm and the fixture's report date is old, so neither the plans pop-up nor the founder-call
- * offer opens on its own.
+ * arm, so the plans pop-up does not open on its own.
  */
 const TOKEN = "test-token-tour";
 const REPORT = `/report/${TOKEN}`;

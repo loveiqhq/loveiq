@@ -18,7 +18,7 @@ End-to-end browser tests using Playwright. Tests run against a production build 
 | `pages.spec.ts`              | Page content and metadata                                                   |
 | `interactions.spec.ts`       | Forms, buttons, interactive elements                                        |
 | `a11y.spec.ts`               | Accessibility (axe-core WCAG checks)                                        |
-| `admin.spec.ts`              | Admin panel flows                                                           |
+| `admin.spec.ts`              | Admin sign-in page and the signed-out redirect                              |
 | `survey.spec.ts`             | Survey wizard flow                                                          |
 | `visual-regression.spec.ts`  | Screenshot comparison tests                                                 |
 | `landing-hero-video.spec.ts` | Landing arm B: the hero video (playback stubbed)                            |

@@ -2,16 +2,28 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { useMemo, useState } from "react";
 
 import { activeKey, AP_BASE, NAV, navHref } from "./nav";
 import { addDays, shortDate } from "@features/admin/server/ap/days";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import { useApStatus } from "./status";
 import { useApFilters } from "./useApFilters";
 
 type Health = "ok" | "stale" | "down" | null;
+
+/** Ends the admin session (the server signs out of Supabase) and returns to the sign-in page. */
+async function signOut() {
+  const response = await fetch("/api/admin/logout", {
+    method: "POST",
+    headers: { "x-csrf-token": getCsrfToken() },
+  }).catch(() => null);
+  if (response?.ok) posthog.reset();
+  window.location.href = "/admin/login";
+}
 
 /** Green while fresh, amber once a source falls behind, red when it cannot be read. */
 function Dot({ health }: { health: Health }) {
@@ -220,9 +232,13 @@ export default function ApSidebar({ onNavigate }: { onNavigate?: () => void }) {
             {status.role.charAt(0).toUpperCase() + status.role.slice(1)}
           </span>
         )}
-        <Link href="/admin" className="font-semibold text-ap-plum">
-          Classic admin
-        </Link>
+        <button
+          type="button"
+          onClick={signOut}
+          className="min-h-6 cursor-pointer self-start border-0 bg-transparent p-0 font-sans text-xs font-semibold text-ap-plum underline-offset-2 hover:underline"
+        >
+          Sign out
+        </button>
       </div>
     </nav>
   );

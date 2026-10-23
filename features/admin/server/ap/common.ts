@@ -53,6 +53,14 @@ export interface Tile {
   note?: string;
   /** That line's colour, where the design colours it (checkout success in red). */
   noteTone?: "good" | "bad" | "flat";
+  /** What the trend line draws, where it isn't the tile's own figure ("€ per submission"). */
+  line?: string;
+  /**
+   * A grey line under the change, where the design gives a count its share as well ("Tour
+   * started": "62% of the 480 readers who opened their report"). A row of its own, so not for
+   * a tile in a `level` grid.
+   */
+  share?: string;
 }
 
 export interface Column {

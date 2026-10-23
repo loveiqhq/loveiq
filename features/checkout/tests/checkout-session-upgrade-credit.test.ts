@@ -193,8 +193,9 @@ describe("POST /api/stripe/checkout-session (All 14 upgrade credit)", () => {
 });
 
 /**
- * The full report after the initial unlock (EUR 1.99): its EUR 10 is Stripe's discount the
- * same way, on a coupon and a metadata key of its own, so ops and the refund alert tell them apart.
+ * The full report after the initial unlock (EUR 1.99): its EUR 10 is taken off the line
+ * itself, not as a coupon, so a code typed on Stripe's page still works (a session takes one
+ * discount); the line says so, and the metadata key of its own lets the refund alert find it.
  */
 describe("POST /api/stripe/checkout-session (the initial unlock's credit)", () => {
   let createSession: ReturnType<typeof vi.fn>;
@@ -218,26 +219,49 @@ describe("POST /api/stripe/checkout-session (the initial unlock's credit)", () =
     } as never);
   });
 
-  it("charges EUR 29.99 less the EUR 10 credit, on the initial credit's coupon", async () => {
-    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({
-      ...QUOTE,
-      plan: "full_report",
-      chargedPriceCents: 1999,
-      upgradeCreditCents: 1000,
-      creditKind: "initial",
-    } as never);
+  const CREDITED = {
+    ...QUOTE,
+    plan: "full_report" as const,
+    experimentGroup: "A3",
+    chargedPriceCents: 1999,
+    upgradeCreditCents: 1000,
+    creditKind: "initial" as const,
+  };
+
+  it("charges EUR 19.99 on the line itself, and still takes a code typed on Stripe", async () => {
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue(CREDITED as never);
 
     const res = await POST(makeRequest(body));
 
     expect(res.status).toBe(200);
     const args = createSession.mock.calls[0]![0];
-    expect(args.line_items[0].price_data.unit_amount).toBe(2999);
-    expect(args.discounts).toEqual([{ coupon: "initial_credit_eur_1000" }]);
+    expect(args.line_items[0].price_data.unit_amount).toBe(1999);
+    expect(args.line_items[0].price_data.product_data.description).toBe("€10 credit applied");
+    expect(args.discounts).toBeUndefined();
+    expect(args.allow_promotion_codes).toBe(true);
     expect(args.metadata).toEqual(
       expect.objectContaining({ currentPrice: "19.99", initialCredit: "10.00" })
     );
     expect(args.metadata.upgradeCredit).toBeUndefined();
+    expect(ensureInitialCreditCoupon).not.toHaveBeenCalled();
     expect(ensureUpgradeCreditCoupon).not.toHaveBeenCalled();
-    expect(ensureInitialCreditCoupon).toHaveBeenCalledWith(expect.anything(), 1000);
+  });
+
+  it("uses a nurture promo instead when it takes off more than the EUR 10", async () => {
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue(CREDITED as never);
+    vi.mocked(resolveNurturePromo).mockResolvedValue({
+      stage: "54h_no_unlock",
+      percentOff: 50,
+      stripePromotionCodeId: "promo_50",
+    });
+
+    await POST(makeRequest({ ...body, promo: "LIQ-50-Ab7K9xQ2" }));
+
+    const args = createSession.mock.calls[0]![0];
+    // The regular EUR 29.99, half off: EUR 15 beats the EUR 10, and the two never stack.
+    expect(args.line_items[0].price_data.unit_amount).toBe(2999);
+    expect(args.line_items[0].price_data.product_data.description).toBeUndefined();
+    expect(args.discounts).toEqual([{ promotion_code: "promo_50" }]);
+    expect(args.metadata.initialCredit).toBeUndefined();
   });
 });

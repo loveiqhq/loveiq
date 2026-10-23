@@ -45,6 +45,9 @@ if (!SELECTOR) {
   process.exit(3);
 }
 
+/** A point a tap can reach (the measurement's own centre of the control). */
+const inViewportPoint = (m) => Number.isFinite(m.cx) && Number.isFinite(m.cy) && m.cy >= 0;
+
 let dead = 0;
 let unmeasured = 0;
 
@@ -150,120 +153,141 @@ for (const name of DEVICE_NAMES) {
       await page.waitForTimeout(200);
     }
 
-    const r = await page.evaluate((sel) => {
-      let all;
-      try {
-        all = [...document.querySelectorAll(sel)];
-      } catch {
-        // selectorFor caps at 120 chars and can emit something querySelector
-        // refuses. That is a probe limitation, never a product defect.
-        return { badSelector: true };
-      }
-      if (all.length === 0) return { missing: true };
-
-      /**
-       * Every VISIBLE match, and the DEAD one wins.
-       *
-       * `selectorFor()` keeps only the tag and the first class, so one selector
-       * routinely names several controls. Taking the first visible match is a
-       * coin flip, and on the consent gate it lands the wrong way every time:
-       * `button.flex-1` matches "Return to site" (live) and "I agree"
-       * (`disabled={!canProceed}`) at the SAME y, in that order. The probe read
-       * the live one and cleared the finding — the exact control 15 readers
-       * pressed to no effect, reported as a pass.
-       *
-       * The event has already established that a reader tapped something dead
-       * under this selector. The question left for the probe is only whether
-       * such a control is still on the page, so if ANY visible match is dead,
-       * the finding stands. The trade-off is deliberate: a page where one
-       * legitimately-disabled sibling shares a selector will now report FAIL.
-       * That is the safe direction — the alternative silently clears real ones.
-       *
-       * (Zero-size matches are still skipped: on /survey the first match in
-       * document order has no box, and the reader tapped something they saw.)
-       */
-      const measure = (el) => {
-        const rect = el.getBoundingClientRect();
-
-        // Same definition as isInteractive() in uxSignals, deliberately.
-        const control = el.closest(
-          "a,button,input,select,textarea,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[contenteditable=true]"
-        );
-        const disabled =
-          !!control &&
-          (control.disabled === true || control.getAttribute("aria-disabled") === "true");
+    const measureTarget = () =>
+      page.evaluate((sel) => {
+        let all;
+        try {
+          all = [...document.querySelectorAll(sel)];
+        } catch {
+          // selectorFor caps at 120 chars and can emit something querySelector
+          // refuses. That is a probe limitation, never a product defect.
+          return { badSelector: true };
+        }
+        if (all.length === 0) return { missing: true };
 
         /**
-         * A disabled control that EXPLAINS ITSELF is not a dead end.
+         * Every VISIBLE match, and the DEAD one wins.
          *
-         * "Disabled" alone was too blunt a rule. The survey consent gate keeps
-         * "I agree" disabled until both boxes are ticked, which is correct and
-         * must not change — so once the missing explanation was added, this
-         * probe still reported the defect and, D1 being in AUTO_PR_CRITERIA,
-         * would have opened a draft pull request against correct behaviour on
-         * every run, forever.
+         * `selectorFor()` keeps only the tag and the first class, so one selector
+         * routinely names several controls. Taking the first visible match is a
+         * coin flip, and on the consent gate it lands the wrong way every time:
+         * `button.flex-1` matches "Return to site" (live) and "I agree"
+         * (`disabled={!canProceed}`) at the SAME y, in that order. The probe read
+         * the live one and cleared the finding — the exact control 15 readers
+         * pressed to no effect, reported as a pass.
          *
-         * `aria-describedby` is the right signal rather than a heuristic: it is
-         * exactly what a screen reader announces when the control takes focus,
-         * so a control that satisfies this check has genuinely told the reader
-         * why. Required to resolve to VISIBLE, non-empty text — an id pointing
-         * at nothing, or at a hidden node, is the same dead end wearing an
-         * attribute.
+         * The event has already established that a reader tapped something dead
+         * under this selector. The question left for the probe is only whether
+         * such a control is still on the page, so if ANY visible match is dead,
+         * the finding stands. The trade-off is deliberate: a page where one
+         * legitimately-disabled sibling shares a selector will now report FAIL.
+         * That is the safe direction — the alternative silently clears real ones.
+         *
+         * (Zero-size matches are still skipped: on /survey the first match in
+         * document order has no box, and the reader tapped something they saw.)
          */
-        const describedBy = control?.getAttribute("aria-describedby") ?? "";
-        const explained = describedBy
-          .split(/\s+/)
-          .filter(Boolean)
-          .some((id) => {
-            const node = document.getElementById(id);
-            if (!node) return false;
-            const r = node.getBoundingClientRect();
-            return r.width > 0 && r.height > 0 && (node.textContent ?? "").trim().length > 0;
-          });
+        const measure = (el) => {
+          const rect = el.getBoundingClientRect();
 
-        let pointer = false;
-        let node = el;
-        for (let i = 0; node && i < 3; i += 1, node = node.parentElement) {
-          if (getComputedStyle(node).cursor === "pointer") {
-            pointer = true;
-            break;
+          // Same definition as isInteractive() in uxSignals, deliberately.
+          const control = el.closest(
+            "a,button,input,select,textarea,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[contenteditable=true]"
+          );
+          const disabled =
+            !!control &&
+            (control.disabled === true || control.getAttribute("aria-disabled") === "true");
+
+          /**
+           * A disabled control that EXPLAINS ITSELF is not a dead end.
+           *
+           * "Disabled" alone was too blunt a rule. The survey consent gate keeps
+           * "I agree" disabled until both boxes are ticked, which is correct and
+           * must not change — so once the missing explanation was added, this
+           * probe still reported the defect and, D1 being in AUTO_PR_CRITERIA,
+           * would have opened a draft pull request against correct behaviour on
+           * every run, forever.
+           *
+           * `aria-describedby` is the right signal rather than a heuristic: it is
+           * exactly what a screen reader announces when the control takes focus,
+           * so a control that satisfies this check has genuinely told the reader
+           * why. Required to resolve to VISIBLE, non-empty text — an id pointing
+           * at nothing, or at a hidden node, is the same dead end wearing an
+           * attribute.
+           */
+          const describedBy = control?.getAttribute("aria-describedby") ?? "";
+          const explained = describedBy
+            .split(/\s+/)
+            .filter(Boolean)
+            .some((id) => {
+              const node = document.getElementById(id);
+              if (!node) return false;
+              const r = node.getBoundingClientRect();
+              return r.width > 0 && r.height > 0 && (node.textContent ?? "").trim().length > 0;
+            });
+
+          let pointer = false;
+          let node = el;
+          for (let i = 0; node && i < 3; i += 1, node = node.parentElement) {
+            if (getComputedStyle(node).cursor === "pointer") {
+              pointer = true;
+              break;
+            }
           }
-        }
 
-        // Does a tap at its own centre actually land on it?
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const inViewport = cy >= 0 && cy <= window.innerHeight;
-        const top = inViewport ? document.elementFromPoint(cx, cy) : null;
-        const covered = inViewport && !!top && top !== el && !el.contains(top) && !top.contains(el);
+          // Does a tap at its own centre actually land on it?
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const inViewport = cy >= 0 && cy <= window.innerHeight;
+          const top = inViewport ? document.elementFromPoint(cx, cy) : null;
+          const covered =
+            inViewport && !!top && top !== el && !el.contains(top) && !top.contains(el);
 
-        return {
-          looksPressable: !!control || pointer,
-          disabled: disabled && !explained,
-          explained: disabled && explained,
-          covered,
-          inViewport,
-          coveredBy: covered
-            ? `${top.tagName.toLowerCase()}.${String(top.className).split(" ")[0]}`
-            : null,
-          tag: el.tagName.toLowerCase(),
-          label: (el.innerText || "").trim().slice(0, 30),
+          return {
+            looksPressable: !!control || pointer,
+            disabled: disabled && !explained,
+            explained: disabled && explained,
+            // Names an explanation it has not shown yet (see the press below).
+            promisesWhy: disabled && !explained && describedBy.trim() !== "",
+            cx: Math.round(cx),
+            cy: Math.round(cy),
+            covered,
+            inViewport,
+            coveredBy: covered
+              ? `${top.tagName.toLowerCase()}.${String(top.className).split(" ")[0]}`
+              : null,
+            tag: el.tagName.toLowerCase(),
+            label: (el.innerText || "").trim().slice(0, 30),
+          };
         };
-      };
 
-      const visible = all.filter((n) => {
-        const r = n.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
-      });
-      if (visible.length === 0) return { notRendered: true, matches: all.length };
+        const visible = all.filter((n) => {
+          const r = n.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        });
+        if (visible.length === 0) return { notRendered: true, matches: all.length };
 
-      const measured = visible.map(measure);
-      const worst =
-        measured.find((m) => m.looksPressable && (m.disabled || m.covered)) ??
-        measured.find((m) => m.explained) ??
-        measured[0];
-      return { ...worst, matches: visible.length };
-    }, SELECTOR);
+        const measured = visible.map(measure);
+        const worst =
+          measured.find((m) => m.looksPressable && (m.disabled || m.covered)) ??
+          measured.find((m) => m.explained) ??
+          measured[0];
+        return { ...worst, matches: visible.length };
+      }, SELECTOR);
+    let r = await measureTarget();
+    /**
+     * Some controls explain themselves when pressed: the survey's blocked Next points at its
+     * hint (aria-describedby), which stays empty until a tap says "Answer this question to
+     * continue." Read without a press, it was a dead control. So a disabled control that
+     * names an explanation is pressed once, as the reader did, and read again. Nothing else
+     * is pressed: a disabled control that names none is dead as it stands, and MUTATE (which
+     * names none) still fails.
+     */
+    if (r.disabled && r.promisesWhy && inViewportPoint(r)) {
+      await page.touchscreen.tap(r.cx, r.cy).catch(() => page.mouse.click(r.cx, r.cy));
+      await page.waitForTimeout(500);
+      const again = await measureTarget();
+      if (again.explained) r = { ...again, explainedOnPress: true };
+    }
 
     const where = `${name.padEnd(14)}`;
     if (r.badSelector || r.missing || r.notRendered) {
@@ -291,8 +315,8 @@ for (const name of DEVICE_NAMES) {
       );
     } else if (r.explained) {
       console.log(
-        `PASS  ${where}${at} <${r.tag}> "${r.label}" is disabled but SAYS WHY — ` +
-          `blocked with an explanation is not a dead end`
+        `PASS  ${where}${at} <${r.tag}> "${r.label}" is disabled but SAYS WHY` +
+          `${r.explainedOnPress ? " once pressed" : ""} — blocked with an explanation is not a dead end`
       );
     } else {
       console.log(`PASS  ${where}${at} <${r.tag}> is a live control and reachable`);

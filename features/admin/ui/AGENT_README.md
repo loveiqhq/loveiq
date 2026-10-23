@@ -1,12 +1,11 @@
 # features/admin/ui/
 
-Admin UI surfaces, dashboards, shared controls, and tab groups.
+Admin UI. Since 16 Oct 2026 that is AP-Analytics (`ap/`) and the sign-in form; the old dark admin's dashboards, tab groups and controls were removed.
 
 ## What belongs here
 
-- Page-scale admin dashboards and panels
-- Reusable admin-only controls, tables, and overlays
-- Domain tab groups under subdirectories like `growth-tabs/` and `health-tabs/`
+- AP-Analytics under `ap/`: its shell, sidebar, filter bar and one component per page
+- The sign-in form and the error box every AP page sits in
 - Admin client hooks under `hooks/`
 
 ## What does not belong here
@@ -17,16 +16,11 @@ Admin UI surfaces, dashboards, shared controls, and tab groups.
 
 ## How to navigate
 
-If you only know the product problem, start with [`docs/admin/domains/AGENT_README.md`](../../../docs/admin/domains/AGENT_README.md).
-
-| Domain                     | Primary components                                                                                                                                                                                              | Supporting subdirectories | Canonical lookup doc                                                              |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------- |
-| Submissions and moderation | `SubmissionBrowser.tsx`, `SubmissionDetail.tsx`, `SubmissionComparison.tsx`, `SubmissionTable.tsx`, `SurveyStatus.tsx`, `AdminCommentsThread.tsx`, `NotesSection.tsx`, `BulkActionBar.tsx`, `SavedViewsBar.tsx` | `answer-explorer/`        | [`docs/admin/domains/submissions.md`](../../../docs/admin/domains/submissions.md) |
+If you only know the product problem, start with [`docs/admin/domains/AGENT_README.md`](../../../docs/admin/domains/AGENT_README.md). Which component each page renders is in [`docs/admin-dashboard.md`](../../../docs/admin-dashboard.md).
 
 ## Key entry files
 
-- `AdminSidebar.tsx`: route grouping and navigation
-- `CommandCenterDashboard.tsx`: active `/admin` landing surface
-- `AdminStatsDashboard.tsx`: standalone stats-heavy dashboard component, not the default `/admin` page
-- `hooks/useAdminFetch.ts`: common client-side admin data loader
-- `ap/`: AP-Analytics, its own light shell (`ApShell.tsx`, `ApSidebar.tsx`, `ApFilterBar.tsx`) and one component per page; the building blocks are in `ap/kit.tsx`. It imports only browser-safe server modules (`format`, `filters`, `days`, `explorer-spec`, `traffic-math`) and the others' types
+- `ap/`: AP-Analytics, its own light shell (`ApShell.tsx`, `ApSidebar.tsx`, `ApFilterBar.tsx`) and one component per page; the page list is `ap/nav.ts`, the building blocks are in `ap/kit.tsx`, and every chart's read-out (the card on hover, tap and arrow keys, and the shaded stretches with no figures) is in `ap/hover.tsx`. It imports only browser-safe server modules (`format`, `filters`, `days`, `explorer-spec`, `traffic-math`) and the others' types
+- `AdminLoginForm.tsx`: the sign-in form at `/admin/login`, in AP's light design; it says why after the 30-minute idle sign-out
+- `DashboardErrorBoundary.tsx`: wraps each AP page so a failing page shows its own error
+- `hooks/useAdminFetch.ts`: the client-side data loader every AP page uses

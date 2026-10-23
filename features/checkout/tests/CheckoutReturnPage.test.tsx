@@ -366,3 +366,99 @@ describe("CheckoutReturnPage", () => {
     });
   }, 10000);
 });
+
+/** The EUR 1.99 Core Archetype (app/api/stripe/initial-unlock): no plan, so the page waits on `initialUnlock`. */
+describe("CheckoutReturnPage — the EUR 1.99 Core Archetype", () => {
+  let originalFetch: typeof globalThis.fetch;
+  const ANALYTICS = { value: 1.99, currency: "EUR", transaction_id: "cs_initial_1" };
+  const status = (initialUnlock: boolean) => ({
+    ok: true,
+    json: async () => ({
+      accessPlan: null,
+      enabled: true,
+      initialUnlock,
+      paymentStatus: "paid",
+      purchaseAnalytics: ANALYTICS,
+      sessionStatus: "complete",
+      surveySubmissionId: 63,
+    }),
+  });
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    mockRouterReplace.mockReset();
+    mockTrackReportPurchase.mockReset();
+    vi.mocked(trackPaywallUnlocked).mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    cleanup();
+  });
+
+  it("names the Core Archetype for screen readers", () => {
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as never;
+    render(
+      <CheckoutReturnPage
+        planId="initial"
+        sessionId="cs_initial_1"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+    expect(screen.getByText("Your Core Archetype")).toHaveClass("sr-only");
+  });
+
+  it("waits while the purchase is not yet recorded, rather than calling it done", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(status(false)) as never;
+    render(
+      <CheckoutReturnPage
+        planId="initial"
+        sessionId="cs_initial_1"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/payment received\. unlocking your report/i)).toBeInTheDocument()
+    );
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(mockTrackReportPurchase).not.toHaveBeenCalled();
+  });
+
+  it("says it is done and returns to the report, at its top and with the tour, once recorded", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(status(true)) as never;
+    render(
+      <CheckoutReturnPage
+        planId="initial"
+        sessionId="cs_initial_1"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+    await waitFor(() => expect(paidLine()).toBeInTheDocument());
+    expect(paidLine().textContent).toMatch(/your report is unlocked/i);
+    await waitFor(
+      () =>
+        expect(mockRouterReplace).toHaveBeenCalledWith(
+          "/report/rpt_ABCDEFGHIJKLMNOPQRST?unlocked=initial"
+        ),
+      { timeout: 3_000 }
+    );
+  });
+
+  it("counts the purchase as the Core Archetype, EUR 1.99", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(status(true)) as never;
+    render(
+      <CheckoutReturnPage
+        planId="initial"
+        sessionId="cs_initial_1"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+    await waitFor(() =>
+      expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+        ...ANALYTICS,
+        item_name: "Your Core Archetype",
+      })
+    );
+    expect(trackPaywallUnlocked).toHaveBeenCalledWith("initial", 1.99, "EUR", "cs_initial_1");
+  });
+});

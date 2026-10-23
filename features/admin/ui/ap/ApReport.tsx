@@ -3,17 +3,19 @@
 import { useState, type ReactNode } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { delta, deltaRel, fmt, type Tone } from "@features/admin/server/ap/format";
+import { delta, deltaRel, EMPTY, fmt, type Tone } from "@features/admin/server/ap/format";
 import type {
   ChangeBox,
   ReportPayload,
   ReportTile,
   TimeGroup,
+  TourView,
 } from "@features/admin/server/ap/report-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { bucketTitles, IndexHover, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -22,19 +24,29 @@ import {
   Card,
   Failed,
   FilterIcon,
+  ICON_BTN,
   KpiTileV2,
   Loading,
   NotTracked,
   PageHeader,
   Pills,
+  RangeLine,
   SectionHead,
   SectionNav,
   SortIcon,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
+
+/** The reader's submission in the Explorer: that one row, over all time. */
+const submissionHref = (id: number | string) =>
+  `/admin/ap/explorer?${new URLSearchParams({
+    source: "production",
+    table: "survey_submission",
+    date: "",
+    filters: JSON.stringify([["id", "eq", String(id)]]),
+  })}`;
 
 /** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
 const wholePct = (v: number | null) =>
@@ -53,8 +65,8 @@ const TONE: Record<Tone, string> = {
 };
 
 /** The design's headline tile (KpiTileV2), at the tile's own decimals. */
-function ReportKpiTile({ tile }: { tile: ReportTile }) {
-  return <KpiTileV2 tile={tile} digits={tile.digits} />;
+function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: string; to: string } }) {
+  return <KpiTileV2 tile={tile} digits={tile.digits} titles={bucketTitles(range.from, range.to)} />;
 }
 
 /**
@@ -82,6 +94,7 @@ function ChangeBoxView({ box }: { box: ChangeBox }) {
 
 const SECTIONS = [
   { id: "wizard", label: "Wizard" },
+  { id: "tour", label: "Guided tour" },
   { id: "time", label: "Time & returns" },
   { id: "chapters", label: "Chapters" },
   { id: "feedback", label: "Feedback" },
@@ -143,7 +156,7 @@ function Th<K extends string>({
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(col)}
-          className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${dir ? "text-ap-violet" : "text-ap-muted"}`}
+          className={`${ICON_BTN} ${dir ? "text-ap-violet" : "text-ap-muted"}`}
         >
           <SortIcon dir={dir} />
         </button>
@@ -186,7 +199,7 @@ function useColumnFilters<T, F extends string>(
       aria-label={`Filter ${labels[k]}`}
       aria-expanded={open === k}
       onClick={() => setOpen(open === k ? null : k)}
-      className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
+      className={`${ICON_BTN} ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
     >
       <FilterIcon />
     </button>
@@ -263,6 +276,33 @@ export default function ApReport() {
                         })),
                       },
                     },
+                    ...data.tour.audiences.map((a) => ({
+                      name: `Guided tour · ${a.label}`,
+                      table: {
+                        columns: [
+                          { label: "Stop", unit: "text" as const },
+                          { label: "Reached (runs)", unit: "count" as const },
+                          { label: "Reached", unit: "pct" as const },
+                          { label: "Median time", unit: "mmss" as const },
+                          { label: "Next", unit: "pct" as const },
+                          { label: "Back", unit: "pct" as const },
+                          { label: "Skip tour", unit: "pct" as const },
+                          { label: "Exit", unit: "pct" as const },
+                        ],
+                        rows: a.stops.map((s) => ({
+                          label: `${s.n} · ${s.name}`,
+                          values: [
+                            s.reached,
+                            s.reachedShare,
+                            s.medianMs,
+                            s.next,
+                            s.back,
+                            s.skip,
+                            s.exit,
+                          ],
+                        })),
+                      },
+                    })),
                     {
                       name: "Chapters",
                       table: {
@@ -458,7 +498,13 @@ export default function ApReport() {
                       },
                     },
                   ],
-                  [...data.tiles, ...data.wizard.tiles]
+                  [
+                    ...data.tiles,
+                    ...data.wizard.tiles,
+                    ...data.tour.audiences.flatMap((a) =>
+                      a.tiles.map((t) => ({ ...t, label: `${t.label} · ${a.label}` }))
+                    ),
+                  ]
                 )
               }
             >
@@ -476,10 +522,11 @@ export default function ApReport() {
           <RangeLine data={data} sources="Production database and PostHog" />
           <TileGrid min={180}>
             {data.tiles.map((t) => (
-              <ReportKpiTile key={t.key} tile={t} />
+              <ReportKpiTile key={t.key} tile={t} range={data.range} />
             ))}
           </TileGrid>
           <WizardSection data={data} />
+          <TourSection data={data} />
           <section
             id="time"
             aria-labelledby="h-time"
@@ -523,7 +570,7 @@ function WizardSection({ data }: { data: ReportPayload }) {
       <SectionHead id="h-rwiz" title="Intro wizard" />
       <TileGrid min={200}>
         {w.tiles.map((t) => (
-          <ReportKpiTile key={t.key} tile={t} />
+          <ReportKpiTile key={t.key} tile={t} range={data.range} />
         ))}
       </TileGrid>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
@@ -613,6 +660,131 @@ function WizardSection({ data }: { data: ReportPayload }) {
   );
 }
 
+const TOUR_GRID = "44px minmax(280px,2.6fr) 74px minmax(130px,1.2fr) 80px 80px 90px 80px";
+
+/**
+ * The guided tour on a reader's first open (Marcus's "Guided tour" section): free readers' five
+ * stops or paid readers' four, its four tiles, and per stop how its readers went on, back, skipped
+ * or left. Drawn as the wizard above it is.
+ */
+function TourSection({ data }: { data: ReportPayload }) {
+  const t = data.tour;
+  const [key, setKey] = useState<TourView["key"]>("free");
+  const a = t.audiences.find((x) => x.key === key) ?? t.audiences[0]!;
+  return (
+    <Card id="tour" labelledBy="h-tour">
+      <SectionHead
+        id="h-tour"
+        title="Guided tour"
+        description="Runs once when a reader first opens the report. Free readers get 5 stops, paid readers 4. Readers move with Next and Back, and can skip at any stop."
+        align="end"
+        right={
+          <Pills
+            label="Readers"
+            options={t.audiences.map((x) => ({ value: x.key, label: x.label }))}
+            value={a.key}
+            onChange={setKey}
+          />
+        }
+      />
+      <AllTraffic note={data.narrowed} />
+      {t.before && <NotTracked>Recorded from {t.from}: pick a range from that day on</NotTracked>}
+      <TileGrid min={200}>
+        {a.tiles.map((k) => (
+          <ReportKpiTile key={k.key} tile={k} range={data.range} />
+        ))}
+      </TileGrid>
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Guided tour stops" style={{ minWidth: 980 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: TOUR_GRID }}>
+            <Th label="#" />
+            <Th label="Stop" />
+            <Th label="Time" right />
+            <Th label="Reached" />
+            <Th label="Next" right />
+            <Th label="Back" right />
+            <Th label="Skip tour" right />
+            <Th label="Exit" right />
+          </div>
+          {a.stops.map((s, i) => (
+            <div
+              key={s.id}
+              role="row"
+              className="grid items-center border-t border-ap-line"
+              style={{ gridTemplateColumns: TOUR_GRID }}
+            >
+              <span role="cell" className="px-3 py-2.5 text-xs tabular-nums text-ap-muted">
+                {s.n}
+              </span>
+              <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
+                <span className="text-sm font-bold">{s.name}</span>
+                <span className="text-xs leading-snug text-ap-muted">{s.purpose}</span>
+                <span className="text-[11px] font-bold text-ap-purple">Spotlight: {s.target}</span>
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {fmt("mmss", s.medianMs)}
+              </span>
+              <span role="cell" className="flex items-center gap-2 px-3 py-2.5">
+                <span className="flex-1">
+                  <Bar pct={s.reachedShare} height={8} />
+                </span>
+                <span className="text-xs font-bold tabular-nums">
+                  {fmt("pct", s.reachedShare, 0)}
+                </span>
+              </span>
+              {/* Next, Skip tour and Exit are whole shares that add up to 100% (wholeShares). */}
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {i === a.stops.length - 1 && s.next !== null ? "Finish " : ""}
+                {fmt("pct", s.next, 0)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {wholePct(s.back)}
+              </span>
+              <span
+                role="cell"
+                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.skip, 8) ? "font-bold text-ap-bad" : ""}`}
+              >
+                {s.skip === 0 ? EMPTY : fmt("pct", s.skip, 0)}
+              </span>
+              <span
+                role="cell"
+                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.exit, 4) ? "font-bold text-ap-bad" : ""}`}
+              >
+                {fmt("pct", s.exit, 0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <details className="text-xs leading-relaxed text-ap-muted">
+        <summary className="cursor-pointer font-semibold text-ap-body">
+          How these are counted
+        </summary>
+        <p className="m-0 mt-1.5">
+          Our own records of each reader&rsquo;s first run of the tour in a browser, from {t.from}
+          (PostHog sees about a quarter of readers); a replay from the chapter menu is left out. All
+          traffic: the runs carry no source, device or tier. Tour started: the range&rsquo;s readers
+          who got the tour, and their share of those who opened their report. A reader who later
+          opened it in another browser got the tour there too: that run counts in the rest.
+          Completed, Skipped tour and Left the tour / bounced are shares of the runs; Left the tour
+          / bounced also holds the {fmt("count", a.unended)} {a.unended === 1 ? "run" : "runs"}{" "}
+          whose end was never recorded (the page went without a word, or the browser kept it and
+          never brought it back), which are on no stop. The table is of the {fmt("count", a.placed)}{" "}
+          {a.placed === 1 ? "run" : "runs"} whose end was recorded with its stops. Reached: of
+          those, the runs that came to the stop; a stop whose control was not on the page is left
+          out of that reader&rsquo;s tour. Next: went on from it, Finish on the last. Skip tour:
+          Skip Tour, Escape or the browser&rsquo;s Back there. Exit: left the page there. A run that
+          went back before it ended is placed on the furthest stop it reached. Next + Skip tour +
+          Exit add up to 100% of the runs on each stop; Back is counted separately, as the share who
+          went back from it at least once. Time: the median time with the stop&rsquo;s bubble up,
+          over every visit to it. From 1280px wide the first stop points at the sidebar, and its
+          text says &ldquo;the menu on the left&rdquo;. In red: Skip tour from 8%, Exit from 4%.
+        </p>
+      </details>
+    </Card>
+  );
+}
+
 /** The design's colours for reading time in the depth chart, shortest palest; then "not recorded". */
 const DEPTH_COLOURS = ["#e3dff0", "#b7aade", "#8c7bcf", "#5a42a6", "#f5f6f8"];
 
@@ -650,11 +822,11 @@ function TimeSection({ data }: { data: ReportPayload }) {
           Benchmark · all reports
         </span>
       </div>
-      <div className="flex h-[150px] items-end gap-2.5 border-b border-ap-line">
+      <div className="relative flex h-[150px] items-end border-b border-ap-line">
         {t.buckets.map((b) => (
           <div
             key={b.label}
-            className="relative flex h-full flex-1 flex-col items-center justify-end gap-1"
+            className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 px-[5px]"
           >
             <span className="text-xs font-bold">
               {fmt("pct", b.share, 0)}{" "}
@@ -671,10 +843,44 @@ function TimeSection({ data }: { data: ReportPayload }) {
             />
           </div>
         ))}
+        <IndexHover
+          xs={t.buckets.map((_, i) => ((i + 0.5) / t.buckets.length) * 100)}
+          label="Share of readers by total active reading time"
+          band={(i) => ({ left: (i / t.buckets.length) * 100, width: 100 / t.buckets.length })}
+          tip={(i) => {
+            const b = t.buckets[i]!;
+            return {
+              title: `${b.label}${b.label.includes("min") ? "" : " min"} of reading`,
+              sub: "Readers’ total active reading time",
+              rows: [
+                {
+                  label: "This report",
+                  value: fmt("pct", b.share, 1),
+                  color: "#795fc8",
+                  mark: "square",
+                },
+                {
+                  label: "Benchmark · all reports",
+                  value: fmt("pct", b.bench, 1),
+                  color: "#161021",
+                  mark: "dashed",
+                },
+                {
+                  label: "Difference",
+                  value: delta("pct", b.share, b.bench, "either")?.text ?? EMPTY,
+                  strong: true,
+                },
+              ],
+            };
+          }}
+        />
       </div>
-      <div className="flex gap-2.5">
+      <div className="flex">
         {t.buckets.map((b) => (
-          <span key={b.label} className="flex-1 text-center text-[11px] text-ap-muted">
+          <span
+            key={b.label}
+            className="min-w-0 flex-1 px-[5px] text-center text-[11px] text-ap-muted"
+          >
             {b.label}
           </span>
         ))}
@@ -772,38 +978,71 @@ function DepthChart({ data }: { data: ReportPayload }) {
         </NotTracked>
       ) : (
         <>
-          <div
-            role="img"
-            aria-label={`Readers by how far they got: ${d.bands.map((b, i) => `${b.label} ${totals[i]}`).join(", ")}`}
-            className="flex h-[260px] items-end gap-4 border-b border-ap-line px-1"
-          >
-            {d.bands.map((b, i) => (
-              <div key={b.label} className="flex h-full flex-1 flex-col justify-end gap-1.5">
-                <span className="text-center text-[15px] font-bold tabular-nums text-ap-ink">
-                  {totals[i]}
-                </span>
-                <div className="flex flex-col gap-0.5">
-                  {[...b.counts.keys()]
-                    .reverse()
-                    .filter((g) => b.counts[g]! > 0)
-                    .map((g) => (
-                      <span
-                        key={g}
-                        className="block rounded"
-                        style={{
-                          height: `${Math.max(3, Math.round((b.counts[g]! / top) * 200))}px`,
-                          background: DEPTH_COLOURS[g],
-                          ...(g === 4 ? { border: "1px dashed #9c95a3" } : {}),
-                        }}
-                      />
-                    ))}
+          <div className="relative h-[260px] border-b border-ap-line">
+            <div
+              role="img"
+              aria-label={`Readers by how far they got: ${d.bands.map((b, i) => `${b.label} ${totals[i]}`).join(", ")}`}
+              className="absolute inset-0 flex items-end"
+            >
+              {d.bands.map((b, i) => (
+                <div
+                  key={b.label}
+                  className="flex h-full min-w-0 flex-1 flex-col justify-end gap-1.5 px-2"
+                >
+                  <span className="text-center text-[15px] font-bold tabular-nums text-ap-ink">
+                    {totals[i]}
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    {[...b.counts.keys()]
+                      .reverse()
+                      .filter((g) => b.counts[g]! > 0)
+                      .map((g) => (
+                        <span
+                          key={g}
+                          className="block rounded"
+                          style={{
+                            height: `${Math.max(3, Math.round((b.counts[g]! / top) * 200))}px`,
+                            background: DEPTH_COLOURS[g],
+                            ...(g === 4 ? { border: "1px dashed #9c95a3" } : {}),
+                          }}
+                        />
+                      ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <IndexHover
+              xs={d.bands.map((_, i) => ((i + 0.5) / d.bands.length) * 100)}
+              label="How far into the report readers got"
+              band={(i) => ({ left: (i / d.bands.length) * 100, width: 100 / d.bands.length })}
+              tip={(i) => {
+                const b = d.bands[i]!;
+                const total = totals[i] ?? 0;
+                return {
+                  title: `${b.label}${b.label.endsWith("%") ? "" : "%"} of the report`,
+                  sub: "Readers whose deepest chapter is in this band",
+                  // Top first, as the column stacks them.
+                  rows: [
+                    ...[...shown].reverse().map(({ g, i: k }) => {
+                      const c = b.counts[k] ?? 0;
+                      return {
+                        label: g,
+                        value: `${fmt("count", c)} · ${total ? fmt("pct", c / total, 1) : EMPTY}`,
+                        color: DEPTH_COLOURS[k],
+                        ...(k === 4 ? { outline: "#9c95a3" } : {}),
+                        mark: "square" as const,
+                        muted: c === 0,
+                      };
+                    }),
+                    { label: "Readers", value: fmt("count", total), strong: true },
+                  ],
+                };
+              }}
+            />
           </div>
-          <div className="flex gap-4 px-1">
+          <div className="flex">
             {d.bands.map((b) => (
-              <span key={b.label} className="flex-1 text-center text-xs text-ap-muted">
+              <span key={b.label} className="min-w-0 flex-1 px-2 text-center text-xs text-ap-muted">
                 {b.label}
               </span>
             ))}
@@ -847,8 +1086,11 @@ function TimeSplit({
   const pick = (r: TimeGroup) =>
     stat === "median" ? { v: r.medianMs, b: r.benchMedianMs } : { v: r.ms, b: r.benchMs };
   const max = Math.max(1, ...rows.map((r) => Math.max(pick(r).v ?? 0, pick(r).b ?? 0)));
+  const rowTip = useRowTip();
+  const word = stat === "median" ? "Median" : "Average";
   return (
     <div className="flex flex-col gap-2.5">
+      {rowTip.card}
       <span className="text-[13px] font-bold text-ap-body">
         {stat === "median" ? "Median" : "Avg."} total time by {title}
       </span>
@@ -859,10 +1101,34 @@ function TimeSplit({
         return (
           <div
             key={r.label}
-            className="grid items-center gap-2.5 text-[13px]"
+            className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
             style={{ gridTemplateColumns: "110px minmax(0,1fr) 48px 56px" }}
+            {...rowTip.bind(() => ({
+              title: r.label,
+              sub: `${word} total reading time`,
+              rows: [
+                {
+                  label: "This report",
+                  value: fmt("mmss", v),
+                  color: GROUP_COLOURS[i % GROUP_COLOURS.length],
+                  mark: "square",
+                  muted: v === null,
+                },
+                {
+                  label: "All reports",
+                  value: fmt("mmss", b),
+                  color: "#161021",
+                  mark: "line",
+                  muted: b === null,
+                },
+                { label: "Difference", value: d?.text ?? EMPTY, strong: d !== null, muted: !d },
+              ],
+            }))}
           >
-            <span className="font-semibold">{r.label}</span>
+            <span className="font-semibold">
+              {r.label}
+              {b !== null && <span className="sr-only">, all reports {fmt("mmss", b)}</span>}
+            </span>
             <span className="relative h-3.5 rounded-full bg-ap-ground">
               <span
                 className="absolute inset-y-0 left-0 rounded-full"
@@ -932,6 +1198,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
   const topSource = Math.max(0.0001, ...(r.sources?.ok ? r.sources.value : []).map((s) => s.share));
   const [sort, setSort] = useState<Sort<CampaignKey>>(null);
   const head = { sort, onSort: (k: CampaignKey) => setSort((s) => nextSort(s, k)) };
+  const sourceTip = useRowTip();
   const filters = useColumnFilters(r.campaigns, CAMPAIGN_FILTERS, campaignValue);
   const campaigns = sortRows(
     filters.matches,
@@ -983,7 +1250,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
           {r.days.map((d) => (
             <div
               key={d.label}
-              className="grid items-center gap-2.5 text-[13px]"
+              className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
               style={{ gridTemplateColumns: "110px minmax(0,1fr) 56px 80px" }}
             >
               <span>{d.label}</span>
@@ -1006,6 +1273,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         <div className="flex flex-col gap-2.5">
           <span className="flex flex-col gap-1">
             <span className="text-[15px] font-bold text-ap-ink">What brought readers back</span>
+            {sourceTip.card}
             <span className="text-[13px] text-ap-muted">
               Share of the return visits PostHog saw, by how each one arrived
             </span>
@@ -1020,10 +1288,26 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             r.sources.value.map((s) => (
               <div
                 key={s.source}
-                className="grid items-center gap-2.5 text-[13px]"
+                className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
                 style={{ gridTemplateColumns: "180px minmax(0,1fr) 56px" }}
+                {...sourceTip.bind(() => ({
+                  title: s.source,
+                  sub: "Return visits PostHog saw",
+                  rows: [
+                    {
+                      label: "Share",
+                      value: fmt("pct", s.share, 1),
+                      color: SOURCE_COLOURS[s.source] ?? "#795fc8",
+                      mark: "square",
+                    },
+                    { label: "Return visits", value: fmt("count", s.sessions), strong: true },
+                  ],
+                }))}
               >
-                <span>{s.source}</span>
+                <span>
+                  {s.source}
+                  <span className="sr-only">, {fmt("count", s.sessions)} return visits</span>
+                </span>
                 <Bar
                   pct={s.share / topSource}
                   color={SOURCE_COLOURS[s.source] ?? "#795fc8"}
@@ -1489,7 +1773,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 <span role="cell" className="px-3 py-2">
                   {r.submission ? (
                     <a
-                      href={`/admin/submissions/${r.submission}`}
+                      href={submissionHref(r.submission)}
                       className="font-mono text-xs text-ap-violet"
                     >
                       #{r.submission}

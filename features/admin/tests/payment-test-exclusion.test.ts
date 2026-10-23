@@ -32,6 +32,18 @@ const MUST_NOT_FILTER: Array<[string, string]> = [
     "features/attribution/server/journey.ts",
     "the Slack journey reads is_test to LABEL a test purchase, never to sum revenue",
   ],
+  [
+    "features/unlock-feedback/server/grant.ts",
+    "whether the reader holds a plan (a test purchase opens a report too) and its own free grant",
+  ],
+  [
+    "app/api/cron/initial-unlock-gift/route.ts",
+    "E07's 'paid since?' check: any payment, a staff test one too, means no gift",
+  ],
+  [
+    "features/report/server/initialUnlockGift.ts",
+    "the gift's once-per-report check must find a staff reader's test-flagged gift too",
+  ],
 ];
 
 /** Every file that queries the payment table, found live rather than hardcoded. */

@@ -33,7 +33,7 @@ export interface ServiceHealthSnapshot {
 
 export interface StuckPaymentsSnapshot {
   count: number;
-  // First few IDs to assist debugging — the full list is in /admin.
+  // First few IDs to assist debugging — the full list is in the payment table (AP Explorer).
   sampleIds: number[];
 }
 

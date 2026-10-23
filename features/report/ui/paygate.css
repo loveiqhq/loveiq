@@ -6,9 +6,10 @@
    backdrop, viewport, close button, scroll region — is report.css's.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* The leave offer (features/booking/ui/founderCallDialog.css) draws with the same tokens. */
+/* The EUR 1.99 pre-unlock gate (features/report/ui/gate/initial-unlock-gate.css) draws with the
+ * same tokens. */
 .report-pricing-modal--paygate,
-.report-leave-offer {
+.iug-page {
   --rpg-ink: #17121f;
   --rpg-ink-strong: #161021;
   --rpg-muted: #4b5563;

@@ -21,8 +21,8 @@ import V4UnlockSample from "./V4UnlockSample";
  * The wall sits INSIDE the fold when there is free copy to fold: the paywalled frame draws
  * "Show All" over Typical Beliefs' challenges and nothing after it (1686:10619), so the
  * sample and its pill come after the free copy they close, one call to action at a time.
- * That fold is then where the page meets the chapter's paywall (`has-wall`): the founder-
- * call offer and "paywall reached" watch it, since the wall inside is clipped until opened.
+ * That fold is then where the page meets the chapter's paywall (`has-wall`): "paywall
+ * reached" watches it, since the wall inside is clipped until opened.
  */
 
 interface Props {

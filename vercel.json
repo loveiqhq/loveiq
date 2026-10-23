@@ -11,6 +11,14 @@
       "schedule": "23 * * * *"
     },
     {
+      "path": "/api/cron/unlock-feedback",
+      "schedule": "41 * * * *"
+    },
+    {
+      "path": "/api/cron/initial-unlock-gift",
+      "schedule": "47 * * * *"
+    },
+    {
       "path": "/api/cron/invite-reminders",
       "schedule": "0 10 * * *"
     },
@@ -138,6 +146,12 @@
       "maxDuration": 50
     },
     "app/api/cron/nurture-sequence/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/unlock-feedback/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/initial-unlock-gift/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/invite-reminders/route.ts": {

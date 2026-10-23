@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+import { TOUR_STEP_IDS } from "@features/report/logic/guidedTour";
+
 // The AP readers' rules that only the SQL text holds: a test against a database would need
 // one with the migrations applied, so these read the migration itself.
 const SQL = readFileSync("supabase/migrations/20261014130000_ap_tracking.sql", "utf8");
@@ -92,5 +94,48 @@ describe("AP readers' SQL", () => {
     expect(signatures(ROLLBACK)).toEqual(signatures(SQL));
     expect(signatures(SQL)).toHaveLength(READERS.length);
     expect(ROLLBACK).not.toMatch(/is_tablet|email_message_event|intro_skip_4/);
+  });
+});
+
+describe("the guided tour's SQL (ap_report_tour)", () => {
+  const TOUR = readFileSync("supabase/migrations/20261018210100_ap_report_tour.sql", "utf8");
+  const TOUR_DOWN = readFileSync(
+    "supabase/rollbacks/20261018210100_ap_report_tour_down.sql",
+    "utf8"
+  );
+
+  it("knows the tour's own stops, and places a run only when every stop it carries is one", () => {
+    const known = /coalesce\(x->>'id', ''\) NOT IN \(([^)]*)\)/.exec(TOUR)?.[1] ?? "";
+    expect(known.split(",").map((s) => s.trim().replace(/'/g, ""))).toEqual([...TOUR_STEP_IDS]);
+  });
+
+  it("casts a stop's time and Back presses only once they are whole numbers", () => {
+    for (const key of ["ms", "back"]) {
+      const field = esc(`(x.value->>'${key}')`);
+      const casts = count(TOUR, new RegExp(`${field}::`));
+      const guarded = count(
+        TOUR,
+        new RegExp(`CASE WHEN x\\.value->>'${key}' ~ '\\^\\[0-9\\]\\{1,\\d+\\}\\$' THEN ${field}::`)
+      );
+      expect(casts).toBeGreaterThan(0);
+      expect(guarded).toBe(casts);
+    }
+  });
+
+  it("reads first runs' starts and ends alone, staff out, for the service role only", () => {
+    expect(TOUR).toMatch(
+      /a\.event_type IN \('tour_started', 'tour_completed', 'tour_skipped', 'tour_left'\)\s+AND a\.metadata->>'trigger' = 'auto'/
+    );
+    expect(TOUR).toMatch(/NOT EXISTS \(SELECT 1 FROM staff WHERE staff\.id = s\.user_id\)/);
+    const head = TOUR.slice(TOUR.indexOf("CREATE OR REPLACE FUNCTION"), TOUR.indexOf("$function$"));
+    expect(head).toMatch(/SECURITY DEFINER/);
+    expect(head).toMatch(/SET search_path TO 'public', 'pg_temp'/);
+    expect(TOUR).toMatch(
+      /REVOKE ALL ON FUNCTION public\.ap_report_tour\(date, date\) FROM PUBLIC, anon, authenticated;/
+    );
+    expect(TOUR).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.ap_report_tour\(date, date\) TO service_role;/
+    );
+    expect(TOUR_DOWN).toMatch(/DROP FUNCTION IF EXISTS public\.ap_report_tour\(date, date\);/);
   });
 });

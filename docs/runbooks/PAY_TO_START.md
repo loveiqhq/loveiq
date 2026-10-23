@@ -47,9 +47,13 @@ test is read per price.
 - **What to check after a test payment**: the `prepaid_report_access` row (succeeded, then
   `consumed_submission_id`, then `payment_id`), the `payment` row (`metadata.journey`, and
   `metadata.plan`: `full_report` or `initial`), the confirmation email and its link, the
-  wizard (four slides; five, with the report map, for the initial report), and the report:
-  fully unlocked, or for the initial report the Core Archetype card and Summary open and the
-  pay screen at EUR 19.99, "EUR 10.00 credit applied".
+  wizard (four slides; five, with the report map, for the initial report), the email after
+  the survey ("Your full report is ready", or E06 "Your Core Archetype is unlocked" for the
+  initial report), and the report: fully unlocked, or for the initial report the Core
+  Archetype card and Summary open. Its pay screen shows the full report at EUR 29.99 for a
+  team or EUR 0 test purchase: the EUR 10 credit comes only with a real, non-test EUR 1.99
+  payment (then EUR 19.99, "EUR 10.00 credit applied"), so check that one in Stripe's test
+  mode on staging with a non-team address.
 
 ## A buyer who paid but cannot get in
 

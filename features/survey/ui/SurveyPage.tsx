@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   type FC,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -1313,7 +1314,10 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
   const isPopStateNav = useRef(false);
   /** The step on screen, for the popstate handler, which is bound once. */
   const stepRef = useRef(step);
-  useEffect(() => {
+  // As the step is committed, not in a later effect: a slide's own Back moves the step from
+  // a timer, and the browser's Back in between read the step before it (intro_back_2 again,
+  // so intro_back_1 was never recorded).
+  useLayoutEffect(() => {
     stepRef.current = step;
   }, [step]);
 
@@ -1499,6 +1503,7 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
         onExit={() => handleReturn()}
         onComplete={(token) => handleReturn(true, token)}
         onStartOver={handleStartOver}
+        payToStart={journey !== null}
       />
     );
   }

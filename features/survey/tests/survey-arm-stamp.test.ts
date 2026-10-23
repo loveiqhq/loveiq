@@ -186,6 +186,14 @@ describe("POST /api/survey — the landing arm on the submission", () => {
     expect(trackerOnPayload()).toEqual({ utm_source: "google", ...C13, ...EMAIL });
   });
 
+  it("names no archetype in its reply: the EUR 1.99 gate sells it, and nothing reads it", async () => {
+    const res = await POST(makeRequest(validBody()));
+    const json = await res.json();
+    expect(json).toMatchObject({ success: true, submissionId: 123 });
+    expect(json).not.toHaveProperty("primaryArchetype");
+    expect(json).not.toHaveProperty("v5PrimaryArchetype");
+  });
+
   it("leaves no arm at all when there is no cookie and nothing claimed", async () => {
     // "No arm" is a real, expected state — crawlers, direct hits, consent
     // refusals — and inventing one would be worse than recording none.

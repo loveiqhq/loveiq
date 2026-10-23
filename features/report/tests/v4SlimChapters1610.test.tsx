@@ -8,7 +8,7 @@ import V4Passage from "@features/report/ui/v3/V4Passage";
 import V4Section from "@features/report/ui/v3/V4Section";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import V4UnlockSample from "@features/report/ui/v3/V4UnlockSample";
-import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/leaveIntent";
+import { FIRST_PAYWALL_SELECTOR } from "@features/report/logic/paywallSelector";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import {
   ACCELERATORS_GENERIC_INTRO_BLOCKS,

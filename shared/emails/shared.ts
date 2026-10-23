@@ -115,6 +115,11 @@ export interface EmailShellParams {
    * templates whose design omits the in-body logo (e.g. the 78h call-invite).
    */
   hideBrandHeader?: boolean;
+  /**
+   * Rows that replace the standard footer, for a design with its own (the unlock-feedback
+   * email). They must carry their own unsubscribe link: `unsubscribeUrl` is then unused.
+   */
+  footerHtml?: string;
 }
 
 export function wrapEmailShell({
@@ -124,6 +129,7 @@ export function wrapEmailShell({
   title,
   unsubscribeUrl,
   hideBrandHeader = false,
+  footerHtml,
 }: EmailShellParams): string {
   const preview = previewText
     ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">${escapeHtml(previewText)}</div>`
@@ -147,7 +153,7 @@ ${preview}
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#ffffff; border-radius:8px; overflow:hidden;">
         ${hideBrandHeader ? "" : renderBrandHeader(siteUrl)}
         ${bodyHtml}
-        ${renderBrandFooter(unsubscribeUrl)}
+        ${footerHtml ?? renderBrandFooter(unsubscribeUrl)}
       </table>
     </td>
   </tr>

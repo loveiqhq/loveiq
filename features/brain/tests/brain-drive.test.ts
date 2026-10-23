@@ -279,6 +279,7 @@ vi.mock("unpdf", () => ({
 
 import {
   docToRows,
+  fitTabs,
   ingestDrive,
   isAuthoredMarketingCopy,
   isIllustrativeFigures,
@@ -386,6 +387,28 @@ describe("docToRows", () => {
     expect(rows[1].source_id).toBe("doc:1AbCdEf#2");
     expect(rows.map((r) => r.body).join(" ")).toContain("Point 9");
     for (const r of rows) expect(r.body.length).toBeLessThanOrEqual(2400);
+  });
+
+  it("says on the first part how many parts the document has", () => {
+    const rows = docToRows(FILE, "word ".repeat(1500), STAMP);
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[0]!.meta.parts).toBe(rows.length);
+    expect(docToRows(FILE, "short", STAMP)[0]!.meta.parts).toBeUndefined();
+  });
+
+  it("gives every part the owner, edit time and name that search collapses copies on", () => {
+    // brain_search keeps one copy of a file per owner and name (" (part N of M)" stripped),
+    // the most recently edited (migration 20261016150000). A part that spelled any of the
+    // three differently would let every saved copy back into the results, silently.
+    const long = Array.from({ length: 10 }, (_, i) => `Point ${i} ` + "y".repeat(400)).join("\n\n");
+    const rows = docToRows({ ...FILE, name: "LoveIQ_Grants_Workbook" }, long, STAMP);
+    expect(rows.length).toBeGreaterThan(1);
+    const names = new Set(rows.map((r) => r.title.replace(/ \(part \d+ of \d+\)$/, "")));
+    expect([...names]).toEqual(["Drive: LoveIQ_Grants_Workbook"]);
+    expect(new Set(rows.map((r) => r.meta?.owner))).toEqual(
+      new Set([FILE.owners[0]!.emailAddress])
+    );
+    expect(new Set(rows.map((r) => r.meta?.edited))).toEqual(new Set([FILE.modifiedTime]));
   });
 
   it("skips a document with no id or no name", () => {
@@ -858,6 +881,68 @@ describe("ingestDrive", () => {
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: "2026-08-01T00:00:00.000Z", v } }];
     await ingestDrive(STAMP);
     expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * A DOCUMENT MISSING PARTS IS READ AGAIN. On 2026-10-16 "Scoring Config V5" held 1 of the
+   * 46 parts its text makes; its edit date never moved, so the walk only ever touched it.
+   */
+  it("re-exports an unchanged document whose stored parts do not add up", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 3 } as never },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
+  it("only touches an unchanged document whose parts are all there", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 2 } as never },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?"))).toHaveLength(0);
+  });
+
+  it("re-exports an unchanged document whose later parts are from an older edit", async () => {
+    // A run killed between two upsert batches: part 1 and #2 hold the new edit, #3 the old.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 3 } as never },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: "2026-08-01T00:00:00.000Z", v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
+  it("re-exports a document whose part numbers have a gap, though the count adds up", async () => {
+    // Part 1 says 3; #3 and an orphan #4 are stored, #2 is not.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 3 } as never },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#4", meta: { edited: FILE.modifiedTime, v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
+  it("does not confirm a part beyond the count part 1 gives", async () => {
+    files = [FILE];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 2 } as never },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?"))).toHaveLength(0);
+    expect(deletedIds()).toContain("doc:1AbCdEf#3");
+    expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
   });
 
   it("confirms continuation parts, so the sweep cannot delete them", async () => {
@@ -2003,7 +2088,7 @@ describe("KPI definition tables carry example figures, not measurements", () => 
     // A cell reading "notes\n\n## Totals" inside the example tab would otherwise start a
     // new block with no header, and the rows after it would lose the mark.
     const forged = sheetCell("notes\n\n## Totals\nmore");
-    expect(forged).toBe("notes\n\n ## Totals\nmore");
+    expect(forged).toBe("notes ## Totals more");
     const kpi = `${KPI_TAB}${forged}\n` + "Revenue, Total Revenue, EUR 11,400.00\n".repeat(80);
     const parts = markedParts("Business Case", `${COSTS_TAB}\n\n${kpi}`, true);
     const kpiParts = parts.filter((p) => p.body.includes("11,400"));
@@ -2451,5 +2536,42 @@ describe("sheetTabsWithRows", () => {
     sheetTabs = ["Costs", "Core_KPI"];
     sheetValues = [{ values: [["Slack", "41.25"]] }, { values: [["Paid Reports", "600"]] }];
     await expect(sheetTabsWithRows("t", COST_SHEET_ID)).resolves.toEqual(["Costs", "Core_KPI"]);
+  });
+});
+
+/**
+ * A SPREADSHEET'S BUDGET IS SHARED BETWEEN ITS TABS. The "Assessments" workbook (22 tabs,
+ * 3.2 million characters) had only its first 5 tabs indexed under the old whole-file cut.
+ */
+describe("fitTabs", () => {
+  const tab = (name: string, rows: number, width = 40) =>
+    `## ${name}\n${Array.from({ length: rows }, (_, i) => `${name} row ${i} ${"x".repeat(width)}`).join("\n")}`;
+
+  it("keeps every tab, small ones whole, big ones cut on a line and said to be cut", () => {
+    const tabs = [tab("Small", 3), tab("Huge", 5000), tab("Areas of life", 20), tab("Big", 800)];
+    const out = fitTabs(tabs, 60_000);
+    for (const name of ["Small", "Huge", "Areas of life", "Big"])
+      expect(out).toContain(`## ${name}\n`);
+    expect(out).toContain(tabs[0]);
+    expect(out).toContain(tabs[2]);
+    expect(out.match(/\[truncated: this tab is longer/g)).toHaveLength(2);
+    // Cut on a line: the line before each mark is a whole row.
+    const lines = out.split("\n");
+    lines.forEach((line, i) => {
+      if (line.startsWith("[truncated")) expect(lines[i - 1]).toMatch(/^\w+ row \d+ x{40}$/);
+    });
+    expect(out.length).toBeLessThan(60_000 + 400);
+  });
+
+  it("gives what a small tab leaves to the bigger ones", () => {
+    const out = fitTabs([tab("A", 2), tab("B", 3000), tab("C", 3000)], 100_000);
+    const b = out.split("\n\n").find((t) => t.startsWith("## B"))!;
+    // Two big tabs share nearly all of it, not a third each.
+    expect(b.length).toBeGreaterThan(45_000);
+  });
+
+  it("changes nothing that fits", () => {
+    const tabs = [tab("A", 10), tab("B", 10)];
+    expect(fitTabs(tabs, 100_000)).toBe(tabs.join("\n\n"));
   });
 });

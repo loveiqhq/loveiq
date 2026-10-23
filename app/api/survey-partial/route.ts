@@ -117,7 +117,8 @@ export async function POST(request: Request) {
         prepaidToken ? PAY_TO_START_JOURNEY : null
       ),
       EMAIL_QUESTION_ARM_KEY,
-      assignEmailQuestionArm(parsed.data.sessionId)
+      // As the submit: a buyer who paid before the survey is in no survey test.
+      prepaidToken ? null : assignEmailQuestionArm(parsed.data.sessionId)
     ),
     client_ip: ip,
     saved_at: new Date().toISOString(),

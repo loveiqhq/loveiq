@@ -2,11 +2,11 @@
  * Charts in answers: one or two of the site's daily numbers drawn as a line, so a trend
  * can be seen rather than read ("I need to see it visually", Marcus).
  *
- * THE NUMBERS are the ones `explain_change` reads (jumps.ts: our own daily rollup and the
- * brain's GA4 day records), plus revenue from the same rollup, which takes it from the
- * payment ledger net of refunds with test payments left out, and Google Ads spend through
- * `adCostByDay`, the reader get_business_numbers and the digest use: a day inside the window
- * the ad data covers is its spend or zero, and a day outside it is a gap, never a zero.
+ * THE NUMBERS are the ones `explain_change` reads (jumps.ts: the AP-Analytics dashboard's
+ * visitors, survey starts, finished surveys and revenue by Berlin day, the daily rollup's
+ * reports opened and paid by UTC day, and the brain's GA4 day records), and Google Ads spend
+ * through `adCostByDay`, the reader get_business_numbers and the digest use: a day inside the
+ * window the ad data covers is its spend or zero, and a day outside it is a gap, never a zero.
  * Nothing here computes a number of its own.
  *
  * THE PICTURE is the Slack digest's own two-line renderer, reached through the same kind of
@@ -14,9 +14,21 @@
  * signature, so it opens in any browser without a login and pastes into a doc or a deck,
  * and it is exactly the picture the tool attaches.
  */
+import { apUnreadable } from "@features/brain/server/ap-numbers";
 import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
-import { BASELINE_DAYS, METRICS, loadSeries, type DaySeries } from "@features/brain/server/jumps";
+import {
+  BASELINE_DAYS,
+  GA4_UNREAD,
+  METRICS,
+  ga4Down,
+  loadSeries,
+  partialDay,
+  utcNote,
+  utcOpen,
+  type DaySeries,
+} from "@features/brain/server/jumps";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { reportingDay } from "@shared/time/reporting-day";
 import { signImagePayload } from "@shared/url/signed-image-url";
 
 /** A day as jumps.ts loads it, plus Google Ads spend when a chart asks for it. */
@@ -38,6 +50,8 @@ export interface ChartMetric {
   };
   /** Read from GA4, which misses visitors who decline cookies. */
   ga4?: boolean;
+  /** The rollup's own figure, by UTC day: blank while that day runs (jumps.ts utcOpen). */
+  utc?: boolean;
 }
 
 /** Legend names in the reader's words, like the digest's titles: no arrows, no "CVR". */
@@ -54,7 +68,10 @@ const SHORT: Record<string, string> = {
   engaged_rate: "Sessions that engage",
   paid_rate: "Openers who pay",
 };
-const FROM_GA4 = new Set(["sessions", "engaged_rate"]);
+
+/** Said where Google Ads spend would be drawn and its read failed. */
+export const AD_UNREAD =
+  "Google Ads spend could not be read just now, so it is left out: this is an outage, not zero.";
 
 export const CHART_METRICS: ChartMetric[] = [
   ...METRICS.map((m): ChartMetric => ({
@@ -64,11 +81,12 @@ export const CHART_METRICS: ChartMetric[] = [
     unit: m.rate ? "rate" : "count",
     of: m.rate ? m.rate.num : (m.count ?? (() => null)),
     rate: m.rate && { den: m.rate.den, minDen: m.rate.minDen, denLabel: m.rate.denLabel },
-    ga4: FROM_GA4.has(m.id),
+    ga4: m.ga4,
+    utc: m.utc,
   })),
   {
     id: "revenue",
-    label: "Revenue in EUR, net of refunds",
+    label: "Revenue in EUR, by the day paid",
     short: "Revenue",
     unit: "money",
     of: (d) => (d.rollup ? Number(d.rollup.revenue ?? 0) : null),
@@ -152,7 +170,8 @@ function windowFigure(m: ChartMetric, pts: Point[]): { brief: string; full: stri
   };
 }
 
-function listDays(m: ChartMetric, pts: Point[]): string {
+function listDays(m: ChartMetric, pts: Point[], lost: boolean): string {
+  if (lost) return `- ${m.short}: left out, as it could not be read just now`;
   const one = (p: Point) => {
     const at = shortDay(p.day);
     if (!m.rate) {
@@ -209,7 +228,9 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       `\`days\` is a whole number from ${MIN_DAYS} to ${MAX_DAYS}, not "${String(req.days)}".`
     );
   }
-  const today = isoDay(now);
+  // The dashboard's (Berlin) day: in UTC, from midnight to 02:00 the last whole day read as
+  // partial and today's date as one that had not happened yet.
+  const today = reportingDay(new Date(now));
   if (req.until !== undefined && req.until !== null && typeof req.until !== "string") {
     return refuse(`\`until\` must be a day like 2026-09-17, not ${JSON.stringify(req.until)}.`);
   }
@@ -226,6 +247,19 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     loadSeries(until, Math.max(0, days - BASELINE_DAYS - 1)),
     wantsAds ? adCostByDay().catch(() => null) : null,
   ]);
+  if (!loaded) return refuse(apUnreadable("a flat line"));
+  /**
+   * GOOGLE ANALYTICS AND GOOGLE ADS SPEND ARE OPTIONAL. A figure whose own read failed is left
+   * out and said so, never drawn as a day with no record, and never blocking the dashboard's
+   * own figures beside it; a chart of nothing else gives that outage. No ad window at all is a
+   * failed read (adCostByDay swallows its errors), as on the dashboard.
+   */
+  const adDown = wantsAds && (!ad || ad.from === null || ad.to === null);
+  const gaDown = ga4Down(loaded);
+  const why = (m: ChartMetric) =>
+    m.id === "ad_spend" && adDown ? AD_UNREAD : m.ga4 && gaDown ? GA4_UNREAD : "";
+  if (metrics.every((m) => why(m))) return refuse([...new Set(metrics.map(why))].join(" "));
+  const none = (m: ChartMetric) => (why(m) ? "could not be read" : "nothing recorded");
   const series: ChartDay[] = loaded
     .slice(-days)
     .map((d) =>
@@ -241,12 +275,19 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const title = b ? `${a.short} and ${lowerFirst(b.short)}` : a.label;
   const windowLabel = `${days} days to ${longDay(until)}`;
   const headline = b
-    ? `Over the ${days} days: ${figA?.brief ?? "nothing recorded"} · ${figB?.brief ?? "nothing recorded"}`
+    ? `Over the ${days} days: ${figA?.brief ?? none(a)} · ${figB?.brief ?? none(b)}`
     : figA
       ? `Over the ${days} days: ${figA.full}`
       : "Nothing recorded on these days";
+  // Reports opened and paid are blank on a day whose UTC day runs on: said as that, not a gap.
+  const at = new Date(now);
+  const open = metrics.some((m) => m.utc)
+    ? series.filter((d) => utcOpen(d.day, at)).map((d) => d.day)
+    : [];
   // Only a chart that has a gap explains one: our own counts cover every day.
-  const hasGap = [first, second ?? []].some((pts) => pts.some((p) => p.value === null));
+  const gapIn = (m: ChartMetric, pts: Point[]) =>
+    !why(m) && pts.some((p) => p.value === null && !open.includes(p.day));
+  const hasGap = gapIn(a, first) || (!!b && !!second && gapIn(b, second));
   const gap = !hasGap
     ? ""
     : a.rate
@@ -254,10 +295,12 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
         ? "a gap is a day with too few people to read a share"
         : `a gap is a day with fewer than ${a.rate.minDen} ${a.rate.denLabel}`
       : "a gap is a day with no record";
-  const ga4 = metrics.some((m) => m.ga4);
+  const ga4 = metrics.some((m) => m.ga4 && !why(m));
   const footnote = [
-    "daily, UTC",
+    "daily",
     gap,
+    open.length ? "a day not over yet in UTC is left blank" : "",
+    ...metrics.filter((m) => why(m)).map((m) => `${lowerFirst(m.short)} could not be read`),
     a.unit === "money" ? "amounts in EUR" : "",
     ga4 ? "GA4 misses visitors who decline cookies" : "",
   ]
@@ -279,6 +322,9 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     headline,
     footnote,
     emptyLabel: "Nothing recorded on these days.",
+    // A series whose read failed is never called "no data yet" in the picture's legend.
+    ...(why(a) ? { missingFirst: "could not be read" } : {}),
+    ...(b && why(b) ? { missingLast: "could not be read" } : {}),
   });
   const u = new URL("/api/admin/digest-image/metric-trend", base);
   u.searchParams.set("d", d);
@@ -286,18 +332,20 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const url = u.toString();
 
   const notes = [
-    until === today ? "Today is still going, so its numbers are partial." : "",
-    wantsAds && !ad ? "Google Ads spend could not be read just now, so it is left blank." : "",
+    "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
+      "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, " +
+      "by UTC day.",
+    partialDay(until, false, at),
+    utcNote(open),
+    ...new Set(metrics.map(why)),
     ga4
       ? "GA4 misses visitors who decline cookies, so it reads lower than our own visitor count."
       : "",
   ].filter(Boolean);
   const text = [
-    `${title}, ${windowLabel} (UTC days).`,
+    `${title}, ${windowLabel}.`,
     b
-      ? [a, b]
-          .map((m, i) => `${m.short}: ${(i === 0 ? figA : figB)?.full ?? "nothing recorded"}.`)
-          .join("\n")
+      ? [a, b].map((m, i) => `${m.short}: ${(i === 0 ? figA : figB)?.full ?? none(m)}.`).join("\n")
       : `${headline}.`,
     `Picture: ${url}`,
     "The link opens in any browser without a login, so anyone you share it with can see this " +
@@ -305,8 +353,8 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     ...notes,
     "",
     "By day, oldest first:",
-    listDays(a, first),
-    ...(b && second ? [listDays(b, second)] : []),
+    listDays(a, first, !!why(a)),
+    ...(b && second ? [listDays(b, second, !!why(b))] : []),
   ].join("\n");
   return { ok: true, url, text };
 }

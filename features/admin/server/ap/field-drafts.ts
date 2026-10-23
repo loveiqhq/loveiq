@@ -186,7 +186,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       plan: "full_report or all_reports; essentials and core are retired plans.",
       currency: "Always EUR.",
       experiment_group:
-        "The price list arm: A3 or B3 (Pricing 3.0, from 6 Oct 2026); A or B before.",
+        "The price list the quote is on now: A3 or B3 (Pricing 3.0, from 6 Oct 2026); A or B before. A re-sync moves unpaid quotes to the new lists, so the list a quote was first shown is in report_price_quote_arm_history.",
       base_price: "The list price before multipliers.",
       country_tier: "tier_1 to tier_5, or default.",
       country_multiplier: "Multiplier for the country tier.",

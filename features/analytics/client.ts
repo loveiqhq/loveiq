@@ -3,14 +3,11 @@ import posthog, { type CaptureOptions } from "posthog-js";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import type {
-  LeaveDismissSource,
-  LeaveOffer,
-  LeaveTrigger,
-} from "@features/report/logic/leaveIntent";
-import type {
+  TourAudience,
   TourReplaySource,
   TourSkipSource,
   TourStepId,
+  TourStopSummary,
   TourTrigger,
 } from "@features/report/logic/guidedTour";
 import { getCsrfToken } from "@shared/http/csrf-client";
@@ -110,15 +107,15 @@ const PERSISTED_EVENTS = new Set([
   // Per-chapter reading and the wizard's Skip Intro (14.10)
   "report_chapter_stats",
   "wizard_skipped",
-  // The report's leave offer: the full report free for a call with the founders
-  "leave_offer_shown",
-  "leave_offer_clicked",
-  "leave_offer_dismissed",
   // The report's guided tour: a first run's start and how it ended, and each replay
   "tour_started",
   "tour_completed",
   "tour_skipped",
+  "tour_left",
   "tour_replayed",
+  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, and its two buttons
+  "initial_gate_viewed",
+  "initial_gate_cta_click",
 ]);
 
 /**
@@ -805,7 +802,8 @@ export const trackPriceShown = (params: PriceShownParams) => {
  * ecommerce shape goes to GA4/PostHog only.
  */
 export const trackBeginCheckout = (
-  plan: "essentials" | "full_report" | "core" | "all_reports",
+  // `initial`: the EUR 1.99 Core Archetype from the pre-unlock gate.
+  plan: "essentials" | "full_report" | "core" | "all_reports" | "initial",
   price: number | null,
   currency: string | null
 ) => {
@@ -866,8 +864,29 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
  * Idempotency: callers gate on the same `transaction_id` localStorage key as
  * `trackReportPurchase`, so a refresh of the return page doesn't double-write.
  */
+/**
+ * The EUR 1.99 pre-unlock gate (features/report/ui/gate), drawn in place of the report for a
+ * reader it stops. Persisted, so the funnel has the gate's "paywall reached" from the page's
+ * side; the server stamps its own (personal_report.initial_gate_seen_at).
+ */
+export const trackInitialGateViewed = (params: { submission_id: number | null }) => {
+  track("initial_gate_viewed", params);
+  persistAnalyticsEvent("initial_gate_viewed", params);
+};
+
+/** One of the gate's two buttons: the price card's, or the sticky bar's. */
+export const trackInitialGateCta = (params: { place: "card" | "sticky" }) => {
+  track("initial_gate_cta_click", params);
+  persistAnalyticsEvent("initial_gate_cta_click", params);
+};
+
+/** The gate's back arrow, back to the survey's last screen. GA4/PostHog only. */
+export const trackInitialGateBack = () => {
+  track("initial_gate_back", {});
+};
+
 export const trackPaywallUnlocked = (
-  plan: "essentials" | "full_report" | "core" | "all_reports",
+  plan: "essentials" | "full_report" | "core" | "all_reports" | "initial",
   priceEur: number,
   currency: string,
   transactionId: string
@@ -1081,71 +1100,30 @@ export const trackScrollPaywallDismissed = (params: {
 };
 
 /**
- * The report's leave offer (features/report/logic/leaveIntent.ts). Stored against the
- * submission, so the admin timeline shows a reader opening the booking page, which is
- * how the founders match a booking to a report before granting its coupon. `popup_arm`
- * lets the pay pop-up test's readout set aside the readers who saw this offer.
- */
-export const trackLeaveOfferShown = (params: {
-  variant: LeaveOffer;
-  trigger: LeaveTrigger;
-  popup_arm: string | null;
-  armed_ms: number;
-}) => {
-  const payload = {
-    variant: params.variant,
-    trigger: params.trigger,
-    ...(params.popup_arm ? { popup_arm: params.popup_arm } : {}),
-    armed_ms: Math.max(0, Math.round(params.armed_ms)),
-  };
-  track("leave_offer_shown", payload);
-  persistAnalyticsEvent("leave_offer_shown", payload);
-};
-
-export const trackLeaveOfferClicked = (params: {
-  variant: LeaveOffer;
-  trigger: LeaveTrigger;
-  view_duration_ms: number;
-}) => {
-  const payload = {
-    variant: params.variant,
-    trigger: params.trigger,
-    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
-  };
-  track("leave_offer_clicked", payload);
-  persistAnalyticsEvent("leave_offer_clicked", payload, payload.view_duration_ms);
-};
-
-export const trackLeaveOfferDismissed = (params: {
-  variant: LeaveOffer;
-  trigger: LeaveTrigger;
-  source: LeaveDismissSource;
-  view_duration_ms: number;
-}) => {
-  const payload = {
-    variant: params.variant,
-    trigger: params.trigger,
-    source: params.source,
-    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
-  };
-  track("leave_offer_dismissed", payload);
-  persistAnalyticsEvent("leave_offer_dismissed", payload, payload.view_duration_ms);
-};
-
-/**
  * The report's guided tour (features/report/logic/guidedTour.ts). Figma's spec card
  * (1755:1276) names the events: started, each stop viewed, back, skipped, completed and
- * replayed. Every one goes to PostHog. Only a FIRST run's start and outcome are stored
- * against the submission, with each replay: the route stores at most 20 events a minute
- * per submission, shared with `begin_checkout`, and a reader clicking through five stops
- * would spend a quarter of that on step views. A first run's `tour_skipped` already says
- * at which stop it stopped; PostHog keeps every step of every run.
+ * replayed; `tour_left` is the reader leaving the page with the tour still up. Every one
+ * goes to PostHog. Only a FIRST run's start and end are stored against the submission,
+ * with each replay: the route stores at most 20 events a minute per submission, shared
+ * with `begin_checkout`, and a reader clicking through five stops would spend a quarter of
+ * that on step views. So the stored end carries the run itself instead: whose tour it was
+ * (`audience`) and, per stop reached, its time and its Back presses (`stops`), which is
+ * what the AP Report page's tour table is counted from. `stops` goes to PostHog and our
+ * own table only: GA4 takes flat parameters.
  */
-export const trackTourStarted = (params: { trigger: TourTrigger; steps: number }) => {
-  const payload = { trigger: params.trigger, steps: params.steps };
+export const trackTourStarted = (params: {
+  trigger: TourTrigger;
+  audience: TourAudience;
+  steps: number;
+}) => {
+  const payload = { trigger: params.trigger, audience: params.audience, steps: params.steps };
   track("tour_started", payload);
   if (params.trigger === "auto") persistAnalyticsEvent("tour_started", payload);
 };
+
+/** A run's stops as they are sent: whole milliseconds, never below zero. */
+const tourStops = (stops: TourStopSummary[]) =>
+  stops.map((s) => ({ id: s.id, ms: Math.max(0, Math.round(s.ms)), back: s.back }));
 
 export const trackTourStepViewed = (params: {
   trigger: TourTrigger;
@@ -1167,39 +1145,75 @@ export const trackTourBack = (params: { trigger: TourTrigger; to: number; steps:
 
 export const trackTourSkipped = (params: {
   trigger: TourTrigger;
+  audience: TourAudience;
   at: number;
   id: TourStepId;
   steps: number;
   source: TourSkipSource;
   duration_ms: number;
+  stops: TourStopSummary[];
 }) => {
   const payload = {
     trigger: params.trigger,
+    audience: params.audience,
     at: params.at,
     id: params.id,
     steps: params.steps,
     source: params.source,
     duration_ms: Math.max(0, Math.round(params.duration_ms)),
   };
-  track("tour_skipped", payload);
+  const stops = tourStops(params.stops);
+  track("tour_skipped", payload, { stops });
   if (params.trigger === "auto") {
-    persistAnalyticsEvent("tour_skipped", payload, payload.duration_ms);
+    persistAnalyticsEvent("tour_skipped", { ...payload, stops }, payload.duration_ms);
   }
 };
 
 export const trackTourCompleted = (params: {
   trigger: TourTrigger;
+  audience: TourAudience;
   steps: number;
   duration_ms: number;
+  stops: TourStopSummary[];
 }) => {
   const payload = {
     trigger: params.trigger,
+    audience: params.audience,
     steps: params.steps,
     duration_ms: Math.max(0, Math.round(params.duration_ms)),
   };
-  track("tour_completed", payload);
+  const stops = tourStops(params.stops);
+  track("tour_completed", payload, { stops });
   if (params.trigger === "auto") {
-    persistAnalyticsEvent("tour_completed", payload, payload.duration_ms);
+    persistAnalyticsEvent("tour_completed", { ...payload, stops }, payload.duration_ms);
+  }
+};
+
+/**
+ * The page went for good with the tour still up, at stop `at` (V4GuidedTour says when). A
+ * beacon both ways: PostHog's queue and an ordinary request may not outlive the page.
+ */
+export const trackTourLeft = (params: {
+  trigger: TourTrigger;
+  audience: TourAudience;
+  at: number;
+  id: TourStepId;
+  steps: number;
+  duration_ms: number;
+  stops: TourStopSummary[];
+}) => {
+  const payload = {
+    trigger: params.trigger,
+    audience: params.audience,
+    at: params.at,
+    id: params.id,
+    steps: params.steps,
+    duration_ms: Math.max(0, Math.round(params.duration_ms)),
+  };
+  const stops = tourStops(params.stops);
+  track("tour_left", payload, { stops }, { transport: "sendBeacon" });
+  if (params.trigger === "auto") {
+    persistAnalyticsEvent("tour_left", { ...payload, stops }, payload.duration_ms);
   }
 };
 

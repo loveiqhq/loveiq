@@ -4,9 +4,9 @@
  * The tour scrolls the page by itself, from the top down to Typical Beliefs and on to the
  * first locked chapter, while the reader only watches. Everything that reads scrolling as
  * reading would count that trip: the chapters' reach and time, `cta_seen`, scroll depth and
- * the "paywall reached" ping. Worse, the plans pop-up and the leave offer each fire once a
- * visit, when the first paywall comes into view, so a tour that set them off would spend
- * them before the reader ever got there on their own. Each of those asks this flag and
+ * the "paywall reached" ping. Worse, the plans pop-up fires once a visit, when its
+ * chapter comes into view, so a tour that set it off would spend it before the reader
+ * ever got there on their own. Each of those asks this flag and
  * stands down while it is set, without disconnecting, so it still fires when the reader
  * really arrives.
  *
