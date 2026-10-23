@@ -456,6 +456,10 @@ describe("buildPayToStart", () => {
       ["2026-10-12", "2026-10-18", "12 Oct"],
       ["2026-10-19", "2026-10-22", "19 Oct"],
     ]);
+    // A range starting mid-week names its first week by its first day, not the Monday before.
+    expect(buildPayToStart(input({ from: "2026-10-01", to: "2026-10-06" })).weeks[0]).toMatchObject(
+      { from: "2026-10-01", to: "2026-10-04", label: "1 Oct" }
+    );
     const [w1, w2] = p.weeks;
     expect(w1!.funnels.after.cac).toBeCloseTo(50);
     expect(w1!.funnels.after.cvr).toBeCloseTo(1 / 500);
@@ -524,8 +528,9 @@ describe("measuresOf", () => {
       finishRate: null,
       clickCvr: null,
     });
-    // No ad spend: the revenue is all return.
-    expect(m.net).toBe(29.99);
+    // Nor a return on ad spend: no ad ran.
+    expect(m.net).toBeNull();
+    expect(measuresOf(10, 4, { visits: 4, finished: 1, paid: 1, revenue: 1.99 }).net).toBe(-8.01);
     expect(m.rpf).toBeCloseTo(14.995);
   });
 });

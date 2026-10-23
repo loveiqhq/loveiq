@@ -34,6 +34,7 @@ import { isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { isInitialUnlockGateEnabled } from "@features/report/server/initialGateState";
 
 import { fetchAllRows } from "../supabase";
+import { shortDate } from "./days";
 import { FULL_PLANS, classifySource, preBuysOf, type Facts, type SubFact } from "./facts";
 import { buckets, windowOf, type ApFilters } from "./filters";
 
@@ -162,7 +163,7 @@ export interface PtsWeek {
   /** Monday-to-Sunday, cut at the range's ends. */
   from: string;
   to: string;
-  /** The week's Monday ("20 Oct"). */
+  /** Its first day in the range ("20 Oct"): the Monday, unless the range starts later. */
   label: string;
   /** All traffic, by the week each customer came in. */
   funnels: Record<FunnelKey, { cac: number | null; cvr: number | null; roas: number | null }>;
@@ -203,8 +204,9 @@ const dayOf = (iso: string) => reportingDay(new Date(iso));
 const euros = (priceCents: number) => `€${(priceCents / 100).toFixed(2)}`;
 
 /**
- * The measures of one view. A cost per customer or survey, and ROAS, need ad spend: with none
- * they are blank, not EUR 0 (a funnel no ad sent anyone to did not get customers for free).
+ * The measures of one view. A cost per customer or survey, ROAS and the return on ad spend need
+ * ad spend: with none they are blank, not EUR 0 (a funnel no ad sent anyone to did not get its
+ * customers for free, nor earn its ads back).
  */
 export function measuresOf(spend: number | null, clicks: number | null, v: PtsView): PtsMeasures {
   const paidFor = spend !== null && spend > 0 ? spend : null;
@@ -218,7 +220,7 @@ export function measuresOf(spend: number | null, clicks: number | null, v: PtsVi
     cac: ratio(paidFor, v.paid),
     cpf: ratio(paidFor, v.finished),
     roas: ratio(v.revenue, paidFor),
-    net: spend === null ? null : cents(v.revenue - spend),
+    net: paidFor === null ? null : cents(v.revenue - paidFor),
   };
 }
 
@@ -572,7 +574,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     return {
       from: b.from,
       to: b.to,
-      label: b.label,
+      label: shortDate(b.from),
       funnels: {
         after: freePoint("after"),
         full: ptsPoint("full"),

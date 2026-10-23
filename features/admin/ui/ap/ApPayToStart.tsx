@@ -601,29 +601,32 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
           </div>
         </div>
       </div>
-      <table className="sr-only">
-        <caption>{m.label} per week, per funnel</caption>
-        <thead>
-          <tr>
-            <th scope="col">Week</th>
-            {funnels.map((f) => (
-              <th key={f.key} scope="col">
-                {f.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {weeks.map((w) => (
-            <tr key={w.from}>
-              <th scope="row">{periodTitle(w)}</th>
+      {/* sr-only on the wrapper: a table sized 1px still lays out its columns, and widens the page. */}
+      <div className="sr-only">
+        <table>
+          <caption>{m.label} per week, per funnel</caption>
+          <thead>
+            <tr>
+              <th scope="col">Week</th>
               {funnels.map((f) => (
-                <td key={f.key}>{f.live ? show(m.unit, w.funnels[f.key][measure]) : "off"}</td>
+                <th key={f.key} scope="col">
+                  {f.label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {weeks.map((w) => (
+              <tr key={w.from}>
+                <th scope="row">{periodTitle(w)}</th>
+                {funnels.map((f) => (
+                  <td key={f.key}>{f.live ? show(m.unit, w.funnels[f.key][measure]) : "off"}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
