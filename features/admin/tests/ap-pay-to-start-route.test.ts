@@ -288,6 +288,8 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     const query = paths().find((x) => x.startsWith("/rest/v1/payment?"))!;
     expect(query).toContain("is_test=is.false");
     expect(query).toContain("status=eq.succeeded");
+    // E07's gift and the feedback grant are EUR 0: left out by the query itself.
+    expect(query).toContain("amount=gt.0");
     expect(query).toContain("journey:metadata->>journey");
   });
 

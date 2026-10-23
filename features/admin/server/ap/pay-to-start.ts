@@ -823,7 +823,7 @@ export async function fetchPayToStartRecords(
         plan: string | null;
         journey: string | null;
       }>(
-        `/rest/v1/payment?is_test=is.false&status=eq.succeeded&personal_report_id=in.(${ids.join(",")})` +
+        `/rest/v1/payment?is_test=is.false&status=eq.succeeded&amount=gt.0&personal_report_id=in.(${ids.join(",")})` +
           "&select=personal_report_id,amount,plan:metadata->>plan,journey:metadata->>journey&order=id.asc",
         "payment"
       ),
