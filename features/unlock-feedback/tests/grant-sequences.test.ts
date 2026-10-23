@@ -204,6 +204,35 @@ describe("someone who paid gets nothing for an answer", () => {
     expect(state.db.grants()).toHaveLength(0);
   });
 
+  /** The EUR 1.99 Core Archetype on the reader's report: the gate's, or E07's EUR 0 gift. */
+  const holdInitial = (row: { amount: number; status?: string; gifted?: string }) =>
+    state.db.tables.payment!.push({
+      id: 9001,
+      amount: row.amount,
+      currency: "EUR",
+      is_test: false,
+      metadata: { plan: "initial", ...(row.gifted ? { gifted: row.gifted } : {}) },
+      personal_report_id: READER.personalReportId,
+      refund_amount: null,
+      status: row.status ?? "succeeded",
+      user_id: READER.userId,
+    });
+
+  it.each([
+    // An email sent before the gate's campaign stamped the report, answered after the EUR 1.99.
+    ["bought the EUR 1.99 Core Archetype between the email and the tap", { amount: 1.99 }],
+    ["holds the Core Archetype E07 gifted on day 4", { amount: 0, gifted: "e07" }],
+  ])("%s", async (_label, held) => {
+    holdInitial(held);
+    expect(await unlock()).toEqual({ kind: "already_paid" });
+    expect(state.db.grants()).toHaveLength(0);
+  });
+
+  it("a refunded EUR 1.99 is nothing held: the answer still unlocks", async () => {
+    holdInitial({ amount: 1.99, status: "refunded" });
+    expect((await unlock()).kind).toBe("granted");
+  });
+
   it("a refunded purchase is no plan: the answer still unlocks", async () => {
     const bought = state.db.buy({ plan: "full_report", amount: 4.99, chargeId: "ch_r" });
     bought.status = "refunded";

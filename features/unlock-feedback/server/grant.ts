@@ -6,6 +6,7 @@ import {
 } from "@features/checkout/server/fulfillment";
 import { getPurchaseTitle } from "@features/checkout/server/reportPurchase";
 import { isReportPurchasePlan } from "@features/report/server/access";
+import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
@@ -46,7 +47,11 @@ const grantIn = (payments: PaymentRow[]) =>
  * price quote is marked purchased either, so the price tests never read it as a conversion.
  *
  * Someone holding any plan already gets nothing (`already_paid`): a free unlock after paying
- * feels unfair (the design's "Paying customers" rule). Safe to run again: an earlier grant is
+ * feels unfair (the design's "Paying customers" rule). So does someone holding the EUR 1.99
+ * Core Archetype, paid or gifted by E07: the email is never sent to them, but one sent before
+ * can be answered after, once the pre-unlock gate's campaign stamps an old report into its
+ * cohort (docs/runbooks/PRE_UNLOCK.md), and a free full report would undo the EUR 1.99's
+ * offer and its EUR 10 credit. Safe to run again: an earlier grant is
  * found and finished, never doubled, and the database refuses a second one outright
  * (`payment_unlock_feedback_once`, one per report), so a double tap's two requests agree on
  * one payment.
@@ -66,7 +71,8 @@ export async function unlockForFeedback({
 
   const payments = await succeededPayments(report.id);
   let paymentId = grantIn(payments);
-  if (!paymentId && payments.some((payment) => isReportPurchasePlan(payment.metadata?.plan))) {
+  const holds = (plan: unknown) => isReportPurchasePlan(plan) || isInitialUnlockPlan(plan);
+  if (!paymentId && payments.some((payment) => holds(payment.metadata?.plan))) {
     return { kind: "already_paid" };
   }
 
