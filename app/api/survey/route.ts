@@ -719,13 +719,20 @@ export async function POST(request: Request) {
     if (claim) {
       scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, submissionId));
     }
-    // Every claim but two joins the cohort like anyone: a token that bought nothing for this
-    // survey (unknown, used, refunded, expired, a checkout left open), and money still
-    // settling, which the gate's own rule stands aside for while it is bound and live. Out:
-    // a paid one, and a failed claim, whose reader may have paid without the entitlement
-    // being bound yet and reads the free report until the sweep binds it (claim.ts); the
-    // gate must never ask a buyer to pay again.
-    if (!isExisting && claim && claim.outcome !== "unlocked" && claim.outcome !== "error") {
+    // A token that bought nothing for this survey joins the cohort like anyone: unknown,
+    // used, refunded, expired, or a checkout left open (Stripe expires it in a day, and the
+    // gate then applies). Out: a paid claim; a failed one, whose reader may have paid
+    // without the entitlement being bound yet (the free report until the sweep binds it,
+    // claim.ts); and money still settling. The gate stands aside for a pending entitlement,
+    // and pay to start never moves a delayed payment that fails off pending, so in the
+    // cohort that reader would meet no gate and lose the emails that skip it.
+    if (
+      !isExisting &&
+      claim &&
+      claim.outcome !== "unlocked" &&
+      claim.outcome !== "error" &&
+      claim.outcome !== "pending"
+    ) {
       await joinInitialGateCohort(submissionId);
     }
 
