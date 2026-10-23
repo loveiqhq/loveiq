@@ -139,8 +139,11 @@ describe("a survey submitted while the EUR 1.99 gate is on", () => {
     ["an unknown one", { outcome: "refused", reason: "not_found" }],
     ["one already used", { outcome: "refused", reason: "used", entitlementId: 7 }],
     ["a checkout left open", { outcome: "unpaid", entitlementId: 7 }],
+    // Bound and settling: the gate's own rule stands aside until it settles, and meets the
+    // reader if it fails, so the reader must be in the cohort for that.
+    ["money still settling", { outcome: "pending", entitlementId: 7, offer: "pre" }],
   ])(
-    "joins it too, before the reply, with a pay-to-start token that bought nothing: %s",
+    "joins it too, before the reply, with a pay-to-start token that has not paid: %s",
     async (_label, outcome) => {
       vi.mocked(claimPayToStartForSubmission).mockResolvedValueOnce(outcome as never);
       routeSupabase();
@@ -172,9 +175,12 @@ describe("no survey joins the cohort", () => {
       "it paid before the survey",
       { outcome: "unlocked", entitlementId: 7, paymentId: 70, offer: "full" },
     ],
-    ["its money is still settling", { outcome: "pending", entitlementId: 7, offer: "pre" }],
     // A blip before the claim binds: the free report until the sweep binds it, never the gate.
     ["its claim failed", { outcome: "error", error: new Error("supabase blip") }],
+    [
+      "its claim failed after the token was found",
+      { outcome: "error", entitlementId: 7, error: new Error("bind failed") },
+    ],
   ])("when it came with a pay-to-start token and %s", async (_label, outcome) => {
     vi.mocked(claimPayToStartForSubmission).mockResolvedValueOnce(outcome as never);
     routeSupabase();
