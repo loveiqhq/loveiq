@@ -812,9 +812,7 @@ async function fetchWebhookEventRecord(stripeEventId: string) {
  * pay_to_start, applyPayToStartEntitlement). The gate's EUR 1.99 and E07's gift are access
  * only and never do: taking one back must not mark a report bought in full "refunded".
  */
-function wroteReportPaymentFields(
-  metadata: Record<string, unknown> | null | undefined
-): boolean {
+function wroteReportPaymentFields(metadata: Record<string, unknown> | null | undefined): boolean {
   return !isInitialUnlockPlan(metadata?.plan) || metadata?.journey === PAY_TO_START_JOURNEY;
 }
 
