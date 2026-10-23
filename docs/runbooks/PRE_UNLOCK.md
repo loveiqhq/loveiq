@@ -20,7 +20,9 @@ with it. Everything ships switched off.
 3. **Switch it on.** `PATCH /api/admin/system-flags` with an admin session, as
    `docs/runbooks/DISASTER_RECOVERY.md` §3 shows, with
    `{"key":"report_initial_unlock_gate","enabled":true}`. Only surveys submitted from then on
-   are gated; the change reaches every instance within 30 seconds (the flags' cache).
+   are gated; the change reaches every instance within 30 seconds (the flags' cache). The
+   live A/B readouts stop taking new readers from then on: the gate's readers are left out of
+   every arm, as pay to start's are, so conclude or restart the running tests at the switch.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -32,12 +34,14 @@ with it. Everything ships switched off.
 5. **E07, from day 4.** Four days after the switch at the earliest, when the first gated
    readers reach day 4: `{"key":"initial_unlock_gift_email","enabled":true}`. The cron runs
    hourly at :47, on production only; each run logs its summary (`gifted`, `heldOut`,
-   `skipped…`, `failed`), and #ops hears about a stalled cron after three hours.
+   `skipped…`, `failed`), and #ops hears about a stalled cron after three hours. One draw per
+   person: a retake's report is left out once the person has an arm.
 
 ## Switch it off
 
 - `report_initial_unlock_gate` off: nobody is gated any more. Readers in the cohort get their
-  free report as before, and the 72-hour 50% email reaches them again. Payments made stand.
+  free report as before, and the 72-hour 50% email and the "why didn't you unlock?" email
+  reach them again. Payments made stand. The cohort stays out of the A/B readouts.
 - `initial_unlock_gift_email` is its own switch: with the gate off for good, switch it off
   too, or readers who met the gate before still get the gift on day 4.
 - `report_paywall_enforced` off (the paywall's kill switch) opens every report, gate included.
@@ -67,5 +71,8 @@ charging the difference is a person's call.
 
 - AP-Analytics, Focus: "Completion → pre-unlock", EUR 1.99 sales per finished survey and the
   revenue per sale. The Payment page's segments and the Landing page's arms carry the rate.
+- A gate view is not a report open: it writes no `report_session` row and no Slack journey
+  step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
+  (each view, behind the consent banner).
 - E07's holdout: compare full-report purchases after day 4 between `initial_gift_arm` = `gift`
   and `holdout`, staff left out. The gift's EUR 0 rows are never revenue.

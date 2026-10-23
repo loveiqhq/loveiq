@@ -17,8 +17,9 @@
 --   initial_gift_sent_at    when E07 went out, so a re-run never sends it twice
 --
 -- Read only through features/report/server/initialGateState.ts, each in its own query that
--- fails soft; none is in the report lookup's select. Deploying before this is applied is
--- therefore safe (nothing is gated, the stamps log a warning), but apply it first.
+-- fails soft; none is in the report lookup's select. Deploying before this is applied gates
+-- nobody (the stamps log a warning), but the A/B readouts read initial_gate_cohort_at and fail
+-- until it is: apply it first.
 -- Rollback: supabase/rollbacks/20261020090000_initial_unlock_gate_down.sql
 
 BEGIN;
