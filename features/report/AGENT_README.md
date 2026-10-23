@@ -150,8 +150,10 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   which fails soft; never in the report lookup's select. A gate view is not a report open: no
   `report_session` row and no Slack journey step until the gate lets the reader through.
 - **Who else reads it.** While the gate is on, the 72h 50% email (which stops its run if the
-  cohort can't be read) and the unlock-feedback email skip the cohort. The A/B readouts leave
-  it out of every arm whatever the switch says (pricing pins it to A3).
+  cohort can't be read) and the unlock-feedback email skip the cohort; an unreadable switch
+  reads as on for them (`readInitialUnlockGateSwitch`). The brain's A/B readouts leave it out
+  of the price lists whatever the switch says (pricing pins it to A3) and never count a
+  EUR 1.99 as a report bought; the digest's SQL readouts don't yet (see the runbook).
 - **The answer.** A gated owner gets `buildInitialUnlockGatePayload` instead of the report —
   price, credit, guarantee, the token and the submission id, nothing of the report —
   `useReportData` turns it into `status: "gated"`, and `ReportPage` draws

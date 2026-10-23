@@ -21,8 +21,13 @@ with it. Everything ships switched off.
    `docs/runbooks/DISASTER_RECOVERY.md` §3 shows, with
    `{"key":"report_initial_unlock_gate","enabled":true}`. Only surveys submitted from then on
    are gated; the change reaches every instance within 30 seconds (the flags' cache). The
-   live A/B readouts stop taking new readers from then on: the gate's readers are left out of
-   every arm, as pay to start's are, so conclude or restart the running tests at the switch.
+   price test stops drawing new readers at the switch (the cohort is quoted on A3): conclude
+   it in the experiment registry. The brain's readouts leave the cohort out of the price
+   lists and never count a EUR 1.99 as a report bought; other tests (landing, survey) go on.
+   **Before switching on**, do the same in the SQL readouts the daily digest and
+   brain-reconcile use (`get_axis_funnel_daily`, `get_arm_cohorts`), as
+   `20261018130000` did for pay to start: today they count the cohort in A3 and a EUR 1.99
+   as a purchase (Fatih's data task: split the EUR 1.99 out of the digest).
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -41,7 +46,7 @@ with it. Everything ships switched off.
 
 - `report_initial_unlock_gate` off: nobody is gated any more. Readers in the cohort get their
   free report as before, and the 72-hour 50% email and the "why didn't you unlock?" email
-  reach them again. Payments made stand. The cohort stays out of the A/B readouts.
+  reach them again. Payments made stand. The cohort stays out of the price test's readouts.
 - `initial_unlock_gift_email` is its own switch: with the gate off for good, switch it off
   too, or readers who met the gate before still get the gift on day 4.
 - `report_paywall_enforced` off (the paywall's kill switch) opens every report, gate included.

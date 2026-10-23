@@ -153,23 +153,45 @@ describe("loadArmOutcomes: a window's readers in the list they were dealt", () =
     );
   });
 
-  it("leaves the EUR 1.99 gate's readers out of every arm, whatever the switch says now", async () => {
-    // Pricing pins them to A3, and their EUR 1.99 would read as a purchase in their arm.
+  it("leaves the EUR 1.99 gate's readers out of the price lists, and in every other test", async () => {
+    // Pricing pins them to A3: their list was not drawn. A landing arm meets the gate alike.
     tables = {
-      survey_submission: [sub(1), sub(3)],
+      survey_submission: [
+        sub(1),
+        { ...sub(3), utm_tracker: JSON.stringify({ arms: { landing: "v3" } }) },
+      ],
       personal_report: [{ survey_submission_id: 3 }],
       report_price_quote: [
         quote(1, "A3", "2026-10-10T10:05:00Z"),
         quote(3, "A3", "2026-10-10T10:06:00Z"),
       ],
-      payment: [{ amount: "1.99", personal_report: { survey_submission_id: 3 } }],
+      payment: [],
     };
     const o = await loadArmOutcomes("2026-10-08T15:23:00Z");
-    expect(o.submissions.map((s) => s.id)).toEqual([1]);
-    expect(o.bySubmission.has(3)).toBe(false);
+    expect(o.submissions.map((s) => s.id)).toEqual([1, 3]);
+    expect(o.bySubmission.get(1)?.pricing).toBe("A3");
+    expect(o.bySubmission.get(3)?.pricing).toBeNull();
     const gated = paths.find((p) => p.startsWith("/rest/v1/personal_report?"));
     expect(gated).toContain("survey_submission_id=gte.1&survey_submission_id=lte.3");
     expect(gated).toContain("initial_gate_cohort_at=not.is.null");
+  });
+
+  it("never counts the EUR 1.99 Core Archetype as a report bought", async () => {
+    tables = {
+      survey_submission: [sub(1), sub(2)],
+      report_price_quote: [
+        quote(1, "A3", "2026-10-10T10:05:00Z"),
+        quote(2, "A3", "2026-10-10T10:06:00Z"),
+      ],
+      payment: [
+        { amount: "1.99", plan: "initial", personal_report: { survey_submission_id: 1 } },
+        { amount: "19.99", plan: "full_report", personal_report: { survey_submission_id: 2 } },
+      ],
+    };
+    const o = await loadArmOutcomes("2026-10-08T15:23:00Z");
+    expect(o.bySubmission.get(1)?.purchased).toBe(false);
+    expect(o.bySubmission.get(2)).toMatchObject({ purchased: true, revenue: 19.99 });
+    expect(paths.find((p) => p.startsWith("/rest/v1/payment?"))).toContain("plan:metadata->>plan");
   });
 
   it("fails loudly when a read fails, rather than reading everyone as unattributed", async () => {
