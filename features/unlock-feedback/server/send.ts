@@ -4,6 +4,7 @@ import {
   getReportPlanByPersonalReportId,
   hasInitialUnlockByPersonalReportId,
 } from "@features/report/server/planAccess";
+import { isInitialUnlockGateEnabled } from "@features/report/server/initialGateState";
 import { readerOf, type CandidateRow, type Reader } from "@features/unlock-feedback/logic/audience";
 import { rotateReasons, type UnlockReason } from "@features/unlock-feedback/logic/reasons";
 import { drawSubjectArm, type SubjectArm } from "@features/unlock-feedback/logic/subjects";
@@ -147,7 +148,9 @@ async function paidAnotherReport(userId: number, row: CandidateRow): Promise<boo
  * Whether the report is in the EUR 1.99 pre-unlock gate's cohort (`initial_gate_cohort_at`,
  * features/report/server/initialGateState.ts): the gate, its EUR 10 credit and the day-4 gift
  * are that reader's offer, and a free full report would undercut them, as the 72h email
- * skips them too. Throws when it can't be read, so the reader waits.
+ * skips them too. Asked only while the gate is on: off, a stamped reader reads their report
+ * like anyone (the 72h email does the same), and before the gate's migration the column
+ * isn't there to read. Throws when it can't be read, so the reader waits.
  */
 async function inInitialGateCohort(personalReportId: number): Promise<boolean> {
   const res = await supabaseFetch(
@@ -230,7 +233,8 @@ export async function eligibility(
   if (await hasInitialUnlockByPersonalReportId(row.id)) return { skip: "paid" };
   if (!opts.staffTest && r.userId !== null && (await paidAnotherReport(r.userId, row)))
     return { skip: "paid" };
-  if (await inInitialGateCohort(row.id)) return { skip: "gate_cohort" };
+  if ((await isInitialUnlockGateEnabled()) && (await inInitialGateCohort(row.id)))
+    return { skip: "gate_cohort" };
   const suppression = await suppressionState(r.email);
   if (suppression !== "clear") return { skip: suppression };
   if (!(await reportOpened(row.id))) return { skip: "not_opened" };
