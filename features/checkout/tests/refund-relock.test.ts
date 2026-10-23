@@ -327,6 +327,18 @@ describe("a refunded or charged-back initial unlock", () => {
     expect(paymentFields(patches)).toBeUndefined();
   });
 
+  it.each([
+    ["refund", () => refund(), "refunded"],
+    ["chargeback opened", () => dispute("charge.dispute.created"), "disputed"],
+  ] as const)(
+    "pay to start's EUR 1.99 wrote them, so its %s writes them, as before the gate",
+    async (_label, event, status) => {
+      const patches = db({ paid: { plan: "initial", journey: "pay_to_start" }, tiers: {} });
+      await processStripeWebhookEvent({ event: event(), stripe });
+      expect(paymentFields(patches)).toMatchObject({ body: { payment_status: status } });
+    }
+  );
+
   it("a full report's refund still marks the report's payment refunded", async () => {
     const patches = db({
       paid: { plan: "full_report", archetype: "Spark Seeker" },

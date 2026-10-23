@@ -805,6 +805,19 @@ async function fetchWebhookEventRecord(stripeEventId: string) {
   return rows[0] ?? null;
 }
 
+/**
+ * Whether a payment wrote the report's own payment fields (personal_report.payment_id,
+ * payment_status, price) when it was fulfilled, so its refund or chargeback writes them too,
+ * as before the gate. Every report plan does, and so does pay to start's EUR 1.99 (journey
+ * pay_to_start, applyPayToStartEntitlement). The gate's EUR 1.99 and E07's gift are access
+ * only and never do: taking one back must not mark a report bought in full "refunded".
+ */
+function wroteReportPaymentFields(
+  metadata: Record<string, unknown> | null | undefined
+): boolean {
+  return !isInitialUnlockPlan(metadata?.plan) || metadata?.journey === PAY_TO_START_JOURNEY;
+}
+
 /** A payment row found again; `metadata.plan` tells an initial unlock's refund apart. */
 interface ExistingPaymentRow {
   id: number;
@@ -1920,8 +1933,8 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
   // and only some money came back; revoking access would be hostile UX and
   // the most common support-ticket source on a refund flow.
   if (!isPartialRefund && existingPayment.personal_report_id) {
-    // An initial unlock never wrote the report's payment fields, so its refund leaves them.
-    if (!isInitialUnlockPlan(existingPayment.metadata?.plan)) {
+    // Only a payment that wrote the report's payment fields writes them back.
+    if (wroteReportPaymentFields(existingPayment.metadata)) {
       await updatePersonalReportPayment({
         amount: toAmount(captured),
         paymentId: existingPayment.id,
@@ -2019,8 +2032,8 @@ async function syncDisputeEvent({
   }
 
   if (existingPayment.personal_report_id) {
-    // As for a refund: an initial unlock leaves the report's payment fields alone.
-    if (!isInitialUnlockPlan(existingPayment.metadata?.plan)) {
+    // As for a refund: only a payment that wrote the report's payment fields writes them.
+    if (wroteReportPaymentFields(existingPayment.metadata)) {
       await updatePersonalReportPayment({
         amount: toAmount(dispute.amount),
         paymentId: existingPayment.id,
