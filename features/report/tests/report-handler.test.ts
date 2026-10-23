@@ -1175,6 +1175,18 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     expect(vi.mocked(refreshJourneyMessage).mock.calls).toEqual([[55, "report_opened"]]);
   });
 
+  it("writes a probe's open no session row, but still advances its Slack journey", async () => {
+    mockGateEnabled.mockResolvedValue(false);
+    await GET(
+      new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1`, {
+        headers: { cookie: "loveiq_probe=1" },
+      })
+    );
+    await flushAfterResponse();
+    expect(recordReportSessionView).not.toHaveBeenCalled();
+    expect(vi.mocked(refreshJourneyMessage).mock.calls).toEqual([[55, "report_opened"]]);
+  });
+
   it("stamps the gate's first view once, after the reply", async () => {
     await ownerGet();
     await flushAfterResponse();

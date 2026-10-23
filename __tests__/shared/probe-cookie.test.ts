@@ -46,7 +46,7 @@ describe("the probe marker", () => {
     // route that never calls it — caught by mutation.
     expect(route).toMatch(/const isProbe = isProbeRequest\(/);
     // ...and it is what gates the write, not merely computed and ignored.
-    expect(route).toMatch(/if \(isProbe\) \{[\s\S]{0,80}\} else if \(access\.personalReportId/);
+    expect(route).toMatch(/if \(!isProbe\) \{[\s\S]{0,120}recordReportSessionView\(/);
   });
 
   it("matches the cookie exactly, not as a substring of another one", () => {
