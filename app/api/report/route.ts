@@ -411,6 +411,11 @@ export async function GET(request: Request) {
     let accessLookupOk = false;
     // For pricing's A3 pin: known only while the gate is on and its state was read.
     let initialGateCohort: boolean | undefined;
+    // The open's session row and Slack journey step, recorded once the EUR 1.99 gate below
+    // has had its say: a reader it stops has not opened the report (the gate's own first view
+    // is initial_gate_seen_at), so neither may count them, or every gated reader would read
+    // as a report open on AP-Analytics.
+    let recordReportOpen: (() => Promise<void>) | null = null;
 
     try {
       // `ensure` reads the personal_report row and returns it; handing that row
@@ -465,36 +470,31 @@ export async function GET(request: Request) {
         logger.info({ path: "/api/report" }, "probe request — report_session row skipped");
       }
 
-      if (isProbe) {
-        // no row
-      } else if (access.personalReportId && !accessPlan) {
-        await recordReportSessionView({
-          ipAddress: ip,
-          personalReportId: access.personalReportId,
-          userAgent,
-          userId: submission.user_id,
-          utmTracker: submission.utm_tracker,
-        });
-      } else if (access.personalReportId) {
-        scheduleAfterResponse("report-session-capture", async () => {
-          await recordReportSessionView({
-            ipAddress: ip,
-            personalReportId: access.personalReportId!,
-            userAgent,
-            userId: submission.user_id,
-            utmTracker: submission.utm_tracker,
-          });
-        });
-      }
-
-      // Advance the Slack journey message now that the report has actually been
-      // opened. report_session is the server-side truth here — analytics_event's
-      // report_viewed sits behind the consent gate and undercounts it by ~31%.
-      // After-response and self-skipping, so a re-read costs nothing.
       if (access.personalReportId) {
-        scheduleAfterResponse("journey-message-report-open", async () => {
-          await refreshJourneyMessage(submission.id, "report_opened");
-        });
+        const openedReportId = access.personalReportId;
+        // An unpaid reader's row lands before the reply, a buyer's after it, as before.
+        const unpaid = !accessPlan;
+        recordReportOpen = async () => {
+          if (!isProbe) {
+            const record = () =>
+              recordReportSessionView({
+                ipAddress: ip,
+                personalReportId: openedReportId,
+                userAgent,
+                userId: submission.user_id,
+                utmTracker: submission.utm_tracker,
+              });
+            if (unpaid) await record();
+            else scheduleAfterResponse("report-session-capture", record);
+          }
+          // Advance the Slack journey message now that the report has actually been
+          // opened. report_session is the server-side truth here — analytics_event's
+          // report_viewed sits behind the consent gate and undercounts it by ~31%.
+          // After-response and self-skipping, so a re-read costs nothing.
+          scheduleAfterResponse("journey-message-report-open", async () => {
+            await refreshJourneyMessage(submission.id, "report_opened");
+          });
+        };
       }
     } catch (err) {
       logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
@@ -557,6 +557,15 @@ export async function GET(request: Request) {
         gated.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
         gated.headers.set("Pragma", "no-cache");
         return gated;
+      }
+    }
+
+    // Not gated: the report is opened.
+    if (recordReportOpen) {
+      try {
+        await recordReportOpen();
+      } catch (err) {
+        logger.warn({ err, submissionId: submission.id }, "Unable to record the report open");
       }
     }
 

@@ -93,10 +93,16 @@ vi.mock("@features/report/server/shareVerify", async () => {
   };
 });
 
+// The Slack journey's "report opened" step, so a test can see whether an open was counted.
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyMessage: vi.fn(),
+}));
+
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
 
 import { GET } from "@/app/api/report/route";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportAccessPlanForSubmission,
   recordReportSessionView,
@@ -1147,6 +1153,26 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   it("creates no price quote for a gated owner", async () => {
     await ownerGet();
     expect(getReportPriceQuotesForContext).not.toHaveBeenCalled();
+  });
+
+  it("counts no report open for a gated view: no session row, no Slack journey step", async () => {
+    await ownerGet();
+    await flushAfterResponse();
+    expect(recordReportSessionView).not.toHaveBeenCalled();
+    expect(refreshJourneyMessage).not.toHaveBeenCalled();
+  });
+
+  it("counts the open once the gate lets the reader through, the row before the reply", async () => {
+    mockGateEnabled.mockResolvedValue(false);
+    await ownerGet();
+    // An unpaid reader's row is written before the reply, as before the gate.
+    expect(recordReportSessionView).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordReportSessionView).mock.calls[0]![0]).toMatchObject({
+      personalReportId: 99,
+      userId: 77,
+    });
+    await flushAfterResponse();
+    expect(vi.mocked(refreshJourneyMessage).mock.calls).toEqual([[55, "report_opened"]]);
   });
 
   it("stamps the gate's first view once, after the reply", async () => {
