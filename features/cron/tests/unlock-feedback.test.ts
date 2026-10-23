@@ -49,6 +49,8 @@ interface Db {
   flagsDown?: boolean;
   /** The EUR 1.99 gate is switched on (its flag reads true); off by default. */
   gateOn?: boolean;
+  /** The gate's switch can't be read (its system_flags read answers 503). */
+  gateSwitchDown?: boolean;
   /** In the EUR 1.99 gate's cohort; cohortDown answers that read with a 500. */
   cohort?: boolean;
   cohortDown?: boolean;
@@ -87,6 +89,7 @@ function withDb(db: Db) {
     if (path.startsWith("/rest/v1/system_flags?")) {
       if (db.flagsDown) return json({}, 503);
       const gate = path.includes("key=eq.report_initial_unlock_gate");
+      if (gate && db.gateSwitchDown) return json({}, 503);
       return json(gate && db.gateOn ? [{ enabled: true }] : []);
     }
     if (path.startsWith("/rest/v1/survey_submission?user_id=eq.")) {
@@ -394,6 +397,11 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
       "gate_cohort",
     ],
     [
+      "a reader in the gate's cohort while its switch can't be read",
+      { gateSwitchDown: true, cohort: true },
+      "gate_cohort",
+    ],
+    [
       "someone who bought another of their reports",
       { otherReports: [{ id: 77, plan: "full_report" }] },
       "paid",
@@ -424,6 +432,10 @@ describe("GET /api/cron/unlock-feedback: who is left out", () => {
     ["payments", { paymentsDown: true }],
     ["report opens", { sessionsDown: true }],
     ["EUR 1.99 gate cohort", { gateOn: true, cohortDown: true }],
+    [
+      "EUR 1.99 gate cohort, with the switch unreadable too",
+      { gateSwitchDown: true, cohortDown: true },
+    ],
   ] as const)("a reader whose %s cannot be read waits for the next run", async (_label, db) => {
     withDb({ candidates: [candidate()], ...db });
     const { body } = await run();

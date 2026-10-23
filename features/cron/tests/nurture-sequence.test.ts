@@ -158,6 +158,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     patchSpy,
     unlockFeedback = jsonResponse([]),
     cohortIds,
+    gateSwitchDown = false,
   }: {
     seventyTwoHour: unknown[];
     quoteMetadata?: Record<string, unknown>;
@@ -166,9 +167,18 @@ describe("GET /api/cron/nurture-sequence", () => {
     unlockFeedback?: unknown;
     /** The EUR 1.99 gate's cohort among the candidates; null answers the read with a 500. */
     cohortIds?: number[] | null;
+    /** The gate's switch can't be read (its system_flags read answers 503). */
+    gateSwitchDown?: boolean;
   }) {
     let personalReportCalls = 0;
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
+      if (
+        gateSwitchDown &&
+        url.includes("/rest/v1/system_flags") &&
+        url.includes("report_initial_unlock_gate")
+      ) {
+        return Promise.resolve(jsonResponse({ message: "slow" }, 503));
+      }
       if (url.includes("/rest/v1/personal_report") && url.includes("initial_gate_cohort_at")) {
         if (cohortIds === null) return Promise.resolve(jsonResponse({ message: "boom" }, 500));
         return Promise.resolve(jsonResponse((cohortIds ?? []).map((id) => ({ id }))));
@@ -446,6 +456,33 @@ describe("GET /api/cron/nurture-sequence", () => {
       const body = await res.json();
       expect(body.summaries["72h_no_unlock"].sent).toBe(1);
       expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(0);
+    });
+
+    it("reads the cohort as if the gate were on when its switch can't be read", async () => {
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [42],
+        gateSwitchDown: true,
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].skippedInitialGate).toBe(1);
+      expect(mockResendSend).not.toHaveBeenCalled();
+    });
+
+    it("still emails a reader outside the cohort when only the switch can't be read", async () => {
+      mockCandidateWindows({
+        seventyTwoHour: [candidate],
+        quoteMetadata: { nurtureEmailsSent: [] },
+        cohortIds: [],
+        gateSwitchDown: true,
+      });
+
+      const res = await GET(makeRequest("test-cron-secret"));
+      const body = await res.json();
+      expect(body.summaries["72h_no_unlock"].sent).toBe(1);
     });
 
     it("reads no cohort while the gate is switched off", async () => {

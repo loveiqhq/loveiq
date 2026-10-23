@@ -58,7 +58,8 @@ function getSupabaseConfig() {
   return { url, serviceRoleKey };
 }
 
-async function fetchFlag(key: SystemFlagKey): Promise<boolean | null> {
+/** The flag's rows, or null when Supabase answered with an error. Throws when unreachable. */
+async function fetchFlagRows(key: SystemFlagKey): Promise<Array<{ enabled: boolean }> | null> {
   const { url, serviceRoleKey } = getSupabaseConfig();
   return getBreaker("supabase").fire(async () => {
     const res = await fetchWithTimeout(
@@ -72,9 +73,14 @@ async function fetchFlag(key: SystemFlagKey): Promise<boolean | null> {
       }
     );
     if (!res.ok) return null;
-    const rows = (await res.json()) as Array<{ enabled: boolean }>;
-    return rows.length > 0 ? rows[0]!.enabled : null;
+    return (await res.json()) as Array<{ enabled: boolean }>;
   });
+}
+
+async function fetchFlag(key: SystemFlagKey): Promise<boolean | null> {
+  const rows = await fetchFlagRows(key);
+  if (rows === null) return null;
+  return rows.length > 0 ? rows[0]!.enabled : null;
 }
 
 /**
@@ -115,13 +121,51 @@ export async function isFeatureEnabled(
   }
 }
 
-// Test-only: clear the in-process cache.
+/** What readFeatureFlag read: the row's value, or null for no row. Failures are not kept. */
+const strictCache = new Map<SystemFlagKey, { value: boolean | null; expiresAt: number }>();
+
+/**
+ * The flag for a caller that must not guess: the row's value, `whenMissing` when there is no
+ * row, and null when it can't be read. isFeatureEnabled answers a failure with its default,
+ * which is right for a switch that gates something (an outage gates nobody) and wrong for a
+ * reader who acts on "off" (the EUR 1.99 gate's switch, read by the emails that skip its
+ * readers: an unreadable switch must not read as off). Answers read are cached as
+ * isFeatureEnabled's are; a failure never is, so the next call asks again.
+ */
+export async function readFeatureFlag(
+  key: SystemFlagKey,
+  whenMissing: boolean
+): Promise<boolean | null> {
+  const envOverride = process.env[`SYSTEM_FLAG_${key}`];
+  if (envOverride === "true" || envOverride === "false") {
+    return envOverride === "true";
+  }
+
+  const now = Date.now();
+  const cached = strictCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.value ?? whenMissing;
+
+  try {
+    const rows = await fetchFlagRows(key);
+    if (!Array.isArray(rows)) return null;
+    const value = rows.length > 0 ? rows[0]!.enabled === true : null;
+    strictCache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
+    return value ?? whenMissing;
+  } catch (err) {
+    logger.warn({ err, key }, "system_flags strict read failed");
+    return null;
+  }
+}
+
+// Test-only: clear the in-process caches; `values` seeds both, as rows read from Supabase.
 export function __resetSystemFlagsCacheForTests(values?: Partial<Record<SystemFlagKey, boolean>>) {
   cache.clear();
+  strictCache.clear();
   if (values) {
     const now = Date.now();
     for (const [key, enabled] of Object.entries(values)) {
       cache.set(key as SystemFlagKey, { enabled: !!enabled, expiresAt: now + CACHE_TTL_MS });
+      strictCache.set(key as SystemFlagKey, { value: !!enabled, expiresAt: now + CACHE_TTL_MS });
     }
   }
 }

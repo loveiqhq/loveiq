@@ -1,5 +1,5 @@
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
-import { isFeatureEnabled } from "@shared/flags/system-flags";
+import { isFeatureEnabled, readFeatureFlag } from "@shared/flags/system-flags";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
@@ -55,6 +55,16 @@ function isRowId(value: unknown): value is number {
 /** The gate itself. Off when its row is missing or Supabase is down: an outage gates no one. */
 export function isInitialUnlockGateEnabled(): Promise<boolean> {
   return isFeatureEnabled("report_initial_unlock_gate", false);
+}
+
+/**
+ * The gate's switch for the emails that skip its cohort: true or false as set (false before
+ * the migration adds its row), null when it can't be read. Unlike the gate itself, which an
+ * unreadable switch leaves off (an outage gates nobody), an email must not read "unreadable"
+ * as "off" and reach the cohort: on null it reads the cohort as if the gate were on.
+ */
+export function readInitialUnlockGateSwitch(): Promise<boolean | null> {
+  return readFeatureFlag("report_initial_unlock_gate", false);
 }
 
 /** E07, the day-4 gift. Off by default for the same reason. */

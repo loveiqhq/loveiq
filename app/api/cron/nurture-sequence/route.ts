@@ -48,8 +48,8 @@ import { getStripeServerClient } from "@features/checkout/server/stripeCheckout"
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
 import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
 import {
-  isInitialUnlockGateEnabled,
   readInitialGateCohortIds,
+  readInitialUnlockGateSwitch,
 } from "@features/report/server/initialGateState";
 // The 50%-off template is timing-agnostic (it references the code's 24h expiry,
 // not the send hour), so the single 72h discount stage reuses it as-is.
@@ -580,8 +580,8 @@ interface RouteContext {
   // Run-level collector of "<stage>: <reason>" strings for failed sends/rows so
   // the aggregate alert is self-diagnosing instead of forcing a Vercel log dive.
   failureReasons: string[];
-  // The batch's reports in the EUR 1.99 gate's cohort, read once per run while the gate is
-  // on; empty when it is off, so everyone is emailed as before.
+  // The batch's reports in the EUR 1.99 gate's cohort, read once per run unless the gate is
+  // switched off; empty when it is, so everyone is emailed as before.
   initialGateCohort: ReadonlySet<number>;
 }
 
@@ -886,10 +886,9 @@ export async function GET(request: Request) {
 
   try {
     const seventyTwoCandidates = await fetchCandidatesByAge(AGE_WINDOWS.seventyTwo);
-    if (
-      seventyTwoCandidates.length > 0 &&
-      (await isInitialUnlockGateEnabled().catch(() => false))
-    ) {
+    // Unless the gate is switched off: a switch that can't be read reads the cohort as if
+    // it were on, so a failed read never sends the cohort a 50% code.
+    if (seventyTwoCandidates.length > 0 && (await readInitialUnlockGateSwitch()) !== false) {
       const cohort = await readInitialGateCohortIds(
         seventyTwoCandidates.map((candidate) => candidate.id)
       );
