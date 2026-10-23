@@ -104,6 +104,13 @@ describe("GET /api/admin/ap/pay-to-start", () => {
   });
 
   it("reads the journey's purchases, its visits by page, and the free survey from ap_facts", async () => {
+    const base = facts();
+    mockSupabaseFetch.mockImplementation(async () =>
+      json({
+        ...base,
+        subs: [...base.subs, sub({ id: 702, day: "2026-10-20", at: "2026-10-20T10:00:00Z" })],
+      })
+    );
     rows["/rest/v1/prepaid_report_access?"] = [
       {
         id: 1,
@@ -116,6 +123,20 @@ describe("GET /api/admin/ap/pay-to-start", () => {
         created_at: "2026-10-20T09:00:00Z",
         paid_at: "2026-10-20T09:02:00Z",
         consumed_submission_id: 700,
+        utm_tracker: null,
+      },
+      // A 100% code: EUR 0, but the journey's, its report unlocked by the purchase.
+      {
+        id: 3,
+        offer: "full",
+        status: "succeeded",
+        amount_cents: 0,
+        list_price_cents: 2999,
+        is_test: false,
+        customer_email: "friend@example.com",
+        created_at: "2026-10-20T09:30:00Z",
+        paid_at: "2026-10-20T09:31:00Z",
+        consumed_submission_id: 702,
         utm_tracker: null,
       },
       // A checkout opened and never paid: the claim binds it to the survey all the same.
@@ -142,8 +163,8 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as PtsPayload;
     const by = (k: string) => body.funnels.find((f) => f.key === k)!;
-    // 700 was paid for first: pay to start's. 701's browser never paid: it took the free
-    // survey like anyone, so it is pay after the report's, with sub 1.
+    // 700 was paid for first and 702 bought with a 100% code: pay to start's. 701's browser
+    // never paid: it took the free survey like anyone, so it is pay after the report's.
     expect(by("after").all).toMatchObject({ visits: 300, finished: 2 });
     expect(by("full").all).toMatchObject({ visits: 2, paid: 1, finished: 1, revenue: 29.99 });
     expect(by("pre").all).toMatchObject({ visits: 1, paid: 0, finished: 0 });

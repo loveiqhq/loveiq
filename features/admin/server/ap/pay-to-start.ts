@@ -22,9 +22,9 @@
  *   labelled `pay_to_start`; pay to start's carry that label and their page's `offer`.
  * - Paying customers: those who kept a payment that took money (refunds and EUR 0 left out).
  * - Revenue: everything they paid on their report, upgrades included, refunds left out.
- * - A survey is pay to start's only when a paid purchase claimed it. A browser that opened a
- *   checkout and never paid (its row still gets bound to the survey) takes the free survey
- *   like anyone, and counts with the free funnels.
+ * - A survey is pay to start's only when a completed purchase claimed it. A browser that
+ *   opened a checkout and never paid (its row still gets bound to the survey) takes the free
+ *   survey like anyone, and counts with the free funnels.
  * - Paid traffic only: the visits are the ad clicks, the people those whose survey (free) or
  *   purchase (pay to start) carries a Google Ads click (classifySource), as on the Traffic page.
  * Staff and test buys are left out, as on every AP page.
@@ -87,7 +87,7 @@ export interface PtsRecords {
    * utm_source (to leave our own checks out); null when unreadable.
    */
   ptsVisits: Array<{ day: string; offer: string | null; src: string | null; n: number }> | null;
-  /** Submissions a paid pay-to-start purchase claimed (charged, refunded or not): that journey's. */
+  /** Submissions a completed pay-to-start purchase claimed (refunded since or not): its journey's. */
   boughtFirst: ReadonlySet<number>;
   /** Pay-to-start buyers' survey starts per Berlin day: ap_facts counts them among its starts. */
   boughtFirstStarts: Readonly<Record<string, number>>;
@@ -245,11 +245,12 @@ export function taggedOf(tracker: string | null): Parameters<typeof classifySour
   };
 }
 
-/** Money was taken for it: charged, and refunded since or not. */
-const isPaid = (e: EntitlementRow) =>
-  (e.amount_cents ?? 0) > 0 &&
-  e.paid_at !== null &&
-  (e.status === "succeeded" || e.status === "refunded");
+/** The checkout completed (a 100% code's EUR 0 too), refunded since or not. */
+const isCompleted = (e: EntitlementRow) =>
+  e.paid_at !== null && (e.status === "succeeded" || e.status === "refunded");
+
+/** Money was taken for it: a completed checkout above EUR 0. */
+const isPaid = (e: EntitlementRow) => isCompleted(e) && (e.amount_cents ?? 0) > 0;
 
 /** Our own probes and verification runs, never counted (classifySource "test"). */
 const isOurTest = (t: Parameters<typeof classifySource>[0], known = true) =>
@@ -767,11 +768,13 @@ export async function fetchPayToStartRecords(
     visitCount.set(key, v);
   }
 
-  // Bought first: claimed by a purchase that was paid. A checkout left unpaid is bound to the
-  // survey too (claim.ts binds a pending row), and its browser took the free survey like anyone.
+  // Bought first: claimed by a completed purchase (a 100% code's EUR 0 one too: its report was
+  // unlocked by the journey). A checkout left unpaid is bound to the survey as well (claim.ts
+  // binds a pending row), and its browser took the free survey like anyone.
   const claimedBy = new Map<number, EntitlementRow>();
   for (const e of entitlements)
-    if (e.consumed_submission_id !== null && isPaid(e)) claimedBy.set(e.consumed_submission_id, e);
+    if (e.consumed_submission_id !== null && isCompleted(e))
+      claimedBy.set(e.consumed_submission_id, e);
   const boughtFirst = new Set(claimedBy.keys());
 
   // Their survey starts, which ap_facts counts among the free survey's: a finished survey's
