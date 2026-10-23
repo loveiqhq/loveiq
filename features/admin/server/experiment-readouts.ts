@@ -307,8 +307,26 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
         )
       : { rows: [] as Array<{ consumed_submission_id: number | null }>, truncated: false };
   const prepaidSubmissions = new Set(prepaidPage.rows.map((r) => r.consumed_submission_id));
+  // The EUR 1.99 gate's readers (Pre-unlock) are in none either: pricing pins them to A3,
+  // and their EUR 1.99 would count as a purchase in whatever arm they fell into. Read
+  // whatever the gate's switch says now: a window can cover days it was on.
+  const gatedPage =
+    readers.length > 0
+      ? await fetchAllPages<{ survey_submission_id: number | null }>(
+          (offset, pageSize) =>
+            `/rest/v1/personal_report?survey_submission_id=gte.${minId}` +
+            `&survey_submission_id=lte.${maxId}&initial_gate_cohort_at=not.is.null` +
+            `&select=survey_submission_id&order=survey_submission_id.asc` +
+            `&offset=${offset}&limit=${pageSize}`,
+          "personal_report"
+        )
+      : { rows: [] as Array<{ survey_submission_id: number | null }>, truncated: false };
+  const gatedSubmissions = new Set(gatedPage.rows.map((r) => r.survey_submission_id));
   const submissions = readers.filter(
-    (s) => !prepaidSubmissions.has(s.id) && !isPayToStartTracker(s.utm_tracker)
+    (s) =>
+      !prepaidSubmissions.has(s.id) &&
+      !gatedSubmissions.has(s.id) &&
+      !isPayToStartTracker(s.utm_tracker)
   );
   const ids = new Set(submissions.map((s) => s.id));
   const quotesPage =
@@ -374,7 +392,11 @@ export async function loadArmOutcomes(since: string, until?: string): Promise<Ar
     submissions,
     bySubmission,
     truncated:
-      subsPage.truncated || prepaidPage.truncated || quotesPage.truncated || paymentsPage.truncated,
+      subsPage.truncated ||
+      prepaidPage.truncated ||
+      gatedPage.truncated ||
+      quotesPage.truncated ||
+      paymentsPage.truncated,
   };
 }
 
