@@ -1,5 +1,6 @@
 -- Rollback of 20261023150000_funnel_event_offer. Deploy code that no longer writes `offer`
--- first: an insert naming a dropped column is refused whole, and the visit is lost.
+-- first: an insert naming a dropped column is refused whole, and the visit is lost. The AP
+-- Pay to start page reads it too; without it the page says its visits can't be read.
 
 BEGIN;
 

@@ -144,6 +144,8 @@ revenue per visit and ROAS first. Each funnel's ads are Google Ads' spend on the
 lands on (`landing_page_view`, by day). Each offer's visits are `funnel_event` rows labelled
 `pay_to_start` with the page's `offer` (`full` or `pre`, migration `20261023150000`), written
 from 23 Oct 2026; earlier visits to the two pages carry no offer, count in neither column, and
-the page says how many. "Paid traffic only" reads the ad clicks as visits and a buyer as paid
-traffic when the purchase's tracker (`prepaid_report_access.utm_tracker`) holds a Google Ads
-click.
+the page says how many (an offer that sold on such a day gets no rates per visit for that
+range). A survey is pay to start's only when a paid purchase claimed it: a checkout opened and
+never paid is bound to the survey too, and that reader counts with the free funnels. "Paid
+traffic only" reads the ad clicks as visits and a buyer as paid traffic when the purchase's
+tracker (`prepaid_report_access.utm_tracker`) holds a Google Ads click.

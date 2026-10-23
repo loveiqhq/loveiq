@@ -61,15 +61,16 @@ function show(unit: Unit, v: number | null): string {
     case "eur":
       return fmt("eur", v, 2);
     case "eur3":
-      return fmt("eur3", v);
+      // Three decimals, as the step cards; a figure above 0 never reads as nothing.
+      return v > 0 && v < 0.0005 ? "<€0.001" : fmt("eur", v, 3);
     case "pct":
-      return fmt("pct", v, 2);
+      return v > 0 && v < 0.00005 ? "<0.01%" : fmt("pct", v, 2);
     case "count":
       return fmt("count", v);
     case "x":
       return `${v.toFixed(2)}×`;
     case "net":
-      return v > 0 ? `${NET_PLUS}${fmt("eur", v, 2)}` : fmt("eur", v, 2);
+      return v >= 0 ? `${NET_PLUS}${fmt("eur", v, 2)}` : fmt("eur", v, 2);
   }
 }
 
@@ -231,6 +232,12 @@ const TONE: Record<Tone, string> = {
   bad: "bg-ap-bad/[0.07] text-ap-bad-ink",
 };
 
+/** What the colour says, for a screen reader and on hover (colour alone is no answer). */
+const TONE_WORD: Record<Exclude<Tone, "plain">, string> = {
+  good: "best of the running funnels",
+  bad: "worst of the running funnels",
+};
+
 /** Green for the best of the running funnels on a line, red for the worst; none for a tie. */
 function toneOf(row: Row, v: number | null, values: Array<number | null>): Tone {
   const xs = values.filter((x): x is number => x !== null && Number.isFinite(x));
@@ -290,12 +297,13 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
               return (
                 <tr
                   key={r.label}
-                  className={`border-t border-ap-line ${r.core ? "bg-[#f7f3ff] shadow-[inset_4px_0_0_#795fc8]" : ""}`}
+                  className={`border-t border-ap-line ${r.core ? "bg-[#f7f3ff]" : ""}`}
                 >
                   <th
                     scope="row"
                     title={r.hint}
-                    className={`px-3 py-2.5 text-left ${r.core ? "text-[15px] font-bold" : "font-medium"} text-ap-ink`}
+                    // The accent on the cell: Safari paints no box-shadow on a table row.
+                    className={`px-3 py-2.5 text-left ${r.core ? "text-[15px] font-bold shadow-[inset_4px_0_0_#795fc8]" : "font-medium"} text-ap-ink`}
                   >
                     <span className="flex items-center gap-2">
                       {r.label}
@@ -314,12 +322,15 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
                         </td>
                       );
                     const v = r.value(f, f[traffic]);
+                    const tone = toneOf(r, v, values);
                     return (
                       <td
                         key={f.key}
-                        className={`px-3 py-2.5 text-right ${r.core ? "text-[15px] font-bold" : "font-medium"} ${TONE[toneOf(r, v, values)]}`}
+                        title={tone === "plain" ? undefined : TONE_WORD[tone]}
+                        className={`px-3 py-2.5 text-right ${r.core ? "text-[15px] font-bold" : "font-medium"} ${TONE[tone]}`}
                       >
                         {show(r.unit, v)}
+                        {tone !== "plain" && <span className="sr-only"> ({TONE_WORD[tone]})</span>}
                       </td>
                     );
                   })}
@@ -399,7 +410,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
                     Revenue per visitor
                   </span>
                   <span className="font-serif text-[22px] font-semibold text-ap-ink">
-                    {f.live ? fmt("eur", f.all.m.rpv, 3) : EMPTY}
+                    {f.live ? show("eur3", f.all.m.rpv) : EMPTY}
                   </span>
                 </span>
               </div>
@@ -475,6 +486,7 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
     return out.filter((r) => r.length);
   };
   const H = 240;
+  const labelStep = Math.max(1, Math.ceil(n / 14));
   return (
     <>
       <SectionHead
@@ -495,112 +507,119 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
         {funnels.map((f) => (
           <span key={f.key} className="inline-flex items-center gap-1.5">
             <LineKey k={f.key} />
-            {f.live ? f.label : `${f.label} · off`}
+            {f.live ? f.label : `${f.label} · off, line starts when switched on`}
           </span>
         ))}
       </div>
-      <div className="overflow-x-auto">
-        <div className="pt-2" style={{ minWidth: n * 64 + 80 }}>
-          <div
-            className="relative border-b border-ap-line"
-            style={{ height: H, margin: "0 12px 0 56px" }}
-          >
-            {QUARTERS.map((q) => (
-              <Fragment key={q}>
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-x-0 border-t border-ap-track"
-                  style={{ bottom: `${q * 100}%` }}
-                />
-                <span
-                  className="absolute -left-14 w-[50px] translate-y-1/2 text-right text-[11px] tabular-nums text-ap-muted"
-                  style={{ bottom: `${q * 100}%` }}
-                >
-                  {show(m.unit, q * top)}
-                </span>
-              </Fragment>
-            ))}
-            <svg
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-              className="absolute inset-0 h-full w-full overflow-visible"
+      {real.length === 0 ? (
+        <p className="m-0 rounded-[14px] bg-ap-ground px-4 py-10 text-center text-sm text-ap-muted">
+          No funnel has a figure for this in the range.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="pt-2" style={{ minWidth: n * 36 + 80 }}>
+            <div
+              className="relative border-b border-ap-line"
+              style={{ height: H, margin: "0 12px 0 56px" }}
             >
-              {funnels.map((f) =>
-                runs(f.key).map((r, j) => (
-                  <polyline
-                    key={`${f.key}-${j}`}
-                    points={r.length === 1 ? `${r[0]} ${r[0]}` : r.join(" ")}
-                    fill="none"
-                    stroke={LINE[f.key].color}
-                    strokeWidth={2}
-                    strokeDasharray={LINE[f.key].dash || undefined}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    vectorEffect="non-scaling-stroke"
+              {QUARTERS.map((q) => (
+                <Fragment key={q}>
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-0 border-t border-ap-track"
+                    style={{ bottom: `${q * 100}%` }}
                   />
-                ))
-              )}
-            </svg>
-            {/* A lone week with a figure is a dot: a line needs two. */}
-            {funnels.flatMap((f) =>
-              runs(f.key)
-                .filter((r) => r.length === 1)
-                .map((r) => {
-                  const [px, py] = r[0]!.split(",").map(Number);
-                  return (
-                    <span
-                      key={`${f.key}-${r[0]}`}
-                      aria-hidden="true"
-                      className="absolute -mb-1 -ml-1 h-2 w-2 rounded-full shadow-[0_0_0_2px_#ffffff]"
-                      style={{
-                        left: `${px}%`,
-                        bottom: `${100 - py!}%`,
-                        background: LINE[f.key].color,
-                      }}
+                  <span
+                    className="absolute -left-14 w-[50px] translate-y-1/2 text-right text-[11px] tabular-nums text-ap-muted"
+                    style={{ bottom: `${q * 100}%` }}
+                  >
+                    {show(m.unit, q * top)}
+                  </span>
+                </Fragment>
+              ))}
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full overflow-visible"
+              >
+                {funnels.map((f) =>
+                  runs(f.key).map((r, j) => (
+                    <polyline
+                      key={`${f.key}-${j}`}
+                      points={r.length === 1 ? `${r[0]} ${r[0]}` : r.join(" ")}
+                      fill="none"
+                      stroke={LINE[f.key].color}
+                      strokeWidth={2}
+                      strokeDasharray={LINE[f.key].dash || undefined}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
                     />
-                  );
-                })
-            )}
-            <IndexHover
-              xs={weeks.map((_, i) => x(i))}
-              label={`${m.label} per week, per funnel`}
-              markers={(i) =>
-                funnels.flatMap((f) => {
-                  const v = weeks[i]!.funnels[f.key][measure];
-                  return v === null || !Number.isFinite(v)
-                    ? []
-                    : [{ y: y(v), color: LINE[f.key].color }];
-                })
-              }
-              tip={(i) => {
-                const w = weeks[i]!;
-                return {
-                  title: periodTitle(w, w.from !== w.to && !isWholeWeek(w)),
-                  sub: m.label,
-                  rows: funnels.map((f) => {
-                    const v = w.funnels[f.key][measure];
-                    return {
-                      label: f.label,
-                      value: f.live ? show(m.unit, v) : "off",
-                      color: LINE[f.key].color,
-                      mark: LINE[f.key].mark,
-                      muted: !f.live || v === null,
-                    };
-                  }),
-                };
-              }}
-            />
-          </div>
-          <div className="flex" style={{ margin: "6px 12px 0 56px" }}>
-            {weeks.map((w) => (
-              <span key={w.from} className="flex-1 text-center text-xs text-ap-muted">
-                {w.label}
-              </span>
-            ))}
+                  ))
+                )}
+              </svg>
+              {/* A lone week with a figure is a dot: a line needs two. */}
+              {funnels.flatMap((f) =>
+                runs(f.key)
+                  .filter((r) => r.length === 1)
+                  .map((r) => {
+                    const [px, py] = r[0]!.split(",").map(Number);
+                    return (
+                      <span
+                        key={`${f.key}-${r[0]}`}
+                        aria-hidden="true"
+                        className="absolute -mb-1 -ml-1 h-2 w-2 rounded-full shadow-[0_0_0_2px_#ffffff]"
+                        style={{
+                          left: `${px}%`,
+                          bottom: `${100 - py!}%`,
+                          background: LINE[f.key].color,
+                        }}
+                      />
+                    );
+                  })
+              )}
+              <IndexHover
+                xs={weeks.map((_, i) => x(i))}
+                label={`${m.label} per week, per funnel`}
+                markers={(i) =>
+                  funnels.flatMap((f) => {
+                    const v = weeks[i]!.funnels[f.key][measure];
+                    return v === null || !Number.isFinite(v)
+                      ? []
+                      : [{ y: y(v), color: LINE[f.key].color }];
+                  })
+                }
+                tip={(i) => {
+                  const w = weeks[i]!;
+                  return {
+                    title: periodTitle(w, w.from !== w.to && !isWholeWeek(w)),
+                    sub: m.label,
+                    rows: funnels.map((f) => {
+                      const v = w.funnels[f.key][measure];
+                      return {
+                        label: f.label,
+                        value: f.live ? show(m.unit, v) : "off",
+                        color: LINE[f.key].color,
+                        mark: LINE[f.key].mark,
+                        muted: !f.live || v === null,
+                      };
+                    }),
+                  };
+                }}
+              />
+            </div>
+            <div className="flex" style={{ margin: "6px 12px 0 56px" }}>
+              {weeks.map((w, i) => (
+                <span key={w.from} className="flex-1 text-center text-xs text-ap-muted">
+                  {/* Every week named up to 14 weeks; past that, every other one (the latest always). */}
+                  {(n - 1 - i) % labelStep === 0 ? w.label : ""}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
       {/* sr-only on the wrapper: a table sized 1px still lays out its columns, and widens the page. */}
       <div className="sr-only">
         <table>

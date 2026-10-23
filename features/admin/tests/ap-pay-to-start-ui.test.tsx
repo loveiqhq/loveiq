@@ -150,10 +150,13 @@ const row = (label: string) =>
   within(table())
     .getAllByRole("row")
     .find((r) => within(r).queryByRole("rowheader")?.textContent?.startsWith(label))!;
-const cells = (label: string) =>
-  within(row(label))
-    .getAllByRole("cell")
-    .map((c) => c.textContent);
+/** What a cell shows on screen: its text without the words only a screen reader hears. */
+const shown = (el: Element) => {
+  const copy = el.cloneNode(true) as Element;
+  copy.querySelectorAll(".sr-only").forEach((x) => x.remove());
+  return copy.textContent;
+};
+const cells = (label: string) => within(row(label)).getAllByRole("cell").map(shown);
 
 describe("ApPayToStart", () => {
   it("lays the four funnels side by side, the gate off, the three core KPIs marked", () => {
@@ -235,7 +238,9 @@ describe("ApPayToStart", () => {
   it("draws a line per funnel by week, the gate's legend saying it is off", () => {
     view.payload = payload;
     render(<ApPayToStart />);
-    expect(screen.getByText("€1.99 after the survey · off")).toBeTruthy();
+    expect(
+      screen.getByText("€1.99 after the survey · off, line starts when switched on")
+    ).toBeTruthy();
     const weeks = screen.getByRole("table", { name: /per week, per funnel/ });
     expect(within(weeks).getAllByRole("row")[1]!.textContent).toBe(
       "12 Oct – 18 Oct 2026€450—€15off"
@@ -266,6 +271,54 @@ describe("ApPayToStart", () => {
     expect(
       exported.sections[2]!.table.rows.every((r) => r.label !== "€1.99 after the survey")
     ).toBe(true);
+  });
+
+  it("says best and worst in words too, not by colour alone", () => {
+    view.payload = payload;
+    render(<ApPayToStart />);
+    const [after, , pre] = within(row("Visit → paying customer")).getAllByRole("cell");
+    expect(after!.textContent).toBe("0.03% (worst of the running funnels)");
+    expect(pre!.getAttribute("title")).toBe("best of the running funnels");
+    // Safari paints no box-shadow on a table row: the core accent is on its header cell.
+    expect(row("ROAS").className).not.toContain("shadow");
+    expect(within(row("ROAS")).getByRole("rowheader").className).toContain(
+      "shadow-[inset_4px_0_0_#795fc8]"
+    );
+  });
+
+  it("never writes a figure above zero as zero, and a break-even as +€0.00", () => {
+    const tiny = structuredClone(payload);
+    const after = tiny.funnels[0]!;
+    after.all.m = { ...after.all.m, rpv: 0.0002, cvr: 0.00002, net: 0 };
+    view.payload = tiny;
+    render(<ApPayToStart />);
+    expect(cells("Revenue per visit")[0]).toBe("<€0.001");
+    expect(cells("Visit → paying customer")[0]).toBe("<0.01%");
+    expect(cells("Return on ad spend (€)")[0]).toBe("+€0.00");
+  });
+
+  it("says so when no funnel has a figure for the measure, instead of an empty axis", () => {
+    const none = structuredClone(payload);
+    for (const w of none.weeks)
+      for (const k of Object.keys(w.funnels) as FunnelKey[]) w.funnels[k].cac = null;
+    view.payload = none;
+    render(<ApPayToStart />);
+    expect(screen.getByText("No funnel has a figure for this in the range.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "ROAS" }));
+    expect(screen.queryByText("No funnel has a figure for this in the range.")).toBeNull();
+  });
+
+  it("names every other week once there are more than 14, the latest always", () => {
+    const long = structuredClone(payload);
+    long.weeks = Array.from({ length: 20 }, (_, i) => ({
+      ...payload.weeks[0]!,
+      from: `2026-${String(5 + Math.floor(i / 4)).padStart(2, "0")}-${String(1 + (i % 4) * 7).padStart(2, "0")}`,
+      label: `W${i + 1}`,
+    }));
+    view.payload = long;
+    render(<ApPayToStart />);
+    const named = screen.queryAllByText(/^W\d+$/).map((x) => x.textContent);
+    expect(named).toEqual(["W2", "W4", "W6", "W8", "W10", "W12", "W14", "W16", "W18", "W20"]);
   });
 
   it("shows the notes under the page", () => {

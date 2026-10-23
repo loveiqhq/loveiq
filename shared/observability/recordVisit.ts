@@ -98,6 +98,22 @@ async function writeFunnelEvent(
 }
 
 /**
+ * The new daily visit proxy.ts flagged on this request, as recordUniqueVisit's arguments (arm,
+ * source, pay-to-start offer); null when none. Read in the root layout.
+ */
+export function flaggedVisit(
+  headers: Pick<Headers, "get">
+): [variant: string, utmSource?: string, offer?: string] | null {
+  const variant = headers.get("x-liq-new-visit");
+  if (!variant) return null;
+  return [
+    variant,
+    headers.get("x-liq-new-visit-utm") ?? undefined,
+    headers.get("x-liq-new-visit-offer") ?? undefined,
+  ];
+}
+
+/**
  * One aggregate daily unique-visit, as described above. `offer`: the pay-to-start page's.
  */
 export async function recordUniqueVisit(

@@ -515,6 +515,110 @@ describe("buildPayToStart", () => {
   });
 });
 
+describe("buildPayToStart, the edges", () => {
+  it("keeps a refunded buyer who kept an upgrade as a customer, with the upgrade's money only", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({
+            id: 1,
+            offer: "pre",
+            status: "refunded",
+            amount_cents: 199,
+            consumed_submission_id: 900,
+          }),
+          ent({ id: 2, offer: "pre", status: "refunded", amount_cents: 199 }),
+        ],
+        laterPays: new Map([[900, [{ amount: 19.99, plan: "full_report" }]]]),
+      })
+    );
+    const pre = funnel(p, "pre");
+    // Both paid first; one kept the full report, the other has nothing left.
+    expect(pre.all).toMatchObject({ paid: 1, revenue: 19.99, finished: 1 });
+    // Neither EUR 1.99 stands.
+    expect(step(p, "pre", "Paid €1.99")).toBe(0);
+    expect(step(p, "pre", "Bought the full report")).toBe(1);
+  });
+
+  it("counts a checkout reopened and paid in the range, though its row is older", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ created_at: "2026-10-10T10:00:00Z", paid_at: "2026-10-20T10:00:00Z" }),
+        ],
+      })
+    );
+    expect(step(p, "full", "Checkout started")).toBe(1);
+    expect(step(p, "full", "Paid €29.99")).toBe(1);
+  });
+
+  it("reads an ad click → paying customer as the ads' own customers, in both views", () => {
+    const p = buildPayToStart(
+      input({
+        facts: {
+          visits: [visit("2026-10-20", 100)],
+          starts: [],
+          subs: [
+            sub({ id: 1, day: "2026-10-20", paidAt: "2026-10-20T11:00:00Z", sales: 1, revenue: 9 }),
+            // Organic: never an ad click's customer.
+            sub({
+              id: 2,
+              day: "2026-10-20",
+              src: null,
+              med: null,
+              ads: false,
+              paidAt: "2026-10-20T11:00:00Z",
+              sales: 1,
+              revenue: 9,
+            }),
+          ],
+        },
+        ads: { ok: true, value: [ad(FREE_PAGE, "2026-10-20", 10, 4)] },
+      })
+    );
+    const after = funnel(p, "after");
+    expect(after.all.paid).toBe(2);
+    expect(after.all.m.clickCvr).toBeCloseTo(1 / 4);
+    expect(after.ads.m.clickCvr).toBeCloseTo(1 / 4);
+  });
+
+  it("leaves an offer's rates per visit blank when it sold on a day its visits can't be counted", () => {
+    const p = buildPayToStart(
+      input({
+        from: "2026-10-19",
+        to: "2026-10-25",
+        ptsVisits: [
+          // The 23rd: before the pages were counted apart.
+          { day: "2026-10-23", offer: null, src: null, n: 6 },
+          { day: "2026-10-24", offer: "full", src: null, n: 50 },
+          { day: "2026-10-24", offer: "pre", src: null, n: 40 },
+        ],
+        entitlements: [
+          ent({ id: 1, created_at: "2026-10-23T10:00:00Z", paid_at: "2026-10-23T10:05:00Z" }),
+          ent({
+            id: 2,
+            offer: "pre",
+            amount_cents: 199,
+            created_at: "2026-10-24T10:00:00Z",
+            paid_at: "2026-10-24T10:05:00Z",
+          }),
+        ],
+      })
+    );
+    const full = funnel(p, "full");
+    expect(full.all.visits).toBeNull();
+    expect(full.all.m).toMatchObject({ cvr: null, rpv: null, finishRate: null });
+    expect(full.all.paid).toBe(1);
+    // The EUR 1.99 offer sold only on a counted day: its rates stand.
+    expect(funnel(p, "pre").all.visits).toBe(40);
+    expect(funnel(p, "pre").all.m.cvr).toBeCloseTo(1 / 40);
+    expect(p.notes).toContain(
+      "Pay to start · €29.99 sold on a day its visits can't be told apart from the other page's, so its rates per visit are left blank for this range."
+    );
+    expect(p.weeks[0]!.funnels.full.cvr).toBeNull();
+  });
+});
+
 describe("measuresOf", () => {
   it("blanks a cost and ROAS without ad spend, and a rate without its divisor", () => {
     const m = measuresOf(0, 0, { visits: null, finished: 2, paid: 1, revenue: 29.99 });

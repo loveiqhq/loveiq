@@ -118,29 +118,35 @@ describe("GET /api/admin/ap/pay-to-start", () => {
         consumed_submission_id: 700,
         utm_tracker: null,
       },
+      // A checkout opened and never paid: the claim binds it to the survey all the same.
+      {
+        id: 2,
+        offer: "pre",
+        status: "expired",
+        amount_cents: null,
+        list_price_cents: 199,
+        is_test: false,
+        customer_email: null,
+        created_at: "2026-10-20T10:30:00Z",
+        paid_at: null,
+        consumed_submission_id: 701,
+        utm_tracker: null,
+      },
     ];
     rows["/rest/v1/funnel_event?"] = [
       { day: "2026-10-20", offer: "full", utm_source: "google" },
       { day: "2026-10-20", offer: "full", utm_source: "google" },
       { day: "2026-10-20", offer: "pre", utm_source: null },
     ];
-    rows["/rest/v1/survey_submission?status=eq.completed&utm_tracker"] = [
-      {
-        id: 701,
-        session_id: "s-701",
-        start_date_time: "2026-10-20T10:40:00Z",
-        created_date_time: "2026-10-20T11:00:00Z",
-        utm_tracker: JOURNEY,
-      },
-    ];
     const res = await GET(req());
     expect(res.status).toBe(200);
     const body = (await res.json()) as PtsPayload;
     const by = (k: string) => body.funnels.find((f) => f.key === k)!;
-    // Sub 1 only: 700 was claimed, 701 carries the journey.
-    expect(by("after").all).toMatchObject({ visits: 300, finished: 1 });
+    // 700 was paid for first: pay to start's. 701's browser never paid: it took the free
+    // survey like anyone, so it is pay after the report's, with sub 1.
+    expect(by("after").all).toMatchObject({ visits: 300, finished: 2 });
     expect(by("full").all).toMatchObject({ visits: 2, paid: 1, finished: 1, revenue: 29.99 });
-    expect(by("pre").all.visits).toBe(1);
+    expect(by("pre").all).toMatchObject({ visits: 1, paid: 0, finished: 0 });
     expect(by("gate").live).toBe(false);
 
     const p = paths();
@@ -157,7 +163,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect(String(mockAds.mock.calls[0]![0])).toContain("FROM landing_page_view");
   });
 
-  it("takes buyers' survey starts out once each, as ap_facts counts a start", async () => {
+  it("takes paid buyers' survey starts out of the free survey's, as ap_facts counted them", async () => {
     mockSupabaseFetch.mockImplementation(async () =>
       json(
         facts({
@@ -170,86 +176,87 @@ describe("GET /api/admin/ap/pay-to-start", () => {
               ads: true,
               arm: null,
               device: "iOS",
-              finished: false,
+              finished: true,
               camp: null,
               term: null,
               cq: null,
-              email: false,
+              email: true,
               n: 10,
             },
           ],
         })
       )
     );
+    const paid = (id: number, sid: number, email = "reader@example.com") => ({
+      id,
+      offer: "full",
+      status: "succeeded",
+      amount_cents: 2999,
+      list_price_cents: 2999,
+      is_test: false,
+      customer_email: email,
+      created_at: "2026-10-20T09:00:00Z",
+      paid_at: "2026-10-20T09:02:00Z",
+      consumed_submission_id: sid,
+      utm_tracker: null,
+    });
     rows["/rest/v1/prepaid_report_access?"] = [
-      {
-        id: 1,
-        offer: "pre",
-        status: "succeeded",
-        amount_cents: 199,
-        list_price_cents: 199,
-        is_test: true,
-        customer_email: "fatih@loveiq.org",
-        created_at: "2026-10-20T09:00:00Z",
-        paid_at: "2026-10-20T09:02:00Z",
-        consumed_submission_id: 702,
-        utm_tracker: null,
-      },
+      paid(1, 701),
+      // Paid with a private address, the survey taken as staff: ap_facts never counted it.
+      paid(2, 702, "someone@example.com"),
+      // Never paid: a free survey, its start stays.
+      { ...paid(3, 703), status: "pending", amount_cents: null, paid_at: null },
+      // Our own check.
+      paid(4, 704),
+      // Started the day before the range.
+      paid(5, 705),
     ];
-    rows["/rest/v1/survey_partial_save?"] = [
-      // Past the first question, labelled: a buyer's start.
-      {
-        session_id: "a",
-        started_at: "2026-10-20T08:00:00Z",
-        current_index: 3,
-        utm_tracker: JOURNEY,
-      },
-      // Never answered: no start.
-      {
-        session_id: "b",
-        started_at: "2026-10-20T08:00:00Z",
-        current_index: 0,
-        utm_tracker: JOURNEY,
-      },
-      // The like filter's look-alike without the label: not a buyer.
-      {
-        session_id: "c",
-        started_at: "2026-10-20T08:00:00Z",
-        current_index: 5,
-        utm_tracker: JSON.stringify({ utm_campaign: "pay_to_start_brand" }),
-      },
-      // The same session as the finished survey below: one start.
-      {
-        session_id: "s-701",
-        started_at: "2026-10-20T10:40:00Z",
-        current_index: 9,
-        utm_tracker: JOURNEY,
-      },
-    ];
-    rows["/rest/v1/survey_submission?status=eq.completed&utm_tracker"] = [
+    rows["/rest/v1/survey_submission?id=in."] = [
       {
         id: 701,
-        session_id: "s-701",
-        start_date_time: "2026-10-20T10:41:00Z",
+        user_id: 9001,
+        start_date_time: "2026-10-20T10:40:00Z",
         created_date_time: "2026-10-20T11:00:00Z",
         utm_tracker: JOURNEY,
       },
-    ];
-    // A staff member's claimed survey: ap_facts never counted its start, so none comes off.
-    rows["/rest/v1/survey_submission?id=in."] = [
       {
         id: 702,
-        session_id: "staff",
-        start_date_time: "2026-10-20T09:10:00Z",
-        created_date_time: "2026-10-20T09:30:00Z",
+        user_id: 9002,
+        start_date_time: "2026-10-20T10:40:00Z",
+        created_date_time: "2026-10-20T11:00:00Z",
+        utm_tracker: null,
       },
+      {
+        id: 704,
+        user_id: 9004,
+        start_date_time: "2026-10-20T10:40:00Z",
+        created_date_time: "2026-10-20T11:00:00Z",
+        utm_tracker: JSON.stringify({ utm_source: "prod-verification" }),
+      },
+      {
+        id: 705,
+        user_id: 9005,
+        start_date_time: "2026-10-19T10:00:00Z",
+        created_date_time: "2026-10-20T08:00:00Z",
+        utm_tracker: null,
+      },
+    ];
+    rows["/rest/v1/app_user?"] = [
+      { id: 9001, email: "reader@example.com" },
+      { id: 9002, email: "fatih@loveiq.org" },
+      { id: 9004, email: "x@example.com" },
+      { id: 9005, email: "y@example.com" },
     ];
     const body = (await (await GET(req())).json()) as PtsPayload;
     const after = body.funnels.find((f) => f.key === "after")!;
-    // 10 starts, the buyers' "a" and "s-701" out.
-    expect(after.steps.find((s) => s.label === "Survey started")!.n).toBe(8);
-    expect(paths().find((x) => x.startsWith("/rest/v1/survey_submission?id=in."))).toContain(
-      "id=in.(702)"
+    // 10 starts; only 701's is a paid buyer's that ap_facts counted.
+    expect(after.steps.find((s) => s.label === "Survey started")!.n).toBe(9);
+    const p = paths();
+    expect(p.find((x) => x.startsWith("/rest/v1/survey_submission?id=in."))).toContain(
+      "id=in.(701,702,704,705)"
+    );
+    expect(p.find((x) => x.startsWith("/rest/v1/app_user?"))).toContain(
+      "id=in.(9001,9002,9004,9005)"
     );
   });
 
@@ -327,7 +334,6 @@ describe("GET /api/admin/ap/pay-to-start", () => {
   it("answers a failed read with a generic 500, never a page of zeros", async () => {
     for (const failing of [
       "/rest/v1/prepaid_report_access?",
-      "/rest/v1/survey_partial_save?",
       "/rest/v1/personal_report?initial_gate_cohort_at",
     ]) {
       clearFactsCache();

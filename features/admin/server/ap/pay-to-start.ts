@@ -20,8 +20,11 @@
  * free survey, or paid to start):
  * - Visits: unique visitors per day (funnel_event). The free survey's are every visit not
  *   labelled `pay_to_start`; pay to start's carry that label and their page's `offer`.
- * - Paying customers: those whose payment took money and stands (refunds and EUR 0 left out).
+ * - Paying customers: those who kept a payment that took money (refunds and EUR 0 left out).
  * - Revenue: everything they paid on their report, upgrades included, refunds left out.
+ * - A survey is pay to start's only when a paid purchase claimed it. A browser that opened a
+ *   checkout and never paid (its row still gets bound to the survey) takes the free survey
+ *   like anyone, and counts with the free funnels.
  * - Paid traffic only: the visits are the ad clicks, the people those whose survey (free) or
  *   purchase (pay to start) carries a Google Ads click (classifySource), as on the Traffic page.
  * Staff and test buys are left out, as on every AP page.
@@ -30,7 +33,6 @@ import { googleAdsSearch } from "@shared/http/google-ads";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
-import { isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { isInitialUnlockGateEnabled } from "@features/report/server/initialGateState";
 
 import { fetchAllRows } from "../supabase";
@@ -85,7 +87,7 @@ export interface PtsRecords {
    * utm_source (to leave our own checks out); null when unreadable.
    */
   ptsVisits: Array<{ day: string; offer: string | null; src: string | null; n: number }> | null;
-  /** Submissions bought before they were taken: claimed, or their tracker carries the journey. */
+  /** Submissions a paid pay-to-start purchase claimed (charged, refunded or not): that journey's. */
   boughtFirst: ReadonlySet<number>;
   /** Pay-to-start buyers' survey starts per Berlin day: ap_facts counts them among its starts. */
   boughtFirstStarts: Readonly<Record<string, number>>;
@@ -243,6 +245,12 @@ export function taggedOf(tracker: string | null): Parameters<typeof classifySour
   };
 }
 
+/** Money was taken for it: charged, and refunded since or not. */
+const isPaid = (e: EntitlementRow) =>
+  (e.amount_cents ?? 0) > 0 &&
+  e.paid_at !== null &&
+  (e.status === "succeeded" || e.status === "refunded");
+
 /** Our own probes and verification runs, never counted (classifySource "test"). */
 const isOurTest = (t: Parameters<typeof classifySource>[0], known = true) =>
   known && classifySource(t) === "test";
@@ -394,17 +402,37 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
   const isAd = (t: Parameters<typeof classifySource>[0]) => classifySource(t) === "google_ads";
   const paidSub = (s: SubFact) => s.paidAt !== null && s.sales > 0;
 
-  // Pay to start's buyers: who paid in the range, and what they paid then and after.
+  // Pay to start's buyers: who paid in the range (refunded since or not), and what they kept
+  // of it and of what they bought on the report after.
   const rows = input.entitlements.filter(counts);
-  const payers = rows.filter(
-    (e) => e.status === "succeeded" && (e.amount_cents ?? 0) > 0 && inRange(e.paid_at)
-  );
+  const bought = rows.filter((e) => isPaid(e) && inRange(e.paid_at));
   const later = (e: EntitlementRow) =>
     e.consumed_submission_id === null ? [] : (input.laterPays.get(e.consumed_submission_id) ?? []);
+  const kept = (e: EntitlementRow) => e.status === "succeeded";
   const moneyOf = (e: EntitlementRow) =>
-    (e.amount_cents ?? 0) / 100 + sumBy(later(e), (p) => p.amount);
+    (kept(e) ? (e.amount_cents ?? 0) / 100 : 0) + sumBy(later(e), (p) => p.amount);
+  const customers = (xs: EntitlementRow[]) => xs.filter((e) => moneyOf(e) > 0);
+  // Days with pay-to-start visits recorded before the two pages were counted apart: an offer
+  // that sold on one of them has visits missing for its own buyers, so no rate per visit.
+  const unsplitDays = new Set(
+    (input.ptsVisits ?? [])
+      .filter(
+        (v) =>
+          v.offer !== "full" &&
+          v.offer !== "pre" &&
+          !isOurTest({ src: v.src, med: null, ads: false })
+      )
+      .map((v) => v.day)
+  );
+  const soldUnsplit = (offer: PtsOffer, ds: string[] = days) =>
+    bought.some(
+      (e) =>
+        e.offer === offer &&
+        unsplitDays.has(dayOf(e.paid_at as string)) &&
+        ds.includes(dayOf(e.paid_at as string))
+    );
   const ptsVisitsOf = (offer: PtsOffer, ds: string[] = days): number | null => {
-    if (!input.ptsVisits) return null;
+    if (!input.ptsVisits || soldUnsplit(offer, ds)) return null;
     const set = new Set(ds);
     return sumBy(
       input.ptsVisits.filter(
@@ -425,6 +453,12 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     ...v,
     m: measuresOf(a ? a.cost : null, a ? a.clicks : null, v),
   });
+  /** Both views. An ad click → paying customer is the ad's customers per click in each. */
+  const views = (a: Ads | null, all: PtsView, paid: PtsView) => {
+    const ads = withMeasures(a, paid);
+    const both = withMeasures(a, all);
+    return { all: { ...both, m: { ...both.m, clickCvr: ads.m.clickCvr } }, ads };
+  };
 
   const freeFunnel = (key: "after" | "gate"): PtsFunnel => {
     const subs = subsOf[key];
@@ -480,34 +514,36 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       live: key === "after" || gateLive,
       spend: ads ? ads.cost : null,
       clicks: ads ? ads.clicks : null,
-      all: withMeasures(ads, all),
-      ads: withMeasures(ads, paidView),
+      ...views(ads, all, paidView),
       steps,
     };
   };
 
   const ptsFunnel = (offer: PtsOffer): PtsFunnel => {
     const ads = adsOf(offer);
-    const mine = payers.filter((e) => e.offer === offer);
+    const mine = bought.filter((e) => e.offer === offer);
     const adBuyers = mine.filter((e) => isAd(taggedOf(e.utm_tracker)));
     const finished = (xs: EntitlementRow[]) => xs.filter((e) => e.consumed_submission_id !== null);
     const visits = ptsVisitsOf(offer);
-    const all = view(visits, finished(mine).length, mine.length, sumBy(mine, moneyOf));
+    const all = view(visits, finished(mine).length, customers(mine).length, sumBy(mine, moneyOf));
     const paidView = view(
       ads ? ads.clicks : null,
       finished(adBuyers).length,
-      adBuyers.length,
+      customers(adBuyers).length,
       sumBy(adBuyers, moneyOf)
     );
     const price = euros(input.prices[offer]);
     const steps: PtsStep[] = [
       { label: "Visits", n: visits, pays: false },
       {
+        // A checkout reopened later keeps its row's first day: one paid in the range started
+        // its checkout by then too.
         label: "Checkout started",
-        n: rows.filter((e) => e.offer === offer && inRange(e.created_at)).length,
+        n: rows.filter((e) => e.offer === offer && (inRange(e.created_at) || inRange(e.paid_at)))
+          .length,
         pays: false,
       },
-      { label: `Paid ${price}`, n: mine.length, pays: true },
+      { label: `Paid ${price}`, n: mine.filter(kept).length, pays: true },
       { label: "Survey finished", n: finished(mine).length, pays: false },
       {
         label: "Report opened",
@@ -530,8 +566,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       live: true,
       spend: ads ? ads.cost : null,
       clicks: ads ? ads.clicks : null,
-      all: withMeasures(ads, all),
-      ads: withMeasures(ads, paidView),
+      ...views(ads, all, paidView),
       steps,
     };
   };
@@ -561,12 +596,12 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       );
     };
     const ptsPoint = (offer: PtsOffer) => {
-      const mine = payers.filter((e) => e.offer === offer && inWeek(dayOf(e.paid_at as string)));
+      const mine = bought.filter((e) => e.offer === offer && inWeek(dayOf(e.paid_at as string)));
       const ads = adsOf(offer, ds);
       return point(
         ads ? ads.cost : null,
         ptsVisitsOf(offer, ds),
-        mine.length,
+        customers(mine).length,
         sumBy(mine, moneyOf)
       );
     };
@@ -603,6 +638,11 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       notes.push(
         `${unsplit} ${unsplit === 1 ? "visit" : "visits"} to the pay-to-start pages came before the two pages were counted apart, so neither offer's visits include ${unsplit === 1 ? "it" : "them"}.`
       );
+    for (const offer of ["full", "pre"] as const)
+      if (soldUnsplit(offer))
+        notes.push(
+          `Pay to start · ${euros(input.prices[offer])} sold on a day its visits can't be told apart from the other page's, so its rates per visit are left blank for this range.`
+        );
   }
   if (days.some((d) => (share.get(d) ?? 0) > 0 && (share.get(d) ?? 0) < 1))
     notes.push(
@@ -672,10 +712,10 @@ function chunks<T>(xs: T[], size = 100): T[][] {
 
 interface SubmissionRow {
   id: number;
-  session_id: string | null;
+  user_id: number | null;
   start_date_time: string | null;
   created_date_time: string;
-  utm_tracker?: string | null;
+  utm_tracker: string | null;
 }
 
 /** Everything the page reads from our database for [from, to], besides ap_facts. */
@@ -685,55 +725,31 @@ export async function fetchPayToStartRecords(
   const { since, until } = windowOf(filters);
   const sinceIso = since.toISOString();
   const untilIso = until.toISOString();
-  // A survey is finished within days of its start; a week covers a start in the range
-  // finished after it, and a finish in the range started before it.
-  const week = 7 * 86_400_000;
-  const [entitlements, visitRows, labelledSubs, labelledDrafts, cohort, gateOn] = await Promise.all(
-    [
-      must<EntitlementRow>(
-        "/rest/v1/prepaid_report_access?offer=not.is.null" +
-          `&created_at=lt.${untilIso}` +
-          "&select=id,offer,status,amount_cents,list_price_cents,is_test,customer_email,created_at,paid_at,consumed_submission_id,utm_tracker" +
-          "&order=id.asc",
-        "prepaid_report_access"
-      ),
-      fetchAllRows<{ day: string; offer: string | null; utm_source: string | null }>(
-        "/rest/v1/funnel_event?event_type=eq.unique_visitor&landing_variant=eq.pay_to_start" +
-          `&day=gte.${filters.from}&day=lte.${filters.to}` +
-          "&select=day,offer,utm_source&order=day.asc,visitor_id.asc"
-      ),
-      must<SubmissionRow>(
-        // eslint-disable-next-line no-secrets/no-secrets -- REST path, not a secret
-        "/rest/v1/survey_submission?status=eq.completed&utm_tracker=like.*pay_to_start*" +
-          `&created_date_time=gte.${new Date(since.getTime() - week).toISOString()}` +
-          `&created_date_time=lt.${new Date(until.getTime() + week).toISOString()}` +
-          "&select=id,session_id,start_date_time,created_date_time,utm_tracker&order=id.asc",
-        "survey_submission"
-      ),
-      must<{
-        session_id: string;
-        started_at: string | null;
-        current_index: number | null;
-        utm_tracker: string | null;
-      }>(
-        "/rest/v1/survey_partial_save?utm_tracker=like.*pay_to_start*" +
-          `&started_at=gte.${sinceIso}&started_at=lt.${untilIso}` +
-          "&select=session_id,started_at,current_index,utm_tracker&order=session_id.asc",
-        "survey_partial_save"
-      ),
-      must<{
-        survey_submission_id: number;
-        initial_gate_cohort_at: string;
-        initial_gate_seen_at: string | null;
-      }>(
-        `/rest/v1/personal_report?initial_gate_cohort_at=gte.${sinceIso}` +
-          `&initial_gate_cohort_at=lt.${new Date(until.getTime() + STAMPED_AT_SUBMIT_MS).toISOString()}` +
-          "&select=survey_submission_id,initial_gate_cohort_at,initial_gate_seen_at&order=id.asc",
-        "personal_report"
-      ),
-      isInitialUnlockGateEnabled(),
-    ]
-  );
+  const [entitlements, visitRows, cohort, gateOn] = await Promise.all([
+    must<EntitlementRow>(
+      "/rest/v1/prepaid_report_access?offer=not.is.null" +
+        `&created_at=lt.${untilIso}` +
+        "&select=id,offer,status,amount_cents,list_price_cents,is_test,customer_email,created_at,paid_at,consumed_submission_id,utm_tracker" +
+        "&order=id.asc",
+      "prepaid_report_access"
+    ),
+    fetchAllRows<{ day: string; offer: string | null; utm_source: string | null }>(
+      "/rest/v1/funnel_event?event_type=eq.unique_visitor&landing_variant=eq.pay_to_start" +
+        `&day=gte.${filters.from}&day=lte.${filters.to}` +
+        "&select=day,offer,utm_source&order=day.asc,visitor_id.asc"
+    ),
+    must<{
+      survey_submission_id: number;
+      initial_gate_cohort_at: string;
+      initial_gate_seen_at: string | null;
+    }>(
+      `/rest/v1/personal_report?initial_gate_cohort_at=gte.${sinceIso}` +
+        `&initial_gate_cohort_at=lt.${new Date(until.getTime() + STAMPED_AT_SUBMIT_MS).toISOString()}` +
+        "&select=survey_submission_id,initial_gate_cohort_at,initial_gate_seen_at&order=id.asc",
+      "personal_report"
+    ),
+    isInitialUnlockGateEnabled(),
+  ]);
 
   const visitCount = new Map<
     string,
@@ -751,53 +767,44 @@ export async function fetchPayToStartRecords(
     visitCount.set(key, v);
   }
 
-  // Bought first: claimed by a submission, or labelled by the journey (a claim that failed
-  // before it bound) — as SQL's pay_to_start_submission() reads it.
+  // Bought first: claimed by a purchase that was paid. A checkout left unpaid is bound to the
+  // survey too (claim.ts binds a pending row), and its browser took the free survey like anyone.
   const claimedBy = new Map<number, EntitlementRow>();
   for (const e of entitlements)
-    if (e.consumed_submission_id !== null) claimedBy.set(e.consumed_submission_id, e);
-  const labelled = labelledSubs.filter((s) => isPayToStartTracker(s.utm_tracker));
-  const boughtFirst = new Set<number>([...claimedBy.keys(), ...labelled.map((s) => s.id)]);
+    if (e.consumed_submission_id !== null && isPaid(e)) claimedBy.set(e.consumed_submission_id, e);
+  const boughtFirst = new Set(claimedBy.keys());
 
-  // The claimed surveys without the label (a buyer with no tracker), for their starts.
-  const unlabelledClaims = [...claimedBy.keys()].filter((id) => !labelled.some((s) => s.id === id));
+  // Their survey starts, which ap_facts counts among the free survey's: a finished survey's
+  // start, unless ap_facts left it out (a staff member's by app_user's address, our own checks).
+  // ponytail: a buyer's unfinished start (no submission to tie it to the purchase) stays in.
   const claimedSubs: SubmissionRow[] = [];
-  for (const ids of chunks(unlabelledClaims)) {
+  for (const ids of chunks([...boughtFirst])) {
     claimedSubs.push(
       ...(await must<SubmissionRow>(
         `/rest/v1/survey_submission?id=in.(${ids.join(",")})&status=eq.completed` +
-          "&select=id,session_id,start_date_time,created_date_time&order=id.asc",
+          "&select=id,user_id,start_date_time,created_date_time,utm_tracker&order=id.asc",
         "survey_submission"
       ))
     );
   }
-
-  // Their survey starts, as ap_facts counts a start: a draft past the first question or a
-  // finished survey, on the day of its first sign, a staff member's finished survey left out.
-  const sessions = new Map<string, { at: number; started: boolean; staff: boolean }>();
-  const seen = (id: string | null, at: string | null, started: boolean, staff = false) => {
-    if (!id || !at) return;
-    const t = Date.parse(at);
-    const s = sessions.get(id) ?? { at: t, started: false, staff: false };
-    s.at = Math.min(s.at, t);
-    s.started ||= started;
-    s.staff ||= staff;
-    sessions.set(id, s);
-  };
-  for (const d of labelledDrafts)
-    if (isPayToStartTracker(d.utm_tracker))
-      seen(d.session_id, d.started_at, (d.current_index ?? 0) >= 1);
-  for (const s of [...labelled, ...claimedSubs])
-    seen(
-      s.session_id,
-      s.start_date_time ?? s.created_date_time,
-      true,
-      isStaffEmail(claimedBy.get(s.id)?.customer_email)
+  const users = [
+    ...new Set(claimedSubs.map((x) => x.user_id).filter((u): u is number => typeof u === "number")),
+  ];
+  const staff = new Set<number>();
+  for (const ids of chunks(users)) {
+    const people = await must<{ id: number; email: string | null }>(
+      `/rest/v1/app_user?id=in.(${ids.join(",")})&select=id,email&order=id.asc`,
+      "app_user"
     );
+    for (const u of people) if (isStaffEmail(u.email)) staff.add(u.id);
+  }
   const boughtFirstStarts: Record<string, number> = {};
-  for (const s of sessions.values()) {
-    if (!s.started || s.staff || s.at < since.getTime() || s.at >= until.getTime()) continue;
-    const day = reportingDay(new Date(s.at));
+  for (const x of claimedSubs) {
+    const at = Date.parse(x.start_date_time ?? x.created_date_time);
+    if (at < since.getTime() || at >= until.getTime()) continue;
+    if ((x.user_id !== null && staff.has(x.user_id)) || isOurTest(taggedOf(x.utm_tracker)))
+      continue;
+    const day = reportingDay(new Date(at));
     boughtFirstStarts[day] = (boughtFirstStarts[day] ?? 0) + 1;
   }
 
