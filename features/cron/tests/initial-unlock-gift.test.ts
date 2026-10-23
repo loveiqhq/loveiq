@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockFetchWithTimeout = vi.fn();
-const mockIsEmailSuppressed = vi.fn();
+const mockSuppressionState = vi.fn();
 const mockResendSend = vi.fn();
 const mockIsProdCronHost = vi.fn();
 
@@ -12,7 +12,7 @@ vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
 }));
 vi.mock("@shared/emails/suppression", () => ({
-  isEmailSuppressed: (...args: unknown[]) => mockIsEmailSuppressed(...args),
+  suppressionState: (...args: unknown[]) => mockSuppressionState(...args),
 }));
 vi.mock("@shared/emails/unsubscribe-token", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/emails/unsubscribe-token")>()),
@@ -72,6 +72,7 @@ interface Calls {
   claims: string[];
   grants: Array<Record<string, unknown>>;
   candidateUrl: string | null;
+  paymentUrls: string[];
 }
 
 /**
@@ -84,14 +85,25 @@ function routeFetches({
   armTaken = false,
   sendTaken = false,
   grantFails = false,
+  armElsewhere = false,
+  armElsewhereDown = false,
 }: {
   candidates: unknown[];
   payments?: unknown[];
   armTaken?: boolean;
   sendTaken?: boolean;
   grantFails?: boolean;
+  /** The person already has an arm on another report (a retake). */
+  armElsewhere?: boolean;
+  armElsewhereDown?: boolean;
 }): Calls {
-  const calls: Calls = { armWrites: [], claims: [], grants: [], candidateUrl: null };
+  const calls: Calls = {
+    armWrites: [],
+    claims: [],
+    grants: [],
+    candidateUrl: null,
+    paymentUrls: [],
+  };
   mockFetchWithTimeout.mockImplementation(
     async (url: string, init?: { method?: string; body?: string }) => {
       const method = init?.method ?? "GET";
@@ -101,7 +113,12 @@ function routeFetches({
       }
       if (method === "GET" && url.includes("metadata->>gifted=eq.e07")) return json([]);
       if (method === "GET" && url.includes("/rest/v1/payment?personal_report_id=eq.")) {
+        calls.paymentUrls.push(url);
         return json(payments);
+      }
+      if (method === "GET" && url.includes("/rest/v1/personal_report?id=neq.")) {
+        if (armElsewhereDown) return json({ message: "boom" }, 500);
+        return json(armElsewhere ? [{ id: 5, survey_submission: { user_id: 7 } }] : []);
       }
       if (method === "GET" && url.includes("/rest/v1/report_access_token")) {
         return json([{ token: TOKEN }]);
@@ -143,7 +160,7 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
       UNSUBSCRIBE_SECRET: "unsub-secret",
     };
     mockIsProdCronHost.mockReturnValue(true);
-    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockSuppressionState.mockResolvedValue("clear");
     mockResendSend.mockResolvedValue({ data: { id: "msg_1" }, error: null });
   });
 
@@ -246,10 +263,28 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     [
       "a reader who unsubscribed or bounced",
       () => {
-        mockIsEmailSuppressed.mockResolvedValue(true);
+        mockSuppressionState.mockResolvedValue("suppressed");
         return {};
       },
       "skippedSuppressed",
+    ],
+    [
+      "a person who already has an arm on another of their reports (a retake)",
+      () => ({ armElsewhere: true }),
+      "skippedEarlierReport",
+    ],
+    [
+      "an address whose suppression can't be read, until the next run",
+      () => {
+        mockSuppressionState.mockResolvedValue("unknown");
+        return {};
+      },
+      "failed",
+    ],
+    [
+      "a reader whose other reports can't be read, until the next run",
+      () => ({ armElsewhereDown: true }),
+      "failed",
     ],
   ])("leaves %s alone: no arm, no gift, no email", async (_who, arrange, counter) => {
     const extra = arrange();
@@ -270,6 +305,25 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     expect(body.summary.skippedRestricted).toBe(1);
     expect(calls.armWrites).toHaveLength(0);
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("counts a refunded or disputed payment as paid, and a checkout left open as not", async () => {
+    const calls = routeFetches({ candidates: [candidate(GIFT_ID)] });
+    await GET(makeRequest("test-cron-secret"));
+    expect(calls.paymentUrls).toHaveLength(1);
+    expect(calls.paymentUrls[0]).toContain("status=in.(succeeded,refunded,disputed)");
+    expect(calls.paymentUrls[0]).not.toContain("canceled");
+  });
+
+  it("asks about the person's other reports by their own user id, never this report", async () => {
+    routeFetches({ candidates: [candidate(GIFT_ID)] });
+    await GET(makeRequest("test-cron-secret"));
+    const url = mockFetchWithTimeout.mock.calls
+      .map(([u]) => String(u))
+      .find((u) => u.includes("/rest/v1/personal_report?id=neq."));
+    expect(url).toContain(`id=neq.${GIFT_ID}&`);
+    expect(url).toContain("initial_gift_arm=not.is.null");
+    expect(url).toContain("survey_submission.user_id=eq.7");
   });
 
   it("does not count the gift itself as a payment that stops the gift", async () => {

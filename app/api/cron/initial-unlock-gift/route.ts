@@ -14,9 +14,11 @@
  * A gift that could not be written gives its arm back, and the next run tries again.
  *
  * Who is looked at: reports first gated between four and five days ago, with no arm. A
- * reader who paid, unsubscribed, bounced or froze their data (GDPR Art. 18) is left alone
- * and given no arm, so they are in neither group; the day-wide window lets one missed
- * tick be caught on the next, and lets them age out instead of being re-read for good.
+ * reader who paid (a refund or a dispute included), unsubscribed, bounced or froze their
+ * data (GDPR Art. 18) is left alone and given no arm, so they are in neither group, and so
+ * is a report whose person already has an arm on another report: a retake is not a second
+ * draw, and one person gets one E07. The day-wide window lets one missed tick be caught on
+ * the next, and lets them age out instead of being re-read for good.
  *
  * Behind `initial_unlock_gift_email` (system_flags, off by default), and production only.
  */
@@ -29,7 +31,7 @@ import { isInitialGiftEmailEnabled } from "@features/report/server/initialGateSt
 import { grantGiftedInitialUnlock } from "@features/report/server/initialUnlockGift";
 import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
 import { assignInitialGiftArm } from "@shared/experiments/initialGiftArm";
-import { isEmailSuppressed } from "@shared/emails/suppression";
+import { suppressionState } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getBreaker } from "@shared/http/circuit-breaker";
@@ -45,7 +47,12 @@ const RESEND_TIMEOUT_MS = 10_000;
 const DAY_MS = 24 * 3_600_000;
 const GIFT_AFTER_MS = 4 * DAY_MS;
 const WINDOW_MS = DAY_MS;
-const CANDIDATE_LIMIT = 25;
+/**
+ * Readers left alone keep no arm and stay in the window for its day, read again each hour,
+ * oldest first: the page is wide enough that they never crowd out the ones still to draw
+ * (the run's 20 s walk budget stops it early, and the next hour carries on).
+ */
+const CANDIDATE_LIMIT = 100;
 /** The Resend `stage` tag the webhook keeps this email's delivery, opens and clicks by. */
 const STAGE = "initial_gift";
 
@@ -124,16 +131,32 @@ async function fetchCandidates(nowMs: number): Promise<CandidateRow[]> {
 }
 
 /**
- * Whether the reader paid anything since: any succeeded payment but the gift itself.
- * Null when it can't be read, and the report waits for the next run.
+ * Whether the reader paid anything since: any payment but the gift itself that took money,
+ * refunded or disputed ones included, so a EUR 1.99 refunded under the guarantee (or
+ * charged back) never comes back free on day 4. A checkout left open (`canceled`) is not
+ * a payment: E07 is for those readers. Null when it can't be read; the report waits.
  */
 async function hasPaid(personalReportId: number): Promise<boolean | null> {
   const r = await supabaseFetch(
-    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&select=metadata&limit=50`
+    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=in.(succeeded,refunded,disputed)&select=metadata&limit=50`
   );
   if (!r.ok) return null;
   const rows = (await r.json()) as Array<{ metadata: Record<string, unknown> | null }>;
   return rows.some((row) => row.metadata?.gifted !== INITIAL_UNLOCK_GIFT);
+}
+
+/**
+ * Whether the person already has an arm on another of their reports (a retake). Null when it
+ * can't be read; the report waits.
+ */
+async function hasArmElsewhere(personalReportId: number, userId: number): Promise<boolean | null> {
+  const r = await supabaseFetch(
+    `/rest/v1/personal_report?id=neq.${personalReportId}&initial_gift_arm=not.is.null` +
+      `&select=id,survey_submission!fk_personal_report_submission!inner(user_id)` +
+      `&survey_submission.user_id=eq.${userId}&limit=1`
+  );
+  if (!r.ok) return null;
+  return ((await r.json()) as unknown[]).length > 0;
 }
 
 async function fetchAccessToken(submissionId: number): Promise<string | null> {
@@ -171,6 +194,8 @@ interface Summary {
   gifted: number;
   heldOut: number;
   skippedPaid: number;
+  /** The person already has an arm on another report (a retake). */
+  skippedEarlierReport: number;
   skippedSuppressed: number;
   skippedRestricted: number;
   skippedNoEmail: number;
@@ -210,7 +235,23 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
     summary.skippedPaid++;
     return;
   }
-  if (await isEmailSuppressed(email)) {
+  const earlier = await hasArmElsewhere(candidate.id, userId);
+  if (earlier === null) {
+    summary.failed++;
+    return;
+  }
+  if (earlier) {
+    summary.skippedEarlierReport++;
+    return;
+  }
+  // E07 sells (its P.S. is the EUR 10 off): an address that can't be checked waits, as the
+  // unlock-feedback email's does, rather than reaching someone who unsubscribed.
+  const suppression = await suppressionState(email);
+  if (suppression === "unknown") {
+    summary.failed++;
+    return;
+  }
+  if (suppression === "suppressed") {
     summary.skippedSuppressed++;
     return;
   }
@@ -332,6 +373,7 @@ export async function GET(request: Request) {
     gifted: 0,
     heldOut: 0,
     skippedPaid: 0,
+    skippedEarlierReport: 0,
     skippedSuppressed: 0,
     skippedRestricted: 0,
     skippedNoEmail: 0,
