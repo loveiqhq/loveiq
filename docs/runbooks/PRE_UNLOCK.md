@@ -79,6 +79,11 @@ charging the difference is a person's call.
 
 - AP-Analytics, Focus: "Completion → pre-unlock", EUR 1.99 sales per finished survey and the
   revenue per sale. The Payment page's segments and the Landing page's arms carry the rate.
+- AP-Analytics, Pay to start: the gate as a funnel of its own ("EUR 1.99 after the survey")
+  beside pay after the report and pay to start, from its cohort (stamped at the survey's
+  submit; the old-user campaign's later stamps stay with pay after the report). The free
+  landing's visits, ads and survey starts go to the gate by day: on the day it is switched,
+  by its share of that day's finished surveys.
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).

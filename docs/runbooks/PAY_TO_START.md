@@ -131,5 +131,22 @@ payment; either entitlement works on its own.
 - A decision on how the numbers show this journey. The digests leave its visits and survey
   views out of the free funnel's, and its buyers out of the arms and the price test, but keep
   its finishers, payments and revenue in their totals, so their rates per visit read high
-  while the page sells. AP-Analytics, Jarvis and the KPI week count all of it, visits too.
+  while the page sells. Jarvis and the KPI week count all of it, visits too; AP-Analytics
+  leaves its visits out of the free funnel's pages and reads it on its own page (below).
 - Marcus's copy flags answered (questions count, minutes, chapters).
+
+## Reading it
+
+AP-Analytics → Assessment A → Pay to start puts every funnel that sells the report side by
+side: pay after the report, pay to start at EUR 29.99 and at EUR 1.99, and EUR 1.99 after the
+survey (the pre-unlock gate, `docs/runbooks/PRE_UNLOCK.md`), with visit → paying customer,
+revenue per visit and ROAS first. Each funnel's ads are Google Ads' spend on the page an ad
+lands on (`landing_page_view`, by day). Each offer's visits are `funnel_event` rows labelled
+`pay_to_start` with the page's `offer` (`full` or `pre`, migration `20261023150000`), written
+from 23 Oct 2026; earlier visits to the two pages carry no offer, count in neither column, and
+the page says how many (an offer that sold on such a day gets no rates per visit for that
+range). A survey is pay to start's only when a completed purchase claimed it (a 100% code's
+EUR 0 one too): a checkout opened and never paid is bound to the survey as well, and that
+reader counts with the free funnels. "Paid
+traffic only" reads the ad clicks as visits and a buyer as paid traffic when the purchase's
+tracker (`prepaid_report_access.utm_tracker`) holds a Google Ads click.
