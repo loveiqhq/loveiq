@@ -855,6 +855,56 @@ describe("measuresOf", () => {
   });
 });
 
+describe("profit (contribution), as the Traffic page counts it (Mark, 23 Oct)", () => {
+  it("takes card fees per payment, each report's running cost and the ads off the revenue", () => {
+    const m = measuresOf(10, 4, {
+      visits: 100,
+      finished: 2,
+      paid: 1,
+      revenue: 29.99,
+      revenueFinished: 29.99,
+      sales: 1,
+    });
+    // 29.99 − (2.9% of 29.99 + €0.25) − 2 × €0.05 − €10 = €18.77
+    expect(m.profit).toBe(18.77);
+    expect(m.ppc).toBeCloseTo(18.77);
+    expect(m.ppf).toBeCloseTo(9.385);
+    // No ad spend read: no profit, as no contribution on Traffic.
+    expect(
+      measuresOf(null, null, { visits: 1, finished: 1, paid: 1, revenue: 9, revenueFinished: 9 })
+        .profit
+    ).toBeNull();
+    // Nobody paid or finished: nothing to divide by.
+    const none = measuresOf(5, 1, {
+      visits: 9,
+      finished: 0,
+      paid: 0,
+      revenue: 0,
+      revenueFinished: 0,
+    });
+    expect([none.profit, none.ppc, none.ppf]).toEqual([-5, null, null]);
+  });
+
+  it("counts each payment for the fee: a purchase and every later buy", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, offer: "pre", amount_cents: 199, consumed_submission_id: 701 }),
+          ent({ id: 2, offer: "pre", amount_cents: 199 }),
+          // A 100% code's purchase took no money: only its later buy is a payment.
+          ent({ id: 3, offer: "pre", amount_cents: 0, consumed_submission_id: 703 }),
+        ],
+        boughtFirst: new Set([701, 703]),
+        laterPays: new Map([
+          [701, [{ amount: 19.99, plan: "full_report" }]],
+          [703, [{ amount: 19.99, plan: "full_report" }]],
+        ]),
+      })
+    );
+    expect(funnel(p, "pre").all.sales).toBe(4);
+  });
+});
+
 describe("gateShares", () => {
   const days = ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22"];
   it("keeps the day before's share over a day without a survey, the first one before it", () => {

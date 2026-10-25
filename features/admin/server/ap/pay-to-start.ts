@@ -50,6 +50,7 @@ import {
 import { buckets, rangeLabel, windowOf, type ApFilters } from "./filters";
 import { VISITS_FROM, type FreeAds } from "./metrics";
 import { teamUserIds } from "./team";
+import { contribution, DEFAULT_ASSUMPTIONS } from "./traffic-math";
 
 export type PtsOffer = "full" | "pre";
 export type FunnelKey = "after" | PtsOffer | "gate";
@@ -145,6 +146,11 @@ export interface PtsView {
    * buyer who has not taken the survey yet paid too, and is no survey completion's money.
    */
   revenueFinished: number;
+  /**
+   * Paid sales (a purchase and each later buy): the card fee's per-payment part of the profit.
+   * Absent: one per paying customer.
+   */
+  sales?: number;
 }
 
 /** The board's measures. Rates are 0..1; each is null when what it divides by is missing or 0. */
@@ -166,6 +172,15 @@ export interface PtsMeasures {
   roas: number | null;
   /** Revenue − ad spend. */
   net: number | null;
+  /**
+   * Contribution, as on the Traffic page (its default assumptions): revenue less card fees, the
+   * reports' running cost and the ad spend. Blank when the ad spend can't be read.
+   */
+  profit: number | null;
+  /** Contribution ÷ paying customers (Mark, 23 Oct). */
+  ppc: number | null;
+  /** Contribution ÷ finished surveys (Mark, 23 Oct). */
+  ppf: number | null;
 }
 
 export interface PtsStep {
@@ -246,6 +261,22 @@ const euros = (priceCents: number) => `€${(priceCents / 100).toFixed(2)}`;
  */
 export function measuresOf(spend: number | null, clicks: number | null, v: PtsView): PtsMeasures {
   const paidFor = spend !== null && spend > 0 ? spend : null;
+  const c = contribution(
+    {
+      spend,
+      clicks,
+      impressions: null,
+      visitors: v.visits,
+      starts: null,
+      completes: v.finished,
+      payers: v.paid,
+      sales: v.sales ?? v.paid,
+      revenue: v.revenue,
+      fullPayers: 0,
+    },
+    DEFAULT_ASSUMPTIONS
+  );
+  const profit = c === null ? null : cents(c);
   return {
     cpc: ratio(spend, clicks),
     finishRate: ratio(v.finished, v.visits),
@@ -257,6 +288,9 @@ export function measuresOf(spend: number | null, clicks: number | null, v: PtsVi
     cpf: ratio(paidFor, v.finished),
     roas: ratio(v.revenue, paidFor),
     net: paidFor === null ? null : cents(v.revenue - paidFor),
+    profit,
+    ppc: ratio(profit, v.paid),
+    ppf: ratio(profit, v.finished),
   };
 }
 
@@ -489,13 +523,15 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     finished: number,
     paid: number,
     revenue: number,
-    revenueFinished = revenue
+    revenueFinished: number,
+    sales: number
   ): PtsView => ({
     visits,
     finished,
     paid,
     revenue: cents(revenue),
     revenueFinished: cents(revenueFinished),
+    sales,
   });
   const withMeasures = (a: Ads | null, v: PtsView) => ({
     ...v,
@@ -519,13 +555,17 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       visits,
       subs.length,
       paid.length,
-      sumBy(subs, (s) => s.revenue)
+      sumBy(subs, (s) => s.revenue),
+      sumBy(subs, (s) => s.revenue),
+      sumBy(subs, (s) => s.sales)
     );
     const paidView = view(
       ads ? ads.clicks : null,
       adSubs.length,
       adSubs.filter(paidSub).length,
-      sumBy(adSubs, (s) => s.revenue)
+      sumBy(adSubs, (s) => s.revenue),
+      sumBy(adSubs, (s) => s.revenue),
+      sumBy(adSubs, (s) => s.sales)
     );
     const started = Math.round(freePart(freeStarts, key));
     const steps: PtsStep[] =
@@ -582,19 +622,24 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     const adBuyers = mine.filter((e) => isAd(taggedOf(e.utm_tracker)));
     const finished = (xs: EntitlementRow[]) => xs.filter((e) => e.consumed_submission_id !== null);
     const visits = ptsVisitsOf(offer);
+    // Each payment that took money and stands: the purchase, and each later buy.
+    const salesOf = (xs: EntitlementRow[]) =>
+      sumBy(xs, (e) => (kept(e) && isPaid(e) ? 1 : 0) + later(e).length);
     const all = view(
       visits,
       finished(mine).length,
       customers(mine).length,
       sumBy(mine, moneyOf),
-      sumBy(finished(mine), moneyOf)
+      sumBy(finished(mine), moneyOf),
+      salesOf(mine)
     );
     const paidView = view(
       ads ? ads.clicks : null,
       finished(adBuyers).length,
       customers(adBuyers).length,
       sumBy(adBuyers, moneyOf),
-      sumBy(finished(adBuyers), moneyOf)
+      sumBy(finished(adBuyers), moneyOf),
+      salesOf(adBuyers)
     );
     const price = euros(input.prices[offer]);
     const steps: PtsStep[] = [

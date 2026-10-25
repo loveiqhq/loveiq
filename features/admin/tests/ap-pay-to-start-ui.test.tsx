@@ -177,6 +177,9 @@ describe("ApPayToStart", () => {
     expect(cells("Revenue per visit")).toEqual(["€0.010", "€0.360", "€0.217", "—"]);
     expect(cells("ROAS")).toEqual(["0.07×", "0.40×", "0.27×", "—"]);
     expect(cells("Return on ad spend (€)")).toEqual(["−€840.02", "−€270.06", "−€328.34", "—"]);
+    // Mark: profit (contribution, as Traffic counts it) per customer and per completion.
+    expect(cells("Profit per paying customer")).toEqual(["−€428.63", "−€46.17", "−€11.00", "—"]);
+    expect(cells("Profit per survey completion")).toEqual(["−€2.86", "−€55.41", "−€11.76", "—"]);
     const core = within(table())
       .getAllByText("Core")
       .map((c) => c.closest("tr")!.querySelector("th")!.textContent);

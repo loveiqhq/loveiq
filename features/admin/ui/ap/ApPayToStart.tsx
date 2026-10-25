@@ -12,6 +12,7 @@ import type {
   PtsView,
   PtsWeek,
 } from "@features/admin/server/ap/pay-to-start";
+import { DEFAULT_ASSUMPTIONS } from "@features/admin/server/ap/traffic-math";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
@@ -108,6 +109,9 @@ interface Row {
   better?: "high" | "low";
   core?: boolean;
 }
+
+/** Contribution as the Traffic page works it out, with its starting assumptions. */
+const CONTRIBUTION = `Contribution: revenue less card fees (${DEFAULT_ASSUMPTIONS.feePct}% + €${DEFAULT_ASSUMPTIONS.feeFix.toFixed(2)} a payment), each report's €${DEFAULT_ASSUMPTIONS.varCost.toFixed(2)} running cost and the ad spend, as on Traffic`;
 
 /** The board's rows, in its order; "Core" are Marcus's three hard KPIs. */
 const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
@@ -233,6 +237,21 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
         hint: "Revenue − ad spend. Above €0 means the ads paid for themselves",
         unit: "net",
         value: (_, v) => v.m.net,
+        better: "high",
+      },
+      // Mark, 23 Oct: profit (contribution) per customer and per completion, as Traffic counts it.
+      {
+        label: "Profit per paying customer",
+        hint: `Contribution ÷ paying customers. ${CONTRIBUTION}`,
+        unit: "net",
+        value: (_, v) => v.m.ppc,
+        better: "high",
+      },
+      {
+        label: "Profit per survey completion",
+        hint: `Contribution ÷ surveys finished. ${CONTRIBUTION}`,
+        unit: "net",
+        value: (_, v) => v.m.ppf,
         better: "high",
       },
     ],
