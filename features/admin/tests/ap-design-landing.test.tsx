@@ -308,7 +308,8 @@ describe("the headline tiles", () => {
 describe("the pay-to-start section", () => {
   /** One pay-to-start funnel as the Pay to start page reads it, with its Step by step steps. */
   const funnel = (key: "full" | "pre", price: string, steps: number[]): PtsFunnel => {
-    const [visits, checkout, paid, finished, paidFinished] = steps as [
+    const [visits, checkout, paid, finished, paidFinished, paidStarted] = steps as [
+      number,
       number,
       number,
       number,
@@ -333,14 +334,15 @@ describe("the pay-to-start section", () => {
         { label: "Report opened", n: finished, pays: false },
       ],
       paidFinished,
+      paidStarted,
     };
   };
   const pts: PtsPayload = {
     range: { from: "2026-10-24", to: "2026-10-30" },
     funnels: [
-      funnel("full", "€29.99", [400, 20, 8, 7, 6]),
-      // A 100% code's buyers finish too: 16 finished, 12 of the 15 who paid.
-      funnel("pre", "€1.99", [300, 30, 15, 16, 12]),
+      funnel("full", "€29.99", [400, 20, 8, 7, 6, 7]),
+      // A 100% code's buyers finish too: 16 finished, 12 of the 15 who paid; 14 of them began.
+      funnel("pre", "€1.99", [300, 30, 15, 16, 12, 14]),
     ],
     weeks: [],
     notes: ["4 visits to the pay-to-start pages came before the two pages were counted apart."],
@@ -389,16 +391,16 @@ describe("the pay-to-start section", () => {
               : "";
           return `${copy.textContent}${tone}`;
         });
-    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "—", "75%-"]);
+    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "7-", "75%-"]);
     // Paid → completed is of the paying buyers only: 12 of 15, never above 100%.
-    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "—", "80%+"]);
-    // The two columns the pages don't record are blank, with no card, and the note says so.
-    for (const h of within(table).getAllByRole("columnheader").slice(1)) {
-      const recorded = !["Saw the price", "Started survey"].includes(h.textContent ?? "");
-      expect(within(h).queryByRole("button", { name: /^About / }) !== null).toBe(recorded);
-    }
+    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "14+", "80%+"]);
+    // Saw the price is no step on these pages: blank, with no card, and the note says why.
+    for (const h of within(table).getAllByRole("columnheader").slice(1))
+      expect(within(h).queryByRole("button", { name: /^About / }) !== null).toBe(
+        h.textContent !== "Saw the price"
+      );
     expect(section.textContent).toContain(
-      "Saw the price and Started survey aren't recorded for these pages yet."
+      "Saw the price: the price is on screen from the first moment on every device"
     );
     expect(section.textContent).toContain(pts.notes[0]);
   });
@@ -437,7 +439,7 @@ describe("an info icon on every figure", () => {
 
   it("says for every landing field whether it is a share, an average or a median, and per what", () => {
     const keys = Object.keys(FIELDS).filter((k) => k.startsWith("landing."));
-    expect(keys).toHaveLength(26);
+    expect(keys).toHaveLength(27);
     for (const k of keys) {
       expect(FIELDS[k]!.stat, k).toMatch(/^(Share|Average|Median|Count)$/);
       expect(FIELDS[k]!.per, k).toMatch(/^per /);

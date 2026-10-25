@@ -41,6 +41,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST } from "@/app/api/survey-partial/route";
+import { flushAfterResponse } from "@shared/http/after-response";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import { isSurveyClosed } from "@features/survey/server/server";
@@ -275,6 +276,43 @@ describe("POST /api/survey-partial", () => {
       utm_source: "google",
       journey: "pay_to_start",
     });
+  });
+
+  it("stamps a buyer's purchase when its survey saves an answer, once, after the reply", async () => {
+    // AP-Analytics' "Started survey" for the pay-to-start pages: an unfinished survey has no
+    // other link to its purchase (20261025170000).
+    const token = `rpp_${"a".repeat(32)}`;
+    await POST(
+      new Request("http://localhost/api/survey-partial", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "valid-token",
+          cookie: `__liq_pp=${token}`,
+        },
+        body: JSON.stringify(validBody()),
+      })
+    );
+    await flushAfterResponse();
+    const stamp = mockFetchWithTimeout.mock.calls.find(([u]) =>
+      String(u).includes("/rest/v1/prepaid_report_access?")
+    );
+    expect(stamp).toBeDefined();
+    const [url, init] = stamp as [string, { method: string; body: string }];
+    expect(init.method).toBe("PATCH");
+    // Its own row, paid, and only the first time.
+    expect(url).toContain(`prepaid_token=eq.${token}`);
+    expect(url).toContain("paid_at=not.is.null");
+    expect(url).toContain("survey_started_at=is.null");
+    expect(Object.keys(JSON.parse(init.body))).toEqual(["survey_started_at"]);
+  });
+
+  it("stamps nothing for a visitor who didn't pay before the survey", async () => {
+    await POST(makeRequest(validBody()));
+    await flushAfterResponse();
+    expect(
+      mockFetchWithTimeout.mock.calls.some(([u]) => String(u).includes("prepaid_report_access"))
+    ).toBe(false);
   });
 
   it("strips a journey label the browser claims without the cookie", async () => {

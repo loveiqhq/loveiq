@@ -448,8 +448,9 @@ describe("buildLanding", () => {
             // A 100% code's buyer finished too: no share of Paid.
             { label: "Survey finished", n: 2 },
           ],
-          // One of the two paying buyers has finished the survey.
+          // One of the two paying buyers has finished the survey; both began it.
           paidFinished: 1,
+          paidStarted: 2,
         },
       ],
       notes: [
@@ -473,12 +474,25 @@ describe("buildLanding", () => {
         pts,
       }).payFirst!;
     expect(at("all").rows).toEqual([
-      expect.objectContaining({ key: "full", visitors: 40, checkout: 4, paid: 2, p2c: 0.5 }),
+      expect.objectContaining({
+        key: "full",
+        visitors: 40,
+        checkout: 4,
+        paid: 2,
+        p2c: 0.5,
+        started: 2,
+      }),
     ]);
     // Only the notes about the pages' own steps: not ads, nor the free survey's funnels.
     expect(at("all").notes).toEqual([
       "2 visits to the pay-to-start pages came before the two pages were counted apart, so neither offer's visits include them.",
     ]);
+    // A paying buyer from before the start stamp who hasn't finished: blank, and why.
+    (pts.funnels[0] as { paidStarted?: number | null }).paidStarted = null;
+    expect(at("all").rows[0]!.started).toBeNull();
+    expect(at("all").notes.at(-1)).toBe(
+      "Started survey is recorded from 26 Oct 2026: a paying buyer before then who hasn't finished the survey can't be told apart from one who never started."
+    );
     const free = at("free");
     expect(free.rows).toEqual([]);
     expect(free.notes.join(" ")).toMatch(/Free survey, which leaves pay to start out/);

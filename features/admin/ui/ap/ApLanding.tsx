@@ -318,8 +318,8 @@ function TestsTable({ data }: { data: LandingPayload }) {
 /**
  * The design's pay-first landing pages (the price before the survey): each page's Step by step
  * figures on the Pay to start page, so the two pages agree, the better page green and the other
- * red where higher is better. "Saw the price" and "Started survey" aren't recorded for these
- * pages: blank, as drawn, with the note under the table.
+ * red where higher is better. "Saw the price" is no step on these pages: the price is on screen
+ * from the first moment on every device, as the note under the table says.
  */
 const PAY_FIRST_COLUMNS: Array<{
   label: string;
@@ -347,7 +347,12 @@ const PAY_FIRST_COLUMNS: Array<{
     cell: (r) => fmt("pct", r.v2p, 2),
     value: (r) => r.v2p,
   },
-  { label: "Started survey", cell: () => EMPTY },
+  {
+    label: "Started survey",
+    info: "landing.pf-started",
+    cell: (r) => fmt("count", r.started),
+    value: (r) => r.started,
+  },
   {
     label: "Paid → completed",
     info: "landing.pf-p2c",
@@ -427,8 +432,9 @@ function PayToStart({ data }: { data: LandingPayload }) {
       )}
       {pf && pf.rows.length > 0 && (
         <p className="m-0 text-xs text-ap-muted">
-          Saw the price and Started survey aren&apos;t recorded for these pages yet. Green is the
-          better of the two pages in a column, red the other.
+          Saw the price: the price is on screen from the first moment on every device (the card
+          beside the text on a computer, the bar at the bottom on a phone), so it is no step of its
+          own here. Green is the better of the two pages in a column, red the other.
         </p>
       )}
       {(pf?.notes ?? []).map((x) => (

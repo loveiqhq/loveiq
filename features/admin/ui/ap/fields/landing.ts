@@ -266,6 +266,12 @@ SELECT pg.page,
   (SELECT count(*) FROM buy, b
     WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
       AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0) AS paid,
+  -- of those who paid (as above), those who started the survey: a saved answer stamped the
+  -- purchase (from 26 Oct 2026), or a finished survey claimed it
+  (SELECT count(*) FROM buy, b
+    WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
+      AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0
+      AND (buy.survey_started_at IS NOT NULL OR buy.consumed_submission_id IS NOT NULL)) AS started_survey,
   -- of those who paid (as above), the share who then finished the survey
   (SELECT round(100.0 * count(*) FILTER (WHERE s.id IS NOT NULL) / nullif(count(*), 0))
      FROM buy
@@ -280,7 +286,7 @@ const T_PREPAID: FieldTable = {
   source: "production",
   table: "prepaid_report_access",
   columns:
-    "offer, status, amount_cents, created_at, paid_at, consumed_submission_id, is_test, customer_email, utm_tracker",
+    "offer, status, amount_cents, created_at, paid_at, consumed_submission_id, survey_started_at, is_test, customer_email, utm_tracker",
   filters: "Period (created_at, paid_at; Berlin days). Nothing else: all traffic.",
   watch:
     "A checkout left unpaid is bound to the survey too: only a completed purchase (paid, kept or refunded) is a buyer.",
@@ -555,6 +561,18 @@ export const fields: FieldRegistry = {
     tables: [T_PTS_VISITS, T_PREPAID],
     query: { lang: "SQL", text: Q_PAY_FIRST },
     related: ["landing.pf-paid", "landing.pf-visitors"],
+  },
+  "landing.pf-started": {
+    label: "Started survey",
+    what: "Of the page's buyers who paid and kept their purchase, those who started the survey it unlocks.",
+    good: "up",
+    stat: "Count",
+    per: "per purchase",
+    formula: { num: "Paid purchases whose survey saved an answer, or was finished" },
+    caveat: `${PF_SAME} A buyer's first saved answer stamps the purchase from 26 Oct 2026 (survey_started_at); before then only a finished survey shows a start, so a range with a paying buyer from before who hasn't finished is blank.`,
+    tables: [T_PREPAID],
+    query: { lang: "SQL", text: Q_PAY_FIRST },
+    related: ["landing.pf-paid", "landing.pf-p2c"],
   },
   "landing.pf-p2c": {
     label: "Paid → completed",

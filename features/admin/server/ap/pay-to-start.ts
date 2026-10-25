@@ -53,6 +53,13 @@ import { teamUserIds } from "./team";
 import { contribution, DEFAULT_ASSUMPTIONS } from "./traffic-math";
 
 export type PtsOffer = "full" | "pre";
+
+/**
+ * The first whole Berlin day a buyer's first saved answer stamps the purchase
+ * (survey_started_at, 20261025170000): set to the deploy's next day. A paying buyer before it
+ * who hasn't finished can't be told apart from one who never started.
+ */
+export const SURVEY_STARTED_FROM = "2026-10-26";
 export type FunnelKey = "after" | PtsOffer | "gate";
 
 export interface EntitlementRow {
@@ -68,6 +75,8 @@ export interface EntitlementRow {
   consumed_submission_id: number | null;
   /** The page's attribution snapshot at checkout (utm tags, the Google Ads click id). */
   utm_tracker: string | null;
+  /** When the buyer's survey first saved an answer (20261025170000); absent from older reads. */
+  survey_started_at?: string | null;
 }
 
 export interface AdsLanding {
@@ -208,6 +217,11 @@ export interface PtsFunnel {
   refunds?: { payers: number; refunded: number };
   /** Pay to start: its paying buyers (the "Paid" step) who then finished the survey. */
   paidFinished?: number;
+  /**
+   * Pay to start: its paying buyers who started the survey (a saved answer, or a finished
+   * survey); null while one of them paid before SURVEY_STARTED_FROM and hasn't finished.
+   */
+  paidStarted?: number | null;
 }
 
 export interface PtsWeek {
@@ -319,6 +333,23 @@ const isCompleted = (e: EntitlementRow) =>
 
 /** Money was taken for it: a completed checkout above EUR 0. */
 const isPaid = (e: EntitlementRow) => isCompleted(e) && (e.amount_cents ?? 0) > 0;
+
+/**
+ * Of the paying buyers, those who started the survey: its first saved answer stamped the
+ * purchase, or a finished survey claimed it. Null while one paid before the stamp existed and
+ * hasn't finished: not started and not stamped look the same then.
+ */
+function paidStartedOf(paying: EntitlementRow[]): number | null {
+  const started = (e: EntitlementRow) =>
+    Boolean(e.survey_started_at) || e.consumed_submission_id !== null;
+  if (
+    paying.some(
+      (e) => !started(e) && reportingDay(new Date(e.paid_at as string)) < SURVEY_STARTED_FROM
+    )
+  )
+    return null;
+  return paying.filter(started).length;
+}
 
 /** Our own probes and verification runs, never counted (classifySource "test"). */
 const isOurTest = (t: Parameters<typeof classifySource>[0], known = true) =>
@@ -691,6 +722,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       }),
       paidFinished: mine.filter((e) => kept(e) && isPaid(e) && e.consumed_submission_id !== null)
         .length,
+      paidStarted: paidStartedOf(mine.filter((e) => kept(e) && isPaid(e))),
     };
   };
 
@@ -896,7 +928,7 @@ export async function fetchPayToStartRecords(
     must<EntitlementRow>(
       "/rest/v1/prepaid_report_access?offer=not.is.null" +
         `&created_at=lt.${untilIso}` +
-        "&select=id,offer,status,amount_cents,list_price_cents,is_test,customer_email,created_at,paid_at,consumed_submission_id,utm_tracker" +
+        "&select=id,offer,status,amount_cents,list_price_cents,is_test,customer_email,created_at,paid_at,consumed_submission_id,utm_tracker,survey_started_at" +
         "&order=id.asc",
       "prepaid_report_access"
     ),
