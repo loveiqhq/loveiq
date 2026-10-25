@@ -35,6 +35,11 @@ interface Saved {
 const control =
   "min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 font-sans text-sm text-ap-ink disabled:cursor-not-allowed disabled:bg-ap-ground disabled:text-ap-muted";
 const fieldLabel = "flex min-w-0 flex-col gap-1 text-xs font-bold text-ap-muted";
+/**
+ * iOS Safari draws a native date field wider than its column, so From ran under To and To past
+ * the card's edge (iPhone Simulator, 25 Oct 2026); without the native look it keeps the width.
+ */
+const dateControl = `${control} min-w-0 appearance-none`;
 
 /** The same state, whatever order its parameters came in. */
 function sameFilters(a: ApFilters, b: ApFilters): boolean {
@@ -322,7 +327,7 @@ export default function ApFilterBar({
                 value={filters.from}
                 max={filters.to}
                 onChange={(e) => e.target.value && update({ from: e.target.value })}
-                className={control}
+                className={dateControl}
               />
             </label>
             <label className={`${fieldLabel} flex-[1_1_150px]`}>
@@ -333,7 +338,7 @@ export default function ApFilterBar({
                 min={filters.from}
                 max={today}
                 onChange={(e) => e.target.value && update({ to: e.target.value })}
-                className={control}
+                className={dateControl}
               />
             </label>
           </div>

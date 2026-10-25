@@ -64,6 +64,11 @@ interface Saved {
 const control =
   "min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 font-sans text-sm text-ap-ink disabled:bg-ap-ground disabled:text-ap-muted";
 const fieldLabel = "flex min-w-0 flex-col gap-1 text-xs font-bold text-ap-muted";
+/**
+ * iOS Safari draws a native date field wider than its column, so From ran under To and To past
+ * the card's edge (iPhone Simulator, 25 Oct 2026); without the native look it keeps the width.
+ */
+const dateControl = `${control} min-w-0 appearance-none`;
 const pill =
   "min-h-11 cursor-pointer rounded-full border border-ap-line bg-white px-[18px] font-sans text-sm font-semibold text-ap-ink disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -779,7 +784,7 @@ export default function ApExplorer() {
                   max={to}
                   disabled={!dateField}
                   onChange={(e) => e.target.value && set({ from: e.target.value })}
-                  className={control}
+                  className={dateControl}
                 />
               </label>
               <label className={fieldLabel}>
@@ -791,7 +796,7 @@ export default function ApExplorer() {
                   max={today}
                   disabled={!dateField}
                   onChange={(e) => e.target.value && set({ to: e.target.value })}
-                  className={control}
+                  className={dateControl}
                 />
               </label>
             </div>
