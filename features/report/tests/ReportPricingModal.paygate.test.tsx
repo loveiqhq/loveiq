@@ -140,6 +140,11 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
     expect(card("full_report").querySelector(".rpg-card__was")?.textContent).toBe(
       "€29.99 - €10.00 credit applied"
     );
+    // Sync 23.10: the credit is set in bold (the modifier); a plain discount is not.
+    expect(card("full_report").querySelector(".rpg-card__off--credit")?.textContent).toBe(
+      "€10.00 credit applied"
+    );
+    expect(card("all_reports").querySelector(".rpg-card__off--credit")).toBeNull();
     // All 14 keeps its own price and strike.
     expect(within(card("all_reports")).getByText("€39.99")).toHaveClass("rpg-card__amount");
     expect(trackPriceShown).toHaveBeenCalledWith(

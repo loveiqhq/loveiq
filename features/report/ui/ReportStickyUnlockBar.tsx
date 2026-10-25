@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, type FC } from "react";
+import { useEffect, useRef, type FC, type ReactNode } from "react";
 
 import { trackStickyUnlockClicked } from "@features/analytics/client";
+import { formatReportPurchasePrice } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 interface Props {
@@ -53,6 +54,27 @@ const GuaranteeBadge: FC<{ nodeId: string }> = ({ nodeId }) => (
   </div>
 );
 
+/**
+ * Sync 23.10 (Marcus and Mark): a reader who paid EUR 1.99 for their Core Archetype holds
+ * EUR 10 off the full report, and the footer says so, bold, above its button, in the
+ * plans' own words ("€10.00 credit applied", ReportPricingModal). Nobody else gets a line.
+ */
+function creditLine(quote: ReportPriceQuoteSnapshot | null): string | null {
+  const cents = quote?.creditKind === "initial" ? (quote.upgradeCreditCents ?? 0) : 0;
+  return cents > 0 ? `${formatReportPurchasePrice(cents)} credit applied` : null;
+}
+
+/** V4's pill, with the credit stacked over it when there is one. */
+const V4Cta: FC<{ credit: string | null; children: ReactNode }> = ({ credit, children }) =>
+  credit ? (
+    <div className="report-sticky-unlock__cta-stack">
+      <p className="report-sticky-unlock__credit">{credit}</p>
+      {children}
+    </div>
+  ) : (
+    <>{children}</>
+  );
+
 const ReportStickyUnlockBar: FC<Props> = ({
   quote,
   onUnlock,
@@ -62,6 +84,7 @@ const ReportStickyUnlockBar: FC<Props> = ({
 }) => {
   const mobileRef = useRef<HTMLDivElement>(null);
   const desktopRef = useRef<HTMLDivElement>(null);
+  const credit = creditLine(quote);
 
   // Publish the height this bar occupies as `--report-unlock-bar-h`, as
   // ConsentBannerOffset publishes `--liq-consent-h`, so floating UI of the report's
@@ -114,14 +137,16 @@ const ReportStickyUnlockBar: FC<Props> = ({
         )}
         {v4 ? (
           /* 1005:394 — the paywall card's pill, "Unlock Full Report →". */
-          <button
-            type="button"
-            className="report-sticky-unlock__cta--v4"
-            onClick={handleClick("mobile")}
-            aria-label="Unlock full report"
-          >
-            Unlock Full Report<span aria-hidden="true">{" →"}</span>
-          </button>
+          <V4Cta credit={credit}>
+            <button
+              type="button"
+              className="report-sticky-unlock__cta--v4"
+              onClick={handleClick("mobile")}
+              aria-label="Unlock full report"
+            >
+              Unlock Full Report<span aria-hidden="true">{" →"}</span>
+            </button>
+          </V4Cta>
         ) : (
           <button
             type="button"
@@ -151,16 +176,18 @@ const ReportStickyUnlockBar: FC<Props> = ({
            * guarantee box at the paywall card's own scale, and the gradient pill. */
           <div className="report-sticky-unlock__desktop-inner">
             <GuaranteeBadge nodeId="1015:1218" />
-            <button
-              type="button"
-              className="report-sticky-unlock__cta--v4"
-              onClick={handleClick("desktop")}
-              aria-label="Unlock full report"
-            >
-              {/* A no-break space, as the footer's: a plain one at the start of the
-               * arrow's flex item collapses. */}
-              Unlock Full Report<span aria-hidden="true">{" →"}</span>
-            </button>
+            <V4Cta credit={credit}>
+              <button
+                type="button"
+                className="report-sticky-unlock__cta--v4"
+                onClick={handleClick("desktop")}
+                aria-label="Unlock full report"
+              >
+                {/* A no-break space, as the footer's: a plain one at the start of the
+                 * arrow's flex item collapses. */}
+                Unlock Full Report<span aria-hidden="true">{" →"}</span>
+              </button>
+            </V4Cta>
           </div>
         ) : (
           <div className="report-sticky-unlock__desktop-inner">

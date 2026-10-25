@@ -131,7 +131,13 @@ const Gradient: FC<{ children: ReactNode }> = ({ children }) => (
 
 function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
   if (!quote) {
-    return { available: false, offLabel: null, priceLabel: null, strikeLabel: null } as const;
+    return {
+      available: false,
+      isCredit: false,
+      offLabel: null,
+      priceLabel: null,
+      strikeLabel: null,
+    } as const;
   }
   // The charged price, which every surface and the Stripe line item read. The strike
   // and the "N% off" both compare against it, so a bucket priced at its own anchor
@@ -144,6 +150,8 @@ function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
   if (creditCents > 0) {
     return {
       available: true,
+      // The EUR 1.99 holder's EUR 10, which the card sets in bold (sync 23.10).
+      isCredit: quote.creditKind === "initial",
       offLabel:
         quote.creditKind === "initial"
           ? `${formatReportPurchasePrice(creditCents)} credit applied`
@@ -158,6 +166,7 @@ function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
     : null;
   return {
     available: true,
+    isCredit: false,
     // "20% OFF" → the frames' "20% off".
     offLabel: badge ? badge.toLowerCase() : null,
     priceLabel: formatReportPurchasePrice(currentCents),
@@ -659,7 +668,11 @@ const PlanCard: FC<{
             {pricing.offLabel ? (
               <>
                 {" - "}
-                <span className="rpg-card__off">{pricing.offLabel}</span>
+                <span
+                  className={`rpg-card__off${pricing.isCredit ? " rpg-card__off--credit" : ""}`}
+                >
+                  {pricing.offLabel}
+                </span>
               </>
             ) : null}
           </p>
