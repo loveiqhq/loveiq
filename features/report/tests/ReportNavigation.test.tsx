@@ -519,6 +519,28 @@ describe("V4 — the finalised nav (961:333)", () => {
     expect(row("introduction").dataset.access).toBe("free");
   });
 
+  // Sync 23.10: once the whole report is the reader's, the navs say nothing more about
+  // access. Every row bold (the "unlocked" weight), no FREE chip, no padlock of either kind.
+  it("draws no chip or padlock and every row bold for a fully unlocked reader", async () => {
+    const { unmount } = await inV4(
+      <ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} fullyUnlocked />
+    );
+    for (const id of ["core_archetype", "typical_beliefs", "power_orientation"]) {
+      expect(row(id).querySelector(".report-nav-badge"), id).toBeNull();
+      expect(row(id).dataset.access, id).toBe("unlocked");
+    }
+    unmount();
+
+    await inV4(
+      <ReportMobileNav activeSectionId="core_archetype" accessById={ACCESS} fullyUnlocked />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^chapter:/i }));
+    for (const id of ["introduction", "typical_beliefs", "power_orientation"]) {
+      expect(row(id).querySelector(".report-nav-badge"), id).toBeNull();
+      expect(row(id).dataset.access, id).toBe("unlocked");
+    }
+  });
+
   it("leaves V3's rows untagged", async () => {
     await inV3(<ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />);
     expect(row("typical_beliefs")).not.toHaveAttribute("data-access");
