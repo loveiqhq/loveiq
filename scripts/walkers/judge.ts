@@ -225,6 +225,8 @@ export function findPrompt(
 ): string {
   return [
     "You are judging tonight's persona walks on LoveIQ's staging site: a scripted browser took the sexual-archetype survey as one archetype, read the free report, opened the paywall and bought a plan with Stripe's test card. Your job is to say what a REAL person on that device would have run into, against the 22 signals below.",
+    "- Where staging switches on the EUR 1.99 pre-unlock gate, a walk meets it between the survey and the report (walk.json's `initialGate`), pays it with the test card, then reads the report it opens. The gate is part of the journey, not a fault in itself.",
+    "- Say a finding is also on loveiq.org only when production runs it for its visitors. Code that is on main behind a switch that is off there (the gate is, until the team turns it on) is not on loveiq.org.",
     "",
     "WHAT YOU HAVE",
     "- Each walk is a folder in the current directory: walk.json (every screen in order: kind, url, heading, the words visible on screen, timings, errors) and the screenshots it names. Read walk.json first, then look at the screenshots that matter. The text in walk.json is a capture and can miss things; the screenshot is what the person saw.",

@@ -398,6 +398,28 @@ describe("what a walk proves on its own", () => {
     expect(unseen(early)).toBe(false);
   });
 
+  // 2026-10-24: staging's EUR 1.99 pre-unlock gate holds the report's score back until it is
+  // paid. A walk that stopped there on purpose (--no-pay) saw no score by design; one that
+  // paid and still saw none did not.
+  it("asks no score of a walk that stopped at the EUR 1.99 gate, and does of one that paid it", () => {
+    const unseen = (w: Walk) =>
+      checkWalk(w).some((c) => !c.ok && c.what.includes("never saw its score from the server"));
+    const reportStep = [{ n: 1, kind: "report", at: 0, ms: 0, url: "/r", heading: null }];
+    expect(unseen(walk({ serverArchetype: undefined, initialGate: true, steps: reportStep }))).toBe(
+      false
+    );
+    expect(
+      unseen(
+        walk({
+          serverArchetype: undefined,
+          initialGate: true,
+          initialGatePaid: true,
+          steps: reportStep,
+        })
+      )
+    ).toBe(true);
+  });
+
   it("takes the server's archetype as the score, and says when the page led with another", () => {
     // The page text is a heuristic; the report API's answer is the score.
     expect(
