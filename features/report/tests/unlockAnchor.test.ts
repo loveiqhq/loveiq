@@ -111,8 +111,32 @@ describe("unlock anchor — back to where the reader paid (Figma 1382:2010)", ()
     vi.advanceTimersByTime(450);
     expect(click).toHaveBeenCalledTimes(1);
     expect(resize).toHaveBeenCalled();
-    // 5000 + 900 + 100 - 200
-    expect(restoreScroll).toHaveBeenCalledWith(5800);
+    // The spot back at 200 would put the article's head at 100, under the chrome (8→136):
+    // the head goes just below it instead, 144px down. 5000 + 900 - 144.
+    expect(restoreScroll).toHaveBeenCalledWith(5756);
+  });
+
+  // Persona walks 23.10: after paying, the report opened with the floating chapter pill
+  // over the "Learn more" article's title and reading time.
+  it("keeps the spot's exact height when the head would show clear of the chrome", () => {
+    const { desire, second } = page();
+    vi.stubGlobal("scrollY", 5000);
+    at(desire, 300, 2400);
+    at(second, 900, 600);
+    restoreUnlockAnchor({ sectionId: "desire_drivers", article: 1, offset: 20, y: 200 });
+    vi.advanceTimersByTime(450);
+    // The head lands at 180, below the chrome: 5000 + 900 + 20 - 200.
+    expect(restoreScroll).toHaveBeenCalledWith(5720);
+  });
+
+  it("keeps a spot deep in the chapter exactly where it was read", () => {
+    const { desire } = page();
+    vi.stubGlobal("scrollY", 5000);
+    at(desire, 300, 2400);
+    restoreUnlockAnchor({ sectionId: "desire_drivers", article: null, offset: 1200, y: 200 });
+    vi.advanceTimersByTime(450);
+    // The head is a screen above; showing it would push the spot off. 5000 + 300 + 1200 - 200.
+    expect(restoreScroll).toHaveBeenCalledWith(6300);
   });
 
   it("leaves the page alone when the chapter is not in this view", () => {
