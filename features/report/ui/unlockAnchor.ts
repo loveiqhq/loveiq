@@ -1,6 +1,7 @@
 import { UNLOCK_ANCHOR_REGEX } from "@features/checkout/server/reportPurchase";
 import { restoreScroll } from "@shared/ui/restore-scroll";
 import { getSmoothScroll } from "@shared/ui/smooth-scroll-registry";
+import { V4_CHROME_OFFSET_PX } from "./v3/v4ChromeOffset";
 import { openV4Chapter } from "./v3/v4OpenChapter";
 
 /**
@@ -47,6 +48,23 @@ const READING_LINE = 0.25;
  * 400ms for it (BODY_SETTLE_MS); the article measured before that is still growing.
  */
 const CHAPTER_SETTLE_MS = 450;
+/**
+ * How close below its head a spot must be (as a share of the screen) for the head to be
+ * shown with it. Further down, the reader was deep in the chapter, and the spot keeps
+ * its exact height.
+ */
+const NEAR_HEAD = 0.6;
+
+/** The notch's inset where the page runs under it (the pill's band moves down by it). */
+function safeAreaTop(): number {
+  const probe = document.createElement("div");
+  probe.style.cssText =
+    "position:fixed;top:0;height:0;visibility:hidden;padding-top:env(safe-area-inset-top,0px)";
+  document.body.appendChild(probe);
+  const inset = Number.parseFloat(getComputedStyle(probe).paddingTop);
+  probe.remove();
+  return Number.isFinite(inset) ? inset : 0;
+}
 
 function articleIndex(section: Element, article: Element | null): number | null {
   if (!article) return null;
@@ -143,8 +161,18 @@ export function restoreUnlockAnchor(anchor: UnlockAnchor, onDone?: () => void): 
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         getSmoothScroll()?.resize();
-        const top = window.scrollY + container.getBoundingClientRect().top + anchor.offset;
-        restoreScroll(Math.max(0, Math.round(top - anchor.y)));
+        const head = window.scrollY + container.getBoundingClientRect().top;
+        let target = head + anchor.offset - anchor.y;
+        // Persona walks 23.10 (iPhone): the spot came back at its height, but the head
+        // of its chapter or article landed under the floating chrome (the pill covered
+        // "Learn more"'s title and reading time), so a buyer met a cut-off page. When the
+        // head would land there and the spot is close below it, the head sits just under
+        // the chrome instead and the spot stays on screen below it.
+        const clear = V4_CHROME_OFFSET_PX + safeAreaTop();
+        if (head - target < clear && anchor.offset + clear <= window.innerHeight * NEAR_HEAD) {
+          target = head - clear;
+        }
+        restoreScroll(Math.max(0, Math.round(target)));
         onDone?.();
       })
     );
