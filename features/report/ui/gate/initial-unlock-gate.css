@@ -687,17 +687,6 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
   border-top: 1px solid #e5e5e5;
   background: #ffffff;
-  transition:
-    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    visibility 0s;
-}
-
-.iug-sticky[data-visible="false"] {
-  visibility: hidden;
-  transform: translateY(calc(100% + 1px));
-  transition:
-    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    visibility 0s 240ms;
 }
 
 .iug-sticky__error {
@@ -884,9 +873,5 @@
   }
   .iug-hero--motion .iug-progress {
     display: none;
-  }
-  .iug-sticky,
-  .iug-sticky[data-visible="false"] {
-    transition: none;
   }
 }

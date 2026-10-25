@@ -52,18 +52,6 @@ class FakeIntersectionObserver {
     return [];
   }
 }
-function setInView(target: Element, isIntersecting: boolean) {
-  for (const observer of observers) {
-    if (!observer.targets.includes(target)) continue;
-    act(() => {
-      observer.callback(
-        [{ target, isIntersecting } as IntersectionObserverEntry],
-        observer as unknown as IntersectionObserver
-      );
-    });
-  }
-}
-
 function setMotion(reduce: boolean) {
   vi.stubGlobal(
     "matchMedia",
@@ -273,7 +261,6 @@ describe("unlocking", () => {
       reply({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_2" })
     );
     renderGate();
-    setInView(cardCta(), false);
     fireEvent.click(stickyCta());
     await settle();
     expect(mockTrackCta).toHaveBeenCalledWith({ place: "sticky" });
@@ -311,7 +298,6 @@ describe("unlocking", () => {
   it("starts one checkout however often the button is pressed", async () => {
     fetchMock.mockReturnValue(new Promise(() => {}));
     renderGate();
-    setInView(cardCta(), false);
     fireEvent.click(cardCta());
     fireEvent.click(cardCta());
     fireEvent.click(stickyCta());
@@ -335,12 +321,13 @@ describe("unlocking", () => {
 });
 
 describe("around the card", () => {
-  it("shows the sticky bar only while the card's button is out of view", () => {
+  // Sync 23.10 (Marcus and Fatih): "the call to action should be sticky immediately".
+  it("pins the sticky bar from the first paint, beside the card's own button", () => {
     renderGate();
-    setInView(cardCta(), true);
-    expect(stickyBar().dataset.visible).toBe("false");
-    setInView(cardCta(), false);
-    expect(stickyBar().dataset.visible).toBe("true");
+    expect(stickyBar()).not.toHaveAttribute("aria-hidden");
+    expect(stickyBar()).not.toHaveAttribute("inert");
+    expect(stickyCta()).toBeEnabled();
+    expect(cardCta()).toBeEnabled();
   });
 
   it("has no back arrow for a reader who came from anywhere but the survey", () => {
