@@ -84,6 +84,18 @@ one table for 15 minutes with a reason, written to `admin_audit_log` before the 
 issued; unmasked rows then include full email addresses. Every explorer CSV export is
 logged too.
 
+Google Analytics' and Google Ads' tables come two ways: `sessions_daily` and `campaign_daily`
+are the company brain's 15-minute copies, and the rest are read live from Google for the
+range asked ([`google-live.ts`](../features/admin/server/ap/google-live.ts)), cached 15
+minutes: GA4's site, acquisition, landing pages (also by source and device), pages, events
+(also by page, and by our custom parameters), hours, devices and browsers, cities, and new
+and returning; Ads' conversion actions, search terms, keywords, ad and asset groups, ads,
+devices, countries, hours, age and gender, impression share, Performance Max's search
+categories (by month: Google gives them only for a span of days) and the account's change
+history (30 days, who by organization only); and Search Console's searches and pages. A
+report link holds its reader's access token, so page paths write every one as
+`/report/[token]`.
+
 | Route                                | Methods             | Minimum access                                         | Source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------------------------ | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `/api/admin/ap/focus`                | `GET`               | `viewer+`                                              | [`app/api/admin/ap/focus/route.ts`](../app/api/admin/ap/focus/route.ts)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |

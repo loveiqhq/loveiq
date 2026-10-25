@@ -39,7 +39,8 @@ export const SURVEY_TRACKING_FROM = "2026-10-17";
  * Where a person came from, read off the survey's tracker (the first page they landed on).
  * Google Ads is a click id or google/cpc, Meta Ads a Meta source with a paid medium, organic
  * search a search engine tagged organic or, untagged, the referrer (from SURVEY_TRACKING_FROM);
- * the rest is utm_source as the links set it (classifySource).
+ * the rest is utm_source as the links set it, or for an untagged visit the referring site
+ * (referrers.ts), Direct only without one (classifySource).
  */
 export const SOURCES = [
   { value: "all", label: "All sources" },
@@ -78,6 +79,24 @@ export const VISITORS = [
 ] as const;
 export type VisitorFilter = (typeof VISITORS)[number]["value"];
 
+/**
+ * The funnel a reader came through (design, 21 Oct 2026): the free survey, or paying before it
+ * (pay to start, in full or €1.99 first; live since 22 Oct 2026, #631). All funnels counts every
+ * finisher and payment, pay to start's buyers too (their visits are on its own page); Free survey
+ * leaves out the surveys bought before they were taken, with their money. Pay to start's two
+ * offers are compared on their own page (Pay to start), so they aren't picked here.
+ */
+export const FUNNELS = [
+  { value: "all", label: "All funnels" },
+  { value: "free", label: "Free survey" },
+  { value: "pay_full", label: "Pay to start · full", live: false },
+  { value: "pay_pre", label: "Pay to start · €1.99 pre", live: false },
+] as const;
+export type FunnelFilter = (typeof FUNNELS)[number]["value"];
+/** What the Funnel filter says, on hover. */
+export const FUNNEL_NOTE =
+  "All funnels counts everyone who finished a survey or paid, pay to start's buyers too; Free survey leaves out those who paid before the survey. Pay to start's two offers are compared on the Pay to start page.";
+
 /** The country price tiers the pricing code assigns (report_price_quote.country_tier). */
 export const TIERS = [
   { value: "all", label: "All tiers" },
@@ -101,6 +120,8 @@ export interface ApFilters {
   device: DeviceFilter;
   tier: TierFilter;
   visitor: VisitorFilter;
+  /** All funnels, or the free survey without pay to start's buyers. */
+  funnel?: FunnelFilter;
   /** The range includes today, which is still running (set by parseFilters). */
   running?: boolean;
 }
@@ -183,6 +204,8 @@ export function parseFilters(
     device: oneOf(DEVICES, get("device"), base.device),
     tier: oneOf(TIERS, get("tier"), base.tier),
     visitor: oneOf(VISITORS, get("visitor"), base.visitor),
+    // A pay-to-start choice in a link reads as all funnels: its offers are on its own page.
+    funnel: get("funnel") === "free" ? "free" : "all",
     running: range!.to >= today,
   };
 }
@@ -200,6 +223,7 @@ export function filterParams(f: ApFilters): Record<string, string> {
   if (f.device !== "all") out.device = f.device;
   if (f.tier !== "all") out.tier = f.tier;
   if (f.visitor !== "all") out.visitor = f.visitor;
+  if (f.funnel && f.funnel !== "all") out.funnel = f.funnel;
   return out;
 }
 
@@ -262,6 +286,7 @@ export function filterSummary(f: ApFilters, today: string): string {
   ];
   const narrowing = [
     f.assessment !== "all" ? labelOf(ASSESSMENTS, f.assessment) : null,
+    f.funnel && f.funnel !== "all" ? labelOf(FUNNELS, f.funnel) : null,
     f.source !== "all" ? labelOf(SOURCES, f.source) : null,
     f.device !== "all" ? labelOf(DEVICES, f.device) : null,
     f.tier !== "all" ? labelOf(TIERS, f.tier) : null,
@@ -281,7 +306,7 @@ export interface Bucket {
   from: string;
   /** Last day, included. */
   to: string;
-  /** "14 Sep", "Oct 2026". */
+  /** "14 Sep", "Oct", "Oct (to 20th)", "Dec 2025" (in a range over two years). */
   label: string;
   /** Days in the bucket. */
   days: number;
@@ -290,6 +315,13 @@ export interface Bucket {
 }
 
 export type Grain = "day" | "week" | "month";
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st, 22nd, 23rd, 31st. */
+function ordinal(n: number): string {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const end = teen ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10];
+  return `${n}${end ?? "th"}`;
+}
 
 /** Days for up to two weeks, weeks up to about four months, months beyond. */
 export function grainOf(from: string, to: string): Grain {
@@ -347,12 +379,19 @@ export function buckets(from: string, to: string, grain: Grain = grainOf(from, t
     const monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
     const end = monthEnd < to ? monthEnd : to;
     const days = dayCount(start, end);
+    const full = start.endsWith("-01") && end === monthEnd;
+    // As the design writes months: "May", "Oct (to 14th)"; the year only when the range spans two.
+    const cut = full
+      ? ""
+      : !start.endsWith("-01")
+        ? ` (from ${ordinal(Number(start.slice(8)))})`
+        : ` (to ${ordinal(Number(end.slice(8)))})`;
     out.push({
       from: start,
       to: end,
-      label: `${MONTHS[m - 1]} ${y}`,
+      label: `${MONTHS[m - 1]}${from.slice(0, 4) === to.slice(0, 4) ? "" : ` ${y}`}${cut}`,
       days,
-      full: start.endsWith("-01") && end === monthEnd,
+      full,
     });
     start = addDays(end, 1);
   }

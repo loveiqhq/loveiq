@@ -196,10 +196,22 @@ const Z90 = 1.6448536269514722;
 /**
  * A run of digits as people write a phone number: spaced, dashed, dotted or bracketed, a + or an
  * opening bracket before. Never inside a word, so the code an address is masked to (masked-1a2b…)
- * is not cut into. It is a phone number from seven digits (maskNote): ponytail, a date written
- * with dots (18.10.2026) is masked too; harmless in a quote.
+ * is not cut into. It is a phone number from seven digits (isPhoneRun).
  */
 const DIGIT_RUN = /(?<![\w-])[(+]*\d[\d\s()./-]*\d(?!\w)/g;
+/**
+ * Seven digits or more that are no phone number, kept narrow so a number never slips through
+ * dressed as one: a real date (23.10.2026, 2026-10-23), prices of up to four digits each
+ * (19.99 / 29.99, 9.99-19.99), or a round thousands figure (1.000.000). Anything else of seven
+ * digits or more is masked.
+ */
+const NOT_A_PHONE =
+  /^(?:(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?:\d{2}|(?:19|20)\d{2})|(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|\d{1,4}[.,]\d{2}(?:\s*[/–-]\s*\d{1,4}[.,]\d{2})*|[1-9]\d{0,2}(?:[.,]000)+)$/;
+
+/** A run of digits (DIGIT_RUN) that reads as a phone number. */
+export function isPhoneRun(run: string): boolean {
+  return run.replace(/\D/g, "").length >= 7 && !NOT_A_PHONE.test(run.trim());
+}
 
 /**
  * A reader's words as the page may show them: email addresses and report links masked as the raw
@@ -207,9 +219,7 @@ const DIGIT_RUN = /(?<![\w-])[(+]*\d[\d\s()./-]*\d(?!\w)/g;
  * free text, as in the team's copy of the data.
  */
 export function maskNote(text: string, m: Masker = masker()): string {
-  return m
-    .text(text.trim())
-    .replace(DIGIT_RUN, (run) => (run.replace(/\D/g, "").length >= 7 ? MASKED : run));
+  return m.text(text.trim()).replace(DIGIT_RUN, (run) => (isPhoneRun(run) ? MASKED : run));
 }
 
 /** The Wilson score interval of k in n, 90% by default; null with nobody to go on. */

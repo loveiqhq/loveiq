@@ -215,7 +215,8 @@ export const DRAFTS: Record<string, TableDraft> = {
       session_id: "The report visit.",
       section_id: "The chapter.",
       feedback: "up or down.",
-      comment: "The comment as typed: free text, so a name can remain.",
+      comment:
+        "The comment as typed. Free text, shown as typed in the raw data explorer and the team copy, so it can hold a name or other personal details.",
       issue: "The reason given with a down vote: inaccurate, incomplete or other.",
       created_at: "When it was given.",
       updated_at: "Last change.",
@@ -280,5 +281,36 @@ export const DRAFTS: Record<string, TableDraft> = {
     table:
       "Ad spend entered by hand, per day and channel. Empty: spend comes from Google Ads through Google Analytics.",
     fields: {},
+  },
+  // Checked against the view's definition (migration 20260329225514, the same live) and its
+  // rows on 21 Oct 2026.
+  admin_submission_facts: {
+    table:
+      "One row per finished survey (survey_submission) with its score, the person's profile and whether it has a report and a paid unlock: a copy the database rebuilds every 5 minutes, so its last few minutes can be missing. The team's own and test surveys are in it (the dashboards leave staff out).",
+    fields: {
+      submission_id: "The finished survey (survey_submission's id).",
+      session_id: "The survey session.",
+      user_id: "The person, in app_user.",
+      email:
+        "The person's email address, from app_user: a code in the raw data explorer unless unlocked.",
+      status: "Always completed.",
+      duration_ms: "Time from start to submit, in milliseconds.",
+      created_date_time:
+        "When the finished survey reached us: the submission time every count uses.",
+      archetype: "The main archetype of the V4 scoring (scoring_result); empty when not scored.",
+      v5_archetype: "The main archetype of the V5 scoring (scoring_result).",
+      gender: "Gender, as answered in the survey (user_profile).",
+      sexual_orientation: "Sexual orientation, as answered (user_profile).",
+      relationship_status: "Relationship status, as answered (user_profile).",
+      country: "Country, as answered, in English (user_profile).",
+      utm_source:
+        "The visit's utm_source tag, read from the submission's utm_tracker (its whole text when that is not JSON). Most ad clicks carry none, and our automated checks write their own (prod-e2e-check).",
+      utm_medium: "The visit's utm_medium tag, read from utm_tracker.",
+      has_report: "A report was made for it (personal_report).",
+      has_payment:
+        "Its report has a succeeded payment: tests and €0 gifted unlocks included, so not the count of sales (payment is).",
+      was_resumed:
+        "A saved draft of the same survey session (survey_partial_save) still existed at the last rebuild. Not a resumed survey: nearly every such draft was saved again about half a minute after the survey was sent, and drafts are deleted 30 days after their last save, so older rows read false.",
+    },
   },
 };

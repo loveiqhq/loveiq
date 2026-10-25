@@ -149,7 +149,8 @@ describe("Traffic page builder", () => {
   });
 
   it("under a filter ad spend can't follow, leaves the Ads API's figures out and says why", () => {
-    const why = "Ad spend can't be split by device here.";
+    const why =
+      "Ad spend isn't split by device in these figures: Google's own split is on Traffic, under Performance › Device, with no device filter on.";
     const p = traffic({ filters: { ...filters, device: "phone" } });
     for (const table of ["campaign", "keyword"] as const) {
       for (const r of p.breakdowns[table].rows) {
@@ -161,7 +162,7 @@ describe("Traffic page builder", () => {
     const camp = p.breakdowns.campaign.rows.find((r) => r.key === "price_time_test")!;
     expect(camp.counts.completes).toBe(1);
     // No dots of all-traffic cost against phone payers.
-    expect(p.quality).toEqual({ dots: [], why });
+    expect(p.quality).toEqual({ dots: [], why, note: null });
     expect(p.tiles.blocked.spend).toBe(why);
   });
 
@@ -220,17 +221,26 @@ describe("Traffic page builder", () => {
       facts: factsFixture({
         from: "2026-10-09",
         to: "2026-10-12",
+        // Finished after the test's restart (8 Oct 17:23), as its readers must be.
         subs: [
           sub({
             id: 1,
             day: "2026-10-10",
+            at: "2026-10-10T10:40:00Z",
             priceArm: "A3",
             ...paid,
             checkoutAt: "2026-10-10T10:50:00Z",
           }),
-          sub({ id: 2, day: "2026-10-10", priceArm: "A3" }),
-          sub({ id: 3, day: "2026-10-10", priceArm: "A3", ...paid, checkoutAt: null }),
-          sub({ id: 4, day: "2026-10-10", priceArm: "B3" }),
+          sub({ id: 2, day: "2026-10-10", at: "2026-10-10T10:40:00Z", priceArm: "A3" }),
+          sub({
+            id: 3,
+            day: "2026-10-10",
+            at: "2026-10-10T10:40:00Z",
+            priceArm: "A3",
+            ...paid,
+            checkoutAt: null,
+          }),
+          sub({ id: 4, day: "2026-10-10", at: "2026-10-10T10:40:00Z", priceArm: "B3" }),
         ],
       }),
     });
@@ -259,6 +269,199 @@ describe("Traffic page builder", () => {
       completes: 4,
       payers: 1,
     });
+  });
+
+  it("visitors: Google Ads' counted by the visit log, the untagged split, devices split per source", () => {
+    const tag = { med: null, fb: false, ref: null } as const;
+    const withLog = factsFixture({
+      ...facts,
+      visits: [
+        // The visit log keeps the link's utm_source: Google Ads' template tags every click.
+        { day: "2026-10-02", arm: "white_card", src: "google", n: 50 },
+        { day: "2026-10-02", arm: "white_card", src: null, n: 100 },
+        { day: "2026-10-03", arm: "white_card", src: "prod-verification", n: 5 },
+      ],
+      subs: [
+        ...facts.subs,
+        // Finished before sources were recorded, untagged: its own row, never Direct.
+        sub({ id: 9, src: null, med: null, ads: false, srcKnown: false, camp: null, term: null }),
+      ],
+    });
+    const g = (over: Record<string, unknown>, sessions: number) => ({
+      bucket: "2026-10-02",
+      src: null,
+      ads: false,
+      camp: null,
+      term: null,
+      sessions,
+      ...tag,
+      ...over,
+    });
+    const sessions = {
+      ok: true as const,
+      value: [
+        // PostHog sees nearly every Google Ads visit: its split of them names the campaigns.
+        g({ src: "google", med: "cpc", ads: true, camp: "price_time_test" }, 30),
+        g({ src: "google", med: "cpc", ads: true, camp: "performance_max" }, 10),
+        // The untagged it saw: 20 direct, 5 from a search engine.
+        g({}, 20),
+        g({ ref: "www.google.com" }, 5),
+      ],
+    };
+    const v = (dim: "device", value: string, over: Record<string, unknown>, n: number) => ({
+      dim,
+      value,
+      src: null,
+      ads: false,
+      sessions: n,
+      ...tag,
+      ...over,
+    });
+    const google = { src: "google", med: "cpc", ads: true };
+    const audience = {
+      ok: true as const,
+      value: [
+        v("device", "Mobile", google, 30),
+        v("device", "Desktop", google, 10),
+        v("device", "Mobile", {}, 5),
+        v("device", "Desktop", {}, 15),
+        v("device", "Mobile", { ref: "www.google.com" }, 5),
+      ],
+    };
+    const p = traffic({ facts: withLog, sessions, audience });
+    const row = (k: keyof typeof p.breakdowns, key: string) =>
+      p.breakdowns[k].rows.find((r) => r.key === key)!;
+    // 50 counted, never PostHog's 62% share of all its visits (40 of 65) times 150.
+    expect(row("channel", "google_ads").counts.visitors).toBe(50);
+    expect(row("campaign", "price_time_test").counts.visitors).toBe(38);
+    // The 100 untagged: direct 4 in 5, organic search 1 in 5. Organic and Direct rates are
+    // blank before 17 Oct (our own records tell them apart only from then), so read the split.
+    expect(p.attribution).toMatchObject({ unattributed: { n: 80, of: 150 } });
+    // Each source's visitors by its own devices: Google Ads 3 in 4 mobile, Direct 1 in 4,
+    // organic all: 37.5 + 20 + 20 mobile, not 62% of 150.
+    expect(row("device", "phone").counts.visitors).toBe(78);
+    expect(row("device", "computer").counts.visitors).toBe(73);
+    expect(row("channel", "unknown")).toMatchObject({
+      name: "Not recorded",
+      counts: { completes: 1 },
+    });
+  });
+
+  it("visitors: Google Ads' count needs no PostHog, its campaigns add up, tablets aren't divided", () => {
+    const tag = { med: null, fb: false, ref: null } as const;
+    const withLog = factsFixture({
+      ...facts,
+      visits: [
+        { day: "2026-10-02", arm: "white_card", src: "google", n: 50 },
+        { day: "2026-10-02", arm: "white_card", src: null, n: 100 },
+      ],
+      subs: [...facts.subs, sub({ id: 7, device: "Tablet" })],
+    });
+    const g = (over: Record<string, unknown>, sessions: number) => ({
+      bucket: "2026-10-02",
+      src: "google",
+      med: "cpc",
+      ads: true,
+      camp: null,
+      term: null,
+      sessions,
+      ...tag,
+      ...over,
+    });
+    const sessions = {
+      ok: true as const,
+      value: [
+        g({ camp: "price_time_test" }, 30),
+        g({ camp: "performance_max" }, 8),
+        // An old campaign's link, still clicked: no Ads line and no finisher, but visitors.
+        g({ camp: "loveiq_problem_awareness" }, 2),
+        g({ src: null, med: null, ads: false }, 20),
+      ],
+    };
+    const row = (p: ReturnType<typeof traffic>, k: keyof typeof p.breakdowns, key: string) =>
+      p.breakdowns[k].rows.find((r) => r.key === key);
+    const p = traffic({ facts: withLog, sessions });
+    // Every campaign tag PostHog saw has its row, so the rows add up to Google Ads' 50.
+    // 50 × 2/40 = 2.5: whole visitors that add up, so 2 here and 38 for 37.5, never 51 of 50.
+    expect(row(p, "campaign", "loveiq_problem_awareness")!.counts.visitors).toBe(2);
+    expect(row(p, "campaign", "price_time_test")!.counts.visitors).toBe(38);
+    expect(p.breakdowns.campaign.rows.reduce((a, r) => a + (r.counts.visitors ?? 0), 0)).toBe(
+      p.breakdowns.campaign.total!.counts.visitors
+    );
+    // PostHog calls an iPad a desktop: the survey's tablets are never divided by its tablets.
+    expect(row(p, "device", "tablet")!.counts.visitors).toBeNull();
+    expect(row(p, "device", "tablet")!.sub).toBe(
+      "PostHog counts iPads as Desktop, so tablet visitors aren't counted"
+    );
+    // PostHog unread: Google Ads' visitors are still the visit log's count, the rest blank.
+    const unread = traffic({ facts: withLog, sessions: null });
+    expect(row(unread, "channel", "google_ads")!.counts.visitors).toBe(50);
+    expect(row(unread, "channel", "direct")!.counts.visitors).toBeNull();
+    // Under the Google Ads filter: its row alone, counted, and its campaigns split.
+    const ga = traffic({
+      facts: withLog,
+      sessions,
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-01", to: "2026-10-07", source: "google_ads" },
+        TODAY
+      ),
+    });
+    expect(ga.breakdowns.channel.rows.map((r) => [r.key, r.counts.visitors])).toEqual([
+      ["google_ads", 50],
+    ]);
+    expect(row(ga, "campaign", "price_time_test")!.counts.visitors).toBe(38);
+  });
+
+  it("a filter the records can't follow blanks every table about people, never zeros", () => {
+    // New or returning before finished surveys kept their PostHog visit (28 Aug 2026).
+    const early = factsFixture({ ...facts, from: "2026-08-01", to: "2026-08-07" });
+    const p = traffic({
+      facts: early,
+      filters: parseFilters(
+        { period: "custom", from: "2026-08-01", to: "2026-08-07", visitor: "new" },
+        TODAY
+      ),
+    });
+    const why = p.tiles.blocked.people!;
+    expect(why).toMatch(/^New and returning are told apart from 28 Aug 2026/);
+    for (const k of [
+      "channel",
+      "campaign",
+      "keyword",
+      "landing",
+      "device",
+      "tier",
+      "visitor",
+    ] as const)
+      expect(p.breakdowns[k].blocked).toBe(why);
+    expect(p.trend.submissionsWhy).toBe(why);
+    expect(p.experiments).toMatchObject({ arms: [], why });
+    expect(p.quality).toMatchObject({ dots: [], why });
+    expect(p.audience.dims.filter((d) => d.kind === "survey").every((d) => d.blocked === why)).toBe(
+      true
+    );
+  });
+
+  it("keywords: a link's utm_term is the keyword only from 27 Aug 2026 (before, the ad group's name)", () => {
+    const may = factsFixture({
+      ...facts,
+      from: "2026-08-20",
+      to: "2026-08-30",
+      subs: [
+        sub({ id: 1, day: "2026-08-21", camp: "loveiq_problem_awareness", term: "am i normal" }),
+        sub({ id: 2, day: "2026-08-28", camp: "price_time_test", term: "love test" }),
+      ],
+    });
+    const p = traffic({
+      facts: may,
+      filters: parseFilters({ period: "custom", from: "2026-08-20", to: "2026-08-30" }, TODAY),
+    });
+    const names = p.breakdowns.keyword.rows.map((r) => r.name);
+    expect(names).toContain("love test");
+    expect(names).not.toContain("am i normal");
+    expect(p.breakdowns.keyword.notes.join(" ")).toMatch(
+      /The links pass the keyword from 27 Aug 2026/
+    );
   });
 
   it("cohorts: revenue within N days of a person's first finished survey, among those old enough", () => {
@@ -292,5 +495,70 @@ describe("Traffic page builder", () => {
     expect(google.eligible).toEqual([1, 1, 1, 1]);
     expect(google.refund).toBeCloseTo(1 / 3);
     expect(google.crossSell).toBe(1);
+  });
+
+  it("under Free survey with the report's €1.99 gate off and none sold, blanks the pre-unlock columns, with why", () => {
+    const subsFacts = factsFixture({
+      from: "2026-10-24",
+      to: "2026-10-30",
+      subs: [sub({ id: 1, day: "2026-10-25", at: "2026-10-25T10:00:00Z" })],
+    });
+    const at = (gateOn: boolean | null) =>
+      traffic({
+        facts: subsFacts,
+        filters: parseFilters(
+          { period: "custom", from: "2026-10-24", to: "2026-10-30", funnel: "free" },
+          TODAY
+        ),
+        gateOn,
+      });
+    const off = at(false);
+    const why = "Not sold in the free survey: the report's €1.99 gate is switched off.";
+    for (const t of Object.values(off.breakdowns)) {
+      for (const r of t.rows) expect(r.counts.prePayers).toBeNull();
+      expect(t.notes).toContain(why);
+    }
+    // With the gate on, the free survey's 0 is a real 0.
+    const on = at(true);
+    expect(
+      Object.values(on.breakdowns).some((t) => t.rows.some((r) => r.counts.prePayers === 0))
+    ).toBe(true);
+  });
+
+  it("cohorts under Free survey: a person's sale on a pay-to-start survey is not the free funnel's", () => {
+    const first = "2026-07-01T10:00:00Z";
+    const facts = factsFixture({
+      from: "2026-07-01",
+      to: "2026-07-07",
+      subs: [
+        sub({
+          id: 1,
+          day: "2026-07-01",
+          at: first,
+          userFirstAt: first,
+          userPays: [
+            { at: "2026-07-01T12:00:00Z", amount: 9.99, plan: "full_report", refunded: false },
+            // Bought on a later survey they paid for before taking it.
+            {
+              at: "2026-07-03T12:00:00Z",
+              amount: 29.99,
+              plan: "full_report",
+              refunded: false,
+              pts: true,
+            },
+          ],
+        }),
+      ],
+    });
+    const rev = (funnel: string) =>
+      traffic({
+        facts,
+        filters: parseFilters(
+          { period: "custom", from: "2026-07-01", to: "2026-07-07", funnel },
+          TODAY
+        ),
+      }).cohorts.rows.find((r) => r.source === "Google Ads")!.rev;
+    expect(rev("all")).toEqual([9.99, 39.98, 39.98, 39.98]);
+    expect(rev("free")).toEqual([9.99, 9.99, 9.99, 9.99]);
   });
 });

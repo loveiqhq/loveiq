@@ -98,6 +98,28 @@ const payload: FocusPayload = {
       trend: "",
     },
   ],
+  funnels: {
+    rows: [
+      {
+        label: "Free survey",
+        sub: "Pay after the report · live",
+        live: true,
+        visitors: 10_086,
+        spend: 1208.57,
+        paying: 1,
+        revenue: 6.99,
+        v2p: 1 / 10_086,
+        rpv: 6.99 / 10_086,
+        cpp: 1208.57,
+        roas: 6.99 / 1208.57,
+        refund: 0,
+        refunded: 0,
+        sales: 1,
+        valid: "Reference",
+      },
+    ],
+    notes: [],
+  },
   charts: [
     chart(
       "submissions",
@@ -185,7 +207,7 @@ const payload: FocusPayload = {
     },
     nps: { sub: "Not asked yet." },
     survey: { valueMs: 836_070, sub: "462 submissions in the range" },
-    report: { valueMs: 168_403, sub: "357 readers with a measured visit · average 7.4 min" },
+    report: { valueMs: 168_403, sub: "357 readers with a measured visit · average 7:24" },
     rows: [
       {
         label: "Assessment A",
@@ -239,6 +261,7 @@ describe("the Dashboard as drawn", () => {
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
     expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual([
       "Dashboard",
+      "Funnel comparison",
       "Survey submissions",
       "Visitor → survey start",
       "Survey completion",
@@ -252,7 +275,7 @@ describe("the Dashboard as drawn", () => {
 
   it("tiles: whole euros, the change against the period before, grey for ad spend", () => {
     render(<ApFocus />);
-    const tile = (label: string) => screen.getByText(label).parentElement!;
+    const tile = (label: string) => screen.getAllByText(label)[0]!.parentElement!;
     expect(tile("Revenue").textContent).toContain("€1,290");
     expect(within(tile("Revenue")).getByText("+29.0%").className).toContain("text-ap-good");
     expect(tile("Ad spend").textContent).toContain("€1,160");
@@ -360,10 +383,10 @@ describe("the Dashboard as drawn", () => {
     );
     const tile = (label: string) => within(asm).getByText(label).parentElement!.textContent;
     expect(tile("Median survey time · A")).toBe(
-      "Median survey time · A14 min462 submissions in the range"
+      "Median survey time · A13:56462 submissions in the range"
     );
     expect(tile("Median report time · A")).toBe(
-      "Median report time · A2.8 min357 readers with a measured visit · average 7.4 min"
+      "Median report time · A2:48357 readers with a measured visit · average 7:24"
     );
     expect(tile("NPS · Assessment A")).toBe("NPS · Assessment A—Not asked yet.");
     const table = within(asm).getByRole("table", { name: "Assessments" });
@@ -389,8 +412,8 @@ describe("the Dashboard as drawn", () => {
         .map((c) => c.textContent)
     ).toEqual([
       "—not asked yet",
-      "14 minlive",
-      "2.8 minlive",
+      "13:56live",
+      "2:48live",
       "462",
       "0.00%",
       "€0.00",
@@ -411,15 +434,17 @@ describe("the Dashboard as drawn", () => {
     }
   });
 
-  it("a trend that starts at or near nothing says rising or falling, not a percentage", () => {
-    expect(trendText(10, 12, [10, 11, 12])).toEqual({ text: "↗ +20% trend", tone: "good" });
-    expect(trendText(10, 10.2, [10, 10, 10])).toEqual({ text: "↗ +2% trend", tone: "flat" });
-    // A range from before launch: the line starts near nothing.
-    expect(trendText(0.03, 20, [0, 0, 0, 30, 30])).toEqual({ text: "↗ rising", tone: "good" });
-    expect(trendText(-2, 20, [0, 30])).toEqual({ text: "↗ rising", tone: "good" });
-    expect(trendText(5, 5, [5, 5])).toEqual({ text: "→ flat", tone: "flat" });
+  it("a trend reads flat when its line starts at nothing or doesn't move, as the design's rule", () => {
+    expect(trendText(10, 12)).toEqual({ text: "↗ +20% trend", tone: "good" });
+    expect(trendText(10, 10.2)).toEqual({ text: "↗ +2% trend", tone: "flat" });
+    // The change is over the line's start, however small that is (its size, when below zero).
+    expect(trendText(0.03, 20)).toEqual({ text: "↗ +66567% trend", tone: "good" });
+    expect(trendText(-2, 20)).toEqual({ text: "↗ +1100% trend", tone: "good" });
+    // A line starting at nothing, or one that doesn't move: flat.
+    expect(trendText(0, 20)).toEqual({ text: "→ flat", tone: "flat" });
+    expect(trendText(5, 5)).toEqual({ text: "→ flat", tone: "flat" });
     // Lower is better: a fall is good.
-    expect(trendText(4, 2, [4, 2], true)).toEqual({ text: "↘ −50% trend", tone: "good" });
+    expect(trendText(4, 2, true)).toEqual({ text: "↘ −50% trend", tone: "good" });
   });
 });
 

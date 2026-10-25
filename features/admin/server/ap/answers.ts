@@ -37,6 +37,8 @@ export interface AnswerRow {
   /** The visit the survey was finished in (PostHog), and new or returning once marked. */
   ph: string | null;
   visitorNew?: boolean | null;
+  /** Bought before it was taken (pay to start), as ap_facts marks a finisher; absent before. */
+  pts?: boolean;
 }
 
 export interface AnswerSplit {
@@ -46,12 +48,16 @@ export interface AnswerSplit {
   /** Multiple choice: shares are of respondents, so they add up to more than 100%. */
   multiple: boolean;
   segments: Array<{ name: string; n: number }>;
+  /** Groups left out: under five people, or past the three largest. */
+  hidden: Array<{ name: string; n: number }>;
   answers: Array<{ label: string; shares: Array<number | null> }>;
   /** The answer whose share differs most between segments, in words. */
   gap: string | null;
   respondents: number;
   /** Finished surveys in the range, so a question few reach shows how few answered it. */
   finished: number;
+  /** Why the filters or the split can't be read over this range; the answers are then empty. */
+  blocked?: string | null;
 }
 
 /** Questions whose answers can be counted: scales and choices, plus the country. */
@@ -94,10 +100,19 @@ function answerOrder(qid: string, counts: Map<string, number>): string[] {
   return [...asked, ...rest];
 }
 
-/** A scale answer as disagree (1–3), neutral (4) or agree (5–7). */
-function scaleSide(v: string): string {
+/** A scale answer to `qid` as the design names it: disagree (1–3), neutral (4) or agree (5–7). */
+function scaleSide(v: string, qid: string): string {
   const n = Number(v);
-  return n <= 3 ? "Disagree (1–3)" : n === 4 ? "Neutral (4)" : "Agree (5–7)";
+  return `${n <= 3 ? "Disagree" : n === 4 ? "Neutral" : "Agree"} on ${qid}`;
+}
+
+/** The design's relationship groups: monogamous and open or polyamorous are both a relationship. */
+function relationshipGroup(r: string | null): string {
+  const l = relationshipLabel(r);
+  if (l === "Single") return l;
+  return l === "Monogamous" || l === "Open or polyamorous"
+    ? "In a relationship"
+    : "Other or not stated";
 }
 
 const SOURCE_LABEL = new Map(SOURCES.map((s) => [s.value as string, s.label]));
@@ -106,7 +121,7 @@ const SOURCE_LABEL = new Map(SOURCES.map((s) => [s.value as string, s.label]));
 function segmentsOf(row: AnswerRow, dim: Dimension, otherQid: string | null): string[] {
   switch (dim) {
     case "none":
-      return ["All finished surveys"];
+      return ["All submissions"];
     case "source": {
       const s = classifySource(row);
       return s === "test" ? [] : [SOURCE_LABEL.get(s) ?? s];
@@ -117,26 +132,26 @@ function segmentsOf(row: AnswerRow, dim: Dimension, otherQid: string | null): st
       const d = deviceClass(row.device);
       return [
         d === "phone"
-          ? "Phone"
+          ? "Mobile"
           : d === "computer"
-            ? "Computer"
+            ? "Desktop"
             : d === "tablet"
               ? "Tablet"
               : "Unknown device",
       ];
     }
     case "relationship":
-      return [relationshipLabel(row.relationship)];
+      return [relationshipGroup(row.relationship)];
     case "question": {
       if (!row.other || !otherQid) return [];
       const type = surveyQuestions.find((x) => x.qId === otherQid)?.answerType;
-      return type === "scale" ? row.other.map(scaleSide) : row.other;
+      return type === "scale" ? row.other.map((v) => scaleSide(v, otherQid)) : row.other;
     }
   }
 }
 
-/** Up to four segments with at least five people, largest first; the rest are left out. */
-const MAX_SEGMENTS = 4;
+/** Up to three segments (the design's three colours) with at least five people, largest first. */
+const MAX_SEGMENTS = 3;
 const MIN_SEGMENT = 5;
 
 export function splitAnswers(
@@ -157,10 +172,11 @@ export function splitAnswers(
       bySegment.set(s, list);
     }
   }
-  const segments = [...bySegment.entries()]
+  const all = [...bySegment.entries()].sort((a, b) => b[1].length - a[1].length);
+  const segments = all
     .filter(([, list]) => list.length >= (dim === "none" ? 1 : MIN_SEGMENT))
-    .sort((a, b) => b[1].length - a[1].length)
     .slice(0, dim === "none" ? 1 : MAX_SEGMENTS);
+  const shown = new Set(segments.map(([name]) => name));
   const counts = new Map<string, number>();
   for (const v of kept.flatMap((r) => r.answer)) counts.set(v, (counts.get(v) ?? 0) + 1);
   const order = answerOrder(qid, counts);
@@ -187,6 +203,9 @@ export function splitAnswers(
     type: q?.answerType ?? "",
     multiple: q?.answerType === "multiple",
     segments: segments.map(([name, list]) => ({ name, n: list.length })),
+    hidden: all
+      .filter(([name]) => !shown.has(name))
+      .map(([name, list]) => ({ name, n: list.length })),
     answers,
     gap,
     respondents: kept.length,
@@ -228,6 +247,7 @@ export async function fetchAnswers(
         device: str(o.device),
         tier: str(o.tier),
         ph: str(o.ph),
+        pts: o.pts === true,
       };
     }),
   };

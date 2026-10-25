@@ -21,6 +21,11 @@ export interface Counts {
   revenue: number;
   /** Payers whose sale was a full unlock (Full, Full All, Core). */
   fullPayers: number;
+  /**
+   * Finishers who pre-unlocked (paid EUR 1.99 for the Core Archetype), so far; null over a range
+   * starting before it was on sale (PRE_ON_SALE_FROM), when nobody could.
+   */
+  prePayers?: number | null;
 }
 
 export interface Assumptions {

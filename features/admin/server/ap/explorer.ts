@@ -27,6 +27,8 @@ import { reportingDay } from "@shared/time/reporting-day";
 
 import { GA4_DAYS, SOURCE_KEYS, type CatalogTable, type SourceKey } from "./catalog";
 import { windowOf } from "./filters";
+import { LIVE_TABLES, liveRows } from "./google-live";
+import { SITE_EVENTS } from "./posthog";
 
 import {
   isNumeric,
@@ -53,6 +55,9 @@ export {
 
 /** Thrown for a query the explorer refuses; its message is safe to show. */
 export class Refused extends Error {}
+
+/** Google's sources by name, for the explorer's "the query". */
+const GOOGLE_NAMES = { ga4: "Google Analytics", ads: "Google Ads", gsc: "Search Console" } as const;
 
 const JSONISH = new Set(["json", "jsonb"]);
 const isArrayType = (type: string) => type.endsWith("[]");
@@ -287,8 +292,16 @@ export function readableSql(table: CatalogTable, q: ExplorerQuery, masked: boole
     else where.push(`${f.column} ${SQL_OPS[f.op]} ${sqlText(f.value.trim())}`);
   }
   const from = table.source === "production" ? table.name : `${table.source}.${table.name}`;
+  const personal = table.fields.some((f) => f.privacy);
   return [
-    `-- ${masked ? "Masked as the team copy is: personal fields read [masked]." : "Unlocked: personal fields as stored."}`,
+    ...(table.source === "ga4" || table.source === "ads" || table.source === "gsc"
+      ? [
+          LIVE_TABLES[table.name]
+            ? `-- ${GOOGLE_NAMES[table.source]}, read live for the range: ${LIVE_TABLES[table.name]!.query}. Filtered and sorted here as below; not a table to query.`
+            : `-- ${GOOGLE_NAMES[table.source]}, as the company brain copies it: one brain_chunk row per day (source 'ga4'). Read for you; not a table to query.`,
+        ]
+      : []),
+    `-- ${!personal ? "No personal fields." : masked ? "Masked as the team copy is: personal fields read [masked]." : "Unlocked: personal fields as stored."}`,
     `SELECT ${q.columns.join(", ")}`,
     `FROM ${from}`,
     ...(where.length ? [`WHERE ${where.join("\n  AND ")}`] : []),
@@ -555,7 +568,7 @@ export async function posthogRows(
   if (q.sort && q.sort !== "timestamp") throw new Refused("PostHog's events sort by time only.");
   const { since, until } = windowOf({ from: q.from, to: q.to });
   const where = [
-    "properties.$host = 'www.loveiq.org'",
+    SITE_EVENTS,
     `timestamp >= ${hogInstant(since)}`,
     `timestamp < ${hogInstant(until)}`,
     ...q.filters.map(hogFilter),
@@ -611,7 +624,7 @@ export async function posthogRows(
     next: read.length === size && typeof last === "string" ? new Date(last).toISOString() : null,
     sql: readableSql(table, { ...q, size, sort: "timestamp", dir }, masked).replace(
       "FROM posthog.events",
-      "FROM events -- PostHog (HogQL), www.loveiq.org only"
+      "FROM events -- PostHog (HogQL): www.loveiq.org, and the server's own purchase events"
     ),
   };
 }
@@ -674,9 +687,17 @@ export async function googleRows(table: string): Promise<Row[] | null> {
   );
 }
 
-/** A Google table's rows, from the brain's copy of Google Analytics and Ads, filtered here. */
-export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<ExplorerResult> {
-  const all = await googleRows(table.name);
+/**
+ * A Google table's rows, filtered here: from the brain's copy of Google Analytics and Ads, or
+ * read live from Google for the range (google-live.ts).
+ */
+export async function dailyRows(
+  table: CatalogTable,
+  q: ExplorerQuery,
+  oidcToken?: string | null
+): Promise<ExplorerResult> {
+  const live = liveRows(table.name, q.from, q.to, oidcToken);
+  const all = live ? await live : await googleRows(table.name);
   if (!all) throw new Refused(`${table.name} is not a Google table.`);
   let rows = all.filter((r) => (r.date as string) >= q.from && (r.date as string) <= q.to);
   for (const f of q.filters) {
@@ -684,6 +705,9 @@ export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<
       const v = r[f.column];
       const s = String(v ?? "");
       const n = Number(f.value);
+      // A number is compared as one: "1.50" is the 1.5 a row holds.
+      const same = (x: string) =>
+        typeof v === "number" ? x.trim() !== "" && Number(x) === v : s === x.trim();
       switch (f.op) {
         case "null":
           return v === null || v === undefined;
@@ -692,14 +716,12 @@ export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<
         case "contains":
           return s.toLowerCase().includes(f.value.trim().toLowerCase());
         case "in":
-          return f.value
-            .split(",")
-            .map((x) => x.trim())
-            .includes(s);
+          return f.value.split(",").some(same);
         case "eq":
-          return s === f.value.trim();
+          return same(f.value);
         case "neq":
-          return s !== f.value.trim();
+          // As SQL reads it: an empty field is never "not equal" to a value.
+          return v !== null && v !== undefined && !same(f.value);
         default: {
           const x = typeof v === "number" ? v : s;
           const y = typeof v === "number" ? n : f.value.trim();
@@ -728,6 +750,7 @@ export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<
     total,
     masked: false,
     sql: readableSql(table, q, false),
-    synced: all.length > 0,
+    // A live table has no sync: an empty answer is a range without rows.
+    synced: live ? true : all.length > 0,
   };
 }

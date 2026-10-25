@@ -13,6 +13,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 import type { ApFilters, DeviceFilter, Source } from "./filters";
 
 import { markVisitors } from "./posthog";
+import { AI_HOST, EMAIL_HOST, SEARCH_HOST, SOCIAL_HOST } from "./referrers";
 
 export interface VisitFact {
   day: string;
@@ -31,6 +32,18 @@ interface Tagged {
   ref?: string | null;
   /** Meta's click id (fbclid) in the tracker (from SURVEY_TRACKING_FROM). */
   fb?: boolean;
+  /**
+   * False when the source can't be known: untagged, before the tracker kept the source
+   * (SOURCE_FROM). Unknown, never Direct. Absent from a reader without it: known.
+   */
+  srcKnown?: boolean;
+  /**
+   * Pay to start's: the survey was claimed by a completed purchase made before it (as the Pay to
+   * start page reads it), so the Funnel filter's "Free survey" leaves it and its money out. A
+   * start is known as one only by its finished survey: an unfinished buyer's run is the free
+   * survey's.
+   */
+  pts?: boolean;
 }
 
 /** What the ad links tag besides the source: the campaign, the keyword and the network. */
@@ -61,6 +74,8 @@ export interface UserPay {
   amount: number;
   plan: string | null;
   refunded: boolean;
+  /** On a survey bought before it was taken (pay to start); out of "Free survey". */
+  pts?: boolean;
 }
 
 export interface SubFact extends Tagged, AdTags {
@@ -72,7 +87,10 @@ export interface SubFact extends Tagged, AdTags {
   arm: string | null;
   device: string | null;
   tier: string | null;
+  /** The price arm the reader was dealt: their first quote's, before any re-sync. */
   priceArm: string | null;
+  /** When their first price quote was made (the report opened); null without one. */
+  quotedAt: string | null;
   country: string | null;
   gender: string | null;
   relationship: string | null;
@@ -153,6 +171,10 @@ export interface MoneyFact extends Tagged, AdTags {
   net: string | null;
   /** The price arm stamped on the payment (A, B, A3, B3), or null. */
   priceArm: string | null;
+  /** The journey the purchase was made in ("pay_to_start" for the offer bought first), or null. */
+  journey?: string | null;
+  /** A full unlock bought on a report whose EUR 1.99 Core Archetype was paid before it. */
+  upgrade?: boolean;
 }
 
 /**
@@ -161,7 +183,12 @@ export interface MoneyFact extends Tagged, AdTags {
  * method or a failure recorded); `status` "succeeded" is paid.
  */
 export interface CheckoutFact extends Tagged {
+  /** The day the payment page was reached (an abandoned one is written a day later). */
   day: string;
+  /** The finisher whose report it unlocks, and the visit they finished in (as on SubFact). */
+  sid: number | null;
+  ph: string | null;
+  visitorNew?: boolean | null;
   status: string;
   attempted: boolean;
   plan: string | null;
@@ -181,10 +208,24 @@ export const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_repo
 
 /**
  * The plans that pre-unlock a report (Marcus's "Initial plan", EUR 1.99): the initial unlock
- * (features/report/logic/initialUnlock.ts), on sale since 19.10 on /sexual-archetype/initial.
+ * (features/report/logic/initialUnlock.ts), on sale on /sexual-archetype/initial (PRE_ON_SALE_FROM).
  * With none here, every pre-unlock figure says it is not on sale.
  */
 export const PRE_PLANS: ReadonlySet<string> = new Set<string>([INITIAL_UNLOCK_PLAN]);
+
+/**
+ * The first whole day the pre-unlock was on sale on the live site: pay to start's EUR 1.99 page
+ * went live 22 Oct 2026 18:48 Berlin (#631; the report's own gate is still off). Before it nobody
+ * could pre-unlock, so a pre-unlock rate over earlier days is blank, never 0%.
+ */
+export const PRE_ON_SALE_FROM = "2026-10-23";
+
+/**
+ * The day pay to start went live on the site (22 Oct 2026 18:48 Berlin, #631): its pages sell
+ * the report in full and the EUR 1.99 Core Archetype before the survey. A range ending earlier
+ * has none of its payments to show, so its rows are blank, never 0.
+ */
+export const PAY_TO_START_FROM = "2026-10-22";
 
 /**
  * A finisher's paid pre-unlocks, from their sales ([time, amount, plan]): the EUR 1.99 from
@@ -227,6 +268,21 @@ export interface QuoteFact extends Tagged {
   revenue: number;
 }
 
+/** A sale of the range that was refunded, in full or in part, whenever the refund came. */
+export interface RefundFact {
+  day: string;
+  sid: number;
+  plan: string | null;
+  amount: number;
+  refund: number;
+  /** In full: the payment left the sales (status 'refunded'). */
+  full: boolean;
+  /** As on MoneyFact. */
+  journey?: string | null;
+  upgrade?: boolean;
+  pts?: boolean;
+}
+
 export interface Facts {
   from: string;
   to: string;
@@ -236,6 +292,8 @@ export interface Facts {
   starts: StartFact[];
   subs: SubFact[];
   money: MoneyFact[];
+  /** Absent from a reader older than 21 Oct 2026: refunds were not read, never "none". */
+  refunds?: RefundFact[];
   checkouts: CheckoutFact[];
   intro: IntroFact[];
   invites: Array<{ day: string; n: number }>;
@@ -273,6 +331,8 @@ export function parseFacts(
     ads: r.ads === true,
     ref: str(r.ref),
     fb: r.fb === true,
+    srcKnown: r.srcKnown !== false,
+    pts: r.pts === true,
   });
   const adTags = (r: Record<string, unknown>) => ({ camp: str(r.camp), term: str(r.term) });
   const pays = (v: unknown): UserPay[] =>
@@ -282,6 +342,7 @@ export function parseFacts(
           amount: num(p.amount),
           plan: str(p.plan),
           refunded: p.refunded === true,
+          pts: p.pts === true,
         }))
       : [];
   return {
@@ -323,6 +384,7 @@ export function parseFacts(
       device: str(r.device),
       tier: str(r.tier),
       priceArm: str(r.priceArm),
+      quotedAt: str(r.quotedAt),
       country: str(r.country),
       gender: str(r.gender),
       relationship: str(r.relationship),
@@ -398,10 +460,29 @@ export function parseFacts(
       method: str(r.method),
       net: str(r.net),
       priceArm: str(r.priceArm),
+      journey: str(r.journey),
+      upgrade: r.upgrade === true,
     })),
+    ...(o.refunds === undefined
+      ? {}
+      : {
+          refunds: rows(o.refunds, "refunds").map((r) => ({
+            day: String(r.day),
+            sid: num(r.sid),
+            plan: str(r.plan),
+            amount: num(r.amount),
+            refund: num(r.refund),
+            full: r.full === true,
+            journey: str(r.journey),
+            upgrade: r.upgrade === true,
+            pts: r.pts === true,
+          })),
+        }),
     checkouts: rows(o.checkouts, "checkouts").map((r) => ({
       ...tagged(r),
       day: String(r.day),
+      sid: numOrNull(r.sid),
+      ph: str(r.ph),
       status: String(r.status),
       attempted: r.attempted === true,
       plan: str(r.plan),
@@ -456,6 +537,7 @@ const AI_SOURCES = new Set([
   "gemini",
   "gemini.google.com",
   "copilot",
+  "copilot.com",
   "copilot.microsoft.com",
   "claude.ai",
 ]);
@@ -500,18 +582,10 @@ const SEARCH_SOURCES = new Set([
   "yandex",
   "brave",
 ]);
-/**
- * Search engines as a referrer: Google in every country and its Android app, Bing,
- * DuckDuckGo, Yahoo search, Ecosia, Yandex and Brave Search. Gmail on the web opens links
- * through google.com, so an untagged click in an email read there looks like organic search.
- */
-const SEARCH_HOSTS = [
-  /^(www\.)?google\.(com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$/,
-  /^com\.google\.android\.googlequicksearchbox$/,
-  /(^|\.)(bing\.com|duckduckgo\.com|ecosia\.org|ya\.ru|yandex\.[a-z.]+)$/,
-  /(^|\.)search\.yahoo\.(com|co\.jp|[a-z]{2})$/,
-  /^search\.brave\.com$/,
-];
+const SEARCH_RE = new RegExp(SEARCH_HOST);
+const AI_RE = new RegExp(AI_HOST);
+const EMAIL_RE = new RegExp(EMAIL_HOST);
+const SOCIAL_RE = new RegExp(SOCIAL_HOST);
 
 export type SourceClass = Source | "unknown" | "test";
 
@@ -520,32 +594,46 @@ export type SourceClass = Source | "unknown" | "test";
  * probes ("test", never counted); Google Ads (a click id, or google with a paid medium); Meta
  * Ads (a Meta source with a paid medium: Meta's click id alone is not one, as Meta adds it to
  * ordinary clicks too, and reads as Social); organic search (no click id, and a search engine
- * tagged organic, or no tags and a search engine as the referrer); then the rest.
+ * tagged organic, or no tags and a search engine as the referrer); then the rest. A visit with
+ * no tags at all is sorted by its referring site (referrers.ts): an AI assistant, an email app
+ * or webmail, a social site; another site is Referral, and only no referrer is Direct.
  */
 export function classifySource(t: Tagged, known = true): SourceClass {
-  if (!known) return "unknown";
+  if (!known || t.srcKnown === false) return "unknown";
   const s = (t.src ?? "").trim().toLowerCase();
   const m = (t.med ?? "").trim().toLowerCase();
-  const ref = (t.ref ?? "").trim().toLowerCase();
   if (m === "probe" || TEST_SOURCES.has(s)) return "test";
   if (t.ads || (s === "google" && PAID_MEDIA.has(m))) return "google_ads";
   if (META_SOURCES.has(s) && META_PAID_MEDIA.has(m)) return "meta_ads";
-  if (
-    !t.fb &&
-    (m === "organic" ? SEARCH_SOURCES.has(s) : !s && !m && SEARCH_HOSTS.some((re) => re.test(ref)))
-  ) {
+  // The referrer counts only on a visit with no tags and no Meta click id, as PostHog's reader
+  // passes it.
+  const ref = !s && !m && !t.fb ? (t.ref ?? "").trim().toLowerCase() : "";
+  if (!t.fb && (m === "organic" ? SEARCH_SOURCES.has(s) : SEARCH_RE.test(ref))) {
     return "organic_search";
   }
-  if (AI_SOURCES.has(s)) return "ai";
+  if (AI_SOURCES.has(s) || AI_RE.test(ref)) return "ai";
   if (
     ["email", "newsletter", "nurture", "resend"].includes(s) ||
-    ["email", "nurture", "newsletter"].includes(m)
+    ["email", "nurture", "newsletter"].includes(m) ||
+    EMAIL_RE.test(ref)
   ) {
     return "email";
   }
-  if (SOCIAL_SOURCES.has(s) || m === "social" || m === "paid_social" || t.fb) return "social";
-  if (!s && !m) return "direct";
+  if (SOCIAL_SOURCES.has(s) || m === "social" || m === "paid_social" || t.fb || SOCIAL_RE.test(ref))
+    return "social";
+  if (!s && !m) return ref ? "referral" : "direct";
   return "referral";
+}
+
+/**
+ * A visit's source as far as the visit log can tell: it keeps only the link's utm_source, and
+ * "google" there is Google Ads' tracking template (its visits match Google's clicks from
+ * SOURCE_FROM). Null for an untagged visit, which could be from any untagged source.
+ */
+export function visitSource(src: string | null): SourceClass | null {
+  const s = (src ?? "").trim().toLowerCase();
+  if (!s) return null;
+  return classifySource({ src: s, med: s === "google" ? "cpc" : null, ads: false });
 }
 
 /**
@@ -596,6 +684,7 @@ export async function fetchFactsFor(
     const startOf = new Map(facts.subs.map((s) => [s.id, s.startAt]));
     await markVisitors(facts.subs, (s) => s.startAt);
     await markVisitors(facts.money, (m) => startOf.get(m.sid));
+    await markVisitors(facts.checkouts, (c) => (c.sid === null ? null : startOf.get(c.sid)));
   }
   return facts;
 }

@@ -2,14 +2,20 @@
 
 import { useMemo, useState } from "react";
 
-import { rangeLabel } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
-import type { ArmRow, ArmStatus, LandingPayload } from "@features/admin/server/ap/landing";
-import type { Table } from "@features/admin/server/ap/common";
+import type {
+  ArmRow,
+  ArmStatus,
+  LandingCounts,
+  LandingPayload,
+  PayFirstRow,
+} from "@features/admin/server/ap/landing";
+import type { Table, Tile } from "@features/admin/server/ap/common";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info, type Worked } from "./field-info";
 import { bucketTitles } from "./hover";
 import {
   BlackButton,
@@ -43,18 +49,25 @@ type MetricKey =
   | "fullCvr"
   | "perVisit"
   | "bounce"
-  | "meanSeconds";
+  | "medianSeconds";
 
-/** The heat columns: unit, and whether lower is better. */
-const COLUMNS: Array<{ key: MetricKey; label: string; heat: boolean; lower?: boolean }> = [
-  { key: "visits", label: "Visits", heat: false },
-  { key: "startCvr", label: "Start CVR", heat: true },
-  { key: "submitCvr", label: "Submit CVR", heat: true },
-  { key: "preCvr", label: "Pre-unlock CVR", heat: true },
-  { key: "fullCvr", label: "Full-unlock CVR", heat: true },
-  { key: "perVisit", label: "€ / visit", heat: true },
-  { key: "bounce", label: "Bounce", heat: true, lower: true },
-  { key: "meanSeconds", label: "Avg. time", heat: true },
+/** The heat columns: unit, whether lower is better, and their info cards. */
+const COLUMNS: Array<{
+  key: MetricKey;
+  label: string;
+  heat: boolean;
+  lower?: boolean;
+  info: string;
+}> = [
+  { key: "visits", label: "Visits", heat: false, info: "landing.visits" },
+  { key: "startCvr", label: "Start CVR", heat: true, info: "landing.arm-start-cvr" },
+  { key: "submitCvr", label: "Submit CVR", heat: true, info: "landing.arm-submit-cvr" },
+  { key: "preCvr", label: "Pre-unlock CVR", heat: true, info: "landing.arm-pre-cvr" },
+  { key: "fullCvr", label: "Full-unlock CVR", heat: true, info: "landing.arm-full-cvr" },
+  { key: "perVisit", label: "€ / visit", heat: true, info: "landing.arm-rev-visit" },
+  { key: "bounce", label: "Bounce", heat: true, lower: true, info: "landing.bounce" },
+  // A median: the average is many times the typical visit (tabs left open), so it is in the export only.
+  { key: "medianSeconds", label: "Median time", heat: true, info: "landing.median-time" },
 ];
 
 /** Percentages as the design writes them here: "5.4%", unlocks "0.19%", bounce "61%". */
@@ -69,11 +82,11 @@ const DIGITS: Partial<Record<MetricKey, number>> = {
 function cell(key: MetricKey, v: number | null): string {
   if (key === "visits") return fmt("count", v);
   if (key === "perVisit") return fmt("eur3", v);
-  if (key === "meanSeconds") return fmt("mmss", v === null ? null : v * 1000);
+  if (key === "medianSeconds") return fmt("mmss", v === null ? null : v * 1000);
   return fmt("pct", v, DIGITS[key]);
 }
 
-/** A cell's number as it reads ("5.4%" is 5.4, "0:41" is 41): the design shades what it shows. */
+/** A cell's number as it reads ("5.4%" is 5.4, "5 s" is 5, "1:05" is 65): the design shades what it shows. */
 function shown(text: string): number {
   const [m, s] = text.replace(/[^0-9.:]/g, "").split(":");
   return s === undefined ? Number(m) : Number(m) * 60 + Number(s);
@@ -150,6 +163,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
       <SectionHead
         id="h-tests"
         title="Tests and variants"
+        info="landing.tests"
         description="Each column is shaded from best (green) to worst (red) among the variants shown. Lower is better for bounce."
       />
       {filtering && data.rows.length > 0 && (
@@ -188,7 +202,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
         <p className="m-0 text-sm text-ap-muted">No landing test ran in this range.</p>
       ) : (
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-          <div role="table" aria-label="Landing tests and variants" style={{ minWidth: 1080 }}>
+          <div role="table" aria-label="Landing tests and variants" style={{ minWidth: 1040 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <span
                 role="columnheader"
@@ -214,6 +228,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
                   className="flex items-center justify-end gap-1 px-3.5 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted"
                 >
                   {c.label}
+                  <Info k={c.info} label={c.label} />
                   <button
                     type="button"
                     aria-label={`Sort by ${c.label}`}
@@ -247,9 +262,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
                   <span className="truncate text-sm font-semibold text-ap-ink" title={r.test}>
                     {r.test}
                   </span>
-                  <span className="text-xs text-ap-muted">
-                    {r.label} · {rangeLabel(r.from, r.to)}
-                  </span>
+                  <span className="text-xs text-ap-muted">{r.label}</span>
                 </span>
                 <span role="cell" className="flex items-center px-3.5 py-3">
                   <span
@@ -286,51 +299,134 @@ function TestsTable({ data }: { data: LandingPayload }) {
           </div>
         </div>
       )}
-      <div className="flex flex-col gap-1.5 text-xs leading-relaxed text-ap-muted">
-        {data.unread.map((u) => (
-          <p key={u} className="m-0 text-ap-bad-ink">
-            {u}
-          </p>
-        ))}
-        {data.outside.length > 0 && (
-          <p className="m-0">Not in this range: {data.outside.join(" · ")}.</p>
-        )}
-        <details>
-          <summary className="cursor-pointer font-semibold text-ap-body">
-            How these are counted
-          </summary>
-          <div className="mt-1.5 flex flex-col gap-1.5">
-            <p className="m-0">
-              Bounce (left without a click) and avg. time come from PostHog, and only for the
-              video-or-question tests: before 7 Oct 2026 PostHog did not reliably know which version
-              a visitor saw. Avg. time counts each view up to 30 minutes; the export has the median
-              too. Start CVR needs to know which version each unfinished starter saw; only their
-              saved progress records it (from 20 Sep 2026), and that is deleted after 30 days, so
-              older days show no start CVR. Unlocks are per visit: Full unlock counts Full, Full All
-              and Core; the Initial plan (pre-unlock) isn&rsquo;t on sale yet, so its column is
-              blank.
+      {data.unread.length > 0 && (
+        <div className="flex flex-col gap-1.5 text-xs leading-relaxed">
+          {data.unread.map((u) => (
+            <p key={u} className="m-0 text-ap-bad-ink">
+              {u}
             </p>
-            {data.footnotes.map((n) => (
-              <p key={n} className="m-0">
-                {n}
-              </p>
-            ))}
-          </div>
-        </details>
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
 
-/** The design's engagement columns: Bounce, Avg. time, CTA clicks, then scroll depth. */
-const ENG_COLUMNS = ["Bounce", "Avg. time", "CTA clicks", "25%", "50%", "75%", "100%"];
+/**
+ * The design's pay-first landing pages (the price before the survey): each page's Step by step
+ * figures on the Pay to start page, so the two pages agree. The design's "Saw the price",
+ * "Started survey" and "Paid → completed" aren't recorded for these pages ("Finished survey"
+ * counts every buyer, a 100% code's too, so it is no share of "Paid").
+ */
+const PAY_FIRST_COLUMNS: Array<{ label: string; info: string; cell: (r: PayFirstRow) => string }> =
+  [
+    { label: "Visitors", info: "landing.pf-visitors", cell: (r) => fmt("count", r.visitors) },
+    {
+      label: "Started checkout",
+      info: "landing.pf-checkout",
+      cell: (r) => fmt("count", r.checkout),
+    },
+    { label: "Paid", info: "landing.pf-paid", cell: (r) => fmt("count", r.paid) },
+    { label: "Visitor → paid", info: "landing.pf-v2p", cell: (r) => fmt("pct", r.v2p, 2) },
+    {
+      label: "Finished survey",
+      info: "landing.pf-finished",
+      cell: (r) => fmt("count", r.finished),
+    },
+  ];
+
+function PayToStart({ data }: { data: LandingPayload }) {
+  const gtc = "minmax(230px, 2fr) repeat(5, minmax(96px, 1fr))";
+  const pf = data.payFirst;
+  return (
+    <Card id="pay-first" labelledBy="h-pay-first">
+      <SectionHead
+        id="h-pay-first"
+        title="Pay-to-start landing pages"
+        description="Landing pages with the price shown before the survey. The visitor pays first, then takes the survey. The same figures as the Pay to start page, step by step."
+      />
+      {pf && pf.rows.length === 0 ? null : pf ? (
+        <div tabIndex={0} className="overflow-x-auto rounded-[14px] border border-ap-line">
+          <div role="table" aria-label="Pay-to-start landing pages" className="min-w-[760px]">
+            <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+              <span
+                role="columnheader"
+                className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted"
+              >
+                Landing page
+              </span>
+              {PAY_FIRST_COLUMNS.map((c) => (
+                <span
+                  key={c.label}
+                  role="columnheader"
+                  className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted"
+                >
+                  {c.label}
+                  <Info k={c.info} label={c.label} />
+                </span>
+              ))}
+            </div>
+            {pf.rows.map((r) => (
+              <div
+                key={r.key}
+                role="row"
+                className="grid border-t border-ap-line"
+                style={{ gridTemplateColumns: gtc }}
+              >
+                <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
+                  <span className="text-[13px] font-bold">{r.name}</span>
+                  <span className="text-[11px] text-ap-muted">{r.sub}</span>
+                </span>
+                {PAY_FIRST_COLUMNS.map((c) => (
+                  <span
+                    key={c.label}
+                    role="cell"
+                    className="px-3 py-2.5 text-right text-[13px] tabular-nums text-ap-ink"
+                  >
+                    {c.cell(r)}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="m-0 text-sm text-ap-muted">
+          Pay to start&rsquo;s figures could not be read just now. Try again in a minute.
+        </p>
+      )}
+      {(pf?.notes ?? []).map((x) => (
+        <p key={x} className="m-0 text-xs text-ap-muted">
+          {x}
+        </p>
+      ))}
+    </Card>
+  );
+}
+
+/** The design's engagement columns: Bounce, the median time, CTA clicks, then scroll depth. */
+const ENG_COLUMNS: Array<{ label: string; info: string }> = [
+  { label: "Bounce", info: "landing.bounce" },
+  { label: "Median time", info: "landing.median-time" },
+  { label: "CTA clicks", info: "landing.cta" },
+  { label: "25%", info: "landing.scroll-25" },
+  { label: "50%", info: "landing.scroll-50" },
+  { label: "75%", info: "landing.scroll-75" },
+  { label: "100%", info: "landing.scroll-100" },
+];
+
+/**
+ * The all-pages row: every landing visit together, its time the median of every view (medians
+ * don't average across versions), so never "Weighted average".
+ */
+const ALL_PAGES = "Every visit together · median time";
 
 /** One row's values in those columns: shares 0..1, seconds for the time; null where unread. */
 function engagementValues(r: ArmRow): Array<number | null> {
-  return [r.bounce, r.meanSeconds, r.cta, ...(r.scroll ?? [null, null, null, null])];
+  return [r.bounce, r.medianSeconds, r.cta, ...(r.scroll ?? [null, null, null, null])];
 }
 
-/** As the design writes them: "61%", "0:41", "8.6%", "80%" (the average row a tenth more). */
+/** As the design writes them: "61%", "5 s", "8.6%", "80%" (the all-pages row a tenth more). */
 function engagementText(i: number, v: number | null, average = false): string {
   if (i === 1) return fmt("mmss", v === null ? null : v * 1000);
   return fmt("pct", v, i === 2 || (average && i === 0) ? 1 : 0);
@@ -349,7 +445,7 @@ function EngagementTable({ data }: { data: LandingPayload }) {
   const e = data.engagement;
   const avg: Array<number | null> | null =
     e && e.ok
-      ? [e.value.bounce, e.value.meanSeconds, e.value.cta, ...e.value.scroll.map((x) => x.share)]
+      ? [e.value.bounce, e.value.medianSeconds, e.value.cta, ...e.value.scroll.map((x) => x.share)]
       : null;
   const gtc = "minmax(220px, 2fr) repeat(7, minmax(80px, 1fr))";
   const tests = [...new Set(rows.map((r) => r.testKey))];
@@ -359,6 +455,7 @@ function EngagementTable({ data }: { data: LandingPayload }) {
       <SectionHead
         id="h-engage"
         title="Engagement per landing page"
+        info="landing.engagement"
         description="Bounce, time on page, CTA clicks and how far visitors scroll. Each column is shaded from best (green) to worst (red)."
       />
       {rows.length === 0 && !avg ? (
@@ -385,13 +482,20 @@ function EngagementTable({ data }: { data: LandingPayload }) {
               </span>
             </div>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
-              {["Landing page · variant", ...ENG_COLUMNS].map((label, i) => (
+              <span
+                role="columnheader"
+                className="px-3 py-2.5 text-left text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted"
+              >
+                Landing page · variant
+              </span>
+              {ENG_COLUMNS.map((c) => (
                 <span
-                  key={label}
+                  key={c.label}
                   role="columnheader"
-                  className={`px-3 py-2.5 text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted ${i ? "text-right" : "text-left"}`}
+                  className="flex items-center justify-end gap-1 px-3 py-2.5 text-right text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted"
                 >
-                  {label}
+                  {c.label}
+                  <Info k={c.info} label={c.label} />
                 </span>
               ))}
             </div>
@@ -422,7 +526,7 @@ function EngagementTable({ data }: { data: LandingPayload }) {
                     }
                     return (
                       <span
-                        key={ENG_COLUMNS[i]}
+                        key={ENG_COLUMNS[i]!.label}
                         role="cell"
                         className={`flex items-center justify-end px-2 py-1.5 text-[13px] tabular-nums ${v === null ? "text-ap-muted" : "text-ap-ink"}`}
                       >
@@ -442,11 +546,11 @@ function EngagementTable({ data }: { data: LandingPayload }) {
             >
               <span role="cell" className="flex flex-col gap-0.5 px-3 py-2.5">
                 <span className="text-[13px] font-bold text-ap-ink">All landing pages</span>
-                <span className="text-xs text-ap-muted">Weighted average</span>
+                <span className="text-xs text-ap-muted">{ALL_PAGES}</span>
               </span>
-              {ENG_COLUMNS.map((label, i) => (
+              {ENG_COLUMNS.map((c, i) => (
                 <span
-                  key={label}
+                  key={c.label}
                   role="cell"
                   className="flex items-center justify-end px-2 py-1.5 text-[13px] font-bold tabular-nums text-ap-ink"
                 >
@@ -459,21 +563,13 @@ function EngagementTable({ data }: { data: LandingPayload }) {
           </div>
         </div>
       )}
-      <div className="flex flex-col gap-1.5 text-xs leading-relaxed text-ap-muted">
-        {e && !e.ok && <p className="m-0 text-ap-bad-ink">{e.error}</p>}
-        <p className="m-0">
-          From PostHog, which records about half of all visits.
-          {e && e.ok
-            ? ` The average row is all ${fmt("count", e.value.sessions)} landing visits it recorded in the range.`
-            : ""}{" "}
-          Bounce: left without a click or another page. CTA clicks: pressed a button to the survey.
-          Time and scroll: until the page was left or the next page opened; time counts each view up
-          to 30 minutes.
-          {unreadArms > 0
-            ? " A version shows no figures where PostHog saw too few of its visits (under 30), or, before 7 Oct 2026, could not tell the versions apart."
-            : ""}
+      {/* What each column counts is in its info card (the call moved the explanations there). */}
+      {e && !e.ok && <p className="m-0 text-xs text-ap-bad-ink">{e.error}</p>}
+      {unreadArms > 0 && (
+        <p className="m-0 text-xs text-ap-muted">
+          A version shows no figures where PostHog saw too few of its visits (under 30).
         </p>
-      </div>
+      )}
     </Card>
   );
 }
@@ -496,7 +592,7 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
       { label: "Full-unlock CVR", unit: "pct" },
       { label: "€ / visit", unit: "eur3" },
       { label: "Bounce (PostHog)", unit: "pct" },
-      { label: "Avg. time (PostHog)", unit: "mmss" },
+      { label: "Avg. time (PostHog, each view up to 30 min)", unit: "mmss" },
       { label: "Median time (PostHog)", unit: "mmss" },
     ],
     rows: data.rows.map((r: ArmRow) => ({
@@ -541,28 +637,37 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
     },
     { name: "Tests and variants", table: tests },
   ];
+  // The page shows the median time; the export keeps the average beside it.
+  const avgTime = (s: number | null) => fmt("mmss", s === null ? null : s * 1000);
   out.push({
     name: "Engagement per landing page (PostHog)",
     table: {
       columns: [
         { label: "Landing page · variant", unit: "text" },
-        ...ENG_COLUMNS.map((label) => ({ label, unit: "text" as const })),
+        ...ENG_COLUMNS.map((c) => ({ label: c.label, unit: "text" as const })),
+        { label: "Avg. time (each view up to 30 min)", unit: "text" },
       ],
       rows: [
         ...data.rows.map((r) => ({
           label: `${r.test} · ${r.label}`,
-          values: engagementValues(r).map((v, i) => engagementText(i, v)),
+          values: [
+            ...engagementValues(r).map((v, i) => engagementText(i, v)),
+            avgTime(r.meanSeconds),
+          ],
         })),
         ...(data.engagement && data.engagement.ok
           ? [
               {
-                label: "All landing pages · weighted average",
+                label: `All landing pages · ${ALL_PAGES.toLowerCase()}`,
                 values: [
-                  data.engagement.value.bounce,
-                  data.engagement.value.meanSeconds,
-                  data.engagement.value.cta,
-                  ...data.engagement.value.scroll.map((x) => x.share),
-                ].map((v, i) => engagementText(i, v, true)),
+                  ...[
+                    data.engagement.value.bounce,
+                    data.engagement.value.medianSeconds,
+                    data.engagement.value.cta,
+                    ...data.engagement.value.scroll.map((x) => x.share),
+                  ].map((v, i) => engagementText(i, v, true)),
+                  avgTime(data.engagement.value.meanSeconds),
+                ],
               },
             ]
           : []),
@@ -570,6 +675,55 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
     },
   });
   return out;
+}
+
+/** Each headline tile's info card: its field key, and what its worked line divides. */
+const TILE_INFO: Record<
+  string,
+  { k: string; num?: (c: LandingCounts) => string; den?: (c: LandingCounts) => string }
+> = {
+  "start-cvr": {
+    k: "landing.start-cvr",
+    num: (c) => fmt("count", c.starts),
+    den: (c) => fmt("count", c.visits),
+  },
+  "complete-cvr": {
+    k: "landing.complete-cvr",
+    num: (c) => fmt("count", c.subs),
+    den: (c) => fmt("count", c.starts),
+  },
+  "pre-cvr": { k: "landing.pre-cvr" },
+  "full-cvr": {
+    k: "landing.full-cvr",
+    num: (c) => fmt("count", c.fullBuyers),
+    den: (c) => fmt("count", c.subs),
+  },
+  "rev-visit": {
+    k: "landing.rev-visit",
+    num: (c) => fmt("eur", c.revenue, 2),
+    den: (c) => fmt("count", c.visits),
+  },
+  "rev-sub": {
+    k: "landing.rev-sub",
+    num: (c) => fmt("eur", c.revenue, 2),
+    den: (c) => fmt("count", c.subs),
+  },
+};
+
+/** The design's decimals: revenue per visitor to a hundredth of a cent, per survey to the cent. */
+const tileDigits = (t: Tile) => (t.key === "rev-visit" ? 4 : t.key === "rev-sub" ? 2 : undefined);
+
+/** A tile's info card, with this range's numbers when it shows a figure, and its 12 weeks. */
+function tileInfo(t: Tile, c: LandingCounts) {
+  const i = TILE_INFO[t.key];
+  if (!i) return undefined;
+  const worked: Worked | undefined =
+    !t.blocked && t.value !== null && i.num && i.den
+      ? { num: i.num(c), den: i.den(c), value: fmt(t.unit, t.value, tileDigits(t)) }
+      : undefined;
+  // A tile with a weekly line (every one but the Initial plan's) shows its last 12 weeks.
+  const trend = t.spark.length ? { route: "landing", tile: t.key, unit: t.unit } : undefined;
+  return { k: i.k, worked, trend };
 }
 
 export default function ApLanding() {
@@ -611,12 +765,14 @@ export default function ApLanding() {
               <KpiTileV2
                 key={t.key}
                 tile={t}
-                digits={t.key === "rev-visit" ? 4 : t.key === "rev-sub" ? 2 : undefined}
+                digits={tileDigits(t)}
                 titles={bucketTitles(data.range.from, data.range.to)}
+                info={tileInfo(t, data.counts)}
               />
             ))}
           </TileGrid>
           <TestsTable data={data} />
+          <PayToStart data={data} />
           {/* Assessment A starts on the landing page: its assessment page is this page. */}
           <section
             id="assessment-page"

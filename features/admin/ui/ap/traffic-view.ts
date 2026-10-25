@@ -14,12 +14,13 @@ import {
   type GoodWhen,
   type Unit,
 } from "@features/admin/server/ap/format";
-import type {
-  IntentRow,
-  PerfRow,
-  PerfTable,
-  QualityDot,
-  TrafficTiles,
+import {
+  TILE_NEEDS,
+  type IntentRow,
+  type PerfRow,
+  type PerfTable,
+  type QualityDot,
+  type TrafficTiles,
 } from "@features/admin/server/ap/traffic";
 import {
   contribution,
@@ -27,13 +28,16 @@ import {
   KPI_KEYS,
   ratioOrNull as q,
   type Assumptions,
+  type Counts,
   type KpiKey,
 } from "@features/admin/server/ap/traffic-math";
+
+import type { Worked } from "./field-info";
 
 const finite = (v: number | null | undefined): v is number =>
   v !== null && v !== undefined && Number.isFinite(v);
 
-/** "0.02×": a ratio as the design writes ROAS and CLV : CAC. */
+/** "0.02×": a ratio as the design writes ROAS and CLV : cost / user. */
 export function times(v: number | null, digits = 2): string {
   const t = fmt("ratio", v, digits);
   return t === EMPTY ? t : `${t}×`;
@@ -81,89 +85,118 @@ export function rankTone(values: Array<number | null>, v: number | null): Shade 
 // ---------------------------------------------------------------------------------------------
 // The nine tiles
 
-type Needs = keyof TrafficTiles["blocked"];
-
 export interface TileSpec {
   label: string;
+  /** Its info card's field key. */
+  info: string;
   unit: Unit;
   digits?: number;
   goodWhen: GoodWhen;
-  /** What the figure is made of: the first of these that is blocked blanks it, with its reason. */
-  needs: Needs[];
   suffix?: string;
   negativeBad?: boolean;
 }
 
 const TILE_SPECS: Record<KpiKey, TileSpec> = {
-  spend: { label: "Ad spend", unit: "eur", digits: 0, goodWhen: "either", needs: ["spend"] },
-  cpc: { label: "CPC", unit: "eur", digits: 2, goodWhen: "down", needs: ["spend"] },
-  visitors: { label: "Visitors", unit: "count", goodWhen: "up", needs: ["visitors"] },
+  spend: { label: "Ad spend", info: "traffic.spend", unit: "eur", digits: 0, goodWhen: "either" },
+  cpc: { label: "CPC", info: "traffic.cpc", unit: "eur", digits: 2, goodWhen: "down" },
+  visitors: { label: "Visitors", info: "traffic.visitors", unit: "count", goodWhen: "up" },
   submitCvr: {
     label: "Survey submission CVR",
+    info: "traffic.submitCvr",
     unit: "pct",
     digits: 2,
     goodWhen: "up",
-    needs: ["visitors", "people"],
   },
   contribPerVisitor: {
     label: "Contribution / visitor",
+    info: "traffic.contribPerVisitor",
     unit: "eur3",
     digits: 3,
     goodWhen: "up",
-    needs: ["visitors", "spend", "people"],
     negativeBad: true,
   },
   revPerVisitor: {
     label: "Revenue / visitor",
+    info: "traffic.revPerVisitor",
     unit: "eur3",
     digits: 4,
     goodWhen: "up",
-    needs: ["visitors", "people"],
   },
   roas: {
     label: "ROAS",
+    info: "traffic.roas",
     unit: "ratio",
     digits: 2,
     goodWhen: "up",
-    needs: ["spend", "people"],
     suffix: "×",
   },
   visitorToPaid: {
     label: "Visitor → paid",
+    info: "traffic.visitorToPaid",
     unit: "pct",
     digits: 3,
     goodWhen: "up",
-    needs: ["visitors", "people"],
   },
   purchaseCvr: {
     label: "Purchase CVR",
+    info: "traffic.purchaseCvr",
     unit: "pct",
     digits: 2,
     goodWhen: "up",
-    needs: ["people"],
   },
 };
 
-/** The nine headline tiles, in the design's order, under the assumptions in force. */
+/** A ratio tile's numerator and denominator as the page prints them; null where one is unknown. */
+const PARTS: Partial<Record<KpiKey, (c: Counts, a: Assumptions) => [string, string] | null>> = {
+  cpc: (c) =>
+    c.spend === null || c.clicks === null ? null : [fmt("eur", c.spend, 0), fmt("count", c.clicks)],
+  submitCvr: (c) =>
+    c.visitors === null ? null : [fmt("count", c.completes), fmt("count", c.visitors)],
+  contribPerVisitor: (c, a) => {
+    const con = contribution(c, a);
+    return con === null || c.visitors === null
+      ? null
+      : [fmt("eur", con, 0), fmt("count", c.visitors)];
+  },
+  revPerVisitor: (c) =>
+    c.visitors === null ? null : [fmt("eur", c.revenue, 2), fmt("count", c.visitors)],
+  roas: (c) => (c.spend === null ? null : [fmt("eur", c.revenue, 2), fmt("eur", c.spend, 0)]),
+  visitorToPaid: (c) =>
+    c.visitors === null ? null : [fmt("count", c.payers), fmt("count", c.visitors)],
+  purchaseCvr: (c) => [fmt("count", c.payers), fmt("count", c.completes)],
+};
+
+/**
+ * The nine headline tiles, in the design's order, under the assumptions in force, each with
+ * its figures for the info card (none while it is blank).
+ */
 export function trafficTiles(
   t: TrafficTiles,
   a: Assumptions
-): Array<{ tile: Tile; spec: TileSpec }> {
+): Array<{ tile: Tile; spec: TileSpec; worked?: Worked }> {
   return KPI_KEYS.map((key) => {
     const spec = TILE_SPECS[key];
+    const value = kpi(key, t.now, a);
+    const blocked = TILE_NEEDS[key].map((n) => t.blocked[n]).find((why) => why !== null) ?? null;
+    const parts = PARTS[key]?.(t.now, a) ?? null;
+    const shown = fmt(spec.unit, value, spec.digits) + (spec.suffix ?? "");
     return {
       spec,
+      worked:
+        blocked || value === null
+          ? undefined
+          : { ...(parts ? { num: parts[0], den: parts[1] } : {}), value: shown },
       tile: {
         key,
         label: spec.label,
         unit: spec.unit,
-        value: kpi(key, t.now, a),
+        value,
         prev: t.prev ? kpi(key, t.prev, a) : null,
         goodWhen: spec.goodWhen,
         spark: t.points.map((p) => kpi(key, p, a)),
         foot: "",
         trend: "",
-        blocked: spec.needs.map((n) => t.blocked[n]).find((why) => why !== null) ?? null,
+        blocked,
       },
     };
   });
@@ -206,6 +239,8 @@ export type Group = "acq" | "fun" | "mon" | "pro" | "val";
 export interface Col {
   key: ColKey;
   label: string;
+  /** Its info card's field key. */
+  info: string;
   group: Group;
   unit: Unit;
   digits?: number;
@@ -215,51 +250,246 @@ export interface Col {
   times?: boolean;
 }
 
-/** The design's columns, in its order, with its decimals. */
+/** The design's columns, in its order, with its decimals (whole euros where it writes them). */
 export const COLS: Col[] = [
-  { key: "vis", label: "Visitors", group: "acq", unit: "count", better: "hi" },
-  { key: "spend", label: "Spend", group: "acq", unit: "eur", digits: 0, better: null },
-  { key: "cpm", label: "CPM", group: "acq", unit: "eur", digits: 2, better: "lo" },
-  { key: "ctr", label: "CTR", group: "acq", unit: "pct", digits: 1, better: "hi" },
-  { key: "cpc", label: "CPC", group: "acq", unit: "eur", digits: 2, better: "lo" },
-  { key: "att", label: "Start CVR", group: "fun", unit: "pct", digits: 1, better: "hi" },
-  { key: "comp", label: "Completion CVR", group: "fun", unit: "pct", digits: 1, better: "hi" },
-  { key: "completes", label: "Completes", group: "fun", unit: "count", better: "hi" },
+  {
+    key: "vis",
+    label: "Visitors",
+    info: "traffic.visitors",
+    group: "acq",
+    unit: "count",
+    better: "hi",
+  },
+  {
+    key: "spend",
+    label: "Spend",
+    info: "traffic.rowSpend",
+    group: "acq",
+    unit: "eur",
+    digits: 0,
+    better: null,
+  },
+  {
+    key: "cpm",
+    label: "CPM",
+    info: "traffic.cpm",
+    group: "acq",
+    unit: "eur",
+    digits: 2,
+    better: "lo",
+  },
+  {
+    key: "ctr",
+    label: "CTR",
+    info: "traffic.ctr",
+    group: "acq",
+    unit: "pct",
+    digits: 1,
+    better: "hi",
+  },
+  {
+    key: "cpc",
+    label: "CPC",
+    info: "traffic.cpc",
+    group: "acq",
+    unit: "eur",
+    digits: 2,
+    better: "lo",
+  },
+  {
+    key: "att",
+    label: "Start CVR",
+    info: "traffic.startCvr",
+    group: "fun",
+    unit: "pct",
+    digits: 1,
+    better: "hi",
+  },
+  {
+    key: "comp",
+    label: "Completion CVR",
+    info: "traffic.completionCvr",
+    group: "fun",
+    unit: "pct",
+    digits: 1,
+    better: "hi",
+  },
+  {
+    key: "completes",
+    label: "Completes",
+    info: "traffic.completes",
+    group: "fun",
+    unit: "count",
+    better: "hi",
+  },
   {
     key: "cpComplete",
     label: "Cost / complete",
+    info: "traffic.costPerComplete",
     group: "fun",
     unit: "eur",
     digits: 2,
     better: "lo",
   },
-  { key: "pre", label: "Pre-unlock rate", group: "mon", unit: "pct", digits: 1, better: "hi" },
-  { key: "full", label: "Full unlock rate", group: "mon", unit: "pct", digits: 1, better: "hi" },
-  { key: "buy", label: "Purchase CVR", group: "mon", unit: "pct", digits: 2, better: "hi" },
-  { key: "v2p", label: "Visitor → paid", group: "mon", unit: "pct", digits: 3, better: "hi" },
-  { key: "aov", label: "AOV", group: "mon", unit: "eur", digits: 2, better: "hi" },
-  { key: "cac", label: "CAC", group: "mon", unit: "eur", digits: 0, better: "lo" },
-  { key: "cpPre", label: "Cost / pre-unlock", group: "mon", unit: "eur", digits: 0, better: "lo" },
   {
-    key: "cpFull",
-    label: "Cost / full unlock",
+    key: "pre",
+    label: "Pre-unlock rate",
+    info: "traffic.preRate",
+    group: "mon",
+    unit: "pct",
+    digits: 1,
+    better: "hi",
+  },
+  {
+    key: "full",
+    label: "Full unlock rate",
+    info: "traffic.fullRate",
+    group: "mon",
+    unit: "pct",
+    digits: 1,
+    better: "hi",
+  },
+  {
+    key: "buy",
+    label: "Purchase CVR",
+    info: "traffic.purchaseCvr",
+    group: "mon",
+    unit: "pct",
+    digits: 2,
+    better: "hi",
+  },
+  {
+    key: "v2p",
+    label: "Visitor → paid",
+    info: "traffic.visitorToPaid",
+    group: "mon",
+    unit: "pct",
+    digits: 3,
+    better: "hi",
+  },
+  {
+    key: "aov",
+    label: "AOV",
+    info: "traffic.aov",
+    group: "mon",
+    unit: "eur",
+    digits: 2,
+    better: "hi",
+  },
+  {
+    key: "cac",
+    label: "CAC",
+    info: "traffic.cac",
     group: "mon",
     unit: "eur",
     digits: 0,
     better: "lo",
   },
-  { key: "rpu", label: "Rev. / user", group: "mon", unit: "eur", digits: 2, better: "hi" },
-  { key: "rpv", label: "Rev. / visitor", group: "mon", unit: "eur3", digits: 3, better: "hi" },
-  { key: "roas", label: "ROAS", group: "mon", unit: "ratio", digits: 2, better: "hi", times: true },
-  { key: "refund", label: "Refund rate", group: "mon", unit: "pct", digits: 1, better: "lo" },
-  { key: "contrib", label: "Contribution", group: "pro", unit: "eur", digits: 0, better: "hi" },
-  { key: "cpv", label: "Contrib. / visitor", group: "pro", unit: "eur3", digits: 3, better: "hi" },
-  { key: "read", label: "Median read", group: "val", unit: "mmss", better: "hi" },
-  { key: "apu", label: "Assessments / user", group: "val", unit: "ratio", digits: 2, better: "hi" },
-  { key: "clv", label: "CLV / user", group: "val", unit: "eur", digits: 2, better: "hi" },
+  {
+    key: "cpPre",
+    label: "Cost / pre-unlock",
+    info: "traffic.costPerPre",
+    group: "mon",
+    unit: "eur",
+    digits: 0,
+    better: "lo",
+  },
+  {
+    key: "cpFull",
+    label: "Cost / full unlock",
+    info: "traffic.costPerFull",
+    group: "mon",
+    unit: "eur",
+    digits: 0,
+    better: "lo",
+  },
+  {
+    key: "rpu",
+    label: "Rev. / user",
+    info: "traffic.revPerUser",
+    group: "mon",
+    unit: "eur",
+    digits: 2,
+    better: "hi",
+  },
+  {
+    key: "rpv",
+    label: "Rev. / visitor",
+    info: "traffic.rpv",
+    group: "mon",
+    unit: "eur3",
+    digits: 3,
+    better: "hi",
+  },
+  {
+    key: "roas",
+    label: "ROAS",
+    info: "traffic.roas",
+    group: "mon",
+    unit: "ratio",
+    digits: 2,
+    better: "hi",
+    times: true,
+  },
+  {
+    key: "refund",
+    label: "Refund rate",
+    info: "traffic.refundRate",
+    group: "mon",
+    unit: "pct",
+    digits: 1,
+    better: "lo",
+  },
+  {
+    key: "contrib",
+    label: "Contribution",
+    info: "traffic.contribution",
+    group: "pro",
+    unit: "eur",
+    digits: 0,
+    better: "hi",
+  },
+  {
+    key: "cpv",
+    label: "Contrib. / visitor",
+    info: "traffic.cpv",
+    group: "pro",
+    unit: "eur3",
+    digits: 3,
+    better: "hi",
+  },
+  {
+    key: "read",
+    label: "Median read",
+    info: "traffic.medianRead",
+    group: "val",
+    unit: "mmss",
+    better: "hi",
+  },
+  {
+    key: "apu",
+    label: "Assessments / user",
+    info: "traffic.apu",
+    group: "val",
+    unit: "ratio",
+    digits: 2,
+    better: "hi",
+  },
+  {
+    key: "clv",
+    label: "CLV / user",
+    info: "traffic.clv",
+    group: "val",
+    unit: "eur",
+    digits: 2,
+    better: "hi",
+  },
+  // Not "CLV : CAC" as drawn: its divisor is ad spend per finisher (the design's own formula),
+  // not per paying customer, so it is named for what it divides by.
   {
     key: "ltvCac",
-    label: "CLV : CAC",
+    label: "CLV : cost / user",
+    info: "traffic.clvRatio",
     group: "val",
     unit: "ratio",
     digits: 2,
@@ -328,11 +558,28 @@ export type RowValues = Record<ColKey, number | null>;
 
 const BLANK = Object.fromEntries(COLS.map((c) => [c.key, null])) as RowValues;
 
-/** Every column of a row from its counts, as the design defines them; a blocked row is blank. */
+/**
+ * Every column of a row from its counts, as the design defines them. A blocked row is blank,
+ * but for Google Ads' own figures (spend, CPM, CTR, CPC), which don't depend on telling the
+ * people apart: the device and tier rows still add up to the spend tile.
+ */
 export function rowValues(r: PerfRow, a: Assumptions): RowValues {
-  if (r.blocked) return BLANK;
+  if (r.blocked) {
+    const c = r.counts;
+    const perMille = q(c.spend, c.impressions);
+    return {
+      ...BLANK,
+      spend: c.spend,
+      cpm: perMille === null ? null : perMille * 1000,
+      ctr: q(c.clicks, c.impressions),
+      cpc: q(c.spend, c.clicks),
+    };
+  }
   const c = r.counts;
-  const contrib = contribution(c, a);
+  // A channel that pays for no ads: its spend is "—", its contribution counts none.
+  const contrib = contribution(r.noAdSpend ? { ...c, spend: 0 } : c, a);
+  // What the rates over visitors divide by: none where its people are sorted otherwise.
+  const per = r.noVisitorRates ? null : c.visitors;
   const perMille = q(c.spend, c.impressions);
   const clv = q(r.lifetimeRevenue, r.people);
   return {
@@ -341,28 +588,30 @@ export function rowValues(r: PerfRow, a: Assumptions): RowValues {
     cpm: perMille === null ? null : perMille * 1000,
     ctr: q(c.clicks, c.impressions),
     cpc: q(c.spend, c.clicks),
-    att: q(c.starts, c.visitors),
+    att: q(c.starts, per),
     comp: q(c.completes, c.starts),
     completes: c.completes,
     cpComplete: q(c.spend, c.completes),
-    // The Initial plan (the pre-unlock) isn't on sale.
-    pre: null,
+    // Finishers who pre-unlocked (EUR 1.99), as the full unlock's; blank before it was on sale.
+    pre: q(c.prePayers ?? null, c.completes),
     full: q(c.fullPayers, c.completes),
     buy: q(c.payers, c.completes),
-    v2p: q(c.payers, c.visitors),
+    v2p: q(c.payers, per),
     aov: q(c.revenue, c.sales),
     cac: q(c.spend, c.payers),
-    cpPre: null,
+    cpPre: q(c.spend, c.prePayers ?? null),
     cpFull: q(c.spend, c.fullPayers),
     rpu: q(c.revenue, c.completes),
-    rpv: q(c.revenue, c.visitors),
+    rpv: q(c.revenue, per),
     roas: q(c.revenue, c.spend),
     refund: q(r.refunded, r.allSales),
     contrib,
-    cpv: q(contrib, c.visitors),
+    cpv: q(contrib, per),
     read: r.readMs,
     apu: q(c.completes, r.people),
     clv,
+    // Per user on both sides (a user is a finisher): CLV / user over ad spend per user. The CAC
+    // column is per paying customer, so dividing by it would mix the two.
     ltvCac: q(clv, q(c.spend, c.completes)),
   };
 }
@@ -386,10 +635,43 @@ export function sortRows<T extends { r: PerfRow; v: RowValues }>(
   });
 }
 
-/** The performance table of a breakdown for the CSV: every column, the total row last. */
+/**
+ * The columns the design's total row fills (Traffic board): ad figures such as CPM, CTR and CPC
+ * are Google Ads' own, and the rest describe a channel, not all of them added up.
+ */
+export const TOTAL_COLS: ReadonlySet<ColKey> = new Set<ColKey>([
+  "vis",
+  "spend",
+  "completes",
+  "buy",
+  "v2p",
+  "aov",
+  "cac",
+  "rpv",
+  "roas",
+  "contrib",
+  "cpv",
+  "cpComplete",
+  "rpu",
+  "att",
+  "comp",
+]);
+
+/** The total row's columns: the design's own, the others blank. */
+export function totalValues(r: PerfRow, a: Assumptions): RowValues {
+  const v = rowValues(r, a);
+  return Object.fromEntries(
+    COLS.map((c) => [c.key, TOTAL_COLS.has(c.key) ? v[c.key] : null])
+  ) as RowValues;
+}
+
+/**
+ * The performance table of a breakdown for the CSV: every column, the total row last (under more
+ * than one row, as the page).
+ */
 export function perfCsv(table: PerfTable, a: Assumptions): Table {
   const sample = table.rows.some((r) => r.sampleVisitors);
-  const rows = [...table.rows, ...(table.total ? [table.total] : [])];
+  const rows = [...table.rows, ...(table.total && table.rows.length > 1 ? [table.total] : [])];
   return {
     columns: [
       { label: table.label, unit: "text" },
@@ -400,7 +682,7 @@ export function perfCsv(table: PerfTable, a: Assumptions): Table {
       })),
     ],
     rows: rows.map((r) => {
-      const v = rowValues(r, a);
+      const v = r === table.total ? totalValues(r, a) : rowValues(r, a);
       return { label: r.name, values: [r.blocked ?? r.sub, ...COLS.map((c) => v[c.key])] };
     }),
   };
@@ -412,27 +694,43 @@ export function perfCsv(table: PerfTable, a: Assumptions): Table {
 export const LEAK_STEPS: Array<{
   key: "att" | "comp" | "buy";
   label: string;
+  /** Its info card's field key. */
+  info: string;
   /** The bar's full width, as drawn: start 20%, completion 100%, purchase 10%. */
   scale: number;
   digits: number;
 }> = [
-  { key: "att", label: "Start CVR", scale: 0.2, digits: 1 },
-  { key: "comp", label: "Completion CVR", scale: 1, digits: 1 },
-  { key: "buy", label: "Purchase CVR", scale: 0.1, digits: 2 },
+  { key: "att", label: "Start CVR", info: "traffic.startCvr", scale: 0.2, digits: 1 },
+  { key: "comp", label: "Completion CVR", info: "traffic.completionCvr", scale: 1, digits: 1 },
+  { key: "buy", label: "Purchase CVR", info: "traffic.purchaseCvr", scale: 0.1, digits: 2 },
 ];
 
-/** The rows' average of a rate, each row weighted by its visitors; rows without either are out. */
-export function visitorWeighted(
-  rows: Array<{ v: number | null; vis: number | null }>
+/** Each funnel step's numerator and denominator, as rowValues divides them. */
+const STEP_PARTS = {
+  att: ["starts", "visitors"],
+  comp: ["completes", "starts"],
+  buy: ["payers", "completes"],
+} as const;
+
+/**
+ * A funnel step's rate over the rows that show it: their numerators added up over their
+ * denominators added up (pooled), so each step is weighed by its own base, as the All row is.
+ */
+export function pooledStep(
+  rows: Array<{ r: PerfRow; v: RowValues }>,
+  step: keyof typeof STEP_PARTS
 ): number | null {
-  let w = 0;
-  let sum = 0;
-  for (const r of rows) {
-    if (!finite(r.v) || !finite(r.vis) || r.vis <= 0) continue;
-    w += r.vis;
-    sum += r.v * r.vis;
+  const [num, den] = STEP_PARTS[step];
+  let n = 0;
+  let d = 0;
+  for (const { r, v } of rows) {
+    const a = r.counts[num];
+    const b = r.counts[den];
+    if (!finite(v[step]) || !finite(a) || !finite(b)) continue;
+    n += a;
+    d += b;
   }
-  return w ? sum / w : null;
+  return d > 0 ? n / d : null;
 }
 
 /** Red more than 10% under the average, green more than 10% over it. */
@@ -472,6 +770,8 @@ export interface ChartMark {
   y: number;
   anchor: Anchor;
   label: string;
+  /** The point it labels. */
+  at?: number;
 }
 
 export interface StackLayer {
@@ -513,14 +813,19 @@ export const xOf = (w: number, n: number) => (n > 1 ? (w / (n - 1)) * 100 : 50);
  * The design's stacked areas: one layer per channel (series[channel][point]), in counts
  * (Total) or as each point's shares (Share %). A single point is drawn as a band across.
  */
-export function stackChart(series: number[][], scale: Scale): StackChart {
+export function stackChart(
+  series: number[][],
+  scale: Scale,
+  /** Room over the tallest point: more under the cost line, which keeps the top band (80–94%). */
+  headroom = 1.12
+): StackChart {
   const n = series[0]?.length ?? 0;
   if (n === 0) return { grid: [], layers: [], tops: [], totals: [], max: 1 };
   const totals = Array.from({ length: n }, (_, w) =>
     series.reduce((s, row) => s + (row[w] ?? 0), 0)
   );
   // Counts top where every quarter line is a whole number (never 62.5 written "63").
-  const max = scale === "share" ? 100 : quarterTop(Math.max(...totals) * 1.12);
+  const max = scale === "share" ? 100 : quarterTop(Math.max(...totals) * headroom);
   const val = (i: number, w: number) => {
     const v = series[i]![w] ?? 0;
     return scale === "share" ? (totals[w] ? (v / totals[w]!) * 100 : 0) : v;
@@ -625,19 +930,28 @@ export function costLine(
   const labels: ChartMark[] = [];
   cost.forEach((v, w) => {
     if (finite(v))
-      labels.push({ x: xOf(w, n), y: py(v), anchor: anchorOf(w, n), label: fmt("eur", v, 2) });
+      labels.push({
+        x: xOf(w, n),
+        y: py(v),
+        anchor: anchorOf(w, n),
+        label: fmt("eur", v, 2),
+        at: w,
+      });
   });
   return { segments, labels };
 }
 
-/** A point's name under the chart: "Week of 21 Sep", "14 Sep", "Oct 2026"; a cut-short one says so. */
+/**
+ * A point's name under the chart: "Week of 21 Sep", "14 Sep", "Oct"; a week cut short says so (a
+ * month's own label already does: "Oct (to 20th)").
+ */
 export function pointLabel(
   grain: Grain,
   p: { label: string; full: boolean },
   short = false
 ): string {
   const name = grain === "week" && !short ? `Week of ${p.label}` : p.label;
-  return p.full ? name : `${name} (part)`;
+  return p.full || grain === "month" ? name : `${name} (part)`;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -12,7 +12,7 @@ import {
 } from "react";
 
 import { type Grain } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt } from "@features/admin/server/ap/format";
+import { EMPTY, fmt, lowerFirst } from "@features/admin/server/ap/format";
 import type {
   AudienceDim,
   BreakdownKey,
@@ -34,6 +34,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info } from "./field-info";
 import { bucketTitles, IndexHover, periodTitle, PointHover, ROW_HOVER, type TipRow } from "./hover";
 import {
   Bar,
@@ -42,7 +43,9 @@ import {
   Card,
   Eyebrow,
   Failed,
+  headWidth,
   ICON_BTN,
+  InfoLabel,
   KpiTileV2,
   Loading,
   NotTracked,
@@ -64,12 +67,14 @@ import {
   cellText,
   colsOf,
   costLine,
+  TOTAL_COLS,
   GOOD,
   GROUP_LABEL,
   LEAK_STEPS,
   perfCsv,
   PLAIN,
   pointLabel,
+  pooledStep,
   rankTone,
   rowValues,
   scatter,
@@ -78,7 +83,6 @@ import {
   times,
   trafficTiles,
   VIEWS,
-  visitorWeighted,
   xOf,
   type Anchor,
   type Col,
@@ -92,15 +96,16 @@ import {
 } from "./traffic-view";
 import { useApFilters } from "./useApFilters";
 
+/** In the order the design draws the sections: Cost vs quality last. */
 const SECTIONS = [
   { id: "scorecard", label: "Scorecard" },
   { id: "performance", label: "Performance" },
   { id: "leakage", label: "Funnel leakage" },
-  { id: "quality", label: "Cost vs quality" },
   { id: "intent", label: "Creatives & intent" },
   { id: "cohorts", label: "Cohorts" },
   { id: "experiments", label: "Experiments" },
   { id: "audience", label: "Audience" },
+  { id: "quality", label: "Cost vs quality" },
 ];
 
 type Inputs = Record<keyof Assumptions, string>;
@@ -177,7 +182,7 @@ export default function ApTraffic() {
           <RangeLine data={data} sources="Production database, PostHog, Google Ads" />
           <Attribution attr={data.attribution} />
           <TileGrid min={200}>
-            {tiles.map(({ tile, spec }) => (
+            {tiles.map(({ tile, spec, worked }) => (
               <KpiTileV2
                 key={tile.key}
                 tile={tile}
@@ -186,19 +191,35 @@ export default function ApTraffic() {
                 negativeBad={spec.negativeBad}
                 level
                 titles={bucketTitles(data.range.from, data.range.to)}
+                info={{
+                  k: spec.info,
+                  worked,
+                  trend: {
+                    route: "traffic",
+                    tile: tile.key,
+                    unit: tile.unit,
+                    digits: spec.digits,
+                    suffix: spec.suffix,
+                  },
+                }}
               />
             ))}
           </TileGrid>
+          <Note>
+            Revenue / visitor, ROAS, Visitor → paid, Purchase CVR and Contribution / visitor count
+            this range&apos;s finishers and what they bought so far, not payments by the day they
+            were made.
+          </Note>
           <Scorecard tiles={data.tiles} a={a} inputs={inputs} onInputs={setInputs} />
           <ChannelTrendSection trend={data.trend} />
           <Performance table={data.breakdowns[bd]} bd={bd} onBd={setBd} a={a} />
           <Leakage table={data.breakdowns[bd]} a={a} />
-          {/* Fourth, as the section bar lists it (the artboard draws it last). */}
-          <Quality quality={data.quality} />
           <Intent intent={data.intent} />
           <Cohorts cohorts={data.cohorts} />
           <Experiments experiments={data.experiments} />
           <Audience dims={data.audience.dims} />
+          {/* Last, as the design draws it. */}
+          <Quality quality={data.quality} />
         </Busy>
       )}
     </>
@@ -240,17 +261,23 @@ function Cell({
   );
 }
 
-/** A table's header row, as the design draws it. */
-function HeadRow({ labels, gtc }: { labels: string[]; gtc: string }) {
+/** A table's header row, as the design draws it: each figure's heading with its info icon. */
+function HeadRow({
+  labels,
+  gtc,
+}: {
+  labels: Array<{ label: string; info?: string }>;
+  gtc: string;
+}) {
   return (
     <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
       {labels.map((h, i) => (
         <span
-          key={h}
+          key={h.label}
           role="columnheader"
           className={`text-balance px-3 py-2.5 text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted ${i ? "text-right" : "text-left"}`}
         >
-          {h}
+          <InfoLabel label={h.label} info={h.info ? { k: h.info } : undefined} />
         </span>
       ))}
     </div>
@@ -282,34 +309,37 @@ function Why({ children }: { children: ReactNode }) {
   return <p className="m-0 text-sm leading-relaxed text-ap-muted">{children}</p>;
 }
 
-/** Why the pre-unlock columns are always blank. */
-const PRE_UNLOCK = "Pre-unlock figures are blank: the Initial plan isn't on sale.";
-
 const people = (n: number) => `${fmt("count", n)} ${n === 1 ? "person" : "people"}`;
 
 // ---------------------------------------------------------------------------------------------
 // Attribution coverage
 
+/** The design's two figures (Marcus took the buyers' and Google's shares off on 15 Oct 2026). */
 function Attribution({ attr }: { attr: TrafficPayload["attribution"] }) {
   const share = attr.why ? null : attr.visitorsWithSource;
   const un = attr.why ? null : attr.unattributed;
-  const paid = attr.purchasesWithSource;
   const items = [
     {
       label: "Visitors with a source",
+      info: "traffic.withSource",
       value: fmt("pct", share, 1),
+      worked:
+        un && share !== null
+          ? {
+              num: `≈ ${fmt("count", un.of - un.n)}`,
+              den: fmt("count", un.of),
+              value: fmt("pct", share, 1),
+            }
+          : undefined,
       red: share !== null && share < 0.5,
     },
     {
       label: "Unattributed visitors",
-      value: un ? `${fmt("count", un.n)} of ${fmt("count", un.of)}` : EMPTY,
+      info: "traffic.unattributed",
+      // Direct's share of PostHog's untagged visits applied to the visit log's: an estimate.
+      value: un ? `≈ ${fmt("count", un.n)} of ${fmt("count", un.of)}` : EMPTY,
+      worked: un ? { value: `≈ ${fmt("count", un.n)} of ${fmt("count", un.of)}` } : undefined,
       red: false,
-    },
-    {
-      label: "Purchases with a source",
-      value: paid ? `${fmt("count", paid.n)} of ${fmt("count", paid.of)}` : EMPTY,
-      red: false,
-      note: paid ? null : "No purchases yet",
     },
   ];
   return (
@@ -329,13 +359,14 @@ function Attribution({ attr }: { attr: TrafficPayload["attribution"] }) {
       <dl className="m-0 flex flex-wrap gap-6">
         {items.map((it) => (
           <div key={it.label} className="flex min-w-[120px] flex-col gap-0.5">
-            <dt className="text-xs text-ap-muted">{it.label}</dt>
+            <dt className="text-xs text-ap-muted">
+              <InfoLabel label={it.label} info={{ k: it.info, worked: it.worked }} />
+            </dt>
             <dd
               className={`m-0 font-serif text-2xl font-semibold tabular-nums ${it.red ? "text-ap-bad" : "text-ap-ink"}`}
             >
               {it.value}
             </dd>
-            {it.note && <dd className="m-0 text-xs text-ap-muted">{it.note}</dd>}
           </div>
         ))}
       </dl>
@@ -368,45 +399,60 @@ function Scorecard({
   const payers = known ? c.payers : null;
   const revenue = known ? c.revenue : null;
   const con = known ? contribution(c, a) : null;
-  const cells: Array<{ label: string; v: string; step: string; sub: string; tone?: string }> = [
+  // Whole euros where the design writes them (spend, CAC, contribution), cents elsewhere.
+  const cells: Array<{
+    label: string;
+    info: string;
+    v: string;
+    step: string;
+    sub: string;
+    tone?: string;
+  }> = [
     {
       label: "Ad spend",
+      info: "traffic.spend",
       v: fmt("eur", c.spend, 0),
       step: "",
       sub: `${fmt("eur", q(c.spend, c.clicks), 2)} per click`,
     },
     {
       label: "Visitors",
+      info: "traffic.visitors",
       v: fmt("count", c.visitors),
       step: `${fmt("eur", q(c.spend, c.visitors), 2)} per visitor`,
       sub: "",
     },
     {
       label: "Survey starts",
+      info: "traffic.starts",
       v: fmt("count", c.starts),
       step: `${fmt("pct", q(c.starts, c.visitors), 2)} start CVR`,
       sub: `${fmt("eur", q(c.spend, c.starts), 2)} per start`,
     },
     {
       label: "Completes",
+      info: "traffic.completes",
       v: fmt("count", completes),
       step: `${fmt("pct", q(completes, c.starts), 1)} completion`,
       sub: `${fmt("eur", q(c.spend, completes), 2)} per complete`,
     },
     {
-      label: "Purchases",
+      label: "Buyers",
+      info: "traffic.buyers",
       v: fmt("count", payers),
       step: `${fmt("pct", q(payers, completes), 2)} purchase CVR`,
-      sub: `${fmt("eur", q(c.spend, payers), 0)} CAC`,
+      sub: `${known ? `${fmt("count", c.sales)} purchase${c.sales === 1 ? "" : "s"} · ` : ""}${fmt("eur", q(c.spend, payers), 0)} CAC`,
     },
     {
       label: "Revenue",
+      info: "traffic.revenue",
       v: fmt("eur", revenue, 2),
       step: `${fmt("eur", q(revenue, known ? c.sales : null), 2)} AOV`,
       sub: `${times(q(revenue, c.spend))} ROAS`,
     },
     {
       label: "Contribution",
+      info: "traffic.contribution",
       v: fmt("eur", con, 0),
       step: `${fmt("eur", q(con, c.visitors), 3)} per visitor`,
       sub: "after fees, report cost, ads",
@@ -428,7 +474,7 @@ function Scorecard({
       <SectionHead
         id="h-score"
         title="Executive scorecard"
-        description="From ad spend to contribution profit for the selected period, with the conversion between each step."
+        description="From ad spend to contribution profit for the selected period, with the conversion between each step. Buyers and revenue are the period's finishers and what they bought so far, not payments by the day they were made."
       />
       {/* The cells' own top and left lines draw the grid; the box hides those on its edges. */}
       <div className="overflow-hidden rounded-[14px] border border-ap-line">
@@ -442,7 +488,10 @@ function Scorecard({
               className={`flex flex-col gap-1 border-l border-t border-ap-line px-3.5 pb-3 pt-3.5 ${i === cells.length - 1 ? "bg-ap-ground" : "bg-white"}`}
             >
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
-                {s.label}
+                <InfoLabel
+                  label={s.label}
+                  info={{ k: s.info, worked: s.v === EMPTY ? undefined : { value: s.v } }}
+                />
               </span>
               <span
                 className={`font-serif text-2xl font-semibold tabular-nums ${s.tone ?? "text-ap-ink"}`}
@@ -553,7 +602,10 @@ function ChannelTrendSection({ trend }: { trend: ChannelTrend }) {
         {hasCost && (
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden="true" className="w-[18px] border-t-2 border-dotted border-ap-ink" />
-            Avg. cost per survey submission (submissions chart)
+            <InfoLabel
+              label="Avg. cost per survey submission (submissions chart)"
+              info={{ k: "traffic.costPerSub" }}
+            />
           </span>
         )}
       </div>
@@ -561,6 +613,7 @@ function ChannelTrendSection({ trend }: { trend: ChannelTrend }) {
         {trend.visitors ? (
           <StackFigure
             title={`Visitors per ${g.noun}`}
+            info="traffic.chartVisitors"
             series={trend.visitors}
             trend={trend}
             scale={scale}
@@ -568,18 +621,31 @@ function ChannelTrendSection({ trend }: { trend: ChannelTrend }) {
         ) : (
           <figure className="m-0 flex flex-col gap-2">
             <figcaption className="text-[15px] font-bold text-ap-ink">
-              Visitors per {g.noun}
+              <InfoLabel label={`Visitors per ${g.noun}`} info={{ k: "traffic.chartVisitors" }} />
             </figcaption>
             <Why>{trend.visitorsWhy ?? "No visitor split for this range."}</Why>
           </figure>
         )}
-        <StackFigure
-          title={`Survey submissions per ${g.noun}`}
-          series={trend.submissions}
-          trend={trend}
-          scale={scale}
-          cost={trend.costPerSub}
-        />
+        {trend.submissionsWhy ? (
+          <figure className="m-0 flex flex-col gap-2">
+            <figcaption className="text-[15px] font-bold text-ap-ink">
+              <InfoLabel
+                label={`Survey submissions per ${g.noun}`}
+                info={{ k: "traffic.chartSubmissions" }}
+              />
+            </figcaption>
+            <Why>{trend.submissionsWhy}</Why>
+          </figure>
+        ) : (
+          <StackFigure
+            title={`Survey submissions per ${g.noun}`}
+            info="traffic.chartSubmissions"
+            series={trend.submissions}
+            trend={trend}
+            scale={scale}
+            cost={trend.costPerSub}
+          />
+        )}
       </div>
       {trend.note && <Note>{trend.note}</Note>}
     </Card>
@@ -588,19 +654,37 @@ function ChannelTrendSection({ trend }: { trend: ChannelTrend }) {
 
 function StackFigure({
   title,
+  info,
   series,
   trend,
   scale,
   cost,
 }: {
   title: string;
+  /** The chart's info card key. */
+  info: string;
   series: number[][];
   trend: ChannelTrend;
   scale: Scale;
   cost?: Array<number | null>;
 }) {
   const n = trend.points.length;
-  const caption = <figcaption className="text-[15px] font-bold text-ap-ink">{title}</figcaption>;
+  // The figures at the lines' end (under the chart on a phone) say which point they are.
+  const caption = (
+    <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[15px] font-bold text-ap-ink">
+      <span>
+        <InfoLabel label={title} info={{ k: info }} />
+      </span>
+      {n > 0 && (
+        <span className="text-xs font-semibold text-ap-muted">
+          <InfoLabel
+            label={`${pointLabel(trend.grain, trend.points[n - 1]!)} by channel`}
+            info={{ k: "traffic.chartLast" }}
+          />
+        </span>
+      )}
+    </figcaption>
+  );
   if (n === 0) {
     return (
       <figure className="m-0 flex flex-col gap-2">
@@ -609,13 +693,19 @@ function StackFigure({
       </figure>
     );
   }
-  const chart = stackChart(series, scale);
+  // Under the cost line the tallest total stays below three quarters of the plot, so the line's
+  // labels (80–94%) never cover a total.
+  const chart = stackChart(series, scale, cost && scale !== "share" ? 1 / 0.74 : undefined);
   const line = cost ? costLine(cost) : null;
   // A phone has room for the figures inside the chart at up to four points, and for about
   // three names under it; a wider screen for six weeks' names or nine days' or months'.
   const crowded = n > 4 ? "max-sm:hidden" : "";
   const phoneEvery = Math.ceil(n / 3);
   const wideEvery = Math.ceil(n / (trend.grain === "week" ? (scale === "share" ? 5 : 6) : 9));
+  // The cost line's figures: about five across a wide screen, counted back from the last one
+  // (which says what they are), so neighbours never sit on each other.
+  const costEvery = Math.ceil(n / 5);
+  const lastCost = line?.labels[line.labels.length - 1]?.at;
   const last = trend.points[n - 1]!;
   return (
     <figure className="m-0 flex flex-col gap-2">
@@ -721,7 +811,7 @@ function StackFigure({
               {line.labels.map((l) => (
                 <span
                   key={`cost-${l.x}`}
-                  className={`absolute whitespace-nowrap rounded bg-white/90 px-1 text-[11px] font-bold tabular-nums text-ap-ink ${crowded}`}
+                  className={`absolute whitespace-nowrap rounded bg-white/90 px-1 text-[11px] font-bold tabular-nums text-ap-ink ${crowded} ${((lastCost ?? 0) - (l.at ?? 0)) % costEvery ? "sm:hidden" : ""}`}
                   style={{
                     left: `${l.x}%`,
                     bottom: `${l.y}%`,
@@ -729,7 +819,7 @@ function StackFigure({
                   }}
                 >
                   {l.label}
-                  <span className="max-sm:hidden"> / submission</span>
+                  {l.at === lastCost && <span className="max-sm:hidden"> / submission</span>}
                 </span>
               ))}
             </>
@@ -852,9 +942,10 @@ function StackFigure({
 
 const BREAKDOWNS: Array<{ value: BreakdownKey; label: string }> = [
   { value: "channel", label: "Channel" },
+  { value: "funnel", label: "Funnel" },
   { value: "campaign", label: "Campaign" },
   { value: "creative", label: "Creative / message" },
-  { value: "keyword", label: "Search term" },
+  { value: "keyword", label: "Keyword" },
   { value: "audience", label: "Prospecting vs retargeting" },
   { value: "landing", label: "Landing page" },
   { value: "assessment", label: "Assessment" },
@@ -877,6 +968,16 @@ const RANK_SHADES = [
 /** A row the design greys: "Not live". */
 const MUTED: Shade = { bg: "transparent", fg: "#6b6678" };
 
+/**
+ * Why some rows read "—", under the table: the rows show their name alone (Marcus, 15 Oct
+ * 2026: the grey line under each name was too noisy). Rows with the same reason share a line.
+ */
+function blankRowNotes(rows: PerfRow[]): string[] {
+  const by = new Map<string, string[]>();
+  for (const r of rows) if (r.blocked) by.set(r.blocked, [...(by.get(r.blocked) ?? []), r.name]);
+  return [...by].map(([why, names]) => `${names.join(" and ")}: ${lowerFirst(why)}`);
+}
+
 function Performance({
   table,
   bd,
@@ -898,7 +999,8 @@ function Performance({
   const live = all.filter((x) => !x.r.muted);
   // "Not live" rows stay at the bottom, whatever the order.
   const rows = [...sortRows(live, key, dir), ...all.filter((x) => x.r.muted)];
-  const total = table.total ? rowValues(table.total, a) : null;
+  // The total under more than one row only, as drawn: under one it would repeat it.
+  const total = table.total && table.rows.length > 1 ? rowValues(table.total, a) : null;
   const shade = (c: Col, v: number | null) =>
     c.better
       ? band(
@@ -917,28 +1019,29 @@ function Performance({
     setMetric(c.key);
     setDir(c.better === "lo" ? "asc" : "desc");
   };
-  // A header's button: the same as picking the metric; again, the other way round.
+  // A header's button: the same as picking the metric; again, the other way round. The name
+  // sorts Z to A first, as the design's does (its sort goes high to low unless lower is better).
   const sortBy = (k: SortKey, better: Col["better"]) => {
     if (k === key) setDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setMetric(k);
-      setDir(k === "name" || better === "lo" ? "asc" : "desc");
+      setDir(better === "lo" ? "asc" : "desc");
     }
   };
 
   const ranked = cols.find((c) => c.key === key) ?? null;
-  const notes = [
-    ...table.notes,
-    ...(cols.some((c) => c.key === "pre" || c.key === "cpPre") ? [PRE_UNLOCK] : []),
-  ];
+  const notes = [...blankRowNotes(table.rows), ...table.notes];
   const groups: Array<{ group: Group | null; span: number }> = [{ group: null, span: 1 }];
   for (const c of cols) {
     const g = groups[groups.length - 1]!;
     if (g.group === c.group) g.span += 1;
     else groups.push({ group: c.group, span: 1 });
   }
-  const gtc = `220px ${cols.map(() => "minmax(100px, 1fr)").join(" ")}`;
-  const head = (label: string, k: SortKey, better: Col["better"], i: number) => {
+  // Each column as wide as its heading needs (two lines at most, the last word and its two
+  // buttons together): a longer word than the column would run under the next heading.
+  const widths = cols.map((c) => Math.max(100, headWidth(c.label, 2)));
+  const gtc = `220px ${widths.map((w) => `minmax(${w}px, 1fr)`).join(" ")}`;
+  const head = (label: string, k: SortKey, better: Col["better"], i: number, info?: string) => {
     const on = k === key;
     const cut = label.lastIndexOf(" ") + 1;
     return (
@@ -949,9 +1052,10 @@ function Performance({
         className={`px-3 py-2.5 text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] ${i ? "text-right" : "text-left"} ${on ? "text-ap-ink" : "text-ap-muted"}`}
       >
         {label.slice(0, cut)}
-        {/* The last word and the button never part, so the button never wraps on its own. */}
+        {/* The last word and the buttons never part, so a button never wraps on its own. */}
         <span className="whitespace-nowrap">
           {label.slice(cut)}
+          {info && <Info k={info} label={label} />}
           <button
             type="button"
             aria-label={`Sort by ${label}`}
@@ -1034,7 +1138,7 @@ function Performance({
             <div
               role="table"
               aria-label={`Performance by ${lower}`}
-              style={{ minWidth: 220 + 104 * cols.length }}
+              style={{ minWidth: 220 + widths.reduce((a, w) => a + Math.max(104, w), 0) }}
             >
               <div
                 aria-hidden="true"
@@ -1053,7 +1157,7 @@ function Performance({
               </div>
               <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
                 {head(table.label, "name", null, 0)}
-                {cols.map((c, i) => head(c.label, c.key, c.better, i + 1))}
+                {cols.map((c, i) => head(c.label, c.key, c.better, i + 1, c.info))}
               </div>
               {rows.length === 0 && (
                 <p className="m-0 border-t border-ap-line px-3 py-3 text-sm text-ap-muted">
@@ -1067,14 +1171,7 @@ function Performance({
                   className="grid items-stretch border-t border-ap-line bg-white"
                   style={{ gridTemplateColumns: gtc }}
                 >
-                  <Cell
-                    header
-                    left
-                    bold
-                    text={r.name}
-                    sub={r.blocked ?? r.sub}
-                    shade={r.muted ? MUTED : PLAIN}
-                  />
+                  <Cell header left bold text={r.name} shade={r.muted ? MUTED : PLAIN} />
                   {cols.map((c) => (
                     <Cell
                       key={c.key}
@@ -1093,7 +1190,11 @@ function Performance({
                 >
                   <Cell header left bold text={table.total.name} />
                   {cols.map((c) => (
-                    <Cell key={c.key} bold text={cellText(c, total[c.key])} />
+                    <Cell
+                      key={c.key}
+                      bold
+                      text={TOTAL_COLS.has(c.key) ? cellText(c, total[c.key]) : ""}
+                    />
                   ))}
                 </div>
               )}
@@ -1131,8 +1232,10 @@ function RankChart({
   return (
     <div className="flex flex-col gap-2">
       <h3 className="m-0 text-[15px] font-bold text-ap-ink">
-        {col.label} by {lower}
-        {col.better === "lo" ? " · lower is better" : ""}
+        <InfoLabel
+          label={`${col.label} by ${lower}${col.better === "lo" ? " · lower is better" : ""}`}
+          info={{ k: col.info }}
+        />
       </h3>
       {shown.length === 0 && (
         <p className="m-0 text-[13px] text-ap-muted">
@@ -1187,11 +1290,14 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
   const all = table.rows.map((r) => ({ r, v: rowValues(r, a) }));
   const live = all.filter((x) => !x.r.muted);
   const rows = [...live, ...all.filter((x) => x.r.muted)];
-  const avg = LEAK_STEPS.map((s) =>
-    visitorWeighted(live.map((x) => ({ v: x.v[s.key], vis: x.v.vis })))
-  );
+  const avg = LEAK_STEPS.map((s) => pooledStep(live, s.key));
   const v2p = live.map((x) => x.v.v2p);
-  const heads = [table.label, ...LEAK_STEPS.map((s) => s.label), "Visitor → paid"];
+  const heads: Array<{ label: string; info?: string }> = [
+    { label: table.label },
+    ...LEAK_STEPS.map((s) => ({ label: s.label, info: s.info })),
+    { label: "Visitor → paid", info: "traffic.visitorToPaid" },
+  ];
+  const notes = blankRowNotes(table.rows);
   return (
     <Card id="leakage" labelledBy="h-leak">
       <SectionHead
@@ -1210,11 +1316,11 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
           >
             {heads.map((h, i) => (
               <span
-                key={h}
+                key={h.label}
                 role="columnheader"
                 className={`px-4 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted ${i ? "border-l border-ap-line" : ""} ${i === heads.length - 1 ? "text-right" : "text-left"}`}
               >
-                {h}
+                <InfoLabel label={h.label} info={h.info ? { k: h.info } : undefined} />
               </span>
             ))}
           </div>
@@ -1237,14 +1343,9 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
               >
                 <span
                   role="rowheader"
-                  className={`flex flex-col justify-center gap-px px-4 py-3.5 text-[13px] font-bold ${r.muted ? "text-ap-muted" : "text-ap-ink"}`}
+                  className={`flex flex-col justify-center px-4 py-3.5 text-[13px] font-bold ${r.muted ? "text-ap-muted" : "text-ap-ink"}`}
                 >
                   {r.name}
-                  {(r.blocked ?? r.sub) && (
-                    <span className="text-[11px] font-medium text-ap-muted">
-                      {r.blocked ?? r.sub}
-                    </span>
-                  )}
                 </span>
                 {LEAK_STEPS.map((s, i) => {
                   const x = v[s.key];
@@ -1293,6 +1394,7 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
           })}
         </Wide>
       )}
+      {!table.blocked && notes.map((note) => <Note key={note}>{note}</Note>)}
     </Card>
   );
 }
@@ -1302,8 +1404,22 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
 
 const INTENT_GTC = "minmax(240px, 2.2fr) repeat(7, minmax(88px, 1fr)) 120px";
 
+/** The keyword table's columns, as drawn. */
+const INTENT_HEADS: Array<{ label: string; info?: string }> = [
+  { label: "Keyword" },
+  { label: "Spend", info: "traffic.rowSpend" },
+  { label: "Clicks", info: "traffic.clicks" },
+  { label: "CTR", info: "traffic.ctr" },
+  { label: "CPC", info: "traffic.cpc" },
+  { label: "Click → complete", info: "traffic.clickToComplete" },
+  { label: "Click → paid", info: "traffic.clickToPaid" },
+  { label: "CAC", info: "traffic.cac" },
+  { label: "Buyer index", info: "traffic.buyerIndex" },
+];
+
 function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
-  const [tab, setTab] = useState<"creative" | "keyword">("creative");
+  // Keywords first: the creatives aren't tracked (21 Oct 2026 call).
+  const [tab, setTab] = useState<"creative" | "keyword">("keyword");
   const rows = intent.keyword.rows;
   const idx = buyerIndex(rows);
   const of = (f: (r: IntentRow) => number | null) => rows.map(f);
@@ -1317,7 +1433,7 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
       <SectionHead
         id="h-int"
         title="Buyers vs curiosity clicks"
-        description="Which messages and search terms bring people who pay, not just people who click. Buyer index: click-to-paid against the average (1.0)."
+        description="Which messages and keywords bring people who pay, not just people who click. Buyer index: click-to-paid against the average (1.0)."
         align="end"
         right={
           <Pills
@@ -1326,7 +1442,7 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
             onChange={setTab}
             options={[
               { value: "creative", label: "Creatives & messages" },
-              { value: "keyword", label: "Search terms" },
+              { value: "keyword", label: "Keywords" },
             ]}
           />
         }
@@ -1335,33 +1451,23 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
         <Why>{intent.creative.blocked}</Why>
       ) : (
         <>
-          {intent.keyword.why && <Note>{intent.keyword.why}</Note>}
+          {intent.keyword.why && rows.length > 0 && <Note>{intent.keyword.why}</Note>}
           {rows.length === 0 ? (
-            <Why>No search term had clicks or finishers in this range.</Why>
+            <Why>{intent.keyword.why ?? "No keyword had clicks or finishers in this range."}</Why>
           ) : (
-            <Wide label="Buyers vs curiosity by search term" min={1040}>
+            <Wide label="Buyers vs curiosity by keyword" min={1040}>
               <div
                 role="row"
                 className="grid bg-ap-ground"
                 style={{ gridTemplateColumns: INTENT_GTC }}
               >
-                {[
-                  "Search term",
-                  "Spend",
-                  "Clicks",
-                  "CTR",
-                  "CPC",
-                  "Click → complete",
-                  "Click → paid",
-                  "CAC",
-                  "Buyer index",
-                ].map((h, i) => (
+                {INTENT_HEADS.map((h, i) => (
                   <span
-                    key={h}
+                    key={h.label}
                     role="columnheader"
                     className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted ${i && i < 8 ? "text-right" : "text-left"}`}
                   >
-                    {h}
+                    <InfoLabel label={h.label} info={h.info ? { k: h.info } : undefined} />
                   </span>
                 ))}
               </div>
@@ -1420,7 +1526,7 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
             </Wide>
           )}
           {rows.length > 0 && rows.every((r) => r.counts.payers === 0) && (
-            <Note>No purchases yet, so no buyer index.</Note>
+            <Note>No purchase came through a keyword in this range, so no buyer index.</Note>
           )}
         </>
       )}
@@ -1431,7 +1537,22 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
 // ---------------------------------------------------------------------------------------------
 // Cohorts by acquisition source
 
-const COH_GTC = "minmax(180px, 1.6fr) repeat(8, minmax(90px, 1fr))";
+const COH_HEADS: Array<{ label: string; info?: string }> = [
+  { label: "Acquisition source" },
+  { label: "Rev. / user day 0", info: "traffic.cohortDay0" },
+  { label: "Day 7", info: "traffic.cohortDay7" },
+  { label: "Day 30", info: "traffic.cohortDay30" },
+  { label: "Day 90", info: "traffic.cohortDay90" },
+  { label: "Day 90 ÷ day 0", info: "traffic.cohortGrowth" },
+  { label: "Repeat assessment", info: "traffic.repeat" },
+  { label: "Cross-sell rate", info: "traffic.crossSell" },
+  { label: "Refund rate", info: "traffic.cohortRefund" },
+];
+// As the experiments' columns: room for each heading with its icon ("Repeat assessment").
+const COH_GTC = [
+  "minmax(180px, 1.6fr)",
+  ...COH_HEADS.slice(1).map((h) => `minmax(${Math.max(90, headWidth(h.label, 2))}px, 1fr)`),
+].join(" ");
 
 function Cohorts({ cohorts }: { cohorts: TrafficPayload["cohorts"] }) {
   const rows = cohorts.rows;
@@ -1444,7 +1565,7 @@ function Cohorts({ cohorts }: { cohorts: TrafficPayload["cohorts"] }) {
       <SectionHead
         id="h-coh"
         title="Cohorts by acquisition source"
-        description="Cumulative revenue per acquired user after first visit, plus repeat purchases, cross-sells and refunds. Shows which sources keep paying after day 0."
+        description="Cumulative revenue per acquired user after their first finished survey, plus repeat purchases, cross-sells and refunds. Shows which sources keep paying after day 0."
       />
       {cohorts.why ? (
         <Why>{cohorts.why}</Why>
@@ -1452,20 +1573,7 @@ function Cohorts({ cohorts }: { cohorts: TrafficPayload["cohorts"] }) {
         <Why>No new users in this range.</Why>
       ) : (
         <Wide label="Cohorts by acquisition source" min={980}>
-          <HeadRow
-            gtc={COH_GTC}
-            labels={[
-              "Acquisition source",
-              "Rev. / user day 0",
-              "Day 7",
-              "Day 30",
-              "Day 90",
-              "Day 90 ÷ day 0",
-              "Repeat assessment",
-              "Cross-sell rate",
-              "Refund rate",
-            ]}
-          />
+          <HeadRow gtc={COH_GTC} labels={COH_HEADS} />
           {rows.map((r) => (
             <div
               key={r.source}
@@ -1508,7 +1616,26 @@ function Cohorts({ cohorts }: { cohorts: TrafficPayload["cohorts"] }) {
 // ---------------------------------------------------------------------------------------------
 // Experiments
 
-const EXP_GTC = "minmax(190px, 1.7fr) minmax(130px, 1.2fr) repeat(9, minmax(86px, 1fr))";
+const EXP_HEADS: Array<{ label: string; info?: string }> = [
+  { label: "Test" },
+  { label: "Arm" },
+  { label: "Visitors", info: "traffic.expVisitors" },
+  { label: "Start CVR", info: "traffic.expStartCvr" },
+  { label: "Submissions", info: "traffic.expSubmissions" },
+  { label: "Payment CVR", info: "traffic.expPaymentCvr" },
+  { label: "Rev. / submission", info: "traffic.expRevPerSub" },
+  { label: "Rev. / visitor", info: "traffic.expRevPerVisitor" },
+  { label: "Lift vs control", info: "traffic.lift" },
+  { label: "Chance to beat", info: "traffic.chance" },
+  { label: "Confidence", info: "traffic.confidence" },
+];
+// Each figure column wide enough for its heading with its info icon (two buttons' room), so the
+// icon never slides under the next heading; the test and arm keep the design's widths.
+const EXP_GTC = [
+  "minmax(190px, 1.7fr)",
+  "minmax(130px, 1.2fr)",
+  ...EXP_HEADS.slice(2).map((h) => `minmax(${Math.max(86, headWidth(h.label, 2))}px, 1fr)`),
+].join(" ");
 
 function Experiments({ experiments }: { experiments: TrafficPayload["experiments"] }) {
   const arms = experiments.arms;
@@ -1520,29 +1647,17 @@ function Experiments({ experiments }: { experiments: TrafficPayload["experiments
         description="Each arm against its control on the test's primary metric. Confidence is 1 − p from a two-sided test of the two proportions; 95% or more counts as a credible result."
       />
       {arms.length === 0 ? (
-        <Why>No test ran in this range.</Why>
+        <Why>{experiments.why ?? "No test ran in this range."}</Why>
       ) : (
         <Wide label="Experiments" min={1260}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: EXP_GTC }}>
-            {[
-              "Test",
-              "Arm",
-              "Visitors",
-              "Start CVR",
-              "Submissions",
-              "Payment CVR",
-              "Rev. / submission",
-              "Rev. / visitor",
-              "Lift vs control",
-              "Chance to beat",
-              "Confidence",
-            ].map((h, i) => (
+            {EXP_HEADS.map((h, i) => (
               <span
-                key={h}
+                key={h.label}
                 role="columnheader"
                 className={`text-balance px-3 py-2.5 text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted ${i > 1 ? "text-right" : "text-left"}`}
               >
-                {h}
+                <InfoLabel label={h.label} info={h.info ? { k: h.info } : undefined} />
               </span>
             ))}
           </div>
@@ -1602,26 +1717,36 @@ function Experiments({ experiments }: { experiments: TrafficPayload["experiments
 // ---------------------------------------------------------------------------------------------
 // Audience by source
 
-const AUDIENCE_GROUPS: Array<{ label: string; dims: Array<{ value: string; label: string }> }> = [
+/** The dimensions, as drawn; `info` is the card of each one's shares. */
+const AUDIENCE_GROUPS: Array<{
+  label: string;
+  dims: Array<{ value: string; label: string; info: string }>;
+}> = [
   {
     label: "From visits",
     dims: [
-      { value: "country", label: "Country" },
-      { value: "device", label: "Device" },
-      { value: "visitor", label: "New vs returning" },
-      { value: "daypart", label: "Time of day" },
+      { value: "country", label: "Country", info: "traffic.audCountry" },
+      { value: "device", label: "Device", info: "traffic.audDevice" },
+      { value: "visitor", label: "New vs returning", info: "traffic.audVisitor" },
+      { value: "daypart", label: "Time of day", info: "traffic.audDaypart" },
     ],
   },
   {
     label: "From the survey",
     dims: [
-      { value: "gender", label: "Gender" },
-      { value: "age", label: "Age" },
-      { value: "relationship", label: "Relationship" },
-      { value: "archetype", label: "Archetype" },
+      { value: "gender", label: "Gender", info: "traffic.audGender" },
+      { value: "age", label: "Age", info: "traffic.audAge" },
+      { value: "relationship", label: "Relationship", info: "traffic.audRelationship" },
+      { value: "archetype", label: "Archetype", info: "traffic.audArchetype" },
     ],
   },
 ];
+const SHARE_INFO = new Map(AUDIENCE_GROUPS.flatMap((g) => g.dims.map((d) => [d.value, d.info])));
+/** The by-source matrix's card: shares of each source's visits, or of its finishers. */
+const BY_SOURCE: Record<AudienceDim["kind"], { info: string }> = {
+  visit: { info: "traffic.audVisitsBySource" },
+  survey: { info: "traffic.audFinishersBySource" },
+};
 
 const DIM_SHADES = [...RANK_SHADES, "#ddd5f2"];
 
@@ -1633,7 +1758,7 @@ function Audience({ dims }: { dims: AudienceDim[] }) {
       <SectionHead
         id="h-aud"
         title="Audience by source"
-        description="Who each source brings. Visit data comes from PostHog for every visitor; survey data comes from the answers of people who completed it."
+        description="Who each source brings. Visit data comes from the visits PostHog recorded (it sees nearly every Google Ads visit, far fewer of the rest), scaled to each source's visitors; survey data comes from the answers of people who completed it."
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {AUDIENCE_GROUPS.map((g) => (
@@ -1657,8 +1782,13 @@ function Audience({ dims }: { dims: AudienceDim[] }) {
 }
 
 function AudienceDetail({ d }: { d: AudienceDim }) {
+  const share = SHARE_INFO.get(d.key);
+  const bySourceInfo = BY_SOURCE[d.kind].info;
   const max = Math.max(0, ...d.values.map((v) => v.share)) || 1;
-  const mxCols = `minmax(150px, 1.6fr) ${d.bySource.map(() => "minmax(84px, 1fr)").join(" ")}`;
+  // Each source's column as wide as its heading and info icon need, so the icon stays its own.
+  const mxCols = `minmax(150px, 1.6fr) ${d.bySource
+    .map((s) => `minmax(${Math.max(84, headWidth(s.source, 1))}px, 1fr)`)
+    .join(" ")}`;
   const perfCols = "minmax(180px, 2fr) repeat(5, minmax(100px, 1fr))";
   const complete = d.perf.map((p) => p.completeRate);
   const full = d.perf.map((p) => p.fullRate);
@@ -1668,7 +1798,12 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
       <div className="flex flex-col gap-6">
         <div className="flex min-w-0 max-w-[640px] flex-col gap-2.5">
           <div className="flex flex-col gap-1">
-            <h3 className="m-0 text-[15px] font-bold text-ap-ink">{d.title} · all sources</h3>
+            <h3 className="m-0 text-[15px] font-bold text-ap-ink">
+              <InfoLabel
+                label={`${d.title} · all sources`}
+                info={share ? { k: share } : undefined}
+              />
+            </h3>
             <span className="text-[13px] text-ap-muted">{d.base}</span>
           </div>
           {d.values.map((v, i) => (
@@ -1711,7 +1846,9 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
                   role="columnheader"
                   className="flex flex-col px-3 py-2.5 text-right text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted"
                 >
-                  {s.source}
+                  <span>
+                    <InfoLabel label={s.source} info={{ k: bySourceInfo }} />
+                  </span>
                   <span className="font-semibold normal-case tracking-normal">
                     {fmt("count", s.n)} {d.kind === "visit" ? "visits" : "finishers"}
                   </span>
@@ -1757,12 +1894,12 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
           <HeadRow
             gtc={perfCols}
             labels={[
-              "Group",
-              "Share",
-              "Complete rate",
-              "Pre-unlock rate",
-              "Full unlock rate",
-              "Median read",
+              { label: "Group" },
+              { label: "Share", info: share },
+              { label: "Complete rate", info: "traffic.audCompleteRate" },
+              { label: "Pre-unlock rate", info: "traffic.preRate" },
+              { label: "Full unlock rate", info: "traffic.fullRate" },
+              { label: "Median read", info: "traffic.medianRead" },
             ]}
           />
           {d.perf.map((p) => (
@@ -1790,7 +1927,6 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
           ))}
         </Wide>
         {d.perfNote && <Note>{d.perfNote}</Note>}
-        <Note>{PRE_UNLOCK}</Note>
       </div>
     </>
   );
@@ -2025,11 +2161,11 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                     },
                     { label: "Click → paid", value: fmt("pct", p.d.clickToPaid, 3) },
                     { label: "Clicks", value: fmt("count", p.d.clicks) },
-                    { label: "Purchases", value: fmt("count", p.d.payers) },
-                    { label: "Spend", value: fmt("eur", p.d.spend, 0) },
+                    { label: "Buyers", value: fmt("count", p.d.payers) },
+                    { label: "Spend", value: fmt("eur", p.d.spend) },
                     {
                       label: "CAC",
-                      value: p.d.payers ? fmt("eur", p.d.spend / p.d.payers, 0) : EMPTY,
+                      value: p.d.payers ? fmt("eur", p.d.spend / p.d.payers) : EMPTY,
                       muted: !p.d.payers,
                     },
                   ],
@@ -2053,8 +2189,14 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
             ))}
           </div>
           <div className="ml-11 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-ap-muted">
-            <span>Click → paid conversion (vertical) · bubble size = spend</span>
-            <span>Cost per click →</span>
+            <span>
+              <InfoLabel label="Click → paid conversion" info={{ k: "traffic.qualityY" }} />{" "}
+              (vertical) · bubble size ={" "}
+              <InfoLabel label="spend" info={{ k: "traffic.rowSpend" }} />
+            </span>
+            <span>
+              <InfoLabel label="Cost per click" info={{ k: "traffic.qualityX" }} /> →
+            </span>
           </div>
           {/* The campaigns in words: on a phone in place of the names by the bubbles, for a
               screen reader at every width. */}
@@ -2068,7 +2210,7 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                 />
                 <span>
                   <strong className="text-ap-ink">{p.name}</strong>: {fmt("eur", p.d.cpc, 2)} per
-                  click, {fmt("pct", p.d.clickToPaid, 3)} click to paid, {fmt("eur", p.d.spend, 0)}{" "}
+                  click, {fmt("pct", p.d.clickToPaid, 3)} click to paid, {fmt("eur", p.d.spend)}{" "}
                   spend
                 </span>
               </li>
@@ -2082,6 +2224,7 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
           )}
           {/* Under a filter the ads can't follow, the campaigns' cost is all traffic's. */}
           {quality.why && <Note>{quality.why}</Note>}
+          {quality.note && <Note>{quality.note}</Note>}
         </div>
       )}
     </Card>

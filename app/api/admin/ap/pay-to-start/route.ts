@@ -6,10 +6,9 @@ import {
   buildPayToStart,
   fetchAdsByLanding,
   fetchPayToStartRecords,
+  payToStartPrices,
 } from "@features/admin/server/ap/pay-to-start";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
-import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
-import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
@@ -40,11 +39,7 @@ export async function GET(request: Request) {
         from: filters.from,
         to: filters.to,
         today,
-        prices: {
-          full: getPayToStartOffer("full").priceCents,
-          pre: getPayToStartOffer("pre").priceCents,
-          gate: INITIAL_UNLOCK_PRICE_CENTS,
-        },
+        prices: payToStartPrices(),
       }),
       { headers: NO_STORE }
     );

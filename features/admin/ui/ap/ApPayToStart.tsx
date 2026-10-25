@@ -39,7 +39,7 @@ import { useApFilters } from "./useApFilters";
  */
 
 const FIXED_NOTE =
-  "Each funnel is read whole here: source, device, country tier and visitor type don't narrow this page.";
+  "Each funnel is read whole here: the Funnel filter, source, device, country tier and visitor type don't narrow this page.";
 
 const SECTIONS = [
   { id: "funnels", label: "Funnel metrics" },
@@ -752,7 +752,7 @@ export default function ApPayToStart() {
       </div>
       <ApFilterBar
         scope="assessment"
-        fixed={["source", "device", "tier", "visitor"]}
+        fixed={["funnel", "source", "device", "tier", "visitor"]}
         fixedNote={FIXED_NOTE}
       />
       {loading && !data && <Loading label="the pay-to-start page" />}

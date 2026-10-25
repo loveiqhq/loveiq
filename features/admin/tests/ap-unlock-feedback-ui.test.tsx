@@ -110,7 +110,8 @@ describe("the Unlock feedback page", () => {
     render(<ApUnlockFeedback />);
     expect(view.bar).toMatchObject({
       scope: "assessment",
-      fixed: ["source", "device", "tier", "visitor"],
+      // Its emails go to free survey readers only: the Funnel filter has nothing to narrow.
+      fixed: ["funnel", "source", "device", "tier", "visitor"],
     });
   });
 

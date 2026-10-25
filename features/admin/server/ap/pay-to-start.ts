@@ -34,11 +34,22 @@ import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
 import { isInitialUnlockGateEnabled } from "@features/report/server/initialGateState";
+import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
+import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
 
 import { fetchAllRows } from "../supabase";
 import { addDays, shortDate } from "./days";
-import { FULL_PLANS, classifySource, preBuysOf, type Facts, type SubFact } from "./facts";
-import { buckets, windowOf, type ApFilters } from "./filters";
+import {
+  FULL_PLANS,
+  PAY_TO_START_FROM,
+  classifySource,
+  preBuysOf,
+  type Facts,
+  type SubFact,
+} from "./facts";
+import { buckets, rangeLabel, windowOf, type ApFilters } from "./filters";
+import { VISITS_FROM, type FreeAds } from "./metrics";
+import { teamUserIds } from "./team";
 
 export type PtsOffer = "full" | "pre";
 export type FunnelKey = "after" | PtsOffer | "gate";
@@ -92,9 +103,9 @@ export interface PtsRecords {
   /** Pay-to-start buyers' survey starts per Berlin day: ap_facts counts them among its starts. */
   boughtFirstStarts: Readonly<Record<string, number>>;
   /**
-   * Claimed surveys taken by staff (app_user's address) or by our own checks (the survey's
-   * tracker): their purchases are left out, as ap_facts leaves those surveys out, whatever
-   * address paid.
+   * Claimed surveys taken by the team (a team account: teamUserIds) or by our own checks (the
+   * survey's tracker): their purchases are left out, as ap_facts leaves those surveys out,
+   * whatever address paid.
    */
   ourClaims: ReadonlySet<number>;
   /** Pay-to-start buyers' submissions whose report was opened. */
@@ -489,7 +500,8 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     const subs = subsOf[key];
     const ads = adsOf(key);
     const adSubs = subs.filter(isAd);
-    const visits = Math.round(freePart(freeVisits, key));
+    // The visit log is whole from VISITS_FROM: before, the free landing's visits are blank.
+    const visits = from < VISITS_FROM ? null : Math.round(freePart(freeVisits, key));
     const paid = subs.filter(paidSub);
     const all = view(
       visits,
@@ -595,7 +607,8 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     return {
       key: offer,
       label: `Pay to start · ${price}`,
-      live: true,
+      // Its pages went live on PAY_TO_START_FROM: a range ending before has none, "off", not 0.
+      live: to >= PAY_TO_START_FROM,
       spend: ads ? ads.cost : null,
       clicks: ads ? ads.clicks : null,
       ...views(ads, all, paidView),
@@ -622,7 +635,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       const ads = adsOf(key, ds);
       return point(
         ads ? ads.cost : null,
-        freePart(freeVisits, key, ds),
+        b.from < VISITS_FROM ? null : freePart(freeVisits, key, ds),
         subs.filter(paidSub).length,
         sumBy(subs, (s) => s.revenue)
       );
@@ -655,6 +668,10 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
   if (!input.ads.ok) notes.push(input.ads.error);
   else if (adsDay.full.size + adsDay.pre.size === 0)
     notes.push("No ad in this range lands on a pay-to-start page yet.");
+  if (from < VISITS_FROM)
+    notes.push(
+      `The visit log counts every visitor from ${rangeLabel(VISITS_FROM, VISITS_FROM)}: the free survey's visits, and the rates over them, are blank for this range.`
+    );
   if (input.ptsVisits === null) notes.push("Pay to start's visits could not be read just now.");
   else {
     const unsplit = sumBy(
@@ -731,6 +748,33 @@ export async function fetchAdsByLanding(
     logger.warn({ err }, "AP pay to start: Google Ads read failed");
     return { ok: false, error: UNREADABLE };
   }
+}
+
+/**
+ * Under "Free survey": whether every ad over the days a page's spend covers ([from, to]: its
+ * range, the period before, its charts' windows) landed on the free survey's pages (Google Ads'
+ * landing pages), so the account's spend is the free survey's. Before pay to start's launch no
+ * ad could land on its pages.
+ */
+export async function freeAdsOnly(
+  from: string,
+  to: string,
+  oidcToken?: string | null
+): Promise<FreeAds> {
+  const start = from > PAY_TO_START_FROM ? from : PAY_TO_START_FROM;
+  if (to < start) return { ok: true };
+  const ads = await fetchAdsByLanding(start, to, oidcToken);
+  if (!ads.ok)
+    return {
+      ok: false,
+      why: "Ad spend can't be told apart by funnel just now (Google Ads' landing pages couldn't be read): pick All funnels.",
+    };
+  return ads.value.some((a) => a.cost > 0 && offerOfLanding(a.url) !== null)
+    ? {
+        ok: false,
+        why: "Some ads in the days these figures cover landed on pay to start's pages, and the account's spend isn't split by funnel here: pick All funnels, or see the Pay to start page for each funnel's own spend.",
+      }
+    : { ok: true };
 }
 
 /** One query's rows, or the page stops: a part read as empty would read as zero. */
@@ -814,7 +858,7 @@ export async function fetchPayToStartRecords(
   const boughtFirst = new Set(claimedBy.keys());
 
   // Their survey starts, which ap_facts counts among the free survey's: a finished survey's
-  // start, unless ap_facts left it out (a staff member's by app_user's address, our own checks).
+  // start, unless ap_facts left it out (a team account's, our own checks).
   // ponytail: a buyer's unfinished start (no submission to tie it to the purchase) stays in.
   const claimedSubs: SubmissionRow[] = [];
   for (const ids of chunks([...boughtFirst])) {
@@ -826,19 +870,9 @@ export async function fetchPayToStartRecords(
       ))
     );
   }
-  const users = [
-    ...new Set(claimedSubs.map((x) => x.user_id).filter((u): u is number => typeof u === "number")),
-  ];
-  const staff = new Set<number>();
-  for (const ids of chunks(users)) {
-    const people = await must<{ id: number; email: string | null }>(
-      `/rest/v1/app_user?id=in.(${ids.join(",")})&select=id,email&order=id.asc`,
-      "app_user"
-    );
-    for (const u of people) if (isStaffEmail(u.email)) staff.add(u.id);
-  }
+  const team = claimedSubs.length ? await teamUserIds() : new Set<number>();
   const ours = (x: SubmissionRow) =>
-    (x.user_id !== null && staff.has(x.user_id)) || isOurTest(taggedOf(x.utm_tracker));
+    (x.user_id !== null && team.has(x.user_id)) || isOurTest(taggedOf(x.utm_tracker));
   const ourClaims = new Set(claimedSubs.filter(ours).map((x) => x.id));
   const boughtFirstStarts: Record<string, number> = {};
   for (const x of claimedSubs) {
@@ -905,4 +939,44 @@ export async function fetchPayToStartRecords(
     })),
     gateOn,
   };
+}
+
+/** Each offer's price as the site charges it: the page's labels and step names. */
+export function payToStartPrices(): PtsInput["prices"] {
+  return {
+    full: getPayToStartOffer("full").priceCents,
+    pre: getPayToStartOffer("pre").priceCents,
+    gate: INITIAL_UNLOCK_PRICE_CENTS,
+  };
+}
+
+/**
+ * The Pay to start page's figures for a range, read as its route reads them, for the pages that
+ * show them too (the Dashboard's funnel comparison, the Landing page's pay-to-start table), so
+ * every page gives the same numbers. Null when its records could not be read.
+ */
+export async function payToStartFor(
+  range: Pick<ApFilters, "from" | "to">,
+  facts: Facts,
+  today: string,
+  oidcToken?: string | null
+): Promise<PtsPayload | null> {
+  try {
+    const [records, ads] = await Promise.all([
+      fetchPayToStartRecords(range),
+      fetchAdsByLanding(range.from, range.to, oidcToken),
+    ]);
+    return buildPayToStart({
+      ...records,
+      facts,
+      ads,
+      from: range.from,
+      to: range.to,
+      today,
+      prices: payToStartPrices(),
+    });
+  } catch (err) {
+    logger.warn({ err }, "AP: pay to start's figures unavailable");
+    return null;
+  }
 }

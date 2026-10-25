@@ -125,7 +125,7 @@ describe("data catalog", () => {
     ).toBe("");
   });
 
-  it("lists the design's tables first, in its order, then the rest by name", () => {
+  it("lists the design's tables first, in its order, then the rest by group, A to Z", () => {
     const names = buildCatalog(
       schemaOf(
         Object.fromEntries(
@@ -153,9 +153,10 @@ describe("data catalog", () => {
       "payment",
       "report_price_quote",
       "report_section_feedback",
-      "admin_audit_log",
-      "analytics_event",
+      // People & email, then tracking, the admin tools last.
       "app_user",
+      "analytics_event",
+      "admin_audit_log",
     ]);
   });
 
@@ -214,7 +215,7 @@ describe("data catalog", () => {
     expect(table("survey_submission_answer")).toMatchObject({ origin: "draft" });
   });
 
-  it("lists the tables a table's own fields point to, as the design does: three at most", () => {
+  it("lists the tables a table joins both ways: its own links, then the tables pointing to it", () => {
     const fk = (table: string) => ({
       format: "bigint",
       description: `<fk table='${table}' column='id'/>`,
@@ -244,9 +245,9 @@ describe("data catalog", () => {
       []
     );
     const joins = (name: string) => joined.find((t) => t.name === name)?.joins;
-    // Not the tables pointing back at it.
-    expect(joins("app_user")).toEqual([]);
-    // In field order, each once, no admin table, and the first three only.
+    // The tables pointing back at it too, each once.
+    expect(joins("app_user")).toEqual(["payment", "survey_submission"]);
+    // In field order, each once, and no admin tool (refund is in no product group).
     expect(joins("payment")).toEqual(["app_user", "personal_report", "report_price_quote"]);
     // A key to its own table is not a join to another.
     expect(joins("survey_submission")).toEqual(["app_user"]);

@@ -33,6 +33,11 @@ export interface Bucket {
   /** Days with no ad-spend coverage. Non-zero means `ad_spend` is unknown, not zero. */
   uncoveredSpendDays: number;
   totals: Record<string, number>;
+  /**
+   * Figures with days the dashboard leaves blank (null: its records can't count them, as
+   * visitors before 15 Jun 2026), and how many: unknown for the bucket, never a partial sum.
+   */
+  unknown: Record<string, number>;
   adSpend: number | null;
 }
 
@@ -95,7 +100,13 @@ export function bucketRows(rows: DayRow[], g: Granularity): Bucket[] {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, days]) => {
       const totals: Record<string, number> = {};
+      const unknown: Record<string, number> = {};
       for (const k of NUMERIC_KEYS) {
+        const blank = days.filter((d) => d[k] === null).length;
+        if (blank) {
+          unknown[k] = blank;
+          continue;
+        }
         const sum = days.reduce(
           (acc, d) => acc + (typeof d[k] === "number" ? (d[k] as number) : 0),
           0
@@ -115,6 +126,7 @@ export function bucketRows(rows: DayRow[], g: Granularity): Bucket[] {
         partial: days.length < bucketLength(key, g),
         uncoveredSpendDays: uncovered,
         totals,
+        unknown,
         adSpend,
       };
     });
@@ -189,11 +201,19 @@ const lengthOf = (p: Period): number =>
 /** One period's totals, plus the caveats that make them readable. */
 function totalsOf(rows: DayRow[]): {
   totals: Record<string, number>;
+  /** Figures with days the dashboard leaves blank (null), and how many: unknown, not summed. */
+  unknown: Record<string, number>;
   adSpend: number | null;
   uncovered: number;
 } {
   const totals: Record<string, number> = {};
+  const unknown: Record<string, number> = {};
   for (const k of NUMERIC_KEYS) {
+    const blank = rows.filter((d) => d[k] === null).length;
+    if (blank) {
+      unknown[k] = blank;
+      continue;
+    }
     if (rows.some((d) => typeof d[k] === "number")) {
       totals[k] =
         Math.round(
@@ -204,6 +224,7 @@ function totalsOf(rows: DayRow[]): {
   const uncovered = rows.filter((d) => typeof d.ad_spend !== "number").length;
   return {
     totals,
+    unknown,
     adSpend:
       uncovered > 0
         ? null
@@ -244,7 +265,9 @@ export function renderComparison(
   }
   lines.push("");
 
-  const keys = [...new Set([...Object.keys(A.totals), ...Object.keys(B.totals)])];
+  const keys = [...new Set([...Object.keys(A.totals), ...Object.keys(B.totals)])].filter(
+    (k) => !(k in A.unknown) && !(k in B.unknown)
+  );
   for (const k of keys) {
     const x = A.totals[k] ?? 0;
     const y = B.totals[k] ?? 0;
@@ -253,6 +276,21 @@ export function renderComparison(
     lines.push(
       `  ${k.padEnd(18)} ${String(x).padStart(10)}  vs ${String(y).padStart(10)}  ` +
         `${delta >= 0 ? "+" : ""}${delta}${pct === null ? "" : ` (${pct >= 0 ? "+" : ""}${pct}%)`}`
+    );
+  }
+
+  // A figure the dashboard leaves blank on some days (its records can't count them) is unknown
+  // for that period: never summed over the days it has, never compared, never a zero.
+  for (const k of NUMERIC_KEYS.filter((x) => x in A.unknown || x in B.unknown)) {
+    lines.push(
+      `  ${k.padEnd(18)} unknown — ` +
+        [
+          A.unknown[k] ? `${A.unknown[k]} of ${a.rows.length} days in the first period` : null,
+          B.unknown[k] ? `${B.unknown[k]} of ${b.rows.length} days in the second` : null,
+        ]
+          .filter(Boolean)
+          .join(" and ") +
+        ` have no figure on the dashboard (its records can't count them), which means unknown, not zero.`
     );
   }
 
