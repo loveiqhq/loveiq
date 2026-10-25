@@ -24,11 +24,17 @@ export const GATE_COPY = {
     priceSuffix: "one time payment",
     cta: "Unlock now",
     guarantee: (days: number) => `${days}-day money-back guarantee.`,
-    features: (creditCents: number) => [
-      "Your Core Archetype and what drives it",
-      "How you rank against all 14 archetypes",
-      "4x full chapters + 4x partly open",
-      `${euros(creditCents)} credit toward the Premium Report`,
+    /**
+     * The card's four lines. `strong` leads a line in bold: the credit (sync 23.10, Marcus
+     * and Mark: "highlight and bold the €10 credit"), which now names what it is for, the
+     * Full Report the report's own bar sells (persona walks 24.10: it said "the Premium
+     * Report", no plan by that name).
+     */
+    features: (creditCents: number): ReadonlyArray<{ strong?: string; text: string }> => [
+      { text: "Your Core Archetype and what drives it" },
+      { text: "How you rank against all 14 archetypes" },
+      { text: "4x full chapters + 4x partly open" },
+      { strong: `${euros(creditCents)} credit`, text: " toward your Full Report" },
     ],
   },
   paymentsLabel: "Guaranteed Safe & Secure Checkout",

@@ -8155,6 +8155,29 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
   white-space: nowrap;
   width: 163px;
 }
+/* Sync 23.10 (Marcus and Mark): the EUR 1.99 holder's credit, bold above the pill
+ * (ReportStickyUnlockBar's creditLine). The gate's AA green; one line, centred on the
+ * pill, which keeps its own size. With it, the phone bar's row centres on the taller
+ * stack. */
+body:has(.rv3.rv4) .report-sticky-unlock__cta-stack {
+  align-items: center;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__credit {
+  color: #007f2d;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 14px;
+  margin: 0;
+  white-space: nowrap;
+}
+body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4:has(.report-sticky-unlock__cta-stack) {
+  align-items: center;
+}
 body:has(.rv3.rv4) .report-sticky-unlock__cta--v4::after {
   content: "";
   inset: -6px 0;

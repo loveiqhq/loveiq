@@ -9,6 +9,7 @@ vi.mock("@features/analytics/client", () => ({
 }));
 
 import ReportStickyUnlockBar from "@features/report/ui/ReportStickyUnlockBar";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 /**
  * The bar publishes the height it occupies as `--report-unlock-bar-h`, the way
@@ -260,5 +261,49 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     expect(badge).not.toContain("265.6px");
     expect(rule(`${D} .report-sticky-unlock__badge-head`)).toContain("font-size: 14px;");
     expect(rule(`${D} .report-sticky-unlock__badge-sub`)).toContain("font-size: 10px;");
+  });
+});
+
+// Sync 23.10 (Marcus and Mark): the EUR 1.99 holder's EUR 10 credit, bold above the
+// footer's "Unlock Full Report".
+describe("ReportStickyUnlockBar — the credit above the button", () => {
+  const credited = {
+    plan: "full_report",
+    chargedPriceCents: 1999,
+    upgradeCreditCents: 1000,
+    creditKind: "initial",
+  } as unknown as ReportPriceQuoteSnapshot;
+
+  it("says a EUR 1.99 holder's credit above the pill, on the phone and the desktop card", () => {
+    const { container } = render(<ReportStickyUnlockBar quote={credited} onUnlock={() => {}} v4 />);
+    const lines = container.querySelectorAll(".report-sticky-unlock__credit");
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line.textContent).toBe("€10.00 credit applied");
+      // The line sits in the pill's own column, right above it.
+      const stack = line.closest(".report-sticky-unlock__cta-stack")!;
+      expect(stack.querySelector(".report-sticky-unlock__cta--v4")).not.toBeNull();
+    }
+  });
+
+  it("draws no credit line for anyone else", () => {
+    const { container } = render(
+      <ReportStickyUnlockBar
+        quote={{ ...credited, creditKind: undefined, upgradeCreditCents: undefined }}
+        onUnlock={() => {}}
+        v4
+      />
+    );
+    expect(container.querySelector(".report-sticky-unlock__credit")).toBeNull();
+    expect(container.querySelector(".report-sticky-unlock__cta-stack")).toBeNull();
+  });
+
+  it("sets the line bold in the gate's AA green", () => {
+    const css = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
+    const at = css.indexOf("body:has(.rv3.rv4) .report-sticky-unlock__credit {");
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
+    expect(rule).toContain("font-weight: 800;");
+    expect(rule).toContain("color: #007f2d;");
   });
 });
