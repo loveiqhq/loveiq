@@ -118,7 +118,8 @@ test.describe("The EUR 1.99 gate", () => {
 test.describe("The EUR 1.99 gate on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test("hands the button to the sticky bar once the card's scrolls away", async ({ page }) => {
+  // Sync 23.10: the sticky bar is there from the first paint, not after a scroll.
+  test("pins the sticky bar from the start, and checks out from it", async ({ page }) => {
     let posted = 0;
     await mockGate(page);
     await page.route("**/api/stripe/initial-unlock", async (route) => {
@@ -132,10 +133,10 @@ test.describe("The EUR 1.99 gate on a phone", () => {
     await page.goto(`/report/${TOKEN}`);
 
     const sticky = page.getByTestId("iug-sticky");
-    await expect(sticky).toHaveAttribute("data-visible", "false");
-    // One screen at a time, polling: WebKit reports the observer every 100-200 ms.
-    await page.evaluate(() => window.scrollTo(0, 900));
-    await expect(sticky).toHaveAttribute("data-visible", "true");
+    await expect(sticky).toBeVisible();
+    await expect(sticky).toBeInViewport();
+    // The card's own button is on the first screen too: the two stand together now.
+    await expect(page.locator(".iug-card .rpg-card__cta")).toBeInViewport();
 
     await sticky.getByRole("button", { name: /Unlock for €1\.99 now/ }).click();
     await expect.poll(() => posted).toBe(1);

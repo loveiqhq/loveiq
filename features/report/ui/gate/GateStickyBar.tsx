@@ -7,27 +7,21 @@ import type { GateCtaPlace, InitialUnlockCheckoutState } from "./useInitialUnloc
 
 /**
  * 1650:2667: the guarantee and the button, pinned to the bottom (the frame's "sticky CTA").
- * It shows only while the card's own button is out of view, so the two never stand on top
- * of each other; hidden, it is inert. It steps up over the cookie banner (--liq-consent-h)
- * and clears the home indicator. A failed click says why in a line above its row.
+ * There from the first paint (sync 23.10, Marcus and Fatih: "the call to action should be
+ * sticky immediately"), as pay to start's bar is: it used to wait until the card's own
+ * button had scrolled away. It steps up over the cookie banner (--liq-consent-h) and clears
+ * the home indicator. A failed click says why in a line above its row.
  */
 export const GateStickyBar: FC<{
   guaranteeDays: number;
   onUnlock: (place: GateCtaPlace) => void;
   priceCents: number;
   state: InitialUnlockCheckoutState;
-  visible: boolean;
-}> = ({ guaranteeDays, onUnlock, priceCents, state, visible }) => {
+}> = ({ guaranteeDays, onUnlock, priceCents, state }) => {
   const busy = state.status === "redirecting";
   const failed = state.status === "error" && state.place === "sticky" ? state.message : null;
   return (
-    <div
-      className="iug-sticky"
-      data-testid="iug-sticky"
-      data-visible={visible ? "true" : "false"}
-      aria-hidden={visible ? undefined : true}
-      inert={!visible}
-    >
+    <div className="iug-sticky" data-testid="iug-sticky">
       {failed ? (
         <p role="alert" className="iug-sticky__error">
           {failed}
