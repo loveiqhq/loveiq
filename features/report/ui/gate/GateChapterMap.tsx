@@ -63,7 +63,7 @@ export const GateChapterMap: FC = () => (
 
     <div className="iug-map" style={{ "--iug-lines": LINES.length } as CSSProperties}>
       <div className="iug-map__card" aria-hidden="true">
-        {LINES.map((line) =>
+        {LINES.map((line, index) =>
           line.kind === "part" ? (
             <p key={line.key} className="iug-map__part">
               {line.text}
@@ -76,6 +76,8 @@ export const GateChapterMap: FC = () => (
               }`}
               data-iug-chapter={line.id}
               data-access={line.access}
+              // Its place down the drawer, for the badges' stagger (initial-unlock-gate.css).
+              style={{ "--iug-i": index } as CSSProperties}
             >
               {line.id === GATE_ACTIVE_CHAPTER ? (
                 <Image
