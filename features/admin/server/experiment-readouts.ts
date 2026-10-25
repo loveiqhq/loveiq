@@ -18,6 +18,7 @@ import {
 } from "@features/attribution/server/labels";
 import { readStampedArms } from "@features/attribution/server/traffic";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
+import { teamUserIds } from "@features/admin/server/ap/team";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { LANDING_TEST_START_AT } from "@shared/experiments/landingVariant";
@@ -75,6 +76,7 @@ export interface ConcludedExperiment {
 
 interface SubmissionRow {
   id: number;
+  user_id?: number | null;
   created_date_time: string | null;
   utm_tracker: string | null;
 }
@@ -270,20 +272,22 @@ export interface ArmOutcomes {
  * test that has ended; their purchases are still followed with no end date.
  */
 export async function loadArmOutcomes(since: string, until?: string): Promise<ArmOutcomes> {
-  const subsPage = await fetchAllPages<
-    SubmissionRow & { app_user: { email: string | null } | null }
-  >(
+  const subsRead = fetchAllPages<SubmissionRow & { app_user: { email: string | null } | null }>(
     (offset, pageSize) =>
       // status=eq.completed is what fetchFunnelStages counts as a completion. /admin's
       // "Finished the survey" step is this scan's count, so it and the headline agree.
       `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
       (until ? `&created_date_time=lt.${until}` : "") +
-      `&select=id,created_date_time,utm_tracker,app_user!fk_survey_submission_user(email)` +
+      `&select=id,user_id,created_date_time,utm_tracker,app_user!fk_survey_submission_user(email)` +
       `&order=id.asc&offset=${offset}&limit=${pageSize}`,
     "survey_submission"
   );
-  // Our own test runs are not readers: the rule that marks a staff payment `is_test`.
-  const readers = subsPage.rows.filter((s) => !isStaffEmail(s.app_user?.email));
+  const [subsPage, team] = await Promise.all([subsRead, teamUserIds()]);
+  // Our own test runs are not readers: an @loveiq.org address, or an account that redeemed the
+  // team's own test coupon (ap_team_user, the rule AP-Analytics counts by).
+  const readers = subsPage.rows.filter(
+    (s) => !isStaffEmail(s.app_user?.email) && !(s.user_id != null && team.has(Number(s.user_id)))
+  );
 
   // Join the quotes by SUBMISSION ID RANGE rather than by their own created date:
   // a quote can be created outside the submission window, and filtering it by date

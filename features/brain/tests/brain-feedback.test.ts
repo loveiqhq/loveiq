@@ -6,6 +6,7 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 import { loadFeedback, renderFeedback } from "@features/brain/server/feedback";
+import { clearTeamCache } from "@features/admin/server/ap/team";
 
 const vote = (over: Record<string, unknown> = {}) => ({
   section_id: "core_archetype",
@@ -25,6 +26,7 @@ const answer = (body: unknown, ok = true) => ({
 describe("loadFeedback", () => {
   beforeEach(() => {
     mockSupabaseFetch.mockReset();
+    clearTeamCache();
   });
 
   it("reads the votes in the window and the Trustpilot reviews, leaving the team's test votes out", async () => {
@@ -68,6 +70,26 @@ describe("loadFeedback", () => {
       'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
       'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
     ]);
+  });
+
+  it("leaves out the votes of the team's test-coupon accounts (ap_team_user, as AP)", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/rest/v1/report_section_feedback")
+        ? answer([vote({ user_id: 5 }), vote({ user_id: 6 }), vote({ user_id: null })])
+        : path.startsWith("/rest/v1/ap_team_user")
+          ? answer([{ id: 6 }])
+          : answer([])
+    );
+    const f = await loadFeedback();
+    expect(f!.votes.map((v) => v.user_id)).toEqual([5, null]);
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain("user_id,app_user(email)");
+  });
+
+  it("is null when the team can't be read, never counting the team's votes", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/rest/v1/ap_team_user") ? answer(null, false) : answer([vote()])
+    );
+    await expect(loadFeedback()).resolves.toBeNull();
   });
 
   it("is null when either read fails, so an outage never reads as silence", async () => {
