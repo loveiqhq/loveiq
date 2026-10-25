@@ -51,8 +51,11 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/** Euros to the cent, from the API's micros. */
-const euros = (micros: unknown) => Math.round(num(micros) / 10_000) / 100;
+/**
+ * Euros from the API's micros, unrounded: a line adds up its rows (a keyword's match types and
+ * ad groups) and is rounded to the cent once (round, below), as the card's sum of its rows is.
+ */
+const euros = (micros: unknown) => num(micros) / 1_000_000;
 
 const cache = new Map<string, { at: number; result: Promise<AdsResult> }>();
 const CACHE_MS = 5 * 60_000;
@@ -154,11 +157,11 @@ async function readAdsSplit(
     ok: true,
     value: {
       campaigns: [...campaigns.values()]
-        .filter((l) => l.cost || l.clicks || l.impressions)
-        .map(round),
+        .map(round)
+        .filter((l) => l.cost || l.clicks || l.impressions),
       keywords: [...keywords.values()]
-        .filter((l) => l.cost || l.clicks || l.impressions)
-        .map(round),
+        .map(round)
+        .filter((l) => l.cost || l.clicks || l.impressions),
     },
   };
 }
