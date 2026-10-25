@@ -73,7 +73,7 @@ export const GatePriceCard = ({ gate, onUnlock, state }: GatePriceCardProps) => 
         <ul className="rpg-card__features">
           {GATE_COPY.card.features(gate.creditCents).map((feature, index) => (
             <li
-              key={feature}
+              key={feature.text}
               className="rpg-card__feature iug-card__feature"
               style={{ animationDelay: `${index * 100}ms` }}
             >
@@ -85,7 +85,12 @@ export const GatePriceCard = ({ gate, onUnlock, state }: GatePriceCardProps) => 
                 unoptimized
                 aria-hidden="true"
               />
-              <span>{feature}</span>
+              <span>
+                {feature.strong ? (
+                  <strong className="iug-card__feature-strong">{feature.strong}</strong>
+                ) : null}
+                {feature.text}
+              </span>
             </li>
           ))}
         </ul>

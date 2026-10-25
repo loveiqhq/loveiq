@@ -326,6 +326,12 @@
   text-align: center;
 }
 
+/* Sync 23.10: the credit leads its line in bold, in the ink of the card's title. */
+.iug-card .iug-card__feature-strong {
+  color: #17121f;
+  font-weight: 700;
+}
+
 /* The four lines come in one after the other (Mark, on the frame); the delay is inline. */
 @media (prefers-reduced-motion: no-preference) {
   .iug-card__feature {

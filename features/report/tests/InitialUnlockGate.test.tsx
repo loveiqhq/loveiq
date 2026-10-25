@@ -143,7 +143,7 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
       "Your Core Archetype and what drives it",
       "How you rank against all 14 archetypes",
       "4x full chapters + 4x partly open",
-      "€10 credit toward the Premium Report",
+      "€10 credit toward your Full Report",
       "Guaranteed Safe & Secure Checkout",
     ]) {
       expect(text).toContain(line);
@@ -195,7 +195,9 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
     const text = pageText();
     expect(text).toContain("€2.49");
     expect(text).toContain("Unlock for €2.49 now");
-    expect(text).toContain("€5 credit toward the Premium Report");
+    expect(text).toContain("€5 credit toward your Full Report");
+    // Sync 23.10: the credit leads its line in bold.
+    expect(screen.getByText("€5 credit").tagName).toBe("STRONG");
     expect(text).toContain("30-day money-back guarantee.");
     expect(text).not.toContain("€1.99");
   });

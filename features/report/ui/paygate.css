@@ -277,6 +277,15 @@
   color: var(--rpg-green);
 }
 
+/* Sync 23.10 (Marcus and Mark): the EUR 1.99 holder's "€10.00 credit applied", bold and
+ * a size up from the strike line's 14/600. The gate's darker green (initial-unlock-gate.css
+ * `.iug-card__guarantee`): the frame's #00892F is under WCAG AA at this size. */
+.rpg-card__off--credit {
+  color: #007f2d;
+  font-size: 15px;
+  font-weight: 700;
+}
+
 .rpg-card__price {
   display: flex;
   align-items: baseline;
