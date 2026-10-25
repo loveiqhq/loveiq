@@ -1,0 +1,14 @@
+/* Development Agreements, 23.10: "User facing frontends on desktop have healthy 75% zoom
+ * ratios (see LinkedIn as reference)". Marcus's screenshots that morning were of this page:
+ * built at 100%, it read over-zoomed on a laptop ("still implementing on 100% zoom vs. 75%").
+ *
+ * From the desktop layout up (Tailwind's xl, 1280px) the page draws at 75%, its fixed
+ * header and sticky price card with it; phones and tablets keep their size. `zoom` scales
+ * layout, not just pixels (unlike a transform), so fixed and sticky positions hold, and the
+ * breakpoints still read the real window. The wizard's map is zoomed the same way
+ * (features/survey/ui/wizard/wizard-desktop.css). */
+@media (min-width: 1280px) {
+  .pts-page {
+    zoom: 0.75;
+  }
+}
