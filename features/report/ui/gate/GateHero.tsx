@@ -33,6 +33,9 @@ function prefersReducedMotion(): boolean {
  * frame: a progress bar fills first, then makes way for "Your Core Archetype was
  * determined", which pulses with the headline (1610:2667, 1604:2387, one 2.5 s loop).
  * Under reduced motion there is no bar and nothing pulses.
+ *
+ * The arrow carries its word, so its visible text is its name (persona walks 24.10: "the
+ * only way out of the gate is a small grey back arrow", which said nothing).
  */
 export const GateHero: FC = () => {
   const [canGoBack] = useState(cameFromSurvey);
@@ -45,13 +48,13 @@ export const GateHero: FC = () => {
           <button
             type="button"
             className="iug-header__back"
-            aria-label={GATE_COPY.back}
             onClick={() => {
               trackInitialGateBack();
               window.history.back();
             }}
           >
             <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
+            <span className="iug-header__back-label">{GATE_COPY.back}</span>
           </button>
         ) : null}
       </header>

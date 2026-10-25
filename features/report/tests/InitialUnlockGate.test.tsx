@@ -338,6 +338,15 @@ describe("around the card", () => {
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
+  // Persona walks 24.10: the arrow alone said nothing. Its word is its name now.
+  it("labels the back arrow with its word, visibly", () => {
+    setReferrer(`${window.location.origin}/survey`);
+    renderGate();
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back.textContent).toBe("Back");
+    expect(back).not.toHaveAttribute("aria-label");
+  });
+
   it("goes back to the survey's last screen with the back arrow", () => {
     setReferrer("https://www.loveiq.org/survey?step=done");
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
