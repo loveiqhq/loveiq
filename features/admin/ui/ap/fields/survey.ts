@@ -248,7 +248,7 @@ team AS (
 `;
 
 /** Shared by the queries below. */
-const STARTS_CTES = `-- Survey starts and submissions for the range, and Completion (submissions ÷ starts). A start:
+export const STARTS_CTES = `-- Survey starts and submissions for the range, and Completion (submissions ÷ starts). A start:
 -- a survey session whose first activity (a step, a draft or a submission) falls in the range
 -- and that answered at least the first question. The team's runs and our test probes are out.
 WITH b AS (

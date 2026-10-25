@@ -22,13 +22,13 @@ const PAYMENTS: FieldTable = {
   watch:
     "Test payments and free (€0) unlocks are left out. A payment refunded in full is no longer 'succeeded'.",
 };
-const REPORTS: FieldTable = {
+export const REPORTS: FieldTable = {
   source: "production",
   table: "personal_report",
   columns: "id, survey_submission_id",
   filters: "None: it links a payment or a reading session to its survey",
 };
-const USERS: FieldTable = {
+export const USERS: FieldTable = {
   source: "production",
   table: "ap_team_user",
   columns:
@@ -95,7 +95,7 @@ const PREPAID: FieldTable = {
   watch:
     "A survey is pay to start's when a completed purchase (paid, kept or refunded) claimed it; a checkout left unpaid is bound to the survey too, and doesn't count.",
 };
-const ADS_LANDING: FieldTable = {
+export const ADS_LANDING: FieldTable = {
   source: "ads",
   table: "landing_page_view",
   columns: "unexpanded_final_url, segments.date, metrics.cost_micros, metrics.clicks",
@@ -108,7 +108,7 @@ const FC_SAME =
   "The Pay to start page's own figures for the range, all traffic, so the two pages agree; its card shows the free survey's row (pay after the report), the one the others are read against.";
 
 /** The free survey's row of the funnel comparison, as the Pay to start page counts it. */
-const FC_FREE = `-- The free survey's row (pay after the report), as the Pay to start page counts it: the range's
+export const FC_FREE = `-- The free survey's row (pay after the report), as the Pay to start page counts it: the range's
 -- finished surveys that weren't bought first and didn't meet the report's EUR 1.99 gate, and
 -- the free landing pages' visitors. The team's surveys and our own probes are left out.
 WITH b AS (
