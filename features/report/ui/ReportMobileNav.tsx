@@ -17,6 +17,8 @@ interface Props {
   activeSectionId: string;
   /** Same contract as the desktop sidebar — every item gets a badge. */
   accessById?: ReadonlyMap<string, ReportNavAccess>;
+  /** Same contract as the desktop sidebar: no badges, every title bold. */
+  fullyUnlocked?: boolean;
   onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
@@ -65,6 +67,7 @@ const ChevronDownIcon: FC = () => (
 const ReportMobileNav: FC<Props> = ({
   activeSectionId,
   accessById,
+  fullyUnlocked = false,
   onReferFriend,
   onSectionClick,
   onShareClick,
@@ -398,7 +401,9 @@ const ReportMobileNav: FC<Props> = ({
                   </p>
                   {part.items.map((item, idx) => {
                     const isActive = activeSectionId === item.id;
-                    const access = accessById?.get(item.id) ?? "free";
+                    const access = fullyUnlocked
+                      ? "unlocked"
+                      : (accessById?.get(item.id) ?? "free");
                     // Cap stagger so the last items don't lag on a long list.
                     const delayIdx = Math.min(idx, 8);
                     return (
@@ -431,7 +436,7 @@ const ReportMobileNav: FC<Props> = ({
                         }}
                       >
                         <span className="report-mobile-nav__label">{item.label}</span>
-                        <ReportNavBadge access={access} />
+                        {!fullyUnlocked && <ReportNavBadge access={access} />}
                       </a>
                     );
                   })}
