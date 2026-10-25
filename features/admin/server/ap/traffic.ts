@@ -18,7 +18,7 @@ import { countryCodesByTier } from "@features/pricing/logic/reportPricing";
 import { reportingDay } from "@shared/time/reporting-day";
 import { COUNTRIES, COUNTRY_CODE_MAP } from "@/data/countries";
 
-import type { AdsResult, AdsLine } from "./ads";
+import type { AdPreview, AdsResult, AdsLine } from "./ads";
 import { addDays, shortDate } from "./days";
 import {
   classifySource,
@@ -208,6 +208,16 @@ export interface IntentRow {
   counts: Counts;
 }
 
+/** A keyword with the ad its searchers saw, and what its clicks brought (Marcus, 15 Oct). */
+export interface AdSeenRow {
+  key: string;
+  keyword: string;
+  /** Its campaign's name. */
+  campaign: string;
+  ad: AdPreview;
+  counts: Counts;
+}
+
 export interface CohortRow {
   source: string;
   users: number;
@@ -295,6 +305,8 @@ export interface TrafficPayload extends PageHead {
   trend: ChannelTrend;
   breakdowns: Record<BreakdownKey, PerfTable>;
   intent: { creative: { blocked: string }; keyword: { rows: IntentRow[]; why: string | null } };
+  /** Each keyword's ad as a searcher sees it, by spend; why the section is blank, when it is. */
+  adsSeen: { rows: AdSeenRow[]; why: string | null };
   cohorts: { rows: CohortRow[]; why: string | null; note: string };
   experiments: { arms: ExperimentArm[]; note: string; why: string | null };
   audience: { dims: AudienceDim[] };
@@ -1610,6 +1622,24 @@ export function buildTraffic(input: {
     counts: r.counts,
   }));
 
+  // ---- the ads as searchers see them: each keyword's row, with the ad its searchers saw most
+  const adsSeenRows: AdSeenRow[] = tables.keyword.blocked
+    ? []
+    : tables.keyword.rows.flatMap((r) => {
+        const ad = adsOk?.keywords.find((l) => `${l.campaign}|${l.key}` === r.key)?.ad;
+        return ad ? [{ key: r.key, keyword: r.name, campaign: r.sub, ad, counts: r.counts }] : [];
+      });
+  const adsUnread =
+    !!adsOk && adsOk.keywords.length > 0 && adsOk.keywords.every((l) => l.ad === undefined);
+  const adsSeenWhy =
+    tables.keyword.blocked ??
+    adsWhy ??
+    (adsUnread
+      ? "Google Ads' search ads could not be read just now."
+      : adsSeenRows.length === 0
+        ? "No keyword with a search ad had clicks or finishers in this range."
+        : null);
+
   // ---- cohorts by acquisition source
   const nowMs = now.getTime();
   const acquired = subs.filter(
@@ -1721,6 +1751,7 @@ export function buildTraffic(input: {
       creative: { blocked: tables.creative.blocked! },
       keyword: { rows: keywordRows, why: tables.keyword.blocked ?? adsWhy },
     },
+    adsSeen: { rows: adsSeenRows, why: adsSeenWhy },
     cohorts: {
       rows: cohortRows,
       why: tablet,

@@ -288,6 +288,20 @@ const payload: TrafficPayload = {
       why: null,
     },
   },
+  adsSeen: {
+    rows: keywordRows.map((r, i) => ({
+      key: r.key,
+      keyword: r.name,
+      campaign: r.sub,
+      ad: {
+        headlines: [`Headline ${i + 1}`, "Take The Test", "LoveIQ"],
+        descriptions: ["Discover your sexual archetype."],
+        display: "www.loveiq.org/Test",
+      },
+      counts: r.counts,
+    })),
+    why: null,
+  },
   cohorts: {
     rows: [
       {
@@ -491,6 +505,7 @@ describe("the Traffic page as drawn", () => {
       "Performance by channel",
       "Funnel leakage by channel",
       "Buyers vs curiosity clicks",
+      "Ads as searchers see them",
       "Cohorts by acquisition source",
       "Experiments",
       "Audience by source",
@@ -502,6 +517,7 @@ describe("the Traffic page as drawn", () => {
       "performance",
       "leakage",
       "intent",
+      "ads-seen",
       "cohorts",
       "experiments",
       "audience",
@@ -515,6 +531,7 @@ describe("the Traffic page as drawn", () => {
       "Performance #performance",
       "Funnel leakage #leakage",
       "Creatives & intent #intent",
+      "Ads as seen #ads-seen",
       "Cohorts #cohorts",
       "Experiments #experiments",
       "Audience #audience",
@@ -621,6 +638,70 @@ describe("the Traffic page as drawn", () => {
     breakDownBy("assessment");
     expect(names(perf("assessment"))).toEqual(["Assessment A", "Assessment B"]);
     clean();
+  });
+
+  // Marcus, 15 Oct: the ads as searchers see them, with what each keyword's clicks brought.
+  it("shows each ad as Google lays it out, with its keywords' cost, payment CVR and revenue per survey", () => {
+    // The first two keywords share an ad group, so its ad.
+    const shared = payload.adsSeen.rows[0]!.ad;
+    view.payload = {
+      ...payload,
+      adsSeen: {
+        rows: payload.adsSeen.rows.map((r, i) => (i < 2 ? { ...r, ad: shared } : r)),
+        why: null,
+      },
+    };
+    render(<ApTraffic />);
+    const section = within(document.getElementById("ads-seen")!);
+    const first = section.getAllByRole("article")[0]!;
+    expect(first).toHaveAccessibleName("Ad 1: Headline 1 | Take The Test | LoveIQ");
+    const card = within(first);
+    expect(card.getByText("Sponsored")).toBeTruthy();
+    expect(card.getByText("www.loveiq.org/Test")).toBeTruthy();
+    expect(card.getByText("Headline 1 | Take The Test | LoveIQ")).toBeTruthy();
+    expect(card.getByText("Discover your sexual archetype.")).toBeTruthy();
+    const table = card.getByRole("table", { name: "Keywords for ad 1" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    // Both keywords of the shared ad, each with its own figures: €120 over 20 finished surveys.
+    expect(rows.map((r) => within(r).getByRole("rowheader").firstChild!.textContent)).toEqual(
+      payload.adsSeen.rows.slice(0, 2).map((r) => r.keyword)
+    );
+    expect(within(rows[0]!).getAllByRole("cell")[0]!.textContent).toBe("€120");
+    expect(within(rows[0]!).getAllByRole("cell")[1]!.textContent).toBe("€6.00");
+    for (const label of ["Spend", "Cost / survey", "Payment CVR", "Rev. / survey"])
+      expect(within(table).getByRole("button", { name: `About ${label}` })).toBeTruthy();
+    clean();
+  });
+
+  it("shows four ads by spend, then all of them on request", () => {
+    const one = payload.adsSeen.rows[0]!;
+    const rows = Array.from({ length: 6 }, (_, i) => ({
+      ...one,
+      key: `k${i}`,
+      keyword: `kw ${i}`,
+      ad: { ...one.ad, headlines: [`Ad ${i}`] },
+    }));
+    view.payload = { ...payload, adsSeen: { rows, why: null } };
+    render(<ApTraffic />);
+    const section = within(document.getElementById("ads-seen")!);
+    expect(section.getAllByRole("article")).toHaveLength(4);
+    fireEvent.click(section.getByRole("button", { name: "Show all 6 ads" }));
+    expect(section.getAllByRole("article")).toHaveLength(6);
+    fireEvent.click(section.getByRole("button", { name: "Show fewer" }));
+    expect(section.getAllByRole("article")).toHaveLength(4);
+  });
+
+  it("says why there are no ads to show", () => {
+    view.payload = {
+      ...payload,
+      adsSeen: { rows: [], why: "Google Ads' search ads could not be read just now." },
+    };
+    render(<ApTraffic />);
+    expect(
+      within(document.getElementById("ads-seen")!).getByText(
+        "Google Ads' search ads could not be read just now."
+      )
+    ).toBeTruthy();
   });
 
   it("shades each audience group's Pre-unlock rate like its other rates, as drawn", () => {

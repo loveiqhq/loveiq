@@ -126,6 +126,48 @@ describe("Traffic page builder", () => {
     expect(p.quality.why).toBeNull();
   });
 
+  // Marcus, 15 Oct: each keyword's ad as searchers see it, with what its clicks brought.
+  it("ads as searchers see them: the keyword's row with its ad, by spend; why when blank", () => {
+    const preview = {
+      headlines: ["Am I Normal?", "Take The Test", "LoveIQ"],
+      descriptions: ["Discover your sexual archetype."],
+      display: "www.loveiq.org/Test",
+    };
+    const withAd: AdsResult = {
+      ok: true,
+      value: { ...ads.value!, keywords: [{ ...ads.value!.keywords[0]!, ad: preview }] },
+    } as AdsResult;
+    const p = traffic({ ads: withAd });
+    expect(p.adsSeen.why).toBeNull();
+    expect(p.adsSeen.rows).toEqual([
+      expect.objectContaining({
+        key: "price_time_test|love test",
+        keyword: "love test",
+        campaign: "Price + Time Test",
+        ad: preview,
+      }),
+    ]);
+    // The Performance table's own counts for the keyword: its spend, finishers and payers.
+    expect(p.adsSeen.rows[0]!.counts).toMatchObject({ spend: 20, completes: 2, payers: 1 });
+    // The keyword's ad group has no search ad: no card, and why.
+    const none = traffic({
+      ads: {
+        ok: true,
+        value: { ...ads.value!, keywords: [{ ...ads.value!.keywords[0]!, ad: null }] },
+      } as AdsResult,
+    });
+    expect(none.adsSeen).toEqual({
+      rows: [],
+      why: "No keyword with a search ad had clicks or finishers in this range.",
+    });
+    // The search ads weren't read (no ad at all): say so, never "none".
+    expect(traffic().adsSeen.why).toBe("Google Ads' search ads could not be read just now.");
+    // Another source's filter: Google Ads' keywords don't apply.
+    expect(
+      traffic({ ads: withAd, filters: { ...filters, source: "organic_search" } }).adsSeen.rows
+    ).toEqual([]);
+  });
+
   it("totals: the Google Ads rows added up, and everyone for device, tier and visitor type", () => {
     const p = traffic();
     // Both campaigns: €70 + €30, 35 + 15 clicks; the three Google Ads finishers.
