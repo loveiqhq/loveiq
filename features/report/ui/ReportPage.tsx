@@ -1021,6 +1021,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     }
     return access;
   }, [resolvedSections, accessPlan, viewArchetypeTier, isV3, isV4, initialGateOpen]);
+  // The whole report is this reader's (sync 23.10): the navs drop every chip and padlock
+  // and set each title bold. navAccessById keeps its tiers, which the chapter locks read.
+  const navFullyUnlocked = ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype);
 
   /**
    * Build-time, deliberately not a runtime flag or a query parameter. A reader on
@@ -1124,6 +1127,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             <ReportMobileNav
               activeSectionId={activeSectionId}
               accessById={navAccessById}
+              fullyUnlocked={navFullyUnlocked}
               onDrawerOpened={() => {
                 trackReportChapterMenuOpened({
                   archetype: viewArchetype || null,
@@ -1163,6 +1167,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 <ReportDesktopSidebar
                   activeSectionId={activeSectionId}
                   accessById={navAccessById}
+                  fullyUnlocked={navFullyUnlocked}
                   onReferFriend={() => {
                     trackReferFriendOpened({ source: "sidebar" });
                     setShowInvite(true);

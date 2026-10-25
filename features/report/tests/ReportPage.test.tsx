@@ -2226,17 +2226,19 @@ describe("ReportPage", () => {
       expect(lockedIds(container).sort()).toEqual(lockedInNav.sort());
     });
 
-    it("opens every gated chapter's badge for a full-report reader", () => {
+    // Sync 23.10 (Mark, Marcus, Fatih): a reader who owns the whole report sees no FREE
+    // chip and no padlock, and every title bold.
+    it("gives a full-report reader a nav that is all theirs: no chips, no padlocks", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withPlan("full_report"));
 
       const { container } = render(<ReportPage />);
       const tier = tiers(container);
 
-      expect([...tier.values()]).not.toContain("locked");
+      expect(new Set(tier.values())).toEqual(new Set(["unlocked"]));
+      expect(tier.get("introduction")).toBe("unlocked");
       expect(tier.get("power_orientation")).toBe("unlocked");
-      expect(tier.get(LIBIDO)).toBe("unlocked");
-      expect(tier.get("introduction")).toBe("free");
+      expect(container.querySelector(".report-sidebar .report-nav-badge")).toBeNull();
     });
 
     it("opens what Essentials opens, and locks the rest", () => {
