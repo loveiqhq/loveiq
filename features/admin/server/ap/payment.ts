@@ -813,7 +813,12 @@ export function buildPayment(input: {
         : ""
     }`,
   };
-  for (const t of segments) t.note = notes[t.key] ?? "";
+  // Pre CVR is blank over a range that starts before the EUR 1.99 was on sale, as on its tile.
+  const preFrom =
+    preLive && facts.from < PRE_ON_SALE_FROM
+      ? ` Pre CVR counts from ${rangeLabel(PRE_ON_SALE_FROM, PRE_ON_SALE_FROM)}, the first whole day the €1.99 was on sale: pick a range from then.`
+      : "";
+  for (const t of segments) t.note = (notes[t.key] ?? "") + preFrom;
 
   // ---- the pricing tests: each a stretch of unchanged price lists (get_price_list_changes),
   // read as the experiment readouts read them: the readers who finished in the stretch, each on

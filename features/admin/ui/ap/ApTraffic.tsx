@@ -1791,6 +1791,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
     .join(" ")}`;
   const perfCols = "minmax(180px, 2fr) repeat(5, minmax(100px, 1fr))";
   const complete = d.perf.map((p) => p.completeRate);
+  const pre = d.perf.map((p) => p.preRate);
   const full = d.perf.map((p) => p.fullRate);
   const read = d.perf.map((p) => p.readMs);
   return (
@@ -1916,7 +1917,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
                 text={fmt("pct", p.completeRate, 1)}
                 shade={band(complete, p.completeRate)}
               />
-              <Cell pad="py-[9px]" text={fmt("pct", p.preRate, 1)} />
+              <Cell pad="py-[9px]" text={fmt("pct", p.preRate, 1)} shade={band(pre, p.preRate)} />
               <Cell
                 pad="py-[9px]"
                 text={fmt("pct", p.fullRate, 1)}

@@ -33,7 +33,18 @@ import {
   periodTitle,
   type Tip,
 } from "./hover";
-import { Busy, Eyebrow, Failed, KpiTileV2, Loading, PageHeader, RangeLine } from "./kit";
+import {
+  Busy,
+  Eyebrow,
+  Failed,
+  KpiTileV2,
+  Loading,
+  PageHeader,
+  RangeLine,
+  STANDING,
+  STANDING_WORD,
+  standingOf,
+} from "./kit";
 import { useApFilters } from "./useApFilters";
 
 const COLOR: Record<ChartColor, string> = { purple: "#795fc8", ink: "#161021", green: "#2e7d5b" };
@@ -770,7 +781,8 @@ function Assessments({ a, from }: { a: FocusPayload["assessments"]; from: string
   );
 }
 
-const FC_COLUMNS = "minmax(210px, 1.8fr) repeat(7, minmax(96px, 1fr)) minmax(140px, 1.2fr)";
+// Nine figures and the funnel's name fit a 1440px screen beside the menu without scrolling.
+const FC_COLUMNS = "minmax(190px, 1.6fr) repeat(8, minmax(88px, 1fr)) minmax(124px, 1.1fr)";
 
 /** "0.01×", as the design writes ROAS. */
 const times = (v: number | null) => (v === null ? EMPTY : `${fmt("ratio", v, 2)}×`);
@@ -784,15 +796,60 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
   const live = f.rows.find((r) => r.key === "after");
   const n = (v: number | null) => fmt("count", v);
   const eur = (v: number | null, digits: number) => fmt("eur", v, digits);
-  const cols: Array<{ label: string; k: string; cell: (r: FunnelRow) => string }> = [
+  // As drawn: the running funnels' best green and worst red, where higher (or lower) is better.
+  const cols: Array<{
+    label: string;
+    k: string;
+    cell: (r: FunnelRow) => string;
+    value?: (r: FunnelRow) => number | null;
+    better?: "high" | "low";
+  }> = [
     { label: "Visitors", k: "focus.fc-visitors", cell: (r) => n(r.visitors) },
     { label: "Ad spend", k: "focus.fc-spend", cell: (r) => eur(r.spend, 0) },
-    { label: "Paying customers", k: "focus.fc-paying", cell: (r) => n(r.paying) },
-    { label: "Visitor → paid", k: "focus.fc-v2p", cell: (r) => fmt("pct", r.v2p, 2) },
-    { label: "Revenue / visitor", k: "focus.fc-rpv", cell: (r) => eur(r.rpv, 3) },
-    { label: "Cost / paying customer", k: "focus.fc-cpp", cell: (r) => eur(r.cpp, 2) },
-    { label: "ROAS", k: "focus.fc-roas", cell: (r) => times(r.roas) },
+    {
+      label: "Paying customers",
+      k: "focus.fc-paying",
+      cell: (r) => n(r.paying),
+      value: (r) => r.paying,
+      better: "high",
+    },
+    {
+      label: "Visitor → paid",
+      k: "focus.fc-v2p",
+      cell: (r) => fmt("pct", r.v2p, 2),
+      value: (r) => r.v2p,
+      better: "high",
+    },
+    {
+      label: "Revenue / visitor",
+      k: "focus.fc-rpv",
+      cell: (r) => eur(r.rpv, 3),
+      value: (r) => r.rpv,
+      better: "high",
+    },
+    {
+      label: "Cost / paying customer",
+      k: "focus.fc-cpp",
+      cell: (r) => eur(r.cpp, 2),
+      value: (r) => r.cpp,
+      better: "low",
+    },
+    {
+      label: "ROAS",
+      k: "focus.fc-roas",
+      cell: (r) => times(r.roas),
+      value: (r) => r.roas,
+      better: "high",
+    },
+    {
+      label: "Refund rate",
+      k: "focus.fc-refund",
+      cell: (r) => fmt("pct", r.refundRate, 1),
+      value: (r) => r.refundRate,
+      better: "low",
+    },
   ];
+  const running = f.rows.filter((r) => r.live);
   // Each column's card shows the free survey's figures, the one live row.
   const parts: Record<string, [string, string] | undefined> = live
     ? {
@@ -800,6 +857,9 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
         "focus.fc-rpv": [eur(live.revenue, 2), n(live.visitors)],
         "focus.fc-cpp": [eur(live.spend, 2), n(live.paying)],
         "focus.fc-roas": [eur(live.revenue, 2), eur(live.spend, 2)],
+        ...(live.refunds && {
+          "focus.fc-refund": [n(live.refunds.refunded), n(live.refunds.payers)],
+        }),
       }
     : {};
   return (
@@ -823,7 +883,7 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
         aria-label="Funnel comparison, scrolls sideways"
         className="overflow-x-auto rounded-[14px] border border-ap-line"
       >
-        <div role="table" aria-label="Funnel comparison" className="min-w-[1060px]">
+        <div role="table" aria-label="Funnel comparison" className="min-w-[1030px]">
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: FC_COLUMNS }}>
             <span
               role="columnheader"
@@ -866,15 +926,23 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
                 {r.label}
                 <span className="text-[11px] font-medium text-ap-muted">{r.sub}</span>
               </span>
-              {cols.map((c) => (
-                <span
-                  key={c.label}
-                  role="cell"
-                  className="flex flex-col justify-center px-3 py-2.5 text-right text-[13px] font-medium tabular-nums text-ap-ink"
-                >
-                  {c.cell(r)}
-                </span>
-              ))}
+              {cols.map((c) => {
+                const tone =
+                  r.live && c.value
+                    ? standingOf(running.map(c.value), c.value(r), c.better)
+                    : "plain";
+                return (
+                  <span
+                    key={c.label}
+                    role="cell"
+                    title={tone === "plain" ? undefined : STANDING_WORD[tone]}
+                    className={`flex flex-col justify-center px-3 py-2.5 text-right text-[13px] font-medium tabular-nums ${STANDING[tone]}`}
+                  >
+                    {c.cell(r)}
+                    {tone !== "plain" && <span className="sr-only"> ({STANDING_WORD[tone]})</span>}
+                  </span>
+                );
+              })}
               <span
                 role="cell"
                 className={`flex flex-col justify-center px-3 py-2.5 text-[13px] font-bold ${r.live ? "text-ap-ink" : "text-ap-muted"}`}
@@ -888,7 +956,8 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
       <div className="flex flex-col gap-1">
         <p className="m-0 text-xs leading-relaxed text-ap-muted">
           The Pay to start page&apos;s figures for this range, all traffic: step by step and week by
-          week there. Valid yet: enough paying customers for a 95% read against the free survey.
+          week there. Green is the best of the running funnels in a column, red the worst. Valid
+          yet: enough paying customers for a 95% read against the free survey.
         </p>
         {f.notes.map((x) => (
           <p key={x} className="m-0 text-xs leading-relaxed text-ap-muted">

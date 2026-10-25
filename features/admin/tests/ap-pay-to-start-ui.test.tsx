@@ -206,8 +206,13 @@ describe("ApPayToStart", () => {
     view.payload = payload;
     render(<ApPayToStart />);
     expect(screen.queryByText(/Paid traffic only: visits are the ad clicks/)).toBeNull();
+    // Mark, 23 Oct: the completions as a number, and why visits outnumber the ad clicks.
+    expect(cells("Survey completions")).toEqual(["300", "5", "29", "—"]);
+    expect(screen.getByText(/so there are more of them than ad clicks/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Paid traffic only" }));
     expect(cells("Visits")).toEqual(["1,200", "600", "640", "—"]);
+    expect(cells("Survey completions")).toEqual(["260", "5", "28", "—"]);
+    expect(screen.queryByText(/so there are more of them than ad clicks/)).toBeNull();
     expect(cells("Paying customers")).toEqual(["1", "6", "30", "—"]);
     expect(cells("Ad spend")).toEqual(["€900", "€450", "€450", "—"]);
     expect(screen.getByText(/Paid traffic only: visits are the ad clicks/)).toBeTruthy();
@@ -230,9 +235,11 @@ describe("ApPayToStart", () => {
     ]);
     expect(within(card).getByText("€121.66")).toBeTruthy();
     expect(within(card).getByText("€0.217")).toBeTruthy();
-    const off = screen.getByRole("region", { name: "€1.99 after the survey" });
+    // Only the funnel's name on the card (Marcus, 23 Oct): off is dimmed, dashed and named.
+    const off = screen.getByRole("region", { name: "€1.99 after the survey (off)" });
     expect(off.className).toContain("border-dashed");
     expect(within(off).getAllByText("—").length).toBeGreaterThan(0);
+    expect(off.textContent).not.toContain("Off");
   });
 
   it("draws a line per funnel by week, the gate's legend saying it is off", () => {

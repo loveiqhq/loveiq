@@ -113,7 +113,7 @@ export function Info({
         open?.({ k, label: name, worked, trend, from: ref.current });
       }}
       className={`-mx-[3px] -my-[6px] inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 align-middle normal-case tracking-normal ${
-        def ? "text-[#b8b2c4] hover:text-ap-purple" : "text-ap-line"
+        def ? "text-[#b8b2c4] hover:text-ap-purple data-[open]:text-ap-purple" : "text-ap-line"
       }`}
     >
       <Glyph />
@@ -653,6 +653,12 @@ export function FieldInfoProvider({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState<Open | null>(null);
   const show = useCallback((o: Open) => setOpen(o), []);
+  // The open card's icon stays violet (the design: "violet only when its card is open").
+  const from = open?.from ?? null;
+  useEffect(() => {
+    from?.setAttribute("data-open", "");
+    return () => from?.removeAttribute("data-open");
+  }, [from]);
   useEffect(() => {
     const d = ref.current;
     // jsdom (tests) has no showModal: an open attribute shows the card there.

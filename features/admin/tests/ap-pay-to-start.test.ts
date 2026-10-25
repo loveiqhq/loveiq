@@ -119,7 +119,7 @@ describe("offerOfLanding", () => {
 
 describe("buildPayToStart", () => {
   // One week, three funnels running, the gate off.
-  const week = () =>
+  const week = (over: Partial<PtsInput> = {}) =>
     buildPayToStart(
       input({
         facts: {
@@ -179,8 +179,42 @@ describe("buildPayToStart", () => {
         ],
         openedSubmissions: new Set([501, 502]),
         laterPays: new Map([[502, [{ amount: 19.99, plan: "full_report" }]]]),
+        ...over,
       })
     );
+
+  it("counts refunds among those who paid, and pay to start's paying buyers who then finished", () => {
+    // Refunds not read: no refund rate, never 0%.
+    expect(funnel(week(), "after").refunds).toBeUndefined();
+    // 3 took the free survey and was refunded in full (no sale left); 502 (€1.99) in part.
+    const p = week({ refundedSubs: new Set([3, 502]) });
+    expect(funnel(p, "after").refunds).toEqual({ payers: 2, refunded: 1 });
+    expect(funnel(p, "full").refunds).toEqual({ payers: 1, refunded: 0 });
+    expect(funnel(p, "pre").refunds).toEqual({ payers: 2, refunded: 1 });
+    expect(funnel(p, "full").paidFinished).toBe(1);
+    // 4 paid and hasn't finished the survey yet.
+    expect(funnel(p, "pre").paidFinished).toBe(1);
+  });
+
+  it("finishes only the paying buyers: a 100% code's and a refunded one's surveys aren't theirs", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, consumed_submission_id: 601 }),
+          ent({ id: 2, amount_cents: 0, consumed_submission_id: 602 }),
+          ent({ id: 3, status: "refunded", consumed_submission_id: 603 }),
+        ],
+        boughtFirst: new Set([601, 602, 603]),
+        refundedSubs: new Set([603]),
+      })
+    );
+    const full = funnel(p, "full");
+    expect(full.steps.find((s) => s.label === "Paid €29.99")!.n).toBe(1);
+    expect(full.steps.find((s) => s.label === "Survey finished")!.n).toBe(3);
+    expect(full.paidFinished).toBe(1);
+    // The 100% code took no money: not among those who paid. The refunded buyer is.
+    expect(full.refunds).toEqual({ payers: 2, refunded: 1 });
+  });
 
   it("counts pay after the report from the free survey, its ads from every other page", () => {
     const after = funnel(week(), "after");

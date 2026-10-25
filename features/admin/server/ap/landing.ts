@@ -218,8 +218,8 @@ export interface PayFirstRow {
   paid: number;
   /** Paid ÷ visitors. */
   v2p: number | null;
-  /** Buyers (a 100% code's too) who finished the survey. */
-  finished: number;
+  /** Of the paying buyers ("Paid"), the share who then finished the survey. */
+  p2c: number | null;
 }
 
 /** Pay to start page notes about what this table doesn't show: ads, and the free survey's funnels. */
@@ -238,7 +238,6 @@ function payFirstRows(pts: PtsPayload): PayFirstRow[] {
     const step = (pick: (label: string) => boolean) => x.steps.find((s) => pick(s.label))?.n ?? 0;
     const visitors = x.steps.find((s) => s.label === "Visits")?.n ?? null;
     const paid = step((l) => l.startsWith("Paid"));
-    const finished = step((l) => l === "Survey finished");
     return [
       {
         key,
@@ -248,7 +247,7 @@ function payFirstRows(pts: PtsPayload): PayFirstRow[] {
         checkout: step((l) => l === "Checkout started"),
         paid,
         v2p: visitors ? paid / visitors : null,
-        finished,
+        p2c: paid > 0 && x.paidFinished !== undefined ? x.paidFinished / paid : null,
       },
     ];
   });

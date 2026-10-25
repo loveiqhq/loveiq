@@ -445,8 +445,11 @@ describe("buildLanding", () => {
             { label: "Visits", n: 40 },
             { label: "Checkout started", n: 4 },
             { label: "Paid €29.99", n: 2 },
-            { label: "Survey finished", n: 1 },
+            // A 100% code's buyer finished too: no share of Paid.
+            { label: "Survey finished", n: 2 },
           ],
+          // One of the two paying buyers has finished the survey.
+          paidFinished: 1,
         },
       ],
       notes: [
@@ -470,7 +473,7 @@ describe("buildLanding", () => {
         pts,
       }).payFirst!;
     expect(at("all").rows).toEqual([
-      expect.objectContaining({ key: "full", visitors: 40, checkout: 4, paid: 2, finished: 1 }),
+      expect.objectContaining({ key: "full", visitors: 40, checkout: 4, paid: 2, p2c: 0.5 }),
     ]);
     // Only the notes about the pages' own steps: not ads, nor the free survey's funnels.
     expect(at("all").notes).toEqual([

@@ -28,6 +28,9 @@ import {
   Pills,
   SectionHead,
   SectionNav,
+  STANDING,
+  STANDING_WORD,
+  standingOf,
   useHashScroll,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
@@ -139,6 +142,16 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
         unit: "count",
         value: (_, v) => v.visits,
       },
+      // Mark, 23 Oct: the completions as a number between the visits and the customers.
+      {
+        label: "Survey completions",
+        hint:
+          traffic === "ads"
+            ? "Surveys finished by people who came through a Google Ads click"
+            : "Surveys finished",
+        unit: "count",
+        value: (_, v) => v.finished,
+      },
       {
         label: "Visit → survey completion",
         hint: "Surveys finished ÷ visits",
@@ -226,31 +239,6 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
   },
 ];
 
-type Tone = "plain" | "good" | "bad";
-const TONE: Record<Tone, string> = {
-  plain: "text-ap-ink",
-  good: "bg-ap-good/[0.08] text-ap-good-ink",
-  bad: "bg-ap-bad/[0.07] text-ap-bad-ink",
-};
-
-/** What the colour says, for a screen reader and on hover (colour alone is no answer). */
-const TONE_WORD: Record<Exclude<Tone, "plain">, string> = {
-  good: "best of the running funnels",
-  bad: "worst of the running funnels",
-};
-
-/** Green for the best of the running funnels on a line, red for the worst; none for a tie. */
-function toneOf(row: Row, v: number | null, values: Array<number | null>): Tone {
-  const xs = values.filter((x): x is number => x !== null && Number.isFinite(x));
-  if (!row.better || v === null || !Number.isFinite(v) || xs.length < 2) return "plain";
-  const lo = Math.min(...xs);
-  const hi = Math.max(...xs);
-  if (lo === hi) return "plain";
-  const best = row.better === "high" ? hi : lo;
-  const worst = row.better === "high" ? lo : hi;
-  return v === best ? "good" : v === worst ? "bad" : "plain";
-}
-
 function Tag({ live }: { live: boolean }) {
   return (
     <span className={`text-[11px] font-semibold ${live ? "text-ap-good-ink" : "text-ap-label"}`}>
@@ -325,15 +313,17 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
                         </td>
                       );
                     const v = r.value(f, f[traffic]);
-                    const tone = toneOf(r, v, values);
+                    const tone = standingOf(values, v, r.better);
                     return (
                       <td
                         key={f.key}
-                        title={tone === "plain" ? undefined : TONE_WORD[tone]}
-                        className={`px-3 py-2.5 text-right ${r.core ? "text-[15px] font-bold" : "font-medium"} ${TONE[tone]}`}
+                        title={tone === "plain" ? undefined : STANDING_WORD[tone]}
+                        className={`px-3 py-2.5 text-right ${r.core ? "text-[15px] font-bold" : "font-medium"} ${STANDING[tone]}`}
                       >
                         {show(r.unit, v)}
-                        {tone !== "plain" && <span className="sr-only"> ({TONE_WORD[tone]})</span>}
+                        {tone !== "plain" && (
+                          <span className="sr-only"> ({STANDING_WORD[tone]})</span>
+                        )}
                       </td>
                     );
                   })}
@@ -362,13 +352,12 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
           return (
             <section
               key={f.key}
-              aria-label={f.label}
+              // Only the funnel's name on the card (Marcus, 23 Oct): an off funnel is dimmed and
+              // dashed, and says so to a screen reader.
+              aria-label={f.live ? f.label : `${f.label} (off)`}
               className={`flex flex-col gap-3 rounded-[14px] border border-ap-line p-4 ${f.live ? "" : "border-dashed opacity-[0.72]"}`}
             >
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
-                {!f.live && <Tag live={false} />}
-              </span>
+              <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
               <ol className="m-0 flex list-none flex-col gap-3 p-0">
                 {f.steps.map((s) => {
                   const share =
@@ -778,11 +767,17 @@ export default function ApPayToStart() {
               }
             />
             <MetricsTable funnels={data.funnels} traffic={traffic} />
-            {traffic === "ads" && (
+            {traffic === "ads" ? (
               <p className="m-0 text-xs leading-snug text-ap-muted">
                 Paid traffic only: visits are the ad clicks; customers, finished surveys and revenue
                 are the people whose survey or purchase came through a Google Ads click. Ad spend is
                 the same in both views.
+              </p>
+            ) : (
+              <p className="m-0 text-xs leading-snug text-ap-muted">
+                Visits are everyone who came to the funnel&apos;s pages each day, from ads and every
+                other source, so there are more of them than ad clicks. Paid traffic only counts the
+                ad clicks.
               </p>
             )}
           </Card>

@@ -289,19 +289,32 @@ describe("the headline tiles", () => {
     const p = heroWeek();
     screenData.payload = p;
     render(createElement(FieldInfoProvider, null, createElement(ApLanding)));
-    fireEvent.click(screen.getByRole("button", { name: "About Survey start CVR" }));
+    const icon = screen.getByRole("button", { name: "About Survey start CVR" });
+    fireEvent.click(icon);
+    // Its icon stays violet while its card is open (the design), and only its own.
+    expect(icon).toHaveAttribute("data-open");
+    expect(icon.className).toContain("data-[open]:text-ap-purple");
+    expect(document.querySelectorAll("[data-open]")).toHaveLength(1);
     const tile = p.tiles.find((t) => t.key === "start-cvr")!;
     const worked = `${fmt("count", p.counts.starts)} ÷ ${fmt("count", p.counts.visits)} = ${fmt("pct", tile.value)}`;
     expect(screen.getByText(worked)).toBeTruthy();
     expect(p.counts.starts! / p.counts.visits!).toBeCloseTo(tile.value!);
     expect(screen.getByText("Loading the last 12 weeks…")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(icon).not.toHaveAttribute("data-open");
   });
 });
 
 describe("the pay-to-start section", () => {
   /** One pay-to-start funnel as the Pay to start page reads it, with its Step by step steps. */
   const funnel = (key: "full" | "pre", price: string, steps: number[]): PtsFunnel => {
-    const [visits, checkout, paid, finished] = steps as [number, number, number, number];
+    const [visits, checkout, paid, finished, paidFinished] = steps as [
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
     const v = { visits, finished, paid, revenue: 0, revenueFinished: 0 };
     const all = { ...v, m: measuresOf(null, null, v) };
     return {
@@ -319,11 +332,16 @@ describe("the pay-to-start section", () => {
         { label: "Survey finished", n: finished, pays: false },
         { label: "Report opened", n: finished, pays: false },
       ],
+      paidFinished,
     };
   };
   const pts: PtsPayload = {
     range: { from: "2026-10-24", to: "2026-10-30" },
-    funnels: [funnel("full", "€29.99", [400, 20, 8, 7]), funnel("pre", "€1.99", [300, 30, 15, 16])],
+    funnels: [
+      funnel("full", "€29.99", [400, 20, 8, 7, 6]),
+      // A 100% code's buyers finish too: 16 finished, 12 of the 15 who paid.
+      funnel("pre", "€1.99", [300, 30, 15, 16, 12]),
+    ],
     weeks: [],
     notes: ["4 visits to the pay-to-start pages came before the two pages were counted apart."],
   };
@@ -346,28 +364,42 @@ describe("the pay-to-start section", () => {
     ).toEqual([
       "Landing page",
       "Visitors",
+      "Saw the price",
       "Started checkout",
       "Paid",
       "Visitor → paid",
-      "Finished survey",
+      "Started survey",
+      "Paid → completed",
     ]);
     const [, full, pre] = within(table).getAllByRole("row");
     expect(within(full!).getByRole("rowheader")).toHaveTextContent(
       "/sexual-archetype · €29.99Pay to start · full"
     );
-    expect(
-      within(full!)
+    // What the eye reads, and the colour: the better page green, the other red, as drawn.
+    const seen = (row: HTMLElement) =>
+      within(row)
         .getAllByRole("cell")
-        .map((c) => c.textContent)
-    ).toEqual(["400", "20", "8", "2.00%", "7"]);
-    // A 100% code's buyer finishes too: Finished survey is no share of Paid.
-    expect(
-      within(pre!)
-        .getAllByRole("cell")
-        .map((c) => c.textContent)
-    ).toEqual(["300", "30", "15", "5.00%", "16"]);
-    for (const h of within(table).getAllByRole("columnheader").slice(1))
-      expect(within(h).getByRole("button", { name: /^About / })).toBeTruthy();
+        .map((c) => {
+          const copy = c.cloneNode(true) as HTMLElement;
+          copy.querySelectorAll(".sr-only").forEach((x) => x.remove());
+          const tone = c.className.includes("bg-ap-good")
+            ? "+"
+            : c.className.includes("bg-ap-bad")
+              ? "-"
+              : "";
+          return `${copy.textContent}${tone}`;
+        });
+    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "—", "75%-"]);
+    // Paid → completed is of the paying buyers only: 12 of 15, never above 100%.
+    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "—", "80%+"]);
+    // The two columns the pages don't record are blank, with no card, and the note says so.
+    for (const h of within(table).getAllByRole("columnheader").slice(1)) {
+      const recorded = !["Saw the price", "Started survey"].includes(h.textContent ?? "");
+      expect(within(h).queryByRole("button", { name: /^About / }) !== null).toBe(recorded);
+    }
+    expect(section.textContent).toContain(
+      "Saw the price and Started survey aren't recorded for these pages yet."
+    );
     expect(section.textContent).toContain(pts.notes[0]);
   });
 

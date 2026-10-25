@@ -623,6 +623,34 @@ describe("the Traffic page as drawn", () => {
     clean();
   });
 
+  it("shades each audience group's Pre-unlock rate like its other rates, as drawn", () => {
+    // Gender: the section opens on it.
+    const d = dim("gender", "Gender", "survey");
+    view.payload = {
+      ...payload,
+      audience: {
+        dims: payload.audience.dims.map((x) =>
+          x.key === "gender"
+            ? {
+                ...d,
+                perf: [
+                  { ...d.perf[0]!, preRate: 0.02 },
+                  { ...d.perf[1]!, completeRate: 0.03, preRate: 0.005, fullRate: 0.02 },
+                ],
+              }
+            : x
+        ),
+      },
+    } satisfies TrafficPayload;
+    render(<ApTraffic />);
+    const t = screen.getByRole("table", { name: "How each gender group performs" });
+    // Share, Complete rate, Pre-unlock rate, Full unlock rate, Median read.
+    const pre = (name: string) => within(rowOf(t, name)).getAllByRole("cell")[2]!;
+    expect(pre("Gender one")).toHaveTextContent("2.0%");
+    expect(pre("Gender one").style.color).toBe("rgb(31, 92, 66)");
+    expect(pre("Gender two").style.color).toBe("rgb(166, 39, 0)");
+  });
+
   it("switches the column set, the rank chart and the sort as the design does", () => {
     render(<ApTraffic />);
     expect(headers(perf())).toEqual([

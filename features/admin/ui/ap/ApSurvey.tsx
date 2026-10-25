@@ -499,8 +499,8 @@ function IntroSection({ data }: { data: SurveyPayload }) {
       )}
       {data.intro.recordedFrom && (
         <NotTracked>
-          Skip intro, Back, Exit and the intro and consent rows are recorded from{" "}
-          {data.intro.recordedFrom}: pick a range from that day on
+          Skip intro, Back, Exit, the intro and consent rows and the tiles&apos; trend lines are
+          recorded from {data.intro.recordedFrom}: pick a range from that day on
         </NotTracked>
       )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">

@@ -1898,17 +1898,17 @@ describe("the guided tour", () => {
     expect(tileOf(p, "free", "tour-started")).toMatchObject({
       unit: "count",
       value: 3,
-      share: "75% of all 4 readers who opened their report, free and paid together",
       blocked: null,
     });
+    // The tile shows only its change, as drawn; its share of the openers is in the section note.
+    expect(tileOf(p, "free", "tour-started").share).toBeUndefined();
+    expect(audience(p, "free").share).toBe("75% of the 4 readers who opened their report");
     // Four runs: one completed, one skipped, one left the page, one with no end at all.
     expect(tileOf(p, "free", "tour-completed")).toMatchObject({ value: 0.25, goodWhen: "up" });
     expect(tileOf(p, "free", "tour-skipped")).toMatchObject({ value: 0.25, goodWhen: "down" });
     expect(tileOf(p, "free", "tour-left")).toMatchObject({ value: 0.5, goodWhen: "down" });
-    expect(tileOf(p, "paid", "tour-started")).toMatchObject({
-      value: 1,
-      share: "25% of all 4 readers who opened their report, free and paid together",
-    });
+    expect(tileOf(p, "paid", "tour-started").value).toBe(1);
+    expect(audience(p, "paid").share).toBe("25% of the 4 readers who opened their report");
     expect(tileOf(p, "paid", "tour-completed").value).toBe(1);
     // A line per day of the week, each day's own runs.
     expect(tileOf(p, "free", "tour-started").spark).toEqual([1, 1, 1, 0, 0, 0, 0]);
@@ -1918,9 +1918,7 @@ describe("the guided tour", () => {
   it("an empty week reads zero readers and blank shares, not a failure", () => {
     const p = tourPage({ tour: { days: [], stops: [], placed: [] } });
     expect(tileOf(p, "free", "tour-started")).toMatchObject({ value: 0, blocked: null });
-    expect(tileOf(p, "free", "tour-started").share).toBe(
-      "0% of all 4 readers who opened their report, free and paid together"
-    );
+    expect(audience(p, "free").share).toBe("0% of the 4 readers who opened their report");
     expect(tileOf(p, "free", "tour-completed").value).toBeNull();
     for (const s of audience(p, "free").stops) {
       expect([s.reached, s.reachedShare, s.next, s.skip, s.exit, s.medianMs]).toEqual([
@@ -2052,7 +2050,7 @@ describe("the guided tour", () => {
   describe("on screen", () => {
     afterEach(() => cleanup());
 
-    it("sits after the wizard in the section nav, with the share under Tour started", () => {
+    it("sits after the wizard in the section nav, the share of openers in its note", () => {
       screenData.payload = tourPage();
       render(createElement(ApReport));
       const nav = within(screen.getByRole("navigation", { name: "Report sections" }));
@@ -2065,9 +2063,9 @@ describe("the guided tour", () => {
       ]);
       const section = within(document.getElementById("tour")!);
       expect(section.getByRole("heading", { name: "Guided tour" })).toBeInTheDocument();
-      expect(
-        section.getByText("75% of all 4 readers who opened their report, free and paid together")
-      ).toBeInTheDocument();
+      expect(document.getElementById("tour")!.textContent).toContain(
+        "Tour started: the range’s readers who got the tour, on this tab 75% of the 4 readers who opened their report, free and paid together"
+      );
       expect(document.getElementById("wizard")!.nextElementSibling).toBe(
         document.getElementById("tour")
       );

@@ -112,6 +112,11 @@ export interface PtsRecords {
   openedSubmissions: ReadonlySet<number>;
   /** Per pay-to-start buyer's submission: what they bought on the report after the purchase. */
   laterPays: ReadonlyMap<number, LaterPay[]>;
+  /**
+   * Submissions with a payment refunded in full or in part (real, above EUR 0), whenever it was
+   * paid: the Dashboard's refund rate per funnel. Absent: not read, so no refund rate.
+   */
+  refundedSubs?: ReadonlySet<number>;
   /** Reports in the gate's cohort, stamped in the range. */
   gateMembers: GateMember[];
   /** The gate's switch as it is now. */
@@ -181,6 +186,13 @@ export interface PtsFunnel {
   all: PtsView & { m: PtsMeasures };
   ads: PtsView & { m: PtsMeasures };
   steps: PtsStep[];
+  /**
+   * All traffic: the customers who paid money (refunded since or not) and those refunded since,
+   * in full or in part: the Dashboard's refund rate. Absent when refunds weren't read.
+   */
+  refunds?: { payers: number; refunded: number };
+  /** Pay to start: its paying buyers (the "Paid" step) who then finished the survey. */
+  paidFinished?: number;
 }
 
 export interface PtsWeek {
@@ -544,6 +556,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
             { label: "Report opened", n: subs.filter((s) => s.visits > 0).length, pays: false },
             { label: "Bought the full report", n: subs.filter((s) => s.full).length, pays: true },
           ];
+    const refunded = input.refundedSubs;
     return {
       key,
       label:
@@ -553,6 +566,13 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       clicks: ads ? ads.clicks : null,
       ...views(ads, all, paidView),
       steps,
+      ...(refunded && {
+        // A full refund took the sale away, so its buyer is counted back among those who paid.
+        refunds: {
+          payers: subs.filter((s) => paidSub(s) || refunded.has(s.id)).length,
+          refunded: subs.filter((s) => refunded.has(s.id)).length,
+        },
+      }),
     };
   };
 
@@ -604,6 +624,9 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
         pays: true,
       });
     }
+    const refunded = input.refundedSubs;
+    const refundedSub = (e: EntitlementRow) =>
+      e.consumed_submission_id !== null && (refunded?.has(e.consumed_submission_id) ?? false);
     return {
       key: offer,
       label: `Pay to start · ${price}`,
@@ -613,6 +636,16 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       clicks: ads ? ads.clicks : null,
       ...views(ads, all, paidView),
       steps,
+      ...(refunded && {
+        // The purchase refunded (before its survey claimed it too), or a payment on the report.
+        refunds: {
+          payers: mine.filter((e) => isPaid(e) || later(e).length > 0 || refundedSub(e)).length,
+          refunded: mine.filter((e) => (e.status === "refunded" && isPaid(e)) || refundedSub(e))
+            .length,
+        },
+      }),
+      paidFinished: mine.filter((e) => kept(e) && isPaid(e) && e.consumed_submission_id !== null)
+        .length,
     };
   };
 
@@ -806,7 +839,15 @@ export async function fetchPayToStartRecords(
   const { since, until } = windowOf(filters);
   const sinceIso = since.toISOString();
   const untilIso = until.toISOString();
-  const [entitlements, visitRows, cohort, gateOn] = await Promise.all([
+  // Refunds are few: every real payment refunded in full, or in part, of any day.
+  const refundRead = (status: string) =>
+    must<{ personal_report_id: number }>(
+      `/rest/v1/payment?status=eq.${status}&amount=gt.0&is_test=is.false` +
+        (status === "succeeded" ? "&refund_amount=gt.0" : "") +
+        "&select=personal_report_id&order=id.asc",
+      "payment"
+    );
+  const [entitlements, visitRows, cohort, gateOn, refundedFull, refundedPart] = await Promise.all([
     must<EntitlementRow>(
       "/rest/v1/prepaid_report_access?offer=not.is.null" +
         `&created_at=lt.${untilIso}` +
@@ -830,7 +871,20 @@ export async function fetchPayToStartRecords(
       "personal_report"
     ),
     isInitialUnlockGateEnabled(),
+    refundRead("refunded"),
+    refundRead("succeeded"),
   ]);
+  const refundedSubs = new Set<number>();
+  for (const ids of chunks([
+    ...new Set([...refundedFull, ...refundedPart].map((p) => p.personal_report_id)),
+  ])) {
+    const reports = await must<{ survey_submission_id: number | null }>(
+      `/rest/v1/personal_report?id=in.(${ids.join(",")})&select=survey_submission_id&order=id.asc`,
+      "personal_report"
+    );
+    for (const r of reports)
+      if (r.survey_submission_id !== null) refundedSubs.add(r.survey_submission_id);
+  }
 
   const visitCount = new Map<
     string,
@@ -932,6 +986,7 @@ export async function fetchPayToStartRecords(
     ourClaims,
     openedSubmissions,
     laterPays,
+    refundedSubs,
     gateMembers: cohort.map((c) => ({
       sid: c.survey_submission_id,
       cohortAt: c.initial_gate_cohort_at,

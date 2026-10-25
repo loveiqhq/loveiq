@@ -143,6 +143,10 @@ export interface FunnelRow {
   cpp: number | null;
   /** Revenue ÷ ad spend. */
   roas: number | null;
+  /** Customers refunded (in full or in part) ÷ customers who paid money, refunded ones included. */
+  refundRate: number | null;
+  /** Its parts, for the column's card: [refunded, paid]. */
+  refunds: { refunded: number; payers: number } | null;
   /** "Reference", "Yes, 95%+", "Not yet, 62%", "Off". */
   valid: string;
 }
@@ -360,6 +364,8 @@ export function buildFocus(input: {
       rpv: x.all.m.rpv,
       cpp: x.all.m.cac,
       roas: x.all.m.roas,
+      refundRate: x.refunds ? ratio(x.refunds.refunded, x.refunds.payers) : null,
+      refunds: x.refunds ?? null,
       valid: validOf(x),
     })),
     notes: notLive
