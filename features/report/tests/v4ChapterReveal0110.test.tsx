@@ -10,6 +10,7 @@ import PracticeTendenciesSection from "@features/report/ui/sections/PracticeTend
 import V3Chapter, { V3ModeProvider, V4ModeProvider } from "@features/report/ui/v3/V3Chapter";
 import type { ReportV3Chapter } from "@features/report/ui/v3/reportV3Nav";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 import { RevealObserver, installRevealObserver, mockRect } from "./v4RevealTestKit";
 
 /**
@@ -242,5 +243,55 @@ describe("Reading Recommendations' book opens with its chapter (reportV3.css)", 
     expect(block).toContain(".rv3.rv4 .rv4-chapter:not(.is-open) .report-reading__book-3d {");
     expect(block).toContain("transform: rotateY(15deg) rotateX(1.5deg);");
     expect(block).toContain("opacity: 1;");
+  });
+});
+
+// Sync 23.10: the guided tour's own scrolling played these charts behind its scrim.
+describe("Report 2.0 charts wait out the guided tour", () => {
+  beforeEach(() => {
+    __resetGuidedTourForTests();
+    // A frame that has already run (see useV4Reveal.test.tsx): these tests scroll twice.
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+  });
+
+  afterEach(() => {
+    __resetGuidedTourForTests();
+  });
+
+  it("holds a chart the tour scrolls into view, and plays it when the reader gets there", () => {
+    const rect = mockRect({ top: 5000 });
+    const { container } = render(<Chart />);
+    act(() => setGuidedTourActive(true));
+    rect.mockReturnValue(box(100));
+    fireEvent.scroll(window);
+    expect(revealed(container)).toBe(false);
+
+    rect.mockReturnValue(box(5000));
+    act(() => setGuidedTourActive(false));
+    expect(revealed(container)).toBe(false);
+
+    rect.mockReturnValue(box(100));
+    fireEvent.scroll(window);
+    expect(revealed(container)).toBe(true);
+  });
+
+  it("plays at the tour's end a chart on screen there, but not one the tour went past", () => {
+    const rect = mockRect({ top: 5000 });
+    const { container } = render(<Chart />);
+    act(() => setGuidedTourActive(true));
+    rect.mockReturnValue(box(-900));
+    fireEvent.scroll(window);
+    act(() => setGuidedTourActive(false));
+    fireEvent.scroll(window);
+    expect(revealed(container)).toBe(false);
+
+    act(() => setGuidedTourActive(true));
+    rect.mockReturnValue(box(100));
+    fireEvent.scroll(window);
+    act(() => setGuidedTourActive(false));
+    expect(revealed(container)).toBe(true);
   });
 });

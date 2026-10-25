@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
+import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
+
 import { useChapterOpen } from "./useChapterOpen";
 
 /**
@@ -28,6 +31,11 @@ import { useChapterOpen } from "./useChapterOpen";
  * Inside a V4 chapter it waits for the chapter to be open and drawn (useChapterOpen):
  * a closed chapter only clips its body, so the check below would fire for a chart the
  * reader cannot see. Elsewhere that flag is always true.
+ *
+ * Held while the guided tour moves the page, as useV4Reveal is (sync 23.10): the tour's
+ * own scrolling would play a chart behind its scrim. When it ends, a chart on screen
+ * reveals; one it carried the page past waits for the reader instead of catching up
+ * out of sight.
  */
 /**
  * Mirrors the default `rootMargin`'s -30% bottom inset: the fraction of the
@@ -48,6 +56,8 @@ export function useRevealOnView<T extends Element>({
     if (!el || isRevealed || !drawn) return;
 
     let frame = 0;
+    // The tour, not the reader, brought this chart into the band (or past it).
+    let passedByTour = false;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) reveal();
@@ -56,6 +66,10 @@ export function useRevealOnView<T extends Element>({
     );
 
     function reveal() {
+      if (isGuidedTourActive()) {
+        passedByTour = true;
+        return;
+      }
       observer.disconnect();
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("scrollend", check);
@@ -80,7 +94,11 @@ export function useRevealOnView<T extends Element>({
       frame = 0;
       const node = ref.current;
       if (!node) return;
-      if (node.getBoundingClientRect().top < window.innerHeight * REVEAL_BAND) reveal();
+      const box = node.getBoundingClientRect();
+      if (box.top >= window.innerHeight * REVEAL_BAND) return;
+      // Above the screen because the tour went past it: wait for the reader.
+      if (passedByTour && box.bottom <= 0) return;
+      reveal();
     }
 
     function onScroll() {
@@ -90,6 +108,10 @@ export function useRevealOnView<T extends Element>({
     observer.observe(el);
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("scrollend", check);
+    // Look again the moment the tour ends; it hands the reader back at the top.
+    const unsubscribeTour = subscribeGuidedTour(() => {
+      if (!isGuidedTourActive()) onScroll();
+    });
     // Already on screen at mount (hydration part-way down the page, or a deep link
     // to a chapter) — no crossing is coming.
     check();
@@ -98,6 +120,7 @@ export function useRevealOnView<T extends Element>({
       observer.disconnect();
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("scrollend", check);
+      unsubscribeTour();
       if (frame) cancelAnimationFrame(frame);
     };
   }, [drawn, isRevealed, threshold, rootMargin]);
