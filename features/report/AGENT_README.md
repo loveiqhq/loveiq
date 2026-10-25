@@ -117,7 +117,11 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
   overflow, Lenis stopped, swipes cancelled. `shared/ui/guided-tour-state.ts` tells the
   scroll-driven signals the scrolling is the tour's: the plans pop-up trigger, the paywall ping,
   chapter time, `cta_seen`, scroll depth and Typical Beliefs' midline rows stand down without
-  letting go.
+  letting go. So do the entrances (sync 23.10: the scores played behind the scrim):
+  `useV4Reveal` (the top three's bars and percentages, the archetype card's Match Strength,
+  the A&B and fantasy surfaces), Report 2.0's `useRevealOnView` charts and `ReportSection`'s
+  fade. When the tour ends, what is on screen plays; what it carried the page past waits for
+  the reader and is never caught up out of sight.
 - **Analytics.** `tour_started`, `tour_step_viewed {n, id}`, `tour_back {to}`,
   `tour_skipped {at, source}`, `tour_completed`, `tour_left {at}` and `tour_replayed` go to
   PostHog; a first run's start and end, and each replay, are also stored (`analytics_event`).

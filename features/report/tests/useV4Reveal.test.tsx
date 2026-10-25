@@ -5,6 +5,7 @@ import { renderToString } from "react-dom/server";
 import type { FC } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useV4Reveal, type V4RevealOptions } from "@features/report/ui/v3/useV4Reveal";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 import { installRevealObserver, mockRect, observerOf, RevealObserver } from "./v4RevealTestKit";
 
 const Probe: FC<{ opts?: V4RevealOptions }> = ({ opts }) => {
@@ -153,5 +154,117 @@ describe("useV4Reveal — keyboard focus inside it reveals it (WCAG 2.4.7)", () 
     render(<FocusProbe opts={{ enabled: false }} />);
     act(() => screen.getByRole("button").focus());
     expect(shown()).toBe("no");
+  });
+});
+
+// Sync 23.10: the guided tour scrolls the page through Part 2 behind its scrim, and the
+// top three's bars and percentages played out there, unseen. They now wait for the reader.
+describe("useV4Reveal — held while the guided tour moves the page", () => {
+  beforeEach(() => {
+    __resetGuidedTourForTests();
+    installRevealObserver();
+    // The kit's frame runs at once but returns a live handle, so the hook would think a
+    // frame is still queued and skip every scroll after the first. These tests scroll
+    // several times: hand back 0, a frame that has already run.
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+  });
+
+  afterEach(() => {
+    __resetGuidedTourForTests();
+  });
+
+  it("plays when the reader scrolls to it, not when the tour passed it", () => {
+    const rect = mockRect({ top: 5000 });
+    render(<Probe />);
+    const observer = observerOf(screen.getByTestId("probe"))!;
+
+    act(() => setGuidedTourActive(true));
+    rect.mockReturnValue({ top: 100, bottom: 161, width: 329, height: 61 } as DOMRect);
+    fireEvent.scroll(window);
+    observer.fire(true);
+    expect(shown()).toBe("no");
+
+    // The tour ends where it began, at the top: the box is below the band again.
+    rect.mockReturnValue({ top: 5000, bottom: 5061, width: 329, height: 61 } as DOMRect);
+    act(() => setGuidedTourActive(false));
+    expect(shown()).toBe("no");
+
+    rect.mockReturnValue({ top: 100, bottom: 161, width: 329, height: 61 } as DOMRect);
+    fireEvent.scroll(window);
+    expect(shown()).toBe("yes");
+  });
+
+  it("plays at once when the tour ends with it on screen", () => {
+    const rect = mockRect({ top: 5000 });
+    render(<Probe />);
+    act(() => setGuidedTourActive(true));
+    rect.mockReturnValue({ top: 100, bottom: 161, width: 329, height: 61 } as DOMRect);
+    fireEvent.scroll(window);
+    expect(shown()).toBe("no");
+
+    act(() => setGuidedTourActive(false));
+    expect(shown()).toBe("yes");
+  });
+
+  it("never catches up out of sight a box the tour carried the page past", () => {
+    const rect = mockRect({ top: 5000 });
+    render(<Probe />);
+    act(() => setGuidedTourActive(true));
+    rect.mockReturnValue({ top: -800, bottom: -739, width: 329, height: 61 } as DOMRect);
+    fireEvent.scroll(window);
+    act(() => setGuidedTourActive(false));
+    fireEvent.scroll(window);
+    expect(shown()).toBe("no");
+
+    // The reader scrolls back up to it.
+    rect.mockReturnValue({ top: 200, bottom: 261, width: 329, height: 61 } as DOMRect);
+    fireEvent.scroll(window);
+    expect(shown()).toBe("yes");
+  });
+
+  it("still catches up a box the reader jumped past themselves", () => {
+    const rect = mockRect({ top: 5000 });
+    render(<Probe />);
+    rect.mockReturnValue({ top: -800, bottom: -739, width: 329, height: 61 } as DOMRect);
+    fireEvent.scroll(window);
+    expect(shown()).toBe("yes");
+  });
+
+  it("with catchUp off, the tour's end plays it only on screen", () => {
+    const rect = mockRect({ top: 5000 });
+    render(<Probe opts={{ catchUp: false }} />);
+    const observer = observerOf(screen.getByTestId("probe"))!;
+    act(() => setGuidedTourActive(true));
+    observer.fire(true);
+    expect(shown()).toBe("no");
+
+    rect.mockReturnValue({ top: -800, bottom: -739, width: 329, height: 61 } as DOMRect);
+    act(() => setGuidedTourActive(false));
+    expect(shown()).toBe("no");
+
+    observer.fire(true);
+    expect(shown()).toBe("yes");
+  });
+
+  it("without an observer, shows when the tour ends", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    act(() => setGuidedTourActive(true));
+    render(<Probe />);
+    expect(shown()).toBe("no");
+    act(() => setGuidedTourActive(false));
+    expect(shown()).toBe("yes");
+  });
+
+  it("lets go of the tour once it has played", () => {
+    mockRect({ top: 100 });
+    render(<Probe />);
+    expect(shown()).toBe("yes");
+    // Revealed and torn down: a later tour changes nothing and throws nothing.
+    act(() => setGuidedTourActive(true));
+    act(() => setGuidedTourActive(false));
+    expect(shown()).toBe("yes");
   });
 });
