@@ -458,9 +458,19 @@ describe("buildPayToStart", () => {
       ["2026-10-19", "2026-10-22", "19 Oct"],
     ]);
     // A range starting mid-week names its first week by its first day, not the Monday before.
-    expect(buildPayToStart(input({ from: "2026-10-01", to: "2026-10-06" })).weeks[0]).toMatchObject(
-      { from: "2026-10-01", to: "2026-10-04", label: "1 Oct" }
-    );
+    const early = buildPayToStart(input({ from: "2026-10-01", to: "2026-10-06" }));
+    expect(early.weeks[0]).toMatchObject({ from: "2026-10-01", to: "2026-10-04", label: "1 Oct" });
+    // Its pages went live on 22 Oct: a range ending before reads them off, never 0 visitors.
+    const live = (x: ReturnType<typeof buildPayToStart>) =>
+      Object.fromEntries(x.funnels.map((f) => [f.key, f.live]));
+    expect(live(early)).toMatchObject({ full: false, pre: false, after: true });
+    expect(live(p)).toMatchObject({ full: true, pre: true });
+    // The visit log is whole from 15 Jun 2026: the free survey's visits before are blank.
+    const june = buildPayToStart(input({ from: "2026-06-01", to: "2026-06-30" }));
+    const after = june.funnels.find((f) => f.key === "after")!;
+    expect(after.all.visits).toBeNull();
+    expect(after.steps[0]).toMatchObject({ label: "Visits", n: null });
+    expect(june.notes.join(" ")).toMatch(/every visitor from 15 Jun 2026/);
     const [w1, w2] = p.weeks;
     expect(w1!.funnels.after.cac).toBeCloseTo(50);
     expect(w1!.funnels.after.cvr).toBeCloseTo(1 / 500);

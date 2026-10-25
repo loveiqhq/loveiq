@@ -74,8 +74,12 @@ record, and no landing test arm.
   wizard funnels leave the page's visits and the paid wizards (`wizard_variant`) out; its finishers, payments
   and revenue stay in the digests' totals. AP-Analytics leaves its visits out of the free
   funnel's pages and compares the journey with the free funnel on a page of its own (Pay to
-  start, `features/admin/server/ap/pay-to-start.ts`); its other pages, Jarvis and the KPI week
-  still count its finishers and payments: how they should show it is an open decision.
+  start, `features/admin/server/ap/pay-to-start.ts`); the Dashboard's funnel comparison and the
+  Landing page's pay-to-start table show that page's own figures (`payToStartFor`). Its other
+  pages count a buyer's finished survey and payments under All funnels (the default) and leave
+  them out under the Funnel filter's Free survey (`ap_facts`' `pts`: claimed by a completed
+  purchase, as the Pay to start page reads it); the Payment page splits each sale by its journey.
+  Jarvis and the KPI week still count its finishers and payments.
 - **A purchase never opens someone else's report.** The continue link and the checkout route
   open a used purchase's report only when the survey was taken under the address Stripe took
   (`server/reportLink.ts`); the status route never sends a report's address, because a

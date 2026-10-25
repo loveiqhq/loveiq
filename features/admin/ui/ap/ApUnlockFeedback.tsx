@@ -247,8 +247,8 @@ export default function ApUnlockFeedback() {
       </div>
       <ApFilterBar
         scope="assessment"
-        fixed={["source", "device", "tier", "visitor"]}
-        fixedNote="This page reads every unlock feedback email over all traffic, so the source, device, tier and visitor filters do not apply. Its segments split the answers by device, gender and age."
+        fixed={["funnel", "source", "device", "tier", "visitor"]}
+        fixedNote="This page reads every unlock feedback email over all traffic (they go to free survey readers only), so the funnel, source, device, tier and visitor filters do not apply. Its segments split the answers by device, gender and age."
       />
       {isAdmin && <UnlockFeedbackSend />}
       {loading && !data && <Loading label="the unlock feedback page" />}
@@ -410,7 +410,9 @@ function Reasons({ data }: { data: Data }) {
   const [picked, setPicked] = useState<string | null>(null);
   const sel = data.reasons.find((r) => r.code === picked) ?? data.reasons[0];
   const chipTop = Math.max(1, ...(sel?.chips ?? []).map((c) => c.n));
-  const gtc = "minmax(180px,1.4fr) minmax(140px,1.6fr) 56px 44px";
+  // On a phone the bar goes (the share is beside it as a number), so the row fits the screen.
+  const cols =
+    "grid-cols-[minmax(0,1fr)_56px_44px] sm:grid-cols-[minmax(180px,1.4fr)_minmax(140px,1.6fr)_56px_44px]";
   return (
     <Card id="reasons" labelledBy="h-rea">
       <SectionHead
@@ -442,14 +444,15 @@ function Reasons({ data }: { data: Data }) {
                   type="button"
                   aria-pressed={on}
                   onClick={() => setPicked(r.code)}
-                  className={`grid min-h-[52px] w-full cursor-pointer items-center gap-3.5 rounded-[14px] border px-3.5 py-2.5 text-left font-sans text-ap-ink ${on ? "border-ap-purple bg-ap-purple/10" : "border-ap-line bg-white hover:bg-ap-ground"}`}
-                  style={{ gridTemplateColumns: gtc }}
+                  className={`grid ${cols} min-h-[52px] w-full cursor-pointer items-center gap-3.5 rounded-[14px] border px-3.5 py-2.5 text-left font-sans text-ap-ink ${on ? "border-ap-purple bg-ap-purple/10" : "border-ap-line bg-white hover:bg-ap-ground"}`}
                 >
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span className="text-sm font-bold">{r.label}</span>
                     <span className="text-xs text-ap-muted">{r.theme}</span>
                   </span>
-                  <Bar pct={r.bar} />
+                  <span className="hidden sm:block">
+                    <Bar pct={r.bar} />
+                  </span>
                   <span className="text-right text-sm font-bold tabular-nums">{pct1(r.share)}</span>
                   <span className="text-right text-[13px] tabular-nums text-ap-muted">
                     {count(r.n)}
@@ -755,7 +758,7 @@ function After({ data }: { data: Data }) {
       <SectionHead
         id="h-aft"
         title="After the free unlock"
-        description={`What the ${people(a.free)} did with their full report, against paying readers in the same period.`}
+        description={`What the ${people(a.free)} did with their full report, against readers who paid to unlock theirs in the same period (pay to start's full-report buyers, whose report came unlocked, left out).`}
       />
       <div className="overflow-hidden rounded-[14px] border border-ap-line">
         <div role="table" aria-label="After the free unlock">

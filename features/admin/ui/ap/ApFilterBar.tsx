@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import {
   ASSESSMENTS,
+  FUNNELS,
+  FUNNEL_NOTE,
   DEVICES,
   PERIODS,
   SOURCES,
@@ -45,7 +47,7 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
  * the URL.
  */
 /** Filters a page cannot apply: shown greyed at their "all" value, with the reason. */
-type Fixed = "source" | "device" | "tier" | "visitor";
+type Fixed = "funnel" | "source" | "device" | "tier" | "visitor";
 
 const SAVED_PARAMS = { kind: "filter" };
 
@@ -70,6 +72,7 @@ export default function ApFilterBar({
   const filters = {
     ...chosen,
     ...(assessmentFixed ? { assessment: "a" as const } : {}),
+    ...(off("funnel") ? { funnel: "all" as const } : {}),
     ...(off("source") ? { source: "all" as const } : {}),
     ...(off("device") ? { device: "all" as const } : {}),
     ...(off("tier") ? { tier: "all" as const } : {}),
@@ -352,6 +355,22 @@ export default function ApFilterBar({
               </select>
             </label>
             <label className={`${fieldLabel} flex-[1_1_170px]`}>
+              Funnel
+              <select
+                value={filters.funnel ?? "all"}
+                onChange={(e) => update({ funnel: e.target.value as ApFilters["funnel"] })}
+                className={control}
+                title={off("funnel") ? fixedNote : FUNNEL_NOTE}
+                disabled={off("funnel")}
+              >
+                {FUNNELS.map((f) => (
+                  <option key={f.value} value={f.value} disabled={"live" in f && !f.live}>
+                    {"live" in f && !f.live ? `${f.label} (on the Pay to start page)` : f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={`${fieldLabel} flex-[1_1_170px]`}>
               Source
               <select
                 value={filters.source}
@@ -432,13 +451,13 @@ export default function ApFilterBar({
               New or returning comes from PostHog: whether the person had visited before the visit
               they finished the survey in. It splits finished surveys, their reports and payments;
               visits, survey starts and ad spend can&rsquo;t be split that way. Meta Ads: a Meta
-              link tagged as paid; Meta&rsquo;s click id alone counts as Social. Organic search: a
-              search engine tagged organic, or an untagged visit from a search engine, told from
-              direct visits by the site a visit came from, recorded from {trackingDay} (before,
-              those read as Direct). Gmail on the web opens links through Google, so an untagged
-              email click can read as organic search. Tablets are told apart from {trackingDay}:
-              before, they count as Mobile, or as Desktop for newer iPads, which present themselves
-              as Macs.
+              link tagged as paid; Meta&rsquo;s click id alone counts as Social. An untagged visit
+              is sorted by the site it came from, recorded from {trackingDay} (before, those read as
+              Direct): a search engine is Organic search, an email app or webmail Email, a social
+              site Social, an AI assistant AI assistants, another site Referral, and only no site at
+              all is Direct. Gmail on the web opens links through Google, so an untagged email click
+              there can read as organic search. Tablets are told apart from {trackingDay}: before,
+              they count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.
               {assessmentFixed && (
                 <> These pages are Assessment A&rsquo;s; B and C have not launched.</>
               )}

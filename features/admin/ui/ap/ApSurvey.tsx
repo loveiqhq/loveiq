@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
-import { rangeLabel, SURVEY_TRACKING_FROM } from "@features/admin/server/ap/filters";
+import type { Table, Tile } from "@features/admin/server/ap/common";
 import { delta, EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type {
@@ -16,6 +16,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info, type Worked } from "./field-info";
 import { bucketTitles, useRowTip } from "./hover";
 import {
   AllTraffic,
@@ -30,6 +31,7 @@ import {
   Loading,
   NotTracked,
   PageHeader,
+  Pills,
   RangeLine,
   SectionHead,
   SortIcon,
@@ -39,7 +41,60 @@ import {
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
-const SEGMENT_COLORS = ["#4000b6", "#fe6839", "#9d8ad7", "#2e7d5b"];
+/** The design's three colours, one per group (at most three). */
+const SEGMENT_COLORS = ["#4000b6", "#fe6839", "#9d8ad7"];
+
+/** Each tile's info card: the headline three and the intro's four. */
+const TILE_INFO: Array<{ tile: string; k: string }> = [
+  { tile: "starts", k: "survey.starts" },
+  { tile: "subs", k: "survey.subs" },
+  { tile: "completion", k: "survey.completion" },
+  { tile: "intro-saw", k: "survey.introSaw" },
+  { tile: "intro-agreed", k: "survey.introAgreed" },
+  { tile: "intro-skipped", k: "survey.introSkipped" },
+  { tile: "intro-left", k: "survey.introLeft" },
+];
+
+/** Each demographic card's info card. */
+const DEMO_INFO: Array<{ title: string; k: string }> = [
+  { title: "Country", k: "survey.demoCountry" },
+  { title: "Gender", k: "survey.demoGender" },
+  { title: "Age", k: "survey.demoAge" },
+  { title: "Device", k: "survey.demoDevice" },
+];
+
+/** Which order the funnel counts in: the survey's own, or the opening-order test's (C13). */
+type Order = "survey" | "test";
+
+/** A tile's figure as the card's "This period" line writes it; nothing while it is blank. */
+const workedOf = (t: Tile): Worked | undefined =>
+  t.blocked || t.value === null ? undefined : { value: fmt(t.unit, t.value) };
+
+/** Completion as the design works it out: submissions ÷ survey starts. */
+function completionWorked(tiles: Tile[], t: Tile): Worked | undefined {
+  const value = workedOf(t);
+  const subs = tiles.find((x) => x.key === "subs")?.value ?? null;
+  const starts = tiles.find((x) => x.key === "starts")?.value ?? null;
+  return value && subs !== null && starts !== null
+    ? { num: fmt("count", subs), den: fmt("count", starts), value: value.value }
+    : value;
+}
+
+/** One order's funnel for the CSV, its questions in that order. */
+const questionTable = (list: QuestionRow[]): Table => ({
+  columns: [
+    { label: "Question", unit: "text" },
+    { label: "Reached", unit: "count" },
+    { label: "Exits", unit: "count" },
+    { label: "Drop-out rate", unit: "pct" },
+    { label: "Median time", unit: "mmss" },
+    { label: "Went back", unit: "count" },
+  ],
+  rows: list.map((r) => ({
+    label: `${r.id} · ${r.text}`,
+    values: [r.reached, r.exits, r.dropRate, r.medianMs, r.wentBack],
+  })),
+});
 
 /** The design's bars in a demographic card, darkest first. */
 const DEMO_COLORS = ["#5a42a6", "#795fc8", "#9d8bd8", "#c0b4e6", "#ddd5f2"];
@@ -76,8 +131,15 @@ export default function ApSurvey() {
   );
   useHashScroll(Boolean(data));
   const [selected, setSelected] = useState<string | null>(null);
+  const [order, setOrder] = useState<Order>("survey");
 
-  const rows = data?.questions?.rows ?? [];
+  const questions = data?.questions ?? null;
+  // The funnel in the order picked: the test's only while the range has runs in it.
+  const rows = ((order === "test" ? questions?.test : null) ?? questions)?.rows ?? [];
+  // Everyone a question was put to, in either order: what its skips (both orders') are a share of.
+  const shownBoth = new Map<string, number>();
+  for (const r of [...(questions?.rows ?? []), ...(questions?.test?.rows ?? [])])
+    shownBoth.set(r.id, (shownBoth.get(r.id) ?? 0) + r.shownAll);
   // Opens on the countable question most people leave on (a free-text one has no answers to show).
   const countableRows = rows.filter((r) => ["scale", "single", "multiple"].includes(r.type));
   const current =
@@ -114,23 +176,16 @@ export default function ApSurvey() {
                       })),
                     },
                   })),
-                  {
-                    name: "Questions",
-                    table: {
-                      columns: [
-                        { label: "Question", unit: "text" },
-                        { label: "Reached", unit: "count" },
-                        { label: "Exits", unit: "count" },
-                        { label: "Drop-out rate", unit: "pct" },
-                        { label: "Median time", unit: "mmss" },
-                        { label: "Went back", unit: "count" },
-                      ],
-                      rows: rows.map((r) => ({
-                        label: `${r.id} · ${r.text}`,
-                        values: [r.reached, r.exits, r.dropRate, r.medianMs, r.wentBack],
-                      })),
-                    },
-                  },
+                  // Both orders' funnels while the opening-order test runs, each in its own order.
+                  ...(questions?.test
+                    ? [
+                        { name: "Questions · survey order", table: questionTable(questions.rows) },
+                        {
+                          name: "Questions · test order (C13)",
+                          table: questionTable(questions.test.rows),
+                        },
+                      ]
+                    : [{ name: "Questions", table: questionTable(questions?.rows ?? []) }]),
                   {
                     name: "Intro wizard",
                     table: {
@@ -179,6 +234,11 @@ export default function ApSurvey() {
                 key={t.key}
                 tile={t}
                 titles={bucketTitles(data.range.from, data.range.to)}
+                info={{
+                  k: TILE_INFO.find((x) => x.tile === t.key)?.k ?? `survey.${t.key}`,
+                  worked: t.key === "completion" ? completionWorked(data.tiles, t) : workedOf(t),
+                  trend: { route: "survey", tile: t.key, unit: t.unit },
+                }}
               />
             ))}
           </TileGrid>
@@ -186,16 +246,21 @@ export default function ApSurvey() {
           <FunnelSection
             data={data}
             rows={rows}
+            order={questions?.test ? order : null}
+            onOrder={setOrder}
             selected={current?.id ?? null}
             onSelect={setSelected}
           />
 
-          {current && data.questions && (
+          {current && questions && (
             <QuestionDetail
               key={current.id}
               q={current}
-              total={data.questions.rows.filter((r) => r.n > 0).length}
+              total={rows.filter((r) => r.n > 0).length}
               rows={rows}
+              shownBoth={shownBoth.get(current.id) ?? 0}
+              segmented={questions.segment !== "All traffic"}
+              unfiltered={questions.blocked !== null}
             />
           )}
 
@@ -203,6 +268,7 @@ export default function ApSurvey() {
             <SectionHead
               id="h-demo"
               title="Core demographics"
+              info="survey.demographics"
               align="end"
               right={
                 <label className="flex min-w-[220px] flex-[0_1_280px] flex-col gap-1 text-xs font-bold text-ap-muted">
@@ -219,24 +285,37 @@ export default function ApSurvey() {
                 </label>
               }
             />
-            <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-ap-body">
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ap-purple" />
-                This survey · {fmt("count", data.demographics.n)} completed
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-3.5 w-[3px] rounded-sm bg-ap-ink" />
-                Benchmark · {fmt("count", data.demographics.benchN)} completed
-              </span>
-            </div>
-            <div
-              className="grid gap-4"
-              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(420px, 100%), 1fr))" }}
-            >
-              {data.demographics.cards.map((c) => (
-                <DemographicCard key={c.title} card={c} />
-              ))}
-            </div>
+            {data.demographics.blocked ? (
+              <p className="m-0 text-sm leading-relaxed text-ap-muted">
+                {data.demographics.blocked}
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-ap-body">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ap-purple" />
+                    This survey · {fmt("count", data.demographics.n)} completed
+                    <Info k="survey.demoN" worked={{ value: fmt("count", data.demographics.n) }} />
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span aria-hidden="true" className="h-3.5 w-[3px] rounded-sm bg-ap-ink" />
+                    Benchmark · {fmt("count", data.demographics.benchN)} completed
+                    <Info
+                      k="survey.benchN"
+                      worked={{ value: fmt("count", data.demographics.benchN) }}
+                    />
+                  </span>
+                </div>
+                <div
+                  className="grid gap-4"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(420px, 100%), 1fr))" }}
+                >
+                  {data.demographics.cards.map((c) => (
+                    <DemographicCard key={c.title} card={c} />
+                  ))}
+                </div>
+              </>
+            )}
           </Card>
 
           <IntroSection data={data} />
@@ -253,7 +332,10 @@ function DemographicCard({ card }: { card: DemoCard }) {
     <div className="flex flex-col gap-3 rounded-[18px] bg-ap-ground p-[18px]">
       {rowTip.card}
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="m-0 font-serif text-lg font-semibold">{card.title}</h3>
+        <h3 className="m-0 font-serif text-lg font-semibold">
+          {card.title}{" "}
+          <Info k={DEMO_INFO.find((x) => x.title === card.title)?.k ?? "survey.demographics"} />
+        </h3>
         <LiveBadge />
       </div>
       {card.rows.map((r, ri) => {
@@ -340,8 +422,6 @@ function DemographicCard({ card }: { card: DemoCard }) {
 
 type IntroRowData = IntroCard & { n: number; time: number | null; eng: string };
 
-const SURVEY_TRACKING_DAY = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
-
 const INTRO_GRID =
   "44px minmax(200px,2fr) 72px minmax(150px,1.1fr) 84px 84px 72px 72px minmax(160px,1.2fr)";
 
@@ -362,9 +442,9 @@ function IntroSection({ data }: { data: SurveyPayload }) {
       : step === "intro_view"
         ? `${pct(ok.silhouette)} tap the silhouette`
         : step === "intro_slide_3"
-          ? `${pct(ok.trust)} open the Trust Zone`
+          ? `${pct(ok.trust)} open Trust Zone`
           : step === "consent_view"
-            ? `Return to site ${pct(ok.returned)} · read the terms ${pct(ok.terms)}`
+            ? `Return to site ${pct(ok.returned)} · read terms ${pct(ok.terms)}`
             : "—";
   const cards: IntroRowData[] = data.intro.cards.map((card, i) => ({
     ...card,
@@ -373,26 +453,46 @@ function IntroSection({ data }: { data: SurveyPayload }) {
     cont: introCont(data, card),
     eng: eng(card.step),
   }));
+  // Before the tracking day the shares are PostHog's sessions: their counts are in the payload.
+  const ph = data.intro.recordedFrom && ok && ok.opened ? ok : null;
+  const parts: Record<string, [number, number]> = ph
+    ? {
+        "intro-agreed": [ph.agreed, ph.opened],
+        "intro-skipped": [ph.skipped, ph.opened],
+        "intro-left": [ph.opened - ph.reachedQ1, ph.opened],
+      }
+    : {};
   return (
     <Card id="wizard" labelledBy="h-wiz">
-      <SectionHead id="h-wiz" title="Intro wizard" />
+      <SectionHead id="h-wiz" title="Intro wizard" info="survey.wizard" />
       <AllTraffic note={data.narrowed} />
       <TileGrid min={200}>
-        {data.intro.tiles.map((t) => (
+        {data.intro.tiles.map((t) => {
           // Whole percentages, as drawn; a share under 1% keeps a tenth so a handful never reads 0%.
-          <KpiTileV2
-            key={t.key}
-            tile={t}
-            digits={
-              t.unit !== "pct"
-                ? undefined
-                : t.value !== null && t.value > 0 && t.value < 0.01
-                  ? 1
-                  : 0
-            }
-            titles={bucketTitles(data.range.from, data.range.to)}
-          />
-        ))}
+          const digits =
+            t.unit !== "pct"
+              ? undefined
+              : t.value !== null && t.value > 0 && t.value < 0.01
+                ? 1
+                : 0;
+          const nd = parts[t.key];
+          return (
+            <KpiTileV2
+              key={t.key}
+              tile={t}
+              digits={digits}
+              titles={bucketTitles(data.range.from, data.range.to)}
+              // No 12-week line: before the tracking day these are PostHog's, for a whole range.
+              info={{
+                k: TILE_INFO.find((x) => x.tile === t.key)?.k ?? `survey.${t.key}`,
+                worked: workedOf(t) && {
+                  ...(nd ? { num: fmt("count", nd[0]), den: fmt("count", nd[1]) } : {}),
+                  value: fmt(t.unit, t.value, digits),
+                },
+              }}
+            />
+          );
+        })}
       </TileGrid>
       {c && !c.ok && (
         <p className="m-0 text-sm text-ap-bad-ink">The engagement column is blank: {c.error}</p>
@@ -404,53 +504,70 @@ function IntroSection({ data }: { data: SurveyPayload }) {
         </NotTracked>
       )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Intro wizard cards" style={{ minWidth: 1080 }}>
+        <div role="table" aria-label="Intro wizard cards" style={{ minWidth: 1040 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: INTRO_GRID }}>
             <Th label="#" />
             <Th label="Card" />
-            <Th label="Time" sortKey="time" sort={sort} onSort={setSort} right />
+            <Th
+              label="Median time"
+              info="survey.wizTime"
+              sortKey="time"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
             {/* By the share the bar and the figure show, not the count beside them. */}
-            <Th label="Reached" sortKey="reachedShare" sort={sort} onSort={setSort} />
-            <Th label="Continue" sortKey="cont" sort={sort} onSort={setSort} right />
-            <Th label="Skip intro" sortKey="skip" sort={sort} onSort={setSort} right />
-            <Th label="Back" sortKey="back" sort={sort} onSort={setSort} right />
-            <Th label="Exit" sortKey="exit" sort={sort} onSort={setSort} right />
-            <Th label="Engagement on card" />
+            <Th
+              label="Reached"
+              info="survey.wizReached"
+              sortKey="reachedShare"
+              sort={sort}
+              onSort={setSort}
+            />
+            <Th
+              label="Continue"
+              info="survey.wizContinue"
+              sortKey="cont"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Skip intro"
+              info="survey.wizSkip"
+              sortKey="skip"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Back"
+              info="survey.wizBack"
+              sortKey="back"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Exit"
+              info="survey.wizExit"
+              sortKey="exit"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th label="Engagement on card" info="survey.wizEngagement" />
           </div>
           {sortRows(cards, sort).map((card) => (
-            <IntroRow key={card.n} card={card} />
+            <IntroRow key={card.n} card={card} from={data.intro.recordedFrom} />
           ))}
         </div>
       </div>
-      <details className="text-xs leading-relaxed text-ap-muted">
-        <summary className="cursor-pointer font-semibold text-ap-body">
-          How these are counted
-        </summary>
-        <p className="m-0 mt-1.5">
-          The cards: our own records, for every visitor from {SURVEY_TRACKING_DAY} (before it, only
-          for visitors who accepted cookies). Reached: of the visitors on the intro card (on slide 1
-          for a range before {SURVEY_TRACKING_DAY}). People who start from the landing page’s
-          question card skip the intro and land on the consent, so they are left out of the
-          consent’s Reached share. Time: the median from a card to the next one (before{" "}
-          {SURVEY_TRACKING_DAY}, slide 4’s ran to question 1, past the consent). Continue: reached
-          the next card that day. Skip intro: pressed it on that slide. Back: the Back button, the
-          arrow key, a swipe or the browser’s Back (slide 1 and the consent have only the
-          browser’s). Exit: the furthest card that visitor reached that day. In red: Skip intro from
-          15%, Exit from 8%. For a range from {SURVEY_TRACKING_DAY} on, the first two boxes are our
-          own records too: visitors on the intro card, and of everyone who began (on the intro card,
-          or on the consent from the landing page’s card) the share who agreed and went on to
-          question 1. The other boxes and the engagement column: clicks PostHog recorded on the
-          survey page, as a share of its sessions there (it sees most survey sessions), as are the
-          first two boxes and the consent’s continue for an earlier range. The four boxes compare
-          with the period before only when both come from the same records (both ours, or both
-          PostHog&rsquo;s).
-        </p>
-      </details>
     </Card>
   );
 }
 
-function IntroRow({ card }: { card: IntroRowData }) {
+function IntroRow({ card, from }: { card: IntroRowData; from: string | null }) {
   return (
     <div
       role="row"
@@ -469,7 +586,9 @@ function IntroRow({ card }: { card: IntroRowData }) {
       </span>
       <span role="cell" className="flex items-center gap-2 px-3 py-2.5">
         {card.reached === null ? (
-          <span className="text-xs text-ap-muted">not recorded</span>
+          <span className="text-xs text-ap-muted">
+            {from ? `recorded from ${from}` : "not recorded"}
+          </span>
         ) : (
           <>
             <span className="flex-1">
@@ -512,10 +631,19 @@ function QuestionDetail({
   q,
   total,
   rows,
+  shownBoth,
+  segmented,
+  unfiltered,
 }: {
   q: QuestionRow;
   total: number;
   rows: QuestionRow[];
+  /** Reached it in either order, all traffic: what Skipped is a share of. */
+  shownBoth: number;
+  /** A source or device segment is on: Skipped, time and back stay all traffic's. */
+  segmented: boolean;
+  /** A filter is on that the funnel can't follow: it shows all traffic. */
+  unfiltered: boolean;
 }) {
   const { params } = useApFilters();
   const [dim, setDim] = useState<Dimension>("none");
@@ -534,7 +662,10 @@ function QuestionDetail({
     query,
     canSplit
   );
-  const skipShare = q.reached ? q.skipped / q.reached : null;
+  // Skips are all traffic's in both orders (the steps carry neither): a share of all it was put to.
+  const skipShare = shownBoth ? q.skipped / shownBoth : null;
+  // Under a filter the funnel can't follow, every figure here is all traffic's too.
+  const allTraffic = segmented || unfiltered ? " · all traffic" : "";
   return (
     <section
       id="question-detail"
@@ -555,24 +686,34 @@ function QuestionDetail({
         className="grid max-w-[760px] gap-3"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))" }}
       >
-        <Figure compact label="Reached" value={fmt("count", q.reached)} />
+        {/* The design's three boxes; the question's reach is its row in the funnel above. */}
         <Figure
           compact
           label="Exits"
+          info={{ k: "survey.exits", worked: { value: fmt("count", q.exits) } }}
           value={fmt("count", q.exits)}
-          note={`${fmt("pct", q.dropRate, 2)} drop-out`}
+          note={`${fmt("pct", q.dropRate, 2)} drop-out${unfiltered ? " · all traffic" : ""}`}
         />
         <Figure
           compact
           label="Skipped"
-          value={fmt("pct", skipShare)}
-          note={`${fmt("count", q.skipped)} passed without an answer`}
+          info={{
+            k: "survey.skipped",
+            worked: {
+              num: fmt("count", q.skipped),
+              den: fmt("count", shownBoth),
+              value: fmt("pct", skipShare, 1),
+            },
+          }}
+          value={fmt("pct", skipShare, 1)}
+          note={`${fmt("count", q.skipped)} passed without an answer${allTraffic}`}
         />
         <Figure
           compact
           label="Median time"
+          info={{ k: "survey.medianTime", worked: { value: fmt("mmss", q.medianMs) } }}
           value={fmt("mmss", q.medianMs)}
-          note={`${fmt("count", q.wentBack)} went back from it`}
+          note={`${fmt("count", q.wentBack)} went back from it${allTraffic}`}
         />
       </div>
       {!canSplit ? (
@@ -618,10 +759,13 @@ function QuestionDetail({
           {error && (
             <p className="m-0 text-sm text-ap-bad-ink">Could not load the answers: {error}</p>
           )}
-          {data && (
+          {data?.blocked && <p className="m-0 text-sm text-ap-muted">{data.blocked}</p>}
+          {data && !data.blocked && (
             <>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <span className="text-[15px] font-bold text-ap-ink">Answers</span>
+                <span className="text-[15px] font-bold text-ap-ink">
+                  Answers <Info k="survey.answers" />
+                </span>
                 {data.segments.map((s, i) => (
                   <span
                     key={s.name}
@@ -633,6 +777,7 @@ function QuestionDetail({
                       style={{ background: SEGMENT_COLORS[i] }}
                     />
                     {s.name} <span className="text-ap-muted">· n={fmt("count", s.n)}</span>
+                    <Info k="survey.answersN" worked={{ value: fmt("count", s.n) }} />
                   </span>
                 ))}
               </div>
@@ -692,7 +837,11 @@ function QuestionDetail({
                 {data.multiple
                   ? "; more than one answer could be picked, so the shares add up to more than 100%"
                   : ""}
-                .{data.gap ? ` Largest gap: ${data.gap}.` : ""}
+                .{data.gap ? ` Largest gap, across the groups shown: ${data.gap}.` : ""}
+                {data.hidden.length > 0 &&
+                  ` Not shown (under five people, or past the three largest): ${data.hidden
+                    .map((h) => `${h.name} (${fmt("count", h.n)})`)
+                    .join(", ")}.`}
               </p>
             </>
           )}
@@ -713,17 +862,23 @@ const FUNNEL_GRID =
 
 /**
  * The design's "Question funnel" (16 Oct 2026): the funnel and the questions table in one.
- * Each question in today's order with the people who reached it, the share of the first and of
- * the one before, the people who left there and its median time; a row opens Question detail.
+ * Each question in its order with the people who reached it, the share of the first and of the
+ * one before, the people who left there and its median time; a row opens Question detail. While
+ * the opening-order test runs (`order` set), each order has its own funnel to pick.
  */
 function FunnelSection({
   data,
   rows,
+  order,
+  onOrder,
   selected,
   onSelect,
 }: {
   data: SurveyPayload;
   rows: QuestionRow[];
+  /** The order shown, or null when the range has no runs in the test's order. */
+  order: Order | null;
+  onOrder: (o: Order) => void;
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -735,11 +890,12 @@ function FunnelSection({
   const top = asked[0]?.reached ?? 0;
   const last = asked[asked.length - 1];
   const term = search.trim().toLowerCase();
-  // Each question against the one before it in today's order, however the table is sorted;
-  // questions no longer asked come last, without a place in the funnel.
+  // Each question against the one before it in its order, however the table is sorted: the
+  // runs that got at least this far, of those that got as far as the one before, never above
+  // 100%. Questions no longer asked come last, without a place in the funnel.
   const steps = [
     ...asked.map((r, i) => {
-      const prev = i ? asked[i - 1]!.reached : null;
+      const prev = asked[i - 1]?.reached ?? null;
       const ofPrev = prev ? r.reached / prev : null;
       return {
         r,
@@ -750,8 +906,8 @@ function FunnelSection({
         exits: r.exits,
         drop: r.dropRate,
         time: r.medianMs,
-        // A question first asked during the range was asked for part of it: no one left there.
-        heavy: ofPrev !== null && ofPrev < 0.95 && !r.newInRange,
+        // The design's orange: more than 5% fewer than the step before.
+        heavy: ofPrev !== null && ofPrev < 0.95,
       };
     }),
     ...rows
@@ -778,13 +934,35 @@ function FunnelSection({
       <SectionHead
         id="h-funnel"
         title="Question funnel"
+        info="survey.funnel"
         description={
           q?.blocked
             ? `${q.blocked} Showing all traffic.`
-            : `Survey sessions reaching each question, ${data.range.label}. Click a row to open it in Question detail.`
+            : `Survey runs begun in the range reaching each question, ${data.range.label}. Click a row to open it in Question detail.`
         }
       />
       {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
+      {order && q?.test && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Pills
+              label="Question order"
+              value={order}
+              onChange={onOrder}
+              options={[
+                { value: "survey", label: `Survey order · ${fmt("count", q.people)} runs` },
+                { value: "test", label: `Test order (C13) · ${fmt("count", q.test.people)} runs` },
+              ]}
+            />
+            <Info k="survey.order" />
+          </div>
+          <p className="m-0 text-xs leading-relaxed text-ap-muted">
+            Since 6 Oct 2026 half of new runs are asked the opening questions in a different order
+            (the C13 test). Each order has its own funnel, so the counts fall from one question to
+            the next.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-y border-ap-line py-3">
         <label className="relative flex max-w-[420px] flex-[1_1_320px]">
           <span className="sr-only">Search questions</span>
@@ -814,7 +992,11 @@ function FunnelSection({
         <div className="flex flex-wrap items-baseline gap-6">
           <span className="flex flex-col gap-0.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
-              First step
+              First step{" "}
+              <Info
+                k="survey.firstStep"
+                worked={asked.length ? { value: fmt("count", top) } : undefined}
+              />
             </span>
             <span className="font-serif text-xl font-semibold tabular-nums">
               {fmt("count", asked.length ? top : null)}
@@ -822,7 +1004,19 @@ function FunnelSection({
           </span>
           <span className="flex flex-col gap-0.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
-              Reached last step
+              Reached last step{" "}
+              <Info
+                k="survey.lastStep"
+                worked={
+                  last && top
+                    ? {
+                        num: fmt("count", last.reached),
+                        den: fmt("count", top),
+                        value: fmt("pct", last.reached / top, 1),
+                      }
+                    : undefined
+                }
+              />
             </span>
             <span className="font-serif text-xl font-semibold tabular-nums">
               {last && top
@@ -841,14 +1035,56 @@ function FunnelSection({
           >
             <Th label="#" />
             <Th label="Question" sortKey="text" text sort={sort} onSort={setSort} />
-            <Th label="Reached" sortKey="reached" sort={sort} onSort={setSort} right />
-            <Th label="Funnel" />
-            <Th label="% of start" sortKey="ofStart" sort={sort} onSort={setSort} right />
-            <Th label="% of prev." sortKey="ofPrev" sort={sort} onSort={setSort} right />
-            <Th label="Exits" sortKey="exits" sort={sort} onSort={setSort} right />
-            <Th label="Drop-out rate" sortKey="drop" sort={sort} onSort={setSort} right />
-            <Th label="Time" sortKey="time" sort={sort} onSort={setSort} right />
-            <Th label={`Exits per ${q?.trendGrain ?? "week"}`} />
+            <Th
+              label="Reached"
+              info="survey.reached"
+              sortKey="reached"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th label="Funnel" info="survey.funnelBar" />
+            <Th
+              label="% of start"
+              info="survey.ofStart"
+              sortKey="ofStart"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="% of prev."
+              info="survey.ofPrev"
+              sortKey="ofPrev"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Exits"
+              info="survey.exits"
+              sortKey="exits"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Drop-out rate"
+              info="survey.dropRate"
+              sortKey="drop"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Median time"
+              info="survey.medianTime"
+              sortKey="time"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th label={`Exits per ${q?.trendGrain ?? "week"}`} info="survey.exitsTrend" />
           </div>
           {shown.map((x) => {
             const on = x.r.id === selected;
@@ -891,6 +1127,11 @@ function FunnelSection({
                       {x.r.n === 0 && (
                         <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
                           not asked now
+                        </span>
+                      )}
+                      {x.r.n > 0 && x.r.newInRange && (
+                        <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
+                          added during the range
                         </span>
                       )}
                       {x.text}
@@ -960,15 +1201,16 @@ function FunnelSection({
       {term && shown.length === 0 && (
         <p className="m-0 text-sm text-ap-muted">No question matches “{search}”.</p>
       )}
+      {q?.notes.map((note) => (
+        <p key={note} className="m-0 text-xs leading-relaxed text-ap-muted">
+          {note}
+        </p>
+      ))}
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Rows in orange lose more than 5% of the previous step. Exits: people whose last step was the
-        question and who never finished; the drop-out rate is those exits over the people who
-        reached it (red above 5%). A question reached by more people than the one before it was
-        asked in a different order to some of them (the opening-order and email-question tests), and
-        one first asked during the range is not shaded: it was asked for only part of it. The end of
-        the flow may differ between survey versions, so check before reading the last rows as
-        drop-outs. Same people as the Notion drop-off page, less our own finished test runs. Time,
-        back and skipped: all traffic, staff left out.
+        Rows in orange lose more than 5% of the previous step. A question added during the range was
+        asked only from the day it was added: its drop-out and skipped rates are over the runs asked
+        it. The end of the flow may differ between survey versions: worth checking before reading
+        the last rows as drop-outs.
       </p>
     </Card>
   );
@@ -994,23 +1236,24 @@ function sortRows<K extends string, T extends Record<K, number | string | null>>
 /**
  * A column heading. With a sort key it sorts the table, first click biggest first (A to Z for
  * a text column), as DataTable does. Inline, so a narrow column wraps its buttons under the label.
+ * `info`: the column's info card.
  */
 function Th<K extends string>({
   label,
+  info,
   sortKey,
   text = false,
   sort = null,
   onSort,
   right = false,
-  children,
 }: {
   label: string;
+  info?: string;
   sortKey?: K;
   text?: boolean;
   sort?: Sort<K>;
   onSort?: (s: Sort<K>) => void;
   right?: boolean;
-  children?: ReactNode;
 }) {
   const dir = sortKey !== undefined && sort?.key === sortKey ? sort.dir : null;
   return (
@@ -1020,7 +1263,12 @@ function Th<K extends string>({
       className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${right ? "text-right" : ""}`}
     >
       {label}
-      {children}
+      {info && (
+        <>
+          {" "}
+          <Info k={info} label={label} />
+        </>
+      )}
       {sortKey !== undefined && (
         <button
           type="button"
@@ -1043,11 +1291,14 @@ function Th<K extends string>({
 /** A figure in a small box, as drawn: lilac in the intro, white and compact in the detail. */
 function Figure({
   label,
+  info,
   value,
   note,
   compact = false,
 }: {
   label: string;
+  /** Its info card, with this question's figures. */
+  info: { k: string; worked?: Worked };
   value: string;
   note?: string;
   compact?: boolean;
@@ -1057,7 +1308,9 @@ function Figure({
     <div
       className={`flex min-w-0 flex-col gap-0.5 rounded-[14px] ${compact ? "bg-white p-2.5" : "bg-ap-lilac p-3.5"}`}
     >
-      <span className={`${small} text-ap-muted`}>{label}</span>
+      <span className={`${small} text-ap-muted`}>
+        {label} <Info k={info.k} label={label} worked={info.worked} />
+      </span>
       <span
         className={`font-serif font-semibold tabular-nums text-ap-ink ${compact ? "text-xl" : "text-[22px]"}`}
       >

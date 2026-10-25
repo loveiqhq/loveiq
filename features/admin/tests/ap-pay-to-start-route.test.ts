@@ -31,7 +31,9 @@ vi.mock("@shared/observability/logger", () => ({
 
 import { GET } from "@/app/api/admin/ap/pay-to-start/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
-import type { PtsPayload } from "@features/admin/server/ap/pay-to-start";
+import { clearTeamCache } from "@features/admin/server/ap/team";
+import { freeAdsOnly, type PtsPayload } from "@features/admin/server/ap/pay-to-start";
+import { spendBlocked } from "@features/admin/server/ap/metrics";
 
 import { sub } from "./ap-fixtures";
 
@@ -82,9 +84,14 @@ beforeEach(() => {
   mockAds.mockResolvedValue([]);
   mockGateOn.mockResolvedValue(false);
   mockSupabaseFetch.mockImplementation(async (path: string) =>
-    path === "/rest/v1/rpc/ap_facts" ? json(facts()) : json(null, { status: 404 })
+    path === "/rest/v1/rpc/ap_facts"
+      ? json(facts())
+      : path.startsWith("/rest/v1/ap_team_user?")
+        ? json(respond(path))
+        : json(null, { status: 404 })
   );
   mockFetchAllRows.mockImplementation(async (path: string) => respond(path));
+  clearTeamCache();
 });
 
 const paths = () => mockFetchAllRows.mock.calls.map(([p]) => String(p));
@@ -221,28 +228,30 @@ describe("GET /api/admin/ap/pay-to-start", () => {
   });
 
   it("takes paid buyers' survey starts out of the free survey's, as ap_facts counted them", async () => {
-    mockSupabaseFetch.mockImplementation(async () =>
-      json(
-        facts({
-          starts: [
-            {
-              day: "2026-10-20",
-              known: true,
-              src: "google",
-              med: "cpc",
-              ads: true,
-              arm: null,
-              device: "iOS",
-              finished: true,
-              camp: null,
-              term: null,
-              cq: null,
-              email: true,
-              n: 10,
-            },
-          ],
-        })
-      )
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/rest/v1/ap_team_user?")
+        ? json(respond(path))
+        : json(
+            facts({
+              starts: [
+                {
+                  day: "2026-10-20",
+                  known: true,
+                  src: "google",
+                  med: "cpc",
+                  ads: true,
+                  arm: null,
+                  device: "iOS",
+                  finished: true,
+                  camp: null,
+                  term: null,
+                  cq: null,
+                  email: true,
+                  n: 10,
+                },
+              ],
+            })
+          )
     );
     const paid = (id: number, sid: number, email = "reader@example.com") => ({
       id,
@@ -298,12 +307,8 @@ describe("GET /api/admin/ap/pay-to-start", () => {
         utm_tracker: null,
       },
     ];
-    rows["/rest/v1/app_user?"] = [
-      { id: 9001, email: "reader@example.com" },
-      { id: 9002, email: "fatih@loveiq.org" },
-      { id: 9004, email: "x@example.com" },
-      { id: 9005, email: "y@example.com" },
-    ];
+    // The team's accounts (ap_team_user): 9002 is fatih@loveiq.org.
+    rows["/rest/v1/ap_team_user?"] = [{ id: 9002 }];
     const body = (await (await GET(req())).json()) as PtsPayload;
     const after = body.funnels.find((f) => f.key === "after")!;
     // 10 starts; only 701's is a paid buyer's that ap_facts counted.
@@ -314,9 +319,9 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect(p.find((x) => x.startsWith("/rest/v1/survey_submission?id=in."))).toContain(
       "id=in.(701,702,704,705)"
     );
-    expect(p.find((x) => x.startsWith("/rest/v1/app_user?"))).toContain(
-      "id=in.(9001,9002,9004,9005)"
-    );
+    expect(
+      mockSupabaseFetch.mock.calls.some(([x]) => String(x).startsWith("/rest/v1/ap_team_user?"))
+    ).toBe(true);
   });
 
   it("counts what a buyer bought on the report afterwards, never the purchase twice", async () => {
@@ -407,5 +412,59 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     mockFetchAllRows.mockImplementation(async (path: string) => respond(path));
     mockSupabaseFetch.mockResolvedValue(json(null, { status: 500 }));
     expect((await GET(req())).status).toBe(500);
+  });
+});
+
+describe("Free survey's ad spend (freeAdsOnly)", () => {
+  const row = (url: string, cost: number) => ({
+    landingPageView: { unexpandedFinalUrl: url },
+    segments: { date: "2026-10-23" },
+    metrics: { costMicros: String(cost * 1_000_000), clicks: "1", impressions: "10" },
+  });
+  const scope = {
+    assessment: "a",
+    source: "all",
+    device: "all",
+    tier: "all",
+    visitor: "all",
+    funnel: "free",
+  } as const;
+
+  it("is the free survey's when no ad over the page's days landed on its pages", async () => {
+    mockAds.mockResolvedValueOnce([row("https://www.loveiq.org/", 12.5)]);
+    const free = await freeAdsOnly("2026-10-10", "2026-10-24");
+    expect(free).toEqual({ ok: true });
+    expect(spendBlocked(scope, free)).toBeNull();
+    // Read from the launch at the earliest: no ad could land on its pages before.
+    expect(String(mockAds.mock.calls.at(-1)![0])).toContain(
+      "BETWEEN '2026-10-22' AND '2026-10-24'"
+    );
+    // A later range reads its own days only, so an earlier pay-to-start ad never blanks it.
+    mockAds.mockResolvedValueOnce([]);
+    await freeAdsOnly("2026-11-02", "2026-11-08");
+    expect(String(mockAds.mock.calls.at(-1)![0])).toContain(
+      "BETWEEN '2026-11-02' AND '2026-11-08'"
+    );
+  });
+
+  it("stays blank, saying why, when an ad landed on a pay-to-start page or the ads can't be read", async () => {
+    mockAds.mockResolvedValueOnce([
+      row("https://www.loveiq.org/", 12.5),
+      row("https://www.loveiq.org/sexual-archetype/initial", 3),
+    ]);
+    const some = await freeAdsOnly("2026-10-20", "2026-10-24");
+    expect(spendBlocked(scope, some)).toMatch(
+      /^Some ads in the days these figures cover landed on pay to start's pages/
+    );
+    mockAds.mockResolvedValueOnce(null);
+    expect(spendBlocked(scope, await freeAdsOnly("2026-10-20", "2026-10-24"))).toMatch(
+      /couldn't be read/
+    );
+    // Before the launch there's nothing to read.
+    mockAds.mockClear();
+    expect(await freeAdsOnly("2026-10-01", "2026-10-20")).toEqual({ ok: true });
+    expect(mockAds).not.toHaveBeenCalled();
+    // Without the check, still blank as before.
+    expect(spendBlocked(scope)).toMatch(/whole Google Ads account's/);
   });
 });

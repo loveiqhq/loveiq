@@ -3,15 +3,20 @@ import { z } from "zod";
 
 import { buildCatalog, productionSchema } from "@features/admin/server/ap/catalog";
 import { googleRows } from "@features/admin/server/ap/explorer";
+import { liveRows } from "@features/admin/server/ap/google-live";
+import { SITE_EVENTS } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { countRows, supabaseFetch } from "@features/admin/server/supabase";
 import { hogqlTable } from "@features/ux-review/server/review";
+import { readVercelOidcToken } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
+import { reportingDay } from "@shared/time/reporting-day";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const QUERY = z.object({
-  source: z.enum(["production", "posthog", "ga4", "ads"]),
+  source: z.enum(["production", "posthog", "ga4", "ads", "gsc"]),
   table: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
 });
 
@@ -63,7 +68,7 @@ export async function GET(request: Request) {
       ]);
     } else if (source === "posthog" && table === "events") {
       const r = await hogqlTable(
-        "SELECT count(), max(timestamp) FROM events WHERE properties.$host = 'www.loveiq.org' LIMIT 1",
+        `SELECT count(), max(timestamp) FROM events WHERE ${SITE_EVENTS} LIMIT 1`,
         1
       );
       if (r.ok) {
@@ -71,13 +76,19 @@ export async function GET(request: Request) {
         // No events, no newest: max() of nothing is the zero time.
         newest = rows ? instant(r.rows[0]?.[1]) : null;
       }
-    } else if (source === "ga4" || source === "ads") {
-      // A row per channel or campaign per day, so counted from the rows the explorer reads.
+    } else if (source === "ga4" || source === "ads" || source === "gsc") {
+      // A row per channel or campaign per day, so counted from the rows the explorer reads:
+      // the brain's copy, or Google itself for a live table (all its days, to today).
       const known = buildCatalog([], []).find((t) => t.source === source && t.name === table);
-      const all = known ? await googleRows(known.name) : null;
+      const live = known
+        ? liveRows(known.name, "2000-01-01", reportingDay(new Date()), readVercelOidcToken(request))
+        : null;
+      const all = known ? await (live ?? googleRows(known.name)) : null;
       if (!all) return NextResponse.json({ error: "No such table." }, { status: 400 });
       rows = all.length;
-      newest = instant(all[all.length - 1]?.date);
+      // A monthly table's newest row ends on its month_to, not its first day.
+      const last = all[all.length - 1];
+      newest = instant(last?.month_to ?? last?.date);
     }
     return NextResponse.json({ rows, newest }, { headers: NO_STORE });
   } catch (err) {

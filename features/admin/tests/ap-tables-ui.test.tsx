@@ -141,7 +141,7 @@ describe("the report's email campaigns table", () => {
       within(table)
         .queryAllByRole("rowheader")
         .map((r) => r.textContent ?? "");
-    expect(names()).toHaveLength(3);
+    expect(names()).toHaveLength(5);
 
     fireEvent.click(within(table).getByRole("button", { name: "Filter Campaign" }));
     const pick = screen.getByRole("combobox", { name: /filter campaign/i });
@@ -153,7 +153,7 @@ describe("the report's email campaigns table", () => {
     expect(names()).toHaveLength(1);
     expect(names()[0]).toMatch(/^54h no unlock/);
     fireEvent.change(pick, { target: { value: "" } });
-    expect(names()).toHaveLength(3);
+    expect(names()).toHaveLength(5);
   });
 });
 

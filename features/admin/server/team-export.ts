@@ -90,7 +90,7 @@ const EMAIL = /[A-Za-z0-9._%+-]+(?:@|%40)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi;
  * `rpt_<redacted>`, the stand-in an earlier fix left in old analytics rows, so a check for
  * `rpt_` finds nothing at all.
  */
-const REPORT_TOKEN = /rp(?:ts?|p)_[A-Za-z0-9_<>-]*/g;
+export const REPORT_TOKEN = /rp(?:ts?|p)_[A-Za-z0-9_<>-]*/g;
 /** Masked in every table that has a column of this name. */
 const PERSONAL_COLUMNS = new Set([
   "first_name",

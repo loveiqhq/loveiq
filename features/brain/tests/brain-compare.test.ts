@@ -125,6 +125,24 @@ describe("parseComparePeriod", () => {
   });
 });
 
+describe("bucketRows — a figure the dashboard leaves blank", () => {
+  it("is unknown for the bucket, never a partial sum", () => {
+    // Visitors are counted whole from 15 Jun 2026: the days before have none (null).
+    const [b] = bucketRows(
+      [
+        day("2026-06-13", { unique_visitors: null }),
+        day("2026-06-14", { unique_visitors: null }),
+        day("2026-06-15"),
+      ],
+      "month"
+    );
+    expect(b!.totals.unique_visitors).toBeUndefined();
+    expect(b!.unknown).toEqual({ unique_visitors: 2 });
+    // The other figures still add up.
+    expect(b!.totals.revenue).toBe(15);
+  });
+});
+
 describe("renderComparison", () => {
   const base = { since: "2026-08-01", until: "2026-08-31" };
 
@@ -149,6 +167,20 @@ describe("renderComparison", () => {
       }
     );
     expect(out).not.toContain("DIFFERENT LENGTHS");
+  });
+
+  it("never compares a figure one period has blank days of, and never reads it as zero", () => {
+    const out = renderComparison(
+      { period: base, rows: [day("2026-08-01")] },
+      {
+        period: { since: "2026-06-01", until: "2026-06-30" },
+        rows: [day("2026-06-01", { unique_visitors: null }), day("2026-06-20")],
+      }
+    );
+    expect(out).toContain("unique_visitors    unknown — 1 of 2 days in the second");
+    expect(out).not.toMatch(/unique_visitors\s+10\s+vs/);
+    // Revenue is whole on both sides: compared.
+    expect(out).toMatch(/revenue\s+5\s+vs\s+10/);
   });
 
   it("refuses to subtract two spends when either side has an uncovered day", () => {

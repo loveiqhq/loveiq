@@ -24,6 +24,7 @@ vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ pa
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 
 import { parseFilters } from "@features/admin/server/ap/filters";
+import type { PtsPayload } from "@features/admin/server/ap/pay-to-start";
 import {
   buildLanding,
   engagementWindows,
@@ -67,20 +68,25 @@ const test = (key: string) => LANDING_TESTS.find((t) => t.key === key)!;
 const now = new Date("2026-10-13T12:00:00Z");
 
 describe("landing test windows", () => {
-  it("runs a live test to yesterday and clips every test to the range", () => {
-    expect(testWindow(test("hero"), "2026-10-01", "2026-12-31", "2026-11-01")).toEqual({
+  it("runs a live test to yesterday, or today in a range running through today, and clips every test to the range", () => {
+    expect(testWindow(test("hero"), "2026-10-01", "2026-10-31", "2026-11-01")).toEqual({
       from: LANDING_TEST_START_DAY,
       to: "2026-10-31",
     });
-    expect(testWindow(test("rebuild"), "2026-09-13", "2026-10-12", "2026-10-13")).toEqual({
-      from: "2026-09-13",
-      to: "2026-09-19",
+    // "Today" (or a range running through it) reads the test's visits of today too.
+    expect(testWindow(test("hero"), "2026-11-01", "2026-11-01", "2026-11-01")).toEqual({
+      from: "2026-11-01",
+      to: "2026-11-01",
     });
-    expect(testWindow(test("rebuild"), "2026-10-01", "2026-10-12", "2026-10-13")).toBeNull();
-    // V1's visits carry their version from 25 Aug: the days before are not the test's.
-    expect(testWindow(test("rebuild"), "2026-08-01", "2026-08-31", "2026-10-13")).toEqual({
-      from: "2026-08-25",
-      to: "2026-08-31",
+    // An ended test keeps its own days: clipped to the range, or none outside it.
+    expect(testWindow(test("hero-first-run"), "2026-10-10", "2026-10-31", "2026-11-01")).toEqual({
+      from: "2026-10-10",
+      to: "2026-10-13",
+    });
+    expect(testWindow(test("hero-first-run"), "2026-10-14", "2026-10-31", "2026-11-01")).toBeNull();
+    expect(testWindow(test("hero-first-run"), "2026-09-01", "2026-10-31", "2026-11-01")).toEqual({
+      from: LANDING_HERO_VIDEO_LAUNCH_DAY,
+      to: "2026-10-13",
     });
   });
 
@@ -197,44 +203,90 @@ describe("buildLanding", () => {
       paid: 1,
       revenue: 6.99,
       status: "Ended",
-      // The Initial plan is on sale; this arm's one submitter didn't buy it.
-      preCvr: 0,
+      // The arm's days (7 Oct) are before the EUR 1.99 was on sale (23 Oct): no rate, never 0%.
+      preCvr: null,
     });
     // A full unlock per visit, as the table's other rates are.
     expect(a?.fullCvr).toBeCloseTo(0.01);
     expect(b).toMatchObject({ arm: "white_video", visits: 120, starts: 18, subs: 0, fullCvr: 0 });
     expect(a?.startCvr).toBeCloseTo(0.12);
     expect(a).toMatchObject({ bounce: null, cta: null, scroll: null });
-    expect(p.outside.map((o) => o.split(" (")[0])).toEqual([
-      "#6 · Hero video vs Q1",
-      "Landing rebuild V1 vs V2",
-    ]);
   });
 
-  it("counts a pre-unlock per visit, as its other rates are", () => {
-    const facts = armFacts();
-    const at = Date.parse("2026-10-07T12:00:00Z") / 1000;
-    facts.subs = facts.subs.map((s) =>
-      s.id === 1
-        ? {
-            ...s,
-            pays: [
-              [at, 1.99, "initial"],
-              [at + 60, 6.99, "full_report"],
-            ],
-          }
-        : s
-    );
+  it("counts a pre-unlock per visit, as its other rates are, once the EUR 1.99 is on sale", () => {
+    // The running test's days 24-30 Oct: 200 visits to version A, one finisher who paid
+    // EUR 1.99 and then the full report, one who paid nothing, and E07's EUR 0 gift is none.
+    const at = Date.parse("2026-10-25T12:00:00Z") / 1000;
+    const facts = factsFixture({
+      from: "2026-10-24",
+      to: "2026-10-30",
+      visits: [{ day: "2026-10-25", arm: "white_card", src: null, n: 200 }],
+      starts: [],
+      subs: [
+        sub({
+          id: 1,
+          day: "2026-10-25",
+          at: "2026-10-25T10:00:00Z",
+          arm: "white_card",
+          pays: [
+            [at, 1.99, "initial"],
+            [at + 60, 19.99, "full_report"],
+          ],
+        }),
+        sub({ id: 2, day: "2026-10-25", at: "2026-10-25T11:00:00Z", arm: "white_card" }),
+        sub({
+          id: 3,
+          day: "2026-10-26",
+          at: "2026-10-26T11:00:00Z",
+          arm: "white_card",
+          pays: [[at, 0, "initial"]],
+        }),
+      ],
+      money: [],
+    });
     const p = buildLanding({
       facts,
       previous: null,
-      filters,
-      today: "2026-10-13",
-      now,
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-24", to: "2026-10-30" },
+        "2026-10-31"
+      ),
+      today: "2026-10-31",
+      now: new Date("2026-10-31T10:00:00Z"),
       armEngagement: {},
       engagement: null,
     });
-    expect(p.rows[0]?.preCvr).toBeCloseTo(0.01);
+    const a = p.rows.find((r) => r.arm === "white_card")!;
+    expect(a.preCvr).toBeCloseTo(1 / 200);
+    // The tile: finished surveys pre-unlocked over all finished surveys.
+    expect(p.tiles.find((t) => t.key === "pre-cvr")!.value).toBeCloseTo(1 / 3);
+    // "Free survey" sells it only through the report's gate: off, and none sold, blank with why.
+    const page = (subs: ReturnType<typeof sub>[], gateOn: boolean | null) =>
+      buildLanding({
+        facts: factsFixture({ ...facts, subs }),
+        previous: null,
+        filters: parseFilters(
+          { period: "custom", from: "2026-10-24", to: "2026-10-30", funnel: "free" },
+          "2026-10-31"
+        ),
+        today: "2026-10-31",
+        now: new Date("2026-10-31T10:00:00Z"),
+        armEngagement: {},
+        engagement: null,
+        gateOn,
+      });
+    const free = (subs: ReturnType<typeof sub>[], gateOn: boolean | null) =>
+      page(subs, gateOn).tiles.find((t) => t.key === "pre-cvr")!;
+    const none = [sub({ id: 2, day: "2026-10-25", at: "2026-10-25T11:00:00Z", arm: "white_card" })];
+    const off = "Not sold in the free survey: the report's €1.99 gate is switched off.";
+    expect(free(none, false)).toMatchObject({ value: null, blocked: off });
+    expect(free(none, true).value).toBe(0);
+    expect(free(facts.subs, false).value).toBeCloseTo(1 / 3);
+    // The tests' arms likewise, and the page says why once.
+    const offPage = page(none, false);
+    expect(offPage.rows.find((r) => r.arm === "white_card")!.preCvr).toBeNull();
+    expect(offPage.notes).toContain(off);
+    expect(page(none, true).rows.find((r) => r.arm === "white_card")!.preCvr).toBe(0);
   });
 
   it("takes bounce, time, CTA clicks and scroll from PostHog where it saw 30 visits an arm", () => {
@@ -291,7 +343,7 @@ describe("buildLanding", () => {
       engagement: failed,
     });
     expect(p.unread).toEqual([
-      `#6 · Hero video vs Q1: bounce, avg. time, CTA clicks and scroll are blank. ${failed.error}`,
+      `#6 · Landing hero: bounce, median time, CTA clicks and scroll are blank. ${failed.error}`,
     ]);
     expect(p.rows.every((r) => r.bounce === null && r.cta === null)).toBe(true);
   });
@@ -327,10 +379,13 @@ describe("buildLanding", () => {
     // 300 visits (the probe's 7 out, every arm in), 30 starts (the probe's 2 out), 2 finishers.
     expect(tile("start-cvr").value).toBeCloseTo(30 / 300);
     expect(tile("complete-cvr").value).toBeCloseTo(2 / 30);
-    // The Initial plan is on sale (19.10); the fixture sold none.
-    expect(tile("pre-cvr").value).toBe(0);
-    expect(tile("pre-cvr").note).toBeUndefined();
-    // The fixture's one full-report sale (2 Oct) over the range's finishers.
+    // The range (1-7 Oct) is before the EUR 1.99 was on sale: blank with why, never 0%.
+    expect(tile("pre-cvr")).toMatchObject({
+      value: null,
+      blocked:
+        "Pre-unlock figures start on 23 Oct 2026, its first whole day on sale (from the evening before): pick a range from that day on.",
+    });
+    // The range's finishers who bought a full unlock (the fixture's first) over all of them.
     expect(tile("full-cvr").value).toBeCloseTo(1 / 2);
     expect(tile("rev-visit").value).toBeCloseTo(6.99 / 300);
     expect(tile("rev-sub")).toMatchObject({ value: 6.99 / 2, prev: 0 });
@@ -341,6 +396,22 @@ describe("buildLanding", () => {
       to: "2026-09-30",
       label: "24 Sep – 30 Sep 2026",
     });
+  });
+
+  it("counts a full unlock against the people who finished in the range, not a sale in it", () => {
+    const facts = armFacts();
+    // A June finisher's full unlock paid in the range: a sale here, but not one of these people.
+    facts.money.push({ ...facts.money[0]!, sid: 99, day: "2026-10-07", plan: "full_report" });
+    const p = buildLanding({
+      facts,
+      previous: null,
+      filters,
+      today: "2026-10-13",
+      now,
+      armEngagement: {},
+      engagement: null,
+    });
+    expect(p.tiles.find((t) => t.key === "full-cvr")!.value).toBeCloseTo(1 / 2);
   });
 
   it("leaves the start rates blank, with why, where starts aren't all recorded", () => {
@@ -361,6 +432,58 @@ describe("buildLanding", () => {
     expect(p.tiles.find((t) => t.key === "start-cvr")!.blocked).toBe(why);
     expect(p.tiles.find((t) => t.key === "complete-cvr")!.blocked).toBe(why);
     expect(p.tiles.find((t) => t.key === "rev-visit")!.blocked).toBeNull();
+  });
+
+  it("shows pay to start's live pages under All funnels, and leaves them out, saying so, under Free survey or before launch", () => {
+    const pts = {
+      funnels: [
+        {
+          key: "full",
+          label: "Pay to start · €29.99",
+          live: true,
+          steps: [
+            { label: "Visits", n: 40 },
+            { label: "Checkout started", n: 4 },
+            { label: "Paid €29.99", n: 2 },
+            { label: "Survey finished", n: 1 },
+          ],
+        },
+      ],
+      notes: [
+        "No ad in this range lands on a pay-to-start page yet.",
+        "2 visits to the pay-to-start pages came before the two pages were counted apart, so neither offer's visits include them.",
+        "Pay after the report is paid after the survey, sometimes days later (the 72-hour email): its last few days here will still grow.",
+      ],
+    } as unknown as PtsPayload;
+    const at = (funnel: string) =>
+      buildLanding({
+        facts: armFacts(),
+        previous: null,
+        filters: parseFilters(
+          { period: "custom", from: "2026-10-01", to: "2026-10-07", funnel },
+          "2026-10-13"
+        ),
+        today: "2026-10-13",
+        now,
+        armEngagement: {},
+        engagement: null,
+        pts,
+      }).payFirst!;
+    expect(at("all").rows).toEqual([
+      expect.objectContaining({ key: "full", visitors: 40, checkout: 4, paid: 2, finished: 1 }),
+    ]);
+    // Only the notes about the pages' own steps: not ads, nor the free survey's funnels.
+    expect(at("all").notes).toEqual([
+      "2 visits to the pay-to-start pages came before the two pages were counted apart, so neither offer's visits include them.",
+    ]);
+    const free = at("free");
+    expect(free.rows).toEqual([]);
+    expect(free.notes.join(" ")).toMatch(/Free survey, which leaves pay to start out/);
+    // A range ending before the pages went live: no row of zeros, but when they started.
+    pts.funnels[0]!.live = false;
+    const before = at("all");
+    expect(before.rows).toEqual([]);
+    expect(before.notes.join(" ")).toMatch(/went live on 22 Oct 2026/);
   });
 });
 
@@ -457,12 +580,12 @@ describe("the landing page's screen", () => {
       "Full-unlock CVR",
       "€ / visit",
       "Bounce",
-      "Avg. time",
+      "Median time",
     ]);
     const eng = screen.getByRole("table", { name: "Engagement per landing page" });
     expect(within(eng).getByText("Scroll depth reached")).toBeTruthy();
     expect(within(eng).getByText("All landing pages")).toBeTruthy();
-    expect(within(eng).getByText("Weighted average")).toBeTruthy();
+    expect(within(eng).getByText("Every visit together · median time")).toBeTruthy();
     // The card's bounce 40%, the video's 25%; the average 95 of 260.
     expect(within(eng).getByText("40%")).toBeTruthy();
     expect(within(eng).getByText("36.5%")).toBeTruthy();

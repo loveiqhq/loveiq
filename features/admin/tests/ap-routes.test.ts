@@ -744,7 +744,21 @@ describe("POST /api/admin/ap/saved-filters", () => {
 });
 
 describe("GET /api/admin/ap/catalog", () => {
-  it("lists the design's Google tables, refreshed every 15 minutes, Ads by its campaigns", async () => {
+  it("reads a source synced today or yesterday as synced", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/") return json(SCHEMA);
+      if (path.startsWith("/rest/v1/admin_field_note")) return json([]);
+      return json([{ period_end: `${today}T12:00:00+00:00` }]);
+    });
+    const body = (await (
+      await catalogGet(new Request("http://localhost/api/admin/ap/catalog"))
+    ).json()) as { sources: Array<{ key: string; status: string; ok: boolean }> };
+    for (const k of ["ga4", "ads"])
+      expect(body.sources.find((x) => x.key === k)).toMatchObject({ status: "Synced", ok: true });
+  });
+
+  it("lists the Google tables: the brain's copies every 15 minutes, Ads by its campaigns, the rest live", async () => {
     mockSupabaseFetch.mockImplementation(async (path: string) => {
       if (path === "/rest/v1/") return json(SCHEMA);
       if (path.startsWith("/rest/v1/admin_field_note")) return json([]);
@@ -759,9 +773,12 @@ describe("GET /api/admin/ap/catalog", () => {
       tables: Array<{ source: string; name: string; key: string[]; group: string }>;
     };
     const source = (k: string) => body.sources.find((x) => x.key === k)!;
-    expect(source("ga4").fresh).toBe("Every 15 minutes, last day 14 Oct 2026");
-    expect(source("ads").fresh).toBe("Every 15 minutes, last day 13 Oct 2026");
-    expect(source("ads").description).toMatch(/conversions by day and campaign/);
+    expect(source("ga4").fresh).toBe("Every 15 minutes, to 14 Oct");
+    expect(source("ads").fresh).toBe("Every 15 minutes, to 13 Oct");
+    // Days behind a 15-minute sync: it has stopped, and the card says so.
+    expect(source("ga4")).toMatchObject({ status: "Behind", ok: false });
+    expect(source("ads")).toMatchObject({ status: "Behind", ok: false });
+    expect(source("ads").description).toMatch(/^Campaign spend, clicks and conversions/);
     // The Ads card dates itself by the campaign table, not by GA4's spend.
     expect(
       mockSupabaseFetch.mock.calls.some(([p]) =>
@@ -769,9 +786,43 @@ describe("GET /api/admin/ap/catalog", () => {
       )
     ).toBe(true);
     const google = body.tables.filter((t) => t.source === "ga4" || t.source === "ads");
-    expect(google.map(({ source: s, name, key, group }) => ({ s, name, key, group }))).toEqual([
-      { s: "ga4", name: "sessions_daily", key: ["date", "channel"], group: "Traffic" },
-      { s: "ads", name: "campaign_daily", key: ["date", "campaign_id"], group: "Spend" },
+    expect(google.map(({ source: s, name }) => `${s}.${name}`)).toEqual([
+      "ga4.sessions_daily",
+      "ads.campaign_daily",
+      // Read live from Google (google-live.ts); since the second audit (21 Oct 2026) also
+      // hours, devices, cities, new and returning, custom parameters, ads, age and gender,
+      // impression share, Performance Max's search categories and the change history.
+      "ga4.site_daily",
+      "ga4.acquisition_daily",
+      "ga4.landing_pages_daily",
+      "ga4.pages_daily",
+      "ga4.events_daily",
+      "ga4.hours_daily",
+      "ga4.tech_daily",
+      "ga4.landing_sources_daily",
+      "ga4.page_events_daily",
+      "ga4.cities_daily",
+      "ga4.new_returning_daily",
+      "ga4.event_params_daily",
+      "ads.conversion_action_daily",
+      "ads.search_term_daily",
+      "ads.keyword_daily",
+      "ads.ad_group_daily",
+      "ads.device_daily",
+      "ads.geo_daily",
+      "ads.demographics_daily",
+      "ads.impression_share_daily",
+      "ads.ads_hours_daily",
+      "ads.search_ads_daily",
+      "ads.pmax_search_categories",
+      "ads.change_history",
+    ]);
+    expect(body.tables.filter((t) => t.source === "gsc").map((t) => t.name)).toEqual([
+      "search_console_daily",
+    ]);
+    expect(google.slice(0, 2).map(({ key, group }) => ({ key, group }))).toEqual([
+      { key: ["date", "channel"], group: "Traffic" },
+      { key: ["date", "campaign_id"], group: "Spend" },
     ]);
   });
 });
@@ -1116,10 +1167,21 @@ describe("the new/returning filter", () => {
 
 describe("fetchSurveyIntroClicks", () => {
   it("counts the sessions that tapped the intro's silhouette, by its aria-label", async () => {
-    mockHogql.mockResolvedValue({ ok: true, cut: null, rows: [[100, 20, 60, 5, 3, 8, 55, 31]] });
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [[100, 20, 60, 5, 3, 8, 55, 70, 31]],
+    });
     // Its own range, so the five-minute cache holds nothing for it.
     const r = await fetchSurveyIntroClicks("2026-07-01", "2026-07-07");
-    expect(r).toMatchObject({ ok: true, value: { opened: 100, answered: 55, silhouette: 31 } });
+    // Reached question 1: the engine started or a question was answered, so at least answered.
+    expect(r).toMatchObject({
+      ok: true,
+      value: { opened: 100, answered: 55, reachedQ1: 70, silhouette: 31 },
+    });
+    expect(String(mockHogql.mock.calls[0]?.[0])).toContain(
+      "event IN ('survey_answer', 'survey_started')"
+    );
     expect(String(mockHogql.mock.calls[0]?.[0])).toContain(
       "event = '$autocapture' AND elements_chain LIKE '%Continue to survey introduction%'"
     );

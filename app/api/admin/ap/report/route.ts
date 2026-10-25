@@ -13,9 +13,11 @@ import {
   fetchReportExtras,
   fetchReportTour,
   TOUR_TRACKING_FROM,
+  fetchVotes,
 } from "@features/admin/server/ap/report-page";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { addDays } from "@features/admin/server/dropoff-weekly";
+import { readInitialUnlockGateSwitch } from "@features/report/server/initialGateState";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
@@ -42,6 +44,12 @@ export async function GET(request: Request) {
         })
       : Promise.resolve(null);
 
+  // "Free survey" sells the EUR 1.99 only through the report's gate: its switch, for the
+  // pre-unlock rate (null when it can't be read, and the tile says so).
+  const gateRead =
+    filters.funnel === "free"
+      ? readInitialUnlockGateSwitch().catch(() => null)
+      : Promise.resolve(null);
   try {
     const compared = cmp && !beforeData(cmp) ? cmp : null;
     const [
@@ -54,6 +62,7 @@ export async function GET(request: Request) {
       previousReturns,
       tour,
       previousTour,
+      votes,
     ] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
@@ -74,6 +83,12 @@ export async function GET(request: Request) {
         : Promise.resolve(null),
       tourOf(filters),
       tourOf(compared),
+      // Every chapter vote, all time: the chapters' feedback and the Feedback section. Without
+      // them those say the votes could not be read, rather than the page failing.
+      fetchVotes().catch((err: unknown) => {
+        logger.warn({ err }, "AP report: chapter votes unavailable");
+        return null;
+      }),
     ]);
     return NextResponse.json(
       buildReportPage({
@@ -86,6 +101,8 @@ export async function GET(request: Request) {
         previousReturns,
         tour,
         previousTour,
+        votes,
+        gateOn: await gateRead,
         filters,
         today,
         now,
