@@ -31,6 +31,7 @@ vi.mock("next/headers", () => ({
 
 import * as csrf from "@shared/http/csrf";
 import * as ratelimit from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 import { POST } from "@/app/api/funnel-event/route";
 
 const VALID_UUID = "550e8400-e29b-41d4-a716-446655440000";
@@ -95,6 +96,20 @@ describe("POST /api/funnel-event", () => {
     const res = await POST(makeRequest({ event: "unique_visitor", visitor_id: "nope" }));
     expect(res.status).toBe(400);
     expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  // The walkers' iPhone runs meet a 400 here on every walk (2026-10-19 on) and nothing said
+  // why. The route now says which field failed, never what the body held.
+  it("says why it refused a body, without the body", async () => {
+    vi.mocked(logger.warn).mockClear();
+    await POST(makeRequest({ event: "unique_visitor", visitor_id: "nope-not-a-uuid" }));
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [fields, message] = vi.mocked(logger.warn).mock.calls[0]!;
+    expect(message).toBe("funnel-event: refused a body that does not parse");
+    expect((fields as { issues: string[] }).issues.some((i) => i.startsWith("visitor_id:"))).toBe(
+      true
+    );
+    expect(JSON.stringify(fields)).not.toContain("nope-not-a-uuid");
   });
 
   it("returns 403 when CSRF check fails", async () => {

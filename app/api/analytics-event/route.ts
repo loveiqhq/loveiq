@@ -179,6 +179,17 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
+    // Why a body was refused, never the body (it carries a visitor's ids): the persona walks'
+    // iPhone runs have met a 400 here on every walk since 2026-10-19, and nothing said why.
+    // An empty or unreadable body (`body: null`) points at the browser's beacon, a named
+    // field at the caller. A warning: the logger mirrors only errors to Slack.
+    logger.warn(
+      {
+        body: body === null ? null : typeof body,
+        issues: parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}:${i.code}`),
+      },
+      "analytics-event: refused a body that does not parse"
+    );
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
