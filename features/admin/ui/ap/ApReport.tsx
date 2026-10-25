@@ -910,22 +910,25 @@ function TourSection({ data }: { data: ReportPayload }) {
           Our own records of each reader&rsquo;s first run of the tour in a browser, from {t.from}
           (PostHog sees about a quarter of readers); a replay from the chapter menu is left out. All
           traffic: the runs carry no funnel, source, device or tier. Tour started: the range&rsquo;s
-          readers who got the tour{a.share ? `, on this tab ${a.share}` : ""}, free and paid
-          together (an opener&rsquo;s audience isn&rsquo;t recorded). A reader who later opened it
-          in another browser got the tour there too: that run counts in the rest. Completed, Skipped
-          tour and Left the tour / bounced are shares of the runs; Left the tour / bounced also
-          holds the {fmt("count", a.unended)} {a.unended === 1 ? "run" : "runs"} whose end was never
-          recorded (the page went without a word, or the browser kept it and never brought it back),
-          which are on no stop. The table is of the {fmt("count", a.placed)}{" "}
-          {a.placed === 1 ? "run" : "runs"} whose end was recorded with its stops. Reached: of
-          those, the runs that came to the stop; a stop whose control was not on the page is left
-          out of that reader&rsquo;s tour. Next: went on from it, Finish on the last. Skip tour:
-          Skip Tour, Escape or the browser&rsquo;s Back there. Exit: left the page there. A run that
-          went back before it ended is placed on the furthest stop it reached. Next + Skip tour +
-          Exit add up to 100% of the runs on each stop; Back is counted separately, as the share who
-          went back from it at least once. Time: the median time with the stop&rsquo;s bubble up,
-          over every visit to it. From 1280px wide the first stop points at the sidebar, and its
-          text says &ldquo;the menu on the left&rdquo;. In red: Skip tour from 8%, Exit from 4%.
+          readers who got the tour
+          {a.share
+            ? `, on this tab ${a.share}, free and paid together (an opener’s audience isn’t recorded)`
+            : ""}
+          . A reader who later opened it in another browser got the tour there too: that run counts
+          in the rest. Completed, Skipped tour and Left the tour / bounced are shares of the runs;
+          Left the tour / bounced also holds the {fmt("count", a.unended)}{" "}
+          {a.unended === 1 ? "run" : "runs"} whose end was never recorded (the page went without a
+          word, or the browser kept it and never brought it back), which are on no stop. The table
+          is of the {fmt("count", a.placed)} {a.placed === 1 ? "run" : "runs"} whose end was
+          recorded with its stops. Reached: of those, the runs that came to the stop; a stop whose
+          control was not on the page is left out of that reader&rsquo;s tour. Next: went on from
+          it, Finish on the last. Skip tour: Skip Tour, Escape or the browser&rsquo;s Back there.
+          Exit: left the page there. A run that went back before it ended is placed on the furthest
+          stop it reached. Next + Skip tour + Exit add up to 100% of the runs on each stop; Back is
+          counted separately, as the share who went back from it at least once. Time: the median
+          time with the stop&rsquo;s bubble up, over every visit to it. From 1280px wide the first
+          stop points at the sidebar, and its text says &ldquo;the menu on the left&rdquo;. In red:
+          Skip tour from 8%, Exit from 4%.
         </p>
       </details>
     </Card>

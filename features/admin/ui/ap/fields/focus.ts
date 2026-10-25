@@ -389,7 +389,7 @@ WHERE segments.date BETWEEN :from AND :to`,
       den: "Customers who paid money, refunded ones included",
       mult: "× 100",
     },
-    caveat: `${FC_SAME} A cohort figure, like the rest of the row: a refund that comes later still raises it. A chargeback (dispute) is no refund here. Blank with no customer who paid.`,
+    caveat: `${FC_SAME} A cohort figure, like the rest of the row: a refund that comes later still raises it. A chargeback (dispute) is no refund here: its customer is left out of both counts, unless the dispute is won. Blank with no customer who paid.`,
     tables: [
       SUBMISSIONS,
       {
@@ -403,6 +403,15 @@ WHERE segments.date BETWEEN :from AND :to`,
       REPORTS,
       USERS,
       PREPAID,
+      {
+        source: "production",
+        table: "payment_webhook_event",
+        columns:
+          "event_type ('charge.refunded', 'charge.dispute.created'), stripe_payment_intent_id",
+        filters: "None: every refund and chargeback notice from Stripe",
+        watch:
+          "Pay to start's rows only: a refund in part before the survey claimed the purchase is on no payment row, and a chargeback voids the purchase as a full refund does, so the notice tells them apart.",
+      },
     ],
     query: { lang: "SQL", text: FC_FREE + FC_FREE_REFUNDS },
     related: ["focus.fc-paying", "focus.fc-roas", "focus.fc-cpp"],

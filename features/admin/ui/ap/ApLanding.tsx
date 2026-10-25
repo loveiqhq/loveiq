@@ -368,7 +368,14 @@ function PayToStart({ data }: { data: LandingPayload }) {
         description="Landing pages with the price shown before the survey. The visitor pays first, then takes the survey. The same figures as the Pay to start page, step by step."
       />
       {pf && pf.rows.length === 0 ? null : pf ? (
-        <div tabIndex={0} className="overflow-x-auto rounded-[14px] border border-ap-line">
+        // `relative`: the cells' sr-only words are placed absolutely, and without a placed box
+        // to hold them they widen the page on a phone.
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Pay-to-start landing pages, scrolls sideways"
+          className="relative overflow-x-auto rounded-[14px] border border-ap-line"
+        >
           <div role="table" aria-label="Pay-to-start landing pages" className="min-w-[980px]">
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <span
@@ -430,7 +437,9 @@ function PayToStart({ data }: { data: LandingPayload }) {
         <p className="m-0 text-xs text-ap-muted">
           Saw the price: the price is on screen from the first moment on every device (the card
           beside the text on a computer, the bar at the bottom on a phone), so it is no step of its
-          own here. Green is the better of the two pages in a column, red the other.
+          own here. Started survey: paying buyers whose survey saved an answer or was finished
+          (recorded from 26 Oct 2026). Paid → completed: of the paying buyers, those who finished.
+          Green is the better of the two pages in a column, red the other.
         </p>
       )}
       {(pf?.notes ?? []).map((x) => (

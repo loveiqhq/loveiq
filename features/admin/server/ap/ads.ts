@@ -114,7 +114,8 @@ const UNREADABLE = "Google Ads could not be read just now.";
 
 /**
  * Cost, clicks and impressions per campaign and per keyword over [from, to] (the account's
- * days, which are Berlin days). Cached five minutes per range; a failure is not kept.
+ * days, which are Berlin days). Cached five minutes per range; a failure is not kept, nor a
+ * result whose search ads couldn't be read.
  */
 export function fetchAdsSplit(
   from: string,
@@ -131,7 +132,7 @@ export function fetchAdsSplit(
   });
   cache.set(key, { at: now, result });
   void result.then((r) => {
-    if (!r.ok) cache.delete(key);
+    if (!r.ok || r.value.keywords.some((l) => l.ad === undefined)) cache.delete(key);
   });
   if (cache.size > 50) cache.delete(cache.keys().next().value!);
   return result;
@@ -163,8 +164,8 @@ async function readAdsSplit(
         `metrics.clicks, metrics.cost_micros FROM keyword_view WHERE ${between}`,
       { oidcToken, timeoutMs: 15_000 }
     ),
-    // The search ads shown in the range, for what each keyword's searchers saw. Best-effort: the
-    // campaign and keyword figures don't wait on it.
+    // The search ads shown in the range, for what each keyword's searchers saw. Best-effort: a
+    // failure leaves the campaign and keyword figures without their ads.
     googleAdsSearch<{
       adGroup?: { id?: string };
       adGroupAd?: {

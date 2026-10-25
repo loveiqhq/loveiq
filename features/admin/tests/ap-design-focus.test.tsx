@@ -331,8 +331,10 @@ describe("the page", () => {
     expect(card).toHaveTextContent(
       "Free survey vs pay to start, compared per visitor and per euro of ad spend. Step rates are not comparable because payment happens at a different point."
     );
+    // `relative`: the cells' sr-only words stay in the box, or they widen the page on a phone.
     expect(within(card).getByRole("region", { name: /scrolls sideways/ })).toHaveClass(
-      "overflow-x-auto"
+      "overflow-x-auto",
+      "relative"
     );
     const table = within(card).getByRole("table", { name: "Funnel comparison" });
     expect(

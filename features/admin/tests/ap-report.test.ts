@@ -2071,6 +2071,20 @@ describe("the guided tour", () => {
       );
     });
 
+    it("says nothing of the openers when there is no share of them: each tab is one audience", () => {
+      const p = tourPage();
+      screenData.payload = {
+        ...p,
+        tour: { ...p.tour, audiences: p.tour.audiences.map((a) => ({ ...a, share: null })) },
+      };
+      render(createElement(ApReport));
+      const text = document.getElementById("tour")!.textContent!;
+      expect(text).toContain(
+        "Tour started: the range’s readers who got the tour. A reader who later opened it"
+      );
+      expect(text).not.toContain("free and paid together");
+    });
+
     it("draws the stops: Spotlight, Back from the second, Finish on the last, the design's reds", () => {
       screenData.payload = tourPage();
       render(createElement(ApReport));

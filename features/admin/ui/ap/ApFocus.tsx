@@ -877,11 +877,13 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
           not comparable because payment happens at a different point.
         </p>
       </div>
+      {/* `relative`: the cells' sr-only words are placed absolutely, and without a placed box
+          to hold them they widen the page on a phone. */}
       <div
         tabIndex={0}
         role="region"
         aria-label="Funnel comparison, scrolls sideways"
-        className="overflow-x-auto rounded-[14px] border border-ap-line"
+        className="relative overflow-x-auto rounded-[14px] border border-ap-line"
       >
         <div role="table" aria-label="Funnel comparison" className="min-w-[1030px]">
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: FC_COLUMNS }}>

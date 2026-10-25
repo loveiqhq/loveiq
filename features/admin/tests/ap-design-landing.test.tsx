@@ -39,11 +39,12 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
 }));
 
 import type { Table } from "@features/admin/server/ap/common";
-import { parseFilters } from "@features/admin/server/ap/filters";
+import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
 import { buildLanding, LANDING_TESTS } from "@features/admin/server/ap/landing";
 import {
   measuresOf,
+  SURVEY_STARTED_FROM,
   type PtsFunnel,
   type PtsPayload,
 } from "@features/admin/server/ap/pay-to-start";
@@ -402,7 +403,15 @@ describe("the pay-to-start section", () => {
     expect(section.textContent).toContain(
       "Saw the price: the price is on screen from the first moment on every device"
     );
+    // The board's note: what the two new columns count, from the stamp's first day.
+    expect(section.textContent).toContain(
+      `Started survey: paying buyers whose survey saved an answer or was finished (recorded from ${rangeLabel(SURVEY_STARTED_FROM, SURVEY_STARTED_FROM)}). Paid → completed: of the paying buyers, those who finished.`
+    );
     expect(section.textContent).toContain(pts.notes[0]);
+    // `relative`: the cells' sr-only words stay in the box, or they widen the page on a phone.
+    expect(
+      within(section).getByRole("region", { name: "Pay-to-start landing pages, scrolls sideways" })
+    ).toHaveClass("overflow-x-auto", "relative");
   });
 
   it("says so when Pay to start's figures couldn't be read", () => {
@@ -413,6 +422,15 @@ describe("the pay-to-start section", () => {
       "Pay to start’s figures could not be read just now. Try again in a minute."
     );
     expect(within(section).queryByRole("table")).toBeNull();
+  });
+});
+
+describe("Started survey's first day", () => {
+  it("is the same day in the card as in the code that counts from it", () => {
+    // A hand-written date: set SURVEY_STARTED_FROM at the deploy, and this keeps the card in step.
+    expect(FIELDS["landing.pf-started"]!.caveat).toContain(
+      rangeLabel(SURVEY_STARTED_FROM, SURVEY_STARTED_FROM)
+    );
   });
 });
 

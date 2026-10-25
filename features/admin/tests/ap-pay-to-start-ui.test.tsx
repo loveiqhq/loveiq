@@ -220,11 +220,11 @@ describe("ApPayToStart", () => {
     expect(screen.queryByText(/Paid traffic only: visits are the ad clicks/)).toBeNull();
     // Mark, 23 Oct: the completions as a number, and why visits outnumber the ad clicks.
     expect(cells("Survey completions")).toEqual(["300", "5", "29", "—"]);
-    expect(screen.getByText(/so there are more of them than ad clicks/)).toBeTruthy();
+    expect(screen.getByText(/so there are usually more of them than ad clicks/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Paid traffic only" }));
     expect(cells("Visits")).toEqual(["1,200", "600", "640", "—"]);
     expect(cells("Survey completions")).toEqual(["260", "5", "28", "—"]);
-    expect(screen.queryByText(/so there are more of them than ad clicks/)).toBeNull();
+    expect(screen.queryByText(/so there are usually more of them than ad clicks/)).toBeNull();
     expect(cells("Paying customers")).toEqual(["1", "6", "30", "—"]);
     expect(cells("Ad spend")).toEqual(["€900", "€450", "€450", "—"]);
     expect(screen.getByText(/Paid traffic only: visits are the ad clicks/)).toBeTruthy();
@@ -254,6 +254,10 @@ describe("ApPayToStart", () => {
     expect(bands[0]).toBe("0,0 100,0 88.71,100 11.29,100");
     // The last step (0.54%: 43.22 wide) narrows to itself.
     expect(bands.at(-1)).toBe("28.39,0 71.61,0 71.61,100 28.39,100");
+    // Out of the flow, so the text sets each row's height, not the band's square viewBox.
+    const svg = within(card).getAllByRole("listitem")[0]!.querySelector("svg")!;
+    expect(svg.getAttribute("class")).toContain("absolute inset-0");
+    expect(svg.parentElement!.className).toContain("relative");
     // The free funnel: the survey's references, its finish rate of its own starts.
     const free = screen.getByRole("region", { name: "Pay after the report" });
     const freeItems = within(free)
@@ -376,6 +380,19 @@ describe("ApPayToStart", () => {
     const box = table().parentElement!;
     expect(box.className).toContain("overflow-x-auto");
     expect(box.className).toContain("relative");
+  });
+
+  it("links the market figures' sources, drawn as links", () => {
+    view.payload = payload;
+    render(<ApPayToStart />);
+    for (const name of ["Riddle, State of Interactive Content 2026", "Littledata"]) {
+      const link = screen.getByRole("link", { name });
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      // Tailwind's base drops a link's colour and underline: these set them back.
+      expect(link.className).toContain("text-ap-plum");
+      expect(link.className).toContain("underline");
+    }
   });
 
   it("shows the notes under the page", () => {

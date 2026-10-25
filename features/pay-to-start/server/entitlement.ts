@@ -261,8 +261,10 @@ export async function markEntitlementSurveyStarted(token: string): Promise<void>
     );
     if (!response.ok)
       logger.warn({ status: response.status }, "pay-to-start: survey start stamp failed");
-  } catch (err) {
-    logger.warn({ err }, "pay-to-start: survey start stamp threw");
+  } catch {
+    // Not logged with the error: a timeout's message carries the URL, and with it the buyer's
+    // token, which unlocks their report.
+    logger.warn("pay-to-start: survey start stamp threw");
   }
 }
 

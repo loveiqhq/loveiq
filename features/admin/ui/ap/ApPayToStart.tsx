@@ -204,7 +204,7 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
       },
       {
         label: "Revenue per survey completion",
-        hint: "Revenue ÷ surveys finished. Compare with cost per survey completion",
+        hint: "The finishers' revenue ÷ surveys finished. Compare with cost per survey completion",
         unit: "eur",
         value: (_, v) => v.m.rpf,
         better: "high",
@@ -248,7 +248,7 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
       },
       {
         label: "Profit per survey completion",
-        hint: `Contribution ÷ surveys finished. ${CONTRIBUTION}`,
+        hint: `The finishers' contribution ÷ surveys finished: a buyer yet to take the survey is left out, as in revenue per survey completion. ${CONTRIBUTION}`,
         unit: "net",
         value: (_, v) => v.m.ppf,
         better: "high",
@@ -433,11 +433,13 @@ function FunnelBand({ top, bottom, color }: { top: number; bottom: number; color
   const x = (v: number) => Math.round(v * 100) / 100;
   const [a, b] = [bandWidth(top), bandWidth(bottom)];
   return (
+    // Out of the flow (`absolute` in its `relative` cell): in it, its square viewBox would set
+    // the row's height instead of the text.
     <svg
       aria-hidden="true"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
-      className="h-full w-full"
+      className="absolute inset-0 h-full w-full"
     >
       <polygon
         points={`${x(50 - a / 2)},0 ${x(50 + a / 2)},0 ${x(50 + b / 2)},100 ${x(50 - b / 2)},100`}
@@ -488,7 +490,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
                     : [];
                   return (
                     <li key={s.label} className="grid grid-cols-[72px_1fr] gap-3">
-                      <span className="block min-h-[38px] py-0.5">
+                      <span className="relative block min-h-[38px]">
                         {share !== null && (
                           <FunnelBand
                             top={share}
@@ -572,6 +574,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
           href="https://www.riddle.com/blog/wp-content/uploads/2026/08/State-of-Interactive-Content-2026-by-Riddle.pdf"
           target="_blank"
           rel="noopener noreferrer"
+          className="font-bold text-ap-plum underline"
         >
           Riddle, State of Interactive Content 2026
         </a>{" "}
@@ -580,6 +583,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
           href="https://www.littledata.io/average/checkout-completion-rate"
           target="_blank"
           rel="noopener noreferrer"
+          className="font-bold text-ap-plum underline"
         >
           Littledata
         </a>
@@ -939,8 +943,8 @@ export default function ApPayToStart() {
             ) : (
               <p className="m-0 text-xs leading-snug text-ap-muted">
                 Visits are everyone who came to the funnel&apos;s pages each day, from ads and every
-                other source, so there are more of them than ad clicks. Paid traffic only counts the
-                ad clicks.
+                other source, so there are usually more of them than ad clicks. Paid traffic only
+                counts the ad clicks.
               </p>
             )}
           </Card>

@@ -253,12 +253,16 @@ function Cell({
   header?: boolean;
 }) {
   return (
+    // `relative` holds the shade's sr-only word, so it can't widen the page on a phone.
     <span
       role={header ? "rowheader" : "cell"}
-      className={`flex flex-col justify-center gap-px px-3 ${pad} text-[13px] tabular-nums ${left ? "text-left" : "text-right"} ${bold ? "font-bold" : "font-medium"}`}
+      className={`relative flex flex-col justify-center gap-px px-3 ${pad} text-[13px] tabular-nums ${left ? "text-left" : "text-right"} ${bold ? "font-bold" : "font-medium"}`}
       style={shadeStyle(shade)}
     >
       {text}
+      {(shade === GOOD || shade === BAD) && (
+        <span className="sr-only"> ({shade === GOOD ? "better" : "worse"})</span>
+      )}
       {sub && <span className="text-[11px] font-medium text-ap-muted">{sub}</span>}
     </span>
   );
@@ -1667,9 +1671,10 @@ function AdsSeen({ ads }: { ads: TrafficPayload["adsSeen"] }) {
             </button>
           )}
           <Note>
-            Green and red: the best and the weakest of the keywords here on that figure. A keyword
-            counts the finishers whose ad click carried it, as the Performance table&apos;s keyword
-            rows do; its spend is Google Ads&apos; own.
+            Green and red: the top and the bottom third of the range on that figure, across every
+            keyword here, those under hidden ads too. A keyword counts the finishers whose ad click
+            carried it, as the Performance table&apos;s keyword rows do; its spend is Google
+            Ads&apos; own.
           </Note>
         </>
       )}

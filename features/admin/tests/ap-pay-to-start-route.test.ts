@@ -409,6 +409,54 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     });
   });
 
+  it("reads Stripe's refund and chargeback notices: a chargeback is no refund", async () => {
+    rows["/rest/v1/prepaid_report_access?"] = [
+      {
+        id: 3,
+        offer: "full",
+        status: "refunded",
+        amount_cents: 2999,
+        list_price_cents: 2999,
+        is_test: false,
+        customer_email: "reader@example.com",
+        created_at: "2026-10-20T10:00:00Z",
+        paid_at: "2026-10-20T10:02:00Z",
+        consumed_submission_id: null,
+        utm_tracker: null,
+        stripe_payment_intent_id: "pi_9",
+      },
+    ];
+    rows["/rest/v1/payment_webhook_event?event_type=eq.charge.dispute.created"] = [
+      { stripe_payment_intent_id: "pi_9" },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const p = paths();
+    expect(p.find((x) => x.startsWith("/rest/v1/prepaid_report_access?"))).toContain(
+      "stripe_payment_intent_id"
+    );
+    for (const type of ["charge.refunded", "charge.dispute.created"])
+      expect(
+        p.find((x) => x.startsWith(`/rest/v1/payment_webhook_event?event_type=eq.${type}&`))
+      ).toContain("stripe_payment_intent_id=not.is.null");
+    expect(body.funnels.find((f) => f.key === "full")!.refunds).toEqual({ payers: 0, refunded: 0 });
+  });
+
+  it("keeps the page up without a refund rate when refunds can't be read", async () => {
+    for (const failing of [
+      "/rest/v1/payment?status=eq.refunded",
+      "/rest/v1/payment_webhook_event?",
+    ]) {
+      clearFactsCache();
+      mockFetchAllRows.mockImplementation(async (path: string) =>
+        path.startsWith(failing) ? null : respond(path)
+      );
+      const res = await GET(req());
+      expect(res.status, failing).toBe(200);
+      const body = (await res.json()) as PtsPayload;
+      for (const f of body.funnels) expect(f.refunds, `${failing} ${f.key}`).toBeUndefined();
+    }
+  });
+
   it("reads the gate's cohort and switch, and its members leave pay after the report", async () => {
     mockGateOn.mockResolvedValue(true);
     rows["/rest/v1/personal_report?initial_gate_cohort_at"] = [

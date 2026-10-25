@@ -545,7 +545,7 @@ export const fields: FieldRegistry = {
     stat: "Count",
     per: "per purchase",
     formula: { num: "Purchases paid in the range, above €0, not refunded" },
-    caveat: `${PF_SAME} A 100% code's €0 purchase is no sale here (its buyer still counts as finished).`,
+    caveat: `${PF_SAME} A 100% code's €0 purchase is no sale here.`,
     tables: [T_PREPAID],
     query: { lang: "SQL", text: Q_PAY_FIRST },
     related: ["landing.pf-v2p", "landing.pf-p2c"],

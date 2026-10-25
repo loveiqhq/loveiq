@@ -45,6 +45,7 @@ import { flushAfterResponse } from "@shared/http/after-response";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import { isSurveyClosed } from "@features/survey/server/server";
+import logger from "@shared/observability/logger";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/survey-partial", {
@@ -305,6 +306,34 @@ describe("POST /api/survey-partial", () => {
     expect(url).toContain("paid_at=not.is.null");
     expect(url).toContain("survey_started_at=is.null");
     expect(Object.keys(JSON.parse(init.body))).toEqual(["survey_started_at"]);
+  });
+
+  it("never logs the buyer's token when the stamp times out, and still saves the draft", async () => {
+    // A timeout's message carries the URL, and the URL the token that unlocks the report.
+    const token = `rpp_${"b".repeat(32)}`;
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("prepaid_report_access"))
+        throw new Error(`Request timeout after 5000ms: ${url}`);
+      return { ok: true };
+    });
+    const res = await POST(
+      new Request("http://localhost/api/survey-partial", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "valid-token",
+          cookie: `__liq_pp=${token}`,
+        },
+        body: JSON.stringify(validBody()),
+      })
+    );
+    await flushAfterResponse();
+    expect(res.status).toBe(200);
+    const warns = vi.mocked(logger.warn).mock.calls;
+    expect(warns.some((c) => String(c.at(-1)).includes("survey start stamp threw"))).toBe(true);
+    expect(JSON.stringify(warns, (_, v) => (v instanceof Error ? v.message : v))).not.toContain(
+      token
+    );
   });
 
   it("stamps nothing for a visitor who didn't pay before the survey", async () => {

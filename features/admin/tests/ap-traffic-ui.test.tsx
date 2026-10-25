@@ -589,11 +589,11 @@ describe("the Traffic page as drawn", () => {
     expect(score.getByText("−€941")).toBeTruthy();
     // Every contribution figure follows: Google Ads' row of the table too (€62.50 net).
     const google = () => within(rowOf(perf(), "Google Ads")).getAllByRole("cell").at(-2)!;
-    expect(google().textContent).toBe("−€955");
+    expect(google().textContent).toBe("−€955 (worse)");
     // A cleared input counts as its default again.
     fireEvent.change(screen.getByLabelText("VAT on revenue %"), { target: { value: "" } });
     expect(tileValue("Contribution / visitor")).toBe("−€0.092");
-    expect(google().textContent).toBe("−€943");
+    expect(google().textContent).toBe("−€943 (worse)");
     clean();
   });
 
@@ -667,7 +667,15 @@ describe("the Traffic page as drawn", () => {
       payload.adsSeen.rows.slice(0, 2).map((r) => r.keyword)
     );
     expect(within(rows[0]!).getAllByRole("cell")[0]!.textContent).toBe("€120");
-    expect(within(rows[0]!).getAllByRole("cell")[1]!.textContent).toBe("€6.00");
+    expect(within(rows[0]!).getAllByRole("cell")[1]!.textContent).toBe("€6.00 (worse)");
+    // Not by colour alone: the word a screen reader reads, held in its own cell.
+    const shaded = within(rows[0]!).getAllByRole("cell")[1]!;
+    expect(shaded.querySelector(".sr-only")!.textContent).toBe(" (worse)");
+    expect(shaded.className).toContain("relative");
+    // The colours are thirds of the range, over every keyword, hidden ads' too.
+    expect(
+      section.getByText(/the top and the bottom third of the range on that figure, across every/)
+    ).toBeTruthy();
     for (const label of ["Spend", "Cost / survey", "Payment CVR", "Rev. / survey"])
       expect(within(table).getByRole("button", { name: `About ${label}` })).toBeTruthy();
     clean();

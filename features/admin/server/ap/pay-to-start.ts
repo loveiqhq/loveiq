@@ -77,6 +77,8 @@ export interface EntitlementRow {
   utm_tracker: string | null;
   /** When the buyer's survey first saved an answer (20261025170000); absent from older reads. */
   survey_started_at?: string | null;
+  /** For Stripe's refund and chargeback notices (refundNotices). */
+  stripe_payment_intent_id?: string | null;
 }
 
 export interface AdsLanding {
@@ -127,6 +129,12 @@ export interface PtsRecords {
    * paid: the Dashboard's refund rate per funnel. Absent: not read, so no refund rate.
    */
   refundedSubs?: ReadonlySet<number>;
+  /**
+   * The payment intents of Stripe's refund and chargeback notices (payment_webhook_event), read
+   * with refundedSubs: a refund in part before the survey claimed a purchase is on no payment
+   * row, and a chargeback voids a purchase as a full refund does.
+   */
+  refundNotices?: { refunded: ReadonlySet<string>; disputed: ReadonlySet<string> };
   /** Reports in the gate's cohort, stamped in the range. */
   gateMembers: GateMember[];
   /** The gate's switch as it is now. */
@@ -160,6 +168,8 @@ export interface PtsView {
    * Absent: one per paying customer.
    */
   sales?: number;
+  /** Those of the finishers, for their profit (ppf). Absent: sales. */
+  salesFinished?: number;
 }
 
 /** The board's measures. Rates are 0..1; each is null when what it divides by is missing or 0. */
@@ -188,7 +198,10 @@ export interface PtsMeasures {
   profit: number | null;
   /** Contribution ÷ paying customers (Mark, 23 Oct). */
   ppc: number | null;
-  /** Contribution ÷ finished surveys (Mark, 23 Oct). */
+  /**
+   * The finishers' contribution ÷ finished surveys (Mark, 23 Oct): their own money, as in rpf,
+   * less the whole ad spend, as in cpf.
+   */
   ppf: number | null;
 }
 
@@ -275,22 +288,29 @@ const euros = (priceCents: number) => `€${(priceCents / 100).toFixed(2)}`;
  */
 export function measuresOf(spend: number | null, clicks: number | null, v: PtsView): PtsMeasures {
   const paidFor = spend !== null && spend > 0 ? spend : null;
-  const c = contribution(
-    {
-      spend,
-      clicks,
-      impressions: null,
-      visitors: v.visits,
-      starts: null,
-      completes: v.finished,
-      payers: v.paid,
-      sales: v.sales ?? v.paid,
-      revenue: v.revenue,
-      fullPayers: 0,
-    },
-    DEFAULT_ASSUMPTIONS
-  );
-  const profit = c === null ? null : cents(c);
+  const counts = {
+    spend,
+    clicks,
+    impressions: null,
+    visitors: v.visits,
+    starts: null,
+    completes: v.finished,
+    payers: v.paid,
+    sales: v.sales ?? v.paid,
+    revenue: v.revenue,
+    fullPayers: 0,
+  };
+  const profitOf = (c: typeof counts) => {
+    const x = contribution(c, DEFAULT_ASSUMPTIONS);
+    return x === null ? null : cents(x);
+  };
+  const profit = profitOf(counts);
+  // A buyer who hasn't taken the survey yet is no completion's money (rpf).
+  const finishersProfit = profitOf({
+    ...counts,
+    sales: v.salesFinished ?? counts.sales,
+    revenue: v.revenueFinished,
+  });
   return {
     cpc: ratio(spend, clicks),
     finishRate: ratio(v.finished, v.visits),
@@ -304,7 +324,7 @@ export function measuresOf(spend: number | null, clicks: number | null, v: PtsVi
     net: paidFor === null ? null : cents(v.revenue - paidFor),
     profit,
     ppc: ratio(profit, v.paid),
-    ppf: ratio(profit, v.finished),
+    ppf: ratio(finishersProfit, v.finished),
   };
 }
 
@@ -555,7 +575,8 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     paid: number,
     revenue: number,
     revenueFinished: number,
-    sales: number
+    sales: number,
+    salesFinished = sales
   ): PtsView => ({
     visits,
     finished,
@@ -563,6 +584,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
     revenue: cents(revenue),
     revenueFinished: cents(revenueFinished),
     sales,
+    salesFinished,
   });
   const withMeasures = (a: Ads | null, v: PtsView) => ({
     ...v,
@@ -662,7 +684,8 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       customers(mine).length,
       sumBy(mine, moneyOf),
       sumBy(finished(mine), moneyOf),
-      salesOf(mine)
+      salesOf(mine),
+      salesOf(finished(mine))
     );
     const paidView = view(
       ads ? ads.clicks : null,
@@ -670,7 +693,8 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       customers(adBuyers).length,
       sumBy(adBuyers, moneyOf),
       sumBy(finished(adBuyers), moneyOf),
-      salesOf(adBuyers)
+      salesOf(adBuyers),
+      salesOf(finished(adBuyers))
     );
     const price = euros(input.prices[offer]);
     const steps: PtsStep[] = [
@@ -701,8 +725,15 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       });
     }
     const refunded = input.refundedSubs;
+    const notices = input.refundNotices;
     const refundedSub = (e: EntitlementRow) =>
       e.consumed_submission_id !== null && (refunded?.has(e.consumed_submission_id) ?? false);
+    const noticed = (set: ReadonlySet<string> | undefined, e: EntitlementRow) =>
+      Boolean(e.stripe_payment_intent_id && set?.has(e.stripe_payment_intent_id));
+    // A chargeback voids the purchase as a full refund does: one not won back leaves the rate,
+    // both sides, as a disputed payment leaves the free funnels'.
+    const paidUndisputed = (e: EntitlementRow) =>
+      isPaid(e) && !(e.status === "refunded" && noticed(notices?.disputed, e));
     return {
       key: offer,
       label: `Pay to start · ${price}`,
@@ -712,14 +743,20 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       clicks: ads ? ads.clicks : null,
       ...views(ads, all, paidView),
       steps,
-      ...(refunded && {
-        // The purchase refunded (before its survey claimed it too), or a payment on the report.
-        refunds: {
-          payers: mine.filter((e) => isPaid(e) || later(e).length > 0 || refundedSub(e)).length,
-          refunded: mine.filter((e) => (e.status === "refunded" && isPaid(e)) || refundedSub(e))
-            .length,
-        },
-      }),
+      ...(refunded &&
+        notices && {
+          // The purchase refunded, in full or in part (before its survey claimed it too), or a
+          // payment on the report.
+          refunds: {
+            payers: mine.filter((e) => paidUndisputed(e) || later(e).length > 0 || refundedSub(e))
+              .length,
+            refunded: mine.filter(
+              (e) =>
+                (paidUndisputed(e) && (e.status === "refunded" || noticed(notices.refunded, e))) ||
+                refundedSub(e)
+            ).length,
+          },
+        }),
       paidFinished: mine.filter((e) => kept(e) && isPaid(e) && e.consumed_submission_id !== null)
         .length,
       paidStarted: paidStartedOf(mine.filter((e) => kept(e) && isPaid(e))),
@@ -909,6 +946,53 @@ interface SubmissionRow {
   utm_tracker: string | null;
 }
 
+/**
+ * The refund rate's records: the submissions with a real payment refunded in full or in part,
+ * whenever it was paid, and Stripe's refund and chargeback notices. Neither when they can't be
+ * read: the pages then show no refund rate rather than failing.
+ */
+async function fetchRefunds(): Promise<Pick<PtsRecords, "refundedSubs" | "refundNotices">> {
+  try {
+    // Refunds are few: every real payment refunded in full, or in part, of any day.
+    const refundRead = (status: string) =>
+      must<{ personal_report_id: number }>(
+        `/rest/v1/payment?status=eq.${status}&amount=gt.0&is_test=is.false` +
+          (status === "succeeded" ? "&refund_amount=gt.0" : "") +
+          "&select=personal_report_id&order=id.asc",
+        "payment"
+      );
+    const noticeRead = async (type: string) =>
+      new Set(
+        (
+          await must<{ stripe_payment_intent_id: string }>(
+            `/rest/v1/payment_webhook_event?event_type=eq.${type}&stripe_payment_intent_id=not.is.null` +
+              "&select=stripe_payment_intent_id&order=id.asc",
+            "payment_webhook_event"
+          )
+        ).map((n) => n.stripe_payment_intent_id)
+      );
+    const [full, part, refunded, disputed] = await Promise.all([
+      refundRead("refunded"),
+      refundRead("succeeded"),
+      noticeRead("charge.refunded"),
+      noticeRead("charge.dispute.created"),
+    ]);
+    const refundedSubs = new Set<number>();
+    for (const ids of chunks([...new Set([...full, ...part].map((p) => p.personal_report_id))])) {
+      const reports = await must<{ survey_submission_id: number | null }>(
+        `/rest/v1/personal_report?id=in.(${ids.join(",")})&select=survey_submission_id&order=id.asc`,
+        "personal_report"
+      );
+      for (const r of reports)
+        if (r.survey_submission_id !== null) refundedSubs.add(r.survey_submission_id);
+    }
+    return { refundedSubs, refundNotices: { refunded, disputed } };
+  } catch (err) {
+    logger.warn({ err }, "AP: pay to start's refunds could not be read");
+    return {};
+  }
+}
+
 /** Everything the page reads from our database for [from, to], besides ap_facts. */
 export async function fetchPayToStartRecords(
   filters: Pick<ApFilters, "from" | "to">
@@ -916,19 +1000,11 @@ export async function fetchPayToStartRecords(
   const { since, until } = windowOf(filters);
   const sinceIso = since.toISOString();
   const untilIso = until.toISOString();
-  // Refunds are few: every real payment refunded in full, or in part, of any day.
-  const refundRead = (status: string) =>
-    must<{ personal_report_id: number }>(
-      `/rest/v1/payment?status=eq.${status}&amount=gt.0&is_test=is.false` +
-        (status === "succeeded" ? "&refund_amount=gt.0" : "") +
-        "&select=personal_report_id&order=id.asc",
-      "payment"
-    );
-  const [entitlements, visitRows, cohort, gateOn, refundedFull, refundedPart] = await Promise.all([
+  const [entitlements, visitRows, cohort, gateOn, refunds] = await Promise.all([
     must<EntitlementRow>(
       "/rest/v1/prepaid_report_access?offer=not.is.null" +
         `&created_at=lt.${untilIso}` +
-        "&select=id,offer,status,amount_cents,list_price_cents,is_test,customer_email,created_at,paid_at,consumed_submission_id,utm_tracker,survey_started_at" +
+        "&select=id,offer,status,amount_cents,list_price_cents,is_test,customer_email,created_at,paid_at,consumed_submission_id,utm_tracker,survey_started_at,stripe_payment_intent_id" +
         "&order=id.asc",
       "prepaid_report_access"
     ),
@@ -948,20 +1024,8 @@ export async function fetchPayToStartRecords(
       "personal_report"
     ),
     isInitialUnlockGateEnabled(),
-    refundRead("refunded"),
-    refundRead("succeeded"),
+    fetchRefunds(),
   ]);
-  const refundedSubs = new Set<number>();
-  for (const ids of chunks([
-    ...new Set([...refundedFull, ...refundedPart].map((p) => p.personal_report_id)),
-  ])) {
-    const reports = await must<{ survey_submission_id: number | null }>(
-      `/rest/v1/personal_report?id=in.(${ids.join(",")})&select=survey_submission_id&order=id.asc`,
-      "personal_report"
-    );
-    for (const r of reports)
-      if (r.survey_submission_id !== null) refundedSubs.add(r.survey_submission_id);
-  }
 
   const visitCount = new Map<
     string,
@@ -1063,7 +1127,7 @@ export async function fetchPayToStartRecords(
     ourClaims,
     openedSubmissions,
     laterPays,
-    refundedSubs,
+    ...refunds,
     gateMembers: cohort.map((c) => ({
       sid: c.survey_submission_id,
       cohortAt: c.initial_gate_cohort_at,

@@ -160,6 +160,15 @@ describe("fetchAdsSplit", () => {
     // Not read: no ad at all (undefined), rather than "this keyword has none" (null).
     expect(r.value.keywords[0]!.ad).toBeUndefined();
     expect(r.value.keywords[0]!.cost).toBe(1);
+    // Nor kept for five minutes: the next look reads Google Ads again.
+    await fetchAdsSplit("2026-10-20", "2026-10-21");
+    expect(googleAdsSearch).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps a whole read for five minutes", async () => {
+    await fetchAdsSplit("2026-10-20", "2026-10-21");
+    await fetchAdsSplit("2026-10-20", "2026-10-21");
+    expect(googleAdsSearch).toHaveBeenCalledTimes(3);
   });
 });
 
