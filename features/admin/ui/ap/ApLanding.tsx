@@ -347,12 +347,8 @@ const PAY_FIRST_COLUMNS: Array<{
     cell: (r) => fmt("pct", r.v2p, 2),
     value: (r) => r.v2p,
   },
-  {
-    label: "Started survey",
-    info: "landing.pf-started",
-    cell: (r) => fmt("count", r.started),
-    value: (r) => r.started,
-  },
+  // A count, not coloured: as drawn (the page with more buyers starts more surveys).
+  { label: "Started survey", info: "landing.pf-started", cell: (r) => fmt("count", r.started) },
   {
     label: "Paid → completed",
     info: "landing.pf-p2c",

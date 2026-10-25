@@ -391,9 +391,9 @@ describe("the pay-to-start section", () => {
               : "";
           return `${copy.textContent}${tone}`;
         });
-    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "7-", "75%-"]);
+    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "7", "75%-"]);
     // Paid → completed is of the paying buyers only: 12 of 15, never above 100%.
-    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "14+", "80%+"]);
+    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "14", "80%+"]);
     // Saw the price is no step on these pages: blank, with no card, and the note says why.
     for (const h of within(table).getAllByRole("columnheader").slice(1))
       expect(within(h).queryByRole("button", { name: /^About / }) !== null).toBe(
