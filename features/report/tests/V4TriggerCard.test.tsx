@@ -356,4 +356,55 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 137px");
     expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 53px");
   });
+
+  // Persona walks 23.10 (iPhone): the accelerators' tile, at the frame's 53px, sat on the
+  // ramp row's readable top on every archetype. The frame's spot is now the floor: the
+  // tile goes no higher than the line where the ramp row turns fully blurred.
+  it("sets each tile no higher than where its ramp row turns fully blurred", () => {
+    expect(rule(".rv3 .rv4-trig__lock .rv4-lockbadge {")).toContain(
+      "top: max(var(--rv4-lock-top, 100px), var(--rv4-lock-clear, 0px));"
+    );
+  });
+});
+
+describe("V4TriggerCard — the tile clears the ramp row (persona walks 23.10)", () => {
+  const box = (prop: "offsetTop" | "offsetHeight", value: (el: HTMLElement) => number) =>
+    vi.spyOn(HTMLElement.prototype, prop, "get").mockImplementation(function (this: HTMLElement) {
+      return value(this);
+    });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("publishes the ramp row's full-blur line on the locked group", () => {
+    // A three-line row 3, as Curious Apprentice's "Enthusiastic feedback" wraps at 393px.
+    box("offsetTop", () => 0);
+    box("offsetHeight", (el) => (el.classList.contains("is-ramp") ? 112 : 0));
+    const { container } = render(
+      <V4TriggerCard tone="accel" rows={LOCKED.accelerators} lockedFrom={LOCKED.lockedFrom} />
+    );
+    const group = container.querySelector<HTMLElement>(".rv4-trig__lock")!;
+    // 64% of 112 (452:261's band), rounded up: no tile may sit above 72px.
+    expect(group.style.getPropertyValue("--rv4-lock-clear")).toBe("72px");
+  });
+
+  it("measures from the row's own top inside the group", () => {
+    box("offsetTop", (el) => (el.classList.contains("is-ramp") ? 10 : 0));
+    box("offsetHeight", (el) => (el.classList.contains("is-ramp") ? 93 : 0));
+    const { container } = render(
+      <V4TriggerCard tone="brake" rows={LOCKED.brakes} lockedFrom={LOCKED.lockedFrom} />
+    );
+    // 10 + 0.64 × 93 = 69.52, rounded up.
+    expect(
+      container
+        .querySelector<HTMLElement>(".rv4-trig__lock")!
+        .style.getPropertyValue("--rv4-lock-clear")
+    ).toBe("70px");
+  });
+
+  it("publishes nothing on an open card", () => {
+    const { container } = render(<V4TriggerCard tone="accel" rows={OPEN.accelerators} />);
+    expect(container.querySelector(".rv4-trig__lock")).toBeNull();
+  });
 });
