@@ -46,19 +46,28 @@
   padding: 0 16px;
 }
 
-/* A 44px target, its 12px arrow where the frame draws it (16px in). */
+/* A 44px-high target, its 12px arrow where the frame draws it (16px in), and its word after
+ * it (persona walks 24.10): the arrow alone said nothing. */
 .iug-header__back {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 44px;
+  gap: 6px;
+  min-width: 44px;
   height: 44px;
   margin-left: -16px;
-  padding: 0;
+  padding: 0 10px 0 16px;
   border: 0;
   border-radius: 12px;
   background: none;
   cursor: pointer;
+}
+
+.iug-header__back-label {
+  color: #5f5a6e;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .iug-header__back:focus-visible {
