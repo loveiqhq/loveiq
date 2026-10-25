@@ -8,6 +8,12 @@ each. Each one:
 3. opens the paywall and buys a plan with Stripe's test card;
 4. reads what it bought.
 
+Where staging switches on the EUR 1.99 pre-unlock gate (`report_initial_unlock_gate`), a
+walk meets it between the survey and the report. It pays the gate's "Unlock now" with the
+test card and goes on with the report that opens (`initialGate` / `initialGatePaid` in
+walk.json); with `--no-pay` it ends at the gate. On 2026-10-24, before the walk knew the
+gate, all four walks stopped there.
+
 A judge on the teamwork@ Claude seat then says what a real person would have run into,
 against Marcus's 22 signals. A second pass tries to prove each finding wrong. What
 survives is posted to #brain and kept in Jarvis.

@@ -40,7 +40,9 @@ export function checkWalk(w: Walk): Check[] {
             what: `Answered as ${w.persona}, but the report named ${w.serverArchetype ?? "no archetype"}.`,
           }
     );
-  } else if (reachedReport) {
+  } else if (reachedReport && !(w.initialGate && !w.initialGatePaid)) {
+    // A walk that stopped at the EUR 1.99 gate (--no-pay) saw no score by design: the
+    // gate's answer carries none until it is paid.
     checks.push({
       ok: false,
       what: `Reached the report but never saw its score from the server${w.assignedArchetype ? `; the page led with ${w.assignedArchetype}` : ""}.`,
