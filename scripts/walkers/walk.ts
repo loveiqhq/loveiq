@@ -139,6 +139,9 @@ export interface Walk {
   scrollLocked?: boolean;
   /** What put the paywall in front of the walk: the sticky bar, a lock, or the report itself. */
   paywallOpenedBy?: string;
+  /** The EUR 1.99 pre-unlock gate stood in front of the report, and whether the walk paid it. */
+  initialGate?: boolean;
+  initialGatePaid?: boolean;
   locksBefore?: number;
   locksAfter?: number;
   steps: Step[];
@@ -884,6 +887,47 @@ async function main(argv: string[]): Promise<number> {
       .catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
     await record("report", { ms: Date.now() - reportAt });
+    // The EUR 1.99 pre-unlock gate (features/report/ui/gate), switched on in staging's
+    // database since 2026-10-23: a reader it stops meets a EUR 1.99 page in place of the
+    // report, and /api/report sends no score until it is paid. On 2026-10-24 every walk
+    // stopped there ("no way to the paywall on the report"). The walk pays it with the test
+    // card, as such a buyer would, and goes on with the report it opens; with --no-pay it
+    // ends at the gate. Its button is the card's "Unlock now" (the sticky bar's says the
+    // price), and it runs before the plans are looked for, so a core walk never takes the
+    // gate's "Unlock now" for the plans' (PLAN_CTA.core).
+    if (
+      await page
+        .locator(".iug-page")
+        .isVisible()
+        .catch(() => false)
+    ) {
+      walk.initialGate = true;
+      mark("met the EUR 1.99 pre-unlock gate");
+      await record("initial-gate");
+      if (!opts.pay) {
+        walk.finished = true;
+        return 0;
+      }
+      await page
+        .locator(".iug-card")
+        .getByRole("button", { name: /^unlock now$/i })
+        .click();
+      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 60_000 });
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForTimeout(2_500);
+      await record("initial-gate-checkout");
+      // Test mode or nothing, as for every purchase here.
+      if (!/\/c\/pay\/cs_test_/.test(page.url()))
+        throw new Error("Stripe opened a session that is not in test mode");
+      await payWithTestCard(page, email);
+      await page.waitForURL((u) => u.origin === opts.origin, { timeout: 120_000 });
+      // Back through /checkout/return, which sends the buyer on once the unlock is confirmed.
+      await page.waitForURL(/\/report\//, { timeout: 90_000 });
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      walk.initialGatePaid = true;
+      mark("paid the EUR 1.99 gate with the test card");
+      await record("report", { note: "the report the EUR 1.99 opened" });
+    }
     walk.assignedArchetype = await page
       .evaluate(
         (names) => {
