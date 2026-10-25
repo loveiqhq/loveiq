@@ -28,7 +28,7 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
   },
 }));
 
-import ApPayToStart from "@features/admin/ui/ap/ApPayToStart";
+import ApPayToStart, { bandWidth } from "@features/admin/ui/ap/ApPayToStart";
 
 const funnel = (
   key: FunnelKey,
@@ -158,6 +158,15 @@ const shown = (el: Element) => {
 };
 const cells = (label: string) => within(row(label)).getAllByRole("cell").map(shown);
 
+describe("the funnel picture's bands (bandWidth)", () => {
+  it("narrows by a quarter for each tenth of the visits, never to nothing above none", () => {
+    expect([1, 0.1, 0.01, 0.001].map(bandWidth)).toEqual([100, 75, 50, 25]);
+    expect(bandWidth(0.00001)).toBe(4);
+    expect([0, -1, Number.NaN].map(bandWidth)).toEqual([0, 0, 0]);
+    expect(bandWidth(2)).toBe(100);
+  });
+});
+
 describe("ApPayToStart", () => {
   it("lays the four funnels side by side, the gate off, the three core KPIs marked", () => {
     view.payload = payload;
@@ -231,11 +240,27 @@ describe("ApPayToStart", () => {
     expect(items).toEqual([
       "Visits560 100.0%",
       "Checkout started70 12.5%",
-      "Paid €1.9931 5.5%",
+      // Mark, 23 Oct: the market's figure beside ours, on the same base.
+      "Paid €1.9931 5.5%Market 51% of checkouts · here 44.3%Market 1.4% of visits",
       "Survey finished29 5.2%",
       "Report opened28 5.0%",
       "Bought the full report3 0.54%",
     ]);
+    // Mark, 23 Oct: a funnel picture, each band narrowing with its step's share of the visits
+    // (log scale): 560 visits (100%, full width) down to 70 checkouts (12.5%: 77.42 wide).
+    const bands = within(card)
+      .getAllByRole("listitem")
+      .map((li) => li.querySelector("polygon")?.getAttribute("points"));
+    expect(bands[0]).toBe("0,0 100,0 88.71,100 11.29,100");
+    // The last step (0.54%: 43.22 wide) narrows to itself.
+    expect(bands.at(-1)).toBe("28.39,0 71.61,0 71.61,100 28.39,100");
+    // The free funnel: the survey's references, its finish rate of its own starts.
+    const free = screen.getByRole("region", { name: "Pay after the report" });
+    const freeItems = within(free)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(freeItems[1]).toBe("Survey started500 8.3%Market ≈52.7% of visits");
+    expect(freeItems[2]).toBe("Survey finished300 5.0%Market ≈59.1% of starts · here 60.0%");
     expect(within(card).getByText("€121.66")).toBeTruthy();
     expect(within(card).getByText("€0.217")).toBeTruthy();
     // Only the funnel's name on the card (Marcus, 23 Oct): off is dimmed, dashed and named.

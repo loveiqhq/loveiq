@@ -19,7 +19,6 @@ import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
 import { IndexHover, periodTitle, type TipRow } from "./hover";
 import {
-  Bar,
   BlackButton,
   Busy,
   Card,
@@ -359,6 +358,95 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
 const PAY = "#5a42a6";
 const STEP = "#c0b4e6";
 
+/**
+ * Industry references for a step (Mark, 23 Oct: "Reference Conversion % that are market
+ * standards"), each read from its source on 25 Oct 2026. Only sources that state their sample
+ * and definition; `of` is the step it is a share of ("visits": the funnel's visits). A rough
+ * frame: none is a paid assessment like ours.
+ */
+const MARKET: Array<{
+  step: RegExp;
+  /** As the source writes it. */
+  shown: string;
+  of: string;
+  ofLabel: string;
+  source: string;
+  rough?: boolean;
+}> = [
+  {
+    step: /^Survey started$/,
+    shown: "52.7%",
+    of: "visits",
+    ofLabel: "of visits",
+    source:
+      "Riddle, State of Interactive Content 2026: personality tests, view → start (median). Short quizzes on publishers' pages.",
+    rough: true,
+  },
+  {
+    step: /^Survey finished$/,
+    shown: "59.1%",
+    of: "Survey started",
+    ofLabel: "of starts",
+    source:
+      "Riddle, State of Interactive Content 2026: median completion of quizzes with 16+ questions. Ours has over 60.",
+    rough: true,
+  },
+  {
+    step: /^Paid( €[\d.]+)?$/,
+    shown: "51%",
+    of: "Checkout started",
+    ofLabel: "of checkouts",
+    source:
+      "Littledata, 433 Shopify stores, 20 Jul – 17 Oct 2026: checkout completion (median), sessions that started checkout and went on to buy.",
+  },
+  {
+    step: /^Paid( €[\d.]+)?$/,
+    shown: "1.4%",
+    of: "visits",
+    ofLabel: "of visits",
+    source:
+      "Littledata, 433 Shopify stores, 20 Jul – 17 Oct 2026: sessions with a purchase (median ecommerce conversion rate).",
+  },
+];
+
+/** A share as the cards write it: two decimals under 1%. */
+const pctOf = (v: number) => (v > 0 && v < 0.00005 ? "<0.01%" : fmt("pct", v, v < 0.01 ? 2 : 1));
+
+/**
+ * A band's width for a share of the funnel's visits: on a log scale, each tenth narrower by a
+ * quarter of the width (100% full, 10% three quarters, 1% half, 0.1% a quarter), so a funnel
+ * that loses nine visitors in ten at its first step still reads as a funnel below it. Nothing
+ * is no band; anything above it at least 4.
+ */
+export function bandWidth(share: number): number {
+  if (!(share > 0)) return 0;
+  return Math.max(4, Math.min(100, 100 + 25 * Math.log10(share)));
+}
+
+/**
+ * One step of a card's funnel picture (Mark, 23 Oct: "Funnel illustrations"): a band for the
+ * step's share of the funnel's visits, narrowing to the next step's, so the card reads as a
+ * funnel. Drawn to the row's height, whatever its text takes.
+ */
+function FunnelBand({ top, bottom, color }: { top: number; bottom: number; color: string }) {
+  // Two decimals: the points stay short and exact (no 88.71000000000001).
+  const x = (v: number) => Math.round(v * 100) / 100;
+  const [a, b] = [bandWidth(top), bandWidth(bottom)];
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      className="h-full w-full"
+    >
+      <polygon
+        points={`${x(50 - a / 2)},0 ${x(50 + a / 2)},0 ${x(50 + b / 2)},100 ${x(50 - b / 2)},100`}
+        fill={color}
+      />
+    </svg>
+  );
+}
+
 function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
   return (
     <>
@@ -377,34 +465,68 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
               className={`flex flex-col gap-3 rounded-[14px] border border-ap-line p-4 ${f.live ? "" : "border-dashed opacity-[0.72]"}`}
             >
               <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
-              <ol className="m-0 flex list-none flex-col gap-3 p-0">
-                {f.steps.map((s) => {
-                  const share =
-                    f.live && s.n !== null && visits !== null && visits > 0 ? s.n / visits : null;
+              <ol className="m-0 flex list-none flex-col gap-1 p-0">
+                {f.steps.map((s, i) => {
+                  const shareOf = (n: number | null | undefined) =>
+                    f.live && n !== null && n !== undefined && visits !== null && visits > 0
+                      ? n / visits
+                      : null;
+                  const share = shareOf(s.n);
+                  const next = shareOf(f.steps[i + 1]?.n) ?? share;
+                  // The market's figure for this step, and ours on the same base.
+                  const refs = f.live
+                    ? MARKET.filter((m) => m.step.test(s.label)).flatMap((m) => {
+                        const base =
+                          m.of === "visits" ? visits : f.steps.find((x) => x.label === m.of)?.n;
+                        if (base === undefined) return [];
+                        const ours =
+                          m.of !== "visits" && base !== null && base > 0 && s.n !== null
+                            ? s.n / base
+                            : null;
+                        return [{ ...m, ours }];
+                      })
+                    : [];
                   return (
-                    <li key={s.label} className="flex flex-col gap-1">
-                      <span className="flex justify-between gap-2 text-[13px]">
-                        <span
-                          className={
-                            s.pays ? "font-bold text-ap-violet" : "font-semibold text-ap-ink"
-                          }
-                        >
-                          {s.label}
-                        </span>
-                        <span className="tabular-nums">
-                          <strong className="text-ap-ink">
-                            {f.live ? fmt("count", s.n) : EMPTY}
-                          </strong>{" "}
-                          {share !== null && (
-                            <span className="text-ap-muted">
-                              {share > 0 && share < 0.00005
-                                ? "<0.01%"
-                                : fmt("pct", share, share < 0.01 ? 2 : 1)}
-                            </span>
-                          )}
-                        </span>
+                    <li key={s.label} className="grid grid-cols-[72px_1fr] gap-3">
+                      <span className="block min-h-[38px] py-0.5">
+                        {share !== null && (
+                          <FunnelBand
+                            top={share}
+                            bottom={next ?? share}
+                            color={s.pays ? PAY : STEP}
+                          />
+                        )}
                       </span>
-                      <Bar pct={share} color={s.pays ? PAY : STEP} minWidth={3} track="#f5f6f8" />
+                      <span className="flex min-w-0 flex-col justify-center gap-0.5 py-1">
+                        <span className="flex justify-between gap-2 text-[13px]">
+                          <span
+                            className={
+                              s.pays ? "font-bold text-ap-violet" : "font-semibold text-ap-ink"
+                            }
+                          >
+                            {s.label}
+                          </span>
+                          <span className="shrink-0 tabular-nums">
+                            <strong className="text-ap-ink">
+                              {f.live ? fmt("count", s.n) : EMPTY}
+                            </strong>{" "}
+                            {share !== null && (
+                              <span className="text-ap-muted">{pctOf(share)}</span>
+                            )}
+                          </span>
+                        </span>
+                        {refs.map((m) => (
+                          <span
+                            key={m.ofLabel}
+                            title={m.source}
+                            className="text-[11px] leading-snug text-ap-muted"
+                          >
+                            Market {m.rough ? "≈" : ""}
+                            {m.shown} {m.ofLabel}
+                            {m.ours !== null && ` · here ${pctOf(m.ours)}`}
+                          </span>
+                        ))}
+                      </span>
                     </li>
                   );
                 })}
@@ -441,6 +563,28 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
           Every other step
         </span>
       </div>
+      <p className="m-0 text-xs leading-relaxed text-ap-muted">
+        Each band narrows with the step&apos;s share of the funnel&apos;s visits, on a log scale
+        (each tenfold drop narrows it by the same step), so the small steps stay visible; the
+        numbers beside it are exact. Market: industry medians, a rough frame only (≈: sources
+        further from a paid assessment like ours). Survey started and finished:{" "}
+        <a
+          href="https://www.riddle.com/blog/wp-content/uploads/2026/08/State-of-Interactive-Content-2026-by-Riddle.pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Riddle, State of Interactive Content 2026
+        </a>{" "}
+        (short quizzes on publishers&apos; pages). Paid:{" "}
+        <a
+          href="https://www.littledata.io/average/checkout-completion-rate"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Littledata
+        </a>
+        &apos;s medians of 433 Shopify stores, 20 Jul – 17 Oct 2026 (stores that ship goods).
+      </p>
     </>
   );
 }
