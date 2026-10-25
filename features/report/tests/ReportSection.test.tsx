@@ -2,6 +2,7 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReportSection from "@features/report/ui/ReportSection";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 class MockIntersectionObserver implements IntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
@@ -101,6 +102,61 @@ describe("ReportSection", () => {
     });
 
     expect(section).toHaveClass("report-section", "is-visible");
+  });
+
+  // Sync 23.10: the guided tour's scroll played section entrances behind its scrim.
+  describe("while the guided tour moves the page", () => {
+    beforeEach(() => {
+      __resetGuidedTourForTests();
+    });
+
+    afterEach(() => {
+      __resetGuidedTourForTests();
+    });
+
+    it("ignores the tour's crossing and fades in when the reader arrives", () => {
+      const rect = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockReturnValue(createRect({ top: 1400, bottom: 3200, height: 1800 }));
+      render(
+        <ReportSection sectionId="core_motivation" title="Core Motivation">
+          <p>Deferred section</p>
+        </ReportSection>
+      );
+      const section = document.getElementById("core_motivation");
+
+      act(() => setGuidedTourActive(true));
+      act(() => triggerIntersection(section!, 0.02));
+      expect(section).not.toHaveClass("is-visible");
+
+      // The tour hands the reader back at the top: still below the fold.
+      act(() => setGuidedTourActive(false));
+      expect(section).not.toHaveClass("is-visible");
+
+      rect.mockReturnValue(createRect({ top: 24, bottom: 360, height: 336 }));
+      act(() => triggerIntersection(section!, 0.02));
+      expect(section).toHaveClass("is-visible");
+    });
+
+    it("fades in at the tour's end when the section is on screen there", () => {
+      const rect = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockReturnValue(createRect({ top: 1400, bottom: 3200, height: 1800 }));
+      render(
+        <ReportSection sectionId="core_motivation" title="Core Motivation">
+          <p>Deferred section</p>
+        </ReportSection>
+      );
+      const section = document.getElementById("core_motivation");
+
+      act(() => setGuidedTourActive(true));
+      rect.mockReturnValue(createRect({ top: 24, bottom: 360, height: 336 }));
+      act(() => triggerIntersection(section!, 0.02));
+      expect(section).not.toHaveClass("is-visible");
+
+      act(() => setGuidedTourActive(false));
+      expect(section).toHaveClass("is-visible");
+    });
   });
 });
 

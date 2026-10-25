@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
+
 /**
  * A one-shot "the reader can see it now" flag for V4's entrances (review 27.09): the
  * sun beliefs' neighbours, the A&B headlines, the flywheel's pulse, the fantasy map's
@@ -19,6 +21,14 @@ import { useEffect, useRef, useState, type RefObject } from "react";
  *   no size never reveals here; the observer catches it when the chapter reopens.
  * - Its catch-up check overrides the observer's threshold, so an entrance cannot be
  *   held for a given depth. One `band` drives both here.
+ *
+ * HELD WHILE THE GUIDED TOUR MOVES THE PAGE (shared/ui/guided-tour-state.ts; sync 23.10:
+ * "the score animations play in the background during the tour"). The tour scrolls the
+ * real page through Part 2 on its way to Typical Beliefs, behind its scrim, so every
+ * entrance it passed played out unseen and the reader later scrolled down to finished
+ * scores. Nothing reveals while it runs. When it ends, a box on screen reveals at once;
+ * one the tour carried the page past is never caught up out of sight, and waits for the
+ * reader to scroll to it.
  */
 
 export interface V4RevealOptions {
@@ -50,18 +60,27 @@ export function useV4Reveal<T extends Element>({
     let done = false;
     let frame = 0;
     let observer: IntersectionObserver | null = null;
+    let unsubscribeTour: (() => void) | null = null;
+    // The tour, not the reader, brought this box into the band (or past it).
+    let passedByTour = false;
 
     function teardown() {
       observer?.disconnect();
       el.removeEventListener("focusin", reveal);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("scrollend", check);
+      unsubscribeTour?.();
+      unsubscribeTour = null;
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
     }
 
     function reveal() {
       if (done) return;
+      if (isGuidedTourActive()) {
+        passedByTour = true;
+        return;
+      }
       done = true;
       teardown();
       setRevealed(true);
@@ -74,7 +93,11 @@ export function useV4Reveal<T extends Element>({
       if (!node) return;
       const box = node.getBoundingClientRect();
       if (box.width === 0 && box.height === 0) return;
-      if (box.top < window.innerHeight * band) reveal();
+      if (box.top >= window.innerHeight * band) return;
+      // Above the screen: a jump over it catches it up, unless the jump was the tour's,
+      // or the surface must never play unseen (catchUp off).
+      if (box.bottom <= 0 && (passedByTour || !catchUp)) return;
+      reveal();
     }
 
     function onScroll() {
@@ -88,7 +111,15 @@ export function useV4Reveal<T extends Element>({
     el.addEventListener("focusin", reveal);
 
     if (typeof IntersectionObserver === "undefined") {
-      if (catchUp) reveal();
+      if (catchUp) {
+        reveal();
+        // Held by the tour, with nothing to watch: it shows the moment the tour ends.
+        if (!done) {
+          unsubscribeTour = subscribeGuidedTour(() => {
+            if (!isGuidedTourActive()) reveal();
+          });
+        }
+      }
       return teardown;
     }
 
@@ -99,6 +130,12 @@ export function useV4Reveal<T extends Element>({
       { rootMargin: `0px 0px -${Math.round((1 - band) * 100)}% 0px`, threshold: 0 }
     );
     observer.observe(el);
+
+    // Look again the moment the tour ends. It hands the reader back at the top, where
+    // what it scrolled past sits below the band once more.
+    unsubscribeTour = subscribeGuidedTour(() => {
+      if (!isGuidedTourActive()) onScroll();
+    });
 
     if (catchUp) {
       window.addEventListener("scroll", onScroll, { passive: true });
