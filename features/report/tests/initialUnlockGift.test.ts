@@ -119,6 +119,11 @@ describe("initialUnlockGiftEmail", () => {
       expect(part).toMatch(/So we(’|&rsquo;|')ve unlocked it for you\./);
       expect(part).toContain("No payment, no catch.");
       expect(part).toContain("five chapters in full");
+      // Sync 26.10: a locked V4 chapter draws no body, so no "preview" is promised.
+      expect(part).toMatch(
+        /Every other chapter shows what it covers, so you can see what(’|&rsquo;|')s waiting for you\./
+      );
+      expect(part).not.toContain("opens with a preview");
       expect(part).toContain("Typical Beliefs:");
       expect(part).toContain("Fantasy vs. Reality:");
       expect(part).toMatch(/P\.S\. If it lands and you want the rest, you have/);

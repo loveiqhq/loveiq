@@ -18,7 +18,7 @@ export const WIZARD_SLIDE_COUNT = 6;
 /**
  * Which wizard a reader gets. A reader who paid before the survey gets their offer's:
  * - `pay_to_start`, the full report (Figma Report-3.0 1477:3920), opens unlocked: slides 1,
- *   4, 5 and 6 of the six. The report map ("your free chapters") and "Unlocking your report
+ *   4, 5 and 6 of the six. The report map ("your opening chapters") and "Unlocking your report
  *   is fully risk free" are left out. Figma draws those four with the six-slide bar and
  *   counters (1/6, 2/6, 3/6, 5/6); the bar here has four segments, "n / 4" (Fatih, 18.10).
  * - `pay_to_start_initial`, the initial report (EUR 1.99), opens only partly: the map too,
@@ -65,7 +65,11 @@ export interface WizardDrawerRow {
   /** The chapter's anchor in the report, as the report's own nav names it. */
   id: string;
   label: string;
-  /** FREE chip, the brand-gradient open lock (the four deep dives), or the grey lock. */
+  /**
+   * The IN FULL chip (FREE until sync 26.10: the EUR 1.99 gate follows the map, so nothing
+   * on it is free; the kind keeps its name), the brand-gradient open lock (the four deep
+   * dives), or the grey lock.
+   */
   badge: WizardDrawerBadge;
 }
 
