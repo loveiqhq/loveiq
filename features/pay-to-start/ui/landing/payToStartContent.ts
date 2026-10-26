@@ -427,7 +427,7 @@ export const PTS_INITIAL = {
     includes: [
       "57 questions · ~15 minutes",
       "Your Core Archetype and what drives it",
-      "4x full chapters + 4x partly open",
+      "5x full chapters + 4x partly open",
       "How you rank against all 14 archetypes",
       // The initial unlock's credit (features/report/logic/initialUnlock.ts), as checkout takes it.
       `${formatOfferPrice(INITIAL_UNLOCK_CREDIT_CENTS)} credit toward the full Premium Report`,

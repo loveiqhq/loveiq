@@ -118,7 +118,7 @@ describe("initialUnlockGiftEmail", () => {
       );
       expect(part).toMatch(/So we(’|&rsquo;|')ve unlocked it for you\./);
       expect(part).toContain("No payment, no catch.");
-      expect(part).toContain("four chapters in full");
+      expect(part).toContain("five chapters in full");
       expect(part).toContain("Typical Beliefs:");
       expect(part).toContain("Fantasy vs. Reality:");
       expect(part).toMatch(/P\.S\. If it lands and you want the rest, you have/);
