@@ -349,6 +349,15 @@ describe("around the card", () => {
     expect(notReady()).not.toHaveAttribute("aria-label");
   });
 
+  // The way out stays in the tab (a client-side link), so the landing page would otherwise
+  // file its scroll and rage-click signals under this report's submission.
+  it("lets go of the report's submission when the reader leaves the gate", () => {
+    const { unmount } = renderGate();
+    expect(mockSetContext).toHaveBeenLastCalledWith(55);
+    unmount();
+    expect(mockSetContext).toHaveBeenLastCalledWith(null);
+  });
+
   it("counts a reader who leaves, and never sends them back through the survey", () => {
     setReferrer("https://www.loveiq.org/survey?step=done");
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
