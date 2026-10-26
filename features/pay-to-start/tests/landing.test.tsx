@@ -626,7 +626,8 @@ describe("the initial report's page", () => {
     ];
     for (const line of expected) expect(text).toContain(line.replace(/\s+/g, " "));
     expect(text).toContain("SURVEY + INITIAL REPORT");
-    expect(text).toContain("€10 credit toward the full Premium Report");
+    expect(text).toContain("€10 credit toward your Full Report");
+    expect(text).not.toContain("Premium Report");
     for (const wrong of [
       PTS_ONE_PRICE.title,
       "the full report.",

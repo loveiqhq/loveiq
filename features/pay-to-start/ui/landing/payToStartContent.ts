@@ -12,9 +12,12 @@ import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnloc
  * the server sells at (`formatOfferPrice`), so the setting changes every mention at once.
  * `features/pay-to-start/tests/no-hardcoded-price.test.ts` fails on a "€" + digit here.
  *
- * Where the frames say something the product does not (57 questions, "~15 minutes" on the
- * price card, the motto and two chapters the slimmed report took out, 50+ pages), the
- * copy is kept as drawn and listed for Marcus in the PR (Fatih, 18.10: verbatim + flag).
+ * Where the frames say something the product does not (the motto and two chapters the
+ * slimmed report took out, 50+ pages), the copy is kept as drawn and listed for Marcus in the
+ * PR (Fatih, 18.10: verbatim + flag). The survey's own facts are stated as the survey has them
+ * since sync 26.10 (Marcus handed the copy calls to Fatih): SURVEY_TOTAL_QUESTIONS questions
+ * and its own 15-minute estimate, where the frames said 57, and nine minutes beside fifteen
+ * (`tests/survey-facts.test.ts`).
  */
 
 /** The address the frames give for refunds (FAQ 2 and the guarantee band). */
@@ -36,12 +39,12 @@ export const PTS_HERO = {
   ratingValue: "4.9/5",
   ratingLabel: " rating",
   takers: "10,000+ people took the test",
-  length: "57 questions · ~9 min",
+  length: "62 questions · ~15 min",
 } as const;
 
 export const PTS_FIND_OUT = {
   title: "What you’ll find out",
-  lead: "In about 9 minutes you’ll know things about yourself most people never learn. Your desire has a logic; we put it into plain words you can use.",
+  lead: "In about 15 minutes you’ll know things about yourself most people never learn. Your desire has a logic; we put it into plain words you can use.",
   cards: [
     {
       number: "01",
@@ -201,9 +204,9 @@ export const PTS_HOW_IT_WORKS = {
     },
     {
       number: "02",
-      title: "Answer 57 questions",
+      title: "Answer 62 questions",
       body: () =>
-        "About 9 minutes, at your own pace. Anonymous by default; pause and come back anytime.",
+        "About 15 minutes, at your own pace. Anonymous by default; pause and come back anytime.",
     },
     {
       number: "03",
@@ -295,7 +298,7 @@ export const PTS_ONE_PRICE = {
   terms: "One-time payment · no subscription",
   cta: "Unlock Survey & Full Report",
   includes: [
-    "The full survey: 57 questions, about 9 minutes",
+    "The full survey: 62 questions, about 15 minutes",
     "Your core archetype out of 14, with your closest matches",
     "Your full 50+ page report, unlocked the moment you finish",
     "Practices and one-sentence scripts you can use with a partner",
@@ -331,7 +334,7 @@ export const PTS_FAQ = {
     {
       question: "How long does it take?",
       answer:
-        "About 9 minutes for 57 questions. The report reads in chapters of a few minutes each.",
+        "About 15 minutes for 62 questions. The report reads in chapters of a few minutes each.",
     },
     {
       question: "Is this a diagnosis?",
@@ -352,7 +355,7 @@ export const PTS_PRICE_CARD = {
   cta: "Unlock Survey & Full Report",
   guarantee: "14-day money-back guarantee",
   includes: [
-    "57 questions · ~15 minutes",
+    "62 questions · ~15 minutes",
     "Full 50+ page report included",
     "Anonymous by default",
     "Pay once · no subscription",
@@ -363,7 +366,7 @@ export const PTS_FINAL_CTA = {
   stars: "★★★★★",
   title: "Find the words for what you want",
   /** Split so the price clause never breaks at the hyphen in "one-time". */
-  leadBefore: "57 questions · about 9 minutes · a 50+ page report you keep. ",
+  leadBefore: "62 questions · about 15 minutes · a 50+ page report you keep. ",
   leadPrice: (price: string) => `${price}, one-time.`,
   cta: (price: string) => `Unlock Survey & Full Report · ${price}`,
   /** The phone frame's shorter label (1706:2329). */
@@ -425,17 +428,17 @@ export const PTS_INITIAL = {
     eyebrow: "SURVEY + INITIAL REPORT",
     cta: "Unlock Survey & Initial Report",
     includes: [
-      "57 questions · ~15 minutes",
+      "62 questions · ~15 minutes",
       "Your Core Archetype and what drives it",
       "5x full chapters + 4x partly open",
       "How you rank against all 14 archetypes",
       // The initial unlock's credit (features/report/logic/initialUnlock.ts), as checkout takes it.
-      `${formatOfferPrice(INITIAL_UNLOCK_CREDIT_CENTS)} credit toward the full Premium Report`,
+      `${formatOfferPrice(INITIAL_UNLOCK_CREDIT_CENTS)} credit toward your Full Report`,
     ],
   },
   finalCta: {
     ...PTS_FINAL_CTA,
-    leadBefore: "57 questions · about 9 minutes",
+    leadBefore: "62 questions · about 15 minutes",
     leadPrice: null,
     // As drawn: no middle dot before the price.
     cta: (price: string) => `Unlock Survey & Initial Report ${price}`,
