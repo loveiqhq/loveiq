@@ -880,7 +880,10 @@ export const trackInitialGateCta = (params: { place: "card" | "sticky" }) => {
   persistAnalyticsEvent("initial_gate_cta_click", params);
 };
 
-/** The gate's back arrow, back to the survey's last screen. GA4/PostHog only. */
+/**
+ * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
+ * the same event name so the series runs on). GA4/PostHog only.
+ */
 export const trackInitialGateBack = () => {
   track("initial_gate_back", {});
 };

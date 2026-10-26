@@ -332,28 +332,33 @@ describe("around the card", () => {
     expect(cardCta()).toBeEnabled();
   });
 
-  it("has no back arrow for a reader who came from anywhere but the survey", () => {
+  // Sync 26.10 (Marcus): "there is no such thing as back". The way out says what it is and
+  // leads to the landing page until his feedback page exists.
+  const notReady = () => screen.getByRole("link", { name: "Not ready to unlock yet" });
+
+  it("offers the way out to every reader, whatever brought them here", () => {
     setReferrer("https://mail.google.com/");
     renderGate();
+    expect(notReady()).toHaveAttribute("href", "/");
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
-  // Persona walks 24.10: the arrow alone said nothing. Its word is its name now.
-  it("labels the back arrow with its word, visibly", () => {
-    setReferrer(`${window.location.origin}/survey`);
+  it("names the way out in its own words, visibly", () => {
     renderGate();
-    const back = screen.getByRole("button", { name: "Back" });
-    expect(back.textContent).toBe("Back");
-    expect(back).not.toHaveAttribute("aria-label");
+    expect(notReady().textContent).toBe("Not ready to unlock yet");
+    expect(notReady()).not.toHaveAttribute("aria-label");
   });
 
-  it("goes back to the survey's last screen with the back arrow", () => {
+  it("counts a reader who leaves, and never sends them back through the survey", () => {
     setReferrer("https://www.loveiq.org/survey?step=done");
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     renderGate();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(back).toHaveBeenCalledTimes(1);
+    const link = notReady();
+    // jsdom cannot follow a link; the href is the destination under test.
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
     expect(mockTrackBack).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it("counts the gate as seen once, for this reader", () => {
