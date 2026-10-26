@@ -583,6 +583,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
                     <WizardReportMap
                       step={mapStep}
                       onStep={(to, control) => moveMap(to, control)}
+                      variant={variant}
                     />
                   </div>
                 )}

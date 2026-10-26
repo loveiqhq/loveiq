@@ -25,6 +25,7 @@ import {
   WIZARD_CHAPTER_COUNT,
   WIZARD_DRAWER,
   WIZARD_PART_COUNT,
+  wizardDrawer,
 } from "@features/survey/ui/wizard/wizardContent";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import { REPORT_V4_CHAPTER_COUNT, REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
@@ -224,6 +225,20 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(pitch.textContent).not.toMatch(/free|preview/i);
     expect(pitch.textContent).toContain("in every chapter");
     expect(screen.queryAllByText(/^free$/i)).toHaveLength(0);
+    expect(screen.getAllByText("IN FULL")).toHaveLength(4);
+  });
+
+  // Review 26.10: a free reader's Core Archetype card is half veiled and its Summary locked
+  // until the EUR 1.99 (or a plan), gate or no gate, so their map never says IN FULL there.
+  // A EUR 1.99 buyer's report opens it whole, and their map says so.
+  it("shows a free reader the Core Archetype partly open, and a EUR 1.99 buyer in full", () => {
+    openMap();
+    const core = () => document.querySelector<HTMLElement>('[data-wizard-row="core_archetype"]')!;
+    expect(core().textContent).not.toContain("IN FULL");
+    cleanup();
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    press(continueButton());
+    expect(core().textContent).toContain("IN FULL");
     expect(screen.getAllByText("IN FULL")).toHaveLength(5);
   });
 
@@ -343,18 +358,25 @@ describe("PreReportWizard — the report map (slide 2)", () => {
       Object.entries(badges)
         .filter(([, b]) => b === "free")
         .map(([id]) => id)
-    ).toEqual([
-      "introduction",
-      "what_shaped_this_report",
-      "top_archetypes",
-      "core_archetype",
-      "constellation",
-    ]);
+    ).toEqual(["introduction", "what_shaped_this_report", "top_archetypes", "constellation"]);
     expect(
       Object.entries(badges)
         .filter(([, b]) => b === "open")
         .map(([id]) => id)
-    ).toEqual(REPORT_DEEP_DIVES.map((d) => d.id));
+    ).toEqual(["core_archetype", ...REPORT_DEEP_DIVES.map((d) => d.id)]);
+  });
+
+  it("a paid wizard's drawer opens the Core Archetype in full", () => {
+    for (const variant of ["pay_to_start", "pay_to_start_initial"] as const) {
+      const badges = new Map(
+        wizardDrawer(variant).flatMap((p) => p.rows.map((r) => [r.id, r.badge] as const))
+      );
+      expect(badges.get("core_archetype"), variant).toBe("free");
+      expect(
+        [...badges.values()].filter((b) => b === "open"),
+        variant
+      ).toHaveLength(4);
+    }
   });
 });
 

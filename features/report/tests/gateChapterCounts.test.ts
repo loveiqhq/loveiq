@@ -4,7 +4,7 @@ import { initialUnlockEmail } from "@features/report/server/emails/initial-unloc
 import { initialUnlockGiftEmail } from "@features/report/server/emails/initial-unlock-gift";
 import { GATE_CHAPTER_PARTS } from "@features/report/ui/gate/gateChapters";
 import { GATE_COPY } from "@features/report/ui/gate/gateContent";
-import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
+import { wizardDrawer } from "@features/survey/ui/wizard/wizardContent";
 
 /**
  * Sync 26.10: the EUR 1.99 card said "4x full chapters" while its own map marked five rows IN
@@ -46,10 +46,20 @@ describe("what the EUR 1.99 opens, counted the same everywhere", () => {
     expect(initialUnlockGiftEmail(params).text).toContain(`You can also read ${emailCount}`);
   });
 
-  it("on the pre-report map, row for row", () => {
-    const wizardRows = WIZARD_DRAWER.flatMap((part) => part.rows);
+  it("on a EUR 1.99 buyer's pre-report map, row for row", () => {
+    const wizardRows = wizardDrawer("pay_to_start_initial").flatMap((part) => part.rows);
     const ids = (badge: string) => wizardRows.filter((r) => r.badge === badge).map((r) => r.id);
     expect(ids("free")).toEqual(inFull.map((row) => row.id));
     expect(ids("open")).toEqual(partlyOpen.map((row) => row.id));
+  });
+
+  // Review 26.10: before the EUR 1.99 the Core Archetype is half veiled, gate on or off.
+  it("on a free reader's map, all but the Core Archetype, which is partly open there", () => {
+    const wizardRows = wizardDrawer("standard").flatMap((part) => part.rows);
+    const ids = (badge: string) => wizardRows.filter((r) => r.badge === badge).map((r) => r.id);
+    expect(ids("free")).toEqual(
+      inFull.map((row) => row.id).filter((id) => id !== "core_archetype")
+    );
+    expect(ids("open")).toEqual(["core_archetype", ...partlyOpen.map((row) => row.id)]);
   });
 });
