@@ -50,7 +50,9 @@ record, and no landing test arm.
   its survey; an open session of the other offer is closed and a new row starts, so one
   browser never pays for both by accident.
 - **Copy lives in `ui/landing/payToStartContent.ts`**, verbatim from Figma; where it disagrees
-  with the product (57 questions, ~15 minutes, cut chapters) it is flagged, not changed. The
+  with the product (cut chapters, 50+ pages) it is flagged, not changed. The survey's own
+  facts are the exception (sync 26.10): its question count and its 15 minutes, as the survey
+  states them (`tests/survey-facts.test.ts`). The
   initial report's page is the same page: what it says otherwise is `PTS_INITIAL`
   (`PTS_OFFER_COPY` picks per offer), where the lines its frames kept from the full report's,
   and that EUR 1.99 does not buy, are corrected and flagged. It has no "One price" band, so its
