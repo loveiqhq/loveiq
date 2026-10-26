@@ -129,7 +129,7 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
           className="flex h-[9.905px] shrink-0 items-center rounded-[2.943px] bg-white px-[3.924px] text-[4.51px] font-semibold leading-[4.513px] tracking-[0.271px] text-[#4a4657]"
           style={{ fontFamily: JAKARTA, border: "0.491px solid rgba(22,16,33,0.13)" }}
         >
-          FREE
+          IN FULL
         </span>
       ) : (
         <Image
@@ -302,7 +302,7 @@ const Pitch: FC<{ icon: "free" | "open" | "locked"; top: number; children: React
         className="wz-pitch-badge flex rounded-[4px] px-[5px] py-[2px] font-sans text-[8px] font-bold uppercase leading-[10px] tracking-[0.5px] text-[#ffb89c]"
         style={{ background: "rgba(255,158,122,0.16)", border: "1px solid rgba(255,158,122,0.35)" }}
       >
-        Free
+        In full
       </span>
     ) : (
       <Image
@@ -503,7 +503,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
             </h2>
             <Pitch icon="free" top={20}>
               <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
-                Read through <strong className="font-bold">your free chapters</strong>.
+                Read <strong className="font-bold">your opening chapters</strong> in full.
               </p>
             </Pitch>
             <Pitch icon="open" top={20}>
@@ -513,8 +513,8 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
             </Pitch>
             <Pitch icon="locked" top={22}>
               <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
-                See the <strong className="font-bold">insights waiting for you</strong> in each
-                chapter preview
+                See the <strong className="font-bold">insights waiting for you</strong> in every
+                chapter.
               </p>
             </Pitch>
           </div>

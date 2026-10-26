@@ -66,7 +66,7 @@ export function initialUnlockGiftEmail({
       <ul style="margin:0 0 16px 0; padding-left:22px; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         ${listItems}
       </ul>
-      <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">Every other chapter opens with a preview, so you can see what&rsquo;s waiting for you.</p>
+      <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">Every other chapter shows what it covers, so you can see what&rsquo;s waiting for you.</p>
     </td>
   </tr>
   <tr>
@@ -111,7 +111,7 @@ export function initialUnlockGiftEmail({
     "You can also read five chapters in full. Four featured chapters are partly open:",
     ...PARTLY_OPEN.map(([name, line]) => `- ${name} ${line}`),
     "",
-    "Every other chapter opens with a preview, so you can see what's waiting for you.",
+    "Every other chapter shows what it covers, so you can see what's waiting for you.",
     "",
     `${ctaLabel}: ${reportUrl}`,
     "",

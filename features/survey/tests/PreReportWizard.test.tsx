@@ -208,11 +208,23 @@ describe("PreReportWizard — the report map (slide 2)", () => {
 
   it("opens on the overview: the pitch copy, ▲ off and ▼ on, nothing marked yet", () => {
     openMap();
-    expect(screen.getByText("your free chapters")).toBeInTheDocument();
+    expect(screen.getByText("your opening chapters")).toBeInTheDocument();
     expect(isOff(previousDeepDive())).toBe(true);
     expect(isOff(nextDeepDive())).toBe(false);
     expect(activeTile()).toBeNull();
     expect(markedRow()).toBeNull();
+  });
+
+  // Sync 26.10, Fatih: words that are true for every reader. The EUR 1.99 gate follows this
+  // slide, and EUR 1.99 buyers see it too, so nothing here is "free"; and a locked V4
+  // chapter draws no body, so nothing promises a preview.
+  it("promises nothing free and no preview: the chapters open IN FULL", () => {
+    openMap();
+    const pitch = document.querySelector<HTMLElement>(".wz-pitch")!;
+    expect(pitch.textContent).not.toMatch(/free|preview/i);
+    expect(pitch.textContent).toContain("in every chapter");
+    expect(screen.queryAllByText(/^free$/i)).toHaveLength(0);
+    expect(screen.getAllByText("IN FULL")).toHaveLength(5);
   });
 
   it("▼ and ▲ step through the four deep dives, marking each chapter in the drawer", () => {
@@ -323,7 +335,7 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(WIZARD_CHAPTER_COUNT).toBe(REPORT_V4_CHAPTER_COUNT);
   });
 
-  it("the drawer badges the free chapters FREE and opens the four deep dives' locks", () => {
+  it("the drawer badges the chapters that open in full and opens the four deep dives' locks", () => {
     const badges = Object.fromEntries(
       WIZARD_DRAWER.flatMap((p) => p.rows.map((r) => [r.id, r.badge]))
     );
@@ -656,9 +668,9 @@ describe("PreReportWizard — Mark's 01.10 placement: the bar under CONTINUE (10
         expect(label.style.color, row.id).toBe("rgb(63, 58, 77)");
       }
     }
-    // The label 3.9 from its badge; the FREE chip and the part headings at the panel's scale.
+    // The label 3.9 from its badge; the IN FULL chip and the part headings at the panel's scale.
     expect(document.querySelector("[data-wizard-row]")).toHaveClass("gap-[3.9px]");
-    expect(screen.getAllByText("FREE")[0]).toHaveClass(
+    expect(screen.getAllByText("IN FULL")[0]).toHaveClass(
       "px-[3.924px]",
       "rounded-[2.943px]",
       "tracking-[0.271px]"
