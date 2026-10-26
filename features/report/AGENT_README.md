@@ -162,6 +162,13 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   price, credit, guarantee, the token and the submission id, nothing of the report —
   `useReportData` turns it into `status: "gated"`, and `ReportPage` draws
   `ui/gate/InitialUnlockGate.tsx` in its place: a page of its own, never a pop-up.
+- **The way out.** "Not ready to unlock yet", top left, for every reader, leads to
+  `GATE_NOT_READY_HREF` (`ui/gate/gateContent.ts`): the landing page (sync 26.10, Marcus: "there
+  is no such thing as back") until his page that asks why is ready; then that constant is the
+  whole change. It still counts as `initial_gate_back`.
+- **What it opens, in numbers.** Five chapters in full and four partly open, counted off the
+  gate's map (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
+  the pre-report map say the same, and `tests/gateChapterCounts.test.ts` holds them to it.
 - **Buying it.** `POST /api/stripe/initial-unlock` (plan `initial`, EUR 1.99 from pay to start's
   `PRE_OFFER`) → Stripe → fulfillment records a payment with `metadata.plan = "initial"` and
   never touches `personal_report.payment_*` (pay to start's EUR 1.99 does, and so do its
@@ -180,7 +187,8 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   `/report?preview=1&v4=1&plan=initial` the report after the EUR 1.99; the emails at
   `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`.
 - **Tests.** `tests/initialUnlockGate.test.ts`, `tests/initialGateState.test.ts`,
-  `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`, the gate blocks of
+  `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`,
+  `tests/gateChapterCounts.test.ts`, the gate blocks of
   `tests/report-handler.test.ts`, `tests/ReportPage.test.tsx` and
   `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`.
 
