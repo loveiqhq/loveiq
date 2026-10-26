@@ -12,8 +12,15 @@ export function euros(cents: number): string {
   return cents % 100 === 0 ? `€${cents / 100}` : `€${(cents / 100).toFixed(2)}`;
 }
 
+/**
+ * Where "Not ready to unlock yet" leads. Sync 26.10 (Marcus): "there is no such thing as
+ * back"; the landing page until his page that asks why, and makes the case, is ready
+ * (Notion "Replace 'Back' with 'Not ready to unlock'"). Then this line is the whole change.
+ */
+export const GATE_NOT_READY_HREF = "/";
+
 export const GATE_COPY = {
-  back: "Back",
+  notReady: "Not ready to unlock yet",
   badge: "Your Core Archetype was determined",
   /** 1604:2387: the second line in the brand gradient. */
   headline: { lead: "Find Out Your", emph: "Sexual Archetypes" },

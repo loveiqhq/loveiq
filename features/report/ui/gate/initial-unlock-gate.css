@@ -38,7 +38,7 @@
   border: 0;
 }
 
-/* ── 1609:11160: the back arrow (only when we have somewhere to go back to) ── */
+/* ── 1609:11160: the way out, "Not ready to unlock yet" (sync 26.10) ───── */
 .iug-header {
   display: flex;
   align-items: center;
@@ -46,8 +46,8 @@
   padding: 0 16px;
 }
 
-/* A 44px-high target, its 12px arrow where the frame draws it (16px in), and its word after
- * it (persona walks 24.10): the arrow alone said nothing. */
+/* A 44px-high target, its 12px arrow where the frame draws it (16px in), and its words after
+ * it (persona walks 24.10): the arrow alone said nothing. A link now, so no underline. */
 .iug-header__back {
   display: inline-flex;
   align-items: center;
@@ -59,15 +59,18 @@
   border: 0;
   border-radius: 12px;
   background: none;
+  text-decoration: none;
   cursor: pointer;
 }
 
+/* One line from 320px: 23 characters at 13px is about 150px. */
 .iug-header__back-label {
   color: #5f5a6e;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
   line-height: 16px;
+  white-space: nowrap;
 }
 
 .iug-header__back:focus-visible {
