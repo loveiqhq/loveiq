@@ -75,11 +75,18 @@ export interface WizardDrawerPart {
   rows: readonly WizardDrawerRow[];
 }
 
+/**
+ * The rows that open in full, as the report's nav and the EUR 1.99 gate's map mark them.
+ * Other Archetypes (`constellation`) is among them: the report gives it to every reader, and
+ * the map drew it locked until sync 26.10 (Fatih: "say five, everywhere";
+ * gateChapterCounts.test.ts holds this list to the gate's).
+ */
 const FREE_ROWS: ReadonlySet<string> = new Set([
   "introduction",
   "what_shaped_this_report",
   "top_archetypes",
   "core_archetype",
+  "constellation",
 ]);
 const DEEP_DIVE_IDS: ReadonlySet<string> = new Set(REPORT_DEEP_DIVES.map((d) => d.id));
 
