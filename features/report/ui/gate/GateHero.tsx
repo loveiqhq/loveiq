@@ -1,24 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, type FC } from "react";
 import { trackInitialGateBack } from "@features/analytics/client";
-import { GATE_COPY } from "./gateContent";
-
-/**
- * Whether the reader came here from our survey's last screen: the only page the back arrow
- * returns to. From an email, a bookmark or a reload there is nowhere of ours to go back to,
- * so there is no arrow (the gate itself never closes).
- */
-function cameFromSurvey(): boolean {
-  if (typeof document === "undefined" || !document.referrer) return false;
-  try {
-    const from = new URL(document.referrer);
-    return from.origin === window.location.origin && from.pathname.startsWith("/survey");
-  } catch {
-    return false;
-  }
-}
+import { GATE_COPY, GATE_NOT_READY_HREF } from "./gateContent";
 
 function prefersReducedMotion(): boolean {
   return (
@@ -29,34 +15,31 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * 1609:11160, 1612:2670: the back arrow, then the moment the gate is built on. Mark, on the
+ * 1609:11160, 1612:2670: the way out, then the moment the gate is built on. Mark, on the
  * frame: a progress bar fills first, then makes way for "Your Core Archetype was
  * determined", which pulses with the headline (1610:2667, 1604:2387, one 2.5 s loop).
  * Under reduced motion there is no bar and nothing pulses.
  *
- * The arrow carries its word, so its visible text is its name (persona walks 24.10: "the
- * only way out of the gate is a small grey back arrow", which said nothing).
+ * The way out is not "Back" (sync 26.10, Marcus: "there is no such thing as back"): it says
+ * the reader is not ready, and leads to GATE_NOT_READY_HREF for every reader, wherever they
+ * came from. Its word is its name (persona walks 24.10: a bare arrow said nothing). Not
+ * prefetched: most readers never take it. Its analytics event keeps its first name.
  */
 export const GateHero: FC = () => {
-  const [canGoBack] = useState(cameFromSurvey);
   const [reducedMotion] = useState(prefersReducedMotion);
 
   return (
     <>
       <header className="iug-header">
-        {canGoBack ? (
-          <button
-            type="button"
-            className="iug-header__back"
-            onClick={() => {
-              trackInitialGateBack();
-              window.history.back();
-            }}
-          >
-            <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
-            <span className="iug-header__back-label">{GATE_COPY.back}</span>
-          </button>
-        ) : null}
+        <Link
+          href={GATE_NOT_READY_HREF}
+          prefetch={false}
+          className="iug-header__back"
+          onClick={() => trackInitialGateBack()}
+        >
+          <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
+          <span className="iug-header__back-label">{GATE_COPY.notReady}</span>
+        </Link>
       </header>
 
       <div className={`iug-hero${reducedMotion ? "" : " iug-hero--motion"}`}>
