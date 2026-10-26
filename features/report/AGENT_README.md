@@ -168,7 +168,9 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   whole change. It still counts as `initial_gate_back`.
 - **What it opens, in numbers.** Five chapters in full and four partly open, counted off the
   gate's map (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
-  the pre-report map say the same, and `tests/gateChapterCounts.test.ts` holds them to it.
+  a EUR 1.99 buyer's pre-report map say the same, and `tests/gateChapterCounts.test.ts` holds
+  them to it. A free reader's map draws the Core Archetype partly open, as their report has it
+  until the EUR 1.99 (`wizardDrawer` in `features/survey/ui/wizard/wizardContent.ts`).
 - **Buying it.** `POST /api/stripe/initial-unlock` (plan `initial`, EUR 1.99 from pay to start's
   `PRE_OFFER`) → Stripe → fulfillment records a payment with `metadata.plan = "initial"` and
   never touches `personal_report.payment_*` (pay to start's EUR 1.99 does, and so do its

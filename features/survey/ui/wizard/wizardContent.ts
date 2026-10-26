@@ -80,25 +80,32 @@ export interface WizardDrawerPart {
 }
 
 /**
- * The rows that open in full, as the report's nav and the EUR 1.99 gate's map mark them.
- * Other Archetypes (`constellation`) is among them: the report gives it to every reader, and
- * the map drew it locked until sync 26.10 (Fatih: "say five, everywhere";
- * gateChapterCounts.test.ts holds this list to the gate's).
+ * The rows every reader has in full, as the report's nav marks them. Other Archetypes
+ * (`constellation`) is among them: the report gives it to every reader, and the map drew it
+ * locked until sync 26.10 (Fatih: "say five, everywhere").
  */
-const FREE_ROWS: ReadonlySet<string> = new Set([
+const IN_FULL_ROWS: ReadonlySet<string> = new Set([
   "introduction",
   "what_shaped_this_report",
   "top_archetypes",
-  "core_archetype",
   "constellation",
 ]);
+const CORE_ARCHETYPE_ROW = "core_archetype";
 const DEEP_DIVE_IDS: ReadonlySet<string> = new Set(REPORT_DEEP_DIVES.map((d) => d.id));
 
-const row = (id: string, label: string): WizardDrawerRow => ({
-  id,
-  label,
-  badge: FREE_ROWS.has(id) ? "free" : DEEP_DIVE_IDS.has(id) ? "open" : "locked",
-});
+/**
+ * A row's badge on a variant's map. The Core Archetype is in full only once it is bought:
+ * before the EUR 1.99 (or a plan) its card is half veiled and its Summary locked, gate on or
+ * off (review 26.10), so a free reader's map draws it partly open, and a paid wizard's in
+ * full. A EUR 1.99 buyer's map then reads as the gate's map: gateChapterCounts.test.ts.
+ */
+function badgeOf(id: string, variant: WizardVariant): WizardDrawerBadge {
+  if (IN_FULL_ROWS.has(id)) return "free";
+  if (id === CORE_ARCHETYPE_ROW) return variant === "standard" ? "open" : "free";
+  return DEEP_DIVE_IDS.has(id) ? "open" : "locked";
+}
+
+const row = (id: string, label: string): Omit<WizardDrawerRow, "badge"> => ({ id, label });
 
 /**
  * The report's chapter drawer as the map draws it (1049:1831, a cropped instance of the
@@ -107,7 +114,9 @@ const row = (id: string, label: string): WizardDrawerRow => ({
  * rather than imported, so the survey does not load the report's nav and page copy; a
  * test holds it to REPORT_V4_NAV_PARTS.
  */
-export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
+const DRAWER_PARTS: ReadonlyArray<
+  Omit<WizardDrawerPart, "rows"> & { rows: ReadonlyArray<Omit<WizardDrawerRow, "badge">> }
+> = [
   {
     part: "Part 1",
     label: "Welcome",
@@ -164,6 +173,17 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
     ],
   },
 ];
+
+/** The drawer as a variant's reader sees it: the rows, each with its badge (badgeOf). */
+export function wizardDrawer(variant: WizardVariant): readonly WizardDrawerPart[] {
+  return DRAWER_PARTS.map((part) => ({
+    ...part,
+    rows: part.rows.map((r) => ({ ...r, badge: badgeOf(r.id, variant) })),
+  }));
+}
+
+/** A free reader's drawer, the one whose rows and order the readers in AP-Analytics walk. */
+export const WIZARD_DRAWER: readonly WizardDrawerPart[] = wizardDrawer("standard");
 
 /**
  * The map's pitch, "6 Parts, 17 Chapters" (1049:1637): the parts, and the chapters as

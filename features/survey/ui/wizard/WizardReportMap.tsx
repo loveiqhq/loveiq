@@ -13,9 +13,10 @@ import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import {
   WIZARD_CHAPTER_COUNT,
-  WIZARD_DRAWER,
   WIZARD_PART_COUNT,
+  wizardDrawer,
   type WizardDrawerRow,
+  type WizardVariant,
 } from "./wizardContent";
 
 /**
@@ -74,6 +75,8 @@ const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 interface WizardReportMapProps {
   step: number;
   onStep: (to: number, control: "next" | "previous") => void;
+  /** Whose map it is: a paid wizard's reader has the Core Archetype in full (badgeOf). */
+  variant?: WizardVariant;
 }
 
 /* ------------------------------------------------------------------ */
@@ -175,7 +178,7 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
   );
 };
 
-const Drawer: FC<{ step: number }> = ({ step }) => (
+const Drawer: FC<{ step: number; variant: WizardVariant }> = ({ step, variant }) => (
   <div
     aria-hidden
     className="wz-drawer absolute left-0 top-0 h-[597px] w-[142.6px] rounded-[14px] bg-white"
@@ -186,7 +189,7 @@ const Drawer: FC<{ step: number }> = ({ step }) => (
   >
     {/* The panel's pill and "Refer a friend" sit above the crop; the list starts 5.266 down. */}
     <div className="flex flex-col gap-[6.9px] px-[4.8905px] pt-[5.266px]">
-      {WIZARD_DRAWER.map((part) => (
+      {wizardDrawer(variant).map((part) => (
         <div key={part.part} className="flex flex-col gap-[1.962px]">
           <div className="min-h-[13.924px] px-[2px] pb-[0.981px] pt-[2.943px]">
             <p
@@ -419,7 +422,7 @@ const Tiles: FC<WizardReportMapProps> = ({ step, onStep }) => {
 /*  The slide                                                          */
 /* ------------------------------------------------------------------ */
 
-const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
+const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep, variant = "standard" }) => {
   const overview = step === 0;
   const fade = (shown: boolean) => ({
     opacity: shown ? 1 : 0,
@@ -486,7 +489,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
     >
       {/* 640 tall: the 36px header row and the 604 main area (1049:1637). */}
       <div className="wz-canvas absolute left-0 top-0 h-[640px] w-[345px]">
-        <Drawer step={step} />
+        <Drawer step={step} variant={variant} />
 
         {/* 1049:1637 — the pitch, centred in the 604 below the header row, at x 165. */}
         <div
