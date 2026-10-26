@@ -38,12 +38,19 @@ export default function InitialUnlockGate({
     reportToken,
   });
 
-  // Seen once per page: the submission is bound first, or the event is not persisted.
+  // The submission is bound while the gate is on screen, and let go when it goes: "Not ready
+  // to unlock yet" leaves for the landing page in the same tab, whose signals are not this
+  // report's. It is bound first, or the viewed event below is not persisted.
+  useEffect(() => {
+    setReportSubmissionContext(gate.submissionId);
+    return () => setReportSubmissionContext(null);
+  }, [gate.submissionId]);
+
+  // Seen once per page.
   const viewedRef = useRef(false);
   useEffect(() => {
     if (viewedRef.current) return;
     viewedRef.current = true;
-    setReportSubmissionContext(gate.submissionId);
     trackInitialGateViewed({ submission_id: gate.submissionId });
   }, [gate.submissionId]);
 
