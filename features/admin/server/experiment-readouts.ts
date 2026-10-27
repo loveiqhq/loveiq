@@ -511,8 +511,11 @@ export function armReader(
 /*
  * Only genuinely randomised, currently-running splits belong here.
  *
- * Pricing 3.0 (A3 vs B3, 50/50 by report id) runs, read by `armReader` from when its
- * current lists started (list B lowered 2026-10-08). The landing test runs again since its round 3 (V2's question card
+ * Pricing 3.0 (A3 vs B3, 50/50 by report id) ran from list B's lowering (2026-10-08) until
+ * the EUR 1.99 gate went on (2026-10-27 14:38 UTC): every free survey finished since joins
+ * the gate's cohort, quoted on A3, so the split draws no new readers (registry #5,
+ * completed; docs/runbooks/PRE_UNLOCK.md step 3). `armReader` still reads its arms for
+ * /admin. The landing test runs again since its round 3 (V2's question card
  * vs V3's hero video, 50/50 by cookie): its arms are new values, so `tallyAxis`
  * compares only them and every earlier landing stamp (`white`, `white_prev`,
  * `control`) reads as not attributable, as does a round-3 reader from before its
@@ -522,7 +525,7 @@ export function armReader(
  * dropping the higher-priced arm; its A/B rows are retired arms, never pooled into
  * 3.0's, which is why 3.0 took new letters.
  */
-export const LIVE_AXES: ExperimentAxis[] = ["pricing", "landing"];
+export const LIVE_AXES: ExperimentAxis[] = ["landing"];
 
 /**
  * `armReader`, plus the landing test's restart at the condensed phone hero

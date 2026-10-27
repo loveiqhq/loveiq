@@ -164,13 +164,15 @@ describe("experiments: the registry, read", () => {
     expect(text).not.toContain("At 5.9 a day per arm");
   });
 
-  it("names Pricing 3.0 as running unregistered, lists the tests that ended before the registry, and how to start one", async () => {
+  it("names the landing test as running unregistered, lists the tests that ended before the registry, and how to start one", async () => {
     const load = vi.fn(async () => nobody());
     const text = await listExperiments(NOW, load);
-    // Pricing 3.0 is randomised with nothing registered against it, so it is named.
+    // The landing split is randomised with nothing registered against it, so it is named.
     expect(text).toContain(
-      "RUNNING NOW\n- Report pricing: being randomised with no hypothesis on record; register it with record_experiment."
+      "RUNNING NOW\n- Landing page design: being randomised with no hypothesis on record; register it with record_experiment."
     );
+    // Pricing 3.0 ended when the EUR 1.99 gate went on (27.10): it draws no new readers.
+    expect(text).not.toContain("Report pricing: being randomised");
     expect(text).not.toContain("No test is being randomised");
     expect(text).toContain(
       "- Landing page design (V1 vs V2) (before the registry): Finished on 19 September 2026"

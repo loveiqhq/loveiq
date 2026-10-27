@@ -17,6 +17,11 @@ with it. Everything ships switched off.
    applied the gate cannot open: its flag's row does not exist, and a missing flag is off.
 2. **The ads.** The search ads promise a free report. Before the switch, Sanjin Studenovic
    checks every ad's copy and changes what the gate makes untrue.
+   **Done 27.10:** Sanjin moved the live ads to 15 minutes and 17 chapters; the last "Free
+   result … 50+ page" description and two headlines of Competitor Blueprint Only were changed
+   through the Ads API the same afternoon (every live ad text checked: none says free, 9
+   minutes or 50 pages). The paused campaigns (Brand, Core Discovery, Problem Awareness) still
+   say "Free report" and "50+ page": change them before switching any of them back on.
 3. **Switch it on.** `PATCH /api/admin/system-flags` with an admin session, as
    `docs/runbooks/DISASTER_RECOVERY.md` §3 shows, with
    `{"key":"report_initial_unlock_gate","enabled":true}`. Only surveys submitted from then on
@@ -31,6 +36,9 @@ with it. Everything ships switched off.
    brain-reconcile use (`get_axis_funnel_daily`, `get_arm_cohorts`), as
    `20261018130000` did for pay to start: today they count the cohort in A3 and a EUR 1.99
    as a purchase (Fatih's data task: split the EUR 1.99 out of the digest).
+   **Switched on 27.10, 14:38 UTC.** Registry #5 completed (no winner: 0 of 91 against 1 of
+   91 bought) and `pricing` out of `LIVE_AXES`. Fatih's digest readouts follow in his own
+   PR; until then the digest's pricing axis counts the cohort in A3, so read past it.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
