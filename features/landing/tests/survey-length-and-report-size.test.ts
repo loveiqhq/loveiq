@@ -7,7 +7,8 @@ import { WIZARD_CHAPTER_COUNT } from "@features/survey/ui/wizard/wizardContent";
  * Eman, 27.10: the site says what the survey and the report are. The landing page and the
  * survey-link email said "9 minutes" beside pay to start's 15 (the survey's own estimate;
  * October's median finish was 15.5), and the report was sold as "50+ pages" where the
- * slimmed report counts 17 chapters ("6 Parts, 17 Chapters" on the pre-report map, its nav).
+ * slimmed report counts 17 chapters ("6 Parts, 17 Chapters" on the pre-report map, its nav):
+ * the plans said "20+ chapters", the nurture emails "+60 pages" and "30+ chapters".
  * Comments may tell that history; the copy may not.
  */
 const SURVEY_MINUTES = 15;
@@ -16,6 +17,9 @@ const ROOTS = [
   "features/pay-to-start/ui",
   "features/survey/server/emails/test-link.ts",
   "features/report/ui/ReportPricingModal.tsx",
+  "features/checkout/server/reportPurchase.ts",
+  "features/report/server/emails/nurture",
+  "features/unlock-feedback/ui",
   "app/sexual-archetype",
 ];
 
@@ -48,7 +52,7 @@ describe("the site says what the survey and the report are", () => {
   it("sizes the report in chapters, as many as the report has", () => {
     expect(copy).not.toMatch(/\d+\+?\s*-?\s*pages?\b/i);
     expect(copy).not.toMatch(/\+\s*\d+\s*page/i);
-    const chapters = all(/(\d+)[\s-]chapters?\b/gi);
+    const chapters = all(/(\d+)\+?[\s-]chapters?\b/gi);
     expect(chapters.length).toBeGreaterThan(6);
     expect(new Set(chapters)).toEqual(new Set([WIZARD_CHAPTER_COUNT]));
   });

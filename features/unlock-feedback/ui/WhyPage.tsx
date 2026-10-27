@@ -147,8 +147,8 @@ const WhyPage: FC<{ initialReason: UnlockReason | null }> = ({ initialReason }) 
               <p className="m-0 text-[16px] leading-[25.6px] text-ap-body">
                 {view.answer.alreadyPaid
                   ? "You already have your report. It’s ready whenever you are."
-                  : // Mark's line (22.10); the full report has 17 chapters, 21 before the slimmed one.
-                    "We’ve saved your answer. The full report, with all its 10+ chapters, is yours now, free."}
+                  : // Mark's line (22.10), counted as the report counts since 27.10 (Eman): 17 chapters.
+                    "We’ve saved your answer. The full report, with all its 17 chapters, is yours now, free."}
               </p>
             </>
           )}
