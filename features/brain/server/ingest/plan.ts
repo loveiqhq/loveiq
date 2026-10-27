@@ -1,5 +1,5 @@
 import { healthChunkBody, planHealth } from "@features/brain/server/plan";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { syncSource, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * What is open on the board, and what has not moved.
@@ -56,7 +56,5 @@ export async function ingestPlan(stampedAt: string): Promise<IngestResult> {
     period_end: null,
   };
 
-  const written = await upsertChunks([row]);
-  const swept = await sweepStale(SOURCE, stampedAt, written);
-  return { source: SOURCE, rows: written, swept };
+  return { source: SOURCE, ...(await syncSource(SOURCE, [row])) };
 }

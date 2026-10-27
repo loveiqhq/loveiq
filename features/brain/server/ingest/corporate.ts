@@ -14,14 +14,7 @@ import {
   type GscRow,
   type ReportOutcome,
 } from "./google";
-import {
-  recordSweep,
-  shouldSweep,
-  sweepStale,
-  upsertChunks,
-  type BrainRow,
-  type IngestResult,
-} from "./upsert";
+import { recordSweep, shouldSweep, syncSource, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * appliedpsychometrics.org -- the corporate website of Applied Psychometrics UG, the company
@@ -436,13 +429,11 @@ export async function ingestCorporateSite(
     );
   }
 
-  const written = await upsertChunks(rows);
-  if (searchError) throw searchError;
-
   const complete = writeTraffic && writeMonths && writeSearch;
   const sweeping = complete && (await shouldSweep(SOURCE));
   if (sweeping) await recordSweep(SOURCE);
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written) : 0;
+  const { rows: written, swept } = await syncSource(SOURCE, rows, { sweep: sweeping });
+  if (searchError) throw searchError;
   return {
     source: SOURCE,
     rows: written,
