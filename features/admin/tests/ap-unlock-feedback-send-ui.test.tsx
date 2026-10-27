@@ -259,3 +259,15 @@ describe("the admin's test", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the subject list on a phone", () => {
+  // Measured on WebKit's iPhone (27.10): without it, the shrunk select still lays its longest
+  // subject out at full width, unseen, and the whole page scrolls sideways by 108 px.
+  it("keeps its long subject lines inside the select", () => {
+    render(<UnlockFeedbackSend />);
+    expect(screen.getByRole("combobox", { name: /Subject/ })).toHaveClass(
+      "min-w-0",
+      "overflow-hidden"
+    );
+  });
+});
