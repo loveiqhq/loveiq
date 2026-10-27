@@ -66,7 +66,7 @@ describe("/why once the answer is in", () => {
     expect(await ready()).toHaveTextContent("Thank you. Your full report is unlocked.");
     expect(
       screen.getByText(
-        "We’ve saved your answer. The full report, with all its 10+ chapters, is yours now, free."
+        "We’ve saved your answer. The full report, with all its 17 chapters, is yours now, free."
       )
     ).toBeInTheDocument();
     expect(screen.getByText("Optional")).toBeInTheDocument();

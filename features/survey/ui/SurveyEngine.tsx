@@ -46,7 +46,11 @@ import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
 import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
-import { completedReportToken, paidWizardRemembered } from "./hooks/surveySession";
+import {
+  completedReportToken,
+  gatePriceRemembered,
+  paidWizardRemembered,
+} from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
@@ -141,6 +145,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     reportToken,
     submissionId,
     paidWizard,
+    gatePriceCents,
     status: submitStatus,
     errorKind: submitErrorKind,
   } = useSubmitSurvey();
@@ -927,6 +932,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           // five, with the map, for the initial one (wizardContent.ts). The stored one covers
           // a reload mid-wizard, when this run's reply is gone.
           variant={paidWizard ?? paidWizardRemembered() ?? "standard"}
+          // The EUR 1.99 gate will stop this reader: the map names its price.
+          gatePriceCents={gatePriceCents ?? gatePriceRemembered()}
           onComplete={() => onComplete(reportToken ?? completedReportToken())}
         />
       );

@@ -9,7 +9,7 @@ const stats: { label: string; value: string }[] = [
   { label: "Completion time", value: "≈ 15 min" },
   { label: "Archetypes", value: "14" },
   { label: "Dimensions measured", value: "21" },
-  { label: "Report pages per Archetype", value: "+50" },
+  { label: "Chapters per report", value: "17" },
   { label: "14-day money-back guarantee used", value: "0,00%" },
   { label: "Methodology", value: "Validated, multi-factor" },
 ];

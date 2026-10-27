@@ -62,7 +62,7 @@ export function initialUnlockGiftEmail({
       <p style="${paragraph}">A few days ago you answered some very personal questions. Your result has been waiting ever since, and we&rsquo;d rather you read it than leave it there.</p>
       <p style="${paragraph}">${bold}So we&rsquo;ve unlocked it for you.<br />No payment, no catch.</strong></p>
       <p style="${paragraph}">Inside, you&rsquo;ll find ${bold}which archetype leads for you</strong> and how your whole constellation fits together, scored across all 14 archetypes.</p>
-      <p style="${paragraph}">You can also read ${bold}five chapters in full</strong>. Four featured chapters are partly open:</p>
+      <p style="${paragraph}">You can also read ${bold}three chapters in full</strong>. Four featured chapters are partly open:</p>
       <ul style="margin:0 0 16px 0; padding-left:22px; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         ${listItems}
       </ul>
@@ -108,7 +108,7 @@ export function initialUnlockGiftEmail({
     "",
     "Inside, you'll find which archetype leads for you and how your whole constellation fits together, scored across all 14 archetypes.",
     "",
-    "You can also read five chapters in full. Four featured chapters are partly open:",
+    "You can also read three chapters in full. Four featured chapters are partly open:",
     ...PARTLY_OPEN.map(([name, line]) => `- ${name} ${line}`),
     "",
     "Every other chapter shows what it covers, so you can see what's waiting for you.",
