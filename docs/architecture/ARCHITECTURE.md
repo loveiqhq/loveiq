@@ -84,7 +84,7 @@ flowchart LR
 | Assessment Factory | Published psychometric instruments beyond the main survey                                                                    | `features/assessments/`                                                                             |
 | Automation         | Scheduled jobs and GitHub Actions workflows                                                                                  | `vercel.json`, `.github/workflows/`                                                                 |
 
-Most feature folders under `features/` have an `AGENT_README.md` that says what the folder is for.
+Most feature folders under `features/` have an `AGENT_README.md` that says what the folder is for. The database tables, and how they point at each other, are in [`TABLES.md`](TABLES.md), generated from the live schema.
 
 ## Measuring
 
