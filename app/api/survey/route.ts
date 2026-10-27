@@ -706,7 +706,7 @@ export async function POST(request: Request) {
     // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
     // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
     // A reader who came with a pay-to-start token joins only after their claim, below.
-    const [scoringSummary, , joinedGate] = await Promise.all([
+    const [, , joinedGate] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
       isExisting || prepaidToken ? Promise.resolve(false) : joinInitialGateCohort(submissionId),
