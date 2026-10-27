@@ -205,8 +205,8 @@ describe("report upsell surfaces ask about plan coverage", () => {
     const { join } = await import("node:path");
     const src = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
 
-    // ownsFullReportFor asks doesAccessPlanCover first, then the tier of the archetype on
-    // screen: a single report bought for another archetype lives only in the tiers.
+    // ownsFullReportFor asks the tier of the archetype on screen first, then the plan: a
+    // single report bought for another archetype lives only in the tiers.
     expect(src).toContain(
       "!ownsFullReportFor(data.accessPlan, data.archetypeTiers, effectiveViewArchetype)"
     );

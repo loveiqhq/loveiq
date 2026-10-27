@@ -47,6 +47,7 @@ import {
   WIZARD_FORWARD,
   WIZARD_LAST,
   type Walk,
+  withoutTheGate,
 } from "../../scripts/walkers/walk";
 
 const config = getScoringConfig();
@@ -351,6 +352,20 @@ const walk = (over: Partial<Walk> = {}): Walk => ({
   ...over,
 });
 
+describe("a proof walk's events", () => {
+  it("leave out the EUR 1.99 gate's checkout and unlock, and keep the report's", () => {
+    const heard = [
+      { t: 1, event: "initial_gate_viewed", props: { submission_id: 5 } },
+      { t: 2, event: "begin_checkout", props: { plan: "initial", price: 1.99 } },
+      { t: 3, event: "checkout_return_viewed", props: { status: "success", plan: "initial" } },
+      { t: 4, event: "paywall_unlocked", props: { plan: "initial" } },
+      { t: 5, event: "price_shown", props: { plan: "full_report" } },
+      { t: 6, event: "begin_checkout", props: { plan: "full_report", price: 19.99 } },
+    ];
+    expect(withoutTheGate(heard).map((e) => e.t)).toEqual([1, 5, 6]);
+  });
+});
+
 describe("a proof walk's page script", () => {
   it("is JavaScript a page can run: one error in it and the walk hears nothing at all", () => {
     // On 2026-10-01 a regex lost its backslashes inside this template string, the whole
@@ -396,6 +411,44 @@ describe("what a walk proves on its own", () => {
       assignedArchetype: undefined,
     });
     expect(unseen(early)).toBe(false);
+  });
+
+  // 2026-10-24: staging's EUR 1.99 pre-unlock gate holds the report's score back until it is
+  // paid. A walk that stopped there on purpose (--no-pay) saw no score by design; one that
+  // paid and still saw none did not.
+  it("asks no score of a walk that stopped at the EUR 1.99 gate, and does of one that paid it", () => {
+    const unseen = (w: Walk) =>
+      checkWalk(w).some((c) => !c.ok && c.what.includes("never saw its score from the server"));
+    const reportStep = [{ n: 1, kind: "report", at: 0, ms: 0, url: "/r", heading: null }];
+    expect(unseen(walk({ serverArchetype: undefined, initialGate: true, steps: reportStep }))).toBe(
+      false
+    );
+    expect(
+      unseen(
+        walk({
+          serverArchetype: undefined,
+          initialGate: true,
+          initialGatePaid: true,
+          steps: reportStep,
+        })
+      )
+    ).toBe(true);
+  });
+
+  it("says when the EUR 1.99 gate's payment did not complete", () => {
+    const failed = (w: Walk) =>
+      checkWalk(w).some((c) => !c.ok && c.what.includes("EUR 1.99 gate but the payment"));
+    const gateCheckout = [
+      { n: 1, kind: "initial-gate", at: 0, ms: 0, url: "/report/<token>", heading: null },
+      { n: 2, kind: "initial-gate-checkout", at: 1, ms: 1, url: "/c/pay/x", heading: null },
+    ];
+    const stopped = { finished: false, stoppedAt: "no return", paid: false, steps: gateCheckout };
+    expect(failed(walk({ ...stopped, initialGate: true }))).toBe(true);
+    expect(failed(walk({ ...stopped, initialGate: true, initialGatePaid: true }))).toBe(false);
+    // Stopped at the gate on purpose (--no-pay): it finished, and never reached Stripe.
+    expect(failed(walk({ initialGate: true, paid: false, steps: gateCheckout.slice(0, 1) }))).toBe(
+      false
+    );
   });
 
   it("takes the server's archetype as the score, and says when the page led with another", () => {

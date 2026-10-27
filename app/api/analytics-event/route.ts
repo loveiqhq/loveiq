@@ -81,9 +81,10 @@ const ALLOWED_EVENTS = [
   "tour_skipped",
   "tour_left",
   "tour_replayed",
-  // The EUR 1.99 pre-unlock gate: seen, and its two buttons
+  // The EUR 1.99 pre-unlock gate: seen, its two buttons, its way out
   "initial_gate_viewed",
   "initial_gate_cta_click",
+  "initial_gate_back",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -123,6 +124,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "lock_icon_clicked":
     case "initial_gate_viewed":
     case "initial_gate_cta_click":
+    case "initial_gate_back":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
@@ -179,6 +181,20 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
+    // Why a body was refused, never the body (it carries a visitor's ids): the persona walks'
+    // iPhone runs have met a 400 here on every walk since 2026-10-19, and nothing said why.
+    // An empty or unreadable body (`body: null`) points at the browser's beacon, a named
+    // field at the caller. A warning: the logger mirrors only errors to Slack.
+    logger.warn(
+      {
+        body: body === null ? null : typeof body,
+        // The field only, and a few: a metadata key is the sender's text, any length.
+        issues: parsed.error.issues
+          .slice(0, 5)
+          .map((i) => `${String(i.path[0] ?? "(root)")}:${i.code}`),
+      },
+      "analytics-event: refused a body that does not parse"
+    );
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 

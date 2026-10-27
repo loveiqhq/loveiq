@@ -17,6 +17,12 @@ interface Props {
    * `free`, `locked`, or `unlocked` once the reader's plan opens it.
    */
   accessById?: ReadonlyMap<string, ReportNavAccess>;
+  /**
+   * The reader holds the full report for the archetype on screen (sync 23.10, Mark, Marcus
+   * and Fatih): no FREE chip and no padlock on any row, and every title bold. With the
+   * whole report theirs, a chip or a lock only asks whether something is still closed.
+   */
+  fullyUnlocked?: boolean;
   onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
@@ -27,6 +33,7 @@ interface Props {
 const ReportDesktopSidebar: FC<Props> = ({
   activeSectionId,
   accessById,
+  fullyUnlocked = false,
   onReferFriend,
   onSectionClick,
   onShareClick,
@@ -155,7 +162,8 @@ const ReportDesktopSidebar: FC<Props> = ({
               <div className="report-sidebar__nav-list">
                 {part.items.map((item) => {
                   const isActive = activeSectionId === item.id;
-                  const access = accessById?.get(item.id) ?? "free";
+                  // A fully unlocked reader's rows all read as theirs: bold, unbadged.
+                  const access = fullyUnlocked ? "unlocked" : (accessById?.get(item.id) ?? "free");
 
                   return (
                     <a
@@ -179,7 +187,7 @@ const ReportDesktopSidebar: FC<Props> = ({
                       <span className="report-sidebar__item-label">
                         <span>{item.label}</span>
                       </span>
-                      <ReportNavBadge access={access} />
+                      {!fullyUnlocked && <ReportNavBadge access={access} />}
                     </a>
                   );
                 })}

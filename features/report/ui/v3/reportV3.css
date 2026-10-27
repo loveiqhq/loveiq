@@ -5194,6 +5194,11 @@
 .rv3 .rv4-trig--accel .rv4-trig__lock {
   --rv4-lock-top: 53px;
 }
+/* Persona walks 23.10: never over the ramp row's readable top. V4TriggerCard publishes
+ * where that row turns fully blurred (--rv4-lock-clear); the frame's spot is the floor. */
+.rv3 .rv4-trig__lock .rv4-lockbadge {
+  top: max(var(--rv4-lock-top, 100px), var(--rv4-lock-clear, 0px));
+}
 
 /* ══ "Try this & see what shifts" — per-chapter numbers ═══════════════════════
  * Accelerator & Brakes draws the same card (377:221 / 374:304 / 375:221) with its
@@ -8149,6 +8154,29 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
   position: relative;
   white-space: nowrap;
   width: 163px;
+}
+/* Sync 23.10 (Marcus and Mark): the EUR 1.99 holder's credit, bold above the pill
+ * (ReportStickyUnlockBar's creditLine). The gate's AA green; one line, centred on the
+ * pill, which keeps its own size. With it, the phone bar's row centres on the taller
+ * stack. */
+body:has(.rv3.rv4) .report-sticky-unlock__cta-stack {
+  align-items: center;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__credit {
+  color: #007f2d;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 14px;
+  margin: 0;
+  white-space: nowrap;
+}
+body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4:has(.report-sticky-unlock__cta-stack) {
+  align-items: center;
 }
 body:has(.rv3.rv4) .report-sticky-unlock__cta--v4::after {
   content: "";

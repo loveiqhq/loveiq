@@ -13,9 +13,10 @@ import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import {
   WIZARD_CHAPTER_COUNT,
-  WIZARD_DRAWER,
   WIZARD_PART_COUNT,
+  wizardDrawer,
   type WizardDrawerRow,
+  type WizardVariant,
 } from "./wizardContent";
 
 /**
@@ -74,6 +75,8 @@ const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 interface WizardReportMapProps {
   step: number;
   onStep: (to: number, control: "next" | "previous") => void;
+  /** Whose map it is: a paid wizard's reader has the Core Archetype in full (badgeOf). */
+  variant?: WizardVariant;
 }
 
 /* ------------------------------------------------------------------ */
@@ -129,7 +132,7 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
           className="flex h-[9.905px] shrink-0 items-center rounded-[2.943px] bg-white px-[3.924px] text-[4.51px] font-semibold leading-[4.513px] tracking-[0.271px] text-[#4a4657]"
           style={{ fontFamily: JAKARTA, border: "0.491px solid rgba(22,16,33,0.13)" }}
         >
-          FREE
+          IN FULL
         </span>
       ) : (
         <Image
@@ -175,7 +178,7 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
   );
 };
 
-const Drawer: FC<{ step: number }> = ({ step }) => (
+const Drawer: FC<{ step: number; variant: WizardVariant }> = ({ step, variant }) => (
   <div
     aria-hidden
     className="wz-drawer absolute left-0 top-0 h-[597px] w-[142.6px] rounded-[14px] bg-white"
@@ -186,7 +189,7 @@ const Drawer: FC<{ step: number }> = ({ step }) => (
   >
     {/* The panel's pill and "Refer a friend" sit above the crop; the list starts 5.266 down. */}
     <div className="flex flex-col gap-[6.9px] px-[4.8905px] pt-[5.266px]">
-      {WIZARD_DRAWER.map((part) => (
+      {wizardDrawer(variant).map((part) => (
         <div key={part.part} className="flex flex-col gap-[1.962px]">
           <div className="min-h-[13.924px] px-[2px] pb-[0.981px] pt-[2.943px]">
             <p
@@ -302,7 +305,7 @@ const Pitch: FC<{ icon: "free" | "open" | "locked"; top: number; children: React
         className="wz-pitch-badge flex rounded-[4px] px-[5px] py-[2px] font-sans text-[8px] font-bold uppercase leading-[10px] tracking-[0.5px] text-[#ffb89c]"
         style={{ background: "rgba(255,158,122,0.16)", border: "1px solid rgba(255,158,122,0.35)" }}
       >
-        Free
+        In full
       </span>
     ) : (
       <Image
@@ -419,7 +422,7 @@ const Tiles: FC<WizardReportMapProps> = ({ step, onStep }) => {
 /*  The slide                                                          */
 /* ------------------------------------------------------------------ */
 
-const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
+const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep, variant = "standard" }) => {
   const overview = step === 0;
   const fade = (shown: boolean) => ({
     opacity: shown ? 1 : 0,
@@ -486,7 +489,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
     >
       {/* 640 tall: the 36px header row and the 604 main area (1049:1637). */}
       <div className="wz-canvas absolute left-0 top-0 h-[640px] w-[345px]">
-        <Drawer step={step} />
+        <Drawer step={step} variant={variant} />
 
         {/* 1049:1637 — the pitch, centred in the 604 below the header row, at x 165. */}
         <div
@@ -503,7 +506,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
             </h2>
             <Pitch icon="free" top={20}>
               <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
-                Read through <strong className="font-bold">your free chapters</strong>.
+                Read <strong className="font-bold">your opening chapters</strong> in full.
               </p>
             </Pitch>
             <Pitch icon="open" top={20}>
@@ -513,8 +516,8 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
             </Pitch>
             <Pitch icon="locked" top={22}>
               <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
-                See the <strong className="font-bold">insights waiting for you</strong> in each
-                chapter preview
+                See the <strong className="font-bold">insights waiting for you</strong> in every
+                chapter.
               </p>
             </Pitch>
           </div>

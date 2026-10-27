@@ -2,6 +2,7 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReportSection from "@features/report/ui/ReportSection";
+import { __resetGuidedTourForTests, setGuidedTourActive } from "@shared/ui/guided-tour-state";
 
 class MockIntersectionObserver implements IntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
@@ -101,6 +102,34 @@ describe("ReportSection", () => {
     });
 
     expect(section).toHaveClass("report-section", "is-visible");
+  });
+
+  // The guided tour holds the score animations (useV4Reveal, useRevealOnView), not this plain
+  // fade: held, the Summary and the archetype card it passed were blank on the way back up
+  // from Finish, where main showed them (review of #648, 27.10).
+  describe("while the guided tour moves the page", () => {
+    beforeEach(() => {
+      __resetGuidedTourForTests();
+    });
+
+    afterEach(() => {
+      __resetGuidedTourForTests();
+    });
+
+    it("fades in as the tour carries it on screen", () => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+        createRect({ top: 24, bottom: 360, height: 336 })
+      );
+      act(() => setGuidedTourActive(true));
+      render(
+        <ReportSection sectionId="summary" title="Summary">
+          <p>Deferred section</p>
+        </ReportSection>
+      );
+      const section = document.getElementById("summary");
+      act(() => triggerIntersection(section!, 0.02));
+      expect(section).toHaveClass("is-visible");
+    });
   });
 });
 

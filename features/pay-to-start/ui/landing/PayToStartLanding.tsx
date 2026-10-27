@@ -9,6 +9,7 @@ import { PtsHero } from "./PtsHero";
 import { PtsNotice } from "./PtsNotice";
 import { PTS_OFFER_COPY } from "./payToStartContent";
 import { PtsOnePrice, PtsPriceCard } from "./PtsPricing";
+import "./payToStart.css";
 import {
   PtsFindOut,
   PtsHowItWorks,

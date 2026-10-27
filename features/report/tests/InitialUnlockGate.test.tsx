@@ -52,18 +52,6 @@ class FakeIntersectionObserver {
     return [];
   }
 }
-function setInView(target: Element, isIntersecting: boolean) {
-  for (const observer of observers) {
-    if (!observer.targets.includes(target)) continue;
-    act(() => {
-      observer.callback(
-        [{ target, isIntersecting } as IntersectionObserverEntry],
-        observer as unknown as IntersectionObserver
-      );
-    });
-  }
-}
-
 function setMotion(reduce: boolean) {
   vi.stubGlobal(
     "matchMedia",
@@ -154,8 +142,8 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
       "14-day money-back guarantee.",
       "Your Core Archetype and what drives it",
       "How you rank against all 14 archetypes",
-      "4x full chapters + 4x partly open",
-      "€10 credit toward the Premium Report",
+      "5x full chapters + 4x partly open",
+      "€10 credit toward your Full Report",
       "Guaranteed Safe & Secure Checkout",
     ]) {
       expect(text).toContain(line);
@@ -207,7 +195,9 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
     const text = pageText();
     expect(text).toContain("€2.49");
     expect(text).toContain("Unlock for €2.49 now");
-    expect(text).toContain("€5 credit toward the Premium Report");
+    expect(text).toContain("€5 credit toward your Full Report");
+    // Sync 23.10: the credit leads its line in bold.
+    expect(screen.getByText("€5 credit").tagName).toBe("STRONG");
     expect(text).toContain("30-day money-back guarantee.");
     expect(text).not.toContain("€1.99");
   });
@@ -273,7 +263,6 @@ describe("unlocking", () => {
       reply({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_2" })
     );
     renderGate();
-    setInView(cardCta(), false);
     fireEvent.click(stickyCta());
     await settle();
     expect(mockTrackCta).toHaveBeenCalledWith({ place: "sticky" });
@@ -311,7 +300,6 @@ describe("unlocking", () => {
   it("starts one checkout however often the button is pressed", async () => {
     fetchMock.mockReturnValue(new Promise(() => {}));
     renderGate();
-    setInView(cardCta(), false);
     fireEvent.click(cardCta());
     fireEvent.click(cardCta());
     fireEvent.click(stickyCta());
@@ -335,27 +323,70 @@ describe("unlocking", () => {
 });
 
 describe("around the card", () => {
-  it("shows the sticky bar only while the card's button is out of view", () => {
+  // Sync 23.10 (Marcus and Fatih): "the call to action should be sticky immediately".
+  it("pins the sticky bar from the first paint, beside the card's own button", () => {
     renderGate();
-    setInView(cardCta(), true);
-    expect(stickyBar().dataset.visible).toBe("false");
-    setInView(cardCta(), false);
-    expect(stickyBar().dataset.visible).toBe("true");
+    expect(stickyBar()).not.toHaveAttribute("aria-hidden");
+    expect(stickyBar()).not.toHaveAttribute("inert");
+    expect(stickyCta()).toBeEnabled();
+    expect(cardCta()).toBeEnabled();
   });
 
-  it("has no back arrow for a reader who came from anywhere but the survey", () => {
+  // Sync 26.10 (Marcus): "there is no such thing as back". The way out says what it is and
+  // leads to the landing page until his feedback page exists.
+  const notReady = () => screen.getByRole("link", { name: "Not ready to unlock yet" });
+
+  it("offers the way out to every reader, whatever brought them here", () => {
     setReferrer("https://mail.google.com/");
     renderGate();
+    expect(notReady()).toHaveAttribute("href", "/");
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
-  it("goes back to the survey's last screen with the back arrow", () => {
-    setReferrer("https://www.loveiq.org/survey?step=done");
-    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+  it("names the way out in its own words, visibly", () => {
     renderGate();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(notReady().textContent).toBe("Not ready to unlock yet");
+    expect(notReady()).not.toHaveAttribute("aria-label");
+  });
+
+  // The way out stays in the tab (a client-side link), so the landing page would otherwise
+  // file its scroll and rage-click signals under this report's submission.
+  it("lets go of the report's submission when the reader leaves the gate", () => {
+    const { unmount } = renderGate();
+    expect(mockSetContext).toHaveBeenLastCalledWith(55);
+    unmount();
+    expect(mockSetContext).toHaveBeenLastCalledWith(null);
+  });
+
+  it("counts a reader who leaves, once, with where the way out led", () => {
+    setReferrer("https://www.loveiq.org/survey?step=done");
+    renderGate();
+    const link = notReady();
+    // jsdom cannot follow a link; the href is the destination under test.
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
+    // A second tap while the landing page loads is the same exit.
+    fireEvent.click(link);
     expect(mockTrackBack).toHaveBeenCalledTimes(1);
+    expect(mockTrackBack).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("publishes its bar's height for the room under the page, and takes it back", () => {
+    const root = document.documentElement;
+    const { unmount } = renderGate();
+    expect(root.style.getPropertyValue("--iug-sticky-h")).toMatch(/^\d+(\.\d+)?px$/);
+    unmount();
+    expect(root.style.getPropertyValue("--iug-sticky-h")).toBe("");
+  });
+
+  it("does not count a reader who opens the way out in a new tab", () => {
+    renderGate();
+    const link = notReady();
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link, { metaKey: true });
+    fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { button: 1 });
+    expect(mockTrackBack).not.toHaveBeenCalled();
   });
 
   it("counts the gate as seen once, for this reader", () => {
@@ -366,6 +397,10 @@ describe("around the card", () => {
     expect(mockSetContext).toHaveBeenCalledWith(55);
     expect(mockTrackViewed).toHaveBeenCalledTimes(1);
     expect(mockTrackViewed).toHaveBeenCalledWith({ submission_id: 55 });
+    // Bound first: the stored row of a reader who came from an email needs the submission.
+    expect(mockSetContext.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTrackViewed.mock.invocationCallOrder[0]!
+    );
   });
 
   it("fills a progress bar before the badge, unless the reader asks for less motion", () => {

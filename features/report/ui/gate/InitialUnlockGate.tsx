@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { setReportSubmissionContext, trackInitialGateViewed } from "@features/analytics/client";
 import ScrollAnimator from "@features/landing/ui/ScrollAnimator";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
@@ -38,25 +38,19 @@ export default function InitialUnlockGate({
     reportToken,
   });
 
-  // The sticky bar stands in for the card's button only while that button is out of view.
-  const ctaRef = useRef<HTMLButtonElement | null>(null);
-  const [stickyVisible, setStickyVisible] = useState(false);
+  // The submission is bound while the gate is on screen, and let go when it goes: "Not ready
+  // to unlock yet" leaves for the landing page in the same tab, whose signals are not this
+  // report's. It is bound first, or the viewed event below is not persisted.
   useEffect(() => {
-    const cta = ctaRef.current;
-    if (!cta || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry) setStickyVisible(!entry.isIntersecting);
-    });
-    observer.observe(cta);
-    return () => observer.disconnect();
-  }, []);
+    setReportSubmissionContext(gate.submissionId);
+    return () => setReportSubmissionContext(null);
+  }, [gate.submissionId]);
 
-  // Seen once per page: the submission is bound first, or the event is not persisted.
+  // Seen once per page.
   const viewedRef = useRef(false);
   useEffect(() => {
     if (viewedRef.current) return;
     viewedRef.current = true;
-    setReportSubmissionContext(gate.submissionId);
     trackInitialGateViewed({ submission_id: gate.submissionId });
   }, [gate.submissionId]);
 
@@ -67,7 +61,7 @@ export default function InitialUnlockGate({
         <ScrollAnimator />
         <GateHero />
         <section className="iug-pricing" aria-label="Your Core Archetype">
-          <GatePriceCard ref={ctaRef} gate={gate} onUnlock={start} state={state} />
+          <GatePriceCard gate={gate} onUnlock={start} state={state} />
         </section>
         <GatePayments />
         <div className="iug-divider" aria-hidden="true" />
@@ -82,7 +76,6 @@ export default function InitialUnlockGate({
           onUnlock={start}
           priceCents={gate.priceCents}
           state={state}
-          visible={stickyVisible}
         />
       </main>
     </div>

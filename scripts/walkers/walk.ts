@@ -139,6 +139,9 @@ export interface Walk {
   scrollLocked?: boolean;
   /** What put the paywall in front of the walk: the sticky bar, a lock, or the report itself. */
   paywallOpenedBy?: string;
+  /** The EUR 1.99 pre-unlock gate stood in front of the report, and whether the walk paid it. */
+  initialGate?: boolean;
+  initialGatePaid?: boolean;
   locksBefore?: number;
   locksAfter?: number;
   steps: Step[];
@@ -611,6 +614,56 @@ async function main(argv: string[]): Promise<number> {
     pending = [];
     last = now;
   };
+  /**
+   * The report, or the gate drawn in its place, past its loading screen with its words in.
+   * The way back from Stripe is a client-side move, so no load state waits for it: the
+   * gate's "report" shot was the empty shell (2026-10-27).
+   */
+  const reportSettled = () =>
+    page
+      .waitForFunction(
+        () =>
+          !document.querySelector(".report-status-screen") &&
+          (Boolean(document.querySelector(".iug-page")) ||
+            (document.body?.innerText.length ?? 0) > 2000),
+        undefined,
+        { timeout: 30_000 }
+      )
+      .catch(() => {});
+  /**
+   * From Stripe back to the report, as a buyer goes. Staging's password cookie is Lax since
+   * 2026-09-30, so Stripe's redirect back keeps it; until then it was Strict and staging asked
+   * for its password again here (loveiq.org has no gate). If that comes back, the gate keeps
+   * the page it was protecting in `next`: go there as a tester would once the password is
+   * typed, and say so in the timeline. Then the return page, which names what was bought
+   * (`receipt`, read while it is there) and sends the buyer on once the unlock is confirmed.
+   */
+  const backToReport = async (receipt?: (text: string) => void) => {
+    const back = new URL(page.url());
+    const next = back.pathname === "/login" ? back.searchParams.get("next") : null;
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      await page.goto(`${opts.origin}${next}`, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await record("after-payment-past-gate", {
+        note: "staging's password page came back after Stripe; staging only, loveiq.org has no gate",
+      });
+    }
+    if (new URL(page.url()).pathname === "/checkout/return") {
+      receipt?.(await page.evaluate(() => document.body?.innerText ?? "").catch(() => ""));
+      // It polls the unlock (every 2s, up to 15 times) before sending the buyer back.
+      await page.waitForURL(/\/report\//, { timeout: 45_000 }).catch(() => {});
+      if (!/\/report\//.test(page.url())) {
+        mark("the return page did not send the buyer on; clicked Go to unlocked report");
+        await page
+          .getByRole("link", { name: /^go to unlocked report$/i })
+          .click({ timeout: 10_000 })
+          .catch(() => {});
+      }
+    }
+    await page.waitForURL(/\/report\//, { timeout: 60_000 });
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+    await reportSettled();
+  };
   // Visible ones only: the report renders hidden twins of its buttons (the desktop modal on
   // a phone), and the first match in the page is often the one nobody can see.
   const button = (name: RegExp) =>
@@ -883,7 +936,47 @@ async function main(argv: string[]): Promise<number> {
       .waitFor({ state: "attached", timeout: 60_000 })
       .catch(() => {});
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+    await reportSettled();
     await record("report", { ms: Date.now() - reportAt });
+    // The EUR 1.99 pre-unlock gate (features/report/ui/gate), switched on in staging's
+    // database since 2026-10-23: a reader it stops meets a EUR 1.99 page in place of the
+    // report, and /api/report sends no score until it is paid. On 2026-10-24 every walk
+    // stopped there ("no way to the paywall on the report"). The walk pays it with the test
+    // card, as such a buyer would, and goes on with the report it opens; with --no-pay it
+    // ends at the gate. Its button is the card's "Unlock now" (the sticky bar's says the
+    // price), and it runs before the plans are looked for, so a core walk never takes the
+    // gate's "Unlock now" for the plans' (PLAN_CTA.core).
+    if (
+      await page
+        .locator(".iug-page")
+        .isVisible()
+        .catch(() => false)
+    ) {
+      walk.initialGate = true;
+      mark("met the EUR 1.99 pre-unlock gate");
+      await record("initial-gate");
+      if (!opts.pay) {
+        walk.finished = true;
+        return 0;
+      }
+      await page
+        .locator(".iug-card")
+        .getByRole("button", { name: /^unlock now$/i })
+        .click();
+      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 60_000 });
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForTimeout(2_500);
+      await record("initial-gate-checkout");
+      // Test mode or nothing, as for every purchase here.
+      if (!/\/c\/pay\/cs_test_/.test(page.url()))
+        throw new Error("Stripe opened a session that is not in test mode");
+      await payWithTestCard(page, email);
+      await page.waitForURL((u) => u.origin === opts.origin, { timeout: 120_000 });
+      await backToReport();
+      walk.initialGatePaid = true;
+      mark("paid the EUR 1.99 gate with the test card");
+      await record("report", { note: "the report the EUR 1.99 opened" });
+    }
     walk.assignedArchetype = await page
       .evaluate(
         (names) => {
@@ -1621,36 +1714,10 @@ async function main(argv: string[]): Promise<number> {
     log.paid = true;
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
     await record("after-payment");
-    // Staging's password cookie is Lax since 2026-09-30, so Stripe's redirect back keeps it.
-    // Until then it was Strict and staging asked for its password again here (loveiq.org has
-    // no gate). If that comes back, the gate keeps the page it was protecting in `next`: go
-    // there as a tester would once the password is typed, and say so in the timeline.
-    const back = new URL(page.url());
-    const next = back.pathname === "/login" ? back.searchParams.get("next") : null;
-    if (next?.startsWith("/") && !next.startsWith("//")) {
-      await page.goto(`${opts.origin}${next}`, { waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-      await record("after-payment-past-gate", {
-        note: "staging's password page came back after Stripe; staging only, loveiq.org has no gate",
-      });
-    }
     // The return page names what was bought: the proof the walk paid for the plan it meant to.
-    // Read it while it is the return page; it redirects by itself once the unlock is confirmed.
-    if (new URL(page.url()).pathname === "/checkout/return") {
-      const receipt = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+    await backToReport((receipt) => {
       walk.boughtPlan = PLANS.find((p) => PLAN_TITLE[p].test(receipt)) ?? null;
-      // It polls the unlock (every 2s, up to 15 times) before sending the buyer back.
-      await page.waitForURL(/\/report\//, { timeout: 45_000 }).catch(() => {});
-      if (!/\/report\//.test(page.url())) {
-        mark("the return page did not send the buyer on; clicked Go to unlocked report");
-        await page
-          .getByRole("link", { name: /^go to unlocked report$/i })
-          .click({ timeout: 10_000 })
-          .catch(() => {});
-      }
-    }
-    await page.waitForURL(/\/report\//, { timeout: 60_000 });
-    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+    });
     await page.waitForTimeout(2_000);
     walk.locksAfter = await countLocks();
     await record("unlocked-report");
@@ -1673,7 +1740,7 @@ async function main(argv: string[]): Promise<number> {
       walk.planted = planted;
       // Only a walk that did what it planned knows the truth; a stopped one knows nothing.
       if (walk.finished) {
-        writeFileSync(join(dir, "events.json"), JSON.stringify(heard) + "\n");
+        writeFileSync(join(dir, "events.json"), JSON.stringify(withoutTheGate(heard)) + "\n");
         writeFileSync(join(dir, "truth.json"), JSON.stringify(truthOf(log), null, 2) + "\n");
       }
     }
@@ -1690,6 +1757,17 @@ async function main(argv: string[]): Promise<number> {
           : "")
     );
   }
+}
+
+/**
+ * A proof walk's events, less the EUR 1.99 gate's (on in staging's database, off on
+ * loveiq.org). Its checkout, return and unlock carry plan "initial", and the behaviour checks
+ * (features/ux-signals) read them as the visit's paywall and payment, which the walk's own
+ * record (truth.json) knows nothing of. Left out, as a loveiq.org visit has none; when the
+ * gate goes live there, the checks learn it and these stay in (docs/runbooks/PRE_UNLOCK.md).
+ */
+export function withoutTheGate<T extends { props: Record<string, unknown> }>(events: T[]): T[] {
+  return events.filter((e) => e.props.plan !== "initial");
 }
 
 /** Answers one known question with the persona's answer. Returns a note when it could not. */

@@ -1,33 +1,46 @@
 "use client";
 
 import Image from "next/image";
-import type { FC } from "react";
+import { useEffect, useRef, type FC } from "react";
 import { GATE_COPY } from "./gateContent";
 import type { GateCtaPlace, InitialUnlockCheckoutState } from "./useInitialUnlockCheckout";
 
 /**
  * 1650:2667: the guarantee and the button, pinned to the bottom (the frame's "sticky CTA").
- * It shows only while the card's own button is out of view, so the two never stand on top
- * of each other; hidden, it is inert. It steps up over the cookie banner (--liq-consent-h)
- * and clears the home indicator. A failed click says why in a line above its row.
+ * There from the first paint (sync 23.10, Marcus and Fatih: "the call to action should be
+ * sticky immediately"), as pay to start's bar is: it used to wait until the card's own
+ * button had scrolled away. It steps up over the cookie banner (--liq-consent-h) and clears
+ * the home indicator. A failed click says why in a line above its row.
  */
 export const GateStickyBar: FC<{
   guaranteeDays: number;
   onUnlock: (place: GateCtaPlace) => void;
   priceCents: number;
   state: InitialUnlockCheckoutState;
-  visible: boolean;
-}> = ({ guaranteeDays, onUnlock, priceCents, state, visible }) => {
+}> = ({ guaranteeDays, onUnlock, priceCents, state }) => {
   const busy = state.status === "redirecting";
   const failed = state.status === "error" && state.place === "sticky" ? state.message : null;
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // The room the page keeps under its last line, and the scroll padding that keeps a
+  // focused button clear (initial-unlock-gate.css), read this bar's real height: more than
+  // the frame's 56px on a narrow phone, and an error line on top.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--iug-sticky-h", `${bar.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    observer?.observe(bar);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--iug-sticky-h");
+    };
+  }, []);
+
   return (
-    <div
-      className="iug-sticky"
-      data-testid="iug-sticky"
-      data-visible={visible ? "true" : "false"}
-      aria-hidden={visible ? undefined : true}
-      inert={!visible}
-    >
+    <div ref={barRef} className="iug-sticky" data-testid="iug-sticky">
       {failed ? (
         <p role="alert" className="iug-sticky__error">
           {failed}

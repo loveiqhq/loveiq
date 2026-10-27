@@ -113,9 +113,10 @@ const PERSISTED_EVENTS = new Set([
   "tour_skipped",
   "tour_left",
   "tour_replayed",
-  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, and its two buttons
+  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, its two buttons, its way out
   "initial_gate_viewed",
   "initial_gate_cta_click",
+  "initial_gate_back",
 ]);
 
 /**
@@ -880,9 +881,39 @@ export const trackInitialGateCta = (params: { place: "card" | "sticky" }) => {
   persistAnalyticsEvent("initial_gate_cta_click", params);
 };
 
-/** The gate's back arrow, back to the survey's last screen. GA4/PostHog only. */
-export const trackInitialGateBack = () => {
-  track("initial_gate_back", {});
+/** Set by the gate's way out, read once by the landing page (consumeLeftInitialGate). */
+const LEFT_INITIAL_GATE_KEY = "liq_left_initial_gate";
+
+/**
+ * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
+ * the same event name so the series runs on). `to` is where it leads: until 27.10 the event
+ * was the arrow, shown only to a reader who came from the survey, one page back. Persisted,
+ * so a later payment can be set against it.
+ */
+export const trackInitialGateBack = (params: { to: string }) => {
+  track("initial_gate_back", params);
+  persistAnalyticsEvent("initial_gate_back", params);
+  if (params.to !== "/") return;
+  try {
+    window.sessionStorage.setItem(LEFT_INITIAL_GATE_KEY, "1");
+  } catch {
+    // Storage blocked: the landing page then counts this reader as a visit, as before.
+  }
+};
+
+/**
+ * Whether this landing view is a reader the EUR 1.99 gate sent back by "Not ready to unlock
+ * yet": someone who has finished the survey, so not a landing visit and no landing arm to
+ * register. Read once.
+ */
+export const consumeLeftInitialGate = (): boolean => {
+  try {
+    const left = window.sessionStorage.getItem(LEFT_INITIAL_GATE_KEY) === "1";
+    if (left) window.sessionStorage.removeItem(LEFT_INITIAL_GATE_KEY);
+    return left;
+  } catch {
+    return false;
+  }
 };
 
 export const trackPaywallUnlocked = (
@@ -1279,10 +1310,13 @@ export const trackLockIconClicked = (params: {
 export const trackStickyUnlockClicked = (params: {
   variant: "mobile" | "desktop";
   archetype?: string | null;
+  /** The bar said "€10.00 credit applied" (a EUR 1.99 holder's credit) over its button. */
+  creditKind?: "initial";
 }) => {
   const payload = {
     variant: params.variant,
     ...(params.archetype ? { archetype: params.archetype } : {}),
+    ...(params.creditKind ? { credit_kind: params.creditKind } : {}),
   };
   track("sticky_unlock_clicked", payload);
   persistAnalyticsEvent("sticky_unlock_clicked", payload);

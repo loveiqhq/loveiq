@@ -40,7 +40,9 @@ export function checkWalk(w: Walk): Check[] {
             what: `Answered as ${w.persona}, but the report named ${w.serverArchetype ?? "no archetype"}.`,
           }
     );
-  } else if (reachedReport) {
+  } else if (reachedReport && !(w.initialGate && !w.initialGatePaid)) {
+    // A walk that stopped at the EUR 1.99 gate (--no-pay) saw no score by design: the
+    // gate's answer carries none until it is paid.
     checks.push({
       ok: false,
       what: `Reached the report but never saw its score from the server${w.assignedArchetype ? `; the page led with ${w.assignedArchetype}` : ""}.`,
@@ -72,6 +74,16 @@ export function checkWalk(w: Walk): Check[] {
         what: `Meant to buy ${w.plan}, but the receipt page named ${w.boughtPlan ?? "no plan"}.`,
       });
     }
+  } else if (
+    w.initialGate &&
+    !w.initialGatePaid &&
+    w.finished === false &&
+    w.steps.some((s) => s.kind === "initial-gate-checkout")
+  ) {
+    checks.push({
+      ok: false,
+      what: "Reached Stripe for the EUR 1.99 gate but the payment did not complete.",
+    });
   } else if (w.plan && w.finished === false && w.steps.some((s) => s.kind === "stripe-checkout")) {
     checks.push({
       ok: false,

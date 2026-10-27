@@ -25,6 +25,7 @@ import {
   WIZARD_CHAPTER_COUNT,
   WIZARD_DRAWER,
   WIZARD_PART_COUNT,
+  wizardDrawer,
 } from "@features/survey/ui/wizard/wizardContent";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import { REPORT_V4_CHAPTER_COUNT, REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
@@ -208,11 +209,37 @@ describe("PreReportWizard — the report map (slide 2)", () => {
 
   it("opens on the overview: the pitch copy, ▲ off and ▼ on, nothing marked yet", () => {
     openMap();
-    expect(screen.getByText("your free chapters")).toBeInTheDocument();
+    expect(screen.getByText("your opening chapters")).toBeInTheDocument();
     expect(isOff(previousDeepDive())).toBe(true);
     expect(isOff(nextDeepDive())).toBe(false);
     expect(activeTile()).toBeNull();
     expect(markedRow()).toBeNull();
+  });
+
+  // Sync 26.10, Fatih: words that are true for every reader. The EUR 1.99 gate follows this
+  // slide, and EUR 1.99 buyers see it too, so nothing here is "free"; and a locked V4
+  // chapter draws no body, so nothing promises a preview.
+  it("promises nothing free and no preview: the chapters open IN FULL", () => {
+    openMap();
+    const pitch = document.querySelector<HTMLElement>(".wz-pitch")!;
+    expect(pitch.textContent).not.toMatch(/free|preview/i);
+    expect(pitch.textContent).toContain("in every chapter");
+    expect(screen.queryAllByText(/^free$/i)).toHaveLength(0);
+    expect(screen.getAllByText("IN FULL")).toHaveLength(4);
+  });
+
+  // Review 26.10: a free reader's Core Archetype card is half veiled and its Summary locked
+  // until the EUR 1.99 (or a plan), gate or no gate, so their map never says IN FULL there.
+  // A EUR 1.99 buyer's report opens it whole, and their map says so.
+  it("shows a free reader the Core Archetype partly open, and a EUR 1.99 buyer in full", () => {
+    openMap();
+    const core = () => document.querySelector<HTMLElement>('[data-wizard-row="core_archetype"]')!;
+    expect(core().textContent).not.toContain("IN FULL");
+    cleanup();
+    render(<PreReportWizard onComplete={vi.fn()} variant="pay_to_start_initial" />);
+    press(continueButton());
+    expect(core().textContent).toContain("IN FULL");
+    expect(screen.getAllByText("IN FULL")).toHaveLength(5);
   });
 
   it("▼ and ▲ step through the four deep dives, marking each chapter in the drawer", () => {
@@ -323,7 +350,7 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(WIZARD_CHAPTER_COUNT).toBe(REPORT_V4_CHAPTER_COUNT);
   });
 
-  it("the drawer badges the free chapters FREE and opens the four deep dives' locks", () => {
+  it("the drawer badges the chapters that open in full and opens the four deep dives' locks", () => {
     const badges = Object.fromEntries(
       WIZARD_DRAWER.flatMap((p) => p.rows.map((r) => [r.id, r.badge]))
     );
@@ -331,12 +358,25 @@ describe("PreReportWizard — the report map (slide 2)", () => {
       Object.entries(badges)
         .filter(([, b]) => b === "free")
         .map(([id]) => id)
-    ).toEqual(["introduction", "what_shaped_this_report", "top_archetypes", "core_archetype"]);
+    ).toEqual(["introduction", "what_shaped_this_report", "top_archetypes", "constellation"]);
     expect(
       Object.entries(badges)
         .filter(([, b]) => b === "open")
         .map(([id]) => id)
-    ).toEqual(REPORT_DEEP_DIVES.map((d) => d.id));
+    ).toEqual(["core_archetype", ...REPORT_DEEP_DIVES.map((d) => d.id)]);
+  });
+
+  it("a paid wizard's drawer opens the Core Archetype in full", () => {
+    for (const variant of ["pay_to_start", "pay_to_start_initial"] as const) {
+      const badges = new Map(
+        wizardDrawer(variant).flatMap((p) => p.rows.map((r) => [r.id, r.badge] as const))
+      );
+      expect(badges.get("core_archetype"), variant).toBe("free");
+      expect(
+        [...badges.values()].filter((b) => b === "open"),
+        variant
+      ).toHaveLength(4);
+    }
   });
 });
 
@@ -650,9 +690,9 @@ describe("PreReportWizard — Mark's 01.10 placement: the bar under CONTINUE (10
         expect(label.style.color, row.id).toBe("rgb(63, 58, 77)");
       }
     }
-    // The label 3.9 from its badge; the FREE chip and the part headings at the panel's scale.
+    // The label 3.9 from its badge; the IN FULL chip and the part headings at the panel's scale.
     expect(document.querySelector("[data-wizard-row]")).toHaveClass("gap-[3.9px]");
-    expect(screen.getAllByText("FREE")[0]).toHaveClass(
+    expect(screen.getAllByText("IN FULL")[0]).toHaveClass(
       "px-[3.924px]",
       "rounded-[2.943px]",
       "tracking-[0.271px]"

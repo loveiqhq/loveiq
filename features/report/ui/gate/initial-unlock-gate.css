@@ -7,7 +7,6 @@
 
 .iug-page {
   --iug-gradient: linear-gradient(105.76deg, #ff6a3a 0%, #cf5afb 52%, #7d88ff 100%);
-  --iug-sticky-h: 56px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -17,13 +16,25 @@
   margin: 0 auto;
   padding-top: env(safe-area-inset-top, 0px);
   /* Room for the sticky bar, so the last review is never under it. */
-  padding-bottom: calc(
-    var(--iug-sticky-h) + env(safe-area-inset-bottom, 0px) + var(--liq-consent-h, 0px)
-  );
+  padding-bottom: var(--iug-sticky-room);
   overflow-x: clip;
   background: #ffffff;
   color: var(--rpg-ink);
   font-family: var(--font-jakarta), var(--font-sans), system-ui, sans-serif;
+}
+
+/* The bar's height as GateStickyBar measures it (its error line and the safe area in it): it
+ * grows past the frame's 56px on a phone under 360px wide. The frame's, until it has. */
+:root {
+  --iug-sticky-room: calc(
+    var(--iug-sticky-h, calc(56px + env(safe-area-inset-bottom, 0px))) + var(--liq-consent-h, 0px)
+  );
+}
+
+/* Whatever takes focus scrolls clear of the bar (WCAG 2.4.11): a short window put the card's
+ * "Unlock now" under it, now that the bar is always there. */
+html:has(.iug-page) {
+  scroll-padding-bottom: var(--iug-sticky-room);
 }
 
 .iug-sr-only {
@@ -38,7 +49,7 @@
   border: 0;
 }
 
-/* ── 1609:11160: the back arrow (only when we have somewhere to go back to) ── */
+/* ── 1609:11160: the way out, "Not ready to unlock yet" (sync 26.10) ───── */
 .iug-header {
   display: flex;
   align-items: center;
@@ -46,19 +57,31 @@
   padding: 0 16px;
 }
 
-/* A 44px target, its 12px arrow where the frame draws it (16px in). */
+/* A 44px-high target, its 12px arrow where the frame draws it (16px in), and its words after
+ * it (persona walks 24.10): the arrow alone said nothing. A link now, so no underline. */
 .iug-header__back {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 44px;
+  gap: 6px;
+  min-width: 44px;
   height: 44px;
   margin-left: -16px;
-  padding: 0;
+  padding: 0 10px 0 16px;
   border: 0;
   border-radius: 12px;
   background: none;
+  text-decoration: none;
   cursor: pointer;
+}
+
+/* One line from 320px: 23 characters at 13px is about 150px. */
+.iug-header__back-label {
+  color: #5f5a6e;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .iug-header__back:focus-visible {
@@ -326,6 +349,12 @@
   text-align: center;
 }
 
+/* Sync 23.10: the credit leads its line in bold, in the ink of the card's title. */
+.iug-card .iug-card__feature-strong {
+  color: #17121f;
+  font-weight: 700;
+}
+
 /* The four lines come in one after the other (Mark, on the frame); the delay is inline. */
 @media (prefers-reduced-motion: no-preference) {
   .iug-card__feature {
@@ -341,6 +370,114 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* ── Sync 23.10: motion on what reassures ─────────────────────────────────────
+ * Marcus and Mark: animate "the 14-day money-back guarantee and the one-time payment" to
+ * ease the fear of paying, and the page's images. No frame draws it; this is a proposal
+ * for Marcus to sign off. Each piece plays once, after the card's four lines are in; the
+ * only loop is the shields' glow. Nothing that holds the price or a button moves, so a tap
+ * (and Playwright's click) always lands on a still target. Reduced motion: none of it, and
+ * every piece rests in its final state. */
+@media (prefers-reduced-motion: no-preference) {
+  /* The guarantee: its shield pops in, then a soft green glow breathes around it. */
+  .iug-card .iug-card__guarantee img {
+    animation:
+      iug-shield-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 1100ms both,
+      iug-shield-glow 3.2s ease-in-out 1900ms infinite;
+  }
+  .iug-sticky__shield {
+    animation:
+      iug-shield-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 1600ms both,
+      iug-shield-glow 3.2s ease-in-out 2400ms infinite;
+  }
+  /* "one time payment": its underline (below) draws itself, once. */
+  .iug-card .iug-card__suffix::after {
+    animation: iug-underline 650ms cubic-bezier(0.16, 1, 0.3, 1) 1500ms both;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  /* The images: the drawer's badges pop in down the chapters as the map scrolls in, and
+   * the reviewers' faces one after the other. */
+  .iug-map-section.animate .iug-map__chip,
+  .iug-map-section.animate .iug-map__lock {
+    animation: iug-pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: calc(450ms + var(--iug-i, 0) * 40ms);
+  }
+  .iug-reviews.animate .rpg-review__avatar {
+    animation: iug-pop-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .iug-reviews.animate .rpg-review:nth-child(1) .rpg-review__avatar {
+    animation-delay: 350ms;
+  }
+  .iug-reviews.animate .rpg-review:nth-child(2) .rpg-review__avatar {
+    animation-delay: 470ms;
+  }
+  .iug-reviews.animate .rpg-review:nth-child(3) .rpg-review__avatar {
+    animation-delay: 590ms;
+  }
+  .iug-reviews.animate .rpg-review:nth-child(n + 4) .rpg-review__avatar {
+    animation-delay: 710ms;
+  }
+}
+
+/* "one time payment" underlined in the brand ramp: drawn by the motion above, and simply
+ * there under reduced motion, its final state. */
+.iug-card .iug-card__suffix {
+  position: relative;
+}
+.iug-card .iug-card__suffix::after {
+  background: linear-gradient(90deg, #fb683e 0%, #e88c8c 50%, #ac88ed 100%);
+  border-radius: 1px;
+  bottom: -3px;
+  content: "";
+  height: 2px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+@keyframes iug-shield-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes iug-shield-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(0, 127, 45, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(0, 127, 45, 0.5));
+  }
+}
+
+@keyframes iug-underline {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes iug-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -687,17 +824,6 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
   border-top: 1px solid #e5e5e5;
   background: #ffffff;
-  transition:
-    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    visibility 0s;
-}
-
-.iug-sticky[data-visible="false"] {
-  visibility: hidden;
-  transform: translateY(calc(100% + 1px));
-  transition:
-    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    visibility 0s 240ms;
 }
 
 .iug-sticky__error {
@@ -884,9 +1010,5 @@
   }
   .iug-hero--motion .iug-progress {
     display: none;
-  }
-  .iug-sticky,
-  .iug-sticky[data-visible="false"] {
-    transition: none;
   }
 }

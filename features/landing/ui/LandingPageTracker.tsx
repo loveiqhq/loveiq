@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import {
+  consumeLeftInitialGate,
   setLandingVariant,
   trackExperimentExposure,
   trackLandingPageView,
@@ -23,7 +24,7 @@ import {
  * `white_video` in the current test, `white` for crawlers and visitors outside it,
  * `white_prev` for round 2's V1. Required, so no landing can register a default
  * arm it was not served. The ref guards against React strict-mode double-mount in
- * dev so the counts stay accurate.
+ * dev so the counts stay accurate. A reader the EUR 1.99 gate sent back here is neither.
  */
 const LandingPageTracker = ({ variant }: { variant: LandingVariant }) => {
   const fired = useRef(false);
@@ -31,6 +32,9 @@ const LandingPageTracker = ({ variant }: { variant: LandingVariant }) => {
   useEffect(() => {
     if (fired.current) return;
     fired.current = true;
+    // Sent here by the EUR 1.99 gate's "Not ready to unlock yet": a reader who finished the
+    // survey is not a landing visit, and takes no arm.
+    if (consumeLeftInitialGate()) return;
     trackLandingPageView();
     setLandingVariant(variant);
     trackExperimentExposure({

@@ -174,6 +174,32 @@ describe("POST /api/analytics-event — allowlist", () => {
   });
 });
 
+// The refused-body warning runs before the CSRF check and the rate limit: it names fields,
+// never what the sender wrote, and only a few.
+describe("POST /api/analytics-event — the refused-body warning", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("logs the field, not a metadata key the sender wrote, and five issues at most", async () => {
+    const { default: logger } = await import("@shared/observability/logger");
+    const junk = "x".repeat(5000);
+    const metadata = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`${junk}${i}`, 1]));
+    const res = await POST(
+      makeRequest({ event_type: "report_viewed", submission_id: 42, metadata })
+    );
+    expect(res.status).toBe(400);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [fields, message] = vi.mocked(logger.warn).mock.calls[0]!;
+    expect(message).toBe("analytics-event: refused a body that does not parse");
+    const issues = (fields as { issues: string[] }).issues;
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.length).toBeLessThanOrEqual(5);
+    expect(issues.every((i) => i.startsWith("metadata:"))).toBe(true);
+    expect(JSON.stringify(fields)).not.toContain(junk.slice(0, 200));
+  });
+});
+
 describe("POST /api/analytics-event — forced-paywall experiment events (Phase E)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

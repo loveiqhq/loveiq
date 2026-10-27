@@ -1,0 +1,33 @@
+/* ── Sync 23.10: guide with motion, never force a click ─────────────────────────
+ * Readers skip to the report from the first slide (Fatih: "users currently skip directly
+ * to the report without seeing the wizard"); Marcus would rather draw the eye than make
+ * slides compulsory. On the first two slides CONTINUE breathes a soft halo after a pause,
+ * so the way on stands out over "Skip Intro". The button itself never moves (the walkers
+ * and Playwright press it); the halo is a pseudo-element that takes no pointer. A proposal
+ * for Marcus to sign off. Reduced motion: none of it. */
+@media (prefers-reduced-motion: no-preference) {
+  .wz-root .wz-continue--nudge {
+    position: relative;
+  }
+  .wz-root .wz-continue--nudge::after {
+    animation: wz-nudge 2.6s ease-out 2.2s infinite;
+    border-radius: inherit;
+    box-shadow: 0 0 0 0 rgba(254, 104, 57, 0.5);
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+  }
+}
+
+@keyframes wz-nudge {
+  0% {
+    box-shadow: 0 0 0 0 rgba(254, 104, 57, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(254, 104, 57, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(254, 104, 57, 0);
+  }
+}

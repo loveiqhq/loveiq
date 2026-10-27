@@ -220,9 +220,11 @@ test.describe("pay to start: the LoveIQ header", () => {
 
     const priceHeading = page.locator("#price h2");
     await expect(priceHeading).toBeInViewport();
-    // Below the fixed header, not under it.
+    // Below the fixed header, not under it. The header's own height, not a number: from
+    // 1280 the page draws at 75% (payToStart.css), the header with it.
     const headingTop = (await priceHeading.boundingBox())?.y ?? 0;
-    expect(headingTop).toBeGreaterThanOrEqual(64);
+    const headerBox = (await header.boundingBox())!;
+    expect(headingTop).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 1);
     expect(new URL(page.url()).pathname).toBe(PAGE);
     expect(surveyRequests).toEqual([]);
   });

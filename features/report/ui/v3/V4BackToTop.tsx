@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type FC, type RefObject } from "react";
 
+import { V4_CHROME_OFFSET_PX } from "./v4ChromeOffset";
+
 /**
  * The floating "Back to top" control for a very long expanded section.
  *
@@ -37,13 +39,6 @@ import { useCallback, useEffect, useState, type FC, type RefObject } from "react
  * Desktop." It stays mounted, and reportV3.css stops drawing it from 700px.
  */
 
-/**
- * The floating chrome occupies the top 136px of the viewport — header 8→56, pill
- * band 80→136, per the note above `.rv4-chrome`. Landing the section heading under
- * it would hide the very thing being scrolled to, so clear it with a little air.
- */
-const CHROME_OFFSET_PX = 144;
-
 interface Props {
   /** The section whose top the button returns to. */
   targetRef: RefObject<HTMLElement | null>;
@@ -65,7 +60,7 @@ const V4BackToTop: FC<Props> = ({ targetRef, label = "Back to top" }) => {
     const el = targetRef.current;
     if (!el) return;
     // scrollIntoView cannot express the chrome offset, so scroll the window.
-    const top = window.scrollY + el.getBoundingClientRect().top - CHROME_OFFSET_PX;
+    const top = window.scrollY + el.getBoundingClientRect().top - V4_CHROME_OFFSET_PX;
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     window.scrollTo({ top: Math.max(0, top), behavior: reduced ? "auto" : "smooth" });
   }, [targetRef]);

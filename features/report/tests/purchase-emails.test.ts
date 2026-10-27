@@ -58,10 +58,10 @@ describe("E06 — your Core Archetype is unlocked", () => {
       /Inside, you&rsquo;ll find <strong[^>]*>which archetype leads for you<\/strong> and how your whole constellation fits together, scored across all 14 archetypes\./
     );
     expect(html).toMatch(
-      /You can read <strong[^>]*>four chapters in full<\/strong>\. Four featured chapters are partly open:/
+      /You can read <strong[^>]*>five chapters in full<\/strong>\. Four featured chapters are partly open:/
     );
     expect(html).toContain(
-      "Every other chapter opens with a preview, so you can see what&rsquo;s waiting for you."
+      "Every other chapter shows what it covers, so you can see what&rsquo;s waiting for you."
     );
   });
 

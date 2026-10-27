@@ -16037,8 +16037,10 @@
 }
 
 /* ── Report nav access badges (Figma locked page, Aside 8993:19278) ─────────────
-   Only rendered when something is actually locked; a fully-unlocked reader gets
-   the badge-free nav of 8719:9326. Border sampled #dedfe2 over white. */
+   One per row while anything is still closed: FREE, the grey padlock, and V4's
+   open padlock on the brand ramp. A reader who owns the whole report gets none
+   (`fullyUnlocked`, sync 23.10), the badge-free nav of 8719:9326. Border sampled
+   #dedfe2 over white. */
 .report-nav-badge {
   flex: 0 0 auto;
   margin-left: auto;

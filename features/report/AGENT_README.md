@@ -117,7 +117,11 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
   overflow, Lenis stopped, swipes cancelled. `shared/ui/guided-tour-state.ts` tells the
   scroll-driven signals the scrolling is the tour's: the plans pop-up trigger, the paywall ping,
   chapter time, `cta_seen`, scroll depth and Typical Beliefs' midline rows stand down without
-  letting go.
+  letting go. So do the entrances (sync 23.10: the scores played behind the scrim):
+  `useV4Reveal` (the top three's bars and percentages, the archetype card's Match Strength,
+  the A&B and fantasy surfaces), Report 2.0's `useRevealOnView` charts and `ReportSection`'s
+  fade. When the tour ends, what is on screen plays; what it carried the page past waits for
+  the reader and is never caught up out of sight.
 - **Analytics.** `tour_started`, `tour_step_viewed {n, id}`, `tour_back {to}`,
   `tour_skipped {at, source}`, `tour_completed`, `tour_left {at}` and `tour_replayed` go to
   PostHog; a first run's start and end, and each replay, are also stored (`analytics_event`).
@@ -158,6 +162,15 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   price, credit, guarantee, the token and the submission id, nothing of the report —
   `useReportData` turns it into `status: "gated"`, and `ReportPage` draws
   `ui/gate/InitialUnlockGate.tsx` in its place: a page of its own, never a pop-up.
+- **The way out.** "Not ready to unlock yet", top left, for every reader, leads to
+  `GATE_NOT_READY_HREF` (`ui/gate/gateContent.ts`): the landing page (sync 26.10, Marcus: "there
+  is no such thing as back") until his page that asks why is ready; then that constant is the
+  whole change. It still counts as `initial_gate_back`.
+- **What it opens, in numbers.** Five chapters in full and four partly open, counted off the
+  gate's map (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
+  a EUR 1.99 buyer's pre-report map say the same, and `tests/gateChapterCounts.test.ts` holds
+  them to it. A free reader's map draws the Core Archetype partly open, as their report has it
+  until the EUR 1.99 (`wizardDrawer` in `features/survey/ui/wizard/wizardContent.ts`).
 - **Buying it.** `POST /api/stripe/initial-unlock` (plan `initial`, EUR 1.99 from pay to start's
   `PRE_OFFER`) → Stripe → fulfillment records a payment with `metadata.plan = "initial"` and
   never touches `personal_report.payment_*` (pay to start's EUR 1.99 does, and so do its
@@ -176,7 +189,8 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   `/report?preview=1&v4=1&plan=initial` the report after the EUR 1.99; the emails at
   `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`.
 - **Tests.** `tests/initialUnlockGate.test.ts`, `tests/initialGateState.test.ts`,
-  `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`, the gate blocks of
+  `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`,
+  `tests/gateChapterCounts.test.ts`, the gate blocks of
   `tests/report-handler.test.ts`, `tests/ReportPage.test.tsx` and
   `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`.
 

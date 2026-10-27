@@ -19,6 +19,7 @@ import WizardReportMap, { MAP_STEPS } from "./wizard/WizardReportMap";
 import { useWizardFit } from "./wizard/useWizardFit";
 import { WIZARD_PROOF_CARDS, wizardSlideOrder, type WizardVariant } from "./wizard/wizardContent";
 import "./wizard/wizard-desktop.css";
+import "./wizard/wizard-motion.css";
 
 /**
  * The pre-report wizard — Figma 1071:2092, "Pre Report Wizard — Mobile (production,
@@ -582,6 +583,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
                     <WizardReportMap
                       step={mapStep}
                       onStep={(to, control) => moveMap(to, control)}
+                      variant={variant}
                     />
                   </div>
                 )}
@@ -626,7 +628,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
                 type="button"
                 onClick={goNext}
                 aria-label={isLast ? "Continue to your report" : "Continue to next slide"}
-                className="wz-continue inline-flex h-12 items-center gap-3 rounded-full bg-[#fe6839] px-7 font-sans text-[14px] font-bold uppercase leading-5 tracking-[1.4px] text-white transition hover:-translate-y-[1px] focus-visible-ring"
+                className={`wz-continue${position < 2 ? " wz-continue--nudge" : ""} inline-flex h-12 items-center gap-3 rounded-full bg-[#fe6839] px-7 font-sans text-[14px] font-bold uppercase leading-5 tracking-[1.4px] text-white transition hover:-translate-y-[1px] focus-visible-ring`}
                 style={{
                   filter:
                     "drop-shadow(0 10px 7.5px rgba(254,104,57,0.2)) drop-shadow(0 4px 3px rgba(254,104,57,0.2))",

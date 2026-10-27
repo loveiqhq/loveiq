@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FC, type RefObject } from "react";
 import type { Report3TriggerRow } from "@/data/report3-accelerators";
 import useV4Reveal from "./useV4Reveal";
 import V4LockBadge from "./V4LockBadge";
@@ -68,6 +68,42 @@ const NODE: Record<Tone, { open: string; locked: string }> = {
 /** The rows an open card shows before its pill; the next one peeks under the fade. */
 const CLEAR_ROWS = 2;
 
+/** 452:261's ramp, where the stylesheet doesn't say (`.rv4-trig__ramp`'s --rv4-band). */
+const RAMP_BAND = 0.64;
+
+/**
+ * Keeps the lock tile off the ramp row's readable top (persona walks 23.10, iPhone:
+ * "the 'Unlock Report' badge sits on top of the 'What accelerates you' text and cuts
+ * words in half"). 314:211 places the tiles for Spark Seeker's copy: 53px into the
+ * accelerators' locked rows, 137 into the brakes'. A ramp row is only fully blurred
+ * from its band down, and a longer row pushes that line lower (a three-line row: 72px),
+ * so the 53px tile sat on words still legible beside it, on every archetype and phone
+ * width (measured 25.10: 7 to 33px). The group publishes the line as `--rv4-lock-clear`;
+ * the stylesheet sets the tile at the lower of the two, so the frame's spot stays the
+ * floor. Layout boxes, not client rects: the rows' entrance transforms move neither.
+ */
+function useLockClearOfRamp(groupRef: RefObject<HTMLDivElement | null>, locked: boolean) {
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!locked || !group) return;
+    const ramp = group.querySelector<HTMLElement>(".rv4-trig__row.is-ramp");
+    if (!ramp) return;
+    const publish = () => {
+      const layer = ramp.querySelector<HTMLElement>(".rv4-trig__ramp");
+      const band = layer
+        ? Number.parseFloat(getComputedStyle(layer).getPropertyValue("--rv4-band")) / 100
+        : Number.NaN;
+      const line = ramp.offsetTop + ramp.offsetHeight * (Number.isFinite(band) ? band : RAMP_BAND);
+      group.style.setProperty("--rv4-lock-clear", `${Math.ceil(line)}px`);
+    };
+    publish();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(ramp);
+    return () => observer.disconnect();
+  }, [groupRef, locked]);
+}
+
 interface Props {
   tone: Tone;
   rows: readonly Report3TriggerRow[];
@@ -122,6 +158,8 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
   // Mark, 28.09: "also animate the headlines and texts". The clear rows rise in one by
   // one once they reach the screen, after the headline; rows under the blur stay still.
   const [rowsRef, rowsInView] = useV4Reveal<HTMLDivElement>();
+  const lockRef = useRef<HTMLDivElement>(null);
+  useLockClearOfRamp(lockRef, locked);
 
   useEffect(() => {
     if (!showAll || !revealed.current) return;
@@ -175,7 +213,11 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
           </div>
         ) : null}
         {locked ? (
-          <div className="rv4-tb-lock rv4-trig__lock" onClick={guardedUnlock(onUnlock)}>
+          <div
+            ref={lockRef}
+            className="rv4-tb-lock rv4-trig__lock"
+            onClick={guardedUnlock(onUnlock)}
+          >
             <ul className="rv4-trig__list is-locked" aria-hidden="true" inert>
               {blurred.map((row, index) => (
                 <Row
