@@ -175,3 +175,106 @@ describe("an RPC is a call, not a write", () => {
     expect(logged).toContain('"kind":"write"');
   });
 });
+
+describe("what #prod-alerts says about the commonest posts (27 Oct 2026)", () => {
+  afterEach(() => {
+    mockError.mockClear();
+    mockWarn.mockClear();
+    mockFetch.mockClear();
+  });
+
+  const createAdmin = () =>
+    supabaseFetch("/auth/v1/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ email: "admin@loveiq.org", email_confirm: true }),
+    });
+
+  /**
+   * Every returning admin's login created the auth user again, Supabase Auth answered
+   * 422 "already registered", both callers carried on as designed, and #prod-alerts
+   * still read "write REJECTED" each time.
+   */
+  it("an admin who already exists is a warn, not an alert", async () => {
+    respond(
+      422,
+      JSON.stringify({
+        code: 422,
+        error_code: "email_exists",
+        msg: "A user with this email address has already been registered",
+      })
+    );
+    await createAdmin();
+    expect(mockError).not.toHaveBeenCalled();
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(mockWarn.mock.calls[0])).toContain("already exists");
+  });
+
+  it("knows the older Auth body too, which has no error_code", async () => {
+    respond(
+      422,
+      JSON.stringify({
+        code: 422,
+        msg: "A user with this email address has already been registered",
+      })
+    );
+    await createAdmin();
+    expect(mockError).not.toHaveBeenCalled();
+  });
+
+  it("still alerts on any other 422 from that endpoint, or a 422 anywhere else", async () => {
+    respond(
+      422,
+      JSON.stringify({
+        code: 422,
+        error_code: "validation_failed",
+        msg: "Unable to validate email address",
+      })
+    );
+    await createAdmin();
+    expect(mockError).toHaveBeenCalledTimes(1);
+    // Auth's numeric code and its error_code both reach the alert.
+    expect(JSON.stringify(mockError.mock.calls[0])).toContain('"code":"422"');
+    expect(JSON.stringify(mockError.mock.calls[0])).toContain("validation_failed");
+
+    respond(
+      422,
+      JSON.stringify({ code: 422, error_code: "email_exists", msg: "already registered" })
+    );
+    await supabaseFetch("/rest/v1/survey_submission", { method: "POST", body: "{}" });
+    expect(mockError).toHaveBeenCalledTimes(2);
+  });
+
+  /** 57014: Postgres cancelled the statement at PostgREST's 8 s limit. */
+  it("calls a timed-out write a timeout, and still says the row was not written", async () => {
+    respond(
+      500,
+      JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" })
+    );
+    await supabaseFetch("/rest/v1/brain_chunk", { method: "POST", body: "[]" });
+    expect(mockError).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(mockError.mock.calls[0]);
+    expect(logged).toContain("TIMED OUT");
+    expect(logged).toContain("the row was not written");
+    expect(logged).not.toContain("REJECTED");
+  });
+
+  it("calls a timed-out function call a timeout, never a missing function", async () => {
+    respond(
+      500,
+      JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" })
+    );
+    await supabaseFetch("/rest/v1/rpc/brain_search", { method: "POST", body: "{}" });
+    const logged = JSON.stringify(mockError.mock.calls[0]);
+    expect(logged).toContain("TIMED OUT");
+    expect(logged).not.toContain("PGRST202 means");
+    expect(logged).not.toContain("REFUSED");
+  });
+
+  it("explains PGRST202 only when that is the code", async () => {
+    respond(400, JSON.stringify({ code: "22P02", message: "invalid input syntax" }));
+    await supabaseFetch("/rest/v1/rpc/ap_facts", { method: "POST", body: "{}" });
+    const logged = JSON.stringify(mockError.mock.calls[0]);
+    expect(logged).toContain("REFUSED");
+    expect(logged).not.toContain("PGRST202 means");
+  });
+});
