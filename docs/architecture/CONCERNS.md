@@ -27,6 +27,7 @@
 - Was: Rate limiting used in-memory Maps that reset across serverless instances
 - Fix: Supabase-backed persistent rate limiting in `shared/http/ratelimit.ts`
 - Evidence: `checkRateLimit()` writes to Supabase `rate_limits` table
+- Since replaced: rate limits moved to Upstash Redis (see `ARCHITECTURE.md`)
 
 **Deep relative imports:** RESOLVED (2026-01)
 
