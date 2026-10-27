@@ -723,6 +723,11 @@ testing on either.
   - Headless, also give the context a `userAgent` with `HeadlessChrome` replaced by `Chrome`.
   - Keep the currency Stripe offers first. Switching it and then typing the code answered
     "Something went wrong".
+  - Since Stripe Tax went on (27 Oct 2026), a €0 order asks for a name and a full billing
+    address, because there is no card to locate the buyer. Fill in the company's address
+    (`#billingName`, `#billingAddressLine1` "Hasenheide 62", `#billingPostalCode` "10967",
+    `#billingLocality` "Berlin", country DE). Then tick the 18+ box
+    (`#termsOfServiceConsentCheckbox`).
 - **Or pre-apply it.** This works on the report checkout only. Stage an alias on one of that
   submission's quotes: `report_price_quote.metadata.nurturePromoCodes.team_test` =
   `{code: "LIQ-100-TESTONLY", stripePromotionCodeId: <the code's promo_ id>, percentOff: 100, expiresAt: <tomorrow>}`.
