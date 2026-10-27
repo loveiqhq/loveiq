@@ -477,6 +477,31 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect(q).toContain("initial_gate_cohort_at=gte.");
   });
 
+  // The page's buttons and its way out, read from its own events for the cohort's surveys.
+  it("reads the gate page's presses and its way out for the cohort", async () => {
+    mockGateOn.mockResolvedValue(true);
+    rows["/rest/v1/personal_report?initial_gate_cohort_at"] = [
+      {
+        survey_submission_id: 1,
+        initial_gate_cohort_at: "2026-10-20T10:00:04Z",
+        initial_gate_seen_at: "2026-10-20T10:01:00Z",
+      },
+    ];
+    rows["/rest/v1/analytics_event?survey_submission_id"] = [
+      { survey_submission_id: 1, event_type: "initial_gate_back", place: null },
+      { survey_submission_id: 1, event_type: "initial_gate_cta_click", place: "sticky" },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const gate = body.funnels.find((f) => f.key === "gate")!;
+    const step = (label: string) => gate.steps.find((s) => s.label === label)!;
+    expect(step("Pressed Unlock").n).toBe(1);
+    expect(step("Pressed Unlock").detail).toBe("on the card 0 · on the bar 1");
+    expect(step("Saw the €1.99 page").detail).toBe("1 left by “Not ready to unlock yet”");
+    const q = paths().find((x) => x.startsWith("/rest/v1/analytics_event?"))!;
+    expect(q).toContain("survey_submission_id=in.(1)");
+    expect(q).toContain("event_type=in.(initial_gate_cta_click,initial_gate_back)");
+  });
+
   it("still answers when only the visits can't be read, and says so", async () => {
     mockFetchAllRows.mockImplementation(async (path: string) =>
       path.startsWith("/rest/v1/funnel_event?") ? null : respond(path)

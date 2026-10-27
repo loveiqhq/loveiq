@@ -35,6 +35,15 @@ const T_SUBS: FieldTable = {
   watch:
     "A survey a completed pay-to-start purchase claimed is pay to start's. The team's own and our probes are left out.",
 };
+const T_GATE_EVENTS: FieldTable = {
+  source: "production",
+  table: "analytics_event",
+  columns:
+    "survey_submission_id, event_type ('initial_gate_cta_click', 'initial_gate_back'), metadata->>'place' ('card', 'sticky')",
+  filters: `Period: through the finishers it belongs to (their survey's day). ${NOT_SPLIT}`,
+  watch:
+    "One row a press on the report's €1.99 page, written by the page. “Not ready to unlock yet” (initial_gate_back) is stored from 27 Oct 2026.",
+};
 const T_PREPAID: FieldTable = {
   source: "production",
   table: "prepaid_report_access",
@@ -297,6 +306,23 @@ const GATE_SEEN =
 SELECT count(*) AS finished, count(*) FILTER (WHERE pr.initial_gate_seen_at IS NOT NULL) AS saw_the_page
   FROM free f JOIN personal_report pr ON pr.survey_submission_id = f.id
  WHERE f.gate;
+`;
+
+/** The €1.99 page's buttons and its way out: who of its finishers pressed what. */
+const GATE_PRESSED =
+  FC_FREE +
+  `
+-- What the report's EUR 1.99 page's finishers did on it, from its own events (one row a press):
+-- pressed "Unlock now" on the card or on the bar, or left by "Not ready to unlock yet" (stored
+-- since 27 Oct 2026). Each reader counts once a line.
+SELECT count(DISTINCT f.id) FILTER (WHERE a.event_type = 'initial_gate_cta_click') AS pressed_unlock,
+       count(DISTINCT f.id) FILTER (WHERE a.event_type = 'initial_gate_cta_click'
+                                      AND coalesce(a.metadata->>'place', 'card') <> 'sticky') AS on_the_card,
+       count(DISTINCT f.id) FILTER (WHERE a.event_type = 'initial_gate_cta_click'
+                                      AND a.metadata->>'place' = 'sticky') AS on_the_bar,
+       count(DISTINCT f.id) FILTER (WHERE a.event_type = 'initial_gate_back') AS not_ready
+  FROM free f JOIN analytics_event a ON a.survey_submission_id = f.id
+ WHERE f.gate AND a.event_type IN ('initial_gate_cta_click', 'initial_gate_back');
 `;
 
 /** Week by week: each funnel's counts per week (Monday to Sunday, clipped to the range). */
@@ -669,13 +695,32 @@ export const fields: FieldRegistry = {
     per: "per finished survey",
     formula: { num: "Finishers in the €1.99 page's cohort whose view of the page was recorded" },
     caveat:
-      "Only while the report's €1.99 page is switched on: its cohort is stamped when the survey is submitted. Blank while it is off.",
+      "Only while the report's €1.99 page is switched on: its cohort is stamped when the survey is submitted. Blank while it is off. The line under it: who left the page by “Not ready to unlock yet” (stored since 27 Oct 2026; Pressed Unlock's card has the query).",
     tables: [
       { ...REPORTS, columns: "survey_submission_id, initial_gate_cohort_at, initial_gate_seen_at" },
       T_SUBS,
     ],
     query: SQL(GATE_SEEN),
-    related: ["pts.step-full", "pts.completions"],
+    related: ["pts.step-pressed", "pts.step-full", "pts.completions"],
+  },
+  "pts.step-pressed": {
+    label: "Pressed Unlock",
+    what: "Finishers of the €1.99-after-the-survey funnel who pressed “Unlock now” on the report's €1.99 page: on its card or on the bar along the bottom.",
+    good: "up",
+    stat: "Count",
+    per: "per person",
+    formula: {
+      num: "Finishers in the €1.99 page's cohort with an Unlock press recorded (initial_gate_cta_click)",
+    },
+    caveat:
+      "The page's own events, so a press with the browser's storage refused can be missing. A reader who pressed both buttons counts once here and on both lines under it. Blank while the page is off.",
+    tables: [
+      T_GATE_EVENTS,
+      { ...REPORTS, columns: "survey_submission_id, initial_gate_cohort_at" },
+      T_SUBS,
+    ],
+    query: SQL(GATE_PRESSED),
+    related: ["pts.step-gate", "pts.step-paid"],
   },
   "pts.step-full": {
     label: "Bought the full report",

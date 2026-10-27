@@ -336,6 +336,7 @@ const STEP_INFO: Array<{ step: RegExp; info: string }> = [
   { step: /^Checkout started$/, info: "pts.step-checkout" },
   { step: /^Paid( €[\d.]+)?$/, info: "pts.step-paid" },
   { step: /^Saw the €[\d.]+ page$/, info: "pts.step-gate" },
+  { step: /^Pressed Unlock$/, info: "pts.step-pressed" },
   { step: /^Bought the full report$/, info: "pts.step-full" },
 ];
 const stepInfo = (label: string) => STEP_INFO.find((x) => x.step.test(label))?.info;
@@ -505,6 +506,9 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
                             )}
                           </span>
                         </span>
+                        {f.live && s.detail && (
+                          <span className="text-[11px] leading-snug text-ap-muted">{s.detail}</span>
+                        )}
                         {refs.map((m) => (
                           <span
                             key={m.ofLabel}

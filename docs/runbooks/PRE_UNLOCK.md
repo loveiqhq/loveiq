@@ -31,10 +31,6 @@ with it. Everything ships switched off.
    brain-reconcile use (`get_axis_funnel_daily`, `get_arm_cohorts`), as
    `20261018130000` did for pay to start: today they count the cohort in A3 and a EUR 1.99
    as a purchase (Fatih's data task: split the EUR 1.99 out of the digest).
-   **Also before switching on** (review of #648, 27.10):
-   - AP-Analytics shows the gate's buttons and its way out: `initial_gate_cta_click`
-     (`place`: card or sticky) and `initial_gate_back` ("Not ready to unlock yet", stored
-     since 27.10, `to` = where it led) are in `analytics_event`, but no AP page reads them yet.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -94,6 +90,9 @@ charging the difference is a person's call.
 - The behaviour checks (`features/ux-signals`) know the gate (27.10): its checkout, return and
   unlock (plan `initial`) are never the report's paywall or payment, and a visit that went no
   further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
+- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar)
+  and, under "Saw the €1.99 page", who left by "Not ready to unlock yet", from the page's own
+  events (`initial_gate_cta_click` with its `place`, `initial_gate_back`, stored since 27.10).
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).
