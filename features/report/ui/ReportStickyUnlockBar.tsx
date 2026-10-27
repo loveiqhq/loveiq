@@ -111,7 +111,7 @@ const ReportStickyUnlockBar: FC<Props> = ({
   }, []);
 
   const handleClick = (variant: "mobile" | "desktop") => () => {
-    trackStickyUnlockClicked({ variant, archetype });
+    trackStickyUnlockClicked({ variant, archetype, ...(credit ? { creditKind: "initial" } : {}) });
     // The plans first, then the payment page (Marcus, 09.10): until then this tap went
     // straight to Stripe for the single report, past the plan the pop-up leads with.
     // begin_checkout is counted by ReportPage.beginCheckout when a plan is pressed. It

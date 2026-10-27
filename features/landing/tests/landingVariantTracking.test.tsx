@@ -49,6 +49,41 @@ describe("landing A/B — the arm reaches the analytics", () => {
     }
   });
 
+  // The EUR 1.99 gate's "Not ready to unlock yet" leads here, in the same tab: a reader who
+  // finished the survey is no landing visit and takes no arm.
+  it("leaves out a reader the gate sent back, for that one view", async () => {
+    sessionStorage.clear();
+    const analytics = await import("@features/analytics/client");
+    const setVariant = vi.spyOn(analytics, "setLandingVariant").mockImplementation(() => {});
+    const exposure = vi.spyOn(analytics, "trackExperimentExposure").mockImplementation(() => {});
+    const view = vi.spyOn(analytics, "trackLandingPageView").mockImplementation(() => {});
+    const { default: LandingPageTracker } = await import("@features/landing/ui/LandingPageTracker");
+
+    analytics.trackInitialGateBack({ to: "/" });
+    render(<LandingPageTracker variant="white_card" />);
+    expect(view).not.toHaveBeenCalled();
+    expect(setVariant).not.toHaveBeenCalled();
+    expect(exposure).not.toHaveBeenCalled();
+
+    // A later landing view in the tab is a visit again.
+    render(<LandingPageTracker variant="white_card" />);
+    expect(view).toHaveBeenCalledTimes(1);
+    expect(setVariant).toHaveBeenCalledWith("white_card");
+  });
+
+  it("still counts the landing when the gate's way out led somewhere else", async () => {
+    sessionStorage.clear();
+    const analytics = await import("@features/analytics/client");
+    vi.spyOn(analytics, "setLandingVariant").mockImplementation(() => {});
+    vi.spyOn(analytics, "trackExperimentExposure").mockImplementation(() => {});
+    const view = vi.spyOn(analytics, "trackLandingPageView").mockImplementation(() => {});
+    const { default: LandingPageTracker } = await import("@features/landing/ui/LandingPageTracker");
+
+    analytics.trackInitialGateBack({ to: "/not-ready" });
+    render(<LandingPageTracker variant="white_card" />);
+    expect(view).toHaveBeenCalledTimes(1);
+  });
+
   it("stamps the arm from the cookie onto a durable event, earlier rounds' arms included", async () => {
     for (const arm of ["white_card", "white_video", "white", "white_prev"] as const) {
       vi.resetModules();

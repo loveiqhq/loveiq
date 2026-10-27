@@ -7,7 +7,6 @@
 
 .iug-page {
   --iug-gradient: linear-gradient(105.76deg, #ff6a3a 0%, #cf5afb 52%, #7d88ff 100%);
-  --iug-sticky-h: 56px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -17,13 +16,25 @@
   margin: 0 auto;
   padding-top: env(safe-area-inset-top, 0px);
   /* Room for the sticky bar, so the last review is never under it. */
-  padding-bottom: calc(
-    var(--iug-sticky-h) + env(safe-area-inset-bottom, 0px) + var(--liq-consent-h, 0px)
-  );
+  padding-bottom: var(--iug-sticky-room);
   overflow-x: clip;
   background: #ffffff;
   color: var(--rpg-ink);
   font-family: var(--font-jakarta), var(--font-sans), system-ui, sans-serif;
+}
+
+/* The bar's height as GateStickyBar measures it (its error line and the safe area in it): it
+ * grows past the frame's 56px on a phone under 360px wide. The frame's, until it has. */
+:root {
+  --iug-sticky-room: calc(
+    var(--iug-sticky-h, calc(56px + env(safe-area-inset-bottom, 0px))) + var(--liq-consent-h, 0px)
+  );
+}
+
+/* Whatever takes focus scrolls clear of the bar (WCAG 2.4.11): a short window put the card's
+ * "Unlock now" under it, now that the bar is always there. */
+html:has(.iug-page) {
+  scroll-padding-bottom: var(--iug-sticky-room);
 }
 
 .iug-sr-only {
@@ -381,21 +392,9 @@
       iug-shield-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 1600ms both,
       iug-shield-glow 3.2s ease-in-out 2400ms infinite;
   }
-  /* "one time payment": an underline in the brand ramp draws itself under it, once. */
-  .iug-card .iug-card__suffix {
-    position: relative;
-  }
+  /* "one time payment": its underline (below) draws itself, once. */
   .iug-card .iug-card__suffix::after {
     animation: iug-underline 650ms cubic-bezier(0.16, 1, 0.3, 1) 1500ms both;
-    background: linear-gradient(90deg, #fb683e 0%, #e88c8c 50%, #ac88ed 100%);
-    border-radius: 1px;
-    bottom: -3px;
-    content: "";
-    height: 2px;
-    left: 0;
-    pointer-events: none;
-    position: absolute;
-    right: 0;
     transform: scaleX(0);
     transform-origin: left center;
   }
@@ -421,6 +420,23 @@
   .iug-reviews.animate .rpg-review:nth-child(n + 4) .rpg-review__avatar {
     animation-delay: 710ms;
   }
+}
+
+/* "one time payment" underlined in the brand ramp: drawn by the motion above, and simply
+ * there under reduced motion, its final state. */
+.iug-card .iug-card__suffix {
+  position: relative;
+}
+.iug-card .iug-card__suffix::after {
+  background: linear-gradient(90deg, #fb683e 0%, #e88c8c 50%, #ac88ed 100%);
+  border-radius: 1px;
+  bottom: -3px;
+  content: "";
+  height: 2px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
 }
 
 @keyframes iug-shield-pop {

@@ -106,7 +106,10 @@ export async function POST(request: Request) {
     logger.warn(
       {
         body: body === null ? null : typeof body,
-        issues: parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}:${i.code}`),
+        // The field only, and a few: a metadata key is the sender's text, any length.
+        issues: parsed.error.issues
+          .slice(0, 5)
+          .map((i) => `${String(i.path[0] ?? "(root)")}:${i.code}`),
       },
       "funnel-event: refused a body that does not parse"
     );
