@@ -111,6 +111,8 @@ export function buildPayToStartSessionParams(
           currency: "eur",
           // The name Stripe's page and the receipt show (Figma 1475:2114).
           product_data: { name: offer.productName },
+          // The price includes the VAT, which the receipt lists (`automaticTax`).
+          tax_behavior: "inclusive",
           unit_amount: offer.priceCents,
         },
         quantity: 1,

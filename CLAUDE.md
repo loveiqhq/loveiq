@@ -361,6 +361,13 @@ For local sandbox testing, install Stripe CLI and run `stripe listen --forward-t
 
 If `STRIPE_CHECKOUT_ENABLED=true` but any Stripe key is missing, the server logs an error on first checkout/webhook hit and the route returns 503. No silent failure.
 
+**VAT on receipts.** Every checkout is created through `createCheckoutSession` (`features/checkout/server/stripeCheckout.ts`), with prices `tax_behavior: "inclusive"`.
+
+- It turns on Stripe Tax (`automatic_tax`) whenever that mode's tax settings are active, so receipts and invoices list the VAT the price already includes. Prices do not change.
+- What is charged comes from the tax registrations in the Stripe dashboard (Tax → Registrations), not from code. With none, nothing is added.
+- If Stripe refuses a session over tax, it is made again without tax and an error goes to #prod-alerts.
+- A test fails if any code outside that helper creates a Checkout Session.
+
 Pay to start sells the survey and full report before the survey, on its own route (`/api/stripe/pay-to-start`). Its sessions carry `metadata.journey: pay_to_start`, which routes the webhook to `features/pay-to-start` ahead of the report's fulfillment, and they require the terms checkbox (`consent_collection.terms_of_service`): the account's public details must name a Terms of Service URL, in test mode and in live mode, or session creation fails.
 
 ---
