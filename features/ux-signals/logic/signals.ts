@@ -114,12 +114,25 @@ export function pageOf(pathname: unknown): "landing" | "survey" | "report" | "ch
 export const bucketOf = (pct: number): number =>
   Math.max(0, ...[25, 50, 75, 100].filter((b) => pct >= b));
 
-/** True when the visit paid: the return page said so, or the report unlocked. */
+/**
+ * The EUR 1.99 gate's checkout, return and unlock carry plan "initial" (features/report/ui/gate;
+ * on in staging's database, off on loveiq.org until it is switched on). They are the gate's,
+ * not the report's paywall or payment: the measures that read a checkout or a payment leave
+ * them out, and where a visit ended reads "gate" for them.
+ */
+const GATE_PLAN = "initial";
+const ofTheGate = (e: UxEvent): boolean => e.props.plan === GATE_PLAN;
+
+/** The report's checkout (not the gate's): a plan's button pressed on the paywall. */
+const reportCheckout = (e: UxEvent): boolean => is("begin_checkout")(e) && !ofTheGate(e);
+
+/** True when the visit paid for the report: the return page said so, or it unlocked. */
 export function paid(v: UxVisit): boolean {
   return v.some(
     (e) =>
-      (e.event === "checkout_return_viewed" && e.props.status === "success") ||
-      e.event === "paywall_unlocked"
+      !ofTheGate(e) &&
+      ((e.event === "checkout_return_viewed" && e.props.status === "success") ||
+        e.event === "paywall_unlocked")
   );
 }
 
@@ -175,6 +188,9 @@ const STAGE: Record<string, string> = {
   testimonial_interaction: "paywall",
   begin_checkout: "checkout",
   checkout_return_viewed: "checkout",
+  initial_gate_viewed: "gate",
+  initial_gate_cta_click: "gate",
+  initial_gate_back: "gate",
 };
 
 /**
@@ -194,7 +210,7 @@ const PAGE_EVENTS = new Set([
 const EXPOSURES = new Set(["price_shown", "locked_card_price_shown"]);
 
 function stageOf(e: UxEvent): string | null {
-  if (e.event in STAGE) return STAGE[e.event]!;
+  if (e.event in STAGE) return ofTheGate(e) ? "gate" : STAGE[e.event]!;
   if (PAGE_EVENTS.has(e.event)) return pageOf(e.props.pathname);
   return null;
 }
@@ -209,7 +225,7 @@ function questionOnScreen(v: UxVisit): string {
 
 /** The first moment the paywall's prices or the checkout were in front of the visitor. */
 function firstPaywall(v: UxVisit): UxEvent | null {
-  return v.find(is("price_shown", "paywall_initiated", "begin_checkout")) ?? null;
+  return v.find((e) => is("price_shown", "paywall_initiated")(e) || reportCheckout(e)) ?? null;
 }
 
 /** The deepest scroll milestone on the report, up to `before` (ms) when given. */
@@ -285,7 +301,7 @@ export const SIGNALS: readonly SignalDef[] = [
     stage: "Whole visit",
     kind: "category",
     measures:
-      "Where the visit ended: landing, survey, pre-report, report, paywall, checkout, or paid.",
+      "Where the visit ended: landing, survey, pre-report, gate, report, paywall, checkout, or paid.",
     from: [...Object.keys(STAGE), ...PAGE_EVENTS, "paywall_unlocked"],
     measure: (v) => {
       if (paid(v)) return "paid";
@@ -293,7 +309,8 @@ export const SIGNALS: readonly SignalDef[] = [
       // still fires price_shown after it (a walk saw three, 2026-10-01), but the visitor
       // had gone: what the page shows on its own is not where they were.
       const lastAction = [...v].reverse().find((e) => stageOf(e) && !EXPOSURES.has(e.event));
-      if (lastAction?.event === "begin_checkout") return "checkout";
+      if (lastAction?.event === "begin_checkout")
+        return ofTheGate(lastAction) ? "gate" : "checkout";
       for (let i = v.length - 1; i >= 0; i--) {
         const s = stageOf(v[i]!);
         if (s) return s;
@@ -404,7 +421,7 @@ export const SIGNALS: readonly SignalDef[] = [
       "From the plans appearing to pressing one to pay, for visits that pressed one: how long the offer was weighed.",
     from: ["price_shown", "paywall_initiated", "paywall_dismissed", "begin_checkout"],
     measure: (v) => {
-      const checkout = v.find(is("begin_checkout"));
+      const checkout = v.find(reportCheckout);
       if (!checkout) return null;
       const before = v.filter((e) => e.t <= checkout.t);
       // The latest opening before the press: an earlier one may have been closed again.
@@ -580,7 +597,7 @@ export const SIGNALS: readonly SignalDef[] = [
       "Which plan the visit pressed to pay for. Comparing plans is not recorded: the cards sit side by side with no toggle.",
     from: ["begin_checkout", "price_shown"],
     measure: (v) => {
-      const checkout = v.find(is("begin_checkout"));
+      const checkout = v.find(reportCheckout);
       if (checkout) return text(checkout.props.plan) ?? "unknown";
       return v.some(is("price_shown")) ? "none" : null;
     },
@@ -615,7 +632,7 @@ export const SIGNALS: readonly SignalDef[] = [
     measures:
       "For visits that went to pay: paid, or stopped short of paying (the checkout, the card, or the way back).",
     from: ["begin_checkout", "checkout_return_viewed", "paywall_unlocked"],
-    measure: (v) => (v.some(is("begin_checkout")) ? (paid(v) ? "paid" : "stopped") : null),
+    measure: (v) => (v.some(reportCheckout) ? (paid(v) ? "paid" : "stopped") : null),
     positive: (t) => t === "stopped",
   },
 ];

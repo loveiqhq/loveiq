@@ -1740,7 +1740,9 @@ async function main(argv: string[]): Promise<number> {
       walk.planted = planted;
       // Only a walk that did what it planned knows the truth; a stopped one knows nothing.
       if (walk.finished) {
-        writeFileSync(join(dir, "events.json"), JSON.stringify(withoutTheGate(heard)) + "\n");
+        // The EUR 1.99 gate's events stay in: the behaviour checks tell them from the report's
+        // (features/ux-signals/logic/signals.ts, plan "initial").
+        writeFileSync(join(dir, "events.json"), JSON.stringify(heard) + "\n");
         writeFileSync(join(dir, "truth.json"), JSON.stringify(truthOf(log), null, 2) + "\n");
       }
     }
@@ -1757,17 +1759,6 @@ async function main(argv: string[]): Promise<number> {
           : "")
     );
   }
-}
-
-/**
- * A proof walk's events, less the EUR 1.99 gate's (on in staging's database, off on
- * loveiq.org). Its checkout, return and unlock carry plan "initial", and the behaviour checks
- * (features/ux-signals) read them as the visit's paywall and payment, which the walk's own
- * record (truth.json) knows nothing of. Left out, as a loveiq.org visit has none; when the
- * gate goes live there, the checks learn it and these stay in (docs/runbooks/PRE_UNLOCK.md).
- */
-export function withoutTheGate<T extends { props: Record<string, unknown> }>(events: T[]): T[] {
-  return events.filter((e) => e.props.plan !== "initial");
 }
 
 /** Answers one known question with the persona's answer. Returns a note when it could not. */
