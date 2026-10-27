@@ -2,7 +2,7 @@ import { glossaryTerms, type GlossaryTerm } from "@/data/glossary-data";
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 import { dimensions, overlays, type OverlayDef } from "@/data/scoring-config";
 import { splitBody } from "./notion";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { syncSource, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * What the words mean, what we ask, and how a score is built.
@@ -183,7 +183,5 @@ export async function ingestDomain(stampedAt: string): Promise<IngestResult> {
   const rows = buildDomainRows(stampedAt);
   // An empty build must not sweep the vocabulary away, the same rule the roster follows.
   if (rows.length === 0) return { source: SOURCE, rows: 0, swept: 0, skipped: "domain-empty" };
-  const written = await upsertChunks(rows);
-  const swept = await sweepStale(SOURCE, stampedAt, written);
-  return { source: SOURCE, rows: written, swept };
+  return { source: SOURCE, ...(await syncSource(SOURCE, rows)) };
 }

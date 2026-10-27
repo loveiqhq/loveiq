@@ -1,5 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { syncSource, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * Turns the funnel into dated, readable facts the brain can retrieve.
@@ -935,10 +935,7 @@ export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> 
   const rows = await brainDailyRollup();
 
   const chunks = buildAnalyticsRows(rows, stampedAt, await adCostByDay());
-  const written = await upsertChunks(chunks);
-  // Safe to sweep: this ingester always rewrites the whole window in one call,
+  // Safe to sweep: this ingester always builds the whole window in one call,
   // so anything older is a day that aged out or a grain that emptied.
-  const swept = await sweepStale(SOURCE, stampedAt, written);
-
-  return { source: SOURCE, rows: written, swept };
+  return { source: SOURCE, ...(await syncSource(SOURCE, chunks)) };
 }
