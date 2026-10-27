@@ -704,13 +704,26 @@ testing on either.
 
 **Purchases**
 
-- €0 only, with the team's 100%-off promotion code applied before checkout opens. Ask
-  Eman for the code. Never write it in this repository, which is public. Typed codes are
-  often refused in our Stripe sessions, so stage an alias on one of that submission's quotes:
-  `report_price_quote.metadata.nurturePromoCodes.team_test` =
+- €0 only, with the team's 100%-off promotion code. Ask Eman for the code. Never write it
+  in this repository, which is public.
+- **Typing the code on Stripe's page** works on every checkout: the report's, pay to
+  start's and the EUR 1.99 gate's. It works only in a browser that does not look automated.
+  - Stripe answers "This code is invalid" whenever `navigator.webdriver` is set or the user
+    agent says `HeadlessChrome`. That is Playwright's default, and it was measured on
+    2026-10-27.
+  - Launch the installed Chrome:
+    `chromium.launch({ channel: "chrome", ignoreDefaultArgs: ["--enable-automation"], args: ["--disable-blink-features=AutomationControlled"] })`.
+  - Headless, also give the context a `userAgent` with `HeadlessChrome` replaced by `Chrome`.
+  - Keep the currency Stripe offers first. Switching it and then typing the code answered
+    "Something went wrong".
+- **Or pre-apply it.** This works on the report checkout only. Stage an alias on one of that
+  submission's quotes: `report_price_quote.metadata.nurturePromoCodes.team_test` =
   `{code: "LIQ-100-TESTONLY", stripePromotionCodeId: <the code's promo_ id>, percentOff: 100, expiresAt: <tomorrow>}`.
   Then open `/report/<token>?promo=LIQ-100-TESTONLY`. The tab forgets the code once a
   purchase completes, so open that link again before each further test purchase.
+- A €0 team purchase earns no credit toward the next one, by design (`getReportCredits`
+  counts paid, non-test rows only). After a test €1.99 unlock, the full report still shows
+  €29.99.
 - On Stripe, press the button only when it says **Complete order**. "Pay" means real money.
 - Why this is safe for ads and revenue: at €0 the browser sends no GA4 purchase and no
   Google Ads conversion (`trackReportPurchase`). The server-side GA4 send skips staff and
