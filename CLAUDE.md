@@ -164,9 +164,9 @@ loveiq-web/
 
 ## Architecture Overview
 
-**Type:** Static marketing site with API routes (Next.js 16 App Router)
+**Type:** Full-stack web product (Next.js 16 App Router, Supabase Postgres, Stripe, scheduled jobs). It began as a marketing site and is no longer one; `docs/architecture/ARCHITECTURE.md` has the map.
 
-**No end-user authentication.** This is a pre-launch marketing site driven by the assessment funnel at `/survey`. The admin panel (`/admin/*`) uses Supabase Auth with magic link emails; see `admin_users` table for the email allowlist.
+**No end-user accounts.** The product is the assessment funnel at `/survey`, and a report opens through its private link. The admin panel (`/admin/*`) uses Supabase Auth with magic link emails; see `admin_users` table for the email allowlist.
 
 ### Data Flow
 
@@ -643,7 +643,7 @@ right-hand slot. `white-v1/` is round 2's retired arm (still shown for
 ### Rate Limiting
 
 - IP-based rate limiting on all form endpoints
-- Persisted in Supabase (survives deployments)
+- Counted in Upstash Redis (Vercel KV), with an in-memory fallback when no store is configured (local development, staging)
 - Email-based cooldown on survey submissions
 
 ### CSRF Protection
