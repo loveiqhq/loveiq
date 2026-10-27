@@ -297,12 +297,15 @@ interface PreReportWizardProps {
   /** Off on /wizard-preview, so a reviewer's clicks never reach the funnel's events. */
   track?: boolean;
   variant?: WizardVariant;
+  /** The EUR 1.99 gate will stop this reader, at this price: the map names it. */
+  gatePriceCents?: number | null;
 }
 
 const PreReportWizard: FC<PreReportWizardProps> = ({
   onComplete,
   track = true,
   variant = "standard",
+  gatePriceCents = null,
 }) => {
   const order = wizardSlideOrder(variant);
   const slideCount = order.length;
@@ -584,6 +587,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
                       step={mapStep}
                       onStep={(to, control) => moveMap(to, control)}
                       variant={variant}
+                      gatePriceCents={gatePriceCents}
                     />
                   </div>
                 )}

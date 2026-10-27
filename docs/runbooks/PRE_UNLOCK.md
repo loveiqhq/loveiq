@@ -39,8 +39,6 @@ with it. Everything ships switched off.
      read its checkout and unlock (plan `initial`) as the report's paywall and payment. Until
      then the proof walks leave those events out (`scripts/walkers/walk.ts`); stop that when
      the checks know the gate.
-   - Marcus confirms the pre-report map: a gated reader sees "IN FULL" rows and "Read your
-     opening chapters in full" one screen before the EUR 1.99 price, which it does not name.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -94,6 +92,9 @@ charging the difference is a person's call.
   submit; the old-user campaign's later stamps stay with pay after the report). The free
   landing's visits, ads and survey starts go to the gate by day: on the day it is switched,
   by its share of that day's finished surveys.
+- The pre-report map names the price to a reader the gate will stop: "Read your opening
+  chapters in full for €1.99." (Eman, 27.10). The survey's reply carries
+  `initialGatePriceCents` when the reader joined the cohort; nobody else's map changes.
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).

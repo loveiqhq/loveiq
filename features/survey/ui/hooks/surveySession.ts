@@ -24,6 +24,11 @@ export const COMPLETED_REPORT_KEY = "loveiq-completed-report";
  * "1", written before the EUR 1.99 offer had a wizard of its own, reads as the full one's.
  */
 export const PAID_WIZARD_KEY = "loveiq-paid-wizard";
+/**
+ * Set when this tab's finished run will meet the EUR 1.99 gate, to its price in cents, so
+ * the pre-report map still names it after a reload during the wizard (Eman, 27.10).
+ */
+export const GATE_PRICE_KEY = "loveiq-gate-price";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -166,6 +171,7 @@ export function getSessionId(): string {
 /** The finished report, for a browser that refuses storage: remembered for this page load. */
 let inMemoryCompleted: string | null = null;
 let inMemoryPaidWizard: PayToStartWizard | null = null;
+let inMemoryGatePrice: number | null = null;
 
 /** Drop the draft's saved id (the run it belonged to is over). */
 export function forgetSessionMirror(): void {
@@ -391,10 +397,12 @@ export function forgetCompletedReport(): void {
   inMemoryCompleted = null;
   inMemorySessionId = null;
   inMemoryPaidWizard = null;
+  inMemoryGatePrice = null;
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
     sessionStorage.removeItem(PAID_WIZARD_KEY);
+    sessionStorage.removeItem(GATE_PRICE_KEY);
     forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
@@ -416,6 +424,28 @@ export function rememberPaidWizard(wizard: PayToStartWizard): void {
 function readPaidWizard(value: string | null): PayToStartWizard | null {
   if (value === "pay_to_start" || value === "pay_to_start_initial") return value;
   return value === "1" ? "pay_to_start" : null;
+}
+
+/** Remember that this tab's finished run will meet the EUR 1.99 gate, at this price. */
+export function rememberGatePrice(cents: number): void {
+  inMemoryGatePrice = cents;
+  if (!canUseStorage()) return;
+  try {
+    sessionStorage.setItem(GATE_PRICE_KEY, String(cents));
+  } catch {
+    /* kept in memory for this page load */
+  }
+}
+
+/** The gate's price for this tab's finished run when the gate will stop it, else null. */
+export function gatePriceRemembered(): number | null {
+  if (!canUseStorage()) return inMemoryGatePrice;
+  try {
+    const cents = Number(sessionStorage.getItem(GATE_PRICE_KEY));
+    return Number.isSafeInteger(cents) && cents > 0 ? cents : inMemoryGatePrice;
+  } catch {
+    return inMemoryGatePrice;
+  }
 }
 
 /** The wizard of this tab's finished run when it was paid for before the survey, else null. */

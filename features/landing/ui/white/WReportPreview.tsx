@@ -6,7 +6,8 @@ import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 
 /**
- * White-variant "+50 page report" section (Figma node 7828:10437): left = report
+ * White-variant report section (Figma node 7828:10437, drawn as a "+50 page report"; counted
+ * in chapters since 27.10, Eman): left = report
  * value props (4 numbered items) + CTA; right = a styled mock of the LoveIQ
  * report ("What the LoveIQ Report looks like") + a short testimonial.
  */
@@ -47,7 +48,7 @@ const WReportPreview: FC = () => (
           <h2 className="font-serif text-[clamp(2rem,5vw,2.6rem)] font-normal leading-[1.1] text-black">
             We will provide you with a{" "}
             <span className="bg-gradient-to-r from-[#fe6839] via-[#bf66d9] to-[#958ef6] bg-clip-text text-transparent">
-              +50 page long report
+              17-chapter report
             </span>
           </h2>
           <p className="max-w-xl text-[16px] leading-relaxed text-[#69707d]">

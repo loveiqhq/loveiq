@@ -11,6 +11,7 @@ import {
 } from "react";
 import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
+import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
 import {
   WIZARD_CHAPTER_COUNT,
   WIZARD_PART_COUNT,
@@ -77,6 +78,11 @@ interface WizardReportMapProps {
   onStep: (to: number, control: "next" | "previous") => void;
   /** Whose map it is: a paid wizard's reader has the Core Archetype in full (badgeOf). */
   variant?: WizardVariant;
+  /**
+   * The EUR 1.99 gate will stop this reader, at this price. The opening chapters are in full
+   * for it, so the first line says so (Eman, 27.10: "show gated readers the price").
+   */
+  gatePriceCents?: number | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -422,7 +428,12 @@ const Tiles: FC<WizardReportMapProps> = ({ step, onStep }) => {
 /*  The slide                                                          */
 /* ------------------------------------------------------------------ */
 
-const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep, variant = "standard" }) => {
+const WizardReportMap: FC<WizardReportMapProps> = ({
+  step,
+  onStep,
+  variant = "standard",
+  gatePriceCents = null,
+}) => {
   const overview = step === 0;
   const fade = (shown: boolean) => ({
     opacity: shown ? 1 : 0,
@@ -506,7 +517,8 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep, variant = "st
             </h2>
             <Pitch icon="free" top={20}>
               <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
-                Read <strong className="font-bold">your opening chapters</strong> in full.
+                Read <strong className="font-bold">your opening chapters</strong> in full
+                {gatePriceCents ? ` for ${formatOfferPrice(gatePriceCents)}` : ""}.
               </p>
             </Pitch>
             <Pitch icon="open" top={20}>

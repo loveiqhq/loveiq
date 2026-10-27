@@ -588,6 +588,8 @@ interface ReportExperienceProps {
  * the source .docx and would lose the edit on the next run.
  */
 const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
+/** The nav's Core Archetype row: its card and the Summary behind INITIAL_UNLOCK_SECTION_ID. */
+const CORE_ARCHETYPE_NAV_ID = "core_archetype";
 
 /** A nav that follows the current chapter; it alone renders again when that moves. */
 const WithActiveSection: FC<{
@@ -1002,6 +1004,26 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     const parts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
     for (const part of parts) {
       for (const item of part.items) {
+        // The Core Archetype: the server half-locks its card and its Summary (`locked` on
+        // each) until the EUR 1.99, or a plan, opens them. Partly open until then and IN FULL
+        // after, as the pre-report map draws it (Eman, 27.10). A report without that copy
+        // asks the Summary's gate, as its own Summary section does.
+        if (item.id === CORE_ARCHETYPE_NAV_ID) {
+          const veiled =
+            archetypeCard || summaryChapter
+              ? Boolean(archetypeCard?.locked || summaryChapter?.locked)
+              : !(
+                  initialGateOpen ||
+                  isSectionUnlockedForPlan({
+                    accessPlan,
+                    archetypeTier: viewArchetypeTier,
+                    isPremium: true,
+                    sectionId: INITIAL_UNLOCK_SECTION_ID,
+                  })
+                );
+          access.set(item.id, veiled ? "unlocked" : "free");
+          continue;
+        }
         const section = resolvedSections.find((s) => s.id === (item.gateId ?? item.id));
         if (!section?.isPremium) {
           access.set(item.id, "free");
@@ -1020,7 +1042,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       }
     }
     return access;
-  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3, isV4, initialGateOpen]);
+  }, [
+    resolvedSections,
+    accessPlan,
+    viewArchetypeTier,
+    isV3,
+    isV4,
+    initialGateOpen,
+    archetypeCard,
+    summaryChapter,
+  ]);
   // The whole report is this reader's (sync 23.10): the navs drop every chip and padlock
   // and set each title bold. navAccessById keeps its tiers, which the chapter locks read.
   const navFullyUnlocked = ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype);

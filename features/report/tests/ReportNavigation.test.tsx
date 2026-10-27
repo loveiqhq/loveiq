@@ -472,11 +472,12 @@ describe("V4 — the finalised nav (961:333)", () => {
     expect(row("introduction")).toHaveAttribute("aria-current", "location");
   });
 
-  it("draws the three tiers: the FREE chip, Figma's open padlock in the brand gradient, the grey padlock", async () => {
+  it("draws the three tiers: the IN FULL chip, Figma's open padlock in the brand gradient, the grey padlock", async () => {
     await inV4(<ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />);
 
+    // IN FULL, not FREE, since 27.10 (Eman): with the EUR 1.99 gate, nothing is sold as free.
     expect(row("core_archetype").querySelector(".report-nav-badge--free")?.textContent).toBe(
-      "Free"
+      "In full"
     );
     const open = row("typical_beliefs").querySelector(".report-nav-badge--unlocked")!;
     expect(open).not.toBeNull();

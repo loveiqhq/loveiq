@@ -142,7 +142,7 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
       "14-day money-back guarantee.",
       "Your Core Archetype and what drives it",
       "How you rank against all 14 archetypes",
-      "5x full chapters + 4x partly open",
+      "3x full chapters + 4x partly open",
       "€10 credit toward your Full Report",
       "Guaranteed Safe & Secure Checkout",
     ]) {

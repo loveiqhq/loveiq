@@ -33,7 +33,11 @@ import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression"
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
-import { joinInitialGateCohort } from "@features/report/server/initialGateState";
+import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
+import {
+  isInInitialGateCohort,
+  joinInitialGateCohort,
+} from "@features/report/server/initialGateState";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -210,12 +214,14 @@ async function replyWithExistingSubmission(
   if (claim) {
     scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, existing.id));
   }
+  const gated = await isInInitialGateCohort(existing.id);
   const response = NextResponse.json(
     {
       success: true,
       submissionId: existing.id,
       ...(reportToken ? { reportToken } : {}),
       ...(claim ? claimResponseFields(claim) : {}),
+      ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
     },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
   );
@@ -700,11 +706,14 @@ export async function POST(request: Request) {
     // Pre-unlock: a survey submitted while the EUR 1.99 gate is on joins its cohort, before
     // the reply (initialGateState.ts says why). A replay was stamped, or not, the first time.
     // A reader who came with a pay-to-start token joins only after their claim, below.
-    const [scoringSummary] = await Promise.all([
+    const [scoringSummary, , joinedGate] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
       reportTokenPromise,
-      isExisting || prepaidToken ? Promise.resolve() : joinInitialGateCohort(submissionId),
+      isExisting || prepaidToken ? Promise.resolve(false) : joinInitialGateCohort(submissionId),
     ]);
+    // Whether the gate will stop this reader: the reply tells the pre-report map, which then
+    // names the price (Eman, 27.10). A replay reads what its first submit did, below.
+    let gated = joinedGate;
 
     // Pay to start: claim what this browser paid for, before the reply, so the report
     // opens unlocked. After scoring, which the full-report tier needs (the primary
@@ -733,8 +742,9 @@ export async function POST(request: Request) {
       claim.outcome !== "error" &&
       claim.outcome !== "pending"
     ) {
-      await joinInitialGateCohort(submissionId);
+      gated = await joinInitialGateCohort(submissionId);
     }
+    if (isExisting) gated = await isInInitialGateCohort(submissionId);
 
     // End of user-blocking work. Everything below is fire-and-forget via
     // scheduleAfterResponse and does not affect response latency.
@@ -921,6 +931,8 @@ export async function POST(request: Request) {
         // route tells it, to a reader allowed to see it.
         // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
+        // The EUR 1.99 gate will stop this reader: the pre-report map names its price.
+        ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
       },
       {
         // The response carries a fresh report access token — never let

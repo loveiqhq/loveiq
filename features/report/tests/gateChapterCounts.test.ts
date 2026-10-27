@@ -9,18 +9,23 @@ import { wizardDrawer } from "@features/survey/ui/wizard/wizardContent";
 /**
  * Sync 26.10: the EUR 1.99 card said "4x full chapters" while its own map marked five rows IN
  * FULL (Other Archetypes, free in the report too, was the fifth). Fatih: say five, everywhere.
- * Every place that counts what the EUR 1.99 opens reads its numbers off the gate's map, which
- * is drawn from the live V4 nav, so a chapter added or cut fails here, not on a reader.
+ * Eman, 27.10: count chapters as the rest of the report does, from Part 2 on ("6 Parts, 17
+ * Chapters"; Part 1 is the welcome), so three in full. Every place that counts what the EUR
+ * 1.99 opens reads its numbers off the gate's map, which is drawn from the live V4 nav, so a
+ * chapter added or cut fails here, not on a reader. The maps compare row for row, Part 1 too.
  */
 const rows = GATE_CHAPTER_PARTS.flatMap((part) => part.rows);
 const inFull = rows.filter((row) => row.access === "in_full");
 const partlyOpen = rows.filter((row) => row.access === "partly_open");
+const chapters = GATE_CHAPTER_PARTS.slice(1).flatMap((part) => part.rows);
+const chaptersInFull = chapters.filter((row) => row.access === "in_full");
+const chaptersPartlyOpen = chapters.filter((row) => row.access === "partly_open");
 
 const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 const word = (n: number) => WORDS[n];
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-const cardLine = `${inFull.length}x full chapters + ${partlyOpen.length}x partly open`;
-const emailCount = `${word(inFull.length)} chapters in full. ${capitalised(word(partlyOpen.length))} featured chapters are partly open:`;
+const cardLine = `${chaptersInFull.length}x full chapters + ${chaptersPartlyOpen.length}x partly open`;
+const emailCount = `${word(chaptersInFull.length)} chapters in full. ${capitalised(word(chaptersPartlyOpen.length))} featured chapters are partly open:`;
 
 const params = {
   firstName: "Ana",
@@ -29,7 +34,13 @@ const params = {
 };
 
 describe("what the EUR 1.99 opens, counted the same everywhere", () => {
-  it("reads five chapters in full and four partly open off the gate's map", () => {
+  it("reads three chapters in full and four partly open off the gate's map, from Part 2", () => {
+    expect(GATE_CHAPTER_PARTS[0]?.rows.map((row) => row.id)).toEqual([
+      "introduction",
+      "what_shaped_this_report",
+    ]);
+    expect([chaptersInFull.length, chaptersPartlyOpen.length]).toEqual([3, 4]);
+    // The map itself still marks the welcome's two rows IN FULL.
     expect([inFull.length, partlyOpen.length]).toEqual([5, 4]);
   });
 
