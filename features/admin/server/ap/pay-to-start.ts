@@ -95,6 +95,12 @@ export interface GateMember {
   sid: number;
   cohortAt: string;
   seenAt: string | null;
+  /**
+   * What the reader did on the €1.99 page, from its own events (analytics_event): pressed
+   * "Unlock now" on the card or on the bar, or left by "Not ready to unlock yet" (stored since
+   * 27 Oct 2026). Absent: none of them.
+   */
+  taps?: { card: boolean; bar: boolean; notReady: boolean };
 }
 
 /** A sale on a pay-to-start buyer's report after the purchase itself (an upgrade). */
@@ -210,6 +216,8 @@ export interface PtsStep {
   n: number | null;
   /** A step that takes money. */
   pays: boolean;
+  /** A line under it: how the step splits, or who left from it. */
+  detail?: string;
 }
 
 export interface PtsFunnel {
@@ -477,6 +485,7 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
       .map((g) => g.sid)
   );
   const seenAt = new Map(input.gateMembers.map((g) => [g.sid, g.seenAt]));
+  const tapsOf = new Map(input.gateMembers.map((g) => [g.sid, g.taps]));
   const subsOf: Record<"after" | "gate", SubFact[]> = {
     after: free.filter((s) => !gateIds.has(s.id)),
     gate: free.filter((s) => gateIds.has(s.id)),
@@ -639,6 +648,15 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
               label: `Saw the ${euros(input.prices.gate)} page`,
               n: subs.filter((s) => seenAt.get(s.id)).length,
               pays: false,
+              detail: `${subs.filter((s) => tapsOf.get(s.id)?.notReady).length} left by “Not ready to unlock yet”`,
+            },
+            // Its two buttons (sync 23.10: the bar is there from the first paint). A reader who
+            // pressed both counts once here, and on both lines under it.
+            {
+              label: "Pressed Unlock",
+              n: subs.filter((s) => tapsOf.get(s.id)?.card || tapsOf.get(s.id)?.bar).length,
+              pays: false,
+              detail: `on the card ${subs.filter((s) => tapsOf.get(s.id)?.card).length} · on the bar ${subs.filter((s) => tapsOf.get(s.id)?.bar).length}`,
             },
             {
               label: `Paid ${euros(input.prices.gate)}`,
@@ -1119,6 +1137,29 @@ export async function fetchPayToStartRecords(
     }
   }
 
+  // The €1.99 page's buttons and its way out, one row a press: pressed "Unlock now" on the card
+  // or the bar, or left by "Not ready to unlock yet" (stored since 27 Oct 2026).
+  const taps = new Map<number, NonNullable<GateMember["taps"]>>();
+  for (const ids of chunks(cohort.map((c) => c.survey_submission_id))) {
+    const rows = await must<{
+      survey_submission_id: number;
+      event_type: string;
+      place: string | null;
+    }>(
+      `/rest/v1/analytics_event?survey_submission_id=in.(${ids.join(",")})` +
+        "&event_type=in.(initial_gate_cta_click,initial_gate_back)" +
+        "&select=survey_submission_id,event_type,place:metadata->>place&order=id.asc",
+      "analytics_event"
+    );
+    for (const r of rows) {
+      const t = taps.get(r.survey_submission_id) ?? { card: false, bar: false, notReady: false };
+      if (r.event_type === "initial_gate_back") t.notReady = true;
+      else if (r.place === "sticky") t.bar = true;
+      else t.card = true;
+      taps.set(r.survey_submission_id, t);
+    }
+  }
+
   return {
     entitlements,
     ptsVisits: visitRows ? [...visitCount.values()] : null,
@@ -1132,6 +1173,7 @@ export async function fetchPayToStartRecords(
       sid: c.survey_submission_id,
       cohortAt: c.initial_gate_cohort_at,
       seenAt: c.initial_gate_seen_at,
+      ...(taps.has(c.survey_submission_id) && { taps: taps.get(c.survey_submission_id) }),
     })),
     gateOn,
   };
