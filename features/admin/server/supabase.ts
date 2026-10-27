@@ -170,31 +170,66 @@ async function warnIfWriteRejected(path: string, method: string, res: Response):
    * has to tell a failed CALL apart from a refused INSERT.
    */
   const isRpc = path.startsWith("/rest/v1/rpc/");
-  const level = res.status === 409 ? "warn" : "error";
   let code: string | undefined;
+  let errorCode: string | undefined;
   let message: string | undefined;
   try {
-    const parsed = JSON.parse(await res.clone().text()) as { code?: string; message?: string };
-    code = parsed.code;
-    message = parsed.message?.replace(/=\([^)]*\)/g, "=(redacted)").slice(0, 200);
+    // PostgREST answers `code` + `message`; Supabase Auth answers `error_code` + `msg`.
+    const parsed = JSON.parse(await res.clone().text()) as {
+      code?: string | number;
+      error_code?: string;
+      message?: string;
+      msg?: string;
+    };
+    code = parsed.code === undefined ? undefined : String(parsed.code);
+    errorCode = parsed.error_code;
+    message = (parsed.message ?? parsed.msg)?.replace(/=\([^)]*\)/g, "=(redacted)").slice(0, 200);
   } catch {
     // Non-JSON body (an HTML error page, or empty). The status alone still locates it.
   }
+  /**
+   * AN ADMIN WHO ALREADY EXISTS IS NOT A FAILURE EITHER. The admin login and Jarvis's
+   * sign-in code both create the auth user before minting a link, and Supabase Auth answers
+   * 422 "already registered" for every returning admin: both callers expect it and carry
+   * on. Logged at error, it posted "write REJECTED" to #prod-alerts on every admin login
+   * (4 on 27 Oct 2026). Any other 422 from that endpoint still alerts.
+   */
+  const existingUser =
+    res.status === 422 &&
+    path.startsWith("/auth/v1/admin/users") &&
+    (errorCode === "email_exists" ||
+      errorCode === "user_already_exists" ||
+      /already (been )?registered|already exists/i.test(message ?? ""));
+  const level = res.status === 409 || existingUser ? "warn" : "error";
+  /**
+   * 57014 IS A TIMEOUT, NOT A REFUSAL: Postgres cancelled the statement at PostgREST's
+   * 8 s limit. The alert said "REJECTED" (and for a function call, "PGRST202 means no
+   * function matches"), which sent people looking for a bad column or a bad argument
+   * when the database was simply too slow at that moment.
+   */
+  const timedOut = code === "57014";
   logger[level](
     {
       path: path.split("?")[0],
       method,
       status: res.status,
       code,
+      errorCode,
       message,
       kind: isRpc ? "rpc" : "write",
     },
-    level === "warn"
-      ? "supabase: write refused as a duplicate — expected when a unique constraint is doing idempotency"
-      : isRpc
-        ? "supabase: a database function call was REFUSED — nothing was written; " +
-          "PGRST202 means no function matches the arguments sent"
-        : "supabase: write REJECTED — the row was not written and no error was thrown"
+    existingUser
+      ? "supabase: auth user already exists — expected, the caller goes on to the sign-in link"
+      : level === "warn"
+        ? "supabase: write refused as a duplicate — expected when a unique constraint is doing idempotency"
+        : timedOut
+          ? isRpc
+            ? "supabase: a database function call TIMED OUT (statement timeout, 57014) — nothing was written"
+            : "supabase: write TIMED OUT (statement timeout, 57014) — the row was not written and no error was thrown"
+          : isRpc
+            ? "supabase: a database function call was REFUSED — nothing was written" +
+              (code === "PGRST202" ? "; PGRST202 means no function matches the arguments sent" : "")
+            : "supabase: write REJECTED — the row was not written and no error was thrown"
   );
 }
 
