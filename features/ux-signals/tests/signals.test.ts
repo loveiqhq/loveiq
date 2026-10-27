@@ -433,6 +433,88 @@ describe("each measure", () => {
   });
 });
 
+// The EUR 1.99 gate (on in staging's database, off on loveiq.org until switched on): its
+// checkout, return and unlock carry plan "initial", and they are the gate's, not the report's.
+describe("the EUR 1.99 gate", () => {
+  const gate = (start: number): UxEvent[] => [
+    ev(start, "initial_gate_viewed", { submission_id: 5 }),
+    ev(start + 4 * S, "initial_gate_cta_click", { place: "card" }),
+    ev(start + 4 * S, "begin_checkout", { plan: "initial", price: 1.99 }),
+  ];
+  const gatePaid = (start: number): UxEvent[] => [
+    ...gate(start),
+    ev(start + 60 * S, "checkout_return_viewed", { status: "success", plan: "initial" }),
+    ev(start + 61 * S, "paywall_unlocked", { plan: "initial" }),
+  ];
+
+  it("is not the report's payment", () => {
+    expect(paid(gatePaid(0))).toBe(false);
+    expect(
+      paid([
+        ...gatePaid(0),
+        ev(200 * S, "begin_checkout", { plan: "full_report" }),
+        ev(260 * S, "paywall_unlocked", { plan: "full_report" }),
+      ])
+    ).toBe(true);
+  });
+
+  it("ends a visit that went no further at the gate, even from its checkout", () => {
+    expect(measure("Drop-off / exit point", gate(0))).toBe("gate");
+    expect(
+      measure("Drop-off / exit point", [
+        ev(0, "initial_gate_viewed"),
+        ev(5 * S, "initial_gate_back"),
+      ])
+    ).toBe("gate");
+    // Back from the gate's checkout without paying: still the gate's, not the report's checkout.
+    expect(
+      measure("Drop-off / exit point", [
+        ...gate(0),
+        ev(40 * S, "checkout_return_viewed", { status: "canceled", plan: "initial" }),
+      ])
+    ).toBe("gate");
+  });
+
+  it("leaves the report's paywall, its plans and its checkout to the report", () => {
+    // Paid the gate, read the report, opened the plans, closed them and left.
+    const v: UxVisit = [
+      ...gatePaid(0),
+      ev(70 * S, "report_viewed"),
+      ev(90 * S, "scroll_depth_50", { pathname: "/report/rpt_x" }),
+      ev(120 * S, "price_shown", { plan: "full_report" }),
+      ev(121 * S, "paywall_initiated"),
+      ev(150 * S, "paywall_dismissed", { reason: "close_button" }),
+    ];
+    expect(measure("Drop-off / exit point", v)).toBe("paywall");
+    expect(measure("Conversion blockers", v)).toBeNull();
+    expect(measure("Price interaction", v)).toBe("none");
+    expect(measure("CTA hesitation", v)).toBeNull();
+    // Read before the plans appeared, not before the gate's checkout.
+    expect(measure("Value discovery before paywall", v)).toBe(50);
+  });
+
+  it("reads the report's plan, not the gate's, when both were pressed", () => {
+    const v: UxVisit = [
+      ...gatePaid(0),
+      ev(70 * S, "report_viewed"),
+      ev(120 * S, "price_shown", { plan: "full_report" }),
+      ev(121 * S, "paywall_initiated"),
+      ev(140 * S, "begin_checkout", { plan: "full_report" }),
+    ];
+    expect(measure("Price interaction", v)).toBe("full_report");
+    expect(measure("CTA hesitation", v)).toBe(19 * S);
+    expect(measure("Conversion blockers", v)).toBe("stopped");
+    expect(measure("Drop-off / exit point", v)).toBe("checkout");
+  });
+
+  it("fetches the gate's own events for real visits", () => {
+    for (const e of ["initial_gate_viewed", "initial_gate_cta_click", "initial_gate_back"]) {
+      expect(SIGNAL_EVENTS, e).toContain(e);
+    }
+    expect(SIGNAL_PROPS).toContain("plan");
+  });
+});
+
 describe("what production recorded", () => {
   it("leaves out real visits from before the site recorded what a measure reads", () => {
     const def = SIGNALS.find((x) => x.name === "CTA visibility")!;

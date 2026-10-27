@@ -35,10 +35,6 @@ with it. Everything ships switched off.
    - AP-Analytics shows the gate's buttons and its way out: `initial_gate_cta_click`
      (`place`: card or sticky) and `initial_gate_back` ("Not ready to unlock yet", stored
      since 27.10, `to` = where it led) are in `analytics_event`, but no AP page reads them yet.
-   - The behaviour checks (`features/ux-signals`) learn the gate as a stage of its own: they
-     read its checkout and unlock (plan `initial`) as the report's paywall and payment. Until
-     then the proof walks leave those events out (`scripts/walkers/walk.ts`); stop that when
-     the checks know the gate.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -95,6 +91,9 @@ charging the difference is a person's call.
 - The pre-report map names the price to a reader the gate will stop: "Read your opening
   chapters in full for €1.99." (Eman, 27.10). The survey's reply carries
   `initialGatePriceCents` when the reader joined the cohort; nobody else's map changes.
+- The behaviour checks (`features/ux-signals`) know the gate (27.10): its checkout, return and
+  unlock (plan `initial`) are never the report's paywall or payment, and a visit that went no
+  further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).

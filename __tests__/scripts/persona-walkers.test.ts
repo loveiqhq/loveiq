@@ -47,7 +47,6 @@ import {
   WIZARD_FORWARD,
   WIZARD_LAST,
   type Walk,
-  withoutTheGate,
 } from "../../scripts/walkers/walk";
 
 const config = getScoringConfig();
@@ -350,20 +349,6 @@ const walk = (over: Partial<Walk> = {}): Walk => ({
   slowRequests: [],
   durationMs: 7 * 60_000,
   ...over,
-});
-
-describe("a proof walk's events", () => {
-  it("leave out the EUR 1.99 gate's checkout and unlock, and keep the report's", () => {
-    const heard = [
-      { t: 1, event: "initial_gate_viewed", props: { submission_id: 5 } },
-      { t: 2, event: "begin_checkout", props: { plan: "initial", price: 1.99 } },
-      { t: 3, event: "checkout_return_viewed", props: { status: "success", plan: "initial" } },
-      { t: 4, event: "paywall_unlocked", props: { plan: "initial" } },
-      { t: 5, event: "price_shown", props: { plan: "full_report" } },
-      { t: 6, event: "begin_checkout", props: { plan: "full_report", price: 19.99 } },
-    ];
-    expect(withoutTheGate(heard).map((e) => e.t)).toEqual([1, 5, 6]);
-  });
 });
 
 describe("a proof walk's page script", () => {
