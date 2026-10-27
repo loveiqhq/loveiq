@@ -29,6 +29,15 @@ describe("nurture email templates", () => {
     expect(out.text).toContain("Sam");
   });
 
+  it("links the Trustpilot badge to our own profile when no domain is configured", () => {
+    // Production sets no NEXT_PUBLIC_TRUSTPILOT_DOMAIN: the badge led to Trustpilot's home
+    // page (Maria, 22.10: "The Trustpilot link doesn't lead to your profile").
+    const out = surveyCompleteEmail({ firstName: "Sam", reportUrl: CTA, siteUrl: SITE });
+    expect(out.html).toContain('href="https://www.trustpilot.com/review/loveiq.org"');
+    expect(out.html).not.toContain('href="https://www.trustpilot.com"');
+    expect(out.text).toContain("https://www.trustpilot.com/review/loveiq.org");
+  });
+
   it("nurture-6h-no-view targets the not-viewed branch", () => {
     const out = nurture6hNoViewEmail({
       firstName: "Sam",
