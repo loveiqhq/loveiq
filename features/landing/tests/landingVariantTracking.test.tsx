@@ -84,6 +84,30 @@ describe("landing A/B — the arm reaches the analytics", () => {
     expect(view).toHaveBeenCalledTimes(1);
   });
 
+  it("stores the gate's way out against the report's submission", async () => {
+    vi.resetModules();
+    sessionStorage.clear();
+    document.cookie = "__csrf=test-csrf; path=/";
+    (window as unknown as { __loveiqReportSubmissionId: number }).__loveiqReportSubmissionId = 55;
+    vi.stubGlobal("navigator", { ...navigator, sendBeacon: undefined });
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: { body?: string }) => {
+        bodies.push(JSON.parse(init?.body ?? "{}"));
+        return { ok: true, json: async () => ({}) } as Response;
+      })
+    );
+    const { trackInitialGateBack } = await import("@features/analytics/client");
+    trackInitialGateBack({ to: "/" });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      event_type: "initial_gate_back",
+      submission_id: 55,
+      metadata: { to: "/" },
+    });
+  });
+
   it("stamps the arm from the cookie onto a durable event, earlier rounds' arms included", async () => {
     for (const arm of ["white_card", "white_video", "white", "white_prev"] as const) {
       vi.resetModules();

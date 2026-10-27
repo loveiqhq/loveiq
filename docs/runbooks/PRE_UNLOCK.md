@@ -31,6 +31,16 @@ with it. Everything ships switched off.
    brain-reconcile use (`get_axis_funnel_daily`, `get_arm_cohorts`), as
    `20261018130000` did for pay to start: today they count the cohort in A3 and a EUR 1.99
    as a purchase (Fatih's data task: split the EUR 1.99 out of the digest).
+   **Also before switching on** (review of #648, 27.10):
+   - AP-Analytics shows the gate's buttons and its way out: `initial_gate_cta_click`
+     (`place`: card or sticky) and `initial_gate_back` ("Not ready to unlock yet", stored
+     since 27.10, `to` = where it led) are in `analytics_event`, but no AP page reads them yet.
+   - The behaviour checks (`features/ux-signals`) learn the gate as a stage of its own: they
+     read its checkout and unlock (plan `initial`) as the report's paywall and payment. Until
+     then the proof walks leave those events out (`scripts/walkers/walk.ts`); stop that when
+     the checks know the gate.
+   - Marcus confirms the pre-report map: a gated reader sees "IN FULL" rows and "Read your
+     opening chapters in full" one screen before the EUR 1.99 price, which it does not name.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -87,5 +97,10 @@ charging the difference is a person's call.
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).
+- "Not ready to unlock yet" leads to the landing page, which does not count that reader as a
+  landing visit or give them a landing arm (the exit is `initial_gate_back`). Since 27.10
+  the event means this link, shown to every reader; before, a back arrow shown only to
+  readers who came from the survey. The sticky bar is always on screen since then too, so
+  `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".
 - E07's holdout: compare full-report purchases after day 4 between `initial_gift_arm` = `gift`
   and `holdout`, staff left out. The gift's EUR 0 rows are never revenue.

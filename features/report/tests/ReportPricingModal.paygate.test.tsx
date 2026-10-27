@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -145,6 +147,10 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
       "€10.00 credit applied"
     );
     expect(card("all_reports").querySelector(".rpg-card__off--credit")).toBeNull();
+    // A size up from the strike line it sits in, which is 14px, and 16px from 960 wide.
+    const css = readFileSync(join(process.cwd(), "features/report/ui/paygate.css"), "utf8");
+    const at = css.indexOf(".rpg-card__off--credit {");
+    expect(css.slice(at, css.indexOf("}", at))).toContain("font-size: calc(1em + 1px);");
     // All 14 keeps its own price and strike.
     expect(within(card("all_reports")).getByText("€39.99")).toHaveClass("rpg-card__amount");
     expect(trackPriceShown).toHaveBeenCalledWith(
