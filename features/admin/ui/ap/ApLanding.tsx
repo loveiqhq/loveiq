@@ -438,7 +438,7 @@ function PayToStart({ data }: { data: LandingPayload }) {
           Saw the price: the price is on screen from the first moment on every device (the card
           beside the text on a computer, the bar at the bottom on a phone), so it is no step of its
           own here. Started survey: paying buyers whose survey saved an answer or was finished
-          (recorded from 26 Oct 2026). Paid → completed: of the paying buyers, those who finished.
+          (recorded from 28 Oct 2026). Paid → completed: of the paying buyers, those who finished.
           Green is the better of the two pages in a column, red the other.
         </p>
       )}

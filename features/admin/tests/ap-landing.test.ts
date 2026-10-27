@@ -491,7 +491,7 @@ describe("buildLanding", () => {
     (pts.funnels[0] as { paidStarted?: number | null }).paidStarted = null;
     expect(at("all").rows[0]!.started).toBeNull();
     expect(at("all").notes.at(-1)).toBe(
-      "Started survey is recorded from 26 Oct 2026: a paying buyer before then who hasn't finished the survey can't be told apart from one who never started."
+      "Started survey is recorded from 28 Oct 2026: a paying buyer before then who hasn't finished the survey can't be told apart from one who never started."
     );
     const free = at("free");
     expect(free.rows).toEqual([]);

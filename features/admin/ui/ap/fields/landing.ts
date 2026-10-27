@@ -267,7 +267,7 @@ SELECT pg.page,
     WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
       AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0) AS paid,
   -- of those who paid (as above), those who started the survey: a saved answer stamped the
-  -- purchase (from 26 Oct 2026), or a finished survey claimed it
+  -- purchase (from 28 Oct 2026), or a finished survey claimed it
   (SELECT count(*) FROM buy, b
     WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
       AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0
@@ -569,7 +569,7 @@ export const fields: FieldRegistry = {
     stat: "Count",
     per: "per purchase",
     formula: { num: "Paid purchases whose survey saved an answer, or was finished" },
-    caveat: `${PF_SAME} A buyer's first saved answer stamps the purchase from 26 Oct 2026 (survey_started_at); before then only a finished survey shows a start, so a range with a paying buyer from before who hasn't finished is blank.`,
+    caveat: `${PF_SAME} A buyer's first saved answer stamps the purchase from 28 Oct 2026 (survey_started_at); before then only a finished survey shows a start, so a range with a paying buyer from before who hasn't finished is blank.`,
     tables: [T_PREPAID],
     query: { lang: "SQL", text: Q_PAY_FIRST },
     related: ["landing.pf-paid", "landing.pf-p2c"],

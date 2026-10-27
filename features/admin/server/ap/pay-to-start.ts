@@ -59,7 +59,7 @@ export type PtsOffer = "full" | "pre";
  * (survey_started_at, 20261025170000): set to the deploy's next day. A paying buyer before it
  * who hasn't finished can't be told apart from one who never started.
  */
-export const SURVEY_STARTED_FROM = "2026-10-26";
+export const SURVEY_STARTED_FROM = "2026-10-28";
 export type FunnelKey = "after" | PtsOffer | "gate";
 
 export interface EntitlementRow {

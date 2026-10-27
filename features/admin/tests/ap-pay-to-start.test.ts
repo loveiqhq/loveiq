@@ -891,7 +891,7 @@ describe("measuresOf", () => {
 });
 
 describe("paying buyers who started the survey (Landing's Started survey)", () => {
-  // A week around the stamp's first day (26 Oct 2026).
+  // A week around the stamp's first day (28 Oct 2026).
   const started = (entitlements: EntitlementRow[]) =>
     funnel(
       buildPayToStart(
@@ -902,16 +902,16 @@ describe("paying buyers who started the survey (Landing's Started survey)", () =
   it("a saved answer stamped the purchase, or a finished survey claimed it", () => {
     expect(
       started([
-        // Paid on 26 Oct: stamped, finished, and one that never started.
-        ent({ id: 1, paid_at: "2026-10-26T09:00:00Z", survey_started_at: "2026-10-26T09:05:00Z" }),
-        ent({ id: 2, paid_at: "2026-10-26T10:00:00Z", consumed_submission_id: 602 }),
-        ent({ id: 3, paid_at: "2026-10-26T11:00:00Z" }),
+        // Paid on 28 Oct: stamped, finished, and one that never started.
+        ent({ id: 1, paid_at: "2026-10-28T09:00:00Z", survey_started_at: "2026-10-28T09:05:00Z" }),
+        ent({ id: 2, paid_at: "2026-10-28T10:00:00Z", consumed_submission_id: 602 }),
+        ent({ id: 3, paid_at: "2026-10-28T11:00:00Z" }),
         // A 100% code's buyer is no paying buyer.
         ent({
           id: 4,
-          paid_at: "2026-10-26T12:00:00Z",
+          paid_at: "2026-10-28T12:00:00Z",
           amount_cents: 0,
-          survey_started_at: "2026-10-26T12:01:00Z",
+          survey_started_at: "2026-10-28T12:01:00Z",
         }),
       ])
     ).toBe(2);
