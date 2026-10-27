@@ -14,6 +14,12 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE:
     "Checkout preview only. Payments are not enabled in this environment yet.",
   getStripeCheckoutCustomerEmail: vi.fn(),
+  // As the real one when Stripe Tax is off; with it on, see stripe-automatic-tax.test.ts.
+  createCheckoutSession: (
+    stripe: { checkout: { sessions: { create: (p: unknown, o: unknown) => unknown } } },
+    params: unknown,
+    idempotencyKey: string
+  ) => stripe.checkout.sessions.create(params, { idempotencyKey }),
   getStripeServerClient: vi.fn(),
   isStripeCheckoutEnabled: vi.fn(),
 }));
@@ -189,6 +195,8 @@ describe("POST /api/stripe/initial-unlock — the EUR 1.99 session", () => {
           currency: "eur",
           unit_amount: 199,
           product_data: { name: "LoveIQ: Your Core Archetype" },
+          // EUR 1.99 includes the VAT the receipt lists.
+          tax_behavior: "inclusive",
         },
         quantity: 1,
       },
