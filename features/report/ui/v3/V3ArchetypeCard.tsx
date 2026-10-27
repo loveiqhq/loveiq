@@ -62,6 +62,8 @@ interface Props {
   initialDeckIndex?: number;
   /** Opens the paywall, from a locked dimension card's lock. */
   onUnlock?: () => void;
+  /** False for one of the reader's other archetypes, opened from the list of 14. */
+  isCore?: boolean;
 }
 
 const V3ArchetypeCard: FC<Props> = ({
@@ -70,6 +72,7 @@ const V3ArchetypeCard: FC<Props> = ({
   copy,
   initialDeckIndex = 0,
   onUnlock,
+  isCore = true,
 }) => {
   const { accent, deep: accentDeep, glyph } = v4ArchetypeColors(archetype);
   // The frame prints a whole number here ("43%") even where the top-three list
@@ -96,7 +99,7 @@ const V3ArchetypeCard: FC<Props> = ({
           "--rv3-arch-glyph": glyph,
         } as CSSProperties
       }
-      aria-label={`${archetype} — your core archetype`}
+      aria-label={`${archetype} — ${isCore ? "your core archetype" : "one of your other archetypes"}`}
     >
       {/* 15:816 — name and match strength (1665:3642: the motto line went, 16.10). */}
       <header ref={headRef} className="rv3-arch__head" data-node-id="15:816">
