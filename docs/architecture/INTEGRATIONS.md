@@ -1,10 +1,17 @@
 # External Integrations
 
-> **Last verified:** 2026-05-31 | **Verified against:** API routes, shared/ utilities, .env.example, Supabase migrations
-
-**Analysis Date:** 2025-01-14
+> **Last verified:** 2026-10-27 | **Verified against:** `origin/main` at `3ca54753`: API routes, `shared/`, `features/`, `proxy.ts`, `.github/workflows/`, `.env.example`, Supabase migrations
 
 ## APIs & External Services
+
+**Payments:**
+
+- Stripe - Checkout sessions, promotion codes, automatic tax and signed webhooks
+  - SDK/Client: `stripe` npm package (exact version in `package.json`)
+  - Auth: `STRIPE_SECRET_KEY` (server), `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (browser), `STRIPE_WEBHOOK_SECRET` (webhook signature)
+  - Used in: `app/api/stripe/`, `features/checkout/server/`, `features/pay-to-start/`
+  - The price and any discount code are checked on the server. A payment counts once. A full refund or a dispute locks the report again (`features/checkout/server/fulfillment.ts`)
+  - Tax: `automatic_tax` is switched on in `features/checkout/server/stripeCheckout.ts` when Stripe Tax is active
 
 **Email Service:**
 
@@ -28,6 +35,7 @@
   - Contact webhook: `SLACK_CONTACT_WEBHOOK_URL` env var
   - Survey webhook: `SLACK_SURVEY_WEBHOOK_URL` env var
   - Payments webhook: `SLACK_PAYMENTS_WEBHOOK_URL` env var
+  - Ops webhook: `SLACK_OPS_WEBHOOK_URL` env var (5xx errors, failed cron runs, Stripe disputes and refunds, daily digest)
   - Used in: `app/api/contact/route.ts`, `app/api/survey/route.ts`, `app/api/stripe/webhook/route.ts`
 
 **Cookie Consent:**
@@ -35,6 +43,7 @@
 - CookieYes - Cookie consent banner
   - Integration: External script loaded in `app/layout.tsx`
   - CSP: `cdn-cookieyes.com` allowed in `proxy.ts`
+  - Decides: GA4 and Google Ads follow the banner. Clarity and PostHog run on all visits (see "Measuring" in [`ARCHITECTURE.md`](ARCHITECTURE.md))
 
 ## Data Storage
 
@@ -43,17 +52,21 @@
 - Supabase PostgreSQL
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
-  - Tables: `survey_submission` (survey responses), `waitlist_user` (historical waitlist signups, retired surface), `rate_limits` (rate limiting), `admin_users` (admin email allowlist), `scoring_result` (survey scoring)
-  - Used in: `app/api/survey/route.ts`, `shared/http/ratelimit.ts`, `features/admin/server/supabase.ts`
+  - Tables: about 100, created in `supabase/migrations/`. Main groups: survey (`survey_submission`, `survey_submission_answer`, `survey_partial_save`, `survey_behavior_event`), scoring (`scoring_result`), report (`personal_report`, `personal_report_section`, `report_price_quote`, `report_session`), payments (`payment`, `payment_item`, `payment_webhook_event`), email (`email_message_event`, `email_suppression`, `resend_webhook_event`, `invite_event`), analytics (`analytics_event`, `funnel_event`), company brain (`brain_chunk`, `brain_person`, `brain_query`), feature switches (`system_flags`), admin (`admin_users`), plus `waitlist_user` (historical waitlist signups, retired surface)
+  - Used in: `app/api/survey/route.ts`, `features/admin/server/supabase.ts`, and every feature that stores data
+  - Staging has its own Supabase project (see [`docs/runbooks/STAGING_DATABASE.md`](../runbooks/STAGING_DATABASE.md))
   - Note: Direct REST API calls, no ORM; also used via `@supabase/supabase-js` + `@supabase/ssr` for admin auth
 
 **File Storage:**
 
 - Not detected (static assets only in `public/`)
 
-**Caching:**
+**Caching and counters:**
 
-- Not detected (no Redis or similar)
+- Upstash Redis (Vercel KV)
+  - Auth: `KV_REST_API_URL` and `KV_REST_API_TOKEN`
+  - Used for: rate limits (`shared/http/ratelimit.ts`) and the counters the security-storm detector reads (`shared/http/csrf.ts`)
+  - Fails open on Redis errors, and falls back to in-memory limits when unset (local development and the staging project)
 
 ## Authentication & Identity
 
@@ -70,8 +83,7 @@
 
 **End-User Auth:**
 
-- None (no end-user authentication system)
-- Site is marketing/landing page only
+- None: there are no customer accounts. A report opens through its private link, and sharing a report uses a signed recipient cookie (`SHARE_VERIFY_SECRET`)
 
 **Staging Auth:**
 
@@ -94,9 +106,19 @@
     - `report_viewed` / `paywall_initiated` / `begin_checkout` - Report engagement (note: `paywall_view` retained for back-compat but no longer fired; user-initiated clicks emit `paywall_initiated`)
   - **Server-side `purchase`** via GA4 Measurement Protocol (`features/analytics/server/ga4.ts`), sent from the Stripe webhook (`features/checkout/server/fulfillment.ts`) so GA4's purchase count matches real payments — the client-side `purchase` event is lossy (ad blockers, closed tabs, consent, GTM). Same `transaction_id` (Stripe session id) as the client event, so GA4 dedupes to one purchase. Consent-gated via the `_ga`/consent captured at checkout. Requires `GA4_API_SECRET`.
 
+**Session recordings and heatmaps:**
+
+- PostHog - Product events, session recordings and client error capture
+  - SDK/Client: `posthog-js` (`features/analytics/client.ts`)
+  - Runs on all visits, not behind the cookie banner (see "Measuring" in [`ARCHITECTURE.md`](ARCHITECTURE.md))
+- Microsoft Clarity - Heatmaps and session recordings
+  - Script: `public/clarity-init.js`, emitted on production only; runs on all visits
+
 **Error Tracking:**
 
-- Not detected (no Sentry or similar)
+- No dedicated error-tracking service
+- Client errors go to PostHog (`posthog.captureException` in `app/error.tsx` and `app/global-error.tsx`)
+- Server 5xx errors, failed cron runs, refunds and disputes post to the Slack ops channel (`SLACK_OPS_WEBHOOK_URL`)
 
 **Logs:**
 
@@ -106,17 +128,11 @@
 
 **CI Pipeline:**
 
-- GitHub Actions - 10 workflows in `.github/workflows/`:
-  - `ci.yml` - Build + lint + test
-  - `security.yml` - Security scanning (secrets, SAST, dependencies, SBOM)
-  - `codeql.yml` - Advanced CodeQL analysis
-  - `docs-truth.yml` - Documentation truth validation
-  - `release.yml` - Release workflow
-  - `health-monitor.yml` - Health monitoring
-  - `lighthouse.yml` - Lighthouse CI
-  - `load-test.yml` - Load testing
-  - `visual-regression.yml` - Playwright visual regression (Chromium)
-  - `slack-commits.yml` - Commit Slack notifications
+- GitHub Actions - 22 workflows in `.github/workflows/`. GitHub's own schedule starts jobs hours late, so an hourly Vercel Cron (`/api/cron/start-github-jobs`) starts the ones that are due:
+  - Checks: `ci.yml` (lint, test, integration, migration drift, browser tests, build, docs impact; a smoke test runs after a push to main), `security.yml`, `codeql.yml`, `docs-truth.yml`, `lighthouse.yml`, `load-test.yml`, `visual-regression.yml`, `health-monitor.yml`, `probe-guard.yml`, `cloud-setup-smoke.yml`
+  - Company brain: `brain-ingest.yml`, `brain-embed.yml`, `brain-daily.yml`
+  - UX review and fix proofs: `persona-walkers.yml`, `ux-review-verify.yml`, `ux-digest-audit.yml`, `generate-fix.yml`, `prove-fix.yml`, `sync-vision-scanners.yml`
+  - Release and housekeeping: `release.yml`, `slack-commits.yml`, `survey-db-sync.yml`
 
 ## Environment Configuration
 
@@ -159,25 +175,35 @@ is idempotent on a replay:
 - `app/api/slack/events/route.ts` — inbound Slack events for the company brain. Slack
   signing secret plus a workspace check, so another workspace's events are refused.
 
+Also inbound, and checked another way:
+
+- `app/api/cron/*` — scheduled jobs, started by Vercel Cron. Each checks `Authorization: Bearer ${CRON_SECRET}`.
+- `app/api/mcp/route.ts` — the company brain's MCP endpoint, which Claude connects to. Access rules are in [`docs/runbooks/COMPANY_BRAIN.md`](../runbooks/COMPANY_BRAIN.md).
+
 **Outgoing:**
 
 - Slack notifications for survey submissions (`app/api/survey/route.ts`)
 - Slack notifications for contact submissions (`app/api/contact/route.ts`)
 - Slack notifications for Stripe payments (`app/api/stripe/webhook/route.ts`)
+- Stripe API: Checkout sessions and promotion codes (`features/checkout/server/`)
+- Resend API: sends from the app and from the scheduled jobs
+- GA4 Measurement Protocol: server-side `purchase` (`features/analytics/server/ga4.ts`)
+- GitHub API: the hourly workflow dispatch (`app/api/cron/start-github-jobs/route.ts`)
 
 ## Third-Party Script CSP
 
-Content Security Policy in `proxy.ts` allows:
+`proxy.ts` builds the Content Security Policy and is the source of truth. It allows, by purpose:
 
-- `googletagmanager.com` - Analytics
-- `google-analytics.com` - Analytics
-- `google.com/recaptcha` - reCAPTCHA
-- `gstatic.com/recaptcha` - reCAPTCHA assets
-- `cdn-cookieyes.com` - Cookie consent
-- `images.unsplash.com` - Stock images
+- Google Tag Manager, Google Analytics and Google Ads tags (`googletagmanager.com`, `google-analytics.com`, `doubleclick.net`, `googleadservices.com`)
+- reCAPTCHA (`google.com/recaptcha`, `gstatic.com/recaptcha`)
+- CookieYes (`cdn-cookieyes.com`, `cookieyes.com`)
+- Microsoft Clarity and Bing (`clarity.ms`, `c.bing.com`)
+- Meta and TikTok hosts (`connect.facebook.net`, `analytics.tiktok.com`); no tag for them is in this repo
+- Trustpilot (`trustpilot.com`; the widget is off by default)
+- Stripe (`js.stripe.com`, `api.stripe.com`, `checkout.stripe.com`, `hooks.stripe.com`)
+- Images (`images.unsplash.com`, `flagcdn.com`)
 
 ---
 
-_Integration audit: 2025-01-14_
-_Last updated: 2026-03-15_
+_Last updated: 2026-10-27_
 _Update when adding/removing external services_
