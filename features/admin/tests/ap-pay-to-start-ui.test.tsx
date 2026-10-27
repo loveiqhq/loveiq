@@ -28,7 +28,9 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
   },
 }));
 
-import ApPayToStart from "@features/admin/ui/ap/ApPayToStart";
+import { DEFAULT_ASSUMPTIONS } from "@features/admin/server/ap/traffic-math";
+import ApPayToStart, { bandWidth } from "@features/admin/ui/ap/ApPayToStart";
+import { FIELDS } from "@features/admin/ui/ap/fields";
 
 const funnel = (
   key: FunnelKey,
@@ -158,6 +160,15 @@ const shown = (el: Element) => {
 };
 const cells = (label: string) => within(row(label)).getAllByRole("cell").map(shown);
 
+describe("the funnel picture's bands (bandWidth)", () => {
+  it("narrows by a quarter for each tenth of the visits, never to nothing above none", () => {
+    expect([1, 0.1, 0.01, 0.001].map(bandWidth)).toEqual([100, 75, 50, 25]);
+    expect(bandWidth(0.00001)).toBe(4);
+    expect([0, -1, Number.NaN].map(bandWidth)).toEqual([0, 0, 0]);
+    expect(bandWidth(2)).toBe(100);
+  });
+});
+
 describe("ApPayToStart", () => {
   it("lays the four funnels side by side, the gate off, the three core KPIs marked", () => {
     view.payload = payload;
@@ -177,10 +188,17 @@ describe("ApPayToStart", () => {
     expect(cells("Revenue per visit")).toEqual(["€0.010", "€0.360", "€0.217", "—"]);
     expect(cells("ROAS")).toEqual(["0.07×", "0.40×", "0.27×", "—"]);
     expect(cells("Return on ad spend (€)")).toEqual(["−€840.02", "−€270.06", "−€328.34", "—"]);
+    // Mark: profit (contribution, as Traffic counts it) per customer and per completion.
+    expect(cells("Profit per paying customer")).toEqual(["−€428.63", "−€46.17", "−€11.00", "—"]);
+    expect(cells("Profit per survey completion")).toEqual(["−€2.86", "−€55.41", "−€11.76", "—"]);
     const core = within(table())
       .getAllByText("Core")
       .map((c) => c.closest("tr")!.querySelector("th")!.textContent);
-    expect(core).toEqual(["Visit → paying customerCore", "Revenue per visitCore", "ROASCore"]);
+    expect(core).toEqual([
+      "Visit → paying customer\u00a0Core",
+      "Revenue per visit\u00a0Core",
+      "ROAS\u00a0Core",
+    ]);
   });
 
   it("marks the best of the running funnels green and the worst red, lower cost the better", () => {
@@ -206,8 +224,13 @@ describe("ApPayToStart", () => {
     view.payload = payload;
     render(<ApPayToStart />);
     expect(screen.queryByText(/Paid traffic only: visits are the ad clicks/)).toBeNull();
+    // Mark, 23 Oct: the completions as a number, and why visits outnumber the ad clicks.
+    expect(cells("Survey completions")).toEqual(["300", "5", "29", "—"]);
+    expect(screen.getByText(/so there are usually more of them than ad clicks/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Paid traffic only" }));
     expect(cells("Visits")).toEqual(["1,200", "600", "640", "—"]);
+    expect(cells("Survey completions")).toEqual(["260", "5", "28", "—"]);
+    expect(screen.queryByText(/so there are usually more of them than ad clicks/)).toBeNull();
     expect(cells("Paying customers")).toEqual(["1", "6", "30", "—"]);
     expect(cells("Ad spend")).toEqual(["€900", "€450", "€450", "—"]);
     expect(screen.getByText(/Paid traffic only: visits are the ad clicks/)).toBeTruthy();
@@ -221,18 +244,40 @@ describe("ApPayToStart", () => {
       .getAllByRole("listitem")
       .map((li) => li.textContent);
     expect(items).toEqual([
-      "Visits560 100.0%",
-      "Checkout started70 12.5%",
-      "Paid €1.9931 5.5%",
-      "Survey finished29 5.2%",
-      "Report opened28 5.0%",
-      "Bought the full report3 0.54%",
+      "Visits\u00a0560 100.0%",
+      "Checkout started\u00a070 12.5%",
+      // Mark, 23 Oct: the market's figure beside ours, on the same base.
+      "Paid €1.99\u00a031 5.5%Market 51% of checkouts · here 44.3%Market 1.4% of visits",
+      "Survey finished\u00a029 5.2%",
+      "Report opened\u00a028 5.0%",
+      "Bought the full report\u00a03 0.54%",
     ]);
+    // Mark, 23 Oct: a funnel picture, each band narrowing with its step's share of the visits
+    // (log scale): 560 visits (100%, full width) down to 70 checkouts (12.5%: 77.42 wide).
+    const bands = within(card)
+      .getAllByRole("listitem")
+      .map((li) => li.querySelector("polygon")?.getAttribute("points"));
+    expect(bands[0]).toBe("0,0 100,0 88.71,100 11.29,100");
+    // The last step (0.54%: 43.22 wide) narrows to itself.
+    expect(bands.at(-1)).toBe("28.39,0 71.61,0 71.61,100 28.39,100");
+    // Out of the flow, so the text sets each row's height, not the band's square viewBox.
+    const svg = within(card).getAllByRole("listitem")[0]!.querySelector("svg")!;
+    expect(svg.getAttribute("class")).toContain("absolute inset-0");
+    expect(svg.parentElement!.className).toContain("relative");
+    // The free funnel: the survey's references, its finish rate of its own starts.
+    const free = screen.getByRole("region", { name: "Pay after the report" });
+    const freeItems = within(free)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(freeItems[1]).toBe("Survey started\u00a0500 8.3%Market ≈52.7% of visits");
+    expect(freeItems[2]).toBe("Survey finished\u00a0300 5.0%Market ≈59.1% of starts · here 60.0%");
     expect(within(card).getByText("€121.66")).toBeTruthy();
     expect(within(card).getByText("€0.217")).toBeTruthy();
-    const off = screen.getByRole("region", { name: "€1.99 after the survey" });
+    // Only the funnel's name on the card (Marcus, 23 Oct): off is dimmed, dashed and named.
+    const off = screen.getByRole("region", { name: "€1.99 after the survey (off)" });
     expect(off.className).toContain("border-dashed");
     expect(within(off).getAllByText("—").length).toBeGreaterThan(0);
+    expect(off.textContent).not.toContain("Off");
   });
 
   it("draws a line per funnel by week, the gate's legend saying it is off", () => {
@@ -341,6 +386,67 @@ describe("ApPayToStart", () => {
     const box = table().parentElement!;
     expect(box.className).toContain("overflow-x-auto");
     expect(box.className).toContain("relative");
+  });
+
+  it("puts an info card on every figure: each row, each step, the cards' totals and the weekly chart", () => {
+    view.payload = payload;
+    render(<ApPayToStart />);
+    const about = (scope: HTMLElement) =>
+      within(scope)
+        .getAllByRole("button", { name: /^About / })
+        .map((b) => [b.getAttribute("aria-label")!.slice(6), b.getAttribute("title")]);
+    // The table: every measure's row header, none of them only a hover hint any more.
+    // (The Ads, Conversion and Money group headings are no figures.)
+    const rows = within(table())
+      .getAllByRole("rowheader")
+      .filter((th) => th.getAttribute("scope") === "row");
+    expect(rows.length).toBe(18);
+    for (const r of rows) {
+      expect(r.getAttribute("title")).toBeNull();
+      const [[name, title]] = about(r) as [[string, string | null]];
+      expect(r.textContent).toContain(name);
+      expect(title).not.toBe("Not defined yet.");
+    }
+    // Every step of every card, and each card's two totals.
+    const cards = screen
+      .getAllByRole("region")
+      .filter((x) => x.hasAttribute("aria-label") && x.querySelector("ol"));
+    expect(cards.length).toBe(4);
+    for (const card of cards) {
+      const steps = within(card).getAllByRole("listitem");
+      const icons = about(card);
+      expect(icons.length, card.getAttribute("aria-label")!).toBe(steps.length + 2);
+      for (const [, title] of icons) expect(title).not.toBe("Not defined yet.");
+    }
+    // The weekly chart's own card, beside its heading.
+    expect(screen.getByRole("button", { name: "About Week by week" }).title).not.toBe(
+      "Not defined yet."
+    );
+  });
+
+  it("writes the profit cards' fees and running cost as the page works them out", () => {
+    // The cards say the numbers in words; the page takes them from the Traffic page's defaults.
+    const { feePct, feeFix, varCost } = DEFAULT_ASSUMPTIONS;
+    for (const k of ["pts.ppc", "pts.ppf"]) {
+      const num = FIELDS[k]!.formula.num;
+      expect(FIELDS[k]!.formula.num, k).toContain(
+        k === "pts.ppc" ? `card fees (${feePct}% + €${feeFix.toFixed(2)} a payment)` : "card fees"
+      );
+      expect(num, k).toContain(`€${varCost.toFixed(2)} per finished survey`);
+    }
+  });
+
+  it("links the market figures' sources, drawn as links", () => {
+    view.payload = payload;
+    render(<ApPayToStart />);
+    for (const name of ["Riddle, State of Interactive Content 2026", "Littledata"]) {
+      const link = screen.getByRole("link", { name });
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      // Tailwind's base drops a link's colour and underline: these set them back.
+      expect(link.className).toContain("text-ap-plum");
+      expect(link.className).toContain("underline");
+    }
   });
 
   it("shows the notes under the page", () => {

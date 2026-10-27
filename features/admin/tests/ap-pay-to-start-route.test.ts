@@ -356,12 +356,105 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     expect(pre.all).toMatchObject({ paid: 1, finished: 1, revenue: 21.98 });
     expect(pre.steps.find((s) => s.label === "Report opened")!.n).toBe(1);
     expect(pre.steps.find((s) => s.label === "Bought the full report")!.n).toBe(1);
-    const query = paths().find((x) => x.startsWith("/rest/v1/payment?"))!;
+    const query = paths().find(
+      (x) => x.startsWith("/rest/v1/payment?") && x.includes("personal_report_id=in.")
+    )!;
     expect(query).toContain("is_test=is.false");
     expect(query).toContain("status=eq.succeeded");
     // E07's gift and the feedback grant are EUR 0: left out by the query itself.
     expect(query).toContain("amount=gt.0");
     expect(query).toContain("journey:metadata->>journey");
+  });
+
+  it("reads every real refund, in full or in part, for the Dashboard's refund rate", async () => {
+    rows["/rest/v1/prepaid_report_access?"] = [
+      {
+        id: 3,
+        offer: "full",
+        status: "succeeded",
+        amount_cents: 2999,
+        list_price_cents: 2999,
+        is_test: false,
+        customer_email: "reader@example.com",
+        created_at: "2026-10-20T10:00:00Z",
+        paid_at: "2026-10-20T10:02:00Z",
+        consumed_submission_id: 700,
+        utm_tracker: null,
+      },
+    ];
+    // 9700 (700's report) refunded in full; 9001 (1's report, the free survey) in part.
+    rows["/rest/v1/payment?status=eq.refunded"] = [{ personal_report_id: 9700 }];
+    rows["/rest/v1/payment?status=eq.succeeded"] = [{ personal_report_id: 9001 }];
+    rows["/rest/v1/personal_report?id=in."] = [
+      { survey_submission_id: 700 },
+      { survey_submission_id: 1 },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const p = paths();
+    const full = p.find((x) => x.startsWith("/rest/v1/payment?status=eq.refunded"))!;
+    const part = p.find((x) => x.startsWith("/rest/v1/payment?status=eq.succeeded"))!;
+    for (const q of [full, part]) {
+      expect(q).toContain("is_test=is.false");
+      expect(q).toContain("amount=gt.0");
+    }
+    expect(part).toContain("refund_amount=gt.0");
+    expect(p.find((x) => x.startsWith("/rest/v1/personal_report?id=in."))).toContain(
+      "id=in.(9700,9001)"
+    );
+    expect(body.funnels.find((f) => f.key === "full")!.refunds).toEqual({ payers: 1, refunded: 1 });
+    // A full refund took 1's sale away: it is counted back among those who paid.
+    expect(body.funnels.find((f) => f.key === "after")!.refunds).toEqual({
+      payers: 1,
+      refunded: 1,
+    });
+  });
+
+  it("reads Stripe's refund and chargeback notices: a chargeback is no refund", async () => {
+    rows["/rest/v1/prepaid_report_access?"] = [
+      {
+        id: 3,
+        offer: "full",
+        status: "refunded",
+        amount_cents: 2999,
+        list_price_cents: 2999,
+        is_test: false,
+        customer_email: "reader@example.com",
+        created_at: "2026-10-20T10:00:00Z",
+        paid_at: "2026-10-20T10:02:00Z",
+        consumed_submission_id: null,
+        utm_tracker: null,
+        stripe_payment_intent_id: "pi_9",
+      },
+    ];
+    rows["/rest/v1/payment_webhook_event?event_type=eq.charge.dispute.created"] = [
+      { stripe_payment_intent_id: "pi_9" },
+    ];
+    const body = (await (await GET(req())).json()) as PtsPayload;
+    const p = paths();
+    expect(p.find((x) => x.startsWith("/rest/v1/prepaid_report_access?"))).toContain(
+      "stripe_payment_intent_id"
+    );
+    for (const type of ["charge.refunded", "charge.dispute.created"])
+      expect(
+        p.find((x) => x.startsWith(`/rest/v1/payment_webhook_event?event_type=eq.${type}&`))
+      ).toContain("stripe_payment_intent_id=not.is.null");
+    expect(body.funnels.find((f) => f.key === "full")!.refunds).toEqual({ payers: 0, refunded: 0 });
+  });
+
+  it("keeps the page up without a refund rate when refunds can't be read", async () => {
+    for (const failing of [
+      "/rest/v1/payment?status=eq.refunded",
+      "/rest/v1/payment_webhook_event?",
+    ]) {
+      clearFactsCache();
+      mockFetchAllRows.mockImplementation(async (path: string) =>
+        path.startsWith(failing) ? null : respond(path)
+      );
+      const res = await GET(req());
+      expect(res.status, failing).toBe(200);
+      const body = (await res.json()) as PtsPayload;
+      for (const f of body.funnels) expect(f.refunds, `${failing} ${f.key}`).toBeUndefined();
+    }
   });
 
   it("reads the gate's cohort and switch, and its members leave pay after the report", async () => {

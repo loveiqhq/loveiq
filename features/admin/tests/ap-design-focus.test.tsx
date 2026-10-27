@@ -311,8 +311,14 @@ describe("the page", () => {
         pts: {
           ...pts,
           funnels: [
-            ptsFunnel("after", "Pay after the report", true, 100, 1000, 10, 69.9),
-            ptsFunnel("full", "Pay to start · €29.99", true, 50, 1000, 30, 899.7),
+            {
+              ...ptsFunnel("after", "Pay after the report", true, 100, 1000, 10, 69.9),
+              refunds: { payers: 10, refunded: 1 },
+            },
+            {
+              ...ptsFunnel("full", "Pay to start · €29.99", true, 50, 1000, 30, 899.7),
+              refunds: { payers: 32, refunded: 2 },
+            },
             ...pts.funnels.slice(2),
           ],
         },
@@ -325,8 +331,10 @@ describe("the page", () => {
     expect(card).toHaveTextContent(
       "Free survey vs pay to start, compared per visitor and per euro of ad spend. Step rates are not comparable because payment happens at a different point."
     );
+    // `relative`: the cells' sr-only words stay in the box, or they widen the page on a phone.
     expect(within(card).getByRole("region", { name: /scrolls sideways/ })).toHaveClass(
-      "overflow-x-auto"
+      "overflow-x-auto",
+      "relative"
     );
     const table = within(card).getByRole("table", { name: "Funnel comparison" });
     expect(
@@ -342,27 +350,120 @@ describe("the page", () => {
       "Revenue / visitor",
       "Cost / paying customer",
       "ROAS",
+      "Refund rate",
       "Valid yet",
     ]);
-    const [, free, full, , gate] = within(table).getAllByRole("row");
-    expect(
-      within(free!)
+    const [, free, full, pre, gate] = within(table).getAllByRole("row");
+    // What the eye reads: the cell less its screen-reader words.
+    const seen = (row: HTMLElement) =>
+      within(row)
         .getAllByRole("cell")
-        .map((c) => c.textContent)
-    ).toEqual(["1,000", "€100", "10", "1.00%", "€0.070", "€10.00", "0.70×", "Reference"]);
+        .map((c) => {
+          const copy = c.cloneNode(true) as HTMLElement;
+          copy.querySelectorAll(".sr-only").forEach((x) => x.remove());
+          return copy.textContent;
+        });
+    expect(seen(free!)).toEqual([
+      "1,000",
+      "€100",
+      "10",
+      "1.00%",
+      "€0.070",
+      "€10.00",
+      "0.70×",
+      "10.0%",
+      "Reference",
+    ]);
     expect(within(free!).getByRole("rowheader")).toHaveTextContent(
       "Pay after the reportFree survey · pay after the report"
     );
-    expect(
-      within(full!)
-        .getAllByRole("cell")
-        .map((c) => c.textContent)
-    ).toEqual(["1,000", "€50", "30", "3.00%", "€0.900", "€1.67", "17.99×", "Yes, 95%+"]);
+    expect(seen(full!)).toEqual([
+      "1,000",
+      "€50",
+      "30",
+      "3.00%",
+      "€0.900",
+      "€1.67",
+      "17.99×",
+      "6.3%",
+      "Yes, 95%+",
+    ]);
     expect(within(gate!).getAllByRole("cell").at(-1)!.textContent).toBe("Off");
+    // As drawn: the running funnels' best green, worst red; a count, visitors and spend too.
+    const tone = (row: HTMLElement) =>
+      within(row)
+        .getAllByRole("cell")
+        .map((c) =>
+          c.className.includes("bg-ap-good")
+            ? "best"
+            : c.className.includes("bg-ap-bad")
+              ? "worst"
+              : "plain"
+        );
+    expect(tone(free!)).toEqual([
+      "plain",
+      "plain",
+      "plain",
+      "worst",
+      "worst",
+      "worst",
+      "worst",
+      "worst",
+      "plain",
+    ]);
+    expect(tone(full!)).toEqual([
+      "plain",
+      "plain",
+      "best",
+      "best",
+      "best",
+      "best",
+      "best",
+      "best",
+      "plain",
+    ]);
+    // Pay to start · €1.99 sold nothing: fewest paying customers, nothing else to rank.
+    expect(tone(pre!)).toEqual([
+      "plain",
+      "plain",
+      "worst",
+      "plain",
+      "plain",
+      "plain",
+      "plain",
+      "plain",
+      "plain",
+    ]);
+    // The gate is off: never ranked.
+    expect(tone(gate!).every((t) => t === "plain")).toBe(true);
+    expect(within(full!).getAllByRole("cell")[3]).toHaveAttribute(
+      "title",
+      "best of the running funnels"
+    );
     expect(card).toHaveTextContent(
-      "The Pay to start page's figures for this range, all traffic: step by step and week by week there. Valid yet: enough paying customers for a 95% read against the free survey."
+      "The Pay to start page's figures for this range, all traffic: step by step and week by week there. Green is the best of the running funnels in a column, red the worst. Valid yet: enough paying customers for a 95% read against the free survey."
     );
     expect(card).toHaveTextContent("Google Ads by landing page: read live.");
+  });
+
+  it("ranks only the running funnels: an off one's empty figures never take the red", () => {
+    show(
+      focus({
+        pts: {
+          ...pts,
+          funnels: [
+            ptsFunnel("after", "Pay after the report", true, 100, 1000, 10, 69.9),
+            ptsFunnel("full", "Pay to start · €29.99", true, 50, 1000, 30, 899.7),
+            ptsFunnel("gate", "€1.99 after the survey", false, 0, 0, 0, 0),
+          ],
+        },
+      })
+    );
+    const table = screen.getByRole("table", { name: "Funnel comparison" });
+    const [, free, full] = within(table).getAllByRole("row");
+    // Paying customers: 10 against 30, the off gate's 0 left out.
+    expect(within(free!).getAllByRole("cell")[2]!.className).toContain("bg-ap-bad");
+    expect(within(full!).getAllByRole("cell")[2]!.className).toContain("bg-ap-good");
   });
 
   it("money tiles in whole euros, and an info icon on every figure", () => {
@@ -371,9 +472,9 @@ describe("the page", () => {
     const tiles = screen.getByText("€7").parentElement!;
     expect(tiles).toHaveTextContent("Revenue");
     const about = screen.getAllByRole("button", { name: /^About / });
-    // 3 tiles, 7 funnel columns, 6 chart titles, 8 legend figures (the pre-unlock chart's two
+    // 3 tiles, 8 funnel columns, 6 chart titles, 8 legend figures (the pre-unlock chart's two
     // aren't drawn: the range is before it was on sale), 4 boxes, 8 table columns.
-    expect(about).toHaveLength(36);
+    expect(about).toHaveLength(37);
     for (const name of [
       "About Revenue",
       "About Ad spend",

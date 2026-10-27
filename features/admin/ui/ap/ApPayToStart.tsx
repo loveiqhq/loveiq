@@ -18,16 +18,19 @@ import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
 import { IndexHover, periodTitle, type TipRow } from "./hover";
 import {
-  Bar,
   BlackButton,
   Busy,
   Card,
   Failed,
+  InfoLabel,
   Loading,
   PageHeader,
   Pills,
   SectionHead,
   SectionNav,
+  STANDING,
+  STANDING_WORD,
+  standingOf,
   useHashScroll,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
@@ -98,29 +101,24 @@ type Figures = PtsView & { m: PtsMeasures };
 
 interface Row {
   label: string;
-  /** What it is, on hover. */
-  hint: string;
+  /** Its info card's key. */
+  info: string;
   unit: Unit;
   value: (f: PtsFunnel, v: Figures) => number | null;
   better?: "high" | "low";
   core?: boolean;
 }
 
-/** The board's rows, in its order; "Core" are Marcus's three hard KPIs. */
-const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
+/** The board's rows, in its order; "Core" are Marcus's three hard KPIs. Each has its info card. */
+const GROUPS: Array<{ title: string; rows: Row[] }> = [
   {
     title: "Ads",
     rows: [
-      {
-        label: "Ad spend",
-        hint: "Google Ads, by the page the ad lands on",
-        unit: "eur0",
-        value: (f) => f.spend,
-      },
-      { label: "Ad clicks", hint: "Google Ads", unit: "count", value: (f) => f.clicks },
+      { label: "Ad spend", info: "pts.spend", unit: "eur0", value: (f) => f.spend },
+      { label: "Ad clicks", info: "pts.clicks", unit: "count", value: (f) => f.clicks },
       {
         label: "Cost per click",
-        hint: "Ad spend ÷ ad clicks. Lower is better",
+        info: "pts.cpc",
         unit: "eur",
         value: (_, v) => v.m.cpc,
         better: "low",
@@ -130,31 +128,25 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
   {
     title: "Conversion",
     rows: [
+      { label: "Visits", info: "pts.visits", unit: "count", value: (_, v) => v.visits },
+      // Mark, 23 Oct: the completions as a number between the visits and the customers.
       {
-        label: "Visits",
-        hint:
-          traffic === "ads"
-            ? "Paid traffic only: the ad clicks"
-            : "Unique visitors per day on the funnel's pages, ads and organic",
+        label: "Survey completions",
+        info: "pts.completions",
         unit: "count",
-        value: (_, v) => v.visits,
+        value: (_, v) => v.finished,
       },
       {
         label: "Visit → survey completion",
-        hint: "Surveys finished ÷ visits",
+        info: "pts.finish-rate",
         unit: "pct",
         value: (_, v) => v.m.finishRate,
         better: "high",
       },
-      {
-        label: "Paying customers",
-        hint: "People whose payment took money and stands",
-        unit: "count",
-        value: (_, v) => v.paid,
-      },
+      { label: "Paying customers", info: "pts.paying", unit: "count", value: (_, v) => v.paid },
       {
         label: "Visit → paying customer",
-        hint: "Paying customers ÷ visits",
+        info: "pts.cvr",
         unit: "pct",
         value: (_, v) => v.m.cvr,
         better: "high",
@@ -162,7 +154,7 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
       },
       {
         label: "Ad click → paying customer",
-        hint: "Paying customers ÷ ad clicks",
+        info: "pts.click-cvr",
         unit: "pct",
         value: (_, v) => v.m.clickCvr,
         better: "high",
@@ -172,15 +164,10 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
   {
     title: "Money",
     rows: [
-      {
-        label: "Revenue",
-        hint: "Everything its customers paid, upgrades included, refunds left out",
-        unit: "eur",
-        value: (_, v) => v.revenue,
-      },
+      { label: "Revenue", info: "pts.revenue", unit: "eur", value: (_, v) => v.revenue },
       {
         label: "Revenue per visit",
-        hint: "Revenue ÷ visits",
+        info: "pts.rpv",
         unit: "eur3",
         value: (_, v) => v.m.rpv,
         better: "high",
@@ -188,28 +175,28 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
       },
       {
         label: "Revenue per survey completion",
-        hint: "Revenue ÷ surveys finished. Compare with cost per survey completion",
+        info: "pts.rpf",
         unit: "eur",
         value: (_, v) => v.m.rpf,
         better: "high",
       },
       {
         label: "Cost per paying customer",
-        hint: "Ad spend ÷ paying customers. Lower is better",
+        info: "pts.cpp",
         unit: "eur",
         value: (_, v) => v.m.cac,
         better: "low",
       },
       {
         label: "Cost per survey completion",
-        hint: "Ad spend ÷ surveys finished. Lower is better",
+        info: "pts.cpf",
         unit: "eur",
         value: (_, v) => v.m.cpf,
         better: "low",
       },
       {
         label: "ROAS",
-        hint: "Revenue ÷ ad spend: what €1 of ads brings back",
+        info: "pts.roas",
         unit: "x",
         value: (_, v) => v.m.roas,
         better: "high",
@@ -217,39 +204,29 @@ const GROUPS = (traffic: Traffic): Array<{ title: string; rows: Row[] }> => [
       },
       {
         label: "Return on ad spend (€)",
-        hint: "Revenue − ad spend. Above €0 means the ads paid for themselves",
+        info: "pts.net",
         unit: "net",
         value: (_, v) => v.m.net,
+        better: "high",
+      },
+      // Mark, 23 Oct: profit (contribution) per customer and per completion, as Traffic counts it.
+      {
+        label: "Profit per paying customer",
+        info: "pts.ppc",
+        unit: "net",
+        value: (_, v) => v.m.ppc,
+        better: "high",
+      },
+      {
+        label: "Profit per survey completion",
+        info: "pts.ppf",
+        unit: "net",
+        value: (_, v) => v.m.ppf,
         better: "high",
       },
     ],
   },
 ];
-
-type Tone = "plain" | "good" | "bad";
-const TONE: Record<Tone, string> = {
-  plain: "text-ap-ink",
-  good: "bg-ap-good/[0.08] text-ap-good-ink",
-  bad: "bg-ap-bad/[0.07] text-ap-bad-ink",
-};
-
-/** What the colour says, for a screen reader and on hover (colour alone is no answer). */
-const TONE_WORD: Record<Exclude<Tone, "plain">, string> = {
-  good: "best of the running funnels",
-  bad: "worst of the running funnels",
-};
-
-/** Green for the best of the running funnels on a line, red for the worst; none for a tie. */
-function toneOf(row: Row, v: number | null, values: Array<number | null>): Tone {
-  const xs = values.filter((x): x is number => x !== null && Number.isFinite(x));
-  if (!row.better || v === null || !Number.isFinite(v) || xs.length < 2) return "plain";
-  const lo = Math.min(...xs);
-  const hi = Math.max(...xs);
-  if (lo === hi) return "plain";
-  const best = row.better === "high" ? hi : lo;
-  const worst = row.better === "high" ? lo : hi;
-  return v === best ? "good" : v === worst ? "bad" : "plain";
-}
 
 function Tag({ live }: { live: boolean }) {
   return (
@@ -284,7 +261,7 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
             ))}
           </tr>
         </thead>
-        {GROUPS(traffic).map((g) => (
+        {GROUPS.map((g) => (
           <tbody key={g.title}>
             <tr className="border-t border-ap-line bg-[#faf9fc]">
               <th
@@ -304,12 +281,13 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
                 >
                   <th
                     scope="row"
-                    title={r.hint}
                     // The accent on the cell: Safari paints no box-shadow on a table row.
                     className={`px-3 py-2.5 text-left ${r.core ? "text-[15px] font-bold shadow-[inset_4px_0_0_#795fc8]" : "font-medium"} text-ap-ink`}
                   >
                     <span className="flex items-center gap-2">
-                      {r.label}
+                      <span>
+                        <InfoLabel label={r.label} info={{ k: r.info }} />
+                      </span>
                       {r.core && (
                         <span className="rounded-full bg-ap-purple px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
                           Core
@@ -325,15 +303,17 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
                         </td>
                       );
                     const v = r.value(f, f[traffic]);
-                    const tone = toneOf(r, v, values);
+                    const tone = standingOf(values, v, r.better);
                     return (
                       <td
                         key={f.key}
-                        title={tone === "plain" ? undefined : TONE_WORD[tone]}
-                        className={`px-3 py-2.5 text-right ${r.core ? "text-[15px] font-bold" : "font-medium"} ${TONE[tone]}`}
+                        title={tone === "plain" ? undefined : STANDING_WORD[tone]}
+                        className={`px-3 py-2.5 text-right ${r.core ? "text-[15px] font-bold" : "font-medium"} ${STANDING[tone]}`}
                       >
                         {show(r.unit, v)}
-                        {tone !== "plain" && <span className="sr-only"> ({TONE_WORD[tone]})</span>}
+                        {tone !== "plain" && (
+                          <span className="sr-only"> ({STANDING_WORD[tone]})</span>
+                        )}
                       </td>
                     );
                   })}
@@ -347,8 +327,112 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
   );
 }
 
+/** Each step's info card, by the step's name (Visits and Survey finished share the table's). */
+const STEP_INFO: Array<{ step: RegExp; info: string }> = [
+  { step: /^Visits$/, info: "pts.visits" },
+  { step: /^Survey started$/, info: "pts.step-started" },
+  { step: /^Survey finished$/, info: "pts.completions" },
+  { step: /^Report opened$/, info: "pts.step-opened" },
+  { step: /^Checkout started$/, info: "pts.step-checkout" },
+  { step: /^Paid( €[\d.]+)?$/, info: "pts.step-paid" },
+  { step: /^Saw the €[\d.]+ page$/, info: "pts.step-gate" },
+  { step: /^Bought the full report$/, info: "pts.step-full" },
+];
+const stepInfo = (label: string) => STEP_INFO.find((x) => x.step.test(label))?.info;
+
 const PAY = "#5a42a6";
 const STEP = "#c0b4e6";
+
+/**
+ * Industry references for a step (Mark, 23 Oct: "Reference Conversion % that are market
+ * standards"), each read from its source on 25 Oct 2026. Only sources that state their sample
+ * and definition; `of` is the step it is a share of ("visits": the funnel's visits). A rough
+ * frame: none is a paid assessment like ours.
+ */
+const MARKET: Array<{
+  step: RegExp;
+  /** As the source writes it. */
+  shown: string;
+  of: string;
+  ofLabel: string;
+  source: string;
+  rough?: boolean;
+}> = [
+  {
+    step: /^Survey started$/,
+    shown: "52.7%",
+    of: "visits",
+    ofLabel: "of visits",
+    source:
+      "Riddle, State of Interactive Content 2026: personality tests, view → start (median). Short quizzes on publishers' pages.",
+    rough: true,
+  },
+  {
+    step: /^Survey finished$/,
+    shown: "59.1%",
+    of: "Survey started",
+    ofLabel: "of starts",
+    source:
+      "Riddle, State of Interactive Content 2026: median completion of quizzes with 16+ questions. Ours has over 60.",
+    rough: true,
+  },
+  {
+    step: /^Paid( €[\d.]+)?$/,
+    shown: "51%",
+    of: "Checkout started",
+    ofLabel: "of checkouts",
+    source:
+      "Littledata, 433 Shopify stores, 20 Jul – 17 Oct 2026: checkout completion (median), sessions that started checkout and went on to buy.",
+  },
+  {
+    step: /^Paid( €[\d.]+)?$/,
+    shown: "1.4%",
+    of: "visits",
+    ofLabel: "of visits",
+    source:
+      "Littledata, 433 Shopify stores, 20 Jul – 17 Oct 2026: sessions with a purchase (median ecommerce conversion rate).",
+  },
+];
+
+/** A share as the cards write it: two decimals under 1%. */
+const pctOf = (v: number) => (v > 0 && v < 0.00005 ? "<0.01%" : fmt("pct", v, v < 0.01 ? 2 : 1));
+
+/**
+ * A band's width for a share of the funnel's visits: on a log scale, each tenth narrower by a
+ * quarter of the width (100% full, 10% three quarters, 1% half, 0.1% a quarter), so a funnel
+ * that loses nine visitors in ten at its first step still reads as a funnel below it. Nothing
+ * is no band; anything above it at least 4.
+ */
+export function bandWidth(share: number): number {
+  if (!(share > 0)) return 0;
+  return Math.max(4, Math.min(100, 100 + 25 * Math.log10(share)));
+}
+
+/**
+ * One step of a card's funnel picture (Mark, 23 Oct: "Funnel illustrations"): a band for the
+ * step's share of the funnel's visits, narrowing to the next step's, so the card reads as a
+ * funnel. Drawn to the row's height, whatever its text takes.
+ */
+function FunnelBand({ top, bottom, color }: { top: number; bottom: number; color: string }) {
+  // Two decimals: the points stay short and exact (no 88.71000000000001).
+  const x = (v: number) => Math.round(v * 100) / 100;
+  const [a, b] = [bandWidth(top), bandWidth(bottom)];
+  return (
+    // Out of the flow (`absolute` in its `relative` cell): in it, its square viewBox would set
+    // the row's height instead of the text.
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      className="absolute inset-0 h-full w-full"
+    >
+      <polygon
+        points={`${x(50 - a / 2)},0 ${x(50 + a / 2)},0 ${x(50 + b / 2)},100 ${x(50 - b / 2)},100`}
+        fill={color}
+      />
+    </svg>
+  );
+}
 
 function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
   return (
@@ -362,41 +446,77 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
           return (
             <section
               key={f.key}
-              aria-label={f.label}
+              // Only the funnel's name on the card (Marcus, 23 Oct): an off funnel is dimmed and
+              // dashed, and says so to a screen reader.
+              aria-label={f.live ? f.label : `${f.label} (off)`}
               className={`flex flex-col gap-3 rounded-[14px] border border-ap-line p-4 ${f.live ? "" : "border-dashed opacity-[0.72]"}`}
             >
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
-                {!f.live && <Tag live={false} />}
-              </span>
-              <ol className="m-0 flex list-none flex-col gap-3 p-0">
-                {f.steps.map((s) => {
-                  const share =
-                    f.live && s.n !== null && visits !== null && visits > 0 ? s.n / visits : null;
+              <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
+              <ol className="m-0 flex list-none flex-col gap-1 p-0">
+                {f.steps.map((s, i) => {
+                  const shareOf = (n: number | null | undefined) =>
+                    f.live && n !== null && n !== undefined && visits !== null && visits > 0
+                      ? n / visits
+                      : null;
+                  const share = shareOf(s.n);
+                  const next = shareOf(f.steps[i + 1]?.n) ?? share;
+                  // The market's figure for this step, and ours on the same base.
+                  const refs = f.live
+                    ? MARKET.filter((m) => m.step.test(s.label)).flatMap((m) => {
+                        const base =
+                          m.of === "visits" ? visits : f.steps.find((x) => x.label === m.of)?.n;
+                        if (base === undefined) return [];
+                        const ours =
+                          m.of !== "visits" && base !== null && base > 0 && s.n !== null
+                            ? s.n / base
+                            : null;
+                        return [{ ...m, ours }];
+                      })
+                    : [];
                   return (
-                    <li key={s.label} className="flex flex-col gap-1">
-                      <span className="flex justify-between gap-2 text-[13px]">
-                        <span
-                          className={
-                            s.pays ? "font-bold text-ap-violet" : "font-semibold text-ap-ink"
-                          }
-                        >
-                          {s.label}
-                        </span>
-                        <span className="tabular-nums">
-                          <strong className="text-ap-ink">
-                            {f.live ? fmt("count", s.n) : EMPTY}
-                          </strong>{" "}
-                          {share !== null && (
-                            <span className="text-ap-muted">
-                              {share > 0 && share < 0.00005
-                                ? "<0.01%"
-                                : fmt("pct", share, share < 0.01 ? 2 : 1)}
-                            </span>
-                          )}
-                        </span>
+                    <li key={s.label} className="grid grid-cols-[72px_1fr] gap-3">
+                      <span className="relative block min-h-[38px]">
+                        {share !== null && (
+                          <FunnelBand
+                            top={share}
+                            bottom={next ?? share}
+                            color={s.pays ? PAY : STEP}
+                          />
+                        )}
                       </span>
-                      <Bar pct={share} color={s.pays ? PAY : STEP} minWidth={3} track="#f5f6f8" />
+                      <span className="flex min-w-0 flex-col justify-center gap-0.5 py-1">
+                        <span className="flex justify-between gap-2 text-[13px]">
+                          <span
+                            className={
+                              s.pays ? "font-bold text-ap-violet" : "font-semibold text-ap-ink"
+                            }
+                          >
+                            <InfoLabel
+                              label={s.label}
+                              info={stepInfo(s.label) ? { k: stepInfo(s.label)! } : undefined}
+                            />
+                          </span>
+                          <span className="shrink-0 tabular-nums">
+                            <strong className="text-ap-ink">
+                              {f.live ? fmt("count", s.n) : EMPTY}
+                            </strong>{" "}
+                            {share !== null && (
+                              <span className="text-ap-muted">{pctOf(share)}</span>
+                            )}
+                          </span>
+                        </span>
+                        {refs.map((m) => (
+                          <span
+                            key={m.ofLabel}
+                            title={m.source}
+                            className="text-[11px] leading-snug text-ap-muted"
+                          >
+                            Market {m.rough ? "≈" : ""}
+                            {m.shown} {m.ofLabel}
+                            {m.ours !== null && ` · here ${pctOf(m.ours)}`}
+                          </span>
+                        ))}
+                      </span>
                     </li>
                   );
                 })}
@@ -404,7 +524,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
               <div className="mt-auto grid grid-cols-2 gap-2.5 border-t border-ap-line pt-3">
                 <span className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
-                    Total revenue
+                    <InfoLabel label="Total revenue" info={{ k: "pts.revenue" }} />
                   </span>
                   <span className="font-serif text-[22px] font-semibold text-ap-ink">
                     {f.live ? show("eur", f.all.revenue) : EMPTY}
@@ -412,7 +532,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
                 </span>
                 <span className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
-                    Revenue per visitor
+                    <InfoLabel label="Revenue per visitor" info={{ k: "pts.rpv" }} />
                   </span>
                   <span className="font-serif text-[22px] font-semibold text-ap-ink">
                     {f.live ? show("eur3", f.all.m.rpv) : EMPTY}
@@ -433,6 +553,30 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
           Every other step
         </span>
       </div>
+      <p className="m-0 text-xs leading-relaxed text-ap-muted">
+        Each band narrows with the step&apos;s share of the funnel&apos;s visits, on a log scale
+        (each tenfold drop narrows it by the same step), so the small steps stay visible; the
+        numbers beside it are exact. Market: industry medians, a rough frame only (≈: sources
+        further from a paid assessment like ours). Survey started and finished:{" "}
+        <a
+          href="https://www.riddle.com/blog/wp-content/uploads/2026/08/State-of-Interactive-Content-2026-by-Riddle.pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-bold text-ap-plum underline"
+        >
+          Riddle, State of Interactive Content 2026
+        </a>{" "}
+        (short quizzes on publishers&apos; pages). Paid:{" "}
+        <a
+          href="https://www.littledata.io/average/checkout-completion-rate"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-bold text-ap-plum underline"
+        >
+          Littledata
+        </a>
+        &apos;s medians of 433 Shopify stores, 20 Jul – 17 Oct 2026 (stores that ship goods).
+      </p>
     </>
   );
 }
@@ -497,6 +641,7 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
       <SectionHead
         id="pts-weeks"
         title="Week by week"
+        info="pts.weeks"
         description="One line per funnel, ads and organic, each customer in the week they came in (finished the free survey, or paid to start), so a funnel that is paid later is not undercounted."
         align="end"
         right={
@@ -669,7 +814,7 @@ function toCsv(d: PtsPayload): Array<{ name: string; table: Table }> {
   ];
   const metrics = (traffic: Traffic): Table => ({
     columns: head,
-    rows: GROUPS(traffic).flatMap((g) =>
+    rows: GROUPS.flatMap((g) =>
       g.rows.map((r) => ({
         label: `${g.title}: ${r.label}${CSV_UNIT[r.unit]}`,
         values: d.funnels.map((f) => (f.live ? csvValue(r.unit, r.value(f, f[traffic])) : "")),
@@ -778,11 +923,17 @@ export default function ApPayToStart() {
               }
             />
             <MetricsTable funnels={data.funnels} traffic={traffic} />
-            {traffic === "ads" && (
+            {traffic === "ads" ? (
               <p className="m-0 text-xs leading-snug text-ap-muted">
                 Paid traffic only: visits are the ad clicks; customers, finished surveys and revenue
                 are the people whose survey or purchase came through a Google Ads click. Ad spend is
                 the same in both views.
+              </p>
+            ) : (
+              <p className="m-0 text-xs leading-snug text-ap-muted">
+                Visits are everyone who came to the funnel&apos;s pages each day, from ads and every
+                other source, so there are usually more of them than ad clicks. Paid traffic only
+                counts the ad clicks.
               </p>
             )}
           </Card>

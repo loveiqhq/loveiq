@@ -98,6 +98,7 @@ const step = (p: PtsPayload, key: FunnelKey, label: string) =>
   funnel(p, key).steps.find((s) => s.label === label)?.n;
 
 const GCLID = JSON.stringify({ utm_source: "google", utm_medium: "cpc", gclid: "Cj0" });
+const NO_NOTICES = { refunded: new Set<string>(), disputed: new Set<string>() };
 
 describe("offerOfLanding", () => {
   it("names the offer by the ad's landing page, and nothing else", () => {
@@ -119,7 +120,7 @@ describe("offerOfLanding", () => {
 
 describe("buildPayToStart", () => {
   // One week, three funnels running, the gate off.
-  const week = () =>
+  const week = (over: Partial<PtsInput> = {}) =>
     buildPayToStart(
       input({
         facts: {
@@ -179,8 +180,76 @@ describe("buildPayToStart", () => {
         ],
         openedSubmissions: new Set([501, 502]),
         laterPays: new Map([[502, [{ amount: 19.99, plan: "full_report" }]]]),
+        ...over,
       })
     );
+
+  it("counts refunds among those who paid, and pay to start's paying buyers who then finished", () => {
+    // Refunds not read: no refund rate, never 0%.
+    expect(funnel(week(), "after").refunds).toBeUndefined();
+    expect(funnel(week(), "full").refunds).toBeUndefined();
+    // 3 took the free survey and was refunded in full (no sale left); 502 (€1.99) in part.
+    const p = week({ refundedSubs: new Set([3, 502]), refundNotices: NO_NOTICES });
+    expect(funnel(p, "after").refunds).toEqual({ payers: 2, refunded: 1 });
+    expect(funnel(p, "full").refunds).toEqual({ payers: 1, refunded: 0 });
+    expect(funnel(p, "pre").refunds).toEqual({ payers: 2, refunded: 1 });
+    expect(funnel(p, "full").paidFinished).toBe(1);
+    // 4 paid and hasn't finished the survey yet.
+    expect(funnel(p, "pre").paidFinished).toBe(1);
+  });
+
+  it("finishes only the paying buyers: a 100% code's and a refunded one's surveys aren't theirs", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, consumed_submission_id: 601 }),
+          ent({ id: 2, amount_cents: 0, consumed_submission_id: 602 }),
+          ent({ id: 3, status: "refunded", consumed_submission_id: 603 }),
+        ],
+        boughtFirst: new Set([601, 602, 603]),
+        refundedSubs: new Set([603]),
+        refundNotices: NO_NOTICES,
+      })
+    );
+    const full = funnel(p, "full");
+    expect(full.steps.find((s) => s.label === "Paid €29.99")!.n).toBe(1);
+    expect(full.steps.find((s) => s.label === "Survey finished")!.n).toBe(3);
+    expect(full.paidFinished).toBe(1);
+    // The 100% code took no money: not among those who paid. The refunded buyer is.
+    expect(full.refunds).toEqual({ payers: 2, refunded: 1 });
+  });
+
+  it("leaves a chargeback out of pay to start's refund rate, as the free funnels do; a part refund before the survey counts", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, consumed_submission_id: 701, stripe_payment_intent_id: "pi_1" }),
+          // A chargeback, open or lost, voids the purchase as a full refund would.
+          ent({ id: 2, status: "refunded", stripe_payment_intent_id: "pi_2" }),
+          // A chargeback won back: paid again.
+          ent({ id: 3, stripe_payment_intent_id: "pi_3" }),
+          // Refunded in part before a survey claimed it: still paid, on no payment row.
+          ent({ id: 4, stripe_payment_intent_id: "pi_4" }),
+          // Refunded in full before its survey.
+          ent({ id: 5, status: "refunded", stripe_payment_intent_id: "pi_5" }),
+        ],
+        boughtFirst: new Set([701]),
+        refundedSubs: new Set(),
+        refundNotices: {
+          refunded: new Set(["pi_4", "pi_5"]),
+          disputed: new Set(["pi_2", "pi_3"]),
+        },
+      })
+    );
+    expect(funnel(p, "full").refunds).toEqual({ payers: 4, refunded: 2 });
+    // Stripe's notices not read: no rate, rather than one that takes a chargeback for a refund.
+    expect(
+      funnel(
+        buildPayToStart(input({ entitlements: [ent({ id: 1 })], refundedSubs: new Set() })),
+        "full"
+      ).refunds
+    ).toBeUndefined();
+  });
 
   it("counts pay after the report from the free survey, its ads from every other page", () => {
     const after = funnel(week(), "after");
@@ -818,6 +887,111 @@ describe("measuresOf", () => {
       measuresOf(10, 4, { visits: 4, finished: 1, paid: 1, revenue: 1.99, revenueFinished: 0 }).net
     ).toBe(-8.01);
     expect(m.rpf).toBeCloseTo(14.995);
+  });
+});
+
+describe("paying buyers who started the survey (Landing's Started survey)", () => {
+  // A week around the stamp's first day (28 Oct 2026).
+  const started = (entitlements: EntitlementRow[]) =>
+    funnel(
+      buildPayToStart(
+        input({ entitlements, from: "2026-10-24", to: "2026-10-30", today: "2026-10-31" })
+      ),
+      "full"
+    ).paidStarted;
+  it("a saved answer stamped the purchase, or a finished survey claimed it", () => {
+    expect(
+      started([
+        // Paid on 28 Oct: stamped, finished, and one that never started.
+        ent({ id: 1, paid_at: "2026-10-28T09:00:00Z", survey_started_at: "2026-10-28T09:05:00Z" }),
+        ent({ id: 2, paid_at: "2026-10-28T10:00:00Z", consumed_submission_id: 602 }),
+        ent({ id: 3, paid_at: "2026-10-28T11:00:00Z" }),
+        // A 100% code's buyer is no paying buyer.
+        ent({
+          id: 4,
+          paid_at: "2026-10-28T12:00:00Z",
+          amount_cents: 0,
+          survey_started_at: "2026-10-28T12:01:00Z",
+        }),
+      ])
+    ).toBe(2);
+  });
+  it("is blank while a paying buyer from before the stamp hasn't finished", () => {
+    expect(started([ent({ id: 1, paid_at: "2026-10-25T09:00:00Z" })])).toBeNull();
+    // Finished: started, whenever it was paid.
+    expect(
+      started([ent({ id: 1, paid_at: "2026-10-25T09:00:00Z", consumed_submission_id: 601 })])
+    ).toBe(1);
+  });
+});
+
+describe("profit (contribution), as the Traffic page counts it (Mark, 23 Oct)", () => {
+  it("takes card fees per payment, each report's running cost and the ads off the revenue", () => {
+    const m = measuresOf(10, 4, {
+      visits: 100,
+      finished: 2,
+      paid: 1,
+      revenue: 29.99,
+      revenueFinished: 29.99,
+      sales: 1,
+    });
+    // 29.99 − (2.9% of 29.99 + €0.25) − 2 × €0.05 − €10 = €18.77
+    expect(m.profit).toBe(18.77);
+    expect(m.ppc).toBeCloseTo(18.77);
+    expect(m.ppf).toBeCloseTo(9.385);
+    // No ad spend read: no profit, as no contribution on Traffic.
+    expect(
+      measuresOf(null, null, { visits: 1, finished: 1, paid: 1, revenue: 9, revenueFinished: 9 })
+        .profit
+    ).toBeNull();
+    // Nobody paid or finished: nothing to divide by.
+    const none = measuresOf(5, 1, {
+      visits: 9,
+      finished: 0,
+      paid: 0,
+      revenue: 0,
+      revenueFinished: 0,
+    });
+    expect([none.profit, none.ppc, none.ppf]).toEqual([-5, null, null]);
+  });
+
+  it("works profit per completion out of the finishers' own money, as revenue per completion", () => {
+    // Pay to start: 10 paid €29.99 first, 2 of them have finished the survey; €100 of ads.
+    const m = measuresOf(100, 50, {
+      visits: 500,
+      finished: 2,
+      paid: 10,
+      revenue: 299.9,
+      revenueFinished: 59.98,
+      sales: 10,
+      salesFinished: 2,
+    });
+    // 59.98 − (2.9% of 59.98 + 2 × €0.25) − 2 × €0.05 − €100 = −€42.36, over 2 completions.
+    expect(m.ppf).toBeCloseTo(-21.18);
+    expect(m.ppf!).toBeLessThan(m.rpf!);
+    // Per paying customer, everyone's money: 299.90 − (8.70 + 2.50) − 0.10 − 100 = €188.60.
+    expect(m.ppc).toBeCloseTo(18.86);
+  });
+
+  it("counts each payment for the fee: a purchase and every later buy", () => {
+    const p = buildPayToStart(
+      input({
+        entitlements: [
+          ent({ id: 1, offer: "pre", amount_cents: 199, consumed_submission_id: 701 }),
+          ent({ id: 2, offer: "pre", amount_cents: 199 }),
+          // A 100% code's purchase took no money: only its later buy is a payment.
+          ent({ id: 3, offer: "pre", amount_cents: 0, consumed_submission_id: 703 }),
+        ],
+        boughtFirst: new Set([701, 703]),
+        laterPays: new Map([
+          [701, [{ amount: 19.99, plan: "full_report" }]],
+          [703, [{ amount: 19.99, plan: "full_report" }]],
+        ]),
+      })
+    );
+    expect(funnel(p, "pre").all.sales).toBe(4);
+    // The finishers' (701 and 703): their profit per completion pays only their fees.
+    expect(funnel(p, "pre").all.salesFinished).toBe(3);
   });
 });
 

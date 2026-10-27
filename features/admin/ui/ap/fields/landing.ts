@@ -266,11 +266,18 @@ SELECT pg.page,
   (SELECT count(*) FROM buy, b
     WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
       AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0) AS paid,
-  -- every purchase completed in the range (a 100% code's EUR 0 one too) whose survey was finished
-  (SELECT count(*) FROM buy
-     JOIN survey_submission s ON s.id = buy.consumed_submission_id AND s.status = 'completed', b
+  -- of those who paid (as above), those who started the survey: a saved answer stamped the
+  -- purchase (from 28 Oct 2026), or a finished survey claimed it
+  (SELECT count(*) FROM buy, b
     WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
-      AND buy.status IN ('succeeded', 'refunded')) AS finished_survey
+      AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0
+      AND (buy.survey_started_at IS NOT NULL OR buy.consumed_submission_id IS NOT NULL)) AS started_survey,
+  -- of those who paid (as above), the share who then finished the survey
+  (SELECT round(100.0 * count(*) FILTER (WHERE s.id IS NOT NULL) / nullif(count(*), 0))
+     FROM buy
+     LEFT JOIN survey_submission s ON s.id = buy.consumed_submission_id AND s.status = 'completed', b
+    WHERE buy.offer = pg.offer AND buy.paid_at >= b.since_ts AND buy.paid_at < b.until_ts
+      AND buy.status = 'succeeded' AND coalesce(buy.amount_cents, 0) > 0) AS paid_to_completed_pct
   FROM pages pg
  WHERE :to >= DATE '2026-10-22'
  ORDER BY pg.offer;`;
@@ -279,7 +286,7 @@ const T_PREPAID: FieldTable = {
   source: "production",
   table: "prepaid_report_access",
   columns:
-    "offer, status, amount_cents, created_at, paid_at, consumed_submission_id, is_test, customer_email, utm_tracker",
+    "offer, status, amount_cents, created_at, paid_at, consumed_submission_id, survey_started_at, is_test, customer_email, utm_tracker",
   filters: "Period (created_at, paid_at; Berlin days). Nothing else: all traffic.",
   watch:
     "A checkout left unpaid is bound to the survey too: only a completed purchase (paid, kept or refunded) is a buyer.",
@@ -538,10 +545,10 @@ export const fields: FieldRegistry = {
     stat: "Count",
     per: "per purchase",
     formula: { num: "Purchases paid in the range, above €0, not refunded" },
-    caveat: `${PF_SAME} A 100% code's €0 purchase is no sale here (its buyer still counts as finished).`,
+    caveat: `${PF_SAME} A 100% code's €0 purchase is no sale here.`,
     tables: [T_PREPAID],
     query: { lang: "SQL", text: Q_PAY_FIRST },
-    related: ["landing.pf-v2p", "landing.pf-finished"],
+    related: ["landing.pf-v2p", "landing.pf-p2c"],
   },
   "landing.pf-v2p": {
     label: "Visitor → paid",
@@ -555,14 +562,26 @@ export const fields: FieldRegistry = {
     query: { lang: "SQL", text: Q_PAY_FIRST },
     related: ["landing.pf-paid", "landing.pf-visitors"],
   },
-  "landing.pf-finished": {
-    label: "Finished survey",
-    what: "Buyers on the page in the range who then finished the survey their purchase unlocks.",
+  "landing.pf-started": {
+    label: "Started survey",
+    what: "Of the page's buyers who paid and kept their purchase, those who started the survey it unlocks.",
     good: "up",
     stat: "Count",
     per: "per purchase",
-    formula: { num: "Purchases completed in the range whose survey was finished" },
-    caveat: `${PF_SAME} Every completed purchase counts here, a 100% code's €0 one and a refunded one too, so it is no share of Paid.`,
+    formula: { num: "Paid purchases whose survey saved an answer, or was finished" },
+    caveat: `${PF_SAME} A buyer's first saved answer stamps the purchase from 28 Oct 2026 (survey_started_at); before then only a finished survey shows a start, so a range with a paying buyer from before who hasn't finished is blank.`,
+    tables: [T_PREPAID],
+    query: { lang: "SQL", text: Q_PAY_FIRST },
+    related: ["landing.pf-paid", "landing.pf-p2c"],
+  },
+  "landing.pf-p2c": {
+    label: "Paid → completed",
+    what: "Of the page's buyers who paid and kept their purchase, the share who then finished the survey it unlocks.",
+    good: "up",
+    stat: "Share",
+    per: "per purchase",
+    formula: { num: "Paid purchases whose survey was finished", den: "Paid", mult: "× 100" },
+    caveat: `${PF_SAME} Paid purchases only (above €0, not refunded), so it is a share of Paid: a 100% code's €0 buyer isn't in it. A buyer who hasn't taken the survey yet may still finish it, so a recent range reads low.`,
     tables: [T_PREPAID, T_SUBS],
     query: { lang: "SQL", text: Q_PAY_FIRST },
     related: ["landing.pf-paid", "landing.pf-checkout"],

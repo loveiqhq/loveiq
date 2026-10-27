@@ -35,6 +35,34 @@ const TONE_TEXT: Record<Tone, string> = {
   flat: "text-ap-muted",
 };
 
+/** A funnel's place on a line of a funnel table: the best of the running funnels, the worst. */
+export type Standing = "plain" | "best" | "worst";
+export const STANDING: Record<Standing, string> = {
+  plain: "text-ap-ink",
+  best: "bg-ap-good/[0.08] text-ap-good-ink",
+  worst: "bg-ap-bad/[0.07] text-ap-bad-ink",
+};
+/** What the colour says, for a screen reader and on hover (colour alone is no answer). */
+export const STANDING_WORD: Record<Exclude<Standing, "plain">, string> = {
+  best: "best of the running funnels",
+  worst: "worst of the running funnels",
+};
+
+/** Green for the best of the running funnels on a line, red for the worst; none for a tie. */
+export function standingOf(
+  values: Array<number | null>,
+  v: number | null,
+  better?: "high" | "low"
+): Standing {
+  const xs = values.filter((x): x is number => x !== null && Number.isFinite(x));
+  if (!better || v === null || !Number.isFinite(v) || xs.length < 2) return "plain";
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  if (lo === hi) return "plain";
+  if (v === (better === "high" ? hi : lo)) return "best";
+  return v === (better === "high" ? lo : hi) ? "worst" : "plain";
+}
+
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
     <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-label">

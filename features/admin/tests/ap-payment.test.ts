@@ -301,6 +301,11 @@ describe("Payment page builder", () => {
     // A range starting before it was on sale: nobody could pre-unlock its first days, so blank.
     const early = payment("2026-10-20", "2026-10-30", { subs });
     expect(early.segments.find((s) => s.key === "gender")!.rows[0]!.preCvr).toBeNull();
+    // ...and the table says why, as the tile does.
+    const why =
+      "Pre CVR counts from 23 Oct 2026, the first whole day the €1.99 was on sale: pick a range from then.";
+    for (const t of early.segments) expect(t.note).toContain(why);
+    for (const t of p.segments) expect(t.note).not.toContain(why);
   });
 
   it("the headline figures: revenue, paid sales and free unlocks, full-unlock and payment CVR", () => {

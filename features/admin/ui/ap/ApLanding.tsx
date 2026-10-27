@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { fmt } from "@features/admin/server/ap/format";
+import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type {
   ArmRow,
   ArmStatus,
@@ -30,6 +30,9 @@ import {
   RangeLine,
   SectionHead,
   SortIcon,
+  STANDING,
+  STANDING_WORD,
+  standingOf,
   TileGrid,
   useHashScroll,
 } from "./kit";
@@ -314,29 +317,48 @@ function TestsTable({ data }: { data: LandingPayload }) {
 
 /**
  * The design's pay-first landing pages (the price before the survey): each page's Step by step
- * figures on the Pay to start page, so the two pages agree. The design's "Saw the price",
- * "Started survey" and "Paid → completed" aren't recorded for these pages ("Finished survey"
- * counts every buyer, a 100% code's too, so it is no share of "Paid").
+ * figures on the Pay to start page, so the two pages agree, the better page green and the other
+ * red where higher is better. "Saw the price" is no step on these pages: the price is on screen
+ * from the first moment on every device, as the note under the table says.
  */
-const PAY_FIRST_COLUMNS: Array<{ label: string; info: string; cell: (r: PayFirstRow) => string }> =
-  [
-    { label: "Visitors", info: "landing.pf-visitors", cell: (r) => fmt("count", r.visitors) },
-    {
-      label: "Started checkout",
-      info: "landing.pf-checkout",
-      cell: (r) => fmt("count", r.checkout),
-    },
-    { label: "Paid", info: "landing.pf-paid", cell: (r) => fmt("count", r.paid) },
-    { label: "Visitor → paid", info: "landing.pf-v2p", cell: (r) => fmt("pct", r.v2p, 2) },
-    {
-      label: "Finished survey",
-      info: "landing.pf-finished",
-      cell: (r) => fmt("count", r.finished),
-    },
-  ];
+const PAY_FIRST_COLUMNS: Array<{
+  label: string;
+  info?: string;
+  cell: (r: PayFirstRow) => string;
+  value?: (r: PayFirstRow) => number | null;
+}> = [
+  { label: "Visitors", info: "landing.pf-visitors", cell: (r) => fmt("count", r.visitors) },
+  { label: "Saw the price", cell: () => EMPTY },
+  {
+    label: "Started checkout",
+    info: "landing.pf-checkout",
+    cell: (r) => fmt("count", r.checkout),
+    value: (r) => r.checkout,
+  },
+  {
+    label: "Paid",
+    info: "landing.pf-paid",
+    cell: (r) => fmt("count", r.paid),
+    value: (r) => r.paid,
+  },
+  {
+    label: "Visitor → paid",
+    info: "landing.pf-v2p",
+    cell: (r) => fmt("pct", r.v2p, 2),
+    value: (r) => r.v2p,
+  },
+  // A count, not coloured: as drawn (the page with more buyers starts more surveys).
+  { label: "Started survey", info: "landing.pf-started", cell: (r) => fmt("count", r.started) },
+  {
+    label: "Paid → completed",
+    info: "landing.pf-p2c",
+    cell: (r) => fmt("pct", r.p2c, 0),
+    value: (r) => r.p2c,
+  },
+];
 
 function PayToStart({ data }: { data: LandingPayload }) {
-  const gtc = "minmax(230px, 2fr) repeat(5, minmax(96px, 1fr))";
+  const gtc = "minmax(230px, 2fr) repeat(7, minmax(96px, 1fr))";
   const pf = data.payFirst;
   return (
     <Card id="pay-first" labelledBy="h-pay-first">
@@ -346,8 +368,15 @@ function PayToStart({ data }: { data: LandingPayload }) {
         description="Landing pages with the price shown before the survey. The visitor pays first, then takes the survey. The same figures as the Pay to start page, step by step."
       />
       {pf && pf.rows.length === 0 ? null : pf ? (
-        <div tabIndex={0} className="overflow-x-auto rounded-[14px] border border-ap-line">
-          <div role="table" aria-label="Pay-to-start landing pages" className="min-w-[760px]">
+        // `relative`: the cells' sr-only words are placed absolutely, and without a placed box
+        // to hold them they widen the page on a phone.
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Pay-to-start landing pages, scrolls sideways"
+          className="relative overflow-x-auto rounded-[14px] border border-ap-line"
+        >
+          <div role="table" aria-label="Pay-to-start landing pages" className="min-w-[980px]">
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <span
                 role="columnheader"
@@ -362,7 +391,7 @@ function PayToStart({ data }: { data: LandingPayload }) {
                   className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted"
                 >
                   {c.label}
-                  <Info k={c.info} label={c.label} />
+                  {c.info && <Info k={c.info} label={c.label} />}
                 </span>
               ))}
             </div>
@@ -377,15 +406,24 @@ function PayToStart({ data }: { data: LandingPayload }) {
                   <span className="text-[13px] font-bold">{r.name}</span>
                   <span className="text-[11px] text-ap-muted">{r.sub}</span>
                 </span>
-                {PAY_FIRST_COLUMNS.map((c) => (
-                  <span
-                    key={c.label}
-                    role="cell"
-                    className="px-3 py-2.5 text-right text-[13px] tabular-nums text-ap-ink"
-                  >
-                    {c.cell(r)}
-                  </span>
-                ))}
+                {PAY_FIRST_COLUMNS.map((c) => {
+                  const tone = c.value
+                    ? standingOf(pf.rows.map(c.value), c.value(r), "high")
+                    : "plain";
+                  return (
+                    <span
+                      key={c.label}
+                      role="cell"
+                      title={tone === "plain" ? undefined : STANDING_WORD[tone]}
+                      className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${STANDING[tone]}`}
+                    >
+                      {c.cell(r)}
+                      {tone !== "plain" && (
+                        <span className="sr-only"> ({STANDING_WORD[tone]})</span>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -393,6 +431,15 @@ function PayToStart({ data }: { data: LandingPayload }) {
       ) : (
         <p className="m-0 text-sm text-ap-muted">
           Pay to start&rsquo;s figures could not be read just now. Try again in a minute.
+        </p>
+      )}
+      {pf && pf.rows.length > 0 && (
+        <p className="m-0 text-xs text-ap-muted">
+          Saw the price: the price is on screen from the first moment on every device (the card
+          beside the text on a computer, the bar at the bottom on a phone), so it is no step of its
+          own here. Started survey: paying buyers whose survey saved an answer or was finished
+          (recorded from 28 Oct 2026). Paid → completed: of the paying buyers, those who finished.
+          Green is the better of the two pages in a column, red the other.
         </p>
       )}
       {(pf?.notes ?? []).map((x) => (

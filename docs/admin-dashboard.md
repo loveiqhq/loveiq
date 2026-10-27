@@ -34,17 +34,26 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 
 ## Pages
 
-| Page                   | Route                            | Component                                                    | Feed                                                                              |
-| ---------------------- | -------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| Dashboard              | `/admin/ap`                      | [`ApFocus.tsx`](../features/admin/ui/ap/ApFocus.tsx)         | `GET /api/admin/ap/focus`                                                         |
-| Assessment A dashboard | `/admin/ap/assessment-a`         | [`ApDashboard.tsx`](../features/admin/ui/ap/ApDashboard.tsx) | `GET /api/admin/ap/assessment`                                                    |
-| Traffic                | `/admin/ap/assessment-a/traffic` | [`ApTraffic.tsx`](../features/admin/ui/ap/ApTraffic.tsx)     | `GET /api/admin/ap/traffic`                                                       |
-| Landing page           | `/admin/ap/assessment-a/landing` | [`ApLanding.tsx`](../features/admin/ui/ap/ApLanding.tsx)     | `GET /api/admin/ap/landing` (the sidebar's "Assessment page" is a section of it)  |
-| Survey                 | `/admin/ap/assessment-a/survey`  | [`ApSurvey.tsx`](../features/admin/ui/ap/ApSurvey.tsx)       | `GET /api/admin/ap/survey`, `GET /api/admin/ap/survey/answers`                    |
-| Report                 | `/admin/ap/assessment-a/report`  | [`ApReport.tsx`](../features/admin/ui/ap/ApReport.tsx)       | `GET /api/admin/ap/report`                                                        |
-| Payment                | `/admin/ap/assessment-a/payment` | [`ApPayment.tsx`](../features/admin/ui/ap/ApPayment.tsx)     | `GET /api/admin/ap/payment`                                                       |
-| Catalog (data sources) | `/admin/ap/sources`              | [`ApSources.tsx`](../features/admin/ui/ap/ApSources.tsx)     | `GET`/`PUT /api/admin/ap/catalog`, `GET /api/admin/ap/catalog/rows`               |
-| Raw data explorer      | `/admin/ap/explorer`             | [`ApExplorer.tsx`](../features/admin/ui/ap/ApExplorer.tsx)   | `GET /api/admin/ap/explorer`, `POST /api/admin/ap/explorer/unlock`, saved filters |
+| Page                   | Route                                    | Component                                                              | Feed                                                                              |
+| ---------------------- | ---------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Dashboard              | `/admin/ap`                              | [`ApFocus.tsx`](../features/admin/ui/ap/ApFocus.tsx)                   | `GET /api/admin/ap/focus`                                                         |
+| Assessment A dashboard | `/admin/ap/assessment-a`                 | [`ApDashboard.tsx`](../features/admin/ui/ap/ApDashboard.tsx)           | `GET /api/admin/ap/assessment`                                                    |
+| Traffic                | `/admin/ap/assessment-a/traffic`         | [`ApTraffic.tsx`](../features/admin/ui/ap/ApTraffic.tsx)               | `GET /api/admin/ap/traffic`                                                       |
+| Landing page           | `/admin/ap/assessment-a/landing`         | [`ApLanding.tsx`](../features/admin/ui/ap/ApLanding.tsx)               | `GET /api/admin/ap/landing` (the sidebar's "Assessment page" is a section of it)  |
+| Survey                 | `/admin/ap/assessment-a/survey`          | [`ApSurvey.tsx`](../features/admin/ui/ap/ApSurvey.tsx)                 | `GET /api/admin/ap/survey`, `GET /api/admin/ap/survey/answers`                    |
+| Report                 | `/admin/ap/assessment-a/report`          | [`ApReport.tsx`](../features/admin/ui/ap/ApReport.tsx)                 | `GET /api/admin/ap/report`                                                        |
+| Payment                | `/admin/ap/assessment-a/payment`         | [`ApPayment.tsx`](../features/admin/ui/ap/ApPayment.tsx)               | `GET /api/admin/ap/payment`                                                       |
+| Pay to start           | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
+| Unlock feedback        | `/admin/ap/assessment-a/unlock-feedback` | [`ApUnlockFeedback.tsx`](../features/admin/ui/ap/ApUnlockFeedback.tsx) | `GET /api/admin/ap/unlock-feedback`                                               |
+| Catalog (data sources) | `/admin/ap/sources`                      | [`ApSources.tsx`](../features/admin/ui/ap/ApSources.tsx)               | `GET`/`PUT /api/admin/ap/catalog`, `GET /api/admin/ap/catalog/rows`               |
+| Raw data explorer      | `/admin/ap/explorer`                     | [`ApExplorer.tsx`](../features/admin/ui/ap/ApExplorer.tsx)             | `GET /api/admin/ap/explorer`, `POST /api/admin/ap/explorer/unlock`, saved filters |
+
+Pay to start sets each funnel's steps out as funnel bands, with the market's reference rate
+beside ours where a source exists (named under the cards), its money with profit per paying
+customer and per survey completion (Traffic's formula), and an info card on every figure.
+Landing's pay-to-start table counts "Started survey" from `prepaid_report_access.survey_started_at`,
+recorded from 28 Oct 2026. Traffic shows each search ad as searchers see it, with its
+keywords' spend, cost per survey, payment rate and revenue per survey.
 
 Each page is a thin wrapper in `app/admin/ap/**/page.tsx` that renders its component
 inside `DashboardErrorBoundary`. The components load their data through

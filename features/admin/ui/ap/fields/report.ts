@@ -724,7 +724,7 @@ const tourField = (
 export const fields: FieldRegistry = {
   "report.tour-started": tourField(
     "Tour started",
-    "Readers whose guided tour started on its own when they first opened their report. The share beside it is of every reader who opened their report in the range (the Report readers figure, all traffic), free and paid together on each tab: a run's audience is recorded, an opener's isn't.",
+    "Readers whose guided tour started on its own when they first opened their report. The section's note (How these are counted) gives it as a share of every reader who opened their report in the range (the Report readers figure, all traffic), free and paid together on each tab: a run's audience is recorded, an opener's isn't.",
     "Readers whose tour started",
     null,
     TOUR_TILES,

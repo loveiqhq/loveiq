@@ -31,7 +31,7 @@ import {
   type Scope,
 } from "./metrics";
 import { freePreBlocked, head, type PageHead, type Tile } from "./common";
-import type { PtsPayload } from "./pay-to-start";
+import { SURVEY_STARTED_FROM, type PtsPayload } from "./pay-to-start";
 import {
   POSTHOG_FROM,
   type LandingArmEngagement,
@@ -218,8 +218,10 @@ export interface PayFirstRow {
   paid: number;
   /** Paid ÷ visitors. */
   v2p: number | null;
-  /** Buyers (a 100% code's too) who finished the survey. */
-  finished: number;
+  /** Of the paying buyers ("Paid"), the share who then finished the survey. */
+  p2c: number | null;
+  /** Paying buyers who started the survey; null where it can't be told (paidStarted). */
+  started: number | null;
 }
 
 /** Pay to start page notes about what this table doesn't show: ads, and the free survey's funnels. */
@@ -238,7 +240,6 @@ function payFirstRows(pts: PtsPayload): PayFirstRow[] {
     const step = (pick: (label: string) => boolean) => x.steps.find((s) => pick(s.label))?.n ?? 0;
     const visitors = x.steps.find((s) => s.label === "Visits")?.n ?? null;
     const paid = step((l) => l.startsWith("Paid"));
-    const finished = step((l) => l === "Survey finished");
     return [
       {
         key,
@@ -248,7 +249,8 @@ function payFirstRows(pts: PtsPayload): PayFirstRow[] {
         checkout: step((l) => l === "Checkout started"),
         paid,
         v2p: visitors ? paid / visitors : null,
-        finished,
+        p2c: paid > 0 && x.paidFinished !== undefined ? x.paidFinished / paid : null,
+        started: x.paidStarted ?? null,
       },
     ];
   });
@@ -459,12 +461,20 @@ export function buildLanding(input: {
         : input.pts
           ? {
               rows: payFirstRows(input.pts),
-              // Before its pages went live, when they did is all there is to say.
+              // Before its pages went live, when they did is all there is to say; then the Pay
+              // to start page's notes about the pages, and why a blank Started survey is blank.
               notes: input.pts.funnels.some((x) => x.key !== "after" && x.key !== "gate" && !x.live)
                 ? [
                     `Pay to start's pages went live on ${rangeLabel(PAY_TO_START_FROM, PAY_TO_START_FROM)}: pick a range reaching that day.`,
                   ]
-                : input.pts.notes.filter((x) => !NOT_PAY_FIRST.some((re) => re.test(x))),
+                : [
+                    ...input.pts.notes.filter((x) => !NOT_PAY_FIRST.some((re) => re.test(x))),
+                    ...(payFirstRows(input.pts).some((r) => r.started === null)
+                      ? [
+                          `Started survey is recorded from ${rangeLabel(SURVEY_STARTED_FROM, SURVEY_STARTED_FROM)}: a paying buyer before then who hasn't finished the survey can't be told apart from one who never started.`,
+                        ]
+                      : []),
+                  ],
             }
           : null,
   };

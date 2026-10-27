@@ -288,6 +288,11 @@ never a tracker created for a stamp, never an arm taken from the body, within 10
 characters. Someone who stops at the email question leaves only this row, so this is where
 the email question test sees who left.
 
+**Pay to start's "Started survey".** When the browser holds a paid pay-to-start purchase, the
+first saved draft stamps `prepaid_report_access.survey_started_at` (once, on a paid row only,
+after the draft is saved; migration `20261025170000`). AP-Analytics' Landing page counts the
+buyers who started from it; nothing personal is written.
+
 **Responses:**
 
 | Status | Body                                              | Meaning                                                   |

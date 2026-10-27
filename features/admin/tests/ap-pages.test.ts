@@ -593,6 +593,8 @@ describe("page builders", () => {
     expect(p.intro.cards.map((s) => s.medianMs)).toEqual([null, 5000, 8000, null, 40_000, null]);
     expect(p.intro.cards.map((s) => s.reached)).toEqual([null, 4, 4, 0, 2, null]);
     expect(p.intro.recordedFrom).toBe("17 Oct 2026");
+    // The tiles draw no trend line either: the note under them names that too.
+    expect(p.intro.tiles.every((t) => t.spark.length === 0)).toBe(true);
     // Skip, Back and Exit say when they start rather than read zero.
     expect(p.intro.cards.every((c) => c.skip === null && c.back === null && c.exit === null)).toBe(
       true
@@ -693,6 +695,7 @@ describe("page builders", () => {
     ]);
     const card = (step: string) => p.intro.cards.find((c) => c.step === step)!;
     expect(p.intro.recordedFrom).toBeNull();
+    expect(p.intro.tiles.every((t) => t.spark.length > 0)).toBe(true);
     // Their consent's share leaves that visitor out: 4 of the intro's 10, never over 100%.
     expect(card("consent_view")).toMatchObject({ reached: 5, reachedShare: 0.4 });
     // The four boxes from our own records: 3 agreed and went on, of the 11 who began; one

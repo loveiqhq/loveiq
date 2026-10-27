@@ -22,13 +22,13 @@ const PAYMENTS: FieldTable = {
   watch:
     "Test payments and free (€0) unlocks are left out. A payment refunded in full is no longer 'succeeded'.",
 };
-const REPORTS: FieldTable = {
+export const REPORTS: FieldTable = {
   source: "production",
   table: "personal_report",
   columns: "id, survey_submission_id",
   filters: "None: it links a payment or a reading session to its survey",
 };
-const USERS: FieldTable = {
+export const USERS: FieldTable = {
   source: "production",
   table: "ap_team_user",
   columns:
@@ -95,7 +95,7 @@ const PREPAID: FieldTable = {
   watch:
     "A survey is pay to start's when a completed purchase (paid, kept or refunded) claimed it; a checkout left unpaid is bound to the survey too, and doesn't count.",
 };
-const ADS_LANDING: FieldTable = {
+export const ADS_LANDING: FieldTable = {
   source: "ads",
   table: "landing_page_view",
   columns: "unexpanded_final_url, segments.date, metrics.cost_micros, metrics.clicks",
@@ -108,7 +108,7 @@ const FC_SAME =
   "The Pay to start page's own figures for the range, all traffic, so the two pages agree; its card shows the free survey's row (pay after the report), the one the others are read against.";
 
 /** The free survey's row of the funnel comparison, as the Pay to start page counts it. */
-const FC_FREE = `-- The free survey's row (pay after the report), as the Pay to start page counts it: the range's
+export const FC_FREE = `-- The free survey's row (pay after the report), as the Pay to start page counts it: the range's
 -- finished surveys that weren't bought first and didn't meet the report's EUR 1.99 gate, and
 -- the free landing pages' visitors. The team's surveys and our own probes are left out.
 WITH b AS (
@@ -171,6 +171,21 @@ after AS (
 const FC_FREE_VISITS = `SELECT visitors FROM after;
 `;
 const FC_FREE_MONEY = `SELECT paying_customers, revenue FROM after;
+`;
+/** Who of the free survey's row paid money, refunded since or not, and who got money back. */
+const FC_FREE_REFUNDS = `-- Refunded: a real payment refunded in full or in part, whenever it was paid. A full refund
+-- takes the sale away, so its buyer is counted back among those who paid.
+SELECT count(*) FILTER (WHERE r.sid IS NOT NULL) AS refunded_customers,
+       count(*) FILTER (WHERE p.eur > 0 OR r.sid IS NOT NULL) AS customers_who_paid,
+       round(100.0 * count(*) FILTER (WHERE r.sid IS NOT NULL)
+             / nullif(count(*) FILTER (WHERE p.eur > 0 OR r.sid IS NOT NULL), 0), 1) AS refund_rate_pct
+  FROM free f
+  LEFT JOIN paid p ON p.sid = f.id
+  LEFT JOIN (SELECT DISTINCT pr.survey_submission_id AS sid
+               FROM payment x JOIN personal_report pr ON pr.id = x.personal_report_id
+              WHERE (x.status = 'refunded' OR (x.status = 'succeeded' AND coalesce(x.refund_amount, 0) > 0))
+                AND NOT coalesce(x.is_test, false) AND x.amount > 0) r ON r.sid = f.id
+ WHERE NOT f.gate;
 `;
 const FC_FREE_RATES = `SELECT visitors, paying_customers, revenue,
        round(100.0 * paying_customers / nullif(visitors, 0), 3) AS visitor_to_paid_pct,
@@ -361,6 +376,45 @@ WHERE segments.date BETWEEN :from AND :to`,
     tables: [ADS_LANDING, SUBMISSIONS, PAYMENTS, REPORTS, USERS, PREPAID],
     query: { lang: "SQL", text: FC_FREE + FC_FREE_MONEY },
     related: ["focus.fc-spend", "focus.fc-rpv", "focus.fc-cpp"],
+  },
+
+  "focus.fc-refund": {
+    label: "Refund rate",
+    what: "The share of the funnel's paying customers who got money back: a full or a partial refund of any of their payments. Lower is better.",
+    good: "down",
+    stat: "Share",
+    per: "per paying customer",
+    formula: {
+      num: "Customers refunded, in full or in part",
+      den: "Customers who paid money, refunded ones included",
+      mult: "× 100",
+    },
+    caveat: `${FC_SAME} A cohort figure, like the rest of the row: a refund that comes later still raises it. A chargeback (dispute) is no refund here: its customer is left out of both counts, unless the dispute is won. Blank with no customer who paid.`,
+    tables: [
+      SUBMISSIONS,
+      {
+        ...PAYMENTS,
+        columns:
+          "amount, status ('succeeded', 'refunded'), refund_amount, is_test, personal_report_id",
+        filters: "None: every payment of the funnel's customers, whenever it was paid",
+        watch:
+          "Test payments and free (€0) unlocks are left out. A refund in full turns the payment's status to 'refunded'; a partial one keeps 'succeeded' with refund_amount above 0.",
+      },
+      REPORTS,
+      USERS,
+      PREPAID,
+      {
+        source: "production",
+        table: "payment_webhook_event",
+        columns:
+          "event_type ('charge.refunded', 'charge.dispute.created'), stripe_payment_intent_id",
+        filters: "None: every refund and chargeback notice from Stripe",
+        watch:
+          "Pay to start's rows only: a refund in part before the survey claimed the purchase is on no payment row, and a chargeback voids the purchase as a full refund does, so the notice tells them apart.",
+      },
+    ],
+    query: { lang: "SQL", text: FC_FREE + FC_FREE_REFUNDS },
+    related: ["focus.fc-paying", "focus.fc-roas", "focus.fc-cpp"],
   },
 
   "focus.chart-submissions": {

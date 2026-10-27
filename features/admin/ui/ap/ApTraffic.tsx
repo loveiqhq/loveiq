@@ -14,6 +14,7 @@ import {
 import { type Grain } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt, lowerFirst } from "@features/admin/server/ap/format";
 import type {
+  AdSeenRow,
   AudienceDim,
   BreakdownKey,
   ChannelTrend,
@@ -102,6 +103,7 @@ const SECTIONS = [
   { id: "performance", label: "Performance" },
   { id: "leakage", label: "Funnel leakage" },
   { id: "intent", label: "Creatives & intent" },
+  { id: "ads-seen", label: "Ads as seen" },
   { id: "cohorts", label: "Cohorts" },
   { id: "experiments", label: "Experiments" },
   { id: "audience", label: "Audience" },
@@ -215,6 +217,7 @@ export default function ApTraffic() {
           <Performance table={data.breakdowns[bd]} bd={bd} onBd={setBd} a={a} />
           <Leakage table={data.breakdowns[bd]} a={a} />
           <Intent intent={data.intent} />
+          <AdsSeen ads={data.adsSeen} />
           <Cohorts cohorts={data.cohorts} />
           <Experiments experiments={data.experiments} />
           <Audience dims={data.audience.dims} />
@@ -250,12 +253,16 @@ function Cell({
   header?: boolean;
 }) {
   return (
+    // `relative` holds the shade's sr-only word, so it can't widen the page on a phone.
     <span
       role={header ? "rowheader" : "cell"}
-      className={`flex flex-col justify-center gap-px px-3 ${pad} text-[13px] tabular-nums ${left ? "text-left" : "text-right"} ${bold ? "font-bold" : "font-medium"}`}
+      className={`relative flex flex-col justify-center gap-px px-3 ${pad} text-[13px] tabular-nums ${left ? "text-left" : "text-right"} ${bold ? "font-bold" : "font-medium"}`}
       style={shadeStyle(shade)}
     >
       {text}
+      {(shade === GOOD || shade === BAD) && (
+        <span className="sr-only"> ({shade === GOOD ? "better" : "worse"})</span>
+      )}
       {sub && <span className="text-[11px] font-medium text-ap-muted">{sub}</span>}
     </span>
   );
@@ -1535,6 +1542,147 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Ads as searchers see them
+
+/** How many ads show before "Show all". */
+const ADS_SHOWN = 4;
+
+const ADS_HEADS: Array<{ label: string; info?: string }> = [
+  { label: "Keyword" },
+  { label: "Spend", info: "traffic.rowSpend" },
+  { label: "Cost / survey", info: "traffic.costPerComplete" },
+  { label: "Payment CVR", info: "traffic.purchaseCvr" },
+  { label: "Rev. / survey", info: "traffic.revPerUser" },
+];
+const ADS_GTC = "minmax(150px, 1.6fr) repeat(4, minmax(84px, 1fr))";
+
+/** One ad (the same headlines, descriptions and address) and the keywords it was shown for. */
+interface AdGroupView {
+  ad: AdSeenRow["ad"];
+  rows: AdSeenRow[];
+  spend: number;
+}
+
+/**
+ * Marcus, 15 Oct: the ads as a searcher sees them on Google, with what each keyword's clicks
+ * brought: cost per finished survey, the share of finishers who paid and revenue per finished
+ * survey (the Performance table's own figures for the keyword). One card per ad, by ad spend:
+ * keywords that share an ad group share its ad.
+ */
+function AdsSeen({ ads }: { ads: TrafficPayload["adsSeen"] }) {
+  const [all, setAll] = useState(false);
+  const byAd = new Map<string, AdGroupView>();
+  for (const r of ads.rows) {
+    const key = JSON.stringify(r.ad);
+    const g = byAd.get(key) ?? { ad: r.ad, rows: [], spend: 0 };
+    g.rows.push(r);
+    g.spend += r.counts.spend ?? 0;
+    byAd.set(key, g);
+  }
+  const groups = [...byAd.values()].sort((a, b) => b.spend - a.spend);
+  // Green and red over every keyword shown, as the other keyword tables colour.
+  const of = (f: (r: AdSeenRow) => number | null) => ads.rows.map(f);
+  const cost = of((r) => q(r.counts.spend, r.counts.completes));
+  const paid = of((r) => q(r.counts.payers, r.counts.completes));
+  const rev = of((r) => q(r.counts.revenue, r.counts.completes));
+  const shown = all ? groups : groups.slice(0, ADS_SHOWN);
+  return (
+    <Card id="ads-seen" labelledBy="h-ads-seen">
+      <SectionHead
+        id="h-ads-seen"
+        title="Ads as searchers see them"
+        description="Each search ad as Google shows it, with the keywords it was shown for and what their clicks brought, by ad spend. Google mixes an ad's headlines, so this is one of the combinations it shows: the headlines in their slots, pinned ones in place."
+      />
+      {groups.length === 0 ? (
+        <Why>{ads.why ?? "No keyword with a search ad had clicks or finishers in this range."}</Why>
+      ) : (
+        <>
+          {shown.map((g, n) => (
+            <article
+              key={JSON.stringify(g.ad)}
+              aria-label={`Ad ${n + 1}: ${g.ad.headlines.join(" | ")}`}
+              className="flex flex-col gap-3 rounded-[14px] border border-ap-line p-4"
+            >
+              {/* As Google lays a search ad out: Sponsored, the address, the blue headline. */}
+              <div className="flex max-w-[640px] flex-col gap-1 rounded-[10px] bg-white p-3 shadow-[0_1px_4px_rgba(32,33,36,0.2)]">
+                <span className="text-[12px] font-bold text-[#202124]">Sponsored</span>
+                <span className="break-all text-[12px] text-[#4d5156]">{g.ad.display}</span>
+                <span className="text-[17px] leading-snug text-[#1a0dab]">
+                  {g.ad.headlines.join(" | ")}
+                </span>
+                {g.ad.descriptions.length > 0 && (
+                  <span className="text-[13px] leading-snug text-[#4d5156]">
+                    {g.ad.descriptions.join(" ")}
+                  </span>
+                )}
+              </div>
+              <Wide label={`Keywords for ad ${n + 1}`} min={560}>
+                <div
+                  role="row"
+                  className="grid bg-ap-ground"
+                  style={{ gridTemplateColumns: ADS_GTC }}
+                >
+                  {ADS_HEADS.map((h, i) => (
+                    <span
+                      key={h.label}
+                      role="columnheader"
+                      className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted ${i ? "text-right" : "text-left"}`}
+                    >
+                      <InfoLabel label={h.label} info={h.info ? { k: h.info } : undefined} />
+                    </span>
+                  ))}
+                </div>
+                {g.rows.map((r) => {
+                  const i = ads.rows.indexOf(r);
+                  return (
+                    <div
+                      key={r.key}
+                      role="row"
+                      className="grid items-stretch border-t border-ap-line"
+                      style={{ gridTemplateColumns: ADS_GTC }}
+                    >
+                      <Cell header left bold text={r.keyword} sub={r.campaign} />
+                      <Cell text={fmt("eur", r.counts.spend, 0)} />
+                      <Cell
+                        text={fmt("eur", cost[i] ?? null, 2)}
+                        shade={band(cost, cost[i] ?? null, true)}
+                      />
+                      <Cell
+                        text={fmt("pct", paid[i] ?? null, 2)}
+                        shade={band(paid, paid[i] ?? null)}
+                      />
+                      <Cell
+                        text={fmt("eur", rev[i] ?? null, 2)}
+                        shade={band(rev, rev[i] ?? null)}
+                      />
+                    </div>
+                  );
+                })}
+              </Wide>
+            </article>
+          ))}
+          {groups.length > ADS_SHOWN && (
+            <button
+              type="button"
+              onClick={() => setAll(!all)}
+              className="self-start rounded-full border border-ap-line bg-white px-4 py-2 text-[13px] font-bold text-ap-ink"
+            >
+              {all ? "Show fewer" : `Show all ${groups.length} ads`}
+            </button>
+          )}
+          <Note>
+            Green and red: the top and the bottom third of the range on that figure, across every
+            keyword here, those under hidden ads too. A keyword counts the finishers whose ad click
+            carried it, as the Performance table&apos;s keyword rows do; its spend is Google
+            Ads&apos; own.
+          </Note>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
 // Cohorts by acquisition source
 
 const COH_HEADS: Array<{ label: string; info?: string }> = [
@@ -1791,6 +1939,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
     .join(" ")}`;
   const perfCols = "minmax(180px, 2fr) repeat(5, minmax(100px, 1fr))";
   const complete = d.perf.map((p) => p.completeRate);
+  const pre = d.perf.map((p) => p.preRate);
   const full = d.perf.map((p) => p.fullRate);
   const read = d.perf.map((p) => p.readMs);
   return (
@@ -1916,7 +2065,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
                 text={fmt("pct", p.completeRate, 1)}
                 shade={band(complete, p.completeRate)}
               />
-              <Cell pad="py-[9px]" text={fmt("pct", p.preRate, 1)} />
+              <Cell pad="py-[9px]" text={fmt("pct", p.preRate, 1)} shade={band(pre, p.preRate)} />
               <Cell
                 pad="py-[9px]"
                 text={fmt("pct", p.fullRate, 1)}

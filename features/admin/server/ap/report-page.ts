@@ -587,6 +587,11 @@ export interface TourView {
   placed: number;
   /** Runs with no end stored: counted in Left the tour / bounced, on no stop. */
   unended: number;
+  /**
+   * Tour started over every reader who opened their report ("41% of the 123 readers who opened
+   * their report"), for the section's note: the tile shows only its change, as drawn.
+   */
+  share: string | null;
 }
 
 /** Reading time for one group of readers: the mean and the median, and the benchmark's. */
@@ -1340,17 +1345,16 @@ export function buildReportPage(input: {
     return {
       key,
       label: `${key === "free" ? "Free" : "Paid"} readers · ${ids.length} stops`,
-      tiles: [
+      // Over every reader who opened their report: a run's audience is known, an opener's isn't,
+      // so this tab's share is of all of them, free and paid together.
+      share:
         tour && tourOpeners > 0
-          ? {
-              ...started,
-              // Over every reader who opened their report: a run's audience is known, an
-              // opener's isn't, so this tab's share is of all of them, free and paid together.
-              share: `${fmt("pct", cur.readers / tourOpeners, 0)} of all ${n(tourOpeners)} ${
-                tourOpeners === 1 ? "reader" : "readers"
-              } who opened their report, free and paid together`,
-            }
-          : started,
+          ? `${fmt("pct", cur.readers / tourOpeners, 0)} of the ${n(tourOpeners)} ${
+              tourOpeners === 1 ? "reader" : "readers"
+            } who opened their report`
+          : null,
+      tiles: [
+        started,
         tourTile("tour-completed", "Completed", "pct", (x) => ratio(x.completed, x.runs), "up"),
         tourTile("tour-skipped", "Skipped tour", "pct", (x) => ratio(x.skipped, x.runs), "down"),
         tourTile(

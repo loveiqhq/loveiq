@@ -39,11 +39,12 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
 }));
 
 import type { Table } from "@features/admin/server/ap/common";
-import { parseFilters } from "@features/admin/server/ap/filters";
+import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
 import { buildLanding, LANDING_TESTS } from "@features/admin/server/ap/landing";
 import {
   measuresOf,
+  SURVEY_STARTED_FROM,
   type PtsFunnel,
   type PtsPayload,
 } from "@features/admin/server/ap/pay-to-start";
@@ -289,19 +290,33 @@ describe("the headline tiles", () => {
     const p = heroWeek();
     screenData.payload = p;
     render(createElement(FieldInfoProvider, null, createElement(ApLanding)));
-    fireEvent.click(screen.getByRole("button", { name: "About Survey start CVR" }));
+    const icon = screen.getByRole("button", { name: "About Survey start CVR" });
+    fireEvent.click(icon);
+    // Its icon stays violet while its card is open (the design), and only its own.
+    expect(icon).toHaveAttribute("data-open");
+    expect(icon.className).toContain("data-[open]:text-ap-purple");
+    expect(document.querySelectorAll("[data-open]")).toHaveLength(1);
     const tile = p.tiles.find((t) => t.key === "start-cvr")!;
     const worked = `${fmt("count", p.counts.starts)} ÷ ${fmt("count", p.counts.visits)} = ${fmt("pct", tile.value)}`;
     expect(screen.getByText(worked)).toBeTruthy();
     expect(p.counts.starts! / p.counts.visits!).toBeCloseTo(tile.value!);
     expect(screen.getByText("Loading the last 12 weeks…")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(icon).not.toHaveAttribute("data-open");
   });
 });
 
 describe("the pay-to-start section", () => {
   /** One pay-to-start funnel as the Pay to start page reads it, with its Step by step steps. */
   const funnel = (key: "full" | "pre", price: string, steps: number[]): PtsFunnel => {
-    const [visits, checkout, paid, finished] = steps as [number, number, number, number];
+    const [visits, checkout, paid, finished, paidFinished, paidStarted] = steps as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
     const v = { visits, finished, paid, revenue: 0, revenueFinished: 0 };
     const all = { ...v, m: measuresOf(null, null, v) };
     return {
@@ -319,11 +334,17 @@ describe("the pay-to-start section", () => {
         { label: "Survey finished", n: finished, pays: false },
         { label: "Report opened", n: finished, pays: false },
       ],
+      paidFinished,
+      paidStarted,
     };
   };
   const pts: PtsPayload = {
     range: { from: "2026-10-24", to: "2026-10-30" },
-    funnels: [funnel("full", "€29.99", [400, 20, 8, 7]), funnel("pre", "€1.99", [300, 30, 15, 16])],
+    funnels: [
+      funnel("full", "€29.99", [400, 20, 8, 7, 6, 7]),
+      // A 100% code's buyers finish too: 16 finished, 12 of the 15 who paid; 14 of them began.
+      funnel("pre", "€1.99", [300, 30, 15, 16, 12, 14]),
+    ],
     weeks: [],
     notes: ["4 visits to the pay-to-start pages came before the two pages were counted apart."],
   };
@@ -346,29 +367,51 @@ describe("the pay-to-start section", () => {
     ).toEqual([
       "Landing page",
       "Visitors",
+      "Saw the price",
       "Started checkout",
       "Paid",
       "Visitor → paid",
-      "Finished survey",
+      "Started survey",
+      "Paid → completed",
     ]);
     const [, full, pre] = within(table).getAllByRole("row");
     expect(within(full!).getByRole("rowheader")).toHaveTextContent(
       "/sexual-archetype · €29.99Pay to start · full"
     );
-    expect(
-      within(full!)
+    // What the eye reads, and the colour: the better page green, the other red, as drawn.
+    const seen = (row: HTMLElement) =>
+      within(row)
         .getAllByRole("cell")
-        .map((c) => c.textContent)
-    ).toEqual(["400", "20", "8", "2.00%", "7"]);
-    // A 100% code's buyer finishes too: Finished survey is no share of Paid.
-    expect(
-      within(pre!)
-        .getAllByRole("cell")
-        .map((c) => c.textContent)
-    ).toEqual(["300", "30", "15", "5.00%", "16"]);
+        .map((c) => {
+          const copy = c.cloneNode(true) as HTMLElement;
+          copy.querySelectorAll(".sr-only").forEach((x) => x.remove());
+          const tone = c.className.includes("bg-ap-good")
+            ? "+"
+            : c.className.includes("bg-ap-bad")
+              ? "-"
+              : "";
+          return `${copy.textContent}${tone}`;
+        });
+    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "7", "75%-"]);
+    // Paid → completed is of the paying buyers only: 12 of 15, never above 100%.
+    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "14", "80%+"]);
+    // Saw the price is no step on these pages: blank, with no card, and the note says why.
     for (const h of within(table).getAllByRole("columnheader").slice(1))
-      expect(within(h).getByRole("button", { name: /^About / })).toBeTruthy();
+      expect(within(h).queryByRole("button", { name: /^About / }) !== null).toBe(
+        h.textContent !== "Saw the price"
+      );
+    expect(section.textContent).toContain(
+      "Saw the price: the price is on screen from the first moment on every device"
+    );
+    // The board's note: what the two new columns count, from the stamp's first day.
+    expect(section.textContent).toContain(
+      `Started survey: paying buyers whose survey saved an answer or was finished (recorded from ${rangeLabel(SURVEY_STARTED_FROM, SURVEY_STARTED_FROM)}). Paid → completed: of the paying buyers, those who finished.`
+    );
     expect(section.textContent).toContain(pts.notes[0]);
+    // `relative`: the cells' sr-only words stay in the box, or they widen the page on a phone.
+    expect(
+      within(section).getByRole("region", { name: "Pay-to-start landing pages, scrolls sideways" })
+    ).toHaveClass("overflow-x-auto", "relative");
   });
 
   it("says so when Pay to start's figures couldn't be read", () => {
@@ -379,6 +422,15 @@ describe("the pay-to-start section", () => {
       "Pay to start’s figures could not be read just now. Try again in a minute."
     );
     expect(within(section).queryByRole("table")).toBeNull();
+  });
+});
+
+describe("Started survey's first day", () => {
+  it("is the same day in the card as in the code that counts from it", () => {
+    // A hand-written date: set SURVEY_STARTED_FROM at the deploy, and this keeps the card in step.
+    expect(FIELDS["landing.pf-started"]!.caveat).toContain(
+      rangeLabel(SURVEY_STARTED_FROM, SURVEY_STARTED_FROM)
+    );
   });
 });
 
@@ -405,7 +457,7 @@ describe("an info icon on every figure", () => {
 
   it("says for every landing field whether it is a share, an average or a median, and per what", () => {
     const keys = Object.keys(FIELDS).filter((k) => k.startsWith("landing."));
-    expect(keys).toHaveLength(26);
+    expect(keys).toHaveLength(27);
     for (const k of keys) {
       expect(FIELDS[k]!.stat, k).toMatch(/^(Share|Average|Median|Count)$/);
       expect(FIELDS[k]!.per, k).toMatch(/^per /);
