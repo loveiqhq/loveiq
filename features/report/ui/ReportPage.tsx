@@ -58,6 +58,7 @@ import type { Report3CardView } from "@/data/report3-archetype-card";
 import type { Report3SummaryView } from "@/data/report3-summary";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
+  REPORT_V4_OTHER_ARCHETYPE_TITLE,
   REPORT_V4_DESIGNED_CHAPTER_IDS,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_PART_FRAME_BY_SECTION,
@@ -876,6 +877,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
   /** The initial unlock opens its gate on the reader's own archetype only (as on the server). */
   const initialGateOpen = initialUnlock && viewArchetype === primaryArchetype;
+  // One of the reader's other archetypes, opened from the report's list of all 14: the Core
+  // Archetype heading, card, badge and nav row stop calling it their core one (Marcus, 27.10).
+  const viewingOtherArchetype = Boolean(primaryArchetype) && viewArchetype !== primaryArchetype;
+  const coreRowLabel = viewingOtherArchetype
+    ? `${REPORT_V4_OTHER_ARCHETYPE_TITLE} Archetype`
+    : undefined;
   /**
    * An Insight Map CTA points at a real pattern section. If the reader already
    * owns that section, take them to it; only open the paywall when they do not.
@@ -1156,6 +1163,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <WithActiveSection store={activeSection}>
           {(activeSectionId) => (
             <ReportMobileNav
+              coreRowLabel={coreRowLabel}
               activeSectionId={activeSectionId}
               accessById={navAccessById}
               fullyUnlocked={navFullyUnlocked}
@@ -1196,6 +1204,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             <WithActiveSection store={activeSection}>
               {(activeSectionId) => (
                 <ReportDesktopSidebar
+                  coreRowLabel={coreRowLabel}
                   activeSectionId={activeSectionId}
                   accessById={navAccessById}
                   fullyUnlocked={navFullyUnlocked}
@@ -1321,17 +1330,26 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                                  * built for the V4 shell (V4Part2) and never
                                  * swapped into the live report, so this ran from
                                  * the top-three list straight into the card. */}
-                                <V4CoreArchetypeHeading />
+                                <V4CoreArchetypeHeading
+                                  coreArchetype={
+                                    viewingOtherArchetype ? primaryArchetype : undefined
+                                  }
+                                />
                                 <V3ArchetypeCard
                                   archetype={viewArchetype as ArchetypeName}
                                   matchStrength={matchScore}
                                   copy={archetypeCard}
                                   onUnlock={unlockPart2("core_archetype")}
+                                  isCore={!viewingOtherArchetype}
                                 />
                               </>
                             ) : null
                           ) : (
-                            <CoreArchetypeSection matchScore={matchScore} theme={theme} />
+                            <CoreArchetypeSection
+                              matchScore={matchScore}
+                              theme={theme}
+                              isCore={!viewingOtherArchetype}
+                            />
                           )}
                         </ReportSection>
                         {isV4 && summaryChapter ? (

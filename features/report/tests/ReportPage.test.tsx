@@ -2298,6 +2298,64 @@ describe("ReportPage", () => {
     });
   });
 
+  // Marcus, 27.10: at the bottom of his report he opened another archetype's report, and
+  // its Core Archetype heading still read "The following archetype is your core archetype".
+  describe("V4 — another of the reader's archetypes is never called their core one", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    /** An all-reports reader whose core is Emotional Voyeur, on Spark Seeker or on their own. */
+    const showing = async (slug: string | null) => {
+      const { buildArchetypeCard } = await import("@/data/report3-archetype-card");
+      const viewed = slug ? "Spark Seeker" : "Emotional Voyeur";
+      mockSearchParams.mockImplementation(
+        () => new URLSearchParams(slug ? `v4=1&archetype=${slug}` : "v4=1")
+      );
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        accessPlan: "all_reports",
+        unlockedArchetypes: ["Emotional Voyeur", "Spark Seeker"],
+        archetypeTiers: { "Emotional Voyeur": "full_report", "Spark Seeker": "full_report" },
+        contentArchetype: viewed,
+        archetypeCard: buildArchetypeCard(viewed),
+      });
+      mockUseReportData.mockReturnValue(response);
+      return render(<ReportPage />).container;
+    };
+    const text = (el: Element | null) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const navRow = (page: HTMLElement) =>
+      text(page.querySelector('.report-sidebar__item[href="#core_archetype"]'));
+
+    it("says so over one of the others, and names the core one", async () => {
+      const page = await showing("spark-seeker");
+
+      expect(text(page.querySelector(".rv4-corehead__title"))).toBe("Another Archetype");
+      const lede = text(page.querySelector(".rv4-corehead__lede"));
+      expect(lede).toContain("You are reading one of your other archetypes.");
+      expect(lede).toContain("the highest probability match of all 14 - is Emotional Voyeur.");
+      expect(lede).not.toContain("The following archetype is your core archetype");
+      expect(
+        page.querySelector('[aria-label="Spark Seeker — one of your other archetypes"]')
+      ).not.toBeNull();
+      expect(navRow(page)).toContain("Another Archetype");
+      expect(navRow(page)).not.toContain("Core Archetype");
+    });
+
+    it("keeps the frame's copy over the reader's own core archetype", async () => {
+      const page = await showing(null);
+
+      expect(text(page.querySelector(".rv4-corehead__title"))).toBe("Core Archetype");
+      expect(text(page.querySelector(".rv4-corehead__lede"))).toBe(
+        "The following archetype is your core archetype - the highest probability match of all 14."
+      );
+      expect(
+        page.querySelector('[aria-label="Emotional Voyeur — your core archetype"]')
+      ).not.toBeNull();
+      expect(navRow(page)).toContain("Core Archetype");
+    });
+  });
+
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
   // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
   // keeps the site's dark shell (#0b0613) it painted while the report was loading.

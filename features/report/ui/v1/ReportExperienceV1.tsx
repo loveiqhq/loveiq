@@ -169,6 +169,9 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   // Live full-report quote used by the locked premium cards' price/strike/save.
   // Same source the pricing modal and sticky bar read, so all three agree.
   const fullReportQuote = pricingQuotes?.full_report ?? null;
+  // One of the reader's other archetypes, opened from the list of all 14 (Marcus, 27.10).
+  const viewingOtherArchetype = Boolean(primaryArchetype) && viewArchetype !== primaryArchetype;
+
   // The report shows locked premium cards (inline price + countdown) when it
   // isn't fully unlocked and has at least one premium section. Gates both the
   // shared countdown ticker and the price-exposure analytics event.
@@ -510,6 +513,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
                         archetypeHtml={archetypeHtml}
                         matchScore={matchScore}
                         theme={theme}
+                        isCore={!viewingOtherArchetype}
                       />
                     </ReportSection>
                   );
