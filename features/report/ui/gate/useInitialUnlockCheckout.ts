@@ -6,6 +6,7 @@ import {
   getGaMeasurementContext,
   trackBeginCheckout,
   trackInitialGateCta,
+  type InitialGateCtaPlace,
 } from "@features/analytics/client";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
@@ -14,7 +15,8 @@ import {
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { GATE_COPY } from "./gateContent";
 
-export type GateCtaPlace = "card" | "sticky";
+/** The gate's card and bar, and the same two on its exit page (`exit_card` / `exit_sticky`). */
+export type GateCtaPlace = InitialGateCtaPlace;
 
 export interface InitialUnlockCheckoutState {
   status: "idle" | "redirecting" | "error";

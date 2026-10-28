@@ -394,6 +394,47 @@ describe("POST /api/analytics-event — reading per chapter and Skip Intro (14.1
   });
 });
 
+describe("POST /api/analytics-event — the paygate's exit pages (28.10)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  const inserted = () => {
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    return JSON.parse(String(insert?.[1]?.body));
+  };
+
+  it("stores a reason against the reader's survey, as the paywall's", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "paygate_exit_reason",
+        submission_id: 42,
+        metadata: { stage: "pre", reason: "see_first", position: 2, changed: false, order: "a,b" },
+      })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "paygate_exit_reason",
+      entity_type: "paywall",
+      metadata: { stage: "pre", reason: "see_first", position: 2 },
+    });
+  });
+
+  it("keeps a reader's sentence to the page's 500 characters, whatever a client sends", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "paygate_exit_note",
+        submission_id: 42,
+        metadata: { stage: "full", length: 600, answer_text: "x".repeat(600) },
+      })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted().metadata.answer_text).toHaveLength(500);
+    expect(inserted().metadata.length).toBe(600);
+  });
+});
+
 /**
  * The wiring between a dwell milestone and the Slack "Report time" line.
  *

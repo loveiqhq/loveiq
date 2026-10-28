@@ -85,6 +85,13 @@ const ALLOWED_EVENTS = [
   "initial_gate_viewed",
   "initial_gate_cta_click",
   "initial_gate_back",
+  // The paygate's exit pages (pre: the gate's way out; full: the full report's, after the
+  // EUR 1.99): seen, the reason tapped, a sentence written, Unlock pressed, and left
+  "paygate_exit_viewed",
+  "paygate_exit_reason",
+  "paygate_exit_note",
+  "paygate_exit_cta_click",
+  "paygate_exit_leave",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -125,6 +132,11 @@ function entityTypeFor(event: AllowedEvent): string {
     case "initial_gate_viewed":
     case "initial_gate_cta_click":
     case "initial_gate_back":
+    case "paygate_exit_viewed":
+    case "paygate_exit_reason":
+    case "paygate_exit_note":
+    case "paygate_exit_cta_click":
+    case "paygate_exit_leave":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
@@ -154,6 +166,20 @@ function entityTypeFor(event: AllowedEvent): string {
     case "experiment_card_flipped":
       return "experiment";
   }
+}
+
+/**
+ * A reader's own sentence from an exit page's "Something else" (paygate_exit_note) is kept
+ * at the page's own cap even if a client sends more: the whole metadata would otherwise be
+ * bounded only by its 8 KB.
+ */
+const EXIT_NOTE_MAX = 500;
+function clampExitNote(
+  event: AllowedEvent,
+  metadata: Record<string, unknown>
+): Record<string, unknown> {
+  if (event !== "paygate_exit_note" || typeof metadata.answer_text !== "string") return metadata;
+  return { ...metadata, answer_text: metadata.answer_text.slice(0, EXIT_NOTE_MAX) };
 }
 
 const schema = z.object({
@@ -258,7 +284,7 @@ export async function POST(request: Request) {
       // only point that sees exactly what is about to be written — and the
       // PostHog event, which we decided to keep intact, has already been sent
       // from the client by now. See shared/format/redact-report-token.ts.
-      metadata: redactReportTokensDeep(metadata ?? {}),
+      metadata: redactReportTokensDeep(clampExitNote(event_type, metadata ?? {})),
       ...(typeof duration_ms === "number" ? { duration_ms } : {}),
     }),
   });

@@ -1,10 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useRef, useState, type FC, type MouseEvent } from "react";
 import { trackInitialGateBack } from "@features/analytics/client";
-import { GATE_COPY, GATE_NOT_READY_HREF } from "./gateContent";
+import { EXIT_LEAVE_PARAM } from "./exit/exitContent";
+import { openExit } from "./exit/exitHistory";
+import { GATE_COPY, GATE_NOT_READY_TO } from "./gateContent";
 
 function prefersReducedMotion(): boolean {
   return (
@@ -21,32 +23,42 @@ function prefersReducedMotion(): boolean {
  * Under reduced motion there is no bar and nothing pulses.
  *
  * The way out is not "Back" (sync 26.10, Marcus: "there is no such thing as back"): it says
- * the reader is not ready, and leads to GATE_NOT_READY_HREF for every reader, wherever they
- * came from. Its word is its name (persona walks 24.10: a bare arrow said nothing). Not
- * prefetched: most readers never take it. Its analytics event keeps its first name.
+ * the reader is not ready, and since 28.10 opens the gate's exit page (./exit), which makes the
+ * case and asks why, for every reader, wherever they came from. On this URL, as `?leave=pre`
+ * on its own history entry (exit/exitHistory.ts): Back returns here. Its word is its name
+ * (persona walks 24.10: a bare arrow said nothing). Its analytics event keeps its first name,
+ * recorded once a gate, and not for a new tab, which opens the exit page there instead.
  */
 export const GateHero: FC = () => {
   const [reducedMotion] = useState(prefersReducedMotion);
-  const left = useRef(false);
-  const leave = (e: MouseEvent<HTMLAnchorElement>) => {
-    // Once, and not for a new tab (cmd/ctrl/shift or a middle click): that reader stays here.
-    if (left.current || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    left.current = true;
-    trackInitialGateBack({ to: GATE_NOT_READY_HREF });
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const href = (() => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete("anchor");
+    params.delete("unlocked");
+    params.set(EXIT_LEAVE_PARAM, "pre");
+    return `${pathname ?? ""}?${params.toString()}`;
+  })();
+  const counted = useRef(false);
+  const notReady = (e: MouseEvent<HTMLAnchorElement>) => {
+    // A new tab (cmd/ctrl/shift or a middle click) opens the exit page there; this one stays.
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (!counted.current) {
+      counted.current = true;
+      trackInitialGateBack({ to: GATE_NOT_READY_TO });
+    }
+    openExit("pre");
   };
 
   return (
     <>
       <header className="iug-header">
-        <Link
-          href={GATE_NOT_READY_HREF}
-          prefetch={false}
-          className="iug-header__back"
-          onClick={leave}
-        >
+        <a href={href} className="iug-header__back" onClick={notReady}>
           <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
           <span className="iug-header__back-label">{GATE_COPY.notReady}</span>
-        </Link>
+        </a>
       </header>
 
       <div className={`iug-hero${reducedMotion ? "" : " iug-hero--motion"}`}>

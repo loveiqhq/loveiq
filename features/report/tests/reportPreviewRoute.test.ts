@@ -114,6 +114,25 @@ describe("GET /api/report/preview — the initial unlock", () => {
   });
 });
 
+/** `&gift=1` with it: E07's gift, which the full report's exit page words as theirs (28.10). */
+describe("GET /api/report/preview — how the initial unlock is held", () => {
+  it("is bought, unless the preview asks for the gift", async () => {
+    expect((await get("archetype=Spark%20Seeker&plan=initial&v4=1")).json.initialUnlockSource).toBe(
+      "paid"
+    );
+    expect(
+      (await get("archetype=Spark%20Seeker&plan=initial&gift=1&v4=1")).json.initialUnlockSource
+    ).toBe("gift");
+  });
+
+  it("is nothing without the initial unlock, gift or not", async () => {
+    expect((await get("archetype=Spark%20Seeker&gift=1&v4=1")).json.initialUnlockSource).toBeNull();
+    expect(
+      (await get("archetype=Spark%20Seeker&plan=full_report&v4=1")).json.initialUnlockSource
+    ).toBeNull();
+  });
+});
+
 describe("GET /api/report/preview — Accelerator & Brakes", () => {
   // Review 26.09 (lockedBlurCopy.ts): a locked reader's page carries the copy it
   // draws blurred — "the unlocked content but blurred" — still marked locked.

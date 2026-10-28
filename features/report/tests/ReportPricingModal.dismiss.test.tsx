@@ -28,6 +28,27 @@ function Page() {
   );
 }
 
+/**
+ * A EUR 1.99 holder's picker (28.10): "Not ready to unlock yet" in place of the ×, which the
+ * page answers by closing the picker and opening the full report's exit page.
+ */
+function HolderPage({ onNotReady }: { onNotReady: () => void }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <ReportPricingModal
+      archetype="Spark Seeker"
+      open={open}
+      onClose={() => setOpen(false)}
+      onUnlock={() => {}}
+      quotes={null}
+      onNotReady={() => {
+        onNotReady();
+        setOpen(false);
+      }}
+    />
+  );
+}
+
 beforeEach(() => {
   dismissed.mockClear();
   vi.stubGlobal(
@@ -66,5 +87,27 @@ describe("closing the paywall", () => {
     render(<Page />);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(reason()).toEqual(["escape"]);
+  });
+
+  it("gives a EUR 1.99 holder “Not ready to unlock yet” for the ×, and names it so", () => {
+    const notReady = vi.fn();
+    const view = render(<HolderPage onNotReady={notReady} />);
+    expect(view.queryByRole("button", { name: "Close pricing modal" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Not ready to unlock yet" }));
+    expect(notReady).toHaveBeenCalledTimes(1);
+    expect(reason()).toEqual(["not_ready"]);
+  });
+
+  it("still just closes on a tap outside or Escape for that reader", () => {
+    const notReady = vi.fn();
+    const first = render(<HolderPage onNotReady={notReady} />);
+    fireEvent.click(first.container.querySelector(".report-pricing-modal__viewport")!);
+    expect(reason()).toEqual(["backdrop"]);
+    first.unmount();
+    dismissed.mockClear();
+    render(<HolderPage onNotReady={notReady} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(reason()).toEqual(["escape"]);
+    expect(notReady).not.toHaveBeenCalled();
   });
 });

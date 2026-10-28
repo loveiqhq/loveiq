@@ -25,3 +25,10 @@ export const INITIAL_UNLOCK_SECTION_ID = "summary";
 export function isInitialUnlockPlan(value: unknown): value is typeof INITIAL_UNLOCK_PLAN {
   return value === INITIAL_UNLOCK_PLAN;
 }
+
+/**
+ * How a reader holds the initial unlock: bought it (the EUR 1.99), or only E07's gift (its
+ * EUR 0 row). The full report's exit page words the EUR 10 by it (server/personalReport.ts
+ * initialUnlockSourceOf).
+ */
+export type InitialUnlockSource = "paid" | "gift";
