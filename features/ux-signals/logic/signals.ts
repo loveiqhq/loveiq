@@ -191,6 +191,13 @@ const STAGE: Record<string, string> = {
   initial_gate_viewed: "gate",
   initial_gate_cta_click: "gate",
   initial_gate_back: "gate",
+  // The paygate's exit pages (28.10): the €1.99 page's is the gate's, the full report's the
+  // paywall's, by the event's own `stage` (stageOf).
+  paygate_exit_viewed: "paywall",
+  paygate_exit_reason: "paywall",
+  paygate_exit_note: "paywall",
+  paygate_exit_cta_click: "paywall",
+  paygate_exit_leave: "paywall",
 };
 
 /**
@@ -210,6 +217,7 @@ const PAGE_EVENTS = new Set([
 const EXPOSURES = new Set(["price_shown", "locked_card_price_shown"]);
 
 function stageOf(e: UxEvent): string | null {
+  if (e.event.startsWith("paygate_exit_")) return e.props.stage === "pre" ? "gate" : "paywall";
   if (e.event in STAGE) return ofTheGate(e) ? "gate" : STAGE[e.event]!;
   if (PAGE_EVENTS.has(e.event)) return pageOf(e.props.pathname);
   return null;
@@ -655,6 +663,8 @@ export const SIGNAL_PROPS = [
   "hidden_ms",
   "cta",
   "error_kind",
+  // The paygate's exit pages: which one (pre, the gate's; full, the full report's).
+  "stage",
 ] as const;
 
 /** Every signal's value for one visit; null where the visit never reached it. */

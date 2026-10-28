@@ -427,7 +427,7 @@ describe("buildPayToStart", () => {
       id: number,
       seen: boolean,
       gapMs = 5_000,
-      taps?: { card: boolean; bar: boolean; notReady: boolean }
+      taps?: { card: boolean; bar: boolean; notReady: boolean; exit?: boolean }
     ) => {
       const s = subs.find((x) => x.id === id)!;
       return {
@@ -437,7 +437,12 @@ describe("buildPayToStart", () => {
         ...(taps && { taps }),
       };
     };
-    const tap = (card: boolean, bar: boolean, notReady = false) => ({ card, bar, notReady });
+    const tap = (card: boolean, bar: boolean, notReady = false, exit = false) => ({
+      card,
+      bar,
+      notReady,
+      exit,
+    });
     const p = buildPayToStart(
       input({
         facts: {
@@ -452,10 +457,10 @@ describe("buildPayToStart", () => {
         },
         gateMembers: [
           // The page's buttons and its way out: 3 pressed the card, 4 both, 8 the bar and
-          // didn't pay, 7 left by "Not ready to unlock yet".
+          // didn't pay, 7 pressed "Not ready to unlock yet" and then Unlock on its exit page.
           member(3, true, 5_000, tap(true, false)),
           member(4, true, 5_000, tap(true, true)),
-          member(7, true, 5_000, tap(false, false, true)),
+          member(7, true, 5_000, tap(false, false, true, true)),
           member(8, true, 5_000, tap(false, true)),
           member(9, false),
           member(6, true, 3 * 86_400_000),
@@ -487,16 +492,16 @@ describe("buildPayToStart", () => {
       ["Survey started", 8 * 0.75 + 6, false],
       ["Survey finished", 5, false],
       ["Saw the €1.99 page", 4, false],
-      ["Pressed Unlock", 3, false],
+      ["Pressed Unlock", 4, false],
       ["Paid €1.99", 2, true],
       ["Report opened", 2, false],
       ["Bought the full report", 1, true],
     ]);
     expect(gate.steps.find((s) => s.label === "Saw the €1.99 page")?.detail).toBe(
-      "1 left by “Not ready to unlock yet”"
+      "1 pressed “Not ready to unlock yet”"
     );
     expect(gate.steps.find((s) => s.label === "Pressed Unlock")?.detail).toBe(
-      "on the card 2 · on the bar 2"
+      "on the card 2 · on the bar 2 · on the exit page 1"
     );
     expect(gate.all).toMatchObject({ finished: 5, paid: 2, revenue: 23.97 });
     // 1, 2, 6 (the campaign's stamp) and 10 (before the switch).

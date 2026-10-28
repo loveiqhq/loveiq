@@ -61,6 +61,7 @@ import {
   type Scope,
 } from "./metrics";
 import { genderShort, relationshipShort } from "./traffic";
+import { buildPaygateExits, type ExitEventRow, type PaygateExitsBlock } from "./paygate-exits";
 
 export interface OverTimeRow {
   label: string;
@@ -245,6 +246,8 @@ export interface PaymentPayload extends PageHead {
     };
   };
   elasticity: Elasticity;
+  /** The paygate's exit pages (paygate-exits.ts): reached, why not, pressed, paid after. */
+  exits: PaygateExitsBlock;
 }
 
 /** The per-visitor price switch, as system_flags holds it; null when it couldn't be read. */
@@ -469,6 +472,8 @@ export function buildPayment(input: {
   fitFacts?: Facts | null;
   /** Whether the report's EUR 1.99 gate is switched on now; null when it couldn't be read. */
   gateOn?: boolean | null;
+  /** The exit pages' events (readPaygateExitRows); null when they couldn't be read. */
+  exitRows?: ExitEventRow[] | null;
 }): PaymentPayload {
   const { facts, filters: f, today, now, uplift } = input;
   const scope: Scope = assessmentScope(f);
@@ -1184,6 +1189,7 @@ export function buildPayment(input: {
       },
     },
     elasticity,
+    exits: buildPaygateExits({ subs, rows: input.exitRows ?? null, blocked: tablet, to: facts.to }),
   };
 }
 

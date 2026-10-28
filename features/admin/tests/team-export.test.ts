@@ -284,6 +284,18 @@ describe("the team data export", () => {
       link_hash: MASKED,
       subject_arm: "D",
     });
+    // A paygate exit page's "Something else" (28.10) keeps its page and loses the words.
+    expect(
+      maskRow(
+        "analytics_event",
+        {
+          event_type: "paygate_exit_note",
+          metadata: { stage: "pre", length: 22, answer_text: "Anna here, maybe later" },
+        },
+        m,
+        ids
+      ).metadata
+    ).toEqual({ stage: "pre", length: 22, answer_text: MASKED });
     expect(maskRow("payment_webhook_event", { event_data: { id: "evt" } }, m, ids).event_data).toBe(
       MASKED
     );

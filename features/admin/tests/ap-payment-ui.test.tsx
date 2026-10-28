@@ -304,6 +304,51 @@ const payload: PaymentPayload = {
       { arm: "B3", price: 4.99 },
     ],
   },
+  exits: {
+    why: null,
+    pages: [
+      {
+        stage: "pre",
+        name: "After the €1.99 page",
+        reached: 40,
+        views: 52,
+        answered: 18,
+        wrote: 3,
+        reasons: [
+          {
+            code: "see_first",
+            label: "I want to see some of it before I pay",
+            n: 10,
+            share: 10 / 18,
+          },
+          {
+            code: "too_expensive",
+            label: "It was too expensive and more than I wanted to pay",
+            n: 7,
+            share: 7 / 18,
+          },
+          { code: "other", label: "Something else (tell us in a sentence)", n: 1, share: 1 / 18 },
+        ],
+        pressed: { card: 4, sticky: 3, any: 6 },
+        paidAfter: 5,
+        left: { maybeLater: 12, back: 9, chapters: 0 },
+        words: [{ day: "2026-10-29", reason: "other", text: "I wanted a sample chapter first." }],
+      },
+      {
+        stage: "full",
+        name: "After the full report's plans",
+        reached: 9,
+        views: 9,
+        answered: 0,
+        wrote: 0,
+        reasons: [],
+        pressed: { card: 0, sticky: 0, any: 0 },
+        paidAfter: 0,
+        left: { maybeLater: 0, back: 2, chapters: 5 },
+        words: [],
+      },
+    ],
+  },
 };
 
 afterEach(() => {
@@ -337,6 +382,10 @@ describe("the Payment page as drawn", () => {
       "Checkout and payment methods",
       "Checkout success",
       "Payment methods",
+      "Paygate exits",
+      "Why not today · After the €1.99 page",
+      "Their words",
+      "Why not today · After the full report's plans",
       "Who pays",
       "Pricing tests",
       "Personal price multipliers in Pricing 3.0",
@@ -348,6 +397,7 @@ describe("the Payment page as drawn", () => {
     expect(texts(pills)).toEqual([
       "Over time",
       "Checkout & methods",
+      "Paygate exits",
       "Segments",
       "Pricing tests",
       "Price elasticity",
@@ -355,6 +405,7 @@ describe("the Payment page as drawn", () => {
     expect(pills.map((p) => p.getAttribute("href"))).toEqual([
       "#over-time",
       "#checkout",
+      "#exits",
       "#segments",
       "#experiments",
       "#elasticity",
@@ -429,6 +480,35 @@ describe("the Payment page as drawn", () => {
       "Stripe Linksaved details2475%€371€15.46",
       "Visacard825%€142€17.74",
     ]);
+  });
+
+  // Marcus's "Paygate exit pages" (28.10): "add it to the payment report".
+  it("paygate exits: each page's reach, answers, presses, sales and ways out, then why and their words", () => {
+    render(<ApPayment />);
+    const card = region("Paygate exits");
+    const table = within(card).getByRole("table", { name: "Paygate exits" });
+    expect(texts(rows(table))).toEqual([
+      "After the €1.99 page“Not ready” on the €1.99 page4052 views1845% · 3 wrote6card 4 · bar 3513%12Maybe later · back arrow 9",
+      "After the full report's plans“Not ready” on the plans, €1.99 holders900% · 0 wrote0card 0 · bar 000%5to the chapters · back arrow 2",
+    ]);
+    expect(within(card).getByText("I want to see some of it before I pay")).toBeTruthy();
+    expect(within(card).getByText("56%")).toBeTruthy();
+    expect(within(card).getByText("Nobody has answered on this page in this range.")).toBeTruthy();
+    expect(within(card).getByText("I wanted a sample chapter first.")).toBeTruthy();
+    expect(within(card).getByText(/2026-10-29 · Something else/)).toBeTruthy();
+  });
+
+  it("paygate exits: says why when it has nothing to show", () => {
+    view.payload = {
+      ...payload,
+      exits: { why: "The exit pages are recorded from 28 Oct 2026, after this range.", pages: [] },
+    };
+    render(<ApPayment />);
+    const card = region("Paygate exits");
+    expect(
+      within(card).getByText("The exit pages are recorded from 28 Oct 2026, after this range.")
+    ).toBeTruthy();
+    expect(within(card).queryByRole("table")).toBeNull();
   });
 
   it("who pays: switches segment; countries of 15 finishers or more all shown", () => {
@@ -646,7 +726,7 @@ describe("the Payment page as drawn", () => {
     expect(card.querySelector("polyline")).toBeNull();
   });
 
-  it("exports the over-time table, checkout, methods, the chosen segment and the pricing arms", () => {
+  it("exports the over-time table, checkout, methods, the exits, the chosen segment and the pricing arms", () => {
     render(<ApPayment />);
     fireEvent.change(screen.getByLabelText("Segment by"), { target: { value: "country" } });
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
@@ -655,11 +735,25 @@ describe("the Payment page as drawn", () => {
       "Payments over time",
       "Checkout success",
       "Payment methods",
+      "Paygate exits",
+      "Paygate exits · why not today",
       "Who pays · Country",
       "Pricing tests",
     ]);
+    const section = (name: string) => exported.sections.find((s) => s.name === name)!.table;
     // The segment in full, every country.
-    expect(exported.sections[4]!.table.rows).toHaveLength(14);
+    expect(section("Who pays · Country").rows).toHaveLength(14);
+    expect(section("Paygate exits").rows[0]).toEqual({
+      label: "After the €1.99 page",
+      values: [40, 52, 18, 3, 6, 5, 12, 0, 9],
+    });
+    expect(
+      section("Paygate exits · why not today").rows.map((r) => [r.label, r.values[0], r.values[1]])
+    ).toEqual([
+      ["I want to see some of it before I pay", "After the €1.99 page", 10],
+      ["It was too expensive and more than I wanted to pay", "After the €1.99 page", 7],
+      ["Something else (tell us in a sentence)", "After the €1.99 page", 1],
+    ]);
   });
 
   it("never writes NaN, undefined or Infinity, with or without sales", () => {
