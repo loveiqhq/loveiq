@@ -1736,7 +1736,7 @@ export async function getUpgradeCreditCents(personalReportId: number): Promise<n
  * - `upgradeCents`, All 14's (`getUpgradeCreditCents` above);
  * - `initialCents`, the initial unlock's EUR 10 off the full report
  *   (`features/report/logic/initialUnlock.ts`): granted by a succeeded, non-test EUR 1.99
- *   payment that was not refunded in full, or by E07's day-4 gift (a EUR 0 row marked
+ *   payment that was not refunded in full, or by E07's day-1 gift (a EUR 0 row marked
  *   `gifted`), which promises the same EUR 10; used up by the report's first full-report
  *   purchase: one EUR 10, "toward the full Premium Report" (Marcus, 14.10: a EUR 10
  *   voucher), never off every single report bought after it. Its money counts towards

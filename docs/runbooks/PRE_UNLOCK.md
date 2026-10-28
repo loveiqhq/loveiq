@@ -47,8 +47,10 @@ with it. Everything ships switched off.
    the full report at EUR 19.99 ("€10 credit applied" on Stripe's page). E06, "Your Core
    Archetype is unlocked", arrives. In the database the report has `initial_gate_cohort_at`
    and `initial_gate_seen_at`, and the payment `metadata.plan` = `initial`.
-5. **E07, from day 4.** Four days after the switch at the earliest, when the first gated
-   readers reach day 4: `{"key":"initial_unlock_gift_email","enabled":true}`. The cron runs
+5. **E07, from day 1.** A day after the switch at the earliest, when the first gated readers
+   reach day 1: `{"key":"initial_unlock_gift_email","enabled":true}`. Switch it on within two
+   days of a reader's first sight of the gate, or that reader ages out of E07's one-day window
+   with no arm, in neither group (the window is one to two days after it). The cron runs
    hourly at :47, on production only; each run logs its summary (`gifted`, `heldOut`,
    `skipped…`, `failed`), and #ops hears about a stalled cron after three hours. One draw per
    person: a retake's report is left out once the person has an arm.
@@ -59,7 +61,7 @@ with it. Everything ships switched off.
   free report as before, and the 72-hour 50% email and the "why didn't you unlock?" email
   reach them again. Payments made stand. The cohort stays out of the price test's readouts.
 - `initial_unlock_gift_email` is its own switch: with the gate off for good, switch it off
-  too, or readers who met the gate before still get the gift on day 4.
+  too, or readers who met the gate before still get the gift on day 1.
 - `report_paywall_enforced` off (the paywall's kill switch) opens every report, gate included.
 
 ## Old reports, for the campaign
@@ -82,6 +84,12 @@ A refunded EUR 1.99 takes the Core Archetype and the EUR 10 credit back with it:
 meets the gate again. If the full report was bought with the credit before the refund, #ops
 gets `credited_payment_refunded`: the reader keeps the full report for EUR 10 less, and
 charging the difference is a person's call.
+
+A EUR 1.99 paid on a report E07 had already gifted (a Stripe page opened before the gift,
+paid after it, or a payment landing as the cron gifts) posts `initial_paid_after_gift` to the
+ops channel, from the webhook or from the cron, whichever sees it: refund that EUR 1.99. The
+gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses nothing, and a
+`credited_payment_refunded` that follows it needs no charge: the gift covers that credit.
 
 ## Reading it
 
@@ -109,5 +117,7 @@ charging the difference is a person's call.
   the event means this link, shown to every reader; before, a back arrow shown only to
   readers who came from the survey. The sticky bar is always on screen since then too, so
   `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".
-- E07's holdout: compare full-report purchases after day 4 between `initial_gift_arm` = `gift`
-  and `holdout`, staff left out. The gift's EUR 0 rows are never revenue.
+- E07's holdout: compare full-report purchases after day 1 between `initial_gift_arm` = `gift`
+  and `holdout`, staff left out. The gift's EUR 0 rows are never revenue. Since E07 moved to
+  day 1 (Marcus, 27.10), a gifted reader can't buy the EUR 1.99 after their first day: read
+  the gate's EUR 1.99 conversion over that first day, not three.

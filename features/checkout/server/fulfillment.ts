@@ -27,7 +27,10 @@ import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
 import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 import { INITIAL_UNLOCK_PLAN, isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
-import { INITIAL_UNLOCK_TITLE } from "@features/report/logic/initialUnlockGate";
+import {
+  INITIAL_UNLOCK_GIFT,
+  INITIAL_UNLOCK_TITLE,
+} from "@features/report/logic/initialUnlockGate";
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import {
   confirmPayToStartSession,
@@ -596,6 +599,33 @@ async function supabaseServiceFetch(path: string, options: ServiceFetchOptions =
       timeoutMs,
     })
   );
+}
+
+/**
+ * A EUR 1.99 Core Archetype paid on a report that E07 had already gifted (Pre-unlock): a
+ * checkout opened before the gift and paid after it bought nothing new. Said to #ops, to be
+ * refunded by hand. It never holds the fulfillment up, and a lookup that fails says nothing.
+ */
+async function alertIfPaidAfterGift(
+  personalReportId: number,
+  paymentIntentId: string | null,
+  internalTag: string
+) {
+  try {
+    const res = await supabaseServiceFetch(
+      `/rest/v1/payment?personal_report_id=eq.${personalReportId}&metadata->>gifted=eq.${INITIAL_UNLOCK_GIFT}&select=id&limit=1`
+    );
+    if (!res.ok || ((await res.json()) as unknown[]).length === 0) return;
+    await notifySlack({
+      channel: "ops",
+      kind: "initial_paid_after_gift",
+      // The payment intent first: Slack's dedupe reads the first 100 characters.
+      text: `${internalTag}:warning: Refund \`${escapeSlack(paymentIntentId ?? "?")}\`: a €1.99 Core Archetype paid on report ${personalReportId} after E07 had already gifted it.`,
+      username: "ops_alerts",
+    });
+  } catch (err) {
+    logger.warn({ err, personalReportId }, "initial unlock: the check for an E07 gift failed");
+  }
 }
 
 function normalizePlan(value: unknown): ReportPurchasePlanId | null {
@@ -1554,6 +1584,9 @@ async function syncCheckoutSessionPayment({
         submissionId: context.submissionId,
         utmTracker: recipient.utmTracker,
       });
+      if (isInitialUnlockPlan(plan) && (amount ?? 0) > 0) {
+        await alertIfPaidAfterGift(personalReport.id, paymentIntentId, internalTag);
+      }
 
       // The old tier 3 ("For you & your partner") only: hand the buyer a one-time
       // 100%-off code to share with a partner. Inside isFirstFulfillment so it

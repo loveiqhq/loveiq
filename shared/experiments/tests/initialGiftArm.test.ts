@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assignInitialGiftArm, INITIAL_GIFT_EXPERIMENT } from "@shared/experiments/initialGiftArm";
 
-/** E07's holdout (Pre-unlock): 80% of the readers still unpaid on day 4 get the gift. */
+/** E07's holdout (Pre-unlock): 80% of the readers still unpaid on day 1 get the gift. */
 describe("assignInitialGiftArm", () => {
   it("gifts 80% of reports and holds 20% out, within 2 points over 10,000", () => {
     let gifted = 0;

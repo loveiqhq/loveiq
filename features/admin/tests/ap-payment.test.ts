@@ -277,7 +277,7 @@ describe("Payment page builder", () => {
         fullSales: 1,
         fullRevenue: 29.99,
       }),
-      // E07's day-4 gift: a EUR 0 Initial row, never a sale.
+      // E07's day-1 gift: a EUR 0 Initial row, never a sale.
       sub({
         id: 3,
         day: "2026-10-25",

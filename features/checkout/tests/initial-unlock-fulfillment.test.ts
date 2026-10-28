@@ -58,7 +58,11 @@ interface Seen {
 }
 
 /** Supabase and Slack as the handler meets them; every request is kept for the assertions. */
-function backend({ existingPayment = false }: { existingPayment?: boolean } = {}) {
+function backend({
+  existingPayment = false,
+  gifted = false,
+  giftLookupFails = false,
+}: { existingPayment?: boolean; gifted?: boolean; giftLookupFails?: boolean } = {}) {
   const seen: Seen[] = [];
   mockFetchWithTimeout.mockImplementation(
     async (url: string, options?: { body?: string; method?: string }) => {
@@ -69,6 +73,10 @@ function backend({ existingPayment = false }: { existingPayment?: boolean } = {}
         return { ok: true, status: 200, text: async () => "" } as Response;
       }
       if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) return json([]);
+      if (url.includes("/rest/v1/payment?personal_report_id=eq.5&metadata->>gifted=eq.e07")) {
+        if (giftLookupFails) return { ok: false, status: 500, json: async () => ({}) } as Response;
+        return json(gifted ? [{ id: 77 }] : []);
+      }
       if (
         url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
         url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
@@ -117,14 +125,14 @@ const SESSION_METADATA = {
   unlockSource: "report_gate",
 };
 
-function stripe() {
+function stripe({ amountTotal = 199 }: { amountTotal?: number } = {}) {
   return {
     charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_initial_1" }) },
     checkout: {
       sessions: {
         retrieve: vi.fn().mockResolvedValue({
           id: "cs_initial_1",
-          amount_total: 199,
+          amount_total: amountTotal,
           currency: "eur",
           customer: null,
           customer_details: { email: "alice@example.com" },
@@ -267,5 +275,58 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     expect(sendGa4PurchaseEvent).not.toHaveBeenCalled();
     expect(sendPosthogPurchaseEvent).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("a EUR 1.99 paid after E07 had gifted the same unlock", () => {
+  const OPS_URL = "https://hooks.slack.com/services/TEST/OPS/secret";
+  beforeEach(() => {
+    process.env.SLACK_OPS_WEBHOOK_URL = OPS_URL;
+  });
+
+  it("tells #ops to refund it: a page opened before the gift, paid after it", async () => {
+    const seen = backend({ gifted: true });
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    const ops = seen.filter((s) => s.method === "POST" && s.url === OPS_URL);
+    expect(ops).toHaveLength(1);
+    expect(String(ops[0]!.body?.text)).toMatch(/paid on report 5 after E07 had already gifted it/);
+    // The payment intent leads: Slack's dedupe reads the first 100 characters.
+    expect(String(ops[0]!.body?.text).slice(0, 40)).toContain("pi_initial_1");
+    expect(String(ops[0]!.body?.text)).toContain("pi_initial_1");
+    // The sale itself is still recorded as it came.
+    expect(seen.some((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))).toBe(true);
+  });
+
+  it("says nothing when there was no gift, or on Stripe's re-delivery", async () => {
+    let seen = backend();
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    expect(seen.filter((s) => s.url === OPS_URL)).toHaveLength(0);
+    vi.clearAllMocks();
+    __resetSlackDedupForTests();
+    seen = backend({ gifted: true, existingPayment: true });
+    await processStripeWebhookEvent({
+      event: completed("evt_initial_2"),
+      stripe: stripe() as never,
+    });
+    expect(seen.filter((s) => s.url === OPS_URL)).toHaveLength(0);
+  });
+
+  it("says nothing for a EUR 0 order (a 100% code): no money to give back", async () => {
+    const seen = backend({ gifted: true });
+    await processStripeWebhookEvent({
+      event: completed("evt_initial_3"),
+      stripe: stripe({ amountTotal: 0 }) as never,
+    });
+    expect(seen.filter((s) => s.url === OPS_URL)).toHaveLength(0);
+  });
+
+  it("records the sale as it came when the gift can't be looked up, and says nothing", async () => {
+    const seen = backend({ gifted: true, giftLookupFails: true });
+    await processStripeWebhookEvent({
+      event: completed("evt_initial_4"),
+      stripe: stripe() as never,
+    });
+    expect(seen.some((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))).toBe(true);
+    expect(seen.filter((s) => s.url === OPS_URL)).toHaveLength(0);
   });
 });

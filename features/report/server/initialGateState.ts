@@ -11,7 +11,7 @@ import logger from "@shared/observability/logger";
  *   initial_gate_cohort_at  the survey was submitted while the gate was on. Only these
  *                           reports are ever gated; one read for free before stays free.
  *   initial_gate_seen_at    the first time the gate was shown: its "paywall reached", and the
- *                           day E07 counts its four days from.
+ *                           time E07 counts its one day from.
  *
  * Every read is a query of its own that fails soft. The columns are never added to the
  * report lookup's select: an unapplied migration would turn that lookup into a 400 for
@@ -67,7 +67,7 @@ export function readInitialUnlockGateSwitch(): Promise<boolean | null> {
   return readFeatureFlag("report_initial_unlock_gate", false);
 }
 
-/** E07, the day-4 gift. Off by default for the same reason. */
+/** E07, the day-1 gift. Off by default for the same reason. */
 export function isInitialGiftEmailEnabled(): Promise<boolean> {
   return isFeatureEnabled("initial_unlock_gift_email", false);
 }

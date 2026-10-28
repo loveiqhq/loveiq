@@ -4,6 +4,7 @@ const mockFetchWithTimeout = vi.fn();
 const mockSuppressionState = vi.fn();
 const mockResendSend = vi.fn();
 const mockIsProdCronHost = vi.fn();
+const mockNotifySlack = vi.fn();
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
@@ -25,6 +26,9 @@ vi.mock("resend", () => ({
   Resend: class {
     emails = { send: mockResendSend };
   },
+}));
+vi.mock("@shared/observability/slack", () => ({
+  notifySlack: (...args: unknown[]) => mockNotifySlack(...args),
 }));
 vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: (...args: unknown[]) => mockIsProdCronHost(...args),
@@ -55,13 +59,18 @@ function json(body: unknown, status = 200) {
   return { ok: status < 400, status, json: async () => body };
 }
 
-function candidate(id: number, appUser: Record<string, unknown> = {}) {
+function candidate(
+  id: number,
+  appUser: Record<string, unknown> = {},
+  surveyAt: string | null = new Date(Date.now() - 1.2 * 24 * 3_600_000).toISOString()
+) {
   return {
     id,
     survey_submission_id: id + 1000,
-    initial_gate_seen_at: new Date(Date.now() - 4.2 * 24 * 3_600_000).toISOString(),
+    initial_gate_seen_at: new Date(Date.now() - 1.2 * 24 * 3_600_000).toISOString(),
     survey_submission: {
       user_id: 7,
+      created_date_time: surveyAt,
       app_user: { email: `reader${id}@example.com`, first_name: "Alex", ...appUser },
     },
   };
@@ -87,6 +96,7 @@ function routeFetches({
   grantFails = false,
   armElsewhere = false,
   armElsewhereDown = false,
+  paidAfterGrant = false,
 }: {
   candidates: unknown[];
   payments?: unknown[];
@@ -96,6 +106,8 @@ function routeFetches({
   /** The person already has an arm on another report (a retake). */
   armElsewhere?: boolean;
   armElsewhereDown?: boolean;
+  /** A EUR 1.99 lands between the cron's first read and its grant. */
+  paidAfterGrant?: boolean;
 }): Calls {
   const calls: Calls = {
     armWrites: [],
@@ -114,6 +126,7 @@ function routeFetches({
       if (method === "GET" && url.includes("metadata->>gifted=eq.e07")) return json([]);
       if (method === "GET" && url.includes("/rest/v1/payment?personal_report_id=eq.")) {
         calls.paymentUrls.push(url);
+        if (paidAfterGrant && calls.grants.length > 0) return json([{ metadata: {} }]);
         return json(payments);
       }
       if (method === "GET" && url.includes("/rest/v1/personal_report?id=neq.")) {
@@ -146,7 +159,7 @@ function routeFetches({
   return calls;
 }
 
-describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
+describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetSystemFlagsCacheForTests({ initial_unlock_gift_email: true });
@@ -210,13 +223,24 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     expect(mockResendSend).not.toHaveBeenCalled();
   });
 
-  it("looks only at reports first gated four to five days ago, with no arm yet", async () => {
-    const calls = routeFetches({ candidates: [] });
-    await GET(makeRequest("test-cron-secret"));
-    const url = calls.candidateUrl ?? "";
-    expect(url).toContain("initial_gate_seen_at=lte.");
-    expect(url).toContain("initial_gate_seen_at=gt.");
-    expect(url).toContain("initial_gift_arm=is.null");
+  it("looks only at reports first gated one to two days ago, with no arm yet", async () => {
+    // Day 1, not the board's day 4 (Marcus, LoveIQ Sync 27 Oct 2026): the bounds themselves,
+    // since a check that only finds the two filters passes on any day.
+    vi.useFakeTimers({ now: new Date("2026-10-28T16:47:00.000Z"), toFake: ["Date"] });
+    try {
+      __resetSystemFlagsCacheForTests({ initial_unlock_gift_email: true });
+      const calls = routeFetches({ candidates: [] });
+      await GET(makeRequest("test-cron-secret"));
+      const url = calls.candidateUrl ?? "";
+      const at = (iso: string) => encodeURIComponent(iso);
+      expect(url).toContain(`initial_gate_seen_at=lte.${at("2026-10-27T16:47:00.000Z")}&`);
+      expect(url).toContain(`initial_gate_seen_at=gt.${at("2026-10-26T16:47:00.000Z")}&`);
+      expect(url).toContain("initial_gift_arm=is.null");
+      // The survey's own time, for the email's first line.
+      expect(url).toContain("fk_personal_report_submission(user_id,created_date_time,");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("gifts a report on the gift arm: the arm, the EUR 0 unlock, one E07, the stamp", async () => {
@@ -240,11 +264,70 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     const sent = mockResendSend.mock.calls[0]![0];
     expect(sent.to).toBe(`reader${GIFT_ID}@example.com`);
     expect(sent.subject).toBe("We unlocked your Core Archetype for you");
+    // A day after a survey of a day ago, so it says when: not the frame's "A few days ago".
+    expect(sent.text).toContain(
+      "Yesterday you answered some very personal questions. Your result has been waiting ever since"
+    );
+    expect(sent.html).toContain("Yesterday you answered some very personal questions.");
+    expect(`${sent.text}${sent.html}`).not.toMatch(/few days ago/i);
     expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
     expect(sent.tags).toEqual([
       { name: "stage", value: "initial_gift" },
       { name: "sub", value: String(GIFT_ID + 1000) },
     ]);
+  });
+
+  it.each([
+    ["35 hours 59 minutes", 35 * 60 + 59, true],
+    ["36 hours 1 minute", 36 * 60 + 1, false],
+    ["three weeks", 21 * 24 * 60, false],
+  ])("says Yesterday only for a survey under 36 hours old: %s", async (_age, minutes, recent) => {
+    // A report can meet the gate long after its survey: a first open days later, or the
+    // old-user campaign's stamped reports. Then no day is named.
+    const surveyAt = new Date(Date.now() - minutes * 60_000).toISOString();
+    routeFetches({ candidates: [candidate(GIFT_ID, {}, surveyAt)] });
+    await GET(makeRequest("test-cron-secret"));
+    const sent = mockResendSend.mock.calls[0]![0];
+    const both = `${sent.text}${sent.html}`;
+    if (recent) {
+      expect(sent.text).toContain("Yesterday you answered some very personal questions.");
+    } else {
+      expect(sent.text).toContain(
+        "You answered some very personal questions. Your result has been waiting ever since"
+      );
+      expect(both).not.toMatch(/yesterday/i);
+    }
+  });
+
+  it("names no day when the survey's time can't be read", async () => {
+    routeFetches({ candidates: [candidate(GIFT_ID, {}, null)] });
+    await GET(makeRequest("test-cron-secret"));
+    const sent = mockResendSend.mock.calls[0]![0];
+    expect(sent.text).toContain("You answered some very personal questions.");
+    expect(`${sent.text}${sent.html}`).not.toMatch(/yesterday/i);
+  });
+
+  it("sends nothing and tells #ops to refund when a EUR 1.99 lands as it gifts", async () => {
+    // The webhook found no gift then, so this run is the side that notices.
+    const calls = routeFetches({ candidates: [candidate(GIFT_ID)], paidAfterGrant: true });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(calls.grants).toHaveLength(1);
+    expect(calls.claims).toHaveLength(0);
+    expect(mockResendSend).not.toHaveBeenCalled();
+    expect(body.summary).toEqual(expect.objectContaining({ gifted: 0, skippedPaid: 1 }));
+    expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+    expect(mockNotifySlack.mock.calls[0]![0]).toMatchObject({
+      channel: "ops",
+      kind: "initial_paid_after_gift",
+    });
+    expect(String(mockNotifySlack.mock.calls[0]![0].text)).toContain(`report ${GIFT_ID}`);
+  });
+
+  it("tells #ops nothing on an ordinary gift", async () => {
+    routeFetches({ candidates: [candidate(GIFT_ID)] });
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+    expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
   it("holds a report on the holdout arm out: its arm, and nothing else", async () => {
@@ -310,9 +393,12 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
   it("counts a refunded or disputed payment as paid, and a checkout left open as not", async () => {
     const calls = routeFetches({ candidates: [candidate(GIFT_ID)] });
     await GET(makeRequest("test-cron-secret"));
-    expect(calls.paymentUrls).toHaveLength(1);
-    expect(calls.paymentUrls[0]).toContain("status=in.(succeeded,refunded,disputed)");
-    expect(calls.paymentUrls[0]).not.toContain("canceled");
+    // Read before the grant, and again after it, for a EUR 1.99 landing in between.
+    expect(calls.paymentUrls).toHaveLength(2);
+    for (const url of calls.paymentUrls) {
+      expect(url).toContain("status=in.(succeeded,refunded,disputed)");
+      expect(url).not.toContain("canceled");
+    }
   });
 
   it("asks about the person's other reports by their own user id, never this report", async () => {

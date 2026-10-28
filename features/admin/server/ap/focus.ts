@@ -410,7 +410,7 @@ export function buildFocus(input: {
   };
   /**
    * The finishers of a period who pre-unlocked (paid EUR 1.99 for the Core Archetype) so far,
-   * and those pre-unlocks' count and revenue, as `fullSales`. E07's day-4 gift is a EUR 0 row
+   * and those pre-unlocks' count and revenue, as `fullSales`. E07's day-1 gift is a EUR 0 row
    * and never one (`preBuysOf`).
    */
   const preSales = (q: Period) => {

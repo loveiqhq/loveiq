@@ -527,7 +527,7 @@ const COHORT =
 const PERSON_RULE =
   "People are told apart by their account; a finished survey without one counts alone.";
 const PRE_RULE =
-  "The Initial plan is the €1.99 Core Archetype: on sale from the evening of 22 Oct 2026 (counted from 23 Oct, its first whole day), on pay to start's €1.99 page (the report's own €1.99 gate is switched off). E07's €0 gift is no sale. A rate over a range starting earlier is blank, never 0%.";
+  "The Initial plan is the €1.99 Core Archetype: on sale from the evening of 22 Oct 2026 on pay to start's €1.99 page (counted from 23 Oct, its first whole day; a rate over a range starting earlier is blank, never 0%), and from 27 Oct 2026 also on the report's own €1.99 gate. E07's €0 gift is no sale.";
 const TYPES_RULE =
   "Each sale is in one row. Pay to start's are the purchases made on its pages (live from 22 Oct 2026), and what a pay-to-start reader later buys on their report has its own row; an upgrade after €1.99 is a full unlock bought on a report whose €1.99 Core Archetype was paid before it, in either funnel. The report's €1.99 gate has a row while it is switched on or sold. A row not on sale over the range is blank, never 0.";
 const BY_PAYMENT_DAY =

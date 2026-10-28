@@ -548,7 +548,7 @@ interface StageSummary {
   skippedNoQuote: number;
   skippedNoPromo: number;
   skippedUnlockFeedback: number;
-  /** In the EUR 1.99 gate's cohort: the gate and its day-4 gift (E07) are their offer. */
+  /** In the EUR 1.99 gate's cohort: the gate and its day-1 gift (E07) are their offer. */
   skippedInitialGate: number;
   failed: number;
 }
@@ -610,7 +610,7 @@ async function processCandidate(
     }
 
     // The EUR 1.99 gate's readers (Pre-unlock): no 50% code beside the gate's own EUR 1.99,
-    // its EUR 10 credit and the day-4 gift. Before the token, so no quote is made for them.
+    // its EUR 10 credit and the day-1 gift. Before the token, so no quote is made for them.
     if (ctx.initialGateCohort.has(candidate.id)) {
       summary.skippedInitialGate++;
       return;

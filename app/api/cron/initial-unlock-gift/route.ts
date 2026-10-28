@@ -1,8 +1,9 @@
 /**
- * E07, the day-4 gift (Pre-unlock, Notion "RFD > Pre-Unlock"; Figma Report-3.0 1669:2835).
+ * E07, the day-1 gift (Pre-unlock, Notion "RFD > Pre-Unlock"; Figma Report-3.0 1669:2835). Day 1,
+ * not the board's day 4: Marcus, LoveIQ Sync 27 Oct 2026 ("one day post-survey").
  *
  * Hourly. A reader the EUR 1.99 gate stopped (`personal_report.initial_gate_seen_at`, its
- * first view) who has paid nothing four days on gets one of two arms
+ * first view) who has paid nothing a day on gets one of two arms
  * (shared/experiments/initialGiftArm.ts), written to `personal_report.initial_gift_arm`:
  *   - gift (80%): the initial unlock as a EUR 0 payment (features/report/server/
  *     initialUnlockGift.ts) and E07, "We unlocked your Core Archetype for you";
@@ -13,7 +14,7 @@
  * it goes out, as the nurture email does (F-06): a lost send is preferred to a double one.
  * A gift that could not be written gives its arm back, and the next run tries again.
  *
- * Who is looked at: reports first gated between four and five days ago, with no arm. A
+ * Who is looked at: reports first gated between one and two days ago, with no arm. A
  * reader who paid (a refund or a dispute included), unsubscribed, bounced or froze their
  * data (GDPR Art. 18) is left alone and given no arm, so they are in neither group, and so
  * is a report whose person already has an arm on another report: a retake is not a second
@@ -38,6 +39,7 @@ import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 
 export const maxDuration = 60;
@@ -45,8 +47,14 @@ export const maxDuration = 60;
 const SUPABASE_TIMEOUT_MS = 8_000;
 const RESEND_TIMEOUT_MS = 10_000;
 const DAY_MS = 24 * 3_600_000;
-const GIFT_AFTER_MS = 4 * DAY_MS;
+const GIFT_AFTER_MS = DAY_MS;
 const WINDOW_MS = DAY_MS;
+/**
+ * E07 says "Yesterday you answered…" only when the survey was that recent. The gate counts
+ * from its first view, and a report can meet it long after its survey: a first open days
+ * later, or the old-user campaign's stamped reports (docs/runbooks/PRE_UNLOCK.md).
+ */
+const ANSWERED_YESTERDAY_MS = 36 * 3_600_000;
 /**
  * Readers left alone keep no arm and stay in the window for its day, read again each hour,
  * oldest first: the page is wide enough that they never crowd out the ones still to draw
@@ -105,6 +113,7 @@ interface CandidateRow {
   initial_gate_seen_at: string;
   survey_submission?: {
     user_id?: number | null;
+    created_date_time?: string | null;
     app_user?: {
       email?: string | null;
       first_name?: string | null;
@@ -122,7 +131,7 @@ async function fetchCandidates(nowMs: number): Promise<CandidateRow[]> {
     `&initial_gate_seen_at=gt.${encodeURIComponent(seenAfter)}` +
     `&initial_gift_arm=is.null` +
     `&select=id,survey_submission_id,initial_gate_seen_at,` +
-    `survey_submission!fk_personal_report_submission(user_id,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
+    `survey_submission!fk_personal_report_submission(user_id,created_date_time,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
     `&order=initial_gate_seen_at.asc` +
     `&limit=${CANDIDATE_LIMIT}`;
   const r = await supabaseFetch(path);
@@ -133,7 +142,7 @@ async function fetchCandidates(nowMs: number): Promise<CandidateRow[]> {
 /**
  * Whether the reader paid anything since: any payment but the gift itself that took money,
  * refunded or disputed ones included, so a EUR 1.99 refunded under the guarantee (or
- * charged back) never comes back free on day 4. A checkout left open (`canceled`) is not
+ * charged back) never comes back free on day 1. A checkout left open (`canceled`) is not
  * a payment: E07 is for those readers. Null when it can't be read; the report waits.
  */
 async function hasPaid(personalReportId: number): Promise<boolean | null> {
@@ -286,6 +295,20 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
     return;
   }
 
+  // A EUR 1.99 can land between the read above and the grant, and its webhook then found no
+  // gift to report (features/checkout/server/fulfillment.ts). Read again, so one side always
+  // tells #ops to refund it; the reader has paid, so no "no payment needed" email.
+  if ((await hasPaid(candidate.id)) === true) {
+    await notifySlack({
+      channel: "ops",
+      kind: "initial_paid_after_gift",
+      text: `:warning: Refund report ${candidate.id}'s €1.99: it was paid as E07 gifted the same unlock. E07's email was not sent.`,
+      username: "ops_alerts",
+    });
+    summary.skippedPaid++;
+    return;
+  }
+
   const claimed = await patchReport(candidate.id, "initial_gift_sent_at=is.null", {
     initial_gift_sent_at: new Date().toISOString(),
   });
@@ -297,7 +320,9 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
   const unsubscribeUrl = ctx.unsubSecret
     ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, UNSUBSCRIBE_CAMPAIGNS.initialGift)
     : undefined;
+  const surveyAt = Date.parse(candidate.survey_submission?.created_date_time ?? "");
   const tpl = initialUnlockGiftEmail({
+    answeredYesterday: Date.now() - surveyAt < ANSWERED_YESTERDAY_MS,
     firstName: user?.first_name?.trim() || null,
     reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
     siteUrl: ctx.siteUrl,

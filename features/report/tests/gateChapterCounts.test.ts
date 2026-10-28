@@ -52,7 +52,7 @@ describe("what the EUR 1.99 opens, counted the same everywhere", () => {
     expect(PTS_INITIAL.priceCard.includes).toContain(cardLine);
   });
 
-  it("in the email after the EUR 1.99 (E06) and in the day-4 gift (E07)", () => {
+  it("in the email after the EUR 1.99 (E06) and in the day-1 gift (E07)", () => {
     expect(initialUnlockEmail(params).text).toContain(`You can read ${emailCount}`);
     expect(initialUnlockGiftEmail(params).text).toContain(`You can also read ${emailCount}`);
   });

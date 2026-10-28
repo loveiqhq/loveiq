@@ -126,7 +126,7 @@
 | The gate page                                               | `features/report/ui/gate/`, `features/report/ui/ReportPage.tsx`, `features/report/ui/hooks/useReportData.ts`                       |
 | The EUR 1.99 checkout and its return                        | `app/api/stripe/initial-unlock/route.ts`, `features/checkout/server/fulfillment.ts`, `features/checkout/ui/CheckoutReturnPage.tsx` |
 | E06 and E07                                                 | `features/report/server/emails/initial-unlock.ts`, `features/report/server/emails/initial-unlock-gift.ts`                          |
-| The day-4 gift and its holdout                              | `app/api/cron/initial-unlock-gift/route.ts`, `features/report/server/initialUnlockGift.ts`, `shared/experiments/initialGiftArm.ts` |
+| The day-1 gift and its holdout                              | `app/api/cron/initial-unlock-gift/route.ts`, `features/report/server/initialUnlockGift.ts`, `shared/experiments/initialGiftArm.ts` |
 | Pricing for the gate's readers (A3, the EUR 10 on the line) | `features/pricing/logic/reportPricing.ts`, `app/api/stripe/checkout-session/route.ts`                                              |
 | The success KPI                                             | `features/admin/server/ap/focus.ts`, `features/admin/server/ap/payment.ts`, `features/admin/server/ap/landing.ts`                  |
 | Runbook                                                     | `docs/runbooks/PRE_UNLOCK.md`                                                                                                      |

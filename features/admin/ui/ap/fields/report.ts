@@ -967,7 +967,7 @@ SELECT count(*) FILTER (WHERE returned_at IS NOT NULL) AS came_back, count(*) AS
     per: "per reader",
     formula: { num: "Readers who bought the Initial plan", den: "Readers", mult: "× 100" },
     caveat:
-      "On sale from the evening of 22 Oct 2026 (counted from 23 Oct, its first whole day), on pay to start's €1.99 page (the report's own €1.99 gate is switched off), so today it is readers who paid before the survey: a range starting earlier is blank, never 0. Real payments only (succeeded, not a test, over €0): E07's €0 gift doesn't count." +
+      "On sale from the evening of 22 Oct 2026 on pay to start's €1.99 page (counted from 23 Oct, its first whole day; a range starting earlier is blank, never 0), and from 27 Oct 2026 also on the report's own €1.99 gate. Real payments only (succeeded, not a test, over €0): E07's €0 gift doesn't count." +
       SAME_AGE,
     tables: [SUBS, PAYMENTS],
     query: {

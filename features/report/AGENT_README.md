@@ -179,8 +179,8 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   return page sends the reader to `/report/<token>?unlocked=initial`, which opens at the top.
   The reader then has the Core Archetype card and the Summary, and EUR 10 off the full report
   on arm A3 (EUR 19.99, the credit on Stripe's line, so codes still work).
-- **E07, day 4.** `app/api/cron/initial-unlock-gift` gives 80% of the readers still unpaid four
-  days after the gate the unlock as a EUR 0 payment (`metadata.gifted = "e07"`) and E07
+- **E07, day 1.** `app/api/cron/initial-unlock-gift` gives 80% of the readers still unpaid a
+  day after the gate the unlock as a EUR 0 payment (`metadata.gifted = "e07"`) and E07
   (`server/emails/initial-unlock-gift.ts`); 20% are held out (`initial_gift_arm`). Behind
   `initial_unlock_gift_email`. Left out of both arms: a reader who paid (refunded or disputed
   included), one whose address is suppressed or can't be checked yet, and a report whose
