@@ -579,6 +579,90 @@ const multiplier = (label: string, what: string, key: string, mult: string): Fie
   related: ["payment.pt-base", "payment.mult-tier", "payment.mult-device"],
 });
 
+const EXITS_EVENTS = `-- The paygate's exit pages' own events (from 28 Oct 2026), for the range's finishers: the
+-- pages' views, reasons, sentences, presses and leaves, and the EUR 1.99 page's Unlock presses
+-- made on its exit page (initial_gate_cta_click, place exit_card / exit_sticky), which are pre's.
+with fin as (
+  select s.id
+    from survey_submission s
+   where s.status = 'completed'
+     and ${FINISH_DAY} between :from and :to
+     and ${NOT_STAFF}
+), ev as (
+  select a.survey_submission_id as sid, a.event_type, a.event_time,
+         case when a.event_type = 'initial_gate_cta_click' then 'pre' else a.metadata->>'stage' end as stage,
+         a.metadata->>'reason' as reason, a.metadata->>'via' as via
+    from analytics_event a join fin on fin.id = a.survey_submission_id
+   where a.event_type in ('paygate_exit_viewed', 'paygate_exit_reason', 'paygate_exit_note',
+                          'paygate_exit_cta_click', 'paygate_exit_leave')
+      or (a.event_type = 'initial_gate_cta_click' and a.metadata->>'place' in ('exit_card', 'exit_sticky'))
+), seen as (
+  select sid, stage, min(event_time) as first_view, count(*) as views
+    from ev where event_type = 'paygate_exit_viewed' group by sid, stage
+)`;
+
+const EXITS_Q = `${EXITS_EVENTS}
+-- Per page: who reached it, answered, wrote, pressed Unlock there, paid within 24 hours of their
+-- first view (the EUR 1.99 on pre, a full unlock on full), and how they left.
+select seen.stage,
+       count(*) as reached,
+       sum(seen.views) as views,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.event_type = 'paygate_exit_reason')) as answered,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.event_type = 'paygate_exit_note')) as wrote,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.event_type in ('paygate_exit_cta_click', 'initial_gate_cta_click'))) as pressed_unlock,
+       count(*) filter (where exists (
+         select 1 from personal_report pr join payment p on p.personal_report_id = pr.id
+          where pr.survey_submission_id = seen.sid and ${REAL_SALE}
+            and p.payment_date_time between seen.first_view and seen.first_view + interval '24 hours'
+            and case when seen.stage = 'pre' then ${PRE_PLAN} else ${FULL_PLAN} end)) as paid_within_24h,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.via = 'maybe_later')) as maybe_later,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.via = 'chapters')) as back_to_chapters,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.via = 'back')) as back_arrow
+  from seen
+ group by seen.stage;`;
+
+const EXIT_REASONS_Q = `${EXITS_EVENTS}
+-- Each reader's latest reason on each page, counted.
+, latest as (
+  select distinct on (sid, stage) sid, stage, reason
+    from ev where event_type = 'paygate_exit_reason'
+   order by sid, stage, event_time desc
+)
+select stage, reason, count(*) as readers,
+       round(100.0 * count(*) / sum(count(*)) over (partition by stage), 1) as share_pct
+  from latest
+ group by stage, reason
+ order by stage, readers desc;`;
+
+const EXIT_WORDS_Q = `-- The exit pages' "Something else" sentences, newest first (the page masks email addresses,
+-- report links and phone numbers before it shows them; this query does not).
+select a.event_time, a.metadata->>'stage' as stage, a.metadata->>'answer_text' as words
+  from analytics_event a
+  join survey_submission s on s.id = a.survey_submission_id
+ where a.event_type = 'paygate_exit_note'
+   and ${FINISH_DAY} between :from and :to
+   and ${NOT_STAFF}
+ order by a.event_time desc
+ limit 10;`;
+
+const EXIT_EVENTS_TABLE: FieldTable = {
+  source: "production",
+  table: "analytics_event",
+  columns:
+    "survey_submission_id, event_type (paygate_exit_viewed, _reason, _note, _cta_click, _leave; initial_gate_cta_click), event_time, metadata (stage, reason, place, via, answer_text)",
+  filters:
+    "The range's finishers (survey day), the team's own left out. Written by the pages themselves from 28 Oct 2026; a reader whose browser refused the request is missing.",
+};
+const EXIT_TABLES = [EXIT_EVENTS_TABLE, SUBMISSION, STAFF];
+const EXIT_RULE =
+  "The two pages “Not ready to unlock yet” opens: pre after the €1.99 page, full after the full report's plans for a €1.99 holder (E07's gift readers included). Each reader once a line, per page. Recorded from 28 Oct 2026.";
+
 export const fields: FieldRegistry = {
   // ---- the tiles
   "payment.revenue": {
@@ -1370,5 +1454,94 @@ select price as best_price,
       text: atPrice("29.99", "29.99: A3's full report on today's price list."),
     },
     related: ["payment.el-best", "payment.el-at", "payment.pt-base"],
+  },
+
+  "payment.exit-reached": {
+    label: "Reached",
+    what: "The range's finishers who opened an exit page: each once, with the views under it.",
+    stat: "Count",
+    per: "per person and page",
+    formula: { num: "Finishers with a paygate_exit_viewed on that page" },
+    caveat: `${EXIT_RULE} ${LEFT_OUT}`,
+    tables: EXIT_TABLES,
+    query: { lang: "SQL", text: EXITS_Q },
+    related: ["payment.exit-answered", "payment.exit-pressed", "payment.exit-paid"],
+  },
+  "payment.exit-answered": {
+    label: "Answered why",
+    what: "Of those who reached the page, who tapped a reason in “Not today? Tell us why.”, with the share and how many also wrote a sentence under it.",
+    good: "up",
+    stat: "Count",
+    per: "per person and page",
+    formula: { num: "Readers with a paygate_exit_reason", den: "Readers who reached the page" },
+    caveat: `${EXIT_RULE} A reader can change their answer; the reasons count each reader's latest.`,
+    tables: EXIT_TABLES,
+    query: { lang: "SQL", text: EXITS_Q },
+    related: ["payment.exit-reasons", "payment.exit-words"],
+  },
+  "payment.exit-pressed": {
+    label: "Pressed Unlock",
+    what: "Readers who pressed Unlock on the exit page: on its offer card or on its bar along the bottom.",
+    good: "up",
+    stat: "Count",
+    per: "per person and page",
+    formula: {
+      num: "Readers with paygate_exit_cta_click (full), or initial_gate_cta_click at exit_card / exit_sticky (pre)",
+    },
+    caveat: `${EXIT_RULE} Pre's presses are the €1.99 page's own event, so Pay to start's “Pressed Unlock” counts them too, on its exit-page line.`,
+    tables: EXIT_TABLES,
+    query: { lang: "SQL", text: EXITS_Q },
+    related: ["payment.exit-paid", "pts.step-pressed"],
+  },
+  "payment.exit-paid": {
+    label: "Paid within 24 h",
+    what: "Readers who paid within 24 hours of first seeing the exit page: the €1.99 after pre, a full unlock after full.",
+    good: "up",
+    stat: "Count",
+    per: "per person and page",
+    formula: {
+      num: "Readers with a real sale of the page's plan within 24 hours of their first view",
+      den: "Readers who reached the page",
+    },
+    caveat: `${EXIT_RULE} A day, not longer: E07 gifts the Core Archetype the day after the gate (experiment #9), so a later payment says less about the page. It need not have started on the page: a reader may pay from the report itself.`,
+    tables: [...EXIT_TABLES, PAYMENT, REPORT],
+    query: { lang: "SQL", text: EXITS_Q },
+    related: ["payment.exit-pressed", "payment.pre", "payment.full"],
+  },
+  "payment.exit-left": {
+    label: "Left",
+    what: "How readers left the exit page: “Maybe later” to the landing page (pre), “Back to my open chapters” (full), and under it the page's back arrow.",
+    stat: "Count",
+    per: "per person and page",
+    formula: { num: "Readers with a paygate_exit_leave of that kind" },
+    caveat: `${EXIT_RULE} The phone's or browser's own Back is not recorded: it closes the page as the arrow does.`,
+    tables: EXIT_TABLES,
+    query: { lang: "SQL", text: EXITS_Q },
+    related: ["payment.exit-reached"],
+  },
+  "payment.exit-reasons": {
+    label: "Why not today",
+    what: "Each reader's latest reason on the exit page, ranked, as shares of those who answered. The reasons are shown in a shuffled order, “Something else” last, so no reason wins by its place.",
+    stat: "Share",
+    per: "per person and page",
+    formula: {
+      num: "Readers whose latest reason is this one",
+      den: "Readers who answered on the page",
+    },
+    caveat: `${EXIT_RULE} Pre asks about paying before seeing a result; full about the open chapters and the full report, so the two lists differ.`,
+    tables: EXIT_TABLES,
+    query: { lang: "SQL", text: EXIT_REASONS_Q },
+    related: ["payment.exit-answered", "payment.exit-words"],
+  },
+  "payment.exit-words": {
+    label: "Their words",
+    what: "The newest sentences readers wrote under “Something else”, with the day and their reason.",
+    stat: "List",
+    per: "per sentence",
+    formula: { num: "paygate_exit_note's answer_text, newest first" },
+    caveat: `${EXIT_RULE} Email addresses, report links and phone numbers are masked on the page; names in free text are not found. The team's data copy and Jarvis mask the sentence whole.`,
+    tables: EXIT_TABLES,
+    query: { lang: "SQL", text: EXIT_WORDS_Q },
+    related: ["payment.exit-reasons"],
   },
 };

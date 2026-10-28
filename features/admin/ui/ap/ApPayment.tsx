@@ -96,6 +96,7 @@ const inWords = (n: number) => WORDS[n] ?? String(n);
 const SECTIONS = [
   { id: "over-time", label: "Over time" },
   { id: "checkout", label: "Checkout & methods" },
+  { id: "exits", label: "Paygate exits" },
   { id: "segments", label: "Segments" },
   { id: "experiments", label: "Pricing tests" },
   { id: "elasticity", label: "Price elasticity" },
@@ -1454,6 +1455,126 @@ function ElasticityModel({
   );
 }
 
+/**
+ * The paygate's exit pages (Marcus's "Paygate exit pages", 28.10; Marcus: "add it to the payment
+ * report"): the two pages "Not ready to unlock yet" opens. Who reached each, why not today (each
+ * reader's latest reason), who pressed Unlock there, who paid within a day, how they left, and
+ * their own words, masked.
+ */
+function Exits({ d }: { d: PaymentPayload }) {
+  const { why, pages } = d.exits;
+  return (
+    <Card id="exits" labelledBy="h-exits">
+      <SectionHead
+        id="h-exits"
+        title="Paygate exits"
+        description="The two pages “Not ready to unlock yet” opens: after the €1.99 page, and, for a €1.99 holder, after the full report's plans. Each makes the case again and asks why not today. Recorded from 28 Oct 2026, for the range's finishers."
+      />
+      {why ? (
+        <Why>{why}</Why>
+      ) : (
+        <>
+          <PayTable
+            label="Paygate exits"
+            columns="minmax(220px, 2fr) repeat(5, minmax(104px, 1fr))"
+            minWidth={880}
+            head={[
+              { label: "Page", left: true },
+              { label: "Reached", info: "payment.exit-reached" },
+              { label: "Answered why", info: "payment.exit-answered" },
+              { label: "Pressed Unlock", info: "payment.exit-pressed" },
+              { label: "Paid within 24 h", info: "payment.exit-paid" },
+              { label: "Left", info: "payment.exit-left" },
+            ]}
+            rows={pages.map((p) => ({
+              key: p.stage,
+              cells: [
+                {
+                  v: p.name,
+                  sub:
+                    p.stage === "pre"
+                      ? "“Not ready” on the €1.99 page"
+                      : "“Not ready” on the plans, €1.99 holders",
+                  left: true,
+                  weight: "bold",
+                },
+                {
+                  v: fmt("count", p.reached),
+                  sub: p.views > p.reached ? `${fmt("count", p.views)} views` : undefined,
+                },
+                {
+                  v: fmt("count", p.answered),
+                  sub: `${fmt("pct", ratio(p.answered, p.reached), 0)} · ${fmt("count", p.wrote)} wrote`,
+                },
+                {
+                  v: fmt("count", p.pressed.any),
+                  sub: `card ${fmt("count", p.pressed.card)} · bar ${fmt("count", p.pressed.sticky)}`,
+                },
+                {
+                  v: fmt("count", p.paidAfter),
+                  sub: fmt("pct", ratio(p.paidAfter, p.reached), 0),
+                },
+                {
+                  v: fmt("count", p.stage === "pre" ? p.left.maybeLater : p.left.chapters),
+                  sub: `${p.stage === "pre" ? "Maybe later" : "to the chapters"} · back arrow ${fmt("count", p.left.back)}`,
+                },
+              ],
+            }))}
+          />
+          {pages.map((p) => (
+            <div key={p.stage} className="flex flex-col gap-3">
+              <SubHead title={`Why not today · ${p.name}`} info="payment.exit-reasons">
+                {p.answered
+                  ? `Each reader's latest answer, of the ${fmt("count", p.answered)} who answered.`
+                  : "Nobody has answered on this page in this range."}
+              </SubHead>
+              {p.reasons.map((r) => (
+                <div
+                  key={r.code}
+                  className="grid items-center gap-3"
+                  style={{ gridTemplateColumns: "minmax(0, 2.4fr) minmax(0, 1fr) 40px 44px" }}
+                >
+                  <span className="text-[13px] text-ap-ink">{r.label}</span>
+                  <Bar pct={r.share} />
+                  <span className="text-right text-[13px] font-bold tabular-nums text-ap-ink">
+                    {fmt("count", r.n)}
+                  </span>
+                  <span className="text-right text-xs font-bold tabular-nums text-ap-muted">
+                    {fmt("pct", r.share, 0)}
+                  </span>
+                </div>
+              ))}
+              {p.words.length ? (
+                <>
+                  <SubHead title="Their words" info="payment.exit-words">
+                    The newest first. Email addresses, report links and phone numbers are masked.
+                  </SubHead>
+                  <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                    {p.words.map((w, i) => (
+                      <li
+                        key={`${w.day}-${i}`}
+                        className="rounded-[10px] border border-ap-line px-3 py-2 text-[13px] leading-relaxed text-ap-ink"
+                      >
+                        <span className="block text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted">
+                          {w.day}
+                          {w.reason
+                            ? ` · ${p.reasons.find((r) => r.code === w.reason)?.label ?? w.reason}`
+                            : ""}
+                        </span>
+                        {w.text}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          ))}
+        </>
+      )}
+    </Card>
+  );
+}
+
 /** The CSV: the tiles, then the tables as the page shows them (the chosen segment in full). */
 function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: Table }> {
   const col = (label: string, unit: Column["unit"]): Column => ({ label, unit });
@@ -1558,6 +1679,51 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
             ratio(m.revenue, m.sales),
           ],
         })),
+      },
+    },
+    {
+      name: "Paygate exits",
+      table: {
+        columns: [
+          col("Page", "text"),
+          col("Reached", "count"),
+          col("Views", "count"),
+          col("Answered why", "count"),
+          col("Wrote a sentence", "count"),
+          col("Pressed Unlock", "count"),
+          col("Paid within 24 h", "count"),
+          col("Maybe later", "count"),
+          col("Back to the chapters", "count"),
+          col("Back arrow", "count"),
+        ],
+        rows: d.exits.pages.map((p) => ({
+          label: p.name,
+          values: [
+            p.reached,
+            p.views,
+            p.answered,
+            p.wrote,
+            p.pressed.any,
+            p.paidAfter,
+            p.left.maybeLater,
+            p.left.chapters,
+            p.left.back,
+          ],
+        })),
+      },
+    },
+    {
+      name: "Paygate exits · why not today",
+      table: {
+        columns: [
+          col("Reason", "text"),
+          col("Page", "text"),
+          col("Readers", "count"),
+          col("Share", "pct"),
+        ],
+        rows: d.exits.pages.flatMap((p) =>
+          p.reasons.map((r) => ({ label: r.label, values: [p.name, r.n, r.share] }))
+        ),
       },
     },
     ...(seg
@@ -1743,6 +1909,7 @@ export default function ApPayment() {
           <PaymentTypes d={data} />
           <OverTime d={data} />
           <Checkout d={data} />
+          <Exits d={data} />
           <Segments d={data} segKey={segKey} onSegKey={setSegKey} />
           <Pricing d={data} />
           <Elasticity el={data.elasticity} />
