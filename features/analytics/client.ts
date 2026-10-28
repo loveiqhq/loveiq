@@ -117,6 +117,13 @@ const PERSISTED_EVENTS = new Set([
   "initial_gate_viewed",
   "initial_gate_cta_click",
   "initial_gate_back",
+  // The paygate's exit pages (features/report/ui/gate/exit): seen, the reason, the sentence,
+  // Unlock pressed, and left
+  "paygate_exit_viewed",
+  "paygate_exit_reason",
+  "paygate_exit_note",
+  "paygate_exit_cta_click",
+  "paygate_exit_leave",
 ]);
 
 /**
@@ -875,30 +882,108 @@ export const trackInitialGateViewed = (params: { submission_id: number | null })
   persistAnalyticsEvent("initial_gate_viewed", params);
 };
 
-/** One of the gate's two buttons: the price card's, or the sticky bar's. */
-export const trackInitialGateCta = (params: { place: "card" | "sticky" }) => {
+/**
+ * One of the EUR 1.99 buttons: the gate's price card or sticky bar, or (from 28.10) the same
+ * two on the gate's exit page, `exit_card` / `exit_sticky`, so AP's "Pressed Unlock" keeps
+ * every press and can tell where it came from.
+ */
+export type InitialGateCtaPlace = "card" | "sticky" | "exit_card" | "exit_sticky";
+
+export const trackInitialGateCta = (params: { place: InitialGateCtaPlace }) => {
   track("initial_gate_cta_click", params);
   persistAnalyticsEvent("initial_gate_cta_click", params);
 };
 
-/** Set by the gate's way out, read once by the landing page (consumeLeftInitialGate). */
+/** Set by a way out of the gate, read once by the landing page (consumeLeftInitialGate). */
 const LEFT_INITIAL_GATE_KEY = "liq_left_initial_gate";
 
 /**
- * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
- * the same event name so the series runs on). `to` is where it leads: until 27.10 the event
- * was the arrow, shown only to a reader who came from the survey, one page back. Persisted,
- * so a later payment can be set against it.
+ * A reader the EUR 1.99 gate stopped is on their way to the landing page: the gate's own way
+ * out did this until 28.10, its exit page's "Maybe later" does it now. The landing page then
+ * neither counts a visit nor registers a landing arm for them.
  */
-export const trackInitialGateBack = (params: { to: string }) => {
-  track("initial_gate_back", params);
-  persistAnalyticsEvent("initial_gate_back", params);
-  if (params.to !== "/") return;
+export const markLeftInitialGate = () => {
   try {
     window.sessionStorage.setItem(LEFT_INITIAL_GATE_KEY, "1");
   } catch {
     // Storage blocked: the landing page then counts this reader as a visit, as before.
   }
+};
+
+/**
+ * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
+ * the same event name so the series runs on). `to` is where it leads: the landing page ("/")
+ * until 28.10, the gate's exit page (`exit_page`) since. Persisted, so a later payment can be
+ * set against it.
+ */
+export const trackInitialGateBack = (params: { to: string }) => {
+  track("initial_gate_back", params);
+  persistAnalyticsEvent("initial_gate_back", params);
+  if (params.to === "/") markLeftInitialGate();
+};
+
+/**
+ * The paygate's exit pages (features/report/ui/gate/exit; Marcus's "Paygate exit pages",
+ * 28.10): `pre` opens from the EUR 1.99 gate's "Not ready to unlock yet", `full` from the plan
+ * picker's for a EUR 1.99 holder. All persisted: AP's Payment page reads them.
+ */
+export type PaygateExitStage = "pre" | "full";
+
+export const trackPaygateExitViewed = (params: { stage: PaygateExitStage }) => {
+  track("paygate_exit_viewed", params);
+  persistAnalyticsEvent("paygate_exit_viewed", params);
+};
+
+/**
+ * A reason tapped: its code, its place in the order this reader was shown (1-based), and
+ * whether it replaced an earlier tap on the same page. The order itself (codes, comma-joined)
+ * is stored and goes to PostHog, not to GA4, which cuts a parameter at 100 characters.
+ */
+export const trackPaygateExitReason = (params: {
+  stage: PaygateExitStage;
+  reason: string;
+  position: number;
+  order: ReadonlyArray<string>;
+  changed: boolean;
+}) => {
+  const { order, ...rest } = params;
+  const shown = order.join(",");
+  track("paygate_exit_reason", rest, { order: shown });
+  persistAnalyticsEvent("paygate_exit_reason", { ...rest, order: shown });
+};
+
+/**
+ * "Something else", in the reader's own words. The words go to our own table only, under
+ * `answer_text`, which the team export and Jarvis mask: PostHog and GA4 get the length.
+ */
+export const trackPaygateExitNote = (params: { stage: PaygateExitStage; text: string }) => {
+  track("paygate_exit_note", { stage: params.stage, length: params.text.length });
+  persistAnalyticsEvent("paygate_exit_note", {
+    stage: params.stage,
+    length: params.text.length,
+    answer_text: params.text,
+  });
+};
+
+/** Unlock pressed on an exit page: the offer card's button or the sticky bar's. */
+export const trackPaygateExitCta = (params: {
+  stage: PaygateExitStage;
+  place: "card" | "sticky";
+}) => {
+  track("paygate_exit_cta_click", params);
+  persistAnalyticsEvent("paygate_exit_cta_click", params);
+};
+
+/**
+ * Left an exit page: its back arrow (`back`), "Maybe later" to the landing page, or "Back to
+ * my open chapters" (`chapters`).
+ */
+export const trackPaygateExitLeave = (params: {
+  stage: PaygateExitStage;
+  via: "back" | "maybe_later" | "chapters";
+}) => {
+  track("paygate_exit_leave", params);
+  persistAnalyticsEvent("paygate_exit_leave", params);
 };
 
 /**
@@ -1098,7 +1183,12 @@ export const trackReportChapterMenuOpened = (params: {
   persistAnalyticsEvent("report_chapter_menu_opened", payload);
 };
 
-export type PaywallDismissSource = "backdrop" | "close_button" | "escape" | "browser_back";
+/**
+ * How the plan picker was closed. `not_ready`: its "Not ready to unlock yet", which a EUR 1.99
+ * holder gets in place of the × (28.10), and which opens the full report's exit page.
+ */
+export type PaywallDismissSource =
+  "backdrop" | "close_button" | "escape" | "browser_back" | "not_ready";
 
 export const trackPaywallDismissed = (params: {
   source: PaywallDismissSource;

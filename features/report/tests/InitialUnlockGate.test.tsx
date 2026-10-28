@@ -16,6 +16,10 @@ vi.mock("@features/analytics/client", () => ({
   getGaMeasurementContext: () => ({ clientId: "123.456", sessionId: "789", consent: true }),
 }));
 vi.mock("posthog-js", () => ({ default: { capture: vi.fn() } }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/report/rpt_abcdefghij0123456789",
+  useSearchParams: () => new URLSearchParams("anchor=summary"),
+}));
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "csrf-token" }));
 
 import InitialUnlockGate from "@features/report/ui/gate/InitialUnlockGate";
@@ -332,14 +336,15 @@ describe("around the card", () => {
     expect(cardCta()).toBeEnabled();
   });
 
-  // Sync 26.10 (Marcus): "there is no such thing as back". The way out says what it is and
-  // leads to the landing page until his feedback page exists.
+  // Sync 26.10 (Marcus): "there is no such thing as back". The way out says what it is and,
+  // since 28.10, opens his exit page on this report's own URL (?leave=pre).
   const notReady = () => screen.getByRole("link", { name: "Not ready to unlock yet" });
 
   it("offers the way out to every reader, whatever brought them here", () => {
     setReferrer("https://mail.google.com/");
     renderGate();
-    expect(notReady()).toHaveAttribute("href", "/");
+    // The anchor marker is the report's own, not the exit page's.
+    expect(notReady()).toHaveAttribute("href", "/report/rpt_abcdefghij0123456789?leave=pre");
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
@@ -358,17 +363,22 @@ describe("around the card", () => {
     expect(mockSetContext).toHaveBeenLastCalledWith(null);
   });
 
-  it("counts a reader who leaves, once, with where the way out led", () => {
+  it("opens the exit page on a history entry of its own, counted once, with where it led", () => {
     setReferrer("https://www.loveiq.org/survey?step=done");
     renderGate();
     const link = notReady();
-    // jsdom cannot follow a link; the href is the destination under test.
-    link.addEventListener("click", (event) => event.preventDefault());
-    fireEvent.click(link);
-    // A second tap while the landing page loads is the same exit.
+    const click = fireEvent.click(link);
+    // Not followed: the page stays, and the exit page opens over it.
+    expect(click).toBe(false);
+    expect(window.history.state?.__loveiqExit).toBe("pre");
+    // (window.location is the test's stand-in; the document's own URL is where it went.)
+    const pushed = new URL(document.URL);
+    expect(pushed.pathname).toBe("/report/rpt_abcdefghij0123456789");
+    expect(pushed.searchParams.get("leave")).toBe("pre");
+    // A second tap is the same exit.
     fireEvent.click(link);
     expect(mockTrackBack).toHaveBeenCalledTimes(1);
-    expect(mockTrackBack).toHaveBeenCalledWith({ to: "/" });
+    expect(mockTrackBack).toHaveBeenCalledWith({ to: "exit_page" });
   });
 
   it("publishes its bar's height for the room under the page, and takes it back", () => {
@@ -379,7 +389,8 @@ describe("around the card", () => {
     expect(root.style.getPropertyValue("--iug-sticky-h")).toBe("");
   });
 
-  it("does not count a reader who opens the way out in a new tab", () => {
+  it("leaves a new tab to open the exit page there, uncounted", () => {
+    window.history.replaceState(null, "");
     renderGate();
     const link = notReady();
     link.addEventListener("click", (event) => event.preventDefault());
@@ -387,6 +398,7 @@ describe("around the card", () => {
     fireEvent.click(link, { ctrlKey: true });
     fireEvent.click(link, { button: 1 });
     expect(mockTrackBack).not.toHaveBeenCalled();
+    expect(window.history.state).toBeNull();
   });
 
   it("counts the gate as seen once, for this reader", () => {

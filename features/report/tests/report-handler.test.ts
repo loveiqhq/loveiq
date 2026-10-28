@@ -1007,6 +1007,7 @@ describe("GET /api/report — the initial unlock", () => {
     accessPlan: null,
     anyPlan: null,
     initialUnlock,
+    initialUnlockSource: initialUnlock ? ("gift" as const) : null,
     archetypeTiers: {},
     personalReportId: 99,
     unlockedArchetypeColumn: [],
@@ -1031,6 +1032,8 @@ describe("GET /api/report — the initial unlock", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.initialUnlock).toBe(true);
+    // How the owner holds it, for the full report's exit page's wording.
+    expect(json.initialUnlockSource).toBe("gift");
     // No plan: the pay screens keep selling, and every chapter stays as a free reader has it.
     expect(json.accessPlan).toBeNull();
     expect(json.purchasedPlan).toBeNull();
@@ -1047,6 +1050,7 @@ describe("GET /api/report — the initial unlock", () => {
       await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
     ).json();
     expect(json.initialUnlock).toBe(false);
+    expect(json.initialUnlockSource).toBeNull();
     expect(json.archetypeCard.locked).toBe(true);
     expect(json.summaryChapter.locked).toBe(true);
   });

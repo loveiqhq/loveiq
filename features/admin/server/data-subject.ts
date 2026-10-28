@@ -17,7 +17,8 @@
  *       - survey_submission_answer + history + options
  *       - survey_behavior_event (by submission session_id) [Audit M3]
  *       - scoring_result
- *       - analytics_event
+ *       - analytics_event (with the paygate exit pages' "Something else" sentences, in
+ *         metadata.answer_text, since 28.10; all of it purged at 180 days by purge-old-data)
  *       - report_section_feedback
  *       - email_message_event (exported; erased by its ON DELETE CASCADE from survey_submission)
  *       - unlock_feedback (the answer to "why didn't you unlock?" and the reader's own words)

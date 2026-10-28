@@ -84,6 +84,23 @@ describe("landing A/B — the arm reaches the analytics", () => {
     expect(view).toHaveBeenCalledTimes(1);
   });
 
+  // Since 28.10 the gate's way out opens its exit page on the report; that page's "Maybe later"
+  // is what leads here now, so it is what marks the reader.
+  it("leaves out a reader the exit page's “Maybe later” sent here, not one still on the report", async () => {
+    sessionStorage.clear();
+    const analytics = await import("@features/analytics/client");
+    vi.spyOn(analytics, "setLandingVariant").mockImplementation(() => {});
+    vi.spyOn(analytics, "trackExperimentExposure").mockImplementation(() => {});
+    const view = vi.spyOn(analytics, "trackLandingPageView").mockImplementation(() => {});
+    const { default: LandingPageTracker } = await import("@features/landing/ui/LandingPageTracker");
+
+    analytics.trackInitialGateBack({ to: "exit_page" });
+    expect(sessionStorage.getItem("liq_left_initial_gate")).toBeNull();
+    analytics.markLeftInitialGate();
+    render(<LandingPageTracker variant="white_card" />);
+    expect(view).not.toHaveBeenCalled();
+  });
+
   it("stores the gate's way out against the report's submission", async () => {
     vi.resetModules();
     sessionStorage.clear();

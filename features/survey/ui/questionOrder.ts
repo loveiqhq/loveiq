@@ -253,6 +253,15 @@ function mulberry32(seed: number): () => number {
 }
 
 /**
+ * The same seeded stream for a list outside the survey: the paygate's exit pages shuffle
+ * their "Not today?" reasons with it (features/report/ui/gate/exit), so a reader sees one
+ * order on a page however often it opens, and the order recorded with the answer is it.
+ */
+export function seededRandom(seed: string): () => number {
+  return mulberry32(hashSeed(seed));
+}
+
+/**
  * `items` in a seeded random order: a copy, never the input.
  *
  * Fisher-Yates, descending, each index landing on a uniformly chosen remaining element,

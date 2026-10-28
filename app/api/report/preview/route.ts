@@ -108,6 +108,13 @@ export async function GET(request: Request) {
   // `?plan=initial`: the initial unlock (EUR 1.99), as its buyer sees the report: no plan,
   // the card and Summary in full, and the full report EUR 10 off on the pay screen.
   const initialUnlock = isInitialUnlockPlan(planParam);
+  // `&gift=1` with it: the same unlock as E07's gift, which the full report's exit page words
+  // differently ("It's yours toward your Full Report", not "You earned it with your €1.99").
+  const initialUnlockSource = initialUnlock
+    ? url.searchParams.get("gift") === "1"
+      ? ("gift" as const)
+      : ("paid" as const)
+    : null;
 
   // A paid preview owns its own archetype, exactly as a real purchase does.
   const unlockedArchetypes = accessPlan ? [archetype] : [];
@@ -169,6 +176,7 @@ export async function GET(request: Request) {
     snapshotAnswers: { currentSexualSatisfaction: 3, importanceOfSex: 5 },
     pricingQuotes: buildPreviewQuotes(new Date(), { initialCredit: initialUnlock }),
     initialUnlock,
+    initialUnlockSource,
     unlockedArchetypes,
     archetypeTiers,
 

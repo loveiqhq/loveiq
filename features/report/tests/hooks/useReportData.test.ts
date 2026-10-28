@@ -260,5 +260,25 @@ describe("useReportData", () => {
       expect(url).toContain("/api/report/preview");
       expect(url).toContain("gate=1");
     });
+
+    // `&gift=1`: the EUR 1.99 unlock as E07's gift, for the full report's exit page's words.
+    it("asks the preview for the gift with previewGift", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...GATE, reportToken: null, submissionId: null }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      renderHook(() =>
+        useReportData({ preview: true, previewPlan: "initial", previewGift: true, v4: true })
+      );
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+      const url = new URL(String(mockFetch.mock.calls[0]?.[0] ?? ""), "http://localhost");
+      expect(url.pathname).toBe("/api/report/preview");
+      expect(url.searchParams.get("plan")).toBe("initial");
+      expect(url.searchParams.get("gift")).toBe("1");
+    });
   });
 });

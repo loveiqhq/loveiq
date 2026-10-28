@@ -2,6 +2,11 @@
 import { cleanup, render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@features/analytics/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/analytics/client")>()),
+  trackPaygateExitViewed: vi.fn(),
+}));
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import { REPORT_V4_PARTS } from "@/data/report3-archetype-page";
@@ -12,6 +17,7 @@ import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-t
 import { titleCase } from "@features/report/logic/titleCase";
 import ReportPricingModal from "@features/report/ui/ReportPricingModal";
 import ReportStickyUnlockBar from "@features/report/ui/ReportStickyUnlockBar";
+import PaygateExitPage from "@features/report/ui/gate/exit/PaygateExitPage";
 import { reportThemes } from "@features/report/ui/reportTheme";
 import {
   ATTACHMENT_FAMILY_CARDS,
@@ -238,6 +244,30 @@ describe("the Pricing 3.0 paygate follows the 02.10 heading rule", () => {
     // The hero, the two section titles, four benefit cards, two titles on each card
     // (one per layout), and "Most Popular".
     expect(heads).toHaveLength(count);
+    heads.forEach(follows);
+  });
+});
+
+describe("the paygate's exit pages follow the 02.10 heading rule", () => {
+  // Marcus's canvas (28.10) writes them in sentence case. The sentences keep his words as they
+  // are: the headline "Unlocking is fully risk-free" and "Not today? Tell us why.".
+  it.each(["pre", "full"] as const)("in every heading that is not a sentence (%s)", (stage) => {
+    const { container } = render(
+      <PaygateExitPage
+        stage={stage}
+        offer={stage === "pre" ? { priceCents: 199 } : { priceCents: 1999, strikeCents: 2999 }}
+        creditCents={1000}
+        guaranteeDays={14}
+        seed="1"
+        checkout={{ busy: false, error: null, errorPlace: null }}
+        onUnlock={() => {}}
+        onBack={() => {}}
+        onLeave={() => {}}
+      />
+    );
+    const heads = texts(container, "h2, h3").filter((head) => !/[.?!]$/.test(head.trim()));
+    // The guarantee, "Why It's Worth Unlocking" and the offer card's title.
+    expect(heads).toHaveLength(3);
     heads.forEach(follows);
   });
 });

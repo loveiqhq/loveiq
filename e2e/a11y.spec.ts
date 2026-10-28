@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-import { buildInitialGateFixture } from "./fixtures/report";
+import { buildInitialGateFixture, buildPricingQuote, mockReport } from "./fixtures/report";
 
 const criticalRoutes = [
   // Both landing arms by name: question 1 in the hero (A) and the hero video (B).
@@ -266,5 +266,71 @@ test("/report (the EUR 1.99 gate) — no critical accessibility violations", asy
   expect(
     blocking,
     `Critical/serious a11y violations on the gate: ${blocking.map((v) => `${v.id}: ${v.description}`).join("; ")}`
+  ).toHaveLength(0);
+});
+
+/**
+ * The paygate's exit pages (28.10): the gate's, `?leave=pre`, with the gate mocked as above,
+ * and the full report's for a EUR 1.99 holder, `?leave=full`, its dialog over the report (the
+ * report under it inert, so only the dialog is measured). Under reduced motion, as the gate.
+ */
+test("/report?leave=pre (the gate's exit page) — no critical accessibility violations", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/report?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(buildInitialGateFixture("rpt_e2eExitGateAbCdEfGhIj")),
+    });
+  });
+  await page.goto("/report/rpt_e2eExitGateAbCdEfGhIj?leave=pre");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .exclude("#cookieyes-root") // third-party consent banner
+    .analyze();
+  const blocking = results.violations.filter(
+    (v) => v.impact === "critical" || v.impact === "serious"
+  );
+  expect(
+    blocking,
+    `Critical/serious a11y violations on the gate's exit page: ${blocking.map((v) => `${v.id}: ${v.description}`).join("; ")}`
+  ).toHaveLength(0);
+});
+
+test("/report?leave=full (the full report's exit page) — no critical accessibility violations", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await mockReport(page, 0, {
+    initialUnlock: true,
+    initialUnlockSource: "paid",
+    pricingQuotes: {
+      full_report: {
+        ...buildPricingQuote("full_report", 0),
+        currentPriceCents: 1999,
+        chargedPriceCents: 1999,
+        upgradeCreditCents: 1000,
+        creditKind: "initial",
+      },
+      all_reports: buildPricingQuote("all_reports", 0),
+    },
+  });
+  await page.goto("/report/rpt_e2eExitFullAbCdEfGhIj?leave=full");
+  await expect(page.getByRole("dialog", { name: "Your Full Report" })).toBeVisible();
+
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .include(".pge-layer")
+    .analyze();
+  const blocking = results.violations.filter(
+    (v) => v.impact === "critical" || v.impact === "serious"
+  );
+  expect(
+    blocking,
+    `Critical/serious a11y violations on the full report's exit page: ${blocking.map((v) => `${v.id}: ${v.description}`).join("; ")}`
   ).toHaveLength(0);
 });

@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -85,6 +86,11 @@ import SectionFeedback from "./SectionFeedback";
 import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import InitialUnlockGate from "./gate/InitialUnlockGate";
+import FullReportExit from "./gate/exit/FullReportExit";
+import PreUnlockExit from "./gate/exit/PreUnlockExit";
+import { EXIT_LEAVE_PARAM, isExitStage } from "./gate/exit/exitContent";
+import { closeExit, dropExitParam, openExit } from "./gate/exit/exitHistory";
+import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportPricingSessionId,
@@ -182,6 +188,7 @@ import {
   trackReportChapterMenuOpened,
   trackReportShareOpened,
   trackReportViewed,
+  markLeftInitialGate,
 } from "@features/analytics/client";
 import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { REPORT_LAYOUT_V4_SLIM } from "@features/analytics/reportLayout";
@@ -468,6 +475,11 @@ interface ReportExperienceProps {
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
+  /**
+   * The plan picker's "Not ready to unlock yet", in place of its ×: a EUR 1.99 holder's way
+   * to the full report's exit page (gate/exit). Only when the picker sells their own report.
+   */
+  onPricingNotReady?: () => void;
   onCloseShareModal: () => void;
   onOpenShareModal: () => void;
   onOpenPricingModal: (archetype?: string | null) => void;
@@ -617,6 +629,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
+  onPricingNotReady,
   onCloseShareModal,
   onOpenShareModal,
   onOpenPricingModal,
@@ -2673,6 +2686,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         targetArchetype={pricingTargetArchetype}
         primaryArchetype={primaryArchetype}
         variant={pricingVariant}
+        onNotReady={
+          onPricingNotReady &&
+          pricingVariant !== "recipient" &&
+          (pricingTargetArchetype === null || pricingTargetArchetype === primaryArchetype)
+            ? onPricingNotReady
+            : undefined
+        }
       />
       {/* The owner's even with no token, which a ?preview=1 page never has: sharing then
        * says on Send that nothing went, where the sidebar used to show a dead button. */}
@@ -2842,6 +2862,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     previewPlan: searchParams.get("plan"),
     // `?preview=1&gate=1`: the EUR 1.99 pre-unlock gate, as a reader it stops meets it.
     previewGate: searchParams.get("preview") === "1" && searchParams.get("gate") === "1",
+    // `&gift=1` with `?plan=initial`: the EUR 1.99 unlock as E07's gift, for its wording.
+    previewGift: searchParams.get("preview") === "1" && searchParams.get("gift") === "1",
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,
@@ -2929,6 +2951,32 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * was removed on 2026-08-31 along with its countdown.
    */
   const pricingQuotes = data?.pricingQuotes ?? null;
+
+  /**
+   * The paygate's exit pages (gate/exit; Marcus's "Paygate exit pages", 28.10), on this URL as
+   * `?leave=pre` / `?leave=full` on an entry of their own (gate/exit/exitHistory.ts):
+   *   - pre: in place of the EUR 1.99 gate, opened by its "Not ready to unlock yet";
+   *   - full: a layer over the report for a EUR 1.99 holder, whose full-report quote carries
+   *     the EUR 10 (creditKind "initial"), opened by the plan picker's "Not ready to unlock yet".
+   * Anywhere else the parameter means nothing, and it is dropped once the report has answered.
+   */
+  const leaveParam = searchParams.get(EXIT_LEAVE_PARAM);
+  const fullReportQuote = pricingQuotes?.full_report ?? null;
+  const canLeaveFull = viewMode === "owner" && fullReportQuote?.creditKind === "initial";
+  const preExitOpen = leaveParam === "pre" && status === "gated" && Boolean(gate);
+  const fullExitOpen = leaveParam === "full" && status === "success" && canLeaveFull;
+  // Read by beginCheckout: Stripe's return from the full exit page goes back to the chapter the
+  // plans were opened from, as from the plans themselves.
+  const fullExitOpenRef = useRef(false);
+  useEffect(() => {
+    fullExitOpenRef.current = fullExitOpen;
+  }, [fullExitOpen]);
+  useEffect(() => {
+    if (!isExitStage(leaveParam)) return;
+    if (status === "loading") return;
+    if (leaveParam === "pre" ? preExitOpen : fullExitOpen) return;
+    dropExitParam();
+  }, [fullExitOpen, leaveParam, preExitOpen, status]);
 
   /**
    * Tell the server the reader reached the paywall.
@@ -3025,9 +3073,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       (viewArchetype || data?.primaryArchetype) ===
         (data?.contentArchetype ?? data?.primaryArchetype),
     autoStart: !isProbe && !arrivedFromCheckout,
-    blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
+    blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null || fullExitOpen,
     submissionId: data?.submissionId ?? null,
   });
+
+  useLayoutEffect(() => {
+    if (!fullExitOpen) return;
+    // The reader has just said "not ready": for the rest of this visit no pop-up, ladder or
+    // offer link opens the plans by itself (a reload of ?leave=full included).
+    autoOpenedPricingRef.current = true;
+    autoOpenedOfferRef.current = true;
+    plansOfferedRef.current = true;
+    if (scrollTeaserTimerRef.current) {
+      clearTimeout(scrollTeaserTimerRef.current);
+      scrollTeaserTimerRef.current = null;
+    }
+  }, [fullExitOpen]);
 
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
@@ -3449,12 +3510,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // purchase looked like it had not worked (production, 2026-10-06). Its top instead.
     const opensAnotherReport =
       Boolean(archetypeForCheckout) && archetypeForCheckout !== viewArchetype;
-    // From the pay screen, the spot it was opened from; from a button that buys
-    // straight away (V1's archetype list), here.
+    // From the pay screen, or the full report's exit page it led to, the spot the pay screen
+    // was opened from; from a button that buys straight away (V1's archetype list), here.
     const anchor = opensAnotherReport
       ? null
       : serializeUnlockAnchor(
-          isPricingModalOpenRef.current
+          isPricingModalOpenRef.current || fullExitOpenRef.current
             ? unlockAnchorRef.current
             : captureUnlockAnchor(recentTapTarget(lastTapRef.current))
         );
@@ -3520,6 +3581,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingVariant("default");
   }, []);
 
+  /**
+   * The plan picker's "Not ready to unlock yet", a EUR 1.99 holder's: the picker closes, and
+   * the full report's exit page opens on its own entry once the picker's has come off the
+   * stack (as a chapter link waits), so no dead entry is left behind it.
+   */
+  const openFullExit = useCallback(() => {
+    closePricingModal();
+    afterOverlayEntryGone(() => openExit("full"));
+  }, [closePricingModal]);
+
   // Paid or not, every reader shares with up to two people (planAccess.ts).
   const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
@@ -3571,14 +3642,27 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   // The EUR 1.99 pre-unlock gate: the API sent no report, only what the gate shows.
   if (status === "gated" && gate) {
+    // Its exit page in its place, the gate kept underneath: it keeps the submission bound for
+    // the events, and Back finds it as it was, its hero not replayed or its view counted twice.
     return (
       <>
         {v4ThemeColor}
-        <InitialUnlockGate
-          gate={gate}
-          reportToken={token ?? null}
-          reportSessionId={token ? null : sessionId}
-        />
+        <div hidden={preExitOpen}>
+          <InitialUnlockGate
+            gate={gate}
+            reportToken={token ?? null}
+            reportSessionId={token ? null : sessionId}
+          />
+        </div>
+        {preExitOpen ? (
+          <PreUnlockExit
+            gate={gate}
+            reportToken={token ?? null}
+            reportSessionId={token ? null : sessionId}
+            onBack={closeExit}
+            onLeave={markLeftInitialGate}
+          />
+        ) : null}
       </>
     );
   }
@@ -3758,6 +3842,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               matchScore={matchScore}
               onBeginCheckout={beginCheckout}
               onClosePricingModal={closePricingModal}
+              onPricingNotReady={isV4 && canLeaveFull ? openFullExit : undefined}
               onCloseShareModal={closeShareModal}
               onOpenShareModal={openShareModal}
               onOpenPricingModal={openPricingModal}
@@ -3932,11 +4017,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <ReportStickyUnlockBar
             quote={pricingQuotes?.full_report ?? null}
             onUnlock={() => openPricingModal(effectiveViewArchetype)}
-            hidden={isPricingModalOpen || isShareModalOpen || tour.running}
+            hidden={isPricingModalOpen || isShareModalOpen || tour.running || fullExitOpen}
             archetype={effectiveViewArchetype}
             v4={isV4}
           />
         )}
+      {fullExitOpen && fullReportQuote ? (
+        <FullReportExit
+          quote={fullReportQuote}
+          unlockSource={data.initialUnlockSource ?? null}
+          busy={checkoutHandoff?.status === "redirecting"}
+          // Back from Stripe lands where the plan picker was opened, not on the layer's button.
+          onUnlock={() => beginCheckout("full_report", primaryArchetype)}
+          onBack={closeExit}
+          seed={String(data.submissionId ?? "preview")}
+        />
+      ) : null}
     </>
   );
 };
