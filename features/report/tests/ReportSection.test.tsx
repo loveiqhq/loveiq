@@ -104,7 +104,9 @@ describe("ReportSection", () => {
     expect(section).toHaveClass("report-section", "is-visible");
   });
 
-  // Sync 23.10: the guided tour's scroll played section entrances behind its scrim.
+  // The guided tour holds the score animations (useV4Reveal, useRevealOnView), not this plain
+  // fade: held, the Summary and the archetype card it passed were blank on the way back up
+  // from Finish, where main showed them (review of #648, 27.10).
   describe("while the guided tour moves the page", () => {
     beforeEach(() => {
       __resetGuidedTourForTests();
@@ -114,47 +116,18 @@ describe("ReportSection", () => {
       __resetGuidedTourForTests();
     });
 
-    it("ignores the tour's crossing and fades in when the reader arrives", () => {
-      const rect = vi
-        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-        .mockReturnValue(createRect({ top: 1400, bottom: 3200, height: 1800 }));
+    it("fades in as the tour carries it on screen", () => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+        createRect({ top: 24, bottom: 360, height: 336 })
+      );
+      act(() => setGuidedTourActive(true));
       render(
-        <ReportSection sectionId="core_motivation" title="Core Motivation">
+        <ReportSection sectionId="summary" title="Summary">
           <p>Deferred section</p>
         </ReportSection>
       );
-      const section = document.getElementById("core_motivation");
-
-      act(() => setGuidedTourActive(true));
+      const section = document.getElementById("summary");
       act(() => triggerIntersection(section!, 0.02));
-      expect(section).not.toHaveClass("is-visible");
-
-      // The tour hands the reader back at the top: still below the fold.
-      act(() => setGuidedTourActive(false));
-      expect(section).not.toHaveClass("is-visible");
-
-      rect.mockReturnValue(createRect({ top: 24, bottom: 360, height: 336 }));
-      act(() => triggerIntersection(section!, 0.02));
-      expect(section).toHaveClass("is-visible");
-    });
-
-    it("fades in at the tour's end when the section is on screen there", () => {
-      const rect = vi
-        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-        .mockReturnValue(createRect({ top: 1400, bottom: 3200, height: 1800 }));
-      render(
-        <ReportSection sectionId="core_motivation" title="Core Motivation">
-          <p>Deferred section</p>
-        </ReportSection>
-      );
-      const section = document.getElementById("core_motivation");
-
-      act(() => setGuidedTourActive(true));
-      rect.mockReturnValue(createRect({ top: 24, bottom: 360, height: 336 }));
-      act(() => triggerIntersection(section!, 0.02));
-      expect(section).not.toHaveClass("is-visible");
-
-      act(() => setGuidedTourActive(false));
       expect(section).toHaveClass("is-visible");
     });
   });

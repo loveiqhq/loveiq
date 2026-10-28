@@ -131,7 +131,7 @@ loveiq-web/
 - `app/api/contact/route.ts`, `app/api/survey/route.ts` — form handlers
 - `features/analytics/client.ts` — analytics event tracking
 - `shared/http/csrf.ts` — CSRF token verification
-- `shared/http/ratelimit.ts` — Supabase-backed rate limiting
+- `shared/http/ratelimit.ts` — Upstash Redis rate limiting
 - `features/invite/emails/invite.ts` — email template
 - `proxy.ts` — middleware (CSP, CSRF cookies, security logging)
 

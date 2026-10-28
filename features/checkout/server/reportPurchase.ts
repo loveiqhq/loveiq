@@ -82,7 +82,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     featuredLabel: "Most Popular",
     features: [
       { included: true, label: "Your complete archetype report" },
-      { included: true, label: "20+ chapters and personalised growth" },
+      { included: true, label: "17 chapters and personalised growth" },
       { included: true, label: "Access to all 14 Archetype reports" },
       { included: true, label: "~14h of reading material" },
     ],
@@ -98,7 +98,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     description: "Your single full archetype report without comparative views",
     features: [
       { included: true, label: "Your complete archetype report" },
-      { included: true, label: "20+ chapters and personalised growth" },
+      { included: true, label: "17 chapters and personalised growth" },
       { included: false, label: "Access to all 14 Archetype reports" },
       { included: false, label: "~14h of reading material" },
     ],

@@ -35,10 +35,12 @@ export interface DropoffRun {
   sessionId: string;
   /** Their first survey event ever, in ms: a test counts only runs begun after its launch. */
   startedAt: number;
-  /** The questions they reached in the window, by id. */
+  /** The questions they reached in the window, by id, in the order they were asked them. */
   reached: string[];
   /** Where they left, when their last step ever fell in the window and they never finished. */
   leftAt: string | null;
+  /** Their last step ever, in ms; null from a reader that doesn't say. */
+  lastAt?: number | null;
   source: "google_ads" | "other" | "unknown";
   /** From their latest step's User-Agent, the price quote's classes; null before 12 Oct 2026. */
   device: "iOS" | "Android" | "Desktop" | null;
@@ -124,11 +126,13 @@ function parseRun(raw: unknown): DropoffRun {
   ) {
     throw new Error("get_survey_dropoff_runs: a row of an unexpected shape");
   }
+  const lastAt = typeof r.last_at === "string" ? Date.parse(r.last_at) : NaN;
   return {
     sessionId: r.session_id,
     startedAt,
     reached: r.reached as string[],
     leftAt: (r.left_at as string | null) ?? null,
+    lastAt: Number.isFinite(lastAt) ? lastAt : null,
     source,
     device,
   };

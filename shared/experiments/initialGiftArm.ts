@@ -1,7 +1,7 @@
 /**
  * E07's holdout (Pre-unlock, Notion "RFD > Pre-Unlock"; Figma Report-3.0 1669:2835). Of
- * the readers the EUR 1.99 gate stopped who have still not paid four days after they first
- * met it, 80% are given the initial unlock (a EUR 0 `initial` payment) and the E07 email;
+ * the readers the EUR 1.99 gate stopped who have still not paid a day after they first met
+ * it, 80% are given the initial unlock (a EUR 0 `initial` payment) and the E07 email;
  * 20% are held out and get nothing, so the gift's pull on full-report sales can be read
  * against readers it never reached.
  *
@@ -9,13 +9,13 @@
  * same report always lands on the same arm, nothing is minted that has to be retired, and
  * the cron (app/api/cron/initial-unlock-gift) writes the arm to
  * `personal_report.initial_gift_arm` when it treats the report, which is what readouts join
- * on. A report that paid before day 4 is never given an arm, so it is in neither.
+ * on. A report that paid before day 1 is never given an arm, so it is in neither.
  *
- * READING THE RESULT. Compare full-report purchases after day 4 between the two arms
+ * READING THE RESULT. Compare full-report purchases after day 1 between the two arms
  * (`initial_gift_arm`), staff reports left out; the gift's own row is EUR 0, never revenue.
- * The board also asks for EUR 1.99 conversion in the first three days, before and after the
- * launch, and for unsubscribes and spam reports on E07 (Resend's events, stage
- * `initial_gift`).
+ * The board also asks for EUR 1.99 conversion before the gift (its first three days when it
+ * was drawn for day 4; the first day now), before and after the launch, and for unsubscribes
+ * and spam reports on E07 (Resend's events, stage `initial_gift`).
  */
 
 import { sessionArmHash } from "@shared/experiments/sessionHash";

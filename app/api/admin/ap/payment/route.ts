@@ -2,9 +2,16 @@ import { NextResponse } from "next/server";
 
 import { fetchFactsFor } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
-import { buildPayment, type UpliftFlag } from "@features/admin/server/ap/payment";
+import { peopleBlocked } from "@features/admin/server/ap/metrics";
+import {
+  buildPayment,
+  CHECKOUT_FROM,
+  fitMonths,
+  type UpliftFlag,
+} from "@features/admin/server/ap/payment";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { readInitialUnlockGateSwitch } from "@features/report/server/initialGateState";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
@@ -42,14 +49,29 @@ export async function GET(request: Request) {
   const today = reportingDay(now);
   const filters = parseFilters(new URL(request.url).searchParams, today);
 
+  // The price-elasticity model fits every whole month since paid checkout began, whatever the
+  // range's start: those months' own facts, unless the range's cover them (or a filter can't
+  // follow them back, and the model is blank).
+  const fit = peopleBlocked(filters, CHECKOUT_FROM) ? null : fitMonths(filters.to);
+
   try {
-    const [facts, uplift] = await Promise.all([
+    const [facts, uplift, fitFacts, gateOn] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       upliftFlag(),
+      fit && fit.from < filters.from ? fetchFactsFor(fit.from, fit.to, filters) : null,
+      // The report's EUR 1.99 gate, for its payment type's line: null when the switch can't be
+      // read (the gate itself reads that as off), and the line says so.
+      readInitialUnlockGateSwitch().catch((err: unknown) => {
+        logger.warn({ err }, "AP payment: the EUR 1.99 gate's switch could not be read");
+        return null;
+      }),
     ]);
-    return NextResponse.json(buildPayment({ facts, filters, today, now, uplift }), {
-      headers: NO_STORE,
-    });
+    return NextResponse.json(
+      buildPayment({ facts, filters, today, now, uplift, fitFacts, gateOn }),
+      {
+        headers: NO_STORE,
+      }
+    );
   } catch (err) {
     logger.error({ err }, "AP payment failed");
     return NextResponse.json({ error: "Unable to load the payment page." }, { status: 500 });

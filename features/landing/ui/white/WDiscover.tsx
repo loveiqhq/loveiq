@@ -60,7 +60,7 @@ const WDiscover: FC = () => (
         id="w-discover-heading"
         className="animate-on-scroll stagger-1 mt-3.5 max-w-[620px] font-serif text-[clamp(2rem,5.5vw,2.875rem)] font-medium leading-[1.18] tracking-[-0.01em] text-[#161021]"
       >
-        In 9 minutes, you&apos;ll know things about yourself most people never learn.
+        In 15 minutes, you&apos;ll know things about yourself most people never learn.
       </h2>
 
       <div className="mt-10 grid gap-x-14 md:grid-cols-2">

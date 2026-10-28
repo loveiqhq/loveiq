@@ -59,7 +59,7 @@ const WCTA: FC = () => {
         </Link>
 
         <p className="animate-on-scroll mt-8 text-center text-[15px] font-bold text-[#6f6a7a] sm:text-[16px]">
-          Anonymous by default · ~9 minutes · No account required
+          Anonymous by default · ~15 minutes · No account required
         </p>
       </div>
     </section>

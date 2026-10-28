@@ -70,7 +70,7 @@ describe("the initial unlock's credit", () => {
     expect((await getReportCredits(165)).initialCents).toBe(1000);
   });
 
-  it("is EUR 10 for the day-4 gift too (E07): a EUR 0 initial row marked gifted", async () => {
+  it("is EUR 10 for the day-1 gift too (E07): a EUR 0 initial row marked gifted", async () => {
     mockFetchWithTimeout.mockResolvedValueOnce(
       json([
         {

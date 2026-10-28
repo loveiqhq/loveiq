@@ -8,7 +8,7 @@ import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
 import { useIsV3, useIsV4 } from "./v3/V3Chapter";
 import { TOUR_LABELS } from "./v3/guidedTourContent";
-import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS } from "./v3/reportV3Nav";
+import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS, withCoreRowLabel } from "./v3/reportV3Nav";
 
 interface Props {
   activeSectionId: string;
@@ -28,6 +28,8 @@ interface Props {
   onShareClick?: () => void;
   /** "Replay the Tour", the menu's last item; focus comes back to it when the tour ends. */
   onReplayTour?: (returnTo: HTMLElement | null) => void;
+  /** The Core Archetype row's label while one of the reader's other archetypes is on screen. */
+  coreRowLabel?: string;
 }
 
 const ReportDesktopSidebar: FC<Props> = ({
@@ -38,10 +40,13 @@ const ReportDesktopSidebar: FC<Props> = ({
   onSectionClick,
   onShareClick,
   onReplayTour,
+  coreRowLabel,
 }) => {
   const isV3 = useIsV3();
   const isV4 = useIsV4();
-  const navParts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
+  const navParts = withCoreRowLabel<
+    (typeof REPORT_NAV_PARTS)[number] | (typeof REPORT_V4_NAV_PARTS)[number]
+  >(isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS, coreRowLabel);
   const navRef = useRef<HTMLElement>(null);
 
   // Capture wheel events on the desktop nav so the page doesn't scroll instead

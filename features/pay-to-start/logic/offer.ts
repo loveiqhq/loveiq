@@ -12,7 +12,9 @@ import type { PayToStartWizard } from "./journey";
  * shown is the price they are charged.
  */
 
-export type PayToStartOfferId = "full" | "pre";
+/** Every offer. funnel_event.offer's CHECK (20261023150000) lists the same: a test holds it. */
+export const PAY_TO_START_OFFER_IDS = ["full", "pre"] as const;
+export type PayToStartOfferId = (typeof PAY_TO_START_OFFER_IDS)[number];
 
 export interface PayToStartOffer {
   id: PayToStartOfferId;
@@ -72,7 +74,7 @@ export function getOfferDefinition(id: PayToStartOfferId): PayToStartOffer {
 }
 
 export function isPayToStartOfferId(value: unknown): value is PayToStartOfferId {
-  return value === "full" || value === "pre";
+  return (PAY_TO_START_OFFER_IDS as readonly unknown[]).includes(value);
 }
 
 /**

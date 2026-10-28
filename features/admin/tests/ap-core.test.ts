@@ -14,21 +14,25 @@ import {
   periodRange,
   trendBuckets,
 } from "@features/admin/server/ap/filters";
-import { delta, deltaRel, fmt } from "@features/admin/server/ap/format";
+import { delta, deltaRel, fmt, lowerFirst } from "@features/admin/server/ap/format";
 import {
   ageMatched,
   ALL,
   armStartsComplete,
   draftsKeptFrom,
+  peopleBlocked,
+  reachedPaywall,
   sameAge,
-  sourceShares,
   spend,
   spendBlocked,
   startsBlocked,
   startsComplete,
   tabletBlocked,
   totals,
+  untaggedShares,
+  visitorsPerSource,
   visitsBlocked,
+  visitsByTag,
 } from "@features/admin/server/ap/metrics";
 
 import { factsFixture, sub } from "./ap-fixtures";
@@ -212,10 +216,12 @@ describe("AP number format", () => {
     // Prices change in euros: cents on small sums, whole euros from €100.
     expect(delta("eur", 29, 32.25, "up", "abs")?.text).toBe("−€3.25");
     expect(delta("eur", 1169.39, 301.96, "down", "abs")).toEqual({ text: "+€867", tone: "bad" });
-    expect(fmt("mmss", 5300)).toBe("0:05.3");
-    expect(fmt("mmss", 400)).toBe("0:00.4");
-    expect(fmt("mmss", 41_000)).toBe("0:41");
-    expect(fmt("mmss", 9_960)).toBe("0:10");
+    expect(fmt("mmss", 5300)).toBe("5 s");
+    expect(fmt("mmss", 400)).toBe("<1 s");
+    expect(fmt("mmss", 41_000)).toBe("41 s");
+    expect(fmt("mmss", 9_960)).toBe("10 s");
+    expect(fmt("mmss", 59_600)).toBe("1:00");
+    expect(fmt("mmss", 0)).toBe("0 s");
     // A check whose change is neither good nor bad (the report open rate) reads grey.
     expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2 pt", tone: "flat" });
     expect(delta("count", 1, 4, "up", "abs")).toEqual({ text: "−3", tone: "bad" });
@@ -252,10 +258,20 @@ describe("AP blanks that say why", () => {
     expect(
       spend(ad("2026-05-28", "2026-10-12"), { ...ALL, device: "phone" }, "2026-06-01", "2026-06-07")
         .why
-    ).toBe("Ad spend can't be split by device here.");
+    ).toBe(
+      "Ad spend isn't split by device in these figures: Google's own split is on Traffic, under Performance › Device, with no device filter on."
+    );
     expect(spend(ad("2026-05-28", "2026-10-12"), ALL, "2026-06-01", "2026-06-07")).toMatchObject({
       eur: 40,
       why: null,
+    });
+    // Under the Funnel filter's Free survey the whole account's spend (pay to start's campaigns
+    // too) would be the free survey's: blank, with where each funnel's own is.
+    expect(
+      spend(ad("2026-05-28", "2026-10-12"), { ...ALL, funnel: "free" }, "2026-06-01", "2026-06-07")
+    ).toMatchObject({
+      eur: null,
+      why: "Ad spend here is the whole Google Ads account's, pay to start's campaigns too: pick All funnels, or see the Pay to start page for each funnel's own spend.",
     });
   });
 
@@ -266,9 +282,56 @@ describe("AP blanks that say why", () => {
     expect(tabletBlocked({ device: "phone" }, "2026-10-01")).toBeNull();
     // Starts follow the same rule, even before the steps recorded any device.
     expect(startsBlocked({ ...ALL, device: "tablet" }, "2026-10-01", TODAY)).toBe(reason);
-    expect(startsBlocked({ ...ALL, device: "phone" }, "2026-10-01", TODAY)).toBe(
-      "Survey starts record the device from 12 Oct 2026."
+    // The steps' device went live mid-afternoon on 12 Oct: the 12th is not whole.
+    expect(startsBlocked({ ...ALL, device: "phone" }, "2026-10-12", TODAY)).toBe(
+      "Survey starts record the device from 13 Oct 2026."
     );
+    expect(startsBlocked({ ...ALL, device: "phone" }, "2026-10-13", "2026-10-20")).toBeNull();
+  });
+
+  it("blanks people under a filter their records can't follow over the range", () => {
+    // Sources are recorded from 19 Jul 2026: an earlier finisher's untagged source is unknown.
+    expect(
+      peopleBlocked({ device: "all", source: "google_ads", visitor: "all" }, "2026-07-18")
+    ).toMatch(/^Sources are recorded from 19 Jul 2026/);
+    expect(
+      peopleBlocked({ device: "all", source: "google_ads", visitor: "all" }, "2026-07-19")
+    ).toBeNull();
+    // New or returning needs the finisher's PostHog visit, kept from 28 Aug 2026.
+    expect(peopleBlocked({ device: "all", source: "all", visitor: "new" }, "2026-08-27")).toMatch(
+      /^New and returning are told apart from 28 Aug 2026/
+    );
+    expect(
+      peopleBlocked({ device: "all", source: "all", visitor: "new" }, "2026-08-28")
+    ).toBeNull();
+    expect(peopleBlocked({ device: "tablet", source: "all", visitor: "all" }, "2026-10-16")).toBe(
+      tabletBlocked({ device: "tablet" }, "2026-10-16")
+    );
+  });
+
+  it("counts visits only where the visit log holds every visitor", () => {
+    // From 23 May the log counted only those who accepted cookies; whole from 15 Jun.
+    expect(visitsBlocked(ALL, "2026-06-14")).toMatch(
+      /^The visit log counts every visitor from 15 Jun 2026/
+    );
+    expect(visitsBlocked(ALL, "2026-06-15")).toBeNull();
+    // Google Ads tags every click from 19 Jul: its visits are counted from then, no other source's.
+    expect(visitsBlocked({ ...ALL, source: "google_ads" }, "2026-07-18")).toMatch(/19 Jul 2026/);
+    expect(visitsBlocked({ ...ALL, source: "google_ads" }, "2026-07-19")).toBeNull();
+    expect(visitsBlocked({ ...ALL, source: "direct" }, "2026-10-01")).toMatch(
+      /only for Google Ads/
+    );
+    expect(
+      totals(factsFixture({ from: "2026-06-10" }), ALL, "2026-06-10", "2026-06-14").visits
+    ).toBeNull();
+  });
+
+  it("puts a reader at the paywall once they saw it, clicked it, checked out or paid", () => {
+    const none = { paywallAt: null, clickedAt: null, checkoutAt: null, paidAt: null };
+    expect(reachedPaywall(none)).toBe(false);
+    // Before the seen stamp (6 Sep 2026) a buyer still got there.
+    expect(reachedPaywall({ ...none, paidAt: "2026-08-01T10:00:00Z" })).toBe(true);
+    expect(reachedPaywall({ ...none, checkoutAt: "2026-08-01T10:00:00Z" })).toBe(true);
   });
 });
 
@@ -280,25 +343,60 @@ describe("AP visitors per source", () => {
     more: { ads?: boolean; fb?: boolean; ref?: string } = {}
   ) => ({ src, med, ads: false, fb: false, ref: null, sessions, ...more });
 
-  it("shares PostHog's visits out by our own source rules, our probes left out", () => {
-    const shares = sourceShares([
+  it("splits the untagged visits PostHog saw by our own source rules, tagged ones left out", () => {
+    const split = untaggedShares([
+      // Tagged: the visit log counts these itself.
       tags("google", "cpc", 30, { ads: true }),
+      tags("ig", "paid", 5),
+      tags("prod-verification", null, 900),
+      // A Google Ads click id without a tag: PostHog sees nearly all of these, so scaling
+      // them up with the rest would invent Google Ads visits. Left out.
+      tags(null, null, 5, { ads: true }),
+      // Untagged: told apart by the referrer and the click ids.
       tags(null, null, 10, { ref: "www.google.com" }),
       tags(null, null, 40),
       tags(null, null, 10, { fb: true }),
-      tags("ig", "paid", 5),
-      tags(null, null, 5, { ads: true }),
-      tags("prod-verification", null, 900),
     ]);
-    expect(Object.fromEntries(shares!)).toEqual({
-      google_ads: 0.35,
-      organic_search: 0.1,
-      direct: 0.4,
-      social: 0.1,
-      meta_ads: 0.05,
+    expect(Object.fromEntries(split!.shares)).toEqual({
+      organic_search: 1 / 6,
+      direct: 4 / 6,
+      social: 1 / 6,
     });
-    expect(sourceShares([])).toBeNull();
-    expect(sourceShares([tags("verify", null, 3)])).toBeNull();
+    expect(split!.seen).toBe(60);
+    expect(untaggedShares([])).toBeNull();
+    expect(untaggedShares([tags("google", "cpc", 3, { ads: true })])).toBeNull();
+    expect(untaggedShares([tags(null, null, 3, { ads: true })])).toBeNull();
+  });
+
+  it("counts the visit log's tagged visits and splits its untagged ones", () => {
+    const facts = factsFixture({
+      visits: [
+        { day: "2026-10-01", arm: "white_card", src: "google", n: 30 },
+        { day: "2026-10-01", arm: "white_card", src: "chatgpt.com", n: 2 },
+        { day: "2026-10-01", arm: "white_card", src: null, n: 60 },
+        { day: "2026-10-02", arm: "white_card", src: "prod-verification", n: 9 },
+        { day: "2026-10-09", arm: "white_card", src: "google", n: 99 },
+      ],
+    });
+    const v = visitsByTag(facts, "2026-10-01", "2026-10-07");
+    // "google" in the visit log is Google Ads' tracking template; our probes are left out.
+    expect(Object.fromEntries(v.tagged)).toEqual({ google_ads: 30, ai: 2 });
+    expect(v.untagged).toBe(60);
+    const per = visitorsPerSource(v, {
+      shares: new Map([
+        ["direct", 0.75],
+        ["organic_search", 0.25],
+      ]),
+      seen: 20,
+    });
+    expect(Object.fromEntries(per)).toEqual({
+      google_ads: 30,
+      ai: 2,
+      direct: 45,
+      organic_search: 15,
+    });
+    // Under the Google Ads filter, its visits are the visit log's own count.
+    expect(totals(facts, { ...ALL, source: "google_ads" }).visits).toBe(30);
   });
 });
 
@@ -325,6 +423,14 @@ describe("AP starts completeness", () => {
 
 describe("AP source classes", () => {
   const t = (src: string | null, med: string | null = null, ads = false) => ({ src, med, ads });
+  it("reads an untagged finisher from before sources were recorded as unknown, never Direct", () => {
+    expect(classifySource({ src: null, med: null, ads: false, srcKnown: false })).toBe("unknown");
+    expect(classifySource({ src: null, med: null, ads: false, srcKnown: true })).toBe("direct");
+    // A reader without the flag keeps its old reading.
+    expect(classifySource({ src: null, med: null, ads: false })).toBe("direct");
+    expect(classifySource({ src: "copilot.com", med: null, ads: false })).toBe("ai");
+  });
+
   it("reads a click id or google/cpc as Google Ads, and our probes as tests", () => {
     expect(classifySource(t(null, null, true))).toBe("google_ads");
     expect(classifySource(t("google", "cpc"))).toBe("google_ads");
@@ -369,12 +475,39 @@ describe("AP source classes", () => {
       "www.ecosia.org",
       "yandex.ru",
       "search.brave.com",
+      "www.qwant.com",
+      "noai.duckduckgo.com",
     ]) {
       expect(classifySource(t(null, null, { ref })), ref).toBe("organic_search");
     }
-    // Not a search: Gmail's own page, another site, or a visit that carries tags.
-    expect(classifySource(t(null, null, { ref: "mail.google.com" }))).toBe("direct");
-    expect(classifySource(t(null, null, { ref: "www.reddit.com" }))).toBe("direct");
+    // An untagged visit's other referrers, as PostHog saw them in the 90 days to 21 Oct 2026.
+    const byRef: Record<string, string> = {
+      "chatgpt.com": "ai",
+      "www.perplexity.ai": "ai",
+      "com.google.android.gm": "email",
+      "mail.google.com": "email",
+      "mail.yahoo.co.jp": "email",
+      "outlook.live.com": "email",
+      "email.ionos.com": "email",
+      "www.ui-deref.de": "email",
+      "security-de.m.mimecastprotect.com": "email",
+      "m.facebook.com": "social",
+      "instagram.com": "social",
+      "web.telegram.org": "social",
+      "www.youtube.com": "social",
+      "com.facebook.katana": "social",
+      "t.co": "social",
+      "appliedpsychometrics.org": "referral",
+    };
+    for (const [ref, source] of Object.entries(byRef)) {
+      expect(classifySource(t(null, null, { ref })), ref).toBe(source);
+    }
+    // No referrer is Direct; a tagged visit or a Meta click keeps its tags' source.
+    expect(classifySource(t(null, null))).toBe("direct");
+    expect(classifySource(t("partner", null, { ref: "chatgpt.com" }))).toBe("referral");
+    expect(classifySource(t(null, null, { fb: true, ref: "com.google.android.gm" }))).toBe(
+      "social"
+    );
     expect(classifySource(t("newsletter", "email", { ref: "www.google.com" }))).toBe("email");
     expect(classifySource(t("google", "cpc", { ref: "www.google.com" }))).toBe("google_ads");
     expect(classifySource(t("google", "organic", { fb: true }))).toBe("social");
@@ -384,6 +517,37 @@ describe("AP source classes", () => {
 });
 
 describe("AP totals", () => {
+  it("leaves pay to start's buyers out under Free survey, and keeps them under All funnels", () => {
+    const base = factsFixture();
+    const f = factsFixture({
+      subs: [
+        ...base.subs,
+        sub({
+          id: 50,
+          day: "2026-10-03",
+          pts: true,
+          paidAt: "2026-10-03T09:00:00Z",
+          sales: 1,
+          revenue: 29.99,
+        }),
+      ],
+      money: [
+        ...base.money,
+        { ...base.money[0]!, sid: 50, day: "2026-10-03", amount: 29.99, pts: true },
+      ],
+      starts: [...base.starts, { ...base.starts[0]!, n: 1, pts: true }],
+    });
+    const all = totals(f, ALL);
+    const free = totals(f, { ...ALL, funnel: "free" });
+    expect(all.subs - free.subs).toBe(1);
+    expect(all.paidCohort - free.paidCohort).toBe(1);
+    expect(all.revenue - free.revenue).toBeCloseTo(29.99);
+    expect(all.sales - free.sales).toBe(1);
+    expect(all.starts! - free.starts!).toBe(1);
+    // Their visits were never these pages' (pay to start's own page counts them).
+    expect(free.visits).toBe(all.visits);
+  });
+
   it("counts visits, starts, finishers and money, and never our probes", () => {
     const t = totals(factsFixture(), ALL);
     expect(t.visits).toBe(220);
@@ -396,8 +560,11 @@ describe("AP totals", () => {
   });
 
   it("blanks what a filter cannot split rather than ignoring the filter", () => {
+    // The visit log can't tell Direct from the other untagged sources.
+    expect(totals(factsFixture(), { ...ALL, source: "direct" }).visits).toBeNull();
     const t = totals(factsFixture(), { ...ALL, source: "google_ads" });
-    expect(t.visits).toBeNull();
+    // Google Ads' own visits are counted: none in the fixture's visit log.
+    expect(t.visits).toBe(0);
     // The unknown start (no tracker) never matches a source.
     expect(t.starts).toBe(10);
     expect(totals(factsFixture(), { ...ALL, tier: "tier_1" }).starts).toBeNull();
@@ -416,7 +583,7 @@ describe("AP totals", () => {
     expect(n.subs).toBe(1);
     expect(n.visits).toBeNull();
     expect(n.starts).toBeNull();
-    expect(visitsBlocked({ ...ALL, visitor: "new" })).toMatch(/new and returning/);
+    expect(visitsBlocked({ ...ALL, visitor: "new" }, "2026-10-01")).toMatch(/new and returning/);
     expect(spendBlocked({ ...ALL, visitor: "returning" })).toMatch(/new and returning/);
     // Not marked (PostHog never saw the visit): in neither group.
     second!.visitorNew = null;
@@ -715,5 +882,23 @@ describe("AP same-age comparisons", () => {
       visits: 1,
       readMs: 480_000,
     });
+  });
+});
+
+describe("a reason carried on after other words", () => {
+  it("lowers its first letter, but never a name's or an acronym's", () => {
+    expect(lowerFirst("Ad spend isn't split by device.")).toBe("ad spend isn't split by device.");
+    expect(lowerFirst("A finisher's tier…")).toBe("a finisher's tier…");
+    expect(lowerFirst("AI assistants have no ad spend.")).toBe("AI assistants have no ad spend.");
+    expect(lowerFirst("Google Ads visits are told apart…")).toBe(
+      "Google Ads visits are told apart…"
+    );
+    expect(lowerFirst("Meta's ad spend isn't read.")).toBe("Meta's ad spend isn't read.");
+  });
+
+  it("writes no minus on a figure that reads as zero", () => {
+    expect(fmt("eur", -0.001, 0)).toBe("€0");
+    expect(fmt("eur3", -0.0001)).toBe("€0.000");
+    expect(fmt("eur", -2.5, 2)).toBe("−€2.50");
   });
 });

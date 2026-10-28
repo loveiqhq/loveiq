@@ -11,7 +11,7 @@ import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
 import { useIsV3, useIsV4 } from "./v3/V3Chapter";
 import { TOUR_LABELS } from "./v3/guidedTourContent";
-import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS } from "./v3/reportV3Nav";
+import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS, withCoreRowLabel } from "./v3/reportV3Nav";
 
 interface Props {
   activeSectionId: string;
@@ -29,6 +29,8 @@ interface Props {
    * Called once the drawer has closed, with what focus goes back to when the tour ends.
    */
   onReplayTour?: (returnTo: HTMLElement | null) => void;
+  /** The Core Archetype row's label while one of the reader's other archetypes is on screen. */
+  coreRowLabel?: string;
 }
 
 // Flat id → label lookup for the floating "Chapter: …" pill, from the same
@@ -73,10 +75,13 @@ const ReportMobileNav: FC<Props> = ({
   onShareClick,
   onDrawerOpened,
   onReplayTour,
+  coreRowLabel,
 }) => {
   const isV3 = useIsV3();
   const isV4 = useIsV4();
-  const navParts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
+  const navParts = withCoreRowLabel<
+    (typeof REPORT_NAV_PARTS)[number] | (typeof REPORT_V4_NAV_PARTS)[number]
+  >(isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS, coreRowLabel);
   const pillButtonRef = useRef<HTMLButtonElement>(null);
   const panelPillButtonRef = useRef<HTMLButtonElement>(null);
   const wasDrawerOpenRef = useRef(false);
@@ -90,8 +95,11 @@ const ReportMobileNav: FC<Props> = ({
   const drawerClosing = phase === "closing";
 
   const activeChapter = useMemo(
-    () => (isV4 ? NAV_LABEL_BY_ID_V4 : NAV_LABEL_BY_ID).get(activeSectionId) ?? "Overview",
-    [activeSectionId, isV4]
+    () =>
+      (activeSectionId === "core_archetype" && coreRowLabel) ||
+      (isV4 ? NAV_LABEL_BY_ID_V4 : NAV_LABEL_BY_ID).get(activeSectionId) ||
+      "Overview",
+    [activeSectionId, isV4, coreRowLabel]
   );
   // Both pills. Mark's 961:333 (29.09): "Selected Chapter font changed to Bold and took
   // out the "Chapter:"" — V4's names the chapter alone. The floating one still tells a

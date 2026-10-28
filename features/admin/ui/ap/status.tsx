@@ -11,6 +11,11 @@ export interface ApStatus {
   production: { ok: boolean };
   ga4: { lastDay: string | null };
   posthog: { ok: boolean; lastEvent: string | null };
+  /**
+   * The PostHog visits of the team's own finished surveys (the info cards' :team_visits); null
+   * when they couldn't be read.
+   */
+  teamVisits?: string[] | null;
 }
 
 const Ctx = createContext<{ status: ApStatus | null; error: string | null }>({

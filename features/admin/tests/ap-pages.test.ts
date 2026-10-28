@@ -120,51 +120,98 @@ describe("buildSurveyQuestions", () => {
   /** Every question today, in today's order: what a run through to the end reaches. */
   const EVERY = askedQuestions(400).map((q) => q.qId);
   const without = (id: string) => EVERY.filter((x) => x !== id);
-  const questions = (runs: DropoffRun[]) =>
+  // 16016 first asked at noon on 2 Oct: after "a" began, before "b".
+  const FIRST_ASKED = { "16016": "2026-10-02T12:00:00Z" };
+  const questions = (runs: DropoffRun[], firstAsked: Record<string, string> = FIRST_ASKED) =>
     buildSurveyQuestions(
       runs,
-      { steps: [], exits: [] },
+      { steps: [], exits: [], first_asked: firstAsked },
       "2026-10-01",
       "2026-10-07",
       "All traffic",
       null
     );
 
-  it("marks a question new only where the range's first runs went to the end without it", () => {
+  it("counts each run at every question up to the furthest it reached: none has more than the one before", () => {
     const q = questions([
-      // 21:00 UTC on 30 Sep is 23:00 in Berlin, before the range: its first steps fall before
-      // it, so its reaching only the end says nothing.
-      run("before", "2026-09-30T21:00:00Z", ["00000", "16015"]),
-      // 23:30 UTC on 30 Sep is already 1 Oct in Berlin, the range's first day. The opening
-      // order test's other opening asks later questions first; this run left after it, so it
-      // went past none of the questions that opening moves on.
-      run("opening", "2026-09-30T23:30:00Z", [...C13_OPENING]),
+      // 21:00 UTC on 30 Sep is 23:00 in Berlin: begun before the range and carried on in it, an
+      // earlier period's start, so in none of it.
+      run("before", "2026-09-30T21:00:00Z", ["16014", "16019", "16020"]),
+      // Question 4's step lost while the tab was in the background; question 2 answered on the
+      // landing page's card. It got to question 5.
+      run("lost", "2026-10-02T09:00:00Z", [EVERY[0]!, EVERY[2]!, EVERY[4]!]),
+      // Begun in the range with its first two steps lost: it passed questions 1 and 2.
+      run("late", "2026-10-02T09:30:00Z", EVERY.slice(2, 4)),
       // To the end before 16016 was asked; the next runs had it.
-      run("a", "2026-10-02T09:00:00Z", without("16016")),
+      run("a", "2026-10-02T10:00:00Z", without("16016")),
       run("b", "2026-10-03T09:00:00Z", EVERY),
       run("c", "2026-10-04T09:00:00Z", EVERY),
     ]);
+    const asked = q.rows.filter((r) => r.n > 0);
+    for (let i = 1; i < asked.length; i++)
+      expect(asked[i]!.reached).toBeLessThanOrEqual(asked[i - 1]!.reached);
+    expect(q.people).toBe(5);
     const row = (id: string) => q.rows.find((r) => r.id === id)!;
-    expect(row("16016")).toMatchObject({ reached: 2, newInRange: true });
-    // Nobody reached them on the range's first day, but they were asked all along.
-    expect(row("16015")).toMatchObject({ reached: 4, newInRange: false });
-    expect(row(EVERY[30]!)).toMatchObject({ reached: 3, newInRange: false });
+    // "late" got past questions 1 and 2 though no step of it is recorded there.
+    expect(row(EVERY[0]!)).toMatchObject({ reached: 5, shown: 4 });
+    // Between its steps: put to it, as far as the records tell.
+    expect(row(EVERY[1]!)).toMatchObject({ reached: 5, shown: 4 });
+    expect(row(EVERY[3]!)).toMatchObject({ reached: 5, shown: 5 });
+    expect(row(EVERY[5]!)).toMatchObject({ reached: 3, shown: 3 });
+    // Passed by a, which began before it was asked, so not put to a: new in the range.
+    expect(row("16016")).toMatchObject({ reached: 3, shown: 2, newInRange: true });
+    expect(row("16019")).toMatchObject({ reached: 3, newInRange: false });
     expect(q.rows.filter((r) => r.newInRange).map((r) => r.id)).toEqual(["16016"]);
 
-    // Not reached by anyone: new only if a run went through to the end without it.
-    const early = questions([run("x", "2026-10-02T09:00:00Z", EVERY.slice(0, 5))]);
+    // New in the range by when it was first asked, not by who reached it.
+    const early = questions([run("x", "2026-10-02T09:00:00Z", EVERY.slice(0, 5))], {});
     expect(early.rows.filter((r) => r.newInRange)).toEqual([]);
-    const passed = questions([run("x", "2026-10-02T09:00:00Z", without("16017"))]);
+    const passed = questions([run("x", "2026-10-02T09:00:00Z", without("16017"))], {
+      "16017": "2026-10-03T00:00:00Z",
+    });
     expect(passed.rows.find((r) => r.id === "16017")).toMatchObject({
-      reached: 0,
+      reached: 1,
+      shown: 0,
       newInRange: true,
     });
+    // A drop-out rate is over the runs the question was put to.
+    const left = questions([
+      run("a", "2026-10-02T09:00:00Z", without("16016")),
+      {
+        ...run("b", "2026-10-03T09:00:00Z", EVERY.slice(0, EVERY.indexOf("16016") + 1)),
+        leftAt: "16016",
+      },
+    ]);
+    expect(left.rows.find((r) => r.id === "16016")).toMatchObject({
+      reached: 2,
+      shown: 1,
+      exits: 1,
+      dropRate: 1,
+    });
+  });
+
+  it("leaves out a run begun before the range: by its first step, or as listed (a draft picked up again)", () => {
+    const q = buildSurveyQuestions(
+      [
+        run("draft", "2026-10-02T09:00:00Z", ["16011", "16012"]),
+        run("x", "2026-10-02T09:00:00Z", EVERY.slice(0, 3)),
+      ],
+      { steps: [], exits: [], earlier: ["draft"] },
+      "2026-10-01",
+      "2026-10-07",
+      "All traffic",
+      null
+    );
+    expect(q.people).toBe(1);
+    expect(q.rows.find((r) => r.id === "16011")!.reached).toBe(0);
+    expect(q.rows[0]!.reached).toBe(1);
 
     // Our own finished test runs are left out of reach, exits and the people count.
+    const to16015 = EVERY.slice(0, EVERY.indexOf("16015") + 1);
     const mine = buildSurveyQuestions(
       [
-        run("a", "2026-10-02T09:00:00Z", ["16015"]),
-        { ...run("staff", "2026-10-02T09:00:00Z", ["16015"]), leftAt: "16015" },
+        run("a", "2026-10-02T09:00:00Z", to16015),
+        { ...run("staff", "2026-10-02T09:00:00Z", to16015), leftAt: "16015" },
       ],
       { steps: [], exits: [], staff: ["staff"] },
       "2026-10-01",
@@ -174,6 +221,185 @@ describe("buildSurveyQuestions", () => {
     );
     expect(mine.people).toBe(1);
     expect(mine.rows.find((r) => r.id === "16015")).toMatchObject({ reached: 1, exits: 0 });
+  });
+});
+
+describe("buildSurveyQuestions, along each run's own way", () => {
+  const run = (
+    sessionId: string,
+    startedAt: string,
+    reached: string[],
+    leftAt: string | null = null
+  ): DropoffRun => ({
+    sessionId,
+    startedAt: Date.parse(startedAt),
+    reached,
+    leftAt,
+    lastAt: Date.parse(startedAt) + 60_000,
+    source: "other",
+    device: null,
+  });
+  const EVERY = askedQuestions(400).map((q) => q.qId);
+  const n = (q: ReturnType<typeof buildSurveyQuestions>, k: number) =>
+    q.rows.find((r) => r.n === k)!;
+  const build = (
+    runs: DropoffRun[],
+    from: string,
+    to: string,
+    steps: Partial<Parameters<typeof buildSurveyQuestions>[1]> = {},
+    now?: number
+  ) =>
+    buildSurveyQuestions(
+      runs,
+      { steps: [], exits: [], ...steps },
+      from,
+      to,
+      "All traffic",
+      null,
+      now
+    );
+
+  it("never counts a run as far as a question it was asked out of today's order (email first, until 16 Aug 2026)", () => {
+    // Asked the email question first, then questions 1 and 2, and left at 2.
+    const q = build(
+      [run("emailFirst", "2026-08-05T10:00:00Z", ["00000", "00001", "01002"], "01002")],
+      "2026-08-01",
+      "2026-08-14"
+    );
+    expect(n(q, 1).reached).toBe(1);
+    expect(n(q, 2)).toMatchObject({ reached: 1, exits: 1 });
+    expect(n(q, 30).reached).toBe(0);
+    expect(q.rows.find((r) => r.id === "00000")!.reached).toBe(0);
+    // One that answered it first and went on to the end passed it on the way: counted there.
+    const done = build(
+      [run("done", "2026-08-05T10:00:00Z", ["00000", ...EVERY.filter((x) => x !== "00000")])],
+      "2026-08-01",
+      "2026-08-14"
+    );
+    expect(done.rows.find((r) => r.id === "00000")!.reached).toBe(1);
+    expect(done.rows.at(-1)!.reached).toBe(1);
+  });
+
+  it("puts a run that answered only the email question, asked first, in no row, and says so", () => {
+    const q = build(
+      [
+        run("emailOnly", "2026-08-05T10:00:00Z", ["00000"], "00000"),
+        run("x", "2026-08-05T11:00:00Z", EVERY.slice(0, 3), EVERY[2]!),
+      ],
+      "2026-08-01",
+      "2026-08-14"
+    );
+    expect(q.people).toBe(2);
+    expect(n(q, 1).reached).toBe(1);
+    expect(q.rows.find((r) => r.id === "00000")).toMatchObject({ reached: 0, exits: 0 });
+    expect(q.notes.some((t) => t.startsWith("1 run answered only the email question"))).toBe(true);
+  });
+
+  it("reads a later run whose first step is the email question as recorded from part-way, not asked it first", () => {
+    // From 17 Aug 2026 the email question comes near the end: a run first recorded on it (steps
+    // were consent-gated until 18 Sep) got there along the order, and left there.
+    const q = build(
+      [
+        run("lateEmail", "2026-09-22T10:00:00Z", ["00000"], "00000"),
+        run("x", "2026-09-22T11:00:00Z", EVERY.slice(0, 3), EVERY[2]!),
+      ],
+      "2026-09-14",
+      "2026-09-27"
+    );
+    expect(n(q, 1).reached).toBe(2);
+    expect(q.rows.find((r) => r.id === "00000")).toMatchObject({ reached: 1, shown: 1, exits: 1 });
+    expect(q.notes.some((t) => t.includes("answered only the email question"))).toBe(false);
+  });
+
+  it("counts a run recorded only from part-way (cookies accepted mid-survey, before 18 Sep 2026) from the start", () => {
+    const q = build(
+      [run("midway", "2026-08-05T10:00:00Z", EVERY.slice(10, 20), EVERY[19]!)],
+      "2026-08-01",
+      "2026-08-14"
+    );
+    expect(n(q, 1)).toMatchObject({ reached: 1, shown: 0 });
+    expect(n(q, 20)).toMatchObject({ reached: 1, shown: 1, exits: 1 });
+    expect(n(q, 21).reached).toBe(0);
+  });
+
+  it("lists no question first asked after the range, and marks one first asked during it", () => {
+    const q = build(
+      [
+        run(
+          "x",
+          "2026-08-05T10:00:00Z",
+          EVERY.filter((x) => !["16016", "16019"].includes(x))
+        ),
+      ],
+      "2026-08-01",
+      "2026-08-14",
+      {
+        first_asked: {
+          "16016": "2026-09-18T08:00:00Z",
+          "16019": "2026-08-10T08:00:00Z",
+          "01002": "2026-03-01T08:00:00Z",
+        },
+      }
+    );
+    expect(q.rows.find((r) => r.id === "16016")).toBeUndefined();
+    expect(q.rows.find((r) => r.id === "16019")).toMatchObject({
+      newInRange: true,
+      reached: 1,
+      shown: 0,
+    });
+    // Answered on the landing page's card (no step): long asked, not new, and put to the run.
+    const card = build(
+      [
+        run(
+          "card",
+          "2026-10-12T00:27:00Z",
+          EVERY.filter((x) => x !== "01002")
+        ),
+      ],
+      "2026-10-12",
+      "2026-10-12",
+      {
+        first_asked: { "01002": "2026-03-01T08:00:00Z" },
+      }
+    );
+    expect(card.rows.find((r) => r.id === "01002")).toMatchObject({
+      newInRange: false,
+      reached: 1,
+      shown: 1,
+    });
+  });
+
+  it("doesn't count a run still on a question today as leaving it", () => {
+    const now = Date.parse("2026-10-24T15:00:00Z");
+    const busy = {
+      ...run("busy", "2026-10-24T14:40:00Z", EVERY.slice(0, 5), EVERY[4]!),
+      lastAt: now - 5 * 60_000,
+    };
+    const gone = {
+      ...run("gone", "2026-10-24T13:00:00Z", EVERY.slice(0, 5), EVERY[4]!),
+      lastAt: now - 90 * 60_000,
+    };
+    const q = build([busy, gone], "2026-10-24", "2026-10-24", {}, now);
+    expect(n(q, 5)).toMatchObject({ reached: 2, exits: 1 });
+  });
+
+  it("adds a question's exits per day up to its exits, in its own order", () => {
+    const q = build(
+      [
+        run("a", "2026-10-02T10:00:00Z", EVERY.slice(0, 4), EVERY[3]!),
+        run("b", "2026-10-03T10:00:00Z", EVERY.slice(0, 4), EVERY[3]!),
+        run("c", "2026-10-03T11:00:00Z", EVERY.slice(0, 2), EVERY[1]!),
+      ],
+      "2026-10-01",
+      "2026-10-07"
+    );
+    for (const r of q.rows) expect(r.exitsTrend.reduce((x, y) => x + y, 0)).toBe(r.exits);
+    expect(n(q, 4).exits).toBe(2);
+  });
+
+  it("says the steps were consent-gated before 18 Sep 2026", () => {
+    expect(build([], "2026-09-01", "2026-09-30").notes.join(" ")).toMatch(/accepted cookies/);
+    expect(build([], "2026-09-18", "2026-09-30").notes).toEqual([]);
   });
 });
 
@@ -276,7 +502,7 @@ describe("page builders", () => {
     const week = surveyPage({ previous: lastWeek });
     expect(foot(week, "starts")).toBe("vs 0");
     expect(note(week, "starts")).toBeUndefined();
-    expect(foot(week, "completion")).toBe("of starts submit (so far)");
+    expect(foot(week, "completion")).toBe("submissions per start");
     // No comparison at all is not a gap.
     expect(foot(surveyPage({ previous: null }), "starts")).toBe(
       "answered at least the first question"
@@ -284,9 +510,26 @@ describe("page builders", () => {
   });
 
   it("survey: the intro tiles from PostHog, compared only with a period PostHog saw whole", () => {
-    const clicks = (opened: number, skipped: number, agreed: number, answered: number) => ({
+    // reachedQ1: the question engine started or a question was answered, so at least answered.
+    const clicks = (
+      opened: number,
+      skipped: number,
+      agreed: number,
+      answered: number,
+      reachedQ1: number
+    ) => ({
       ok: true as const,
-      value: { opened, skipped, agreed, answered, returned: 0, trust: 0, terms: 0, silhouette: 0 },
+      value: {
+        opened,
+        skipped,
+        agreed,
+        answered,
+        reachedQ1,
+        returned: 0,
+        trust: 0,
+        terms: 0,
+        silhouette: 0,
+      },
     });
     const page = (from: string, to: string, prevFrom: string | null) =>
       buildSurveyPage({
@@ -299,8 +542,8 @@ describe("page builders", () => {
         now: new Date("2026-10-13T10:00:00Z"),
         questions: null,
         questionsError: null,
-        introClicks: clicks(100, 20, 60, 55),
-        prevIntroClicks: clicks(80, 8, 40, 40),
+        introClicks: clicks(100, 20, 60, 55, 70),
+        prevIntroClicks: clicks(80, 8, 40, 40, 48),
       });
     const tiles = (p: ReturnType<typeof page>) =>
       p.intro.tiles.map((t) => [t.label, t.value, t.prev, t.blocked]);
@@ -309,7 +552,8 @@ describe("page builders", () => {
       ["Saw the intro", 100, 80, null],
       ["Agreed to consent", 0.6, 0.5, null],
       ["Skipped slides", 0.2, 0.1, null],
-      ["Left before Q1", 1 - 55 / 100, 1 - 40 / 80, null],
+      // Left before question 1: never reached the questions, not merely answered nothing.
+      ["Left before Q1", 1 - 70 / 100, 1 - 48 / 80, null],
     ]);
     // A week before begins ahead of PostHog's first day: partial, so not compared.
     expect(page("2026-08-25", "2026-08-31", "2026-08-18").intro.tiles.map((t) => t.prev)).toEqual([
@@ -349,6 +593,8 @@ describe("page builders", () => {
     expect(p.intro.cards.map((s) => s.medianMs)).toEqual([null, 5000, 8000, null, 40_000, null]);
     expect(p.intro.cards.map((s) => s.reached)).toEqual([null, 4, 4, 0, 2, null]);
     expect(p.intro.recordedFrom).toBe("17 Oct 2026");
+    // The tiles draw no trend line either: the note under them names that too.
+    expect(p.intro.tiles.every((t) => t.spark.length === 0)).toBe(true);
     // Skip, Back and Exit say when they start rather than read zero.
     expect(p.intro.cards.every((c) => c.skip === null && c.back === null && c.exit === null)).toBe(
       true
@@ -376,9 +622,10 @@ describe("page builders", () => {
       starts: [start(true, 4), start(false, 4)],
     });
     const completion = surveyPage({ previous: week }).tiles.find((t) => t.key === "completion")!;
+    // The design's Completion: the earlier week's 2 submissions over its 8 starts.
     expect(completion).toMatchObject({
-      prev: 0.5,
-      foot: "of starts submit (so far) · vs 50.0%",
+      prev: 0.25,
+      foot: "submissions per start · vs 25.0%",
     });
 
     const people = factsFixture({
@@ -448,6 +695,7 @@ describe("page builders", () => {
     ]);
     const card = (step: string) => p.intro.cards.find((c) => c.step === step)!;
     expect(p.intro.recordedFrom).toBeNull();
+    expect(p.intro.tiles.every((t) => t.spark.length > 0)).toBe(true);
     // Their consent's share leaves that visitor out: 4 of the intro's 10, never over 100%.
     expect(card("consent_view")).toMatchObject({ reached: 5, reachedShare: 0.4 });
     // The four boxes from our own records: 3 agreed and went on, of the 11 who began; one
@@ -584,7 +832,7 @@ describe("page builders", () => {
     const cac = p.tiles.find((t) => t.key === "cac")!;
     // A sale is too rare to draw: 1 Oct, no spend for one finisher; 2 Oct, €40 for one.
     expect(cac.spark.slice(0, 2)).toEqual([0, 40]);
-    expect(cac.trend).toContain("line: ad spend per submission");
+    expect(cac.trend).toContain("line: € per submission");
     // Its line is not CAC: the read-out names what it draws.
     expect(cac.line).toBe("Ad spend per submission");
   });
@@ -609,7 +857,7 @@ describe("page builders", () => {
     });
     const cac = p.tiles.find((t) => t.key === "cac")!;
     expect(cac.prev).toBeNull();
-    expect(cac.foot).toMatch(/^spend €40 \(spend recorded/);
+    expect(cac.foot).toMatch(/^Google Ads spend ÷ paying customers \(spend recorded/);
     const row = (label: string) => p.scorecard.find((r) => r.label === label)!;
     expect(row("CAC").note).toContain("spend recorded");
     expect(row("ROAS").note).toContain("spend recorded");
@@ -660,10 +908,18 @@ describe("visitors per source: a sample split, the totals live", () => {
       tags("prod-verification", null, 100),
     ],
   };
-  it("dashboard: Sources and Performance over the estimated visitors, as drawn", () => {
+  it("dashboard: Sources and Performance over the counted and split visitors, as drawn", () => {
+    // The visit log: 66 Google Ads visits (its links tag every click), 110 untagged, a probe.
+    const tagged = factsFixture({
+      visits: [
+        { day: "2026-10-01", arm: "white_card", src: "google", n: 66 },
+        { day: "2026-10-01", arm: "white_card", src: null, n: 110 },
+        { day: "2026-10-02", arm: "white_card", src: "prod-verification", n: 5 },
+      ],
+    });
     const dash = (s: typeof sessions | null) =>
       buildDashboard({
-        facts,
+        facts: tagged,
         previous: null,
         ad,
         filters,
@@ -690,20 +946,41 @@ describe("visitors per source: a sample split, the totals live", () => {
       2,
       undefined,
     ]);
+    // Google Ads' 66 are counted, never PostHog's share of all its visits (30%, mostly Google
+    // Ads, as PostHog sees it nearly whole); the 110 untagged are split by PostHog's untagged
+    // visits: organic 10, direct 50.
     const google = p.sources.rows.find((r) => r.label === "Google Ads")!;
-    expect(google.values).toEqual([66, 0.3, 2, 2 / 66, 6.99 / 66]);
-    expect(google.bar).toBeCloseTo(66 / 110);
+    expect(google.values).toEqual([66, 66 / 176, 2, 2 / 66, 6.99 / 66]);
+    const direct = p.sources.rows.find((r) => r.label === "Direct / untagged")!;
+    expect(direct.values[0]).toBe(92);
+    expect(p.sources.rows.find((r) => r.label === "Organic search")!.values[0]).toBe(18);
+    expect(google.bar).toBeCloseTo(66 / 92);
     expect(p.sources.rows).toHaveLength(SOURCE_ROWS.length);
     expect(p.performance.find((r) => r.label === "Google Ads")).toEqual({
       label: "Google Ads",
       surveyCvr: 2 / 66,
       perVisit: 6.99 / 66,
     });
-    // Blank: dashes and no bars, which would read as no visits.
+    // PostHog unread: Google Ads' visits are still a count, the others blank (dashes and no
+    // bars, which would read as no visits).
     const none = dash(null);
     expect(none.sources.sample).toBe(false);
-    expect(none.sources.rows.every((r) => r.bar === undefined && r.values[0] === null)).toBe(true);
-    expect(none.performance.every((r) => r.surveyCvr === null && r.perVisit === null)).toBe(true);
+    expect(none.sources.rows.every((r) => r.bar === undefined)).toBe(true);
+    expect(none.sources.rows.find((r) => r.label === "Google Ads")!.values).toEqual([
+      66,
+      66 / 176,
+      2,
+      2 / 66,
+      6.99 / 66,
+    ]);
+    expect(
+      none.sources.rows.filter((r) => r.label !== "Google Ads").every((r) => r.values[0] === null)
+    ).toBe(true);
+    expect(
+      none.performance
+        .filter((r) => r.label !== "Google Ads")
+        .every((r) => r.surveyCvr === null && r.perVisit === null)
+    ).toBe(true);
   });
 
   it("dashboard: € per visit for new and returning, each payment with its payer's group", () => {
@@ -854,6 +1131,74 @@ describe("blanks say why, and notes say what the numbers are", () => {
   const tile = (p: { tiles: Array<{ key: string }> }, key: string) =>
     p.tiles.find((t) => t.key === key) as ReturnType<typeof focus>["tiles"][number];
 
+  it("dashboard: the journey leaves a share blank where its base is incomplete, and says why", () => {
+    // 1 to 7 Aug: survey starts were kept only with their drafts (cleared after 30 days), and
+    // the paywall's seen stamp starts on 6 Sep 2026.
+    const aug = parseFilters({ period: "custom", from: "2026-08-01", to: "2026-08-07" }, TODAY);
+    const d = dashboard({
+      facts: factsFixture({ from: "2026-08-01", to: "2026-08-07" }),
+      filters: aug,
+    });
+    const step = (n: number) => d.journey.find((j) => j.n === n)!;
+    expect(step(3)).toMatchObject({ value: null, step: "— of visits" });
+    expect(step(4).step).toBe("— of starts");
+    expect(step(6)).toMatchObject({ value: null, step: "recorded from 6 Sep 2026" });
+    expect(step(7).step).toBe("— of paywall");
+    // The incomplete starts themselves are blank too, as the Start CVR tile and the Survey page.
+    expect(d.journeyNote).toMatch(/^Step 3 is blank and steps 3 and 4 have no share: /);
+    expect(d.journeyNote).toMatch(/Step 6 is blank: /);
+    expect(d.scorecard.find((r) => r.label === "Start CVR")!.value).toBeNull();
+    // A range the records hold whole: every share, and no note.
+    expect(dashboard().journeyNote).toBeNull();
+  });
+
+  it("dashboard: finishers whose source was never recorded have a row of their own, not Direct", () => {
+    const unknown = factsFixture({
+      subs: [
+        ...facts.subs,
+        sub({ id: 41, src: null, med: null, ads: false, srcKnown: false }),
+        sub({ id: 42, src: null, med: null, ads: false, srcKnown: false }),
+      ],
+    });
+    const rows = dashboard({ facts: unknown }).sources.rows;
+    expect(rows.at(-1)).toMatchObject({
+      label: "Not recorded",
+      values: [null, null, 2, null, null],
+    });
+    expect(rows.find((r) => r.label === "Direct / untagged")!.values[2]).toBe(0);
+  });
+
+  it("Dashboard: chapter ratings say they are all traffic's under a filter, and the A boxes say why they are empty", () => {
+    const ratings = { up: 15, down: 2 };
+    expect(focus({ ratings }).assessments.nps.sub).toBe(
+      "Not asked yet. 88% of 17 chapter ratings say helpful."
+    );
+    expect(focus({ ratings, filters: { ...filters, source: "direct" } }).assessments.nps.sub).toBe(
+      "Not asked yet. 88% of 17 chapter ratings say helpful (all traffic)."
+    );
+    const b = focus({ filters: { ...filters, assessment: "b" } }).assessments;
+    expect(b.survey).toEqual({
+      valueMs: null,
+      sub: "Assessment B has not launched: these boxes are Assessment A's.",
+    });
+    expect(b.report.valueMs).toBeNull();
+  });
+
+  it("Dashboard: the full-unlock rate is the range's own finishers who bought, not sales paid in it", () => {
+    const chart = (f: ReturnType<typeof focus>) =>
+      f.charts.find((c) => c.key === "full-unlock")!.views.day.series[0]!.total;
+    // The fixture's first finisher bought a full unlock; a June finisher's sale in the range
+    // is revenue here, but not one of these people.
+    const own = factsFixture({
+      subs: [
+        sub({ ...facts.subs[0]!, full: true, fullSales: 1, fullRevenue: 6.99 }),
+        facts.subs[1]!,
+      ],
+      money: [...facts.money, { ...facts.money[0]!, sid: 999, day: "2026-10-03" }],
+    });
+    expect(chart(focus({ facts: own }))).toBeCloseTo(1 / 2);
+  });
+
   it("dashboard: CLV equals the average order only while nobody bought twice", () => {
     const clv = (money: typeof facts.money) =>
       dashboard({ facts: factsFixture({ money }) }).scorecard.find((r) => r.label === "CLV")!.note;
@@ -868,8 +1213,8 @@ describe("blanks say why, and notes say what the numbers are", () => {
   });
 
   it("dashboard: the journey's submit step is a share of the starts, as drawn", () => {
-    // 10 of the 14 starts finished.
-    expect(dashboard().journey[3]).toMatchObject({ label: "Submitted", step: "71.4% of starts" });
+    // "% = of the previous step": the range's 2 submissions over its 14 starts.
+    expect(dashboard().journey[3]).toMatchObject({ label: "Submitted", step: "14.3% of starts" });
   });
 
   it("dashboard: an earlier € per survey complete from €1 is written in cents, as the value is", () => {

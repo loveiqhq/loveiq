@@ -79,7 +79,14 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
   createSupabaseMiddleware: () => ({ auth: { getUser: mockGetUser } }),
 }));
 
-import { config, isPayToStartPage, proxy, shouldCountSurveyView, shouldCountVisit } from "@/proxy";
+import {
+  config,
+  isPayToStartPage,
+  payToStartOfferOf,
+  proxy,
+  shouldCountSurveyView,
+  shouldCountVisit,
+} from "@/proxy";
 import { renderBrandHeader } from "@shared/emails/shared";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -1005,6 +1012,40 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     expect(isPayToStartPage("/sexual-archetype/continue")).toBe(true);
     expect(isPayToStartPage("/sexual-archetypes")).toBe(false);
     expect(isPayToStartPage("/survey")).toBe(false);
+  });
+
+  it("tells the two pay-to-start pages apart in the visit's offer, and no other visit has one", async () => {
+    const cases: Array<[string, string | null]> = [
+      ["/sexual-archetype", "full"],
+      ["/sexual-archetype/initial", "pre"],
+      ["/sexual-archetype/initial?gclid=abc", "pre"],
+      // The status page Stripe returns buyers to names the EUR 1.99 offer in its address.
+      ["/sexual-archetype/checkout?session_id=cs_1&offer=pre", "pre"],
+      ["/sexual-archetype/checkout?session_id=cs_1", "full"],
+      ["/", null],
+      ["/survey", null],
+    ];
+    for (const [path, offer] of cases) {
+      mockNextOpts.value = null;
+      await proxy(makeVisitRequest({ path, dest: "document" }));
+      expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit-offer"), path).toBe(offer);
+    }
+    expect(payToStartOfferOf("/sexual-archetype/initial/", null)).toBe("pre");
+    // Only the status page reads `offer`: on the full offer's page it changes nothing.
+    expect(payToStartOfferOf("/sexual-archetype", "pre")).toBe("full");
+  });
+
+  it("never lets a client claim a visit's offer", async () => {
+    // Copied from the inbound headers like its siblings: an echoed one must not reach the row.
+    for (const path of ["/", "/sexual-archetype"]) {
+      const req = makeVisitRequest({ path, dest: "document" });
+      (req as unknown as { headers: Headers }).headers.set("x-liq-new-visit-offer", "pre");
+      mockNextOpts.value = null;
+      await proxy(req);
+      expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit-offer"), path).toBe(
+        path === "/" ? null : "full"
+      );
+    }
   });
 
   it("labels the survey a pay-to-start buyer opens pay_to_start", async () => {

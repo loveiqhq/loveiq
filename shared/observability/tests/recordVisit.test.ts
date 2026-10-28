@@ -20,7 +20,15 @@ vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
-import { recordSurveyPageView, recordUniqueVisit } from "@shared/observability/recordVisit";
+import { readFileSync } from "node:fs";
+
+import { PAY_TO_START_OFFER_IDS, isPayToStartOfferId } from "@features/pay-to-start/logic/offer";
+
+import {
+  flaggedVisit,
+  recordSurveyPageView,
+  recordUniqueVisit,
+} from "@shared/observability/recordVisit";
 
 /** The JSON body of the single insert the writer performed. */
 function insertedBody(): Record<string, unknown> {
@@ -100,6 +108,54 @@ describe("server-side funnel writers", () => {
     mockFetch.mockClear();
     await recordSurveyPageView("pay_to_start");
     expect(insertedBody().landing_variant).toBe("pay_to_start");
+  });
+
+  it("writes which pay-to-start page a visit landed on, and nothing on any other visit", async () => {
+    await recordUniqueVisit("pay_to_start", "google", "pre");
+    expect(insertedBody().offer).toBe("pre");
+    mockFetch.mockClear();
+    await recordUniqueVisit("pay_to_start", undefined, "full");
+    expect(insertedBody().offer).toBe("full");
+    // Clamped like the label: the header comes from a request, and the column's CHECK would
+    // refuse the whole row (the visit with it) for anything else.
+    mockFetch.mockClear();
+    await recordUniqueVisit("pay_to_start", undefined, "free");
+    expect(insertedBody()).not.toHaveProperty("offer");
+    // An arm's visit never carries an offer, whatever the header said.
+    mockFetch.mockClear();
+    await recordUniqueVisit("white_card", undefined, "pre");
+    expect(insertedBody()).not.toHaveProperty("offer");
+  });
+
+  it("reads the visit proxy.ts flagged, offer included, as the layout hands it on", () => {
+    expect(
+      flaggedVisit(
+        new Headers({
+          "x-liq-new-visit": "pay_to_start",
+          "x-liq-new-visit-utm": "google",
+          "x-liq-new-visit-offer": "pre",
+        })
+      )
+    ).toEqual(["pay_to_start", "google", "pre"]);
+    expect(flaggedVisit(new Headers({ "x-liq-new-visit": "white_card" }))).toEqual([
+      "white_card",
+      undefined,
+      undefined,
+    ]);
+    expect(flaggedVisit(new Headers())).toBeNull();
+    // The layout spreads it into the writer, so no argument is dropped on the way.
+    const layout = readFileSync("app/layout.tsx", "utf8");
+    expect(layout).toContain("after(() => recordUniqueVisit(...newVisit))");
+  });
+
+  it("writes only offers the table's CHECK allows (20261023150000)", () => {
+    // A value the CHECK refuses loses the whole visit: every offer the code knows is in it.
+    const check = readFileSync(
+      "supabase/migrations/20261023150000_funnel_event_offer.sql",
+      "utf8"
+    ).split("ADD CONSTRAINT")[1]!;
+    for (const offer of PAY_TO_START_OFFER_IDS) expect(check).toContain(`'${offer}'`);
+    expect(PAY_TO_START_OFFER_IDS.every(isPayToStartOfferId)).toBe(true);
   });
 
   it("omits utm_source entirely for direct traffic", async () => {

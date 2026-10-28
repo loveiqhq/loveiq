@@ -6,11 +6,12 @@
 import { tourSteps, type TourAudience, type TourStepId } from "@features/report/logic/guidedTour";
 import { TOUR_COPY } from "@features/report/ui/v3/guidedTourContent";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { RETIRED_NAMES } from "@features/admin/ui/ap/retired-chapters";
+import { POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
 
 import { assessmentScope } from "./assessment";
 import { shortDate } from "./days";
-import { PRE_PLANS, type Facts, type SubFact } from "./facts";
+import { PRE_ON_SALE_FROM, PRE_PLANS, preBuysOf, type Facts, type SubFact } from "./facts";
 import {
   activeNarrowing,
   bucketCaption,
@@ -24,18 +25,21 @@ import {
   launched,
   mean,
   median,
+  peopleBlocked,
   ratio,
   subsIn,
-  tabletBlocked,
   totals,
   trend,
   type Totals,
   ageMatched,
   sameAge,
 } from "./metrics";
-import { head, readFoot, type PageHead, type Tile } from "./common";
-import type { PostHogResult, ReportReturns } from "./posthog";
+import { freePreBlocked, head, readFoot, type PageHead, type Tile } from "./common";
+import { POSTHOG_FROM, type PostHogResult, type ReportReturns } from "./posthog";
 import { AGE_BANDS, ageBand, genderLabel } from "./survey-page";
+import { teamUserIds } from "./team";
+import { isPhoneRun } from "./unlock-feedback";
+import { REPORT_TOKEN } from "@features/admin/server/team-export";
 
 export interface ReportExtras {
   wizard: Array<{
@@ -51,13 +55,15 @@ export interface ReportExtras {
   paywall_clicks: Array<{ section: string; readers: number }>;
   /**
    * Reading per chapter (report_chapter_stats), over the range's readers who finished from
-   * `chapter_stats_from`: readers who reached each chapter, their mean time in it, and how
-   * many of them used each control. `pw_click` counts only readers who also saw a paywall.
+   * `chapter_stats_from`: readers who reached each chapter, their mean and median time in it,
+   * and how many of them used each control. `pw_click` counts only readers who also saw a
+   * paywall. `ms_median` is missing from a function older than 21 Oct 2026: blank.
    */
   chapter_stats: Array<{
     section: string;
     reached: number;
     ms_avg: number | null;
+    ms_median?: number | null;
     opened: number;
     show_all: number;
     learn_more: number;
@@ -67,6 +73,11 @@ export interface ReportExtras {
   }>;
   /** Those readers who reached any chapter: Reach's denominator. */
   chapter_readers: number;
+  /**
+   * Of them, those who read before the slimmed report went live (22 Oct 2026): the reach base of
+   * the chapters it left out. Absent from an older reader.
+   */
+  chapter_readers_before_slim?: number;
   /** Each of those readers' chapters reached (ids, unordered): how far into the report they got. */
   chapter_depth: Array<{ sid: number; chapters: string[] }>;
   /** The first day (Berlin) any chapter reading was recorded; null before the first. */
@@ -101,6 +112,8 @@ export interface ReportExtras {
     returned: number | null;
     bought: number;
     revenue: number;
+    /** Its send times are estimated from the report's time (no promo code dated them). */
+    estimated?: boolean;
   }>;
   /** The first Berlin day an email's own event was kept (clicks count from it); null before. */
   email_events_from: string | null;
@@ -135,6 +148,9 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
     // recorded, which the page says, never zeros.
     chapter_stats: Array.isArray(raw.chapter_stats) ? raw.chapter_stats : [],
     chapter_readers: Number(raw.chapter_readers) || 0,
+    ...(raw.chapter_readers_before_slim === undefined
+      ? {}
+      : { chapter_readers_before_slim: Number(raw.chapter_readers_before_slim) || 0 }),
     chapter_depth: Array.isArray(raw.chapter_depth)
       ? raw.chapter_depth.map((d) => ({
           sid: Number(d.sid),
@@ -160,6 +176,7 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
       delivered_opens: e.delivered_opens ?? null,
       opened: e.opened ?? null,
       clicked: e.clicked ?? null,
+      estimated: e.estimated === true,
     })),
     email_events_from: typeof raw.email_events_from === "string" ? raw.email_events_from : null,
     email_opens_from: typeof raw.email_opens_from === "string" ? raw.email_opens_from : null,
@@ -289,6 +306,84 @@ export function wholeShares(counts: number[]): number[] | null {
   return parts.map((p) => p.whole / 100);
 }
 
+/** A chapter vote (report_section_feedback), its comment already masked. */
+export interface Vote {
+  at: string;
+  submission: number | null;
+  /** The reader's account (app_user.id), the log's "User ID". */
+  user: number | null;
+  section: string;
+  vote: "up" | "down";
+  issue: string | null;
+  comment: string | null;
+}
+
+/**
+ * A reader's comment as the page may show it: email addresses, a report's link (its access
+ * token: anyone with it could open that reader's report) and phone numbers masked, as the
+ * unlock feedback's written answers are; a date or a price is no phone number (isPhoneRun).
+ */
+export function maskContacts(text: string): string {
+  return text
+    .replace(/[^\s@()<>"',;]+@[^\s@()<>"',;]+\.[^\s@()<>"',;]+/g, "[email]")
+    .replace(REPORT_TOKEN, "[report link]")
+    .replace(/\+?\d[\d\s()./-]{5,}\d/g, (m) => (isPhoneRun(m) ? "[phone]" : m));
+}
+
+/**
+ * Every chapter vote since voting began, whatever the range: the design's "live, all time"
+ * (Marcus, 12 Oct 2026: the relative quantity of feedback given). The team's own are left out
+ * as ap_report_extras leaves them out (a vote on a team account's survey), and each comment is
+ * masked before it leaves the server. Read whole, a page at a time.
+ */
+export async function fetchVotes(): Promise<Vote[]> {
+  const staff = await teamUserIds();
+  type Row = {
+    created_at: string;
+    survey_submission_id: number | null;
+    section_id: string;
+    feedback: string;
+    issue: string | null;
+    comment: string | null;
+    survey_submission: { user_id: number | null } | null;
+  };
+  const rows: Row[] = [];
+  for (let offset = 0; ; offset += POSTGREST_MAX_ROWS) {
+    const res = await supabaseFetch(
+      `/rest/v1/report_section_feedback?${new URLSearchParams({
+        select:
+          "created_at,survey_submission_id,section_id,feedback,issue,comment,survey_submission(user_id)",
+        order: "created_at.desc,id.desc",
+        limit: String(POSTGREST_MAX_ROWS),
+        offset: String(offset),
+      })}`,
+      { paginated: true }
+    );
+    if (!res.ok) throw new Error(`report_section_feedback failed (${res.status})`);
+    const page = (await res.json()) as Row[];
+    rows.push(...page);
+    if (page.length < POSTGREST_MAX_ROWS) break;
+  }
+  return rows
+    .filter((r) => {
+      const uid = r.survey_submission?.user_id;
+      return uid === null || uid === undefined || !staff.has(Number(uid));
+    })
+    .map((r) => ({
+      at: r.created_at,
+      submission: r.survey_submission_id === null ? null : Number(r.survey_submission_id),
+      user:
+        r.survey_submission?.user_id === null || r.survey_submission?.user_id === undefined
+          ? null
+          : Number(r.survey_submission.user_id),
+      section: r.section_id,
+      vote: r.feedback === "up" ? ("up" as const) : ("down" as const),
+      // An issue is one of the report's own keys; anything else is a reader's words, masked.
+      issue: r.issue && !(r.issue in ISSUES) ? maskContacts(r.issue) : r.issue,
+      comment: r.comment?.trim() ? maskContacts(r.comment.trim()) : null,
+    }));
+}
+
 const SLIDES = [
   {
     name: "A note before you explore your report",
@@ -315,15 +410,55 @@ const SLIDES = [
 const MAP_STEPS_FROM = "2026-10-06";
 
 /**
- * The four ways back to a report PostHog tells apart (posthog.ts), in the design's order, each
- * with the design's name for it.
+ * The ways back to a report PostHog tells apart (posthog.ts), in the design's order, each with
+ * the design's name for it. An email without a campaign is the report-ready email every
+ * finisher gets, or an invite reminder: not a campaign.
  */
 const RETURN_SOURCES: Array<[posthog: string, label: string]> = [
-  ["Bookmark or direct", "Bookmark or direct"],
-  ["Email link", "Email campaign"],
+  ["Bookmark or direct", "Bookmark / direct"],
+  ["Email campaign link", "Email campaign"],
+  ["Email link", "Report or invite email"],
   ["Share link from a friend", "Share link from a friend"],
   ["Another tagged link", "Other"],
 ];
+/** The classes that came through an email, campaign or not. */
+const EMAIL_RETURNS: ReadonlySet<string> = new Set(["Email campaign link", "Email link"]);
+
+/**
+ * Every nurture email stage that has been sent, live first, with what it was and when it went
+ * out (read off the quotes' send marks). Until Pricing 2.0 (3 Aug 2026) a ladder ran: 6 h if
+ * the report wasn't opened, then 30 h and 54 h with codes, and in early June a 78 h call
+ * invite. Since then one 72 h email.
+ */
+const STAGES: Array<{ stage: string; status: "Live" | "Retired"; what: string }> = [
+  {
+    stage: "72h_no_unlock",
+    status: "Live",
+    what: "Sent 72 h after the report if not unlocked, with a 50% code · since 3 Aug 2026",
+  },
+  {
+    stage: "54h_no_unlock",
+    status: "Retired",
+    what: "54 h, a 75% code · 16 May – 3 Aug 2026, retired with Pricing 2.0",
+  },
+  {
+    stage: "30h_no_unlock",
+    status: "Retired",
+    what: "30 h, a 50% code · 16 May – 3 Aug 2026, retired with Pricing 2.0",
+  },
+  {
+    stage: "6h_no_view",
+    status: "Retired",
+    what: "6 h, if the report wasn't opened · 16 May – 3 Aug 2026, retired with Pricing 2.0",
+  },
+  {
+    stage: "78h_no_unlock",
+    status: "Retired",
+    what: "78 h, an invite to a 20-minute call · 2–15 Jun 2026, paused since",
+  },
+];
+/** The chapter-nudge emails' last day: switched off with Pricing 2.0 (system flag). */
+const CHAPTER_NUDGES_UNTIL = "2026-08-03";
 
 /** "1 share", "12 shares". */
 const plural = (n: number, one: string) =>
@@ -342,17 +477,33 @@ const ISSUES: Record<string, string> = {
 const LIVE_CHAPTERS: ReadonlySet<string> = new Set(
   WIZARD_DRAWER.flatMap((p) => p.rows.map((r) => r.id))
 );
+/**
+ * Chapters the live report rates outside its nav, so with no per-chapter reading: Report V4's
+ * Summary, which takes the place of 2.0's "What this means for you" and posts its votes
+ * under `summary`.
+ */
+const RATED_ONLY: Array<{ id: string; name: string; part: string }> = [
+  { id: "summary", name: "Summary of your archetype", part: "Report V4 · Summary" },
+];
 
-/** The live report's chapters in its own order (its nav), then any older chapter id voted on. */
+/**
+ * The live report's chapters in its own order (its nav), the ones it rates outside the nav,
+ * then any older chapter id voted on.
+ */
 export function chapterList(seen: string[]): Array<{ id: string; name: string; part: string }> {
   const live = WIZARD_DRAWER.flatMap((p) =>
     p.rows.map((r) => ({ id: r.id, name: r.label, part: `${p.part} · ${p.label}` }))
   );
+  const rated = new Set(RATED_ONLY.map((c) => c.id));
   const older = [...new Set(seen)]
-    .filter((id) => !LIVE_CHAPTERS.has(id))
+    .filter((id) => !LIVE_CHAPTERS.has(id) && !rated.has(id))
     .sort()
-    .map((id) => ({ id, name: prettyId(id), part: "Earlier report versions" }));
-  return [...live, ...older];
+    .map((id) => ({
+      id,
+      name: Object.hasOwn(RETIRED_NAMES, id) ? RETIRED_NAMES[id]! : prettyId(id),
+      part: "Earlier report versions",
+    }));
+  return [...live, ...RATED_ONLY, ...older];
 }
 
 export function prettyId(id: string): string {
@@ -360,8 +511,17 @@ export function prettyId(id: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * What a ratio or an average is worked out of, for its info card ("94 ÷ 419"): the readers (or
+ * the milliseconds read) over the readers it is a share of.
+ */
+export interface Parts {
+  num: number;
+  den: number;
+}
+
 /** A headline tile, with the design's decimals for its value (`digits`). */
-export type ReportTile = Tile & { digits?: number };
+export type ReportTile = Tile & { digits?: number; parts?: Parts };
 
 /**
  * A headline rate's decimals, as the design writes them: two figures ("34%", "2.1%", "0.21%"),
@@ -392,6 +552,7 @@ export interface ChangeBox {
   goodWhen: GoodWhen;
   digits?: number;
   note?: string;
+  parts?: Parts;
 }
 
 /** A stop of the guided tour, as a reader of its audience gets it, and how its runs went there. */
@@ -426,6 +587,11 @@ export interface TourView {
   placed: number;
   /** Runs with no end stored: counted in Left the tour / bounced, on no stop. */
   unended: number;
+  /**
+   * Tour started over every reader who opened their report ("41% of the 123 readers who opened
+   * their report"), for the section's note: the tile shows only its change, as drawn.
+   */
+  share: string | null;
 }
 
 /** Reading time for one group of readers: the mean and the median, and the benchmark's. */
@@ -439,6 +605,11 @@ export interface TimeGroup {
 
 export interface ReportPayload extends PageHead {
   launched: boolean;
+  /**
+   * Why the sections about readers (slides, time in report, returns but its ways back and the
+   * campaigns, which are all traffic) are blank under these filters (peopleBlocked), or null.
+   */
+  blocked: string | null;
   tiles: ReportTile[];
   wizard: {
     /** Intro started, completed all 6, skipped and left the report; rates whole, as drawn. */
@@ -451,8 +622,9 @@ export interface ReportPayload extends PageHead {
       reachedShare: number | null;
       cont: number | null;
       /**
-       * Pressed Skip Intro on the slide, of its readers who finished once that was
-       * recorded (`skipsFrom`); null with none of them.
+       * Of the slide's readers, those who stopped on it having pressed Skip Intro (on it, or
+       * on a slide they went back to); null while Skip Intro was not recorded in the range.
+       * Continue, Skip intro and Exit share the slide's readers out between them.
        */
       skip: number | null;
       back: number;
@@ -514,8 +686,18 @@ export interface ReportPayload extends PageHead {
     campaigns: Array<{
       stage: string;
       status: "Live" | "Retired";
-      /** Null with every figure below for a retired stage that sent and sold nothing in the range. */
-      sent: number | null;
+      /** What the email was, and when it ran. */
+      what: string;
+      /** Its send times are estimated (report time + the stage's delay): no code dated them. */
+      estimated: boolean;
+      /** Reported delivered: what Clicked is a share of, and what Opened is (since opens). */
+      delivered: number | null;
+      deliveredOpens: number | null;
+      /**
+       * Sent and purchased are counts, 0 included, as drawn; a retired stage that sent and sold
+       * nothing in the range has no other figure.
+       */
+      sent: number;
       /** Of those sent, readers whose email was opened; null when the range is not all counted. */
       opened: number | null;
       /** opened ÷ sent. */
@@ -528,12 +710,16 @@ export interface ReportPayload extends PageHead {
       returned: number | null;
       /** returned ÷ sent. */
       returnRate: number | null;
-      purchased: number | null;
+      purchased: number;
       revenue: number;
     }>;
     /** Since when opens and clicks are counted, for the note under the campaigns. */
     emailEvents: string;
+    /** What the table can't list for this range (the chapter nudges), or null. */
+    campaignNote: string | null;
   };
+  /** What the wizard's slides can't see for this range, or null. */
+  wizardNote: string | null;
   chapters: Array<{
     n: number;
     id: string;
@@ -545,6 +731,8 @@ export interface ReportPayload extends PageHead {
     paywallReaders: number;
     /** The rest from per-chapter reading; null where the range has none recorded. */
     reach: number | null;
+    /** The median reader's time in it (what the page shows), and the mean (the CSV keeps it). */
+    medianMs: number | null;
     avgMs: number | null;
     /** Of the chapter's readers (those who reached it); null where none did it. */
     showMore: number | null;
@@ -557,7 +745,12 @@ export interface ReportPayload extends PageHead {
   }>;
   /** Per-chapter reading: from when, its readers in this range, and whether it has any days. */
   chapterReading: { from: string | null; readers: number; recorded: boolean };
+  /** Every chapter vote since voting began (all time, all traffic), whatever the filters. */
   feedback: {
+    /** Why the votes are missing (they could not be read), or null. */
+    error: string | null;
+    /** The first vote's Berlin day; null before any. */
+    from: string | null;
     good: number;
     bad: number;
     total: number;
@@ -565,10 +758,14 @@ export interface ReportPayload extends PageHead {
     log: Array<{
       at: string;
       submission: number | null;
+      user: number | null;
+      /** The chapter's name, and its id (the search finds either). */
       chapter: string;
+      id: string;
       vote: "Good" | "Bad";
       issue: string | null;
-      commented: boolean;
+      /** The reader's comment, email addresses and phone numbers masked; null without one. */
+      comment: string | null;
     }>;
   };
 }
@@ -619,12 +816,18 @@ const DEPTH_BANDS: Array<[string, number, number]> = [
 /** A reader's total reading time, as the design splits it; the last is "not recorded". */
 const TIME_GROUPS = ["< 1 min", "1–5 min", "5–10 min", "10 min+", "Time not recorded"] as const;
 
-/** Of PostHog's return visits, the share that came through an email link; null unread or none. */
-function emailShare(r: PostHogResult<ReportReturns> | null): number | null {
+/** Of PostHog's return visits, those that came through any email link; null unread or none. */
+function emailParts(r: PostHogResult<ReportReturns> | null): Parts | null {
   if (!r || !r.ok) return null;
   const by = new Map(r.value.sources.map((s) => [s.source, s.sessions]));
-  const total = RETURN_SOURCES.reduce((a, [s]) => a + (by.get(s) ?? 0), 0);
-  return total ? (by.get("Email link") ?? 0) / total : null;
+  const den = RETURN_SOURCES.reduce((a, [s]) => a + (by.get(s) ?? 0), 0);
+  const num = [...EMAIL_RETURNS].reduce((a, s) => a + (by.get(s) ?? 0), 0);
+  return den ? { num, den } : null;
+}
+
+function emailShare(r: PostHogResult<ReportReturns> | null): number | null {
+  const p = emailParts(r);
+  return p ? p.num / p.den : null;
 }
 
 /** Berlin calendar days between two instants. */
@@ -653,17 +856,24 @@ export function buildReportPage(input: {
    */
   tour?: ReportTour | null;
   previousTour?: ReportTour | null;
+  /**
+   * Every chapter vote, all time (fetchVotes): the chapters' feedback and the Feedback section.
+   * Null when they could not be read; left out, none.
+   */
+  votes?: Vote[] | null;
+  /** The report's EUR 1.99 gate now, read under "Free survey" only; null when it couldn't be. */
+  gateOn?: boolean | null;
   filters: ApFilters;
   today: string;
   now: Date;
 }): ReportPayload {
   const { facts, extras, filters: f, today, now } = input;
   const scope = assessmentScope(f);
-  // The tablet filter before tablets were told apart: nobody counts as one, so every tile is
-  // blank with the reason, and an earlier period from before then is not compared.
-  const tablet = tabletBlocked(scope, facts.from);
+  // A filter the records can't follow over this range: every tile is blank with the reason,
+  // and an earlier period it can't follow either is not compared.
+  const tablet = peopleBlocked(scope, facts.from);
   const previous =
-    input.previous && !tabletBlocked(scope, input.previous.from) ? input.previous : null;
+    input.previous && !peopleBlocked(scope, input.previous.from) ? input.previous : null;
   const t = totals(facts, scope);
   // The earlier period at the same age as this one: its readers had no longer to act.
   const prevAged = previous ? ageMatched(previous, sameAge(facts, previous, now)) : null;
@@ -688,8 +898,16 @@ export function buildReportPage(input: {
     per((l) => l.filter((s) => s.openedAt && s.invited).length, list);
   const unlockRate = (list: SubFact[]) =>
     per((l) => l.filter((s) => s.openedAt && s.paidAt && s.full).length, list);
+  // As the full unlock's: openers who pre-unlocked (paid EUR 1.99 for the Core Archetype) so far.
   const preRate = (list: SubFact[]) =>
-    per((l) => l.filter((s) => s.openedAt && s.paidAt && PRE_PLANS.has(s.plan ?? "")).length, list);
+    per((l) => l.filter((s) => s.openedAt && preBuysOf(s).length > 0).length, list);
+  const preWhy =
+    f.funnel === "free"
+      ? freePreBlocked(
+          input.gateOn,
+          subs.some((s) => preBuysOf(s).length > 0)
+        )
+      : null;
   const spark = (pick: (x: SubFact[]) => number | null) =>
     trend(facts, scope, (_x, from, to) => pick(subsIn(facts, scope, from, to)));
   // Paywall clicks, share-method invites and the wizard's slides were recorded only with
@@ -699,7 +917,8 @@ export function buildReportPage(input: {
       from >= EVENTS_COMPLETE_FROM ? pick(subsIn(facts, scope, from, to)) : null
     );
   const n = (v: number) => v.toLocaleString("en-US");
-  const narrowed = activeNarrowing(f).length > 0;
+  // The wizard's back presses and skips are read for every reader, pay to start's too.
+  const narrowed = activeNarrowing(f).length > 0 || f.funnel === "free";
 
   const tile = (
     key: string,
@@ -760,7 +979,9 @@ export function buildReportPage(input: {
         readMean(subs),
         prevComparable ? readMean(prevSubs) : null,
         `${readFoot(readMedian(subs))} · recorded for ${n(rec.length)} of ${n(readers.length)}${withheld}`,
-        spark((l) => readMean(l))
+        // Reading times were recorded only with cookie consent before 18 Sep 2026: a week of two
+        // timed readers would dwarf the rest, so the line starts there.
+        sparkFull((l) => readMean(l))
       ),
       ...noCmpNote,
     },
@@ -772,7 +993,7 @@ export function buildReportPage(input: {
         readMedian(subs),
         prevComparable ? readMedian(prevSubs) : null,
         `half of the readers read longer · recorded for ${n(rec.length)} of ${n(readers.length)}${withheld}`,
-        spark((l) => readMedian(l))
+        sparkFull((l) => readMedian(l))
       ),
       ...noCmpNote,
     },
@@ -837,21 +1058,26 @@ export function buildReportPage(input: {
       ),
       ...noCmpNote,
     },
-    // The Initial plan (EUR 1.99, pay to start's initial report since 19.10). With no plan
-    // key on sale, no figure, and the tile says so.
-    PRE_PLANS.size
+    // The Initial plan (EUR 1.99, the Core Archetype: on sale from PRE_ON_SALE_FROM through pay
+    // to start). Over days before it, nobody could: no figure, and the tile says so. "Free
+    // survey" sells it only through the report's gate: with that off and none sold, the same.
+    PRE_PLANS.size && facts.from >= PRE_ON_SALE_FROM && !preWhy
       ? tile(
           "pre",
           "Pre unlock rate",
           "pct",
           preRate(subs),
-          previous ? preRate(prevSubs) : null,
-          "Initial plan purchases ÷ report openers",
+          previous && previous.from >= PRE_ON_SALE_FROM ? preRate(prevSubs) : null,
+          "Core Archetype (€1.99) purchases ÷ report openers",
           spark(preRate)
         )
       : {
           ...tile("pre", "Pre unlock rate", "pct", null, null, "", []),
-          note: "Initial plan not on sale yet",
+          note: !PRE_PLANS.size
+            ? "Initial plan not on sale yet"
+            : facts.from < PRE_ON_SALE_FROM
+              ? `Counted from ${rangeLabel(PRE_ON_SALE_FROM, PRE_ON_SALE_FROM)}`
+              : (preWhy ?? ""),
         },
     tile(
       "full",
@@ -863,6 +1089,21 @@ export function buildReportPage(input: {
       spark(unlockRate)
     ),
   ];
+  // What each rate and average is worked out of, for its info card.
+  const readSum = rec.reduce((a, s) => a + s.readMs, 0);
+  const openers = (pick: (s: SubFact) => unknown): Parts => ({
+    num: readers.filter(pick).length,
+    den: readers.length,
+  });
+  const tileParts: Record<string, Parts> = {
+    read: { num: readSum, den: rec.length },
+    returned: openers((s) => s.returnedAt),
+    initiated: openers((s) => s.clickedAt),
+    share: openers((s) => s.shared),
+    rating: openers((s) => s.votes > 0),
+    invite: openers((s) => s.invited),
+    full: openers((s) => s.paidAt && s.full),
+  };
 
   // The pre-report wizard: everyone who finished sees slide 1; a later slide is reached by
   // those who went on to it. Reached, went on and left come from the readers themselves (the
@@ -876,9 +1117,10 @@ export function buildReportPage(input: {
   // The map's steppers come as submissions, so unlike Back this share follows the filters.
   const steppers = extras.map_steppers ? new Set(extras.map_steppers) : null;
   const mapReaders = subs.filter((s) => s.day >= MAP_STEPS_FROM && (s.wizardSlide ?? 0) >= 1);
-  // Skip Intro per slide, recorded from `skipsFrom`. Its pressers come as submissions too, so
-  // it follows the filters; before `skipsFrom` nobody's skip is known.
+  // Skip Intro, recorded from `skipsFrom`. Its pressers come as submissions too, so it follows
+  // the filters; before `skipsFrom` nobody's skip is known, so a skip then reads as an exit.
   const skipsFrom = extras.wizard_skips_from;
+  const skipsCounted = skipsFrom !== null && skipsFrom <= f.to;
   const skippedOn = new Map(extras.wizard_skips.map((k) => [k.slide, new Set(k.sids)]));
   const skippers = new Set(extras.wizard_skips.flatMap((k) => k.sids));
   const slides = SLIDES.map((s, i) => {
@@ -887,13 +1129,12 @@ export function buildReportPage(input: {
     const wentOn = i < 5 ? reach[i + 1]! : openedAfter;
     const back = w?.went_back ?? 0;
     const readersHere = subs.filter((x) => i === 0 || (x.wizardSlide ?? 0) >= i);
-    const skipped = skippedOn.get(i) ?? new Set<number>();
-    // Stopped here but pressed Skip Intro, here or on a slide they went back to: they
-    // skipped, they did not leave.
-    const skippedOnly = readersHere.filter(
+    // Each of the slide's readers went on, skipped or left, by where they stopped: one who
+    // stopped here having pressed Skip Intro (here, or on a slide they went back to) skipped,
+    // the rest who stopped here left. So Continue, Skip intro and Exit add up to its readers.
+    const skipped = readersHere.filter(
       (x) => skippers.has(x.id) && !(i < 5 ? (x.wizardSlide ?? 0) > i : x.openedAt)
     ).length;
-    const recordedHere = skipsFrom === null ? [] : readersHere.filter((x) => x.day >= skipsFrom);
     return {
       n: i + 1,
       name: s.name,
@@ -901,11 +1142,11 @@ export function buildReportPage(input: {
       reached,
       reachedShare: ratio(reached, started),
       cont: ratio(wentOn, reached),
-      skip: ratio(recordedHere.filter((x) => skipped.has(x.id)).length, recordedHere.length),
+      skip: skipsCounted ? ratio(skipped, reached) : null,
       back,
       // Slide 1 has no Back button: nothing to share out.
       backShare: narrowed || i === 0 ? null : ratio(back, reached),
-      exit: reached ? Math.max(0, reached - wentOn - skippedOnly) / reached : null,
+      exit: ratio(reached - wentOn - skipped, reached),
       medianMs: w && w.timed > 0 && w.median_ms !== null ? Number(w.median_ms) : null,
       engaged:
         i === 1 && steppers
@@ -960,7 +1201,12 @@ export function buildReportPage(input: {
             skipsFrom ? ` · our own share from ${rangeLabel(skipsFrom, skipsFrom)}` : ""
           }`,
           [],
-          input.returns && !input.returns.ok ? input.returns.error : null
+          // PostHog has nothing before it starts: blank, never a count of none.
+          f.from < POSTHOG_FROM
+            ? `From PostHog, which starts on ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}: pick a range from that day on.`
+            : input.returns && !input.returns.ok
+              ? input.returns.error
+              : null
         ),
         goodWhen: "down",
         trend: "",
@@ -1008,6 +1254,13 @@ export function buildReportPage(input: {
       goodWhen: "down",
     },
   ];
+  const wizardParts: Record<string, Parts> = {
+    completed: { num: openedAfter, den: started },
+    left: { num: subs.filter((s) => !s.openedAt).length, den: started },
+    ...(ownSkips
+      ? { skipped: { num: subs.filter((x) => skippers.has(x.id)).length, den: started } }
+      : {}),
+  };
 
   // The guided tour, from our own records of every reader's first run, so all traffic: they
   // carry no source, device or tier. Shown for a range from TOUR_TRACKING_FROM, and compared
@@ -1029,12 +1282,15 @@ export function buildReportPage(input: {
     previous && previous.from < TOUR_TRACKING_FROM
       ? { note: `No comparison before ${tourFrom}` }
       : {};
-  const openers = subsIn(facts, {
+  // The tour's records carry no funnel, source, device, tier or visitor: its readers are over
+  // every reader who opened their report, whatever the filters.
+  const tourOpeners = subsIn(facts, {
     ...scope,
     source: "all",
     device: "all",
     tier: "all",
     visitor: "all",
+    funnel: "all",
   }).filter((s) => s.openedAt).length;
   /** An audience's runs over the range, or over one trend point's days. */
   const tourSums = (
@@ -1089,15 +1345,16 @@ export function buildReportPage(input: {
     return {
       key,
       label: `${key === "free" ? "Free" : "Paid"} readers · ${ids.length} stops`,
+      // Over every reader who opened their report: a run's audience is known, an opener's isn't,
+      // so this tab's share is of all of them, free and paid together.
+      share:
+        tour && tourOpeners > 0
+          ? `${fmt("pct", cur.readers / tourOpeners, 0)} of the ${n(tourOpeners)} ${
+              tourOpeners === 1 ? "reader" : "readers"
+            } who opened their report`
+          : null,
       tiles: [
-        tour && openers > 0
-          ? {
-              ...started,
-              share: `${fmt("pct", cur.readers / openers, 0)} of the ${n(openers)} ${
-                openers === 1 ? "reader" : "readers"
-              } who opened their report`,
-            }
-          : started,
+        started,
         tourTile("tour-completed", "Completed", "pct", (x) => ratio(x.completed, x.runs), "up"),
         tourTile("tour-skipped", "Skipped tour", "pct", (x) => ratio(x.skipped, x.runs), "down"),
         tourTile(
@@ -1151,9 +1408,26 @@ export function buildReportPage(input: {
       benchMedianMs: median(bench),
     };
   };
-  // Every group, an empty one with no figure: the design draws them all.
-  const genders = ["Women", "Men", "Non-binary", "Other", "Prefer not to say", "Not stated"];
-  const ages = [...AGE_BANDS, "Not stated"];
+  // Every group, an empty one with no figure: the design draws them all. Those who'd rather not
+  // label it are "Not stated" with those who gave no answer, as the design groups them, and
+  // "Other" is drawn when a reader of the range answered it.
+  const genderOf = (s: SubFact) => {
+    const g = genderLabel(s.gender);
+    return g === "Rather not label" ? "Not stated" : g;
+  };
+  const genders = [
+    "Women",
+    "Men",
+    "Non-binary",
+    ...(rec.some((s) => genderOf(s) === "Other") ? ["Other"] : []),
+    "Not stated",
+  ];
+  // Age is a required answer: "Not stated" only when a reader of the range has none (the design
+  // draws the bands alone).
+  const ages = [
+    ...AGE_BANDS,
+    ...(rec.some((s) => ageBand(s.age) === "Not stated") ? ["Not stated"] : []),
+  ];
 
   const returnersOf = (l: SubFact[]) => l.filter((s) => s.openedAt && s.visits > 1 && s.returnedAt);
   const gapsOf = (l: SubFact[]) =>
@@ -1174,8 +1448,14 @@ export function buildReportPage(input: {
     cumulative: null,
   });
 
+  // PostHog starts on POSTHOG_FROM: a range reaching back before it has no whole count of how
+  // readers came back, so it says so rather than shares of the part it saw.
+  const posthogWhole = f.from >= POSTHOG_FROM;
+  const noPostHog = `From PostHog, which starts on ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}: pick a range from that day on.`;
   let sources: ReportPayload["returns"]["sources"] = null;
-  if (input.returns) {
+  if (!posthogWhole) {
+    sources = { ok: false, error: noPostHog };
+  } else if (input.returns) {
     if (input.returns.ok) {
       const by = new Map(input.returns.value.sources.map((s) => [s.source, s.sessions]));
       const total = RETURN_SOURCES.reduce((a, [s]) => a + (by.get(s) ?? 0), 0);
@@ -1190,7 +1470,8 @@ export function buildReportPage(input: {
       sources = input.returns;
     }
   }
-  const viaEmail = emailShare(input.returns);
+  const viaEmailParts = posthogWhole ? emailParts(input.returns) : null;
+  const viaEmail = viaEmailParts ? viaEmailParts.num / viaEmailParts.den : null;
   // Opens and clicks are of the emails the webhook reported delivered: clicks once it kept any
   // event, opens of those delivered after open tracking was switched on (later than the rest).
   // So a range reaching back before tracking still counts right, out of the emails it saw. A
@@ -1199,19 +1480,27 @@ export function buildReportPage(input: {
   const clicksFrom = extras.email_events_from;
   const opensCounted = opensFrom !== null && opensFrom <= f.to;
   const clicksCounted = clicksFrom !== null && clicksFrom <= f.to;
-  const campaigns = ["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"].map((stage) => {
+  const campaigns = STAGES.map(({ stage, status, what }) => {
     const e = extras.emails.find((x) => x.stage === stage);
-    const status = stage === "72h_no_unlock" ? ("Live" as const) : ("Retired" as const);
-    // A retired stage that sent and sold nothing in the range has no figures: "—", not 0.
+    // A retired stage that sent and sold nothing in the range: 0 sent and 0 bought, as drawn,
+    // and no other figure ("—"), as nothing it sent can have been opened or brought anyone back.
     const idle = status === "Retired" && !e?.sent && !e?.bought;
+    // Sends dated by the report's time, not by a code: who came back "after" one can't be told.
+    const estimated = e?.estimated === true;
     // No row: nothing was sent (or bought) for the stage, so nobody came back from it.
-    const returned = idle ? null : e ? e.returned : 0;
-    const sent = idle ? null : (e?.sent ?? 0);
-    const opened = idle || !opensCounted ? null : e ? e.opened : 0;
-    const clicked = idle || !clicksCounted ? null : e ? e.clicked : 0;
+    const returned = idle || estimated ? null : e ? e.returned : 0;
+    const sent = e?.sent ?? 0;
+    // Of the stage's emails the webhook saw delivered: a stage sent only before tracking began
+    // has none, so its opens and clicks are unknown ("—"), not 0.
+    const opened = idle || !opensCounted || !e?.delivered_opens ? null : e.opened;
+    const clicked = idle || !clicksCounted || !e?.delivered ? null : e.clicked;
     return {
       stage,
       status,
+      what,
+      estimated,
+      delivered: idle ? null : (e?.delivered ?? null),
+      deliveredOpens: idle ? null : (e?.delivered_opens ?? null),
       sent,
       opened,
       openRate: ratio(opened, e?.delivered_opens ?? null),
@@ -1219,20 +1508,36 @@ export function buildReportPage(input: {
       clickRate: ratio(clicked, e?.delivered ?? null),
       returned,
       returnRate: ratio(returned, sent),
-      purchased: idle ? null : (e?.bought ?? 0),
+      purchased: e?.bought ?? 0,
       revenue: e?.revenue ?? 0,
     };
   });
 
-  const votesBy = new Map(extras.chapters.map((c) => [c.section, c]));
+  // Every vote since voting began, all traffic: the design's "live, all time". Null: they could
+  // not be read, which the page says (no column of zeros).
+  const votesError =
+    input.votes === null
+      ? "The chapter votes could not be read just now. Try again in a minute."
+      : null;
+  const votes = input.votes ?? [];
+  const votesBy = new Map<string, { up: number; down: number }>();
+  for (const v of votes) {
+    const c = votesBy.get(v.section) ?? { up: 0, down: 0 };
+    c[v.vote] += 1;
+    votesBy.set(v.section, c);
+  }
   const clicksBy = new Map(extras.paywall_clicks.map((c) => [c.section, c.readers]));
-  // Reading per chapter, for the live report's chapters on days it was recorded: all
-  // traffic, like the votes, as its rows are summed per chapter in the database.
+  // Reading per chapter, on days it was recorded: all traffic, like the votes, as its rows are
+  // summed per chapter in the database. The live report's chapters, and an earlier version's
+  // known chapter for the readers it had while it was live (no other key a browser sends).
   const readingFrom = extras.chapter_stats_from;
   const readingRecorded = readingFrom !== null && readingFrom <= f.to;
   const statsBy = new Map(extras.chapter_stats.map((c) => [c.section, c]));
-  const chapters = chapterList(extras.chapters.map((c) => c.section)).map((c, i) => {
-    const live = readingRecorded && LIVE_CHAPTERS.has(c.id);
+  const readEarlier = [...statsBy.keys()].filter((id) => Object.hasOwn(RETIRED_NAMES, id));
+  const chapters = chapterList([...votesBy.keys(), ...readEarlier]).map((c, i) => {
+    const live =
+      readingRecorded &&
+      (LIVE_CHAPTERS.has(c.id) || (statsBy.has(c.id) && Object.hasOwn(RETIRED_NAMES, c.id)));
     const st = live ? statsBy.get(c.id) : undefined;
     const reached = Number(st?.reached) || 0;
     // A share of the chapter's readers; blank where nobody used it (or it has no such control).
@@ -1245,7 +1550,16 @@ export function buildReportPage(input: {
       up: votesBy.get(c.id)?.up ?? 0,
       down: votesBy.get(c.id)?.down ?? 0,
       paywallReaders: clicksBy.get(c.id) ?? 0,
-      reach: live ? ratio(reached, extras.chapter_readers) : null,
+      // An earlier version's chapter: of the readers who read while it was in the report.
+      reach: live
+        ? ratio(
+            reached,
+            LIVE_CHAPTERS.has(c.id)
+              ? extras.chapter_readers
+              : (extras.chapter_readers_before_slim ?? extras.chapter_readers)
+          )
+        : null,
+      medianMs: st?.ms_median === undefined || st.ms_median === null ? null : Number(st.ms_median),
       avgMs: st && st.ms_avg !== null ? Number(st.ms_avg) : null,
       showMore: used(st?.show_all),
       learnMore: used(st?.learn_more),
@@ -1312,14 +1626,17 @@ export function buildReportPage(input: {
     ...(previous && !comparable && noCmp ? { note: noCmp } : {}),
   });
   const timeBoxes: ChangeBox[] = [
-    box(
-      "avg",
-      "Avg. total time",
-      "mmss",
-      mean(rec.map((s) => s.readMs)),
-      mean(prevRec.map((s) => s.readMs)),
-      prevComparable
-    ),
+    {
+      ...box(
+        "avg",
+        "Avg. total time",
+        "mmss",
+        mean(rec.map((s) => s.readMs)),
+        mean(prevRec.map((s) => s.readMs)),
+        prevComparable
+      ),
+      parts: { num: readSum, den: rec.length },
+    },
     box(
       "median",
       "Median total time",
@@ -1328,28 +1645,34 @@ export function buildReportPage(input: {
       median(prevRec.map((s) => s.readMs)),
       prevComparable
     ),
-    box(
-      "session",
-      "Avg. per session",
-      "mmss",
-      perSession(rec),
-      perSession(prevRec),
-      prevComparable
-    ),
+    {
+      ...box(
+        "session",
+        "Avg. per session",
+        "mmss",
+        perSession(rec),
+        perSession(prevRec),
+        prevComparable
+      ),
+      parts: { num: readSum, den: rec.reduce((a, s) => a + s.closed, 0) },
+    },
     // Opens were recorded for everyone all along: compared whenever there is a period before.
     box("readers", "Readers", "count", readers.length, prevReaders.length, true),
   ];
   const returnBoxes: ChangeBox[] = [
-    box(
-      "back",
-      "Came back",
-      "pct",
-      returnedShare(subs),
-      returnedShare(prevSubs),
-      prevComparable,
-      "up",
-      0
-    ),
+    {
+      ...box(
+        "back",
+        "Came back",
+        "pct",
+        returnedShare(subs),
+        returnedShare(prevSubs),
+        prevComparable,
+        "up",
+        0
+      ),
+      parts: tileParts.returned,
+    },
     box(
       "days",
       "Median days to return",
@@ -1371,30 +1694,45 @@ export function buildReportPage(input: {
         0
       ),
       // PostHog's own reading of the period before; blank when it was not read.
+      ...(viaEmailParts ? { parts: viaEmailParts } : {}),
     },
-    box(
-      "visits",
-      "Visits per reader",
-      "ratio",
-      visitsPer(readers),
-      visitsPer(prevReaders),
-      prevComparable
-    ),
+    // A session here is a visit: report sessions less than 30 minutes apart are one (ap_facts).
+    {
+      ...box(
+        "visits",
+        "Sessions per reader",
+        "ratio",
+        visitsPer(readers),
+        visitsPer(prevReaders),
+        prevComparable
+      ),
+      parts: { num: readers.reduce((a, s) => a + s.visits, 0), den: readers.length },
+    },
   ];
 
+  // Under a filter the records can't follow, the readers' sections are blank with the reason,
+  // never a column of zeros; the boxes about readers read "—".
+  const readerBox = (b: ChangeBox): ChangeBox =>
+    tablet && b.key !== "email" ? { ...b, value: null, prev: null, parts: undefined } : b;
   return {
-    ...head(f, today, now),
+    // No figure here counts sales, so head() isn't given the facts that name the unseen ones.
+    ...head(f, today, now, true),
     launched: launched(scope),
-    tiles,
+    blocked: tablet,
+    tiles: tiles.map((t) => (tileParts[t.key] ? { ...t, parts: tileParts[t.key] } : t)),
     wizard: {
-      tiles: wizardTiles.map((t) => ({ ...t, digits: wholeDigits(t.value) })),
-      slides,
+      tiles: wizardTiles.map((t) => ({
+        ...t,
+        digits: wholeDigits(t.value),
+        ...(wizardParts[t.key] ? { parts: wizardParts[t.key] } : {}),
+      })),
+      slides: tablet ? [] : slides,
       skipsFrom,
     },
     tour: {
       from: tourFrom,
       before: launched(scope) && !tourOn,
-      openers,
+      openers: tourOpeners,
       audiences: AUDIENCES.map(tourView),
     },
     time: {
@@ -1407,20 +1745,22 @@ export function buildReportPage(input: {
         rec.reduce((a, s) => a + s.readMs, 0),
         rec.reduce((a, s) => a + s.closed, 0)
       ),
-      buckets: TIME_BUCKETS.map(([label], i) => ({
-        label,
-        share: buckets[i]!,
-        bench: benchBuckets[i]!,
-      })),
-      boxes: timeBoxes,
-      byGender: genders.map(group((s) => genderLabel(s.gender))),
-      byAge: ages.map(group((s) => ageBand(s.age))),
+      buckets: tablet
+        ? []
+        : TIME_BUCKETS.map(([label], i) => ({
+            label,
+            share: buckets[i]!,
+            bench: benchBuckets[i]!,
+          })),
+      boxes: timeBoxes.map(readerBox),
+      byGender: tablet ? [] : genders.map(group(genderOf)),
+      byAge: tablet ? [] : ages.map(group((s) => ageBand(s.age))),
       depth: {
         from: readingFrom,
         readers: depthReaders,
         chapters: order.length,
         groups: [...TIME_GROUPS],
-        bands: depthBands,
+        bands: tablet ? [] : depthBands,
       },
     },
     returns: {
@@ -1431,12 +1771,20 @@ export function buildReportPage(input: {
         readers.length
       ),
       viaEmail,
-      boxes: returnBoxes,
-      days,
+      boxes: returnBoxes.map(readerBox),
+      days: tablet ? [] : days,
       sources,
       campaigns,
       emailEvents: emailEventsNote(opensFrom, clicksFrom),
+      campaignNote:
+        f.from <= CHAPTER_NUDGES_UNTIL
+          ? `The chapter nudges (a locked chapter emailed every other day, switched off on ${rangeLabel(CHAPTER_NUDGES_UNTIL, CHAPTER_NUDGES_UNTIL)}) aren't listed: only each reader's last one was dated, so they can't be put in a range.`
+          : null,
     },
+    wizardNote:
+      f.from < EVENTS_COMPLETE_FROM
+        ? "Before 18 Sep 2026 a slide was recorded only for readers who accepted cookies, so for those days the later slides read low and Exit high. Left the wizard (the report never opened) counts everyone."
+        : null,
     chapters,
     chapterReading: {
       from: readingFrom,
@@ -1444,21 +1792,32 @@ export function buildReportPage(input: {
       recorded: readingRecorded,
     },
     feedback: {
-      good: extras.chapters.reduce((a, c) => a + c.up, 0),
-      bad: extras.chapters.reduce((a, c) => a + c.down, 0),
-      total: extras.votes_total,
+      error: votesError,
+      from: votes.length
+        ? new Date(Math.min(...votes.map((v) => Date.parse(v.at)))).toLocaleDateString("en-CA", {
+            timeZone: "Europe/Berlin",
+          })
+        : null,
+      good: votes.filter((v) => v.vote === "up").length,
+      bad: votes.filter((v) => v.vote === "down").length,
+      total: votes.length,
+      // The reasons a bad vote can give, as ap_report_extras counts them.
       issues: Object.entries(ISSUES).map(([id, label]) => ({
         label,
-        n: extras.issues.find((x) => x.issue === id)?.n ?? 0,
+        n: votes.filter((v) => v.vote === "down" && v.issue === id).length,
       })),
-      log: extras.feedback.map((r) => ({
-        at: r.at,
-        submission: r.submission,
-        chapter: names.get(r.section) ?? prettyId(r.section),
-        vote: r.vote === "up" ? ("Good" as const) : ("Bad" as const),
-        issue: r.issue ? (ISSUES[r.issue] ?? r.issue) : null,
-        commented: r.commented,
-      })),
+      log: [...votes]
+        .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+        .map((r) => ({
+          at: r.at,
+          submission: r.submission,
+          user: r.user,
+          chapter: names.get(r.section) ?? prettyId(r.section),
+          id: r.section,
+          vote: r.vote === "up" ? ("Good" as const) : ("Bad" as const),
+          issue: r.issue ? (ISSUES[r.issue] ?? r.issue) : null,
+          comment: r.comment,
+        })),
     },
   };
 }

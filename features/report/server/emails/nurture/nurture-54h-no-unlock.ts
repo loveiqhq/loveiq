@@ -53,10 +53,10 @@ export function nurture54hNoUnlockEmail({
         "We're offering this because we believe the report becomes most valuable when you see the full picture, not just your basic results, but the deeper patterns behind how you desire, connect, communicate, and grow.",
       ].join(""),
       bullets: [
-        { text: "+60 pages of insights into your sexuality" },
+        { text: "A 17-chapter report on your sexuality" },
         { text: "Results based on 100+ science papers" },
         {
-          text: "30+ chapters on your fantasies, arousal, desire patterns, and intimacy style",
+          text: "Chapters on your fantasies, arousal, desire patterns, and intimacy style",
         },
         {
           text: "Personalized growth paths to better understand your needs, boundaries, and sex life",

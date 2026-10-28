@@ -47,6 +47,7 @@ const FILTER_STATE = z
     device: values(DEVICES).optional(),
     tier: values(TIERS).optional(),
     visitor: values(VISITORS).optional(),
+    funnel: z.enum(["all", "free"]).optional(),
   })
   .strict();
 

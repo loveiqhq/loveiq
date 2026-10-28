@@ -785,6 +785,10 @@ describe("SurveyPage — the intro's own records", () => {
     await screen.findByRole("heading", { name: /judgment-free zone/i });
     await user.click(screen.getByRole("button", { name: /go to previous slide/i }));
     await screen.findByRole("heading", { name: /quality in/i });
+    // The slide's record is sent from an effect, which can run just after its heading shows
+    // (on a slow runner, after the test's next step): press Back once it is sent, as a person
+    // who saw the slide would. A Back before it is the next test's case.
+    await waitFor(() => expect(sent()).toContain("intro_slide_1"));
 
     act(() => {
       window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 0 } }));

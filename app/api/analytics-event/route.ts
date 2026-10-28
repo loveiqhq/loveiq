@@ -81,9 +81,10 @@ const ALLOWED_EVENTS = [
   "tour_skipped",
   "tour_left",
   "tour_replayed",
-  // The EUR 1.99 pre-unlock gate: seen, and its two buttons
+  // The EUR 1.99 pre-unlock gate: seen, its two buttons, its way out
   "initial_gate_viewed",
   "initial_gate_cta_click",
+  "initial_gate_back",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -123,6 +124,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "lock_icon_clicked":
     case "initial_gate_viewed":
     case "initial_gate_cta_click":
+    case "initial_gate_back":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
@@ -186,7 +188,10 @@ export async function POST(request: Request) {
     logger.warn(
       {
         body: body === null ? null : typeof body,
-        issues: parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}:${i.code}`),
+        // The field only, and a few: a metadata key is the sender's text, any length.
+        issues: parsed.error.issues
+          .slice(0, 5)
+          .map((i) => `${String(i.path[0] ?? "(root)")}:${i.code}`),
       },
       "analytics-event: refused a body that does not parse"
     );

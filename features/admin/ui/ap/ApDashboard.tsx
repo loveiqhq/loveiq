@@ -8,6 +8,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info } from "./field-info";
 import { bucketTitles, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
@@ -20,6 +21,7 @@ import {
   Failed,
   FilterIcon,
   HeaderFilter,
+  headWidth,
   ICON_BTN,
   KpiTile,
   LiveBadge,
@@ -53,7 +55,7 @@ export default function ApDashboard() {
         crumbs={["Assessments", "Assessment A", "Dashboard"]}
         title="Assessment A"
         badge={<LiveBadge />}
-        description={`LoveIQ sexual personality test${data ? ` · ${data.questions} questions` : ""} · 14 archetypes${data ? ` · ${data.range.label}${data.compare ? ` vs ${data.compare.label}` : ""}` : ""}.`}
+        description={`LoveIQ sexual personality test${data ? ` · ${data.questions} questions` : ""} · 14 archetypes${data ? ` · ${data.rangeText}` : ""}.`}
         actions={
           <BlackButton
             disabled={!data}
@@ -142,6 +144,11 @@ export default function ApDashboard() {
                   size="md"
                   level
                   titles={bucketTitles(data.range.from, data.range.to)}
+                  info={{
+                    k: t.info,
+                    worked: t.worked,
+                    trend: { route: "assessment", tile: t.key, unit: t.unit },
+                  }}
                 />
               ))}
             </TileGrid>
@@ -160,29 +167,45 @@ export default function ApDashboard() {
                 style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(128px, 100%), 1fr))" }}
               >
                 {data.journey.map((j, i) => (
-                  <li key={j.n} className="flex">
-                    <a
-                      href={
-                        j.href.startsWith("#")
-                          ? j.href
-                          : `${ASSESSMENT_A}/${j.href.split("#")[0]}${query}${j.href.includes("#") ? `#${j.href.split("#")[1]}` : ""}`
-                      }
-                      className={`flex min-h-[120px] flex-1 flex-col gap-1.5 rounded-[14px] p-3.5 text-ap-ink no-underline ${i % 2 ? "bg-ap-ground" : "bg-ap-lilac"}`}
-                    >
-                      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-plum">
-                        Step {j.n}
-                      </span>
-                      <span className="text-[13px] font-bold">{j.label}</span>
-                      <span className="font-serif text-[22px] font-semibold tabular-nums">
-                        {j.value === null ? "—" : fmt("count", j.value)}
-                      </span>
-                      <span className="text-xs text-ap-muted">{j.step}</span>
-                    </a>
+                  // The whole box still goes to the step's report: its link is stretched over the
+                  // box, and the info icon (a button, which can't sit inside a link) above it.
+                  <li
+                    key={j.n}
+                    className={`relative flex min-h-[120px] flex-col gap-1.5 rounded-[14px] p-3.5 text-ap-ink ${i % 2 ? "bg-ap-ground" : "bg-ap-lilac"}`}
+                  >
+                    <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-plum">
+                      Step {j.n}
+                    </span>
+                    <span className="text-[13px] font-bold">
+                      <a
+                        href={
+                          j.href.startsWith("#")
+                            ? j.href
+                            : `${ASSESSMENT_A}/${j.href.split("#")[0]}${query}${j.href.includes("#") ? `#${j.href.split("#")[1]}` : ""}`
+                        }
+                        className="text-ap-ink no-underline after:absolute after:inset-0 after:rounded-[14px] after:content-['']"
+                      >
+                        {j.label}
+                      </a>
+                      {j.info && (
+                        <>
+                          {" "}
+                          <span className="relative">
+                            <Info k={j.info} label={j.label} worked={j.worked} />
+                          </span>
+                        </>
+                      )}
+                    </span>
+                    <span className="font-serif text-[22px] font-semibold tabular-nums">
+                      {j.value === null ? "—" : fmt("count", j.value)}
+                    </span>
+                    <span className="text-xs text-ap-muted">{j.step}</span>
                   </li>
                 ))}
               </ol>
               <p className="m-0 text-xs text-ap-muted">
                 Steps 4 to 7 follow the people who submitted in the range, up to today.
+                {data.journeyNote ? ` ${data.journeyNote}` : ""}
               </p>
             </Card>
             <Scorecard rows={data.scorecard} />
@@ -234,13 +257,15 @@ export default function ApDashboard() {
                     }}
                   >
                     <SourceBars
-                      title="Survey complete CVR"
+                      title="Survey submission CVR"
+                      info="assessment.perf-cvr"
                       rows={data.performance.map((r) => ({ label: r.label, value: r.surveyCvr }))}
                       unit="pct"
                       digits={2}
                     />
                     <SourceBars
                       title="€ revenue per visit"
+                      info="assessment.perf-per-visit"
                       rows={data.performance.map((r) => ({ label: r.label, value: r.perVisit }))}
                       unit="eur3"
                       color="#fe6839"
@@ -259,7 +284,7 @@ export default function ApDashboard() {
               id="h-pay"
               eyebrow="Assessment A · Payment"
               title="Prices"
-              description="Sales per plan and price point for the selected period · comps (€0 unlocks) are not counted as sales"
+              description="Prices quoted in the selected period, and the checkouts and sales on them so far · comps (€0 unlocks) are not counted as sales"
               align="end"
               right={
                 <a
@@ -277,8 +302,11 @@ export default function ApDashboard() {
             )}
             <p className="m-0 text-xs text-ap-muted">
               Quoted and checkouts come from report_price_quote; sales and revenue from payment, on
-              those quotes. Payment CVR = sales ÷ quoted. A reader is quoted every plan, so the rows
-              of one price list share their readers.
+              those quotes, whenever they were paid (a sale in the period on an older quote is not
+              here). Payment CVR = sales ÷ quoted. A reader is quoted every plan on sale, so the
+              rows of one price list share their readers. Each quote shows the arm and price it was
+              dealt: later re-syncs moved unpaid quotes to newer lists. Before Pricing 2.0 (3 Aug
+              2026) prices were personal and only a paid one was kept.
             </p>
           </Card>
         </Busy>
@@ -289,12 +317,15 @@ export default function ApDashboard() {
 
 function SourceBars({
   title,
+  info,
   rows,
   unit,
   digits,
   color = "#795fc8",
 }: {
   title: string;
+  /** The chart's info card key. */
+  info: string;
   rows: Array<{ label: string; value: number | null }>;
   unit: "pct" | "eur3";
   /** Decimals where the design fixes them (a CVR in hundredths, as the Sources table). */
@@ -304,7 +335,9 @@ function SourceBars({
   const max = Math.max(0, ...rows.map((r) => r.value ?? 0)) || 1;
   return (
     <div className="flex flex-col gap-2.5">
-      <span className="text-[13px] font-bold text-ap-body">{title}</span>
+      <span className="text-[13px] font-bold text-ap-body">
+        {title} <Info k={info} label={title} />
+      </span>
       {rows.map((r) => (
         <div
           key={r.label}
@@ -377,23 +410,59 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
             ["New", "new", nr.value.new, "#795fc8"],
             ["Returning", "returning", nr.value.returning, "#fe6839"],
           ] as const
-        ).map(([label, key, g, color]) => (
-          <div key={label} className="flex flex-col gap-1.5 rounded-[14px] bg-ap-ground p-4">
-            <span className="flex items-center gap-2 text-[13px] font-bold">
-              <span
-                aria-hidden="true"
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ background: color }}
-              />
-              {label} · {fmt("pct", share(g.visitors), 0)}
-            </span>
-            <span className="font-serif text-2xl font-semibold">{fmt("count", g.visitors)}</span>
-            <span className="text-[13px] text-ap-muted">
-              Survey CVR {fmt("pct", g.visitors ? g.completed / g.visitors : null, 1)} · € / visit{" "}
-              {fmt("eur3", perVisit(key, g.visitors))}
-            </span>
-          </div>
-        ))}
+        ).map(([label, key, g, color]) => {
+          const cvr = g.visitors ? g.completed / g.visitors : null;
+          const rpv = perVisit(key, g.visitors);
+          return (
+            <div key={label} className="flex flex-col gap-1.5 rounded-[14px] bg-ap-ground p-4">
+              <span className="flex items-center gap-2 text-[13px] font-bold">
+                <span
+                  aria-hidden="true"
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: color }}
+                />
+                {label} · {fmt("pct", share(g.visitors), 0)}
+                <Info
+                  k="assessment.nr-visitors"
+                  label={`${label} visitors`}
+                  worked={{ value: fmt("count", g.visitors) }}
+                />
+              </span>
+              <span className="font-serif text-2xl font-semibold">{fmt("count", g.visitors)}</span>
+              <span className="text-[13px] text-ap-muted">
+                Survey CVR{" "}
+                <Info
+                  k="assessment.nr-cvr"
+                  label="Survey CVR"
+                  worked={
+                    cvr === null
+                      ? undefined
+                      : {
+                          num: fmt("count", g.completed),
+                          den: fmt("count", g.visitors),
+                          value: fmt("pct", cvr, 1),
+                        }
+                  }
+                />{" "}
+                {fmt("pct", cvr, 1)} · € / visit{" "}
+                <Info
+                  k="assessment.nr-per-visit"
+                  label="€ / visit"
+                  worked={
+                    rpv === null || !revenue?.ok
+                      ? undefined
+                      : {
+                          num: fmt("eur", revenue.value[key], 2),
+                          den: fmt("count", g.visitors),
+                          value: fmt("eur3", rpv),
+                        }
+                  }
+                />{" "}
+                {fmt("eur3", rpv)}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
         A visitor is new when PostHog had not seen their browser before the range. Survey CVR:
@@ -410,8 +479,9 @@ type PriceKey = "planLabel" | "price" | "quoted" | "checkouts" | "sales" | "cvr"
 
 type PriceFilter = "plan" | "price";
 
+/** A quote's price, or "Not kept": before Pricing 2.0 prices were personal (the note says so). */
 const priceText = (r: DashboardPayload["prices"][number]) =>
-  `${fmt("eur", r.price, 2)}${r.priceArm ? ` · ${r.priceArm}` : ""}`;
+  `${r.price === null ? "Not kept" : fmt("eur", r.price, 2)}${r.priceArm ? ` · ${r.priceArm}` : ""}`;
 
 function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
   const [sort, setSort] = useState<{ key: PriceKey; dir: 1 | -1 } | null>(null);
@@ -431,16 +501,28 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
         return ((x ?? -Infinity) - (y ?? -Infinity)) * sort.dir;
       })
     : kept;
-  const head: Array<[string, PriceKey | null]> = [
-    ["Plan", "planLabel"],
-    ["Price", "price"],
-    ["Quoted", "quoted"],
-    ["Checkouts", "checkouts"],
-    ["Sales", "sales"],
-    ["Payment CVR", "cvr"],
-    ["Revenue", "revenue"],
+  // Every column but the plan's name has an info card.
+  const head: Array<{ h: string; key: PriceKey; info?: string }> = [
+    { h: "Plan", key: "planLabel" },
+    { h: "Price", key: "price", info: "assessment.price" },
+    { h: "Quoted", key: "quoted", info: "assessment.price-quoted" },
+    { h: "Checkouts", key: "checkouts", info: "assessment.price-checkouts" },
+    { h: "Sales", key: "sales", info: "assessment.price-sales" },
+    { h: "Payment CVR", key: "cvr", info: "assessment.price-cvr" },
+    { h: "Revenue", key: "revenue", info: "assessment.price-revenue" },
   ];
-  const gtc = "minmax(130px,1.2fr) minmax(110px,0.9fr) repeat(5, minmax(90px,1fr))";
+  // Each column at least as wide as its heading and buttons (Plan and Price filter and sort,
+  // the rest sort, and the info icon), so no heading spills into the next on a phone.
+  const widths = head.map(({ h, info }, i) =>
+    Math.max(i === 0 ? 130 : 110, headWidth(h, (i < 2 ? 2 : 1) + (info ? 1 : 0)))
+  );
+  const gtc = widths
+    .map((w, i) => `minmax(${w}px,${i === 0 ? 1.2 : i === 1 ? 0.9 : 1}fr)`)
+    .join(" ");
+  const minWidth = Math.max(
+    700,
+    widths.reduce((a, w) => a + w, 0)
+  );
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
       {open && (
@@ -451,9 +533,9 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
         />
       )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Prices" style={{ minWidth: 700 }}>
+        <div role="table" aria-label="Prices" style={{ minWidth }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
-            {head.map(([h, key], i) => (
+            {head.map(({ h, key, info }, i) => (
               <span
                 key={h}
                 role="columnheader"
@@ -463,6 +545,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                 className={`flex items-center gap-1 px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${i > 1 ? "justify-end text-right" : ""}`}
               >
                 {h}
+                {info && <Info k={info} label={h} />}
                 {i < 2 &&
                   (() => {
                     const k: PriceFilter = i === 0 ? "plan" : "price";
@@ -577,7 +660,15 @@ function Scorecard({ rows }: { rows: DashboardPayload["scorecard"] }) {
             {list.map((r) => (
               <div key={r.label} className="flex items-baseline justify-between gap-3">
                 <span className="flex min-w-0 flex-col">
-                  <span className="text-[13px] font-semibold">{r.label}</span>
+                  <span className="text-[13px] font-semibold">
+                    {r.label}
+                    {r.info && (
+                      <>
+                        {" "}
+                        <Info k={r.info} label={r.label} worked={r.worked} />
+                      </>
+                    )}
+                  </span>
                   <span className="text-[11px] leading-snug text-ap-muted">{r.note}</span>
                 </span>
                 <span className="shrink-0 font-serif text-lg font-semibold tabular-nums">

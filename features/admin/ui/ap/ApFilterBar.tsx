@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import {
   ASSESSMENTS,
+  FUNNELS,
+  FUNNEL_NOTE,
   DEVICES,
   PERIODS,
   SOURCES,
@@ -33,6 +35,11 @@ interface Saved {
 const control =
   "min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 font-sans text-sm text-ap-ink disabled:cursor-not-allowed disabled:bg-ap-ground disabled:text-ap-muted";
 const fieldLabel = "flex min-w-0 flex-col gap-1 text-xs font-bold text-ap-muted";
+/**
+ * iOS Safari draws a native date field wider than its column, so From ran under To and To past
+ * the card's edge (iPhone Simulator, 25 Oct 2026); without the native look it keeps the width.
+ */
+const dateControl = `${control} min-w-0 appearance-none`;
 
 /** The same state, whatever order its parameters came in. */
 function sameFilters(a: ApFilters, b: ApFilters): boolean {
@@ -45,7 +52,7 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
  * the URL.
  */
 /** Filters a page cannot apply: shown greyed at their "all" value, with the reason. */
-type Fixed = "source" | "device" | "tier" | "visitor";
+type Fixed = "funnel" | "source" | "device" | "tier" | "visitor";
 
 const SAVED_PARAMS = { kind: "filter" };
 
@@ -70,6 +77,7 @@ export default function ApFilterBar({
   const filters = {
     ...chosen,
     ...(assessmentFixed ? { assessment: "a" as const } : {}),
+    ...(off("funnel") ? { funnel: "all" as const } : {}),
     ...(off("source") ? { source: "all" as const } : {}),
     ...(off("device") ? { device: "all" as const } : {}),
     ...(off("tier") ? { tier: "all" as const } : {}),
@@ -319,7 +327,7 @@ export default function ApFilterBar({
                 value={filters.from}
                 max={filters.to}
                 onChange={(e) => e.target.value && update({ from: e.target.value })}
-                className={control}
+                className={dateControl}
               />
             </label>
             <label className={`${fieldLabel} flex-[1_1_150px]`}>
@@ -330,7 +338,7 @@ export default function ApFilterBar({
                 min={filters.from}
                 max={today}
                 onChange={(e) => e.target.value && update({ to: e.target.value })}
-                className={control}
+                className={dateControl}
               />
             </label>
           </div>
@@ -347,6 +355,22 @@ export default function ApFilterBar({
                 {ASSESSMENTS.filter((a) => scope === "overall" || a.value !== "all").map((a) => (
                   <option key={a.value} value={a.value}>
                     {a.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={`${fieldLabel} flex-[1_1_170px]`}>
+              Funnel
+              <select
+                value={filters.funnel ?? "all"}
+                onChange={(e) => update({ funnel: e.target.value as ApFilters["funnel"] })}
+                className={control}
+                title={off("funnel") ? fixedNote : FUNNEL_NOTE}
+                disabled={off("funnel")}
+              >
+                {FUNNELS.map((f) => (
+                  <option key={f.value} value={f.value} disabled={"live" in f && !f.live}>
+                    {"live" in f && !f.live ? `${f.label} (on the Pay to start page)` : f.label}
                   </option>
                 ))}
               </select>
@@ -432,13 +456,13 @@ export default function ApFilterBar({
               New or returning comes from PostHog: whether the person had visited before the visit
               they finished the survey in. It splits finished surveys, their reports and payments;
               visits, survey starts and ad spend can&rsquo;t be split that way. Meta Ads: a Meta
-              link tagged as paid; Meta&rsquo;s click id alone counts as Social. Organic search: a
-              search engine tagged organic, or an untagged visit from a search engine, told from
-              direct visits by the site a visit came from, recorded from {trackingDay} (before,
-              those read as Direct). Gmail on the web opens links through Google, so an untagged
-              email click can read as organic search. Tablets are told apart from {trackingDay}:
-              before, they count as Mobile, or as Desktop for newer iPads, which present themselves
-              as Macs.
+              link tagged as paid; Meta&rsquo;s click id alone counts as Social. An untagged visit
+              is sorted by the site it came from, recorded from {trackingDay} (before, those read as
+              Direct): a search engine is Organic search, an email app or webmail Email, a social
+              site Social, an AI assistant AI assistants, another site Referral, and only no site at
+              all is Direct. Gmail on the web opens links through Google, so an untagged email click
+              there can read as organic search. Tablets are told apart from {trackingDay}: before,
+              they count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.
               {assessmentFixed && (
                 <> These pages are Assessment A&rsquo;s; B and C have not launched.</>
               )}

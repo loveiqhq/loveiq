@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, type FC } from "react";
+import { useRef, useState, type FC, type MouseEvent } from "react";
 import { trackInitialGateBack } from "@features/analytics/client";
 import { GATE_COPY, GATE_NOT_READY_HREF } from "./gateContent";
 
@@ -27,6 +27,13 @@ function prefersReducedMotion(): boolean {
  */
 export const GateHero: FC = () => {
   const [reducedMotion] = useState(prefersReducedMotion);
+  const left = useRef(false);
+  const leave = (e: MouseEvent<HTMLAnchorElement>) => {
+    // Once, and not for a new tab (cmd/ctrl/shift or a middle click): that reader stays here.
+    if (left.current || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    left.current = true;
+    trackInitialGateBack({ to: GATE_NOT_READY_HREF });
+  };
 
   return (
     <>
@@ -35,7 +42,7 @@ export const GateHero: FC = () => {
           href={GATE_NOT_READY_HREF}
           prefetch={false}
           className="iug-header__back"
-          onClick={() => trackInitialGateBack()}
+          onClick={leave}
         >
           <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
           <span className="iug-header__back-label">{GATE_COPY.notReady}</span>

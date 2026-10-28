@@ -34,7 +34,7 @@ export function testLinkEmail({ testUrl, siteUrl, unsubscribeUrl }: TestLinkEmai
         You asked us to send this over so you can take the test whenever the moment is right. No rush, and no account needed.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        It takes about <strong style="font-weight:700;">9 minutes</strong>, it is anonymous by default, and you can stop and pick it up again at any time.
+        It takes about <strong style="font-weight:700;">15 minutes</strong>, it is anonymous by default, and you can stop and pick it up again at any time.
       </p>
     </td>
   </tr>
@@ -62,7 +62,7 @@ export function testLinkEmail({ testUrl, siteUrl, unsubscribeUrl }: TestLinkEmai
     "",
     "You asked us to send this over so you can take the test whenever the moment is right. No rush, and no account needed.",
     "",
-    "It takes about 9 minutes, it is anonymous by default, and you can stop and pick it up again at any time.",
+    "It takes about 15 minutes, it is anonymous by default, and you can stop and pick it up again at any time.",
     "",
     `Take the LoveIQ test: ${testUrl}`,
     "",

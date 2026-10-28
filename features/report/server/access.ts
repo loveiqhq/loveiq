@@ -78,9 +78,16 @@ export function ownsFullReportFor(
   archetypeTiers: Readonly<Record<string, "essentials" | "full_report">> | null | undefined,
   archetype: string | null | undefined
 ): boolean {
-  if (doesAccessPlanCover(accessPlan, "full_report")) return true;
-  if (!archetype || !archetypeTiers) return false;
-  return new Map(Object.entries(archetypeTiers)).get(archetype) === "full_report";
+  if (accessPlan === "all_reports") return true;
+  // The archetype's own tier first, as isSectionUnlockedForPlan locks its chapters: an
+  // Essentials report bought for another archetype is not a full one because the reader's
+  // own plan is (the nav then said "all yours" over locked chapters).
+  const tier =
+    archetype && archetypeTiers
+      ? new Map(Object.entries(archetypeTiers)).get(archetype)
+      : undefined;
+  if (tier) return tier === "full_report";
+  return doesAccessPlanCover(accessPlan, "full_report");
 }
 
 /**

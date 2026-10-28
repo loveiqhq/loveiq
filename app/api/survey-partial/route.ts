@@ -18,6 +18,8 @@ import {
   EMAIL_QUESTION_ARM_KEY,
 } from "@shared/experiments/emailQuestionArm";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
+import { markEntitlementSurveyStarted } from "@features/pay-to-start/server/entitlement";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
@@ -172,6 +174,14 @@ export async function POST(request: Request) {
       logger.warn({ err }, "Supabase error on survey partial save");
     }
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
+  }
+
+  // A buyer who paid before the survey: its first saved answer stamps the purchase, the only
+  // link an unfinished survey has to it (AP-Analytics' "Started survey"). Once; after the reply.
+  if (prepaidToken) {
+    scheduleAfterResponse("pay-to-start-survey-started", () =>
+      markEntitlementSurveyStarted(prepaidToken)
+    );
   }
 
   return NextResponse.json({ success: true });

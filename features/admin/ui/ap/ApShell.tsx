@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 
 import ApSidebar, { Mark } from "./ApSidebar";
+import { FieldInfoProvider } from "./field-info";
 import { ApStatusProvider } from "./status";
 
 /**
@@ -53,7 +54,9 @@ export default function ApShell({ children }: { children: ReactNode }) {
         </div>
         <main className="min-w-0 flex-1 px-4 pb-[72px] pt-7 sm:px-[clamp(16px,3vw,40px)]">
           <div className="mx-auto flex max-w-[1160px] flex-col gap-6">
-            <Suspense fallback={null}>{children}</Suspense>
+            <Suspense fallback={null}>
+              <FieldInfoProvider>{children}</FieldInfoProvider>
+            </Suspense>
           </div>
         </main>
       </div>

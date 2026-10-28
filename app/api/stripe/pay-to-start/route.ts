@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  createCheckoutSession,
   getStripeServerClient,
   isStripeCheckoutEnabled,
 } from "@features/checkout/server/stripeCheckout";
@@ -264,7 +265,7 @@ export async function POST(request: Request) {
     const idempotencyKey = createHash("sha256")
       .update(`pts|${token}|${Math.floor(nowMs / 60_000)}|${JSON.stringify(params)}`)
       .digest("hex");
-    const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
+    const session = await createCheckoutSession(stripe, params, idempotencyKey);
 
     if (!session.url) {
       logger.error({ sessionId: session.id }, "pay-to-start: session without a hosted URL");

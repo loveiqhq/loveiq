@@ -17,6 +17,12 @@ vi.mock("@shared/flags/system-flags", () => ({ isFeatureEnabled: vi.fn() }));
 vi.mock("@features/survey/server/server", () => ({ isSurveyClosed: vi.fn() }));
 vi.mock("@features/checkout/server/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE: "Checkout preview only.",
+  // As the real one when Stripe Tax is off; with it on, see stripe-automatic-tax.test.ts.
+  createCheckoutSession: (
+    stripe: { checkout: { sessions: { create: (p: unknown, o: unknown) => unknown } } },
+    params: unknown,
+    idempotencyKey: string
+  ) => stripe.checkout.sessions.create(params, { idempotencyKey }),
   getStripeServerClient: vi.fn(),
   isStripeCheckoutEnabled: vi.fn(),
 }));
@@ -222,6 +228,8 @@ describe("a first checkout", () => {
           price_data: {
             currency: "eur",
             product_data: { name: "LoveIQ Survey & Report" },
+            // The price includes the VAT the receipt lists.
+            tax_behavior: "inclusive",
             unit_amount: 2999,
           },
           quantity: 1,
@@ -487,6 +495,7 @@ describe("the initial report's checkout", () => {
         {
           price_data: {
             product_data: { name: "LoveIQ Survey & Initial Report" },
+            tax_behavior: "inclusive",
             unit_amount: 199,
           },
         },

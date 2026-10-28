@@ -16,7 +16,6 @@ const UNIT_NAMES: Partial<Record<Unit, string>> = {
   eur3: "EUR",
   pct: "%",
   mmss: "seconds",
-  min: "minutes",
   days: "days",
 };
 

@@ -1,19 +1,29 @@
 /**
  * What AP-Analytics reads from PostHog: the counts our own tables cannot give (a visitor
  * coming back on another day, the landing page's scroll and bounce, clicks inside the survey
- * intro). PostHog records about half of the site's visitors (blockers, bots it drops) and
- * starts on 23 Aug 2026, so the pages show these as shares, labelled as PostHog's.
+ * intro). PostHog records only part of the site's visits (nearly every Google Ads one, far
+ * fewer of the rest: blockers, declined cookies, bots it drops) and starts on 23 Aug 2026, so
+ * the pages show these as shares, labelled as PostHog's.
  *
  * Every query goes through hogqlTable, the app's one HogQL door (its row cap and table
  * allowlist apply), and only on the live site's host.
  */
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { countryCodesByTier } from "@features/pricing/logic/reportPricing";
 import { hogqlTable } from "@features/ux-review/server/review";
 import logger from "@shared/observability/logger";
 
 import { windowOf } from "./filters";
+import { OWN_HOST } from "./referrers";
+import { teamUserIds } from "./team";
 
 export const POSTHOG_FROM = "2026-08-23";
 const HOST = "www.loveiq.org";
+/**
+ * The live site's events, plus the purchases the server itself sends PostHog after a payment
+ * (they carry no host): every event of LoveIQ's that the explorer and the catalog list.
+ */
+export const SITE_EVENTS = `(properties.$host = '${HOST}' OR (event = 'purchase' AND coalesce(properties.$host, '') = ''))`;
 
 /** A Berlin day boundary as HogQL reads it: an instant, in UTC. */
 function at(d: Date): string {
@@ -32,6 +42,52 @@ export function postHogFailed(err: unknown): { ok: false; error: string } {
 
 const cache = new Map<string, { at: number; result: Promise<PostHogResult<unknown[][]>> }>();
 const CACHE_MS = 5 * 60_000;
+
+let staffCache: { at: number; ids: Promise<string[] | null> } | null = null;
+
+/**
+ * The PostHog visits of the team's own finished surveys (its accounts: teamUserIds), whose
+ * people every figure leaves out. Read every five minutes; null when they can't be read
+ * (logged), which leaves nobody out rather than failing the page.
+ */
+export function teamVisits(): Promise<string[] | null> {
+  const now = Date.now();
+  if (staffCache && now - staffCache.at < CACHE_MS) return staffCache.ids;
+  const ids = teamUserIds()
+    .then((team) =>
+      supabaseFetch(
+        `/rest/v1/survey_submission?${new URLSearchParams({
+          select: "posthog_session_id",
+          user_id: `in.(${[...team].join(",") || "0"})`,
+          posthog_session_id: "not.is.null",
+          order: "id.asc",
+        })}`
+      )
+    )
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`staff visits ${res.status}`);
+      return ((await res.json()) as Array<{ posthog_session_id: string }>)
+        .map((r) => r.posthog_session_id)
+        .filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+    })
+    .catch((err: unknown) => {
+      logger.warn({ err }, "AP: the team's PostHog visits could not be read");
+      staffCache = null;
+      return null;
+    });
+  staffCache = { at: now, ids };
+  return ids;
+}
+
+/** A HogQL condition leaving out the PostHog people behind the team's own visits. */
+async function notStaff(): Promise<string> {
+  const ids = await teamVisits();
+  return ids?.length
+    ? ` AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN (${ids
+        .map((id) => `'${id}'`)
+        .join(", ")}) AND timestamp >= toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC'))`
+    : "";
+}
 
 /** One HogQL query's rows, cached for five minutes (a failure is not kept). */
 function rows(query: string, cap: number): Promise<PostHogResult<unknown[][]>> {
@@ -91,7 +147,9 @@ export async function markVisitors<P extends { ph: string | null; visitorNew?: b
       .slice(i, i + 500)
       .map((id) => `'${id.toLowerCase()}'`)
       .join(",");
-    const visit = `SELECT properties.$session_id AS sid, any(person_id) AS pid, min(timestamp) AS started
+    // One person per visit, the same in both reads of it: any() may pick a different one of a
+    // visit's persons each time it runs, and the join then drops the visit.
+    const visit = `SELECT properties.$session_id AS sid, argMin(person_id, timestamp) AS pid, min(timestamp) AS started
       FROM events WHERE timestamp >= ${since} AND properties.$session_id IN (${list}) GROUP BY sid`;
     const r = await rows(
       `SELECT v.sid, toUnixTimestamp64Milli(v.started) AS started_ms,
@@ -148,7 +206,7 @@ export async function fetchNewReturning(
       FROM events
       WHERE properties.$host = '${HOST}'
         AND event IN ('$pageview', 'survey_started', 'survey_completed')
-        AND timestamp < ${at(until)}
+        AND timestamp < ${at(until)}${await notStaff()}
       GROUP BY person_id
     )
     WHERE active = 1
@@ -187,13 +245,15 @@ export async function fetchVisitorGroups(
     (id): id is string => typeof id === "string" && SESSION_ID.test(id)
   );
   const start = `toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC')`;
+  const staff = await notStaff();
   const out = new Map<string, "new" | "returning">();
   for (let i = 0; i < ids.length; i += 500) {
     const list = ids
       .slice(i, i + 500)
       .map((id) => `'${id}'`)
       .join(",");
-    const visit = `SELECT properties.$session_id AS sid, any(person_id) AS pid
+    // One person per visit, the same in both reads of it (see markVisitors).
+    const visit = `SELECT properties.$session_id AS sid, argMin(person_id, timestamp) AS pid
       FROM events WHERE timestamp >= ${start} AND properties.$session_id IN (${list}) GROUP BY sid`;
     const r = await rows(
       `SELECT v.sid, if(f.first_seen >= ${at(since)}, 'new', 'returning') AS grp
@@ -202,7 +262,7 @@ export async function fetchVisitorGroups(
              WHERE properties.$host = '${HOST}'
                AND event IN ('$pageview', 'survey_started', 'survey_completed')
                AND timestamp >= ${start} AND timestamp < ${at(until)}
-               AND person_id IN (SELECT pid FROM (${visit}))
+               AND person_id IN (SELECT pid FROM (${visit}))${staff}
              GROUP BY person_id) f ON f.person_id = v.pid`,
       600
     );
@@ -232,13 +292,15 @@ function tagValue(raw: unknown): string | null {
   return typeof raw === "string" && raw ? new URLSearchParams(`v=${raw}`).get("v") || null : null;
 }
 
+const OWN_RE = new RegExp(OWN_HOST);
+
 /**
  * The referring site as the tracker keeps it (shared/url/utm.ts): none for a direct visit
  * ("$direct"), our own pages or Stripe's checkout.
  */
 function referrer(raw: unknown): string | null {
   const host = typeof raw === "string" ? raw.trim().toLowerCase() : "";
-  if (!host || host === "$direct" || /(^|\.)(loveiq\.org|stripe\.com)$/.test(host)) return null;
+  if (!host || host === "$direct" || OWN_RE.test(host)) return null;
   return host;
 }
 
@@ -271,8 +333,10 @@ export async function fetchSessionSources(
         WHERE event = '$pageview' AND properties.$host = '${HOST}' AND $session_id != ''
           AND properties.$pathname NOT LIKE '/admin%' AND properties.$pathname NOT LIKE '/jarvis%'
           AND properties.$pathname != '/login'
-          AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+          AND timestamp >= ${at(since)} AND timestamp < ${at(until)}${await notStaff()}
         GROUP BY sid
+        -- A visit that landed on a pay-to-start page is that funnel's (its own page counts it).
+        HAVING argMin(properties.$pathname, timestamp) NOT LIKE '/sexual-archetype%'
       )
     )
     GROUP BY src, med, ads, fb, r
@@ -301,6 +365,8 @@ export interface SurveyIntroClicks {
   trust: number;
   terms: number;
   answered: number;
+  /** Reached the questions: the question engine started (survey_started) or a question was answered. */
+  reachedQ1: number;
   /** Tapped the silhouette on the intro card (it has no text, only its aria-label). */
   silhouette: number;
 }
@@ -326,15 +392,16 @@ export async function fetchSurveyIntroClicks(
            uniqExactIf($session_id, properties.$el_text = '> Trust Zone') AS trust,
            uniqExactIf($session_id, properties.$el_text IN ('Terms & Conditions', 'Digital Content & Subscription Terms', 'Terms of Use')) AS terms,
            uniqExactIf($session_id, event = 'survey_answer') AS answered,
+           uniqExactIf($session_id, event IN ('survey_answer', 'survey_started')) AS reached_q1,
            uniqExactIf($session_id, event = '$autocapture' AND elements_chain LIKE '%Continue to survey introduction%') AS silhouette
     FROM events
     WHERE properties.$host = '${HOST}'
       AND properties.$pathname = '/survey'
-      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}${await notStaff()}
     LIMIT 1`;
   const r = await rows(q, 1);
   if (!r.ok) return r;
-  const [opened, skipped, agreed, returned, trust, terms, answered, silhouette] = (
+  const [opened, skipped, agreed, returned, trust, terms, answered, reachedQ1, silhouette] = (
     r.value[0] ?? []
   ).map((v) => Number(v) || 0);
   return {
@@ -347,6 +414,7 @@ export async function fetchSurveyIntroClicks(
       trust: trust ?? 0,
       terms: terms ?? 0,
       answered: answered ?? 0,
+      reachedQ1: reachedQ1 ?? 0,
       silhouette: silhouette ?? 0,
     },
   };
@@ -363,19 +431,22 @@ export interface ReportReturns {
 
 /**
  * How readers came back to their report: every report session that began more than 30
- * minutes after their first one, by its first page's link (an email link carries
- * utm_source=email or from=email). Report links hold an access token, so only the class
- * of a link leaves PostHog, never the link.
+ * minutes after their first one, by its first page's link. An email link carries from=email
+ * (or utm_source=email); a campaign's (the nurture emails, the chapter nudges) also carries
+ * its utm_campaign, while the report-ready and invite-reminder emails carry none. Report
+ * links hold an access token, so only the class of a link leaves PostHog, never the link.
  */
 export async function fetchReportReturns(
   from: string,
   to: string
 ): Promise<PostHogResult<ReportReturns>> {
   const { since, until } = windowOf({ from, to });
-  const reportViews = `event = '$pageview' AND properties.$host = '${HOST}' AND properties.$pathname LIKE '/report/%'`;
+  const staff = await notStaff();
+  const reportViews = `event = '$pageview' AND properties.$host = '${HOST}' AND properties.$pathname LIKE '/report/%'${staff}`;
   const sourcesQ = `
     SELECT cls, count() AS sessions FROM (
-      SELECT multiIf(s.url LIKE '%utm_source=email%' OR s.url LIKE '%from=email%', 'Email link',
+      SELECT multiIf((s.url LIKE '%utm_source=email%' OR s.url LIKE '%from=email%') AND s.url LIKE '%utm_campaign=%', 'Email campaign link',
+                     s.url LIKE '%utm_source=email%' OR s.url LIKE '%from=email%', 'Email link',
                      s.url LIKE '%share%', 'Share link from a friend',
                      s.url LIKE '%utm_%' OR s.url LIKE '%gclid%', 'Another tagged link',
                      'Bookmark or direct') AS cls,
@@ -398,7 +469,7 @@ export async function fetchReportReturns(
     SELECT uniqExactIf($session_id, properties.$el_text = 'Skip Intro' AND elements_chain LIKE '%wz-skip%') AS skips
     FROM events
     WHERE event = '$autocapture' AND properties.$host = '${HOST}' AND properties.$pathname = '/survey'
-      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}${staff}
     LIMIT 1`;
   const [s, c, k] = await Promise.all([rows(sourcesQ, 10), rows(campaignsQ, 20), rows(skipsQ, 1)]);
   if (!s.ok) return s;
@@ -460,13 +531,14 @@ export async function fetchLandingEngagement(
   to: string
 ): Promise<PostHogResult<LandingArmEngagement[]>> {
   const { since, until } = windowOf({ from, to });
-  const range = `properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}`;
+  const range = `properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}${await notStaff()}`;
   const sessionsQ = `
     SELECT coalesce(arm, 'unknown') AS arm, count() AS sessions,
            countIf(clicks = 0 AND ctas = 0 AND other_pages = 0) AS bounced, countIf(ctas > 0) AS cta
     FROM (
       SELECT $session_id AS sid, argMax(properties.landing_variant, timestamp) AS arm,
-             countIf(event = '$autocapture') AS clicks, countIf(event = 'cta_click') AS ctas,
+             countIf(event = '$autocapture' AND NOT match(elements_chain, '(^|[^a-zA-Z])cky-')) AS clicks,
+             countIf(event = 'cta_click') AS ctas,
              countIf(event = '$pageview' AND properties.$pathname != '/') AS other_pages,
              countIf(event = 'landing_page_view') AS landings
       FROM events WHERE ${range}
@@ -550,7 +622,7 @@ export async function fetchLandingTime(
            avg(${CAPPED}) AS mean_dur
     FROM events
     WHERE event IN ('$pageleave', '$pageview') AND properties.$prev_pageview_pathname = '/'
-      AND properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+      AND properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}${await notStaff()}
     LIMIT 1`;
   const r = await rows(q, 1);
   if (!r.ok) return r;
@@ -564,10 +636,10 @@ export async function fetchLandingTime(
  * the country and the browser's offset from UTC. Pages the visit log leaves out (admin, Jarvis,
  * the login) are left out, as fetchSessionSources does.
  */
-function firstViews(from: string, to: string): string {
+function firstViews(from: string, to: string, staff: string): string {
   const { since, until } = windowOf({ from, to });
   return `
-    SELECT $session_id AS sid, any(person_id) AS pid, min(timestamp) AS first_ts,
+    SELECT $session_id AS sid, argMin(person_id, timestamp) AS pid, min(timestamp) AS first_ts,
            argMin(properties.$current_url, timestamp) AS url,
            argMin(properties.$referring_domain, timestamp) AS first_ref,
            argMin(properties.$device_type, timestamp) AS device,
@@ -577,8 +649,10 @@ function firstViews(from: string, to: string): string {
     WHERE event = '$pageview' AND properties.$host = '${HOST}' AND $session_id != ''
       AND properties.$pathname NOT LIKE '/admin%' AND properties.$pathname NOT LIKE '/jarvis%'
       AND properties.$pathname != '/login'
-      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
-    GROUP BY sid`;
+      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}${staff}
+    GROUP BY sid
+    -- A visit that landed on a pay-to-start page is that funnel's (its own page counts it).
+    HAVING argMin(properties.$pathname, timestamp) NOT LIKE '/sexual-archetype%'`;
 }
 
 /** The tag columns classifySource reads, from firstViews' columns. */
@@ -632,7 +706,7 @@ export async function fetchSessionGroups(
       SELECT ${BUCKET[grain]} AS bucket, ${TAGS},
              lower(extract(url, '[?&]utm_campaign=([^&#]*)')) AS camp,
              lower(extract(url, '[?&]utm_term=([^&#]*)')) AS term
-      FROM (${firstViews(from, to)})
+      FROM (${firstViews(from, to, await notStaff())})
     )
     GROUP BY bucket, src, med, ads, fb, r, camp, term
     ORDER BY n DESC
@@ -652,14 +726,14 @@ export async function fetchSessionGroups(
 }
 
 /** The visit dimensions the Traffic page's audience reads from PostHog. */
-export type VisitDim = "country" | "device" | "daypart" | "visitor" | "countryAll";
+export type VisitDim = "country" | "device" | "daypart" | "visitor" | "tier";
 
 /** Visits with the same tags and the same value of one dimension. */
 export interface VisitGroup extends SessionTags {
   dim: VisitDim;
   /**
-   * A country code (or "Other"), "Mobile", "Morning", "new", … ("" when PostHog had none).
-   * "countryAll" is every country by its code, over all sources (its tags are empty).
+   * A country code (or "Other"), "Mobile", "Morning", "new", "tier_1" … ("" when PostHog had
+   * none). A tier is the country's price tier, as the pricing code puts it (countryTierOf).
    */
   value: string;
 }
@@ -671,13 +745,14 @@ const TOP_COUNTRIES = 12;
  * Who the live site's visits were, by source: the country (PostHog's GeoIP, the most common
  * TOP_COUNTRIES by name), the device, the time of day where the visitor was (the browser's own
  * offset from UTC) and whether PostHog had seen the person more than half an hour before.
- * PostHog records about half of the visits (blockers, bots), so these are shares of a sample.
+ * PostHog records only part of the visits (nearly every Google Ads one, far fewer of the rest),
+ * so these are shares of a sample, applied to each source's own visitors (stratified).
  */
 export async function fetchVisitAudience(
   from: string,
   to: string
 ): Promise<PostHogResult<VisitGroup[]>> {
-  const views = firstViews(from, to);
+  const views = firstViews(from, to, await notStaff());
   const grouped = (value: string, source: string) => `
     SELECT src, med, ads, fb, ${REF}, value, count() AS n
     FROM (SELECT ${TAGS}, ${value} AS value FROM ${source})
@@ -685,7 +760,19 @@ export async function fetchVisitAudience(
     ORDER BY n DESC
     LIMIT 3000`;
   const topCountries = `SELECT country FROM (${views}) WHERE country != '' GROUP BY country ORDER BY count() DESC LIMIT ${TOP_COUNTRIES}`;
-  const queries: Record<Exclude<VisitDim, "countryAll">, string> = {
+  // Each country's price tier, from the pricing code's own table: every country counted, by
+  // source, in a handful of rows.
+  const tierOf = [...countryCodesByTier()]
+    .map(([tier, codes]) => {
+      const list = codes.filter((c) => /^[A-Z]{2}$/.test(c)).map((c) => `'${c}'`);
+      return `upper(country) IN (${list.join(", ")}), '${tier}'`;
+    })
+    .join(", ");
+  const queries: Record<VisitDim, string> = {
+    tier: grouped(
+      `if(coalesce(country, '') = '', '', multiIf(${tierOf}, 'default'))`,
+      `(${views})`
+    ),
     country: grouped(
       `if(coalesce(country, '') = '', '', if(country IN (${topCountries}), country, 'Other'))`,
       `(${views})`
@@ -704,19 +791,9 @@ export async function fetchVisitAudience(
          GROUP BY person_id) f ON f.person_id = v.pid`
     ),
   };
-  // Every country, for the price tiers: no tags, so a few hundred rows at most.
-  const allCountries = `
-    SELECT '' AS src, '' AS med, 0 AS ads, 0 AS fb, '' AS r, coalesce(country, '') AS value, count() AS n
-    FROM (${views})
-    GROUP BY value
-    ORDER BY n DESC
-    LIMIT 3000`;
-  const dims = [...(Object.keys(queries) as VisitDim[]), "countryAll" as const];
-  const results = await Promise.all(
-    dims.map((d) =>
-      rows(d === "countryAll" ? allCountries : queries[d as Exclude<VisitDim, "countryAll">], 3000)
-    )
-  );
+  const dims = Object.keys(queries) as VisitDim[];
+  // eslint-disable-next-line security/detect-object-injection -- d is one of queries' own keys.
+  const results = await Promise.all(dims.map((d) => rows(queries[d], 3000)));
   const out: VisitGroup[] = [];
   for (const [i, r] of results.entries()) {
     if (!r.ok) return r;

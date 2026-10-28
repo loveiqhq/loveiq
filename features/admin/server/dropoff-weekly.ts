@@ -16,6 +16,7 @@ import { addDays, shortDate } from "@features/admin/server/ap/days";
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
+import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
 
@@ -94,10 +95,12 @@ export type QuestionEnds = Map<string, { sessions: number; quits: number }>;
  * Hidden questions are still defined but no longer asked, so they are left out.
  */
 export function askedQuestions(
-  nameLength: number
+  nameLength: number,
+  /** The opening-order test's arm whose order to give (C13); the survey's own by default. */
+  arm: QuestionOrderArm = "control"
 ): Array<{ qId: string; n: number; name: string }> {
   const names = surveyQuestionNames(nameLength);
-  return orderAskedQuestions(surveyQuestions, "control")
+  return orderAskedQuestions(surveyQuestions, arm)
     .filter((q) => q.qId && !HIDDEN_QIDS.has(q.qId))
     .map((q, i) => ({ qId: q.qId, n: i + 1, name: names.get(q.qId) ?? q.qId }));
 }

@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isLandingVariant } from "@shared/experiments/landingVariant";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
+import { isPayToStartOfferId } from "@features/pay-to-start/logic/offer";
 import { sanitizeUtmSource } from "@shared/url/utm";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
@@ -22,7 +23,8 @@ import logger from "@shared/observability/logger";
 async function writeFunnelEvent(
   eventType: "unique_visitor" | "survey_page_view",
   variant: string,
-  utmSource?: string
+  utmSource?: string,
+  offer?: string
 ): Promise<void> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -74,6 +76,9 @@ async function writeFunnelEvent(
         // Omitted (stays NULL) for direct/untagged visits so COUNT(utm_source)
         // reflects only real campaign traffic.
         ...(cleanUtm ? { utm_source: cleanUtm } : {}),
+        // Which pay-to-start offer's page (20261023150000): on that journey's visits only, and
+        // only a real offer, as the label above is clamped (the header comes from proxy.ts).
+        ...(variant === PAY_TO_START_JOURNEY && isPayToStartOfferId(offer) ? { offer } : {}),
       }),
       timeoutMs: 3000,
     });
@@ -93,10 +98,30 @@ async function writeFunnelEvent(
 }
 
 /**
- * One aggregate daily unique-visit, as described above.
+ * The new daily visit proxy.ts flagged on this request, as recordUniqueVisit's arguments (arm,
+ * source, pay-to-start offer); null when none. Read in the root layout.
  */
-export async function recordUniqueVisit(variant: string, utmSource?: string): Promise<void> {
-  return writeFunnelEvent("unique_visitor", variant, utmSource);
+export function flaggedVisit(
+  headers: Pick<Headers, "get">
+): [variant: string, utmSource?: string, offer?: string] | null {
+  const variant = headers.get("x-liq-new-visit");
+  if (!variant) return null;
+  return [
+    variant,
+    headers.get("x-liq-new-visit-utm") ?? undefined,
+    headers.get("x-liq-new-visit-offer") ?? undefined,
+  ];
+}
+
+/**
+ * One aggregate daily unique-visit, as described above. `offer`: the pay-to-start page's.
+ */
+export async function recordUniqueVisit(
+  variant: string,
+  utmSource?: string,
+  offer?: string
+): Promise<void> {
+  return writeFunnelEvent("unique_visitor", variant, utmSource, offer);
 }
 
 /**

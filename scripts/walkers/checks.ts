@@ -74,6 +74,16 @@ export function checkWalk(w: Walk): Check[] {
         what: `Meant to buy ${w.plan}, but the receipt page named ${w.boughtPlan ?? "no plan"}.`,
       });
     }
+  } else if (
+    w.initialGate &&
+    !w.initialGatePaid &&
+    w.finished === false &&
+    w.steps.some((s) => s.kind === "initial-gate-checkout")
+  ) {
+    checks.push({
+      ok: false,
+      what: "Reached Stripe for the EUR 1.99 gate but the payment did not complete.",
+    });
   } else if (w.plan && w.finished === false && w.steps.some((s) => s.kind === "stripe-checkout")) {
     checks.push({
       ok: false,

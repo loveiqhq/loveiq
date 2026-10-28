@@ -8,6 +8,7 @@ import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurch
 import { buildCancelUrl, buildSuccessUrl } from "@features/checkout/server/reportReturnUrls";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  createCheckoutSession,
   getStripeCheckoutCustomerEmail,
   getStripeServerClient,
   isStripeCheckoutEnabled,
@@ -152,6 +153,8 @@ export async function POST(request: Request) {
           price_data: {
             currency: "eur",
             product_data: { name: PRODUCT_NAME },
+            // EUR 1.99 includes the VAT, which the receipt lists (`automaticTax`).
+            tax_behavior: "inclusive",
             unit_amount: INITIAL_UNLOCK_PRICE_CENTS,
           },
           quantity: 1,
@@ -192,7 +195,7 @@ export async function POST(request: Request) {
       .update(`${Math.floor(Date.now() / 60_000)}|${JSON.stringify(params)}`)
       .digest("hex");
 
-    const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
+    const session = await createCheckoutSession(stripe, params, idempotencyKey);
     if (!session.url) {
       logger.error({ sessionId: session.id }, "initial-unlock: Stripe session missing hosted URL");
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

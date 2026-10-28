@@ -1,9 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
-
-import { isGuidedTourActive, subscribeGuidedTour } from "@shared/ui/guided-tour-state";
-
 import V3Chapter, { getV3Chapter, useIsV3, useIsV4 } from "./v3/V3Chapter";
 
 interface Props {
@@ -70,10 +67,8 @@ const ReportSection: FC<Props> = ({
     const element = ref.current;
     if (!element || isVisible) return;
 
-    // Never while the guided tour moves the page: its scroll would play this fade
-    // behind the scrim (sync 23.10). The tour's end looks again, below.
     const revealSection = () => {
-      if (isGuidedTourActive() || !shouldRevealSection(element, sectionId)) {
+      if (!shouldRevealSection(element, sectionId)) {
         return false;
       }
 
@@ -96,7 +91,6 @@ const ReportSection: FC<Props> = ({
       (entries) => {
         const entry = entries[0];
         if (entry && (entry.isIntersecting || entry.intersectionRatio > 0)) {
-          if (isGuidedTourActive()) return;
           setIsVisible(true);
           observer.disconnect();
         }
@@ -121,14 +115,10 @@ const ReportSection: FC<Props> = ({
     observer.observe(element);
     window.addEventListener("hashchange", scheduleRevealCheck);
     window.addEventListener("resize", scheduleRevealCheck, { passive: true });
-    const unsubscribeTour = subscribeGuidedTour(() => {
-      if (!isGuidedTourActive()) scheduleRevealCheck();
-    });
 
     return () => {
       window.removeEventListener("hashchange", scheduleRevealCheck);
       window.removeEventListener("resize", scheduleRevealCheck);
-      unsubscribeTour();
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }

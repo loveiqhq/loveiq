@@ -420,6 +420,22 @@ describe("what a walk proves on its own", () => {
     ).toBe(true);
   });
 
+  it("says when the EUR 1.99 gate's payment did not complete", () => {
+    const failed = (w: Walk) =>
+      checkWalk(w).some((c) => !c.ok && c.what.includes("EUR 1.99 gate but the payment"));
+    const gateCheckout = [
+      { n: 1, kind: "initial-gate", at: 0, ms: 0, url: "/report/<token>", heading: null },
+      { n: 2, kind: "initial-gate-checkout", at: 1, ms: 1, url: "/c/pay/x", heading: null },
+    ];
+    const stopped = { finished: false, stoppedAt: "no return", paid: false, steps: gateCheckout };
+    expect(failed(walk({ ...stopped, initialGate: true }))).toBe(true);
+    expect(failed(walk({ ...stopped, initialGate: true, initialGatePaid: true }))).toBe(false);
+    // Stopped at the gate on purpose (--no-pay): it finished, and never reached Stripe.
+    expect(failed(walk({ initialGate: true, paid: false, steps: gateCheckout.slice(0, 1) }))).toBe(
+      false
+    );
+  });
+
   it("takes the server's archetype as the score, and says when the page led with another", () => {
     // The page text is a heuristic; the report API's answer is the score.
     expect(

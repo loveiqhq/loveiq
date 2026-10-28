@@ -12,9 +12,10 @@ import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnloc
  * the server sells at (`formatOfferPrice`), so the setting changes every mention at once.
  * `features/pay-to-start/tests/no-hardcoded-price.test.ts` fails on a "€" + digit here.
  *
- * Where the frames say something the product does not (the motto and two chapters the
- * slimmed report took out, 50+ pages), the copy is kept as drawn and listed for Marcus in the
- * PR (Fatih, 18.10: verbatim + flag). The survey's own facts are stated as the survey has them
+ * Where the frames said something the product does not, the copy follows the product (Eman,
+ * 27.10): a 17-chapter report, not 50+ pages; no motto; Attachment style and Fantasy vs.
+ * reality in place of the two chapters the slimmed report took out (Core insecurities,
+ * Confidence level). The survey's own facts are stated as the survey has them
  * since sync 26.10 (Marcus handed the copy calls to Fatih): SURVEY_TOTAL_QUESTIONS questions
  * and its own 15-minute estimate, where the frames said 57, and nine minutes beside fifteen
  * (`tests/survey-facts.test.ts`).
@@ -77,12 +78,12 @@ export const PTS_FIND_OUT = {
 export const PTS_INSIDE = {
   title: "Inside your report",
   lead: (price: string) =>
-    `A 50+ page report written for your archetype, in chapters you can read in a few minutes each. All of it is included in ${price}; nothing is held back after you pay.`,
+    `A 17-chapter report written for your archetype, in chapters you can read in a few minutes each. All of it is included in ${price}; nothing is held back after you pay.`,
   chapters: [
     {
       number: "01",
       title: "Your core archetype",
-      body: "Your sexual personality out of 14, your motto, and how closely you match the neighbouring types.",
+      body: "Your sexual personality out of 14 and how closely you match the neighbouring types.",
     },
     {
       number: "02",
@@ -96,13 +97,13 @@ export const PTS_INSIDE = {
     },
     {
       number: "04",
-      title: "Core insecurities",
-      body: "How fears of rejection or inadequacy shape when you open up, pull away or seek reassurance.",
+      title: "Attachment style",
+      body: "How your attachment style shapes the way you seek connection, protect yourself and experience intimacy with a partner.",
     },
     {
       number: "05",
-      title: "Confidence level",
-      body: "Where your confidence feels solid, where it wavers, and how that shapes how you express desire.",
+      title: "Fantasy vs. reality",
+      body: "What your fantasies say about what you want, and how they compare with what you actually do.",
     },
     {
       number: "06",
@@ -212,7 +213,7 @@ export const PTS_HOW_IT_WORKS = {
       number: "03",
       title: "Read your report",
       body: () =>
-        "Your archetype and your full 50+ page report open the moment you finish. Nothing left to pay.",
+        "Your archetype and your full 17-chapter report open the moment you finish. Nothing left to pay.",
     },
   ],
 } as const;
@@ -300,7 +301,7 @@ export const PTS_ONE_PRICE = {
   includes: [
     "The full survey: 62 questions, about 15 minutes",
     "Your core archetype out of 14, with your closest matches",
-    "Your full 50+ page report, unlocked the moment you finish",
+    "Your full 17-chapter report, unlocked the moment you finish",
     "Practices and one-sentence scripts you can use with a partner",
     "Lifetime access to your report",
     "A receipt and invoice by email",
@@ -356,7 +357,7 @@ export const PTS_PRICE_CARD = {
   guarantee: "14-day money-back guarantee",
   includes: [
     "62 questions · ~15 minutes",
-    "Full 50+ page report included",
+    "Full 17-chapter report included",
     "Anonymous by default",
     "Pay once · no subscription",
   ],
@@ -366,7 +367,7 @@ export const PTS_FINAL_CTA = {
   stars: "★★★★★",
   title: "Find the words for what you want",
   /** Split so the price clause never breaks at the hyphen in "one-time". */
-  leadBefore: "62 questions · about 15 minutes · a 50+ page report you keep. ",
+  leadBefore: "62 questions · about 15 minutes · a 17-chapter report you keep. ",
   leadPrice: (price: string) => `${price}, one-time.`,
   cta: (price: string) => `Unlock Survey & Full Report · ${price}`,
   /** The phone frame's shorter label (1706:2329). */
@@ -398,7 +399,7 @@ export const PTS_STICKY_BAR = {
  */
 export const PTS_INITIAL = {
   insideLead:
-    "A 50+ page report (when fully unlocked) written for your archetype, in chapters you can read in a few minutes each.",
+    "A 17-chapter report (when fully unlocked) written for your archetype, in chapters you can read in a few minutes each.",
   steps: [
     {
       number: "01",
@@ -430,7 +431,7 @@ export const PTS_INITIAL = {
     includes: [
       "62 questions · ~15 minutes",
       "Your Core Archetype and what drives it",
-      "5x full chapters + 4x partly open",
+      "3x full chapters + 4x partly open",
       "How you rank against all 14 archetypes",
       // The initial unlock's credit (features/report/logic/initialUnlock.ts), as checkout takes it.
       `${formatOfferPrice(INITIAL_UNLOCK_CREDIT_CENTS)} credit toward your Full Report`,

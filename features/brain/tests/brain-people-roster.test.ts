@@ -9,22 +9,21 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 vi.mock("@features/brain/server/ingest/upsert", () => ({
-  upsertChunks: vi.fn(async (rows: unknown[]) => rows.length),
-  sweepStale: vi.fn(async () => 0),
+  syncSource: vi.fn(async (_source: string, rows: unknown[]) => ({ rows: rows.length, swept: 0 })),
 }));
 
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { upsertChunks } from "@features/brain/server/ingest/upsert";
+import { syncSource } from "@features/brain/server/ingest/upsert";
 import { ingestPeople } from "@features/brain/server/ingest/people";
 
 const STAMP = "2026-09-11T12:00:00.000Z";
 const mockFetch = vi.mocked(supabaseFetch);
-const mockUpsert = vi.mocked(upsertChunks);
+const mockUpsert = vi.mocked(syncSource);
 
 function roster(people: unknown[]) {
   mockFetch.mockResolvedValue({ ok: true, json: async () => people } as never);
 }
-const written = () => (mockUpsert.mock.calls[0]?.[0] as Array<{ body: string; meta: unknown }>)[0];
+const written = () => (mockUpsert.mock.calls[0]?.[1] as Array<{ body: string; meta: unknown }>)[0];
 
 afterEach(() => vi.clearAllMocks());
 

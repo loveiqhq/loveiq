@@ -145,6 +145,39 @@ describe("toPerson", () => {
   });
 });
 
+describe("loadPeople: the team", () => {
+  it("leaves out the surveys of the team's test-coupon accounts (ap_team_user, as AP)", async () => {
+    vi.resetModules();
+    vi.doMock("@features/admin/server/supabase", () => ({
+      supabaseFetch: async (path: string) => ({
+        ok: true,
+        status: 200,
+        json: async () => (path.startsWith("/rest/v1/ap_team_user") ? [{ id: 6 }] : [{ id: 41 }]),
+      }),
+    }));
+    const finisher = (userId: number, email: string) => ({
+      user_id: userId,
+      created_date_time: "2026-09-10T12:00:00Z",
+      age: [],
+      app_user: { email, user_profile: null },
+      scoring_result: null,
+      personal_report: null,
+    });
+    vi.doMock("@features/brain/server/read-all", () => ({
+      readAll: async () => [
+        finisher(5, "reader@example.com"),
+        finisher(6, "tester@example.com"),
+        finisher(7, "x@loveiq.org"),
+      ],
+    }));
+    const mod = await import("@features/brain/server/user-totals");
+    const people = await mod.loadPeople("2026-09-01", "2026-09-30");
+    expect(people!.map((p) => p.userId)).toEqual(["5"]);
+    vi.doUnmock("@features/admin/server/supabase");
+    vi.doUnmock("@features/brain/server/read-all");
+  });
+});
+
 describe("onePerPerson", () => {
   it("counts someone who finished twice once: first month, latest answers, payments added", () => {
     const merged = onePerPerson([

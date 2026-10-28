@@ -11,7 +11,7 @@ import logger from "@shared/observability/logger";
  *   initial_gate_cohort_at  the survey was submitted while the gate was on. Only these
  *                           reports are ever gated; one read for free before stays free.
  *   initial_gate_seen_at    the first time the gate was shown: its "paywall reached", and the
- *                           day E07 counts its four days from.
+ *                           time E07 counts its one day from.
  *
  * Every read is a query of its own that fails soft. The columns are never added to the
  * report lookup's select: an unapplied migration would turn that lookup into a 400 for
@@ -67,7 +67,7 @@ export function readInitialUnlockGateSwitch(): Promise<boolean | null> {
   return readFeatureFlag("report_initial_unlock_gate", false);
 }
 
-/** E07, the day-4 gift. Off by default for the same reason. */
+/** E07, the day-1 gift. Off by default for the same reason. */
 export function isInitialGiftEmailEnabled(): Promise<boolean> {
   return isFeatureEnabled("initial_unlock_gift_email", false);
 }
@@ -137,11 +137,12 @@ export async function readInitialGateCohortIds(
 }
 
 /** The first stamp lands and later ones match nothing (`is.null`). Never throws. */
+/** Whether the stamp is there now (written, or kept from before); false when the write failed. */
 async function stampOnce(
   personalReportId: number,
   column: "initial_gate_cohort_at" | "initial_gate_seen_at"
-): Promise<void> {
-  if (!isRowId(personalReportId)) return;
+): Promise<boolean> {
+  if (!isRowId(personalReportId)) return false;
   try {
     const response = await serviceFetch(
       `/rest/v1/personal_report?id=eq.${personalReportId}&${column}=is.null`,
@@ -157,17 +158,19 @@ async function stampOnce(
         "pre-unlock: stamp failed"
       );
     }
+    return response.ok;
   } catch (err) {
     logger.warn({ err, personalReportId, column }, "pre-unlock: stamp failed");
+    return false;
   }
 }
 
-export function stampInitialGateCohort(personalReportId: number): Promise<void> {
+export function stampInitialGateCohort(personalReportId: number): Promise<boolean> {
   return stampOnce(personalReportId, "initial_gate_cohort_at");
 }
 
-export function stampInitialGateSeen(personalReportId: number): Promise<void> {
-  return stampOnce(personalReportId, "initial_gate_seen_at");
+export async function stampInitialGateSeen(personalReportId: number): Promise<void> {
+  await stampOnce(personalReportId, "initial_gate_seen_at");
 }
 
 /**
@@ -175,13 +178,37 @@ export function stampInitialGateSeen(personalReportId: number): Promise<void> {
  * before it replies: a reader who skips the wizard opens the report a moment after the
  * reply, and a stamp still on its way would show them the report once, then gate it on
  * the next visit. Never throws; a report that misses the stamp is simply not gated.
+ * Resolves whether it is in the cohort, which the survey's reply passes on: the pre-report
+ * map names the price to a reader the gate will stop (Eman, 27.10).
  */
-export async function joinInitialGateCohort(submissionId: number): Promise<void> {
+export async function joinInitialGateCohort(submissionId: number): Promise<boolean> {
   try {
-    if (!(await isInitialUnlockGateEnabled())) return;
+    if (!(await isInitialUnlockGateEnabled())) return false;
     const report = await ensurePersonalReportForSubmission({ submissionId });
-    if (report?.id) await stampInitialGateCohort(report.id);
+    return report?.id ? await stampInitialGateCohort(report.id) : false;
   } catch (err) {
     logger.warn({ err, submissionId }, "pre-unlock: cohort stamp failed, report not gated");
+    return false;
+  }
+}
+
+/**
+ * Whether a survey's report is in the gate's cohort while the gate is on, for a reply that
+ * stamps nothing (a submit that is replayed): the first submit joined it, or not. False when
+ * either can't be read; the map then reads as it does for anyone.
+ */
+export async function isInInitialGateCohort(submissionId: number): Promise<boolean> {
+  if (!isRowId(submissionId)) return false;
+  try {
+    if (!(await isInitialUnlockGateEnabled())) return false;
+    const response = await serviceFetch(
+      `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=initial_gate_cohort_at&limit=1`
+    );
+    if (!response.ok) return false;
+    const rows = (await response.json()) as Array<{ initial_gate_cohort_at?: string | null }>;
+    return Boolean(Array.isArray(rows) && rows[0]?.initial_gate_cohort_at);
+  } catch (err) {
+    logger.warn({ err, submissionId }, "pre-unlock: cohort read failed");
+    return false;
   }
 }

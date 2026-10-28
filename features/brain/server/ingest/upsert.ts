@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { loadPeople, peopleIn } from "@features/brain/server/people";
@@ -388,7 +389,12 @@ function clean(row: BrainRow): BrainRow {
   };
 }
 
-export async function upsertChunks(rows: BrainRow[]): Promise<number> {
+export async function upsertChunks(
+  rows: BrainRow[],
+  /** The source as stored, from `storedChunks`: a document stored exactly as built is not
+   *  written again. Only `syncSource` passes it. */
+  stored?: ReadonlyMap<string, StoredChunk>
+): Promise<number> {
   if (rows.length === 0) return 0;
 
   /**
@@ -476,10 +482,11 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     );
   }
   const unique = [...byKey.values()];
+  const changed = stored ? changedDocuments(unique, stored) : unique;
 
   let written = 0;
-  for (let i = 0; i < unique.length; i += BATCH) {
-    const batch = unique.slice(i, i + BATCH);
+  for (let i = 0; i < changed.length; i += BATCH) {
+    const batch = changed.slice(i, i + BATCH);
     const res = await supabaseFetch("/rest/v1/brain_chunk?on_conflict=source,source_id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -515,8 +522,113 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     (r) => (r.meta as { withheld?: unknown } | undefined)?.withheld
   ).length;
   // Only after every batch landed: a write that failed threw above and deletes nothing.
-  await dropLeftoverParts(unique);
-  return written - withheld;
+  await dropLeftoverParts(changed);
+  if (stored) {
+    logger.info(
+      { source: rows[0]!.source, written, unchanged: unique.length - changed.length },
+      "brain: wrote only the documents that changed"
+    );
+  }
+  // Rows this call holds in the corpus: written now, or already stored exactly as built.
+  return written + (unique.length - changed.length) - withheld;
+}
+
+/** A stored row, in the columns `upsertChunks` writes apart from `updated_at`. */
+type StoredChunk = Pick<BrainRow, "title" | "url" | "body" | "meta"> & {
+  period_end: string | null;
+};
+
+/**
+ * Every row of `source` as stored, keyed as `upsertChunks` keys its rows. Null when a page
+ * cannot be read. Paged, because PostgREST caps a response at 1,000 rows.
+ */
+async function storedChunks(source: string): Promise<Map<string, StoredChunk> | null> {
+  const out = new Map<string, StoredChunk>();
+  try {
+    for (let offset = 0; offset < 100_000; offset += 1000) {
+      const res = await supabaseFetch(
+        `/rest/v1/brain_chunk?select=source_id,title,url,body,meta,period_end` +
+          `&source=eq.${encodeURIComponent(source)}&order=source_id.asc&limit=1000&offset=${offset}`
+      );
+      const page = await chunkPage<StoredChunk & { source_id: string }>(source, res);
+      for (const r of page) out.set(`${source} ${r.source_id}`, r);
+      if (page.length < 1000) return out;
+    }
+    throw new Error("more stored rows than one read pages through");
+  } catch (err) {
+    logger.warn({ err, source }, "brain: could not read the stored rows, writing every row");
+    return null;
+  }
+}
+
+/**
+ * The rows of every document not stored exactly as built: all of its parts, or none.
+ *
+ * WHOLE DOCUMENTS, never single parts. `fetch_document` hides a part stamped well before its
+ * first part as left over from a longer version (`dropLeftoverParts` in the MCP route), so
+ * rewriting one changed part alone would hide its unchanged siblings. A document with more
+ * parts stored than built is rewritten too, so the leftover cleanup removes the extra ones.
+ *
+ * Compared on the row as it will be STORED: after redaction, the length cap and the derived
+ * `meta.people`, or every row would differ. A difference this does not anticipate only makes a
+ * row look changed, which costs a rewrite, never a missed change.
+ */
+function changedDocuments(rows: BrainRow[], stored: ReadonlyMap<string, StoredChunk>): BrainRow[] {
+  const key = (r: BrainRow) => `${r.source} ${r.source_id}`;
+  const storedParts = new Map<string, number>();
+  for (const k of stored.keys())
+    storedParts.set(partBase(k), (storedParts.get(partBase(k)) ?? 0) + 1);
+  return [...Map.groupBy(rows, (r) => partBase(key(r)))].flatMap(([doc, parts]) =>
+    parts.length === storedParts.get(doc) && parts.every((r) => sameChunk(r, stored.get(key(r))))
+      ? []
+      : parts
+  );
+}
+
+function sameChunk(row: BrainRow, stored: StoredChunk | undefined): boolean {
+  return (
+    stored !== undefined &&
+    stored.title === row.title &&
+    stored.url === row.url &&
+    stored.body === row.body &&
+    stored.period_end === row.period_end &&
+    // Through JSON, as the write sends it: `undefined` dropped, a Date as its string. Key
+    // order is ignored, as jsonb ignores it.
+    isDeepStrictEqual(stored.meta, JSON.parse(JSON.stringify(row.meta ?? {})))
+  );
+}
+
+/**
+ * A SOURCE REBUILT WHOLE EVERY RUN (report, domain, skill, analytics, people, plan,
+ * corporate): write only the documents that changed, then delete the rows the build no
+ * longer holds.
+ *
+ * These used to rewrite every row every run and sweep by `updated_at`, so a row had to be
+ * rewritten to survive: about 1,300 identical rows every 15 minutes (2026-10-17). No
+ * brain_chunk update is HOT (`updated_at` is in two btrees), so each one re-inserted into the
+ * vector, full-text and trigram indexes. On a database already in swap, that churn pushed
+ * brain-fast's writes, one-row writes included, past PostgREST's 8-second statement timeout
+ * (57014): 93 runs failed on it in the week to 2026-10-27.
+ *
+ * Swept by the build's ids instead (`sweepMissing`, and its majority guard), so a row left
+ * alone is not taken for a deleted one. Left alone, a row keeps its embedding; a row whose
+ * title or body changed is re-embedded, as before.
+ *
+ * FAILS SAFE: stored rows that cannot be read mean every row is written, as before, and
+ * nothing is swept this run. A build that holds no rows sweeps nothing.
+ */
+export async function syncSource(
+  source: string,
+  rows: BrainRow[],
+  { sweep = true }: { sweep?: boolean } = {}
+): Promise<{ rows: number; swept: number }> {
+  const stored = await storedChunks(source);
+  const kept = await upsertChunks(rows, stored ?? undefined);
+  const swept =
+    sweep && stored && kept > 0
+      ? await sweepMissing(source, new Set(rows.map((r) => r.source_id)))
+      : 0;
+  return { rows: kept, swept };
 }
 
 /** `thread:abc#3` -> `thread:abc`. An id with no numeric part suffix is its own base. */

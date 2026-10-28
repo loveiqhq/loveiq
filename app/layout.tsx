@@ -14,7 +14,7 @@ import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import UxSignals from "@shared/ui/UxSignals";
 import WebVitals from "@shared/ui/WebVitals";
 import { after } from "next/server";
-import { recordUniqueVisit } from "@shared/observability/recordVisit";
+import { flaggedVisit, recordUniqueVisit } from "@shared/observability/recordVisit";
 import { jsonLdString } from "@shared/seo/json-ld";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
@@ -188,11 +188,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // AFTER the response so it never blocks render. Aggregate + non-identifying
   // (see recordUniqueVisit / proxy.ts) — this is the Visitor→Survey-start
   // denominator that the consent-gated client pinger previously under-counted.
-  const newVisitVariant = headersList.get("x-liq-new-visit");
-  if (newVisitVariant) {
-    const newVisitUtm = headersList.get("x-liq-new-visit-utm") ?? undefined;
-    after(() => recordUniqueVisit(newVisitVariant, newVisitUtm));
-  }
+  const newVisit = flaggedVisit(headersList);
+  if (newVisit) after(() => recordUniqueVisit(...newVisit));
 
   return (
     <html lang="en">

@@ -13,11 +13,13 @@ import {
   deltaRel,
   EMPTY,
   fmt,
+  lowerFirst,
   sparkGeometry,
   type Tone,
   type Unit,
 } from "@features/admin/server/ap/format";
 
+import { Info, type TrendSource, type Worked } from "./field-info";
 import { IndexHover } from "./hover";
 
 /**
@@ -33,11 +35,63 @@ const TONE_TEXT: Record<Tone, string> = {
   flat: "text-ap-muted",
 };
 
+/** A funnel's place on a line of a funnel table: the best of the running funnels, the worst. */
+export type Standing = "plain" | "best" | "worst";
+export const STANDING: Record<Standing, string> = {
+  plain: "text-ap-ink",
+  best: "bg-ap-good/[0.08] text-ap-good-ink",
+  worst: "bg-ap-bad/[0.07] text-ap-bad-ink",
+};
+/** What the colour says, for a screen reader and on hover (colour alone is no answer). */
+export const STANDING_WORD: Record<Exclude<Standing, "plain">, string> = {
+  best: "best of the running funnels",
+  worst: "worst of the running funnels",
+};
+
+/** Green for the best of the running funnels on a line, red for the worst; none for a tie. */
+export function standingOf(
+  values: Array<number | null>,
+  v: number | null,
+  better?: "high" | "low"
+): Standing {
+  const xs = values.filter((x): x is number => x !== null && Number.isFinite(x));
+  if (!better || v === null || !Number.isFinite(v) || xs.length < 2) return "plain";
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  if (lo === hi) return "plain";
+  if (v === (better === "high" ? hi : lo)) return "best";
+  return v === (better === "high" ? lo : hi) ? "worst" : "plain";
+}
+
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
     <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-label">
       {children}
     </span>
+  );
+}
+
+/**
+ * A label with its info icon after it. A no-break space glues the icon to the label's last
+ * word, so the icon never wraps onto a line of its own; the label stays one text node.
+ */
+export function InfoLabel({
+  label,
+  info,
+}: {
+  label: string;
+  info?: { k: string; worked?: Worked; trend?: TrendSource };
+}) {
+  return (
+    <>
+      {label}
+      {info && (
+        <span className="whitespace-nowrap">
+          {"\u00a0"}
+          <Info k={info.k} label={label} worked={info.worked} trend={info.trend} />
+        </span>
+      )}
+    </>
   );
 }
 
@@ -67,6 +121,7 @@ export function SectionHead({
   id,
   eyebrow,
   title,
+  info,
   description,
   right,
   level = 2,
@@ -75,6 +130,8 @@ export function SectionHead({
   id: string;
   eyebrow?: string;
   title: string;
+  /** The section's (chart's) info card key. */
+  info?: string;
   description?: ReactNode;
   right?: ReactNode;
   level?: 2 | 3;
@@ -88,12 +145,20 @@ export function SectionHead({
     >
       <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1.5">
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-        <Heading
-          id={id}
-          className={`m-0 font-serif font-semibold leading-tight text-ap-ink ${level === 2 ? "text-2xl" : "text-lg"}`}
-        >
-          {title}
-        </Heading>
+        {/* The icon sits beside the heading, not in it: the heading's name stays its title. */}
+        <div className="flex items-start gap-1">
+          <Heading
+            id={id}
+            className={`m-0 font-serif font-semibold leading-tight text-ap-ink ${level === 2 ? "text-2xl" : "text-lg"}`}
+          >
+            {title}
+          </Heading>
+          {info && (
+            <span className={level === 2 ? "pt-[3px]" : "pt-px"}>
+              <Info k={info} label={title} />
+            </span>
+          )}
+        </div>
         {description && <p className="m-0 text-sm leading-relaxed text-ap-muted">{description}</p>}
       </div>
       {right}
@@ -216,9 +281,12 @@ export function KpiTile({
   size = "lg",
   level = false,
   titles,
+  info,
 }: {
   tile: Tile;
   size?: "lg" | "md";
+  /** The tile's info card (not on a tile that is itself a link). */
+  info?: { k: string; worked?: Worked; trend?: TrendSource };
   level?: boolean;
   /** Each trend point's period, for its read-out. */
   titles?: string[];
@@ -237,7 +305,9 @@ export function KpiTile({
   const body =
     size === "lg" ? (
       <>
-        <Eyebrow>{tile.label}</Eyebrow>
+        <Eyebrow>
+          <InfoLabel label={tile.label} info={tile.href ? undefined : info} />
+        </Eyebrow>
         <span className="flex items-baseline justify-between gap-2">
           {value}
           {d && (
@@ -257,7 +327,9 @@ export function KpiTile({
       </>
     ) : (
       <>
-        <Eyebrow>{tile.label}</Eyebrow>
+        <Eyebrow>
+          <InfoLabel label={tile.label} info={tile.href ? undefined : info} />
+        </Eyebrow>
         {value}
         <span className="text-xs leading-normal text-ap-muted">
           {d && <strong className={`whitespace-nowrap ${TONE_TEXT[d.tone]}`}>{d.text}</strong>}
@@ -305,8 +377,11 @@ export function KpiTileV2({
   negativeBad = false,
   titles,
   foot = false,
+  info,
 }: {
   tile: Tile;
+  /** The tile's info card: its field key, this range's figures and its 12-week line. */
+  info?: { k: string; worked?: Worked; trend?: TrendSource };
   level?: boolean;
   /** Decimals for the value, where the design fixes them. */
   digits?: number;
@@ -330,7 +405,9 @@ export function KpiTileV2({
     <div
       className={`${level ? "row-span-4 grid grid-rows-subgrid" : "flex flex-col"} gap-2 rounded-[20px] border border-ap-line bg-white px-[18px] py-4 text-ap-ink shadow-ap`}
     >
-      <Eyebrow>{tile.label}</Eyebrow>
+      <Eyebrow>
+        <InfoLabel label={tile.label} info={info} />
+      </Eyebrow>
       <span
         className={`font-serif text-[28px] font-semibold leading-none tabular-nums ${red ? "text-ap-bad" : "text-ap-ink"}`}
       >
@@ -436,7 +513,9 @@ export function StatBox({
     <div
       className={`${level ? "row-span-4 grid grid-rows-subgrid" : "flex flex-col"} min-w-0 gap-1 rounded-[14px] p-3.5 [container-type:inline-size] ${tone === "grey" ? "bg-ap-ground" : "bg-white"}`}
     >
-      <span className="text-xs text-ap-muted">{stat.label}</span>
+      <span className="text-xs text-ap-muted">
+        <InfoLabel label={stat.label} info={stat.info ? { k: stat.info } : undefined} />
+      </span>
       {/* 23% of the box: Lora's "€12,345" is about 4.2em wide, so it fits at any width. */}
       <span className="font-serif text-[length:min(24px,23cqi)] font-semibold leading-[1.33] tabular-nums text-ap-ink">
         {fmt(stat.unit, stat.value)}
@@ -605,7 +684,7 @@ export function HeaderFilter({
  * about 8.2px (SUBMISSIONS measures 83px). ponytail: a letter count, not the font's metrics;
  * a label of wide letters (M, W) may need a few pixels more.
  */
-function headWidth(label: string, buttons: number): number {
+export function headWidth(label: string, buttons: number): number {
   const w = (s: string) => s.length * 8.2;
   const words = label.split(" ");
   let need = w(label) + buttons * 15;
@@ -638,7 +717,7 @@ export function DataTable({
   // enough for its heading in two lines (headWidth). Narrower than all of them, it scrolls.
   const hasBar = table.rows.some((r) => r.bar !== undefined);
   const widths = table.columns.map((c, i) =>
-    Math.max(i ? 88 : 150, headWidth(c.label, i ? 1 : sortFirst ? 2 : 1))
+    Math.max(i ? 88 : 150, headWidth(c.label, (i ? 1 : sortFirst ? 2 : 1) + (c.info ? 1 : 0)))
   );
   const gtc = [
     ...widths.map((w, i) => `minmax(${w}px, ${i ? 1 : 1.5}fr)`),
@@ -689,6 +768,7 @@ export function DataTable({
                 {c.label.slice(0, c.label.lastIndexOf(" ") + 1)}
                 <span className="whitespace-nowrap">
                   {c.label.slice(c.label.lastIndexOf(" ") + 1)}
+                  {c.info && <Info k={c.info} label={c.label} />}
                   {i === 0 && (
                     <button
                       type="button"
@@ -1030,7 +1110,7 @@ export function RangeLine({
           {withRange &&
             `Figures below: ${data.range.label}${data.compare ? ` vs ${data.compare.label}` : ""} · `}
           {sources} · updated {at}
-          {trend ? ` · trend lines: ${trend.charAt(0).toLowerCase()}${trend.slice(1)}` : ""}
+          {trend ? ` · trend lines: ${lowerFirst(trend)}` : ""}
         </span>
       </div>
       {data.notes.map((n) => (

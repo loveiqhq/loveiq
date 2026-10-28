@@ -13,6 +13,7 @@ import { orderedOptions } from "../questionOrder";
 import {
   getSessionId,
   rememberCompletedReport,
+  rememberGatePrice,
   rememberPaidWizard,
   setReportSessionId,
 } from "./surveySession";
@@ -156,6 +157,8 @@ export function useSubmitSurvey() {
    * report is unlocked, or will be when the payment settles: the wizard its offer shows.
    */
   const [paidWizard, setPaidWizard] = useState<PayToStartWizard | null>(null);
+  /** The EUR 1.99 gate will stop this reader: its price, which the pre-report map names. */
+  const [gatePriceCents, setGatePriceCents] = useState<number | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -235,6 +238,7 @@ export function useSubmitSurvey() {
               unlocked?: boolean;
               unlockPending?: boolean;
               wizard?: string;
+              initialGatePriceCents?: unknown;
             };
             if (
               json.journey === "pay_to_start" &&
@@ -246,6 +250,11 @@ export function useSubmitSurvey() {
                 json.wizard === "pay_to_start_initial" ? "pay_to_start_initial" : "pay_to_start";
               setPaidWizard(wizard);
               rememberPaidWizard(wizard);
+            }
+            const gatePrice = json.initialGatePriceCents;
+            if (typeof gatePrice === "number" && Number.isSafeInteger(gatePrice) && gatePrice > 0) {
+              setGatePriceCents(gatePrice);
+              rememberGatePrice(gatePrice);
             }
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
@@ -367,6 +376,7 @@ export function useSubmitSurvey() {
     reportToken,
     submissionId,
     paidWizard,
+    gatePriceCents,
     status,
     errorKind,
   };

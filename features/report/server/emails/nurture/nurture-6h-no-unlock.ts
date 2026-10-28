@@ -36,10 +36,10 @@ export function nurture6hNoUnlockEmail({
       ctaLabel: "View your report now",
       ctaUrl,
       bullets: [
-        { text: "+60 pages of insights into your sexuality" },
+        { text: "A 17-chapter report on your sexuality" },
         { text: "Results based on 100+ science papers" },
         {
-          text: "30+ chapters on your fantasies, arousal, desire patterns, and intimacy style",
+          text: "Chapters on your fantasies, arousal, desire patterns, and intimacy style",
         },
         {
           text: "Personalized growth paths to better understand your needs, boundaries, and sex life",

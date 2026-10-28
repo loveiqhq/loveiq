@@ -25,6 +25,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { reportingDay } from "@shared/time/reporting-day";
 
+import { Info } from "./field-info";
 import { Failed, FilterIcon, ICON_BTN, Loading, PageHeader, SortIcon } from "./kit";
 import { useApRole, useApStatus } from "./status";
 
@@ -46,6 +47,7 @@ const SOURCE_NAMES: Record<SourceKey, string> = {
   posthog: "PostHog",
   ga4: "Google Analytics",
   ads: "Google Ads",
+  gsc: "Search Console",
 };
 
 type Filter = [string, Op, string];
@@ -62,6 +64,11 @@ interface Saved {
 const control =
   "min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 font-sans text-sm text-ap-ink disabled:bg-ap-ground disabled:text-ap-muted";
 const fieldLabel = "flex min-w-0 flex-col gap-1 text-xs font-bold text-ap-muted";
+/**
+ * iOS Safari draws a native date field wider than its column, so From ran under To and To past
+ * the card's edge (iPhone Simulator, 25 Oct 2026); without the native look it keeps the width.
+ */
+const dateControl = `${control} min-w-0 appearance-none`;
 const pill =
   "min-h-11 cursor-pointer rounded-full border border-ap-line bg-white px-[18px] font-sans text-sm font-semibold text-ap-ink disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -359,10 +366,14 @@ export default function ApExplorer() {
   const [back, setBack] = useState<string[]>([]);
 
   const source = (params.get("source") ?? "production") as SourceKey;
-  const tables = useMemo(
-    () => catalog.data?.tables.filter((t) => t.source === source && !t.closed) ?? [],
-    [catalog.data, source]
-  );
+  // The submission facts first (the page opens on them), then the catalog's own order.
+  const tables = useMemo(() => {
+    const open = catalog.data?.tables.filter((t) => t.source === source && !t.closed) ?? [];
+    return [
+      ...open.filter((t) => t.name === "admin_submission_facts"),
+      ...open.filter((t) => t.name !== "admin_submission_facts"),
+    ];
+  }, [catalog.data, source]);
 
   const table =
     tables.find((t) => t.name === params.get("table")) ??
@@ -773,7 +784,7 @@ export default function ApExplorer() {
                   max={to}
                   disabled={!dateField}
                   onChange={(e) => e.target.value && set({ from: e.target.value })}
-                  className={control}
+                  className={dateControl}
                 />
               </label>
               <label className={fieldLabel}>
@@ -785,7 +796,7 @@ export default function ApExplorer() {
                   max={today}
                   disabled={!dateField}
                   onChange={(e) => e.target.value && set({ to: e.target.value })}
-                  className={control}
+                  className={dateControl}
                 />
               </label>
             </div>
@@ -832,31 +843,45 @@ export default function ApExplorer() {
             </div>
           </form>
 
+          {/* As the filter bar's "Save current filter" form is drawn. */}
           {saveName !== null && (
-            <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-ap-line bg-white p-4">
-              <input
-                aria-label="View name"
-                value={saveName}
-                maxLength={80}
-                placeholder={`${table.name} view`}
-                onChange={(e) => setSaveName(e.target.value)}
-                className={`${control} !w-64`}
-              />
-              <label className="flex items-center gap-2 text-[13px] text-ap-body">
+            <div className="flex flex-wrap items-end gap-2.5 rounded-[14px] bg-ap-lilac px-3.5 py-3">
+              <label className={`${fieldLabel} flex-[1_1_240px]`}>
+                Name this view
+                <input
+                  type="text"
+                  value={saveName}
+                  maxLength={80}
+                  placeholder={`e.g. ${table.name} view`}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  className={control}
+                />
+              </label>
+              <label className="flex min-h-11 items-center gap-2 text-[13px] font-semibold text-ap-body">
                 <input
                   type="checkbox"
                   checked={saveShared}
                   onChange={(e) => setSaveShared(e.target.checked)}
-                  className="h-4 w-4 accent-ap-purple"
+                  className="h-[18px] w-[18px] accent-[#795fc8]"
                 />
-                Share with the team
+                Share with team
               </label>
               <button
                 type="button"
                 onClick={saveView}
-                className="min-h-10 cursor-pointer rounded-full border-0 bg-black px-4 text-xs font-bold text-white"
+                className="min-h-11 cursor-pointer rounded-full border-0 bg-black px-5 text-sm font-bold text-white"
               >
                 Save
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveName(null);
+                  setSaveShared(false);
+                }}
+                className="min-h-11 cursor-pointer rounded-full border border-ap-line bg-white px-[18px] text-sm font-semibold text-ap-body"
+              >
+                Cancel
               </button>
             </div>
           )}
@@ -924,11 +949,10 @@ export default function ApExplorer() {
                       type="checkbox"
                       checked={on}
                       onChange={() => {
+                        // A ticked column joins the end: the order chosen is kept.
                         const next = on
                           ? columns.filter((c) => c !== f.name)
-                          : table.fields
-                              .map((x) => x.name)
-                              .filter((n) => n === f.name || columns.includes(n));
+                          : [...columns, f.name];
                         if (next.length) set({ cols: next.join(",") });
                       }}
                       className="m-0 h-4 w-4 accent-ap-purple"
@@ -952,22 +976,29 @@ export default function ApExplorer() {
               <h2 id="h-res" className="m-0 break-all font-serif text-xl font-semibold">
                 {table.name}
               </h2>
-              <span className="text-[13px] text-ap-muted" aria-live="polite">
-                {data && result.loading ? "Updating… " : ""}
-                {data
-                  ? data.rows.length === 0
-                    ? "No rows"
-                    : posthog
-                      ? `Showing ${data.rows.length.toLocaleString("en-US")} of ${total?.toLocaleString("en-US") ?? "?"} events, ${dir === "asc" && sort ? "oldest" : "newest"} first`
-                      : `Showing ${first.toLocaleString("en-US")}–${last.toLocaleString("en-US")}${total !== null ? ` of ${total.toLocaleString("en-US")}` : ""} rows`
-                  : result.loading
-                    ? "Loading…"
+              <span className="text-[13px] text-ap-muted">
+                <span aria-live="polite">
+                  {data && result.loading ? "Updating… " : ""}
+                  {data
+                    ? data.rows.length === 0
+                      ? "No rows"
+                      : posthog
+                        ? `Showing ${data.rows.length.toLocaleString("en-US")} of ${total?.toLocaleString("en-US") ?? "?"} events, ${dir === "asc" && sort ? "oldest" : "newest"} first`
+                        : `Showing ${first.toLocaleString("en-US")}–${last.toLocaleString("en-US")}${total !== null ? ` of ${total.toLocaleString("en-US")}` : ""} rows`
+                    : result.loading
+                      ? "Loading…"
+                      : ""}
+                  {masks
+                    ? masked
+                      ? " · masked"
+                      : ` · unlocked until ${unlock ? new Date(unlock.until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : ""}`
                     : ""}
-                {masks
-                  ? masked
-                    ? " · masked"
-                    : ` · unlocked until ${unlock ? new Date(unlock.until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : ""}`
-                  : ""}
+                </span>
+                <Info
+                  k="data.showing"
+                  label="Showing … of N rows"
+                  worked={total !== null ? { value: total.toLocaleString("en-US") } : undefined}
+                />
               </span>
             </div>
             {masks && masked && (

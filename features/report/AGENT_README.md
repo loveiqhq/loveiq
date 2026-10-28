@@ -166,8 +166,9 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   `GATE_NOT_READY_HREF` (`ui/gate/gateContent.ts`): the landing page (sync 26.10, Marcus: "there
   is no such thing as back") until his page that asks why is ready; then that constant is the
   whole change. It still counts as `initial_gate_back`.
-- **What it opens, in numbers.** Five chapters in full and four partly open, counted off the
-  gate's map (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
+- **What it opens, in numbers.** Three chapters in full and four partly open, counted off the
+  gate's map from Part 2 on, as the report counts chapters (Eman, 27.10: Part 1 is its welcome)
+  (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
   a EUR 1.99 buyer's pre-report map say the same, and `tests/gateChapterCounts.test.ts` holds
   them to it. A free reader's map draws the Core Archetype partly open, as their report has it
   until the EUR 1.99 (`wizardDrawer` in `features/survey/ui/wizard/wizardContent.ts`).
@@ -178,8 +179,8 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   return page sends the reader to `/report/<token>?unlocked=initial`, which opens at the top.
   The reader then has the Core Archetype card and the Summary, and EUR 10 off the full report
   on arm A3 (EUR 19.99, the credit on Stripe's line, so codes still work).
-- **E07, day 4.** `app/api/cron/initial-unlock-gift` gives 80% of the readers still unpaid four
-  days after the gate the unlock as a EUR 0 payment (`metadata.gifted = "e07"`) and E07
+- **E07, day 1.** `app/api/cron/initial-unlock-gift` gives 80% of the readers still unpaid a
+  day after the gate the unlock as a EUR 0 payment (`metadata.gifted = "e07"`) and E07
   (`server/emails/initial-unlock-gift.ts`); 20% are held out (`initial_gift_arm`). Behind
   `initial_unlock_gift_email`. Left out of both arms: a reader who paid (refunded or disputed
   included), one whose address is suppressed or can't be checked yet, and a report whose

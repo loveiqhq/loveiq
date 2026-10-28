@@ -25,6 +25,7 @@ import {
   loadArmOutcomes,
   loadPriceListChanges,
 } from "@features/admin/server/experiment-readouts";
+import { clearTeamCache } from "@features/admin/server/ap/team";
 
 const sub = (id: number) => ({
   id,
@@ -49,6 +50,7 @@ const quote = (
 beforeEach(() => {
   paths.length = 0;
   tables = {};
+  clearTeamCache();
 });
 
 describe("dealtArm: the price list a quote was dealt, not the one it carries now", () => {
@@ -108,6 +110,30 @@ describe("loadArmOutcomes: a window's readers in the list they were dealt", () =
     expect(quotes).toContain("report_price_quote_arm_history(old_experiment_group)");
     expect(quotes).toContain("report_price_quote_arm_history.order=changed_at.asc,id.asc");
     expect(quotes).toContain("survey_submission_id=gte.1&survey_submission_id=lte.3");
+  });
+
+  it("leaves the team's test-coupon accounts out, as AP-Analytics does (ap_team_user)", async () => {
+    tables = {
+      survey_submission: [
+        { ...sub(1), user_id: 11 },
+        // Redeemed the team's test coupon from an outside address.
+        { ...sub(2), user_id: 12 },
+        { ...sub(3), user_id: null },
+      ],
+      ap_team_user: [{ id: 12 }],
+      report_price_quote: [],
+      payment: [],
+    };
+    const o = await loadArmOutcomes("2026-10-08T15:23:00Z");
+    expect(o.submissions.map((s) => s.id)).toEqual([1, 3]);
+    expect(paths.find((p) => p.startsWith("/rest/v1/survey_submission?"))).toContain(
+      "select=id,user_id,"
+    );
+  });
+
+  it("fails rather than count the team when the team can't be read", async () => {
+    tables = { survey_submission: [{ ...sub(1), user_id: 11 }], ap_team_user: 500 };
+    await expect(loadArmOutcomes("2026-10-08T15:23:00Z")).rejects.toThrow("ap_team_user");
   });
 
   it("takes a reader's first quote when two disagree, and a live window has no end", async () => {

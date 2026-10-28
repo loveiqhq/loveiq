@@ -54,6 +54,17 @@ describe("the gate's motion (sync 23.10)", () => {
     }
   });
 
+  it("leaves the underline drawn, at rest, for a reader who asks for less motion", () => {
+    const outside = GATE_CSS.replace(block, "");
+    const at = outside.indexOf(".iug-card .iug-card__suffix::after {");
+    expect(at).toBeGreaterThan(-1);
+    const rule = outside.slice(at, outside.indexOf("}", at));
+    expect(rule).toContain('content: "";');
+    expect(rule).not.toContain("transform");
+    // The motion block alone starts it collapsed, to draw it.
+    expect(block).toMatch(/\.iug-card__suffix::after\s*\{[^}]*transform: scaleX\(0\)/);
+  });
+
   it("never moves the price or a button", () => {
     for (const still of ["rpg-card__cta", "rpg-card__amount", "iug-sticky__cta", "iug-card {"]) {
       expect(block, still).not.toContain(still);
@@ -70,5 +81,19 @@ describe("the wizard's CONTINUE halo (sync 23.10)", () => {
     expect(after).toContain("animation: wz-nudge");
     // The halo is drawn by its shadow; the button's own box never moves.
     expect(block).not.toMatch(/\.wz-continue--nudge\s*\{[^}]*transform/);
+  });
+});
+
+// The bar is always there (sync 23.10), so the page keeps room for its real height and a
+// focused control scrolls clear of it (WCAG 2.4.11).
+describe("the gate's room for its bar", () => {
+  it("keeps the measured bar, the safe area and the cookie banner clear", () => {
+    expect(GATE_CSS).toMatch(
+      /--iug-sticky-room: calc\(\s*var\(--iug-sticky-h, calc\(56px \+ env\(safe-area-inset-bottom, 0px\)\)\) \+ var\(--liq-consent-h, 0px\)\s*\)/
+    );
+    expect(GATE_CSS).toMatch(/\.iug-page \{[^}]*padding-bottom: var\(--iug-sticky-room\);/);
+    expect(GATE_CSS).toMatch(
+      /html:has\(\.iug-page\) \{\s*scroll-padding-bottom: var\(--iug-sticky-room\);/
+    );
   });
 });

@@ -12,16 +12,18 @@ import {
   SURVEY_TRACKING_FROM,
   trendBuckets,
 } from "./filters";
-import { fmt } from "./format";
+import { fmt, lowerFirst } from "./format";
 import {
   comparableStarts,
   launched,
   median,
+  peopleBlocked,
   ratio,
   startsBlocked,
   startsComplete,
+  STARTS_INCOMPLETE,
+  STEP_DEVICE_FROM,
   subsIn,
-  tabletBlocked,
   totals,
   trend,
   type Totals,
@@ -78,6 +80,8 @@ export interface SurveyPayload extends PageHead {
   tiles: Tile[];
   demographics: {
     benchmark: Benchmark;
+    /** Why the cards are blank under these filters (peopleBlocked), or null. */
+    blocked: string | null;
     n: number;
     benchN: number;
     cards: DemoCard[];
@@ -115,7 +119,7 @@ export function ageBand(a: string | null): string {
 
 export function genderLabel(g: string | null): string {
   if (!g) return "Not stated";
-  if (/rather not/i.test(g)) return "Prefer not to say";
+  if (/rather not/i.test(g)) return "Rather not label";
   return GENDER[g] ?? g;
 }
 
@@ -198,7 +202,7 @@ function deviceCard(mine: SubFact[], bench: SubFact[], from: string, benchFrom: 
     "Device",
     mine.map((s) => deviceLabel(s.device)),
     bench.map((s) => deviceLabel(s.device)),
-    `Mobile is iPhone and Android${iphone === null ? "" : ` (here ${fmt("pct", iphone, 0)} iPhone, ${fmt("pct", 1 - iphone, 0)} Android)`}, from the reader's price quote, else the survey's own steps (recorded from 12 Oct 2026). Tablet from the survey's steps, recorded from ${launch}; before, tablets count as Mobile or Desktop. Unknown: neither has one.`,
+    `Mobile is iPhone and Android${iphone === null ? "" : ` (here ${fmt("pct", iphone, 0)} iPhone, ${fmt("pct", 1 - iphone, 0)} Android)`}, from the reader's price quote, else the survey's own steps (recorded from ${rangeLabel(STEP_DEVICE_FROM, STEP_DEVICE_FROM)}). Tablet from the survey's steps, told apart in ranges from ${launch}; in one starting earlier, tablets count as Mobile or Desktop. Unknown: neither has one.`,
     ["Mobile", "Desktop", "Tablet", "Unknown"]
   );
   const rows = ["Mobile", "Desktop", "Tablet"].map(
@@ -276,20 +280,37 @@ export function buildSurveyPage(input: {
 }): SurveyPayload {
   const { facts, filters: f, today, now } = input;
   const scope = assessmentScope(f);
-  // Under the tablet filter, an earlier period from before tablets were told apart is not
-  // compared: nobody in it counts as one.
+  // An earlier period the filters can't follow (tablets before they were told apart, sources
+  // before they were recorded, new or returning before finishers kept their visit) is not
+  // compared.
   const previous =
-    input.previous && !tabletBlocked(scope, input.previous.from) ? input.previous : null;
+    input.previous && !peopleBlocked(scope, input.previous.from) ? input.previous : null;
   const t = totals(facts, scope);
   const pRaw = previous ? totals(previous, scope) : null;
   const p: Totals | null = comparableStarts(pRaw, facts.from, previous?.from ?? null, today, scope);
   const caption = bucketCaption(facts.from, facts.to);
-  const stB = startsBlocked(scope, facts.from, today);
-  const noCmp =
-    p && p.starts === null && t.starts !== null ? "no comparison: earlier starts incomplete" : null;
+  // Starts the filters can't follow, or that read low (before 18 Sep, drafts cleared): blank, as
+  // on Assessment A, rather than a low count and a high completion.
+  const stB =
+    startsBlocked(scope, facts.from, today) ??
+    (startsComplete(facts.from, today, scope) ? null : `${STARTS_INCOMPLETE}.`);
+  // Why the earlier period's starts can't be compared: its days before the steps recorded the
+  // device (under a device filter), else its starts are incomplete.
+  const prevWhy = previous ? startsBlocked(scope, previous.from, today) : null;
+  const noCmpWhy =
+    p && p.starts === null && t.starts !== null
+      ? prevWhy
+        ? prevWhy.replace(/\.$/, "")
+        : "earlier starts incomplete"
+      : null;
+  const noCmp = noCmpWhy ? `no comparison: ${lowerFirst(noCmpWhy)}` : null;
   // The headline tile says it in grey where the change would stand.
-  const noCmpNote = noCmp ? { note: "No comparison: earlier starts incomplete" } : {};
-  const prevCompletion = p ? ratio(p.startsFinished, p.starts) : null;
+  const noCmpNote = noCmp
+    ? { note: `No comparison: ${noCmp.slice("no comparison: ".length)}` }
+    : {};
+  // The design's Completion (502 ÷ 752): the range's submissions over its starts, as Landing's
+  // "Survey complete CVR" and Focus's survey completion read it.
+  const prevCompletion = p ? ratio(p.subs, p.starts) : null;
   const tiles: Tile[] = [
     {
       key: "starts",
@@ -319,23 +340,22 @@ export function buildSurveyPage(input: {
       goodWhen: "up",
       spark: trend(facts, scope, (x) => x.subs),
       foot: p ? `vs ${p.subs.toLocaleString("en-US")}` : "finished surveys",
-      blocked: tabletBlocked(scope, facts.from),
+      blocked: peopleBlocked(scope, facts.from),
       trend: caption,
     },
     {
       key: "completion",
       label: "Completion",
       unit: "pct",
-      value: ratio(t.startsFinished, t.starts),
+      value: ratio(t.subs, t.starts),
       prev: prevCompletion,
       goodWhen: "up",
       spark: trend(facts, scope, (x, from) =>
-        startsComplete(from, today, scope) ? ratio(x.startsFinished, x.starts) : null
+        startsComplete(from, today, scope) ? ratio(x.subs, x.starts) : null
       ),
-      // The design's "of starts submit · vs 64.6%", with "(so far)": a start may still finish.
       foot:
         noCmp ??
-        `of starts submit (so far)${prevCompletion === null ? "" : ` · vs ${fmt("pct", prevCompletion)}`}`,
+        `submissions per start${prevCompletion === null ? "" : ` · vs ${fmt("pct", prevCompletion)}`}`,
       blocked: stB,
       trend: caption,
       ...noCmpNote,
@@ -356,36 +376,42 @@ export function buildSurveyPage(input: {
       : input.benchmarkKind === "prev"
         ? `all surveys in the previous period, ${rangeLabel(input.benchmark.from, input.benchmark.to)}`
         : "all surveys in the same period";
+  // Under a filter the records can't follow, the cards are blank with the reason, never bars
+  // of a filtered-out nobody.
+  const demoBlocked = peopleBlocked(scope, facts.from);
   const demographics = {
     benchmark: input.benchmarkKind,
+    blocked: demoBlocked,
     n: mine.length,
     benchN: bench.length,
-    cards: [
-      // The design's four countries by name, then Other.
-      demoCard(
-        "Country",
-        mine.map((s) => s.country ?? "Not stated"),
-        bench.map((s) => s.country ?? "Not stated"),
-        "From the country question (15001).",
-        undefined,
-        5
-      ),
-      demoCard(
-        "Gender",
-        mine.map((s) => genderLabel(s.gender)),
-        bench.map((s) => genderLabel(s.gender)),
-        "From the gender question (15010).",
-        ["Women", "Men", "Non-binary", "Other", "Prefer not to say", "Not stated"]
-      ),
-      demoCard(
-        "Age",
-        mine.map((s) => ageBand(s.age)),
-        bench.map((s) => ageBand(s.age)),
-        "From the age question (15003); 55+ is its 55–64 and 65+.",
-        [...AGE_BANDS, "Not stated"]
-      ),
-      deviceCard(mine, bench, facts.from, input.benchmark.from),
-    ],
+    cards: demoBlocked
+      ? []
+      : [
+          // The design's four countries by name, then Other.
+          demoCard(
+            "Country",
+            mine.map((s) => s.country ?? "Not stated"),
+            bench.map((s) => s.country ?? "Not stated"),
+            "From the country question (15001).",
+            undefined,
+            5
+          ),
+          demoCard(
+            "Gender",
+            mine.map((s) => genderLabel(s.gender)),
+            bench.map((s) => genderLabel(s.gender)),
+            "From the gender question (15010).",
+            ["Women", "Men", "Non-binary", "Other", "Rather not label", "Not stated"]
+          ),
+          demoCard(
+            "Age",
+            mine.map((s) => ageBand(s.age)),
+            bench.map((s) => ageBand(s.age)),
+            "From the age question (15003); 55+ is its 55–64 and 65+.",
+            [...AGE_BANDS, "Not stated"]
+          ),
+          deviceCard(mine, bench, facts.from, input.benchmark.from),
+        ],
     note: `This range: ${mine.length.toLocaleString("en-US")} completed surveys. Benchmark: ${benchNote} (${bench.length.toLocaleString("en-US")}). While only Assessment A is live, "all surveys" is this survey.`,
   };
 
@@ -438,7 +464,15 @@ export function buildSurveyPage(input: {
     demographics,
     intro: {
       cards,
-      clicks: input.introClicks,
+      // PostHog starts on POSTHOG_FROM: a range reaching back before it gets no partial counts,
+      // only the reason, as the intro tiles do.
+      clicks:
+        input.facts.from < POSTHOG_FROM
+          ? {
+              ok: false,
+              error: `From PostHog, which starts on ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}: pick a range from that day on.`,
+            }
+          : input.introClicks,
       recordedFrom: on && !tracked ? rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM) : null,
       tiles: introTiles,
     },
@@ -488,11 +522,13 @@ function introFigures(
   }
   const c = clicks && clicks.ok ? clicks.value : null;
   if (!c || !c.opened) return { saw: c ? c.opened : null, agreed: null, skipped: null, left: null };
+  // Left before question 1: the sessions that never reached the questions (the engine never
+  // started and nothing was answered), not those that only answered nothing.
   return {
     saw: c.opened,
     agreed: c.agreed / c.opened,
     skipped: c.skipped / c.opened,
-    left: 1 - c.answered / c.opened,
+    left: 1 - c.reachedQ1 / c.opened,
   };
 }
 

@@ -1,7 +1,7 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { archetypeContent } from "@/data/report-archetypes";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { syncSource, type BrainRow, type IngestResult } from "./upsert";
 import { splitBody } from "./notion";
 
 /**
@@ -256,7 +256,5 @@ export function buildSkillRows(stampedAt: string, prompts: PromptDoc[]): BrainRo
 export async function ingestSkills(stampedAt: string): Promise<IngestResult> {
   const rows = buildSkillRows(stampedAt, await promptDocs());
   if (rows.length === 0) return { source: SOURCE, rows: 0, swept: 0, skipped: "skill-empty" };
-  const written = await upsertChunks(rows);
-  const swept = await sweepStale(SOURCE, stampedAt, written);
-  return { source: SOURCE, rows: written, swept };
+  return { source: SOURCE, ...(await syncSource(SOURCE, rows)) };
 }

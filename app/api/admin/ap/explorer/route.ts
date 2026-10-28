@@ -25,6 +25,7 @@ import {
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { toCsv } from "@features/admin/server/team-export";
+import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -140,7 +141,11 @@ export async function GET(request: Request) {
         const r =
           p.source === "posthog"
             ? await posthogRows(table, { ...q, page: 1, size: 200, cursor: null }, masked, now)
-            : await dailyRows(table, { ...q, page: 1, size: EXPORT_MAX });
+            : await dailyRows(
+                table,
+                { ...q, page: 1, size: EXPORT_MAX },
+                readVercelOidcToken(request)
+              );
         return await csvResponse(
           r.rows,
           r.columns,
@@ -168,7 +173,7 @@ export async function GET(request: Request) {
         ? await productionRows(table, q, masked, now)
         : p.source === "posthog"
           ? await posthogRows(table, q, masked, now)
-          : await dailyRows(table, q);
+          : await dailyRows(table, q, readVercelOidcToken(request));
     return NextResponse.json(result, { headers: NO_STORE });
   } catch (err) {
     if (err instanceof Refused) return NextResponse.json({ error: err.message }, { status: 400 });

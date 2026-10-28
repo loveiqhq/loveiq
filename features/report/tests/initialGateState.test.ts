@@ -20,6 +20,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
 
 import {
   isInitialGiftEmailEnabled,
+  isInInitialGateCohort,
   isInitialUnlockGateEnabled,
   joinInitialGateCohort,
   readInitialGateCohortIds,
@@ -140,10 +141,14 @@ describe("the stamps", () => {
     expect(Object.keys(JSON.parse(request?.body ?? "{}"))).toEqual(["initial_gate_cohort_at"]);
   });
 
-  it("never throw", async () => {
+  it("never throw, and the cohort's says whether it holds", async () => {
     mockFetchWithTimeout.mockRejectedValue(new Error("down"));
     await expect(stampInitialGateSeen(10)).resolves.toBeUndefined();
-    await expect(stampInitialGateCohort(10)).resolves.toBeUndefined();
+    await expect(stampInitialGateCohort(10)).resolves.toBe(false);
+    mockFetchWithTimeout.mockResolvedValue(reply({ message: "nope" }, 400));
+    await expect(stampInitialGateCohort(10)).resolves.toBe(false);
+    mockFetchWithTimeout.mockResolvedValue(reply(null, 204));
+    await expect(stampInitialGateCohort(10)).resolves.toBe(true);
   });
 });
 
@@ -176,7 +181,8 @@ describe("joinInitialGateCohort", () => {
     process.env.SYSTEM_FLAG_report_initial_unlock_gate = "true";
     mockEnsureReport.mockResolvedValue({ id: 10 });
     mockFetchWithTimeout.mockResolvedValue(reply(null, 204));
-    await joinInitialGateCohort(123);
+    // The survey's reply passes it on: the pre-report map names the price (27.10).
+    await expect(joinInitialGateCohort(123)).resolves.toBe(true);
     expect(requests().map((request) => `${request.method} ${request.url}`)).toEqual([
       "PATCH https://db.example/rest/v1/personal_report?id=eq.10&initial_gate_cohort_at=is.null",
     ]);
@@ -184,7 +190,7 @@ describe("joinInitialGateCohort", () => {
 
   it("creates and stamps nothing while the gate is off", async () => {
     process.env.SYSTEM_FLAG_report_initial_unlock_gate = "false";
-    await joinInitialGateCohort(123);
+    await expect(joinInitialGateCohort(123)).resolves.toBe(false);
     expect(mockEnsureReport).not.toHaveBeenCalled();
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
@@ -192,6 +198,40 @@ describe("joinInitialGateCohort", () => {
   it("never throws, so the survey is saved whatever happens here", async () => {
     process.env.SYSTEM_FLAG_report_initial_unlock_gate = "true";
     mockEnsureReport.mockRejectedValue(new Error("personal_report_create_failed"));
-    await expect(joinInitialGateCohort(123)).resolves.toBeUndefined();
+    await expect(joinInitialGateCohort(123)).resolves.toBe(false);
+  });
+
+  it("is not in the cohort when the stamp did not hold", async () => {
+    process.env.SYSTEM_FLAG_report_initial_unlock_gate = "true";
+    mockEnsureReport.mockResolvedValue({ id: 10 });
+    mockFetchWithTimeout.mockResolvedValue(reply({ message: "nope" }, 500));
+    await expect(joinInitialGateCohort(123)).resolves.toBe(false);
+  });
+});
+
+// A replayed submit stamps nothing: its reply reads what the first submit did.
+describe("isInInitialGateCohort", () => {
+  it("reads the report's cohort stamp while the gate is on", async () => {
+    process.env.SYSTEM_FLAG_report_initial_unlock_gate = "true";
+    mockFetchWithTimeout.mockResolvedValue(
+      reply([{ initial_gate_cohort_at: "2026-10-27T08:00:00Z" }])
+    );
+    await expect(isInInitialGateCohort(123)).resolves.toBe(true);
+    expect(requests()[0]?.url).toBe(
+      "https://db.example/rest/v1/personal_report?survey_submission_id=eq.123&select=initial_gate_cohort_at&limit=1"
+    );
+    mockFetchWithTimeout.mockResolvedValue(reply([{ initial_gate_cohort_at: null }]));
+    await expect(isInInitialGateCohort(123)).resolves.toBe(false);
+  });
+
+  it("is false while the gate is off, and when the read fails", async () => {
+    process.env.SYSTEM_FLAG_report_initial_unlock_gate = "false";
+    await expect(isInInitialGateCohort(123)).resolves.toBe(false);
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    process.env.SYSTEM_FLAG_report_initial_unlock_gate = "true";
+    mockFetchWithTimeout.mockRejectedValueOnce(new Error("down"));
+    await expect(isInInitialGateCohort(123)).resolves.toBe(false);
+    mockFetchWithTimeout.mockResolvedValueOnce(reply({ message: "nope" }, 400));
+    await expect(isInInitialGateCohort(123)).resolves.toBe(false);
   });
 });

@@ -17,6 +17,11 @@ with it. Everything ships switched off.
    applied the gate cannot open: its flag's row does not exist, and a missing flag is off.
 2. **The ads.** The search ads promise a free report. Before the switch, Sanjin Studenovic
    checks every ad's copy and changes what the gate makes untrue.
+   **Done 27.10:** Sanjin moved the live ads to 15 minutes and 17 chapters; the last "Free
+   result … 50+ page" description and two headlines of Competitor Blueprint Only were changed
+   through the Ads API the same afternoon (every live ad text checked: none says free, 9
+   minutes or 50 pages). The paused campaigns (Brand, Core Discovery, Problem Awareness) still
+   say "Free report" and "50+ page": change them before switching any of them back on.
 3. **Switch it on.** `PATCH /api/admin/system-flags` with an admin session, as
    `docs/runbooks/DISASTER_RECOVERY.md` §3 shows, with
    `{"key":"report_initial_unlock_gate","enabled":true}`. Only surveys submitted from then on
@@ -31,6 +36,9 @@ with it. Everything ships switched off.
    brain-reconcile use (`get_axis_funnel_daily`, `get_arm_cohorts`), as
    `20261018130000` did for pay to start: today they count the cohort in A3 and a EUR 1.99
    as a purchase (Fatih's data task: split the EUR 1.99 out of the digest).
+   **Switched on 27.10, 14:38 UTC.** Registry #5 completed (no winner: 0 of 91 against 1 of
+   91 bought) and `pricing` out of `LIVE_AXES`. Fatih's digest readouts follow in his own
+   PR; until then the digest's pricing axis counts the cohort in A3, so read past it.
 4. **Check it.** Take the survey in a fresh browser with an address that isn't a team one: a
    team address (`@loveiq.org`) makes the payment a staff test (`is_test`), and test payments
    carry no EUR 10 credit, so it would show EUR 29.99. The gate follows the wizard. Pay
@@ -39,8 +47,10 @@ with it. Everything ships switched off.
    the full report at EUR 19.99 ("€10 credit applied" on Stripe's page). E06, "Your Core
    Archetype is unlocked", arrives. In the database the report has `initial_gate_cohort_at`
    and `initial_gate_seen_at`, and the payment `metadata.plan` = `initial`.
-5. **E07, from day 4.** Four days after the switch at the earliest, when the first gated
-   readers reach day 4: `{"key":"initial_unlock_gift_email","enabled":true}`. The cron runs
+5. **E07, from day 1.** A day after the switch at the earliest, when the first gated readers
+   reach day 1: `{"key":"initial_unlock_gift_email","enabled":true}`. Switch it on within two
+   days of a reader's first sight of the gate, or that reader ages out of E07's one-day window
+   with no arm, in neither group (the window is one to two days after it). The cron runs
    hourly at :47, on production only; each run logs its summary (`gifted`, `heldOut`,
    `skipped…`, `failed`), and #ops hears about a stalled cron after three hours. One draw per
    person: a retake's report is left out once the person has an arm.
@@ -51,7 +61,7 @@ with it. Everything ships switched off.
   free report as before, and the 72-hour 50% email and the "why didn't you unlock?" email
   reach them again. Payments made stand. The cohort stays out of the price test's readouts.
 - `initial_unlock_gift_email` is its own switch: with the gate off for good, switch it off
-  too, or readers who met the gate before still get the gift on day 4.
+  too, or readers who met the gate before still get the gift on day 1.
 - `report_paywall_enforced` off (the paywall's kill switch) opens every report, gate included.
 
 ## Old reports, for the campaign
@@ -75,12 +85,39 @@ meets the gate again. If the full report was bought with the credit before the r
 gets `credited_payment_refunded`: the reader keeps the full report for EUR 10 less, and
 charging the difference is a person's call.
 
+A EUR 1.99 paid on a report E07 had already gifted (a Stripe page opened before the gift,
+paid after it, or a payment landing as the cron gifts) posts `initial_paid_after_gift` to the
+ops channel, from the webhook or from the cron, whichever sees it: refund that EUR 1.99. The
+gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses nothing, and a
+`credited_payment_refunded` that follows it needs no charge: the gift covers that credit.
+
 ## Reading it
 
 - AP-Analytics, Focus: "Completion → pre-unlock", EUR 1.99 sales per finished survey and the
   revenue per sale. The Payment page's segments and the Landing page's arms carry the rate.
+- AP-Analytics, Pay to start: the gate as a funnel of its own ("EUR 1.99 after the survey")
+  beside pay after the report and pay to start, from its cohort (stamped at the survey's
+  submit; the old-user campaign's later stamps stay with pay after the report). The free
+  landing's visits, ads and survey starts go to the gate by day: on the day it is switched,
+  by its share of that day's finished surveys.
+- The pre-report map names the price to a reader the gate will stop: "Read your opening
+  chapters in full for €1.99." (Eman, 27.10). The survey's reply carries
+  `initialGatePriceCents` when the reader joined the cohort; nobody else's map changes.
+- The behaviour checks (`features/ux-signals`) know the gate (27.10): its checkout, return and
+  unlock (plan `initial`) are never the report's paywall or payment, and a visit that went no
+  further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
+- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar)
+  and, under "Saw the €1.99 page", who left by "Not ready to unlock yet", from the page's own
+  events (`initial_gate_cta_click` with its `place`, `initial_gate_back`, stored since 27.10).
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).
-- E07's holdout: compare full-report purchases after day 4 between `initial_gift_arm` = `gift`
-  and `holdout`, staff left out. The gift's EUR 0 rows are never revenue.
+- "Not ready to unlock yet" leads to the landing page, which does not count that reader as a
+  landing visit or give them a landing arm (the exit is `initial_gate_back`). Since 27.10
+  the event means this link, shown to every reader; before, a back arrow shown only to
+  readers who came from the survey. The sticky bar is always on screen since then too, so
+  `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".
+- E07's holdout: compare full-report purchases after day 1 between `initial_gift_arm` = `gift`
+  and `holdout`, staff left out. The gift's EUR 0 rows are never revenue. Since E07 moved to
+  day 1 (Marcus, 27.10), a gifted reader can't buy the EUR 1.99 after their first day: read
+  the gate's EUR 1.99 conversion over that first day, not three.

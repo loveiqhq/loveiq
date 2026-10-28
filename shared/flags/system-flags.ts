@@ -17,7 +17,7 @@
  *   unlock_feedback          — when OFF, the "why didn't you unlock?" email stops (20261019120000)
  *   report_initial_unlock_gate — when ON, surveys submitted from then on meet the EUR 1.99
  *                              gate before their report (20261020090000; read default OFF)
- *   initial_unlock_gift_email  — when ON, E07 gifts the Core Archetype on day 4 to 80% of
+ *   initial_unlock_gift_email  — when ON, E07 gifts the Core Archetype on day 1 to 80% of
  *                              the gate's non-payers (20261020090000; read default OFF)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get

@@ -5,7 +5,7 @@ import { summaryArchetypeContent } from "@/data/report-summary";
 import { reportPracticeIntroBlocks } from "@/data/report-practice-intro";
 import { faqs } from "@/data/faqs";
 import { splitBody } from "./notion";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { syncSource, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * The report copy that actually ships — the house voice at its most authoritative.
@@ -233,7 +233,5 @@ export async function ingestReportVoice(stampedAt: string): Promise<IngestResult
   // An empty build must not sweep the voice away and leave the corpus with nothing —
   // the same rule the roster ingester follows for the same reason.
   if (rows.length === 0) return { source: SOURCE, rows: 0, swept: 0, skipped: "report-empty" };
-  const written = await upsertChunks(rows);
-  const swept = await sweepStale(SOURCE, stampedAt, written);
-  return { source: SOURCE, rows: written, swept };
+  return { source: SOURCE, ...(await syncSource(SOURCE, rows)) };
 }

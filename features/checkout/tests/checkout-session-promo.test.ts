@@ -17,6 +17,12 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE:
     "Checkout preview only. Payments are not enabled in this environment yet.",
   getStripeCheckoutCustomerEmail: vi.fn(),
+  // As the real one when Stripe Tax is off; with it on, see stripe-automatic-tax.test.ts.
+  createCheckoutSession: (
+    stripe: { checkout: { sessions: { create: (p: unknown, o: unknown) => unknown } } },
+    params: unknown,
+    idempotencyKey: string
+  ) => stripe.checkout.sessions.create(params, { idempotencyKey }),
   getStripeServerClient: vi.fn(),
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(true),
 }));

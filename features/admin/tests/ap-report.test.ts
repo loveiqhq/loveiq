@@ -216,38 +216,77 @@ describe("report page", () => {
       prev: null,
       foot: "of report openers rated at least one chapter (1 of 1 · 1 vote)",
     });
-    // No earlier period: nothing compared, and no grey note either.
-    for (const t of q.tiles) expect(t.note).toBeUndefined();
-    // The Initial plan is on sale (19.10); the fixture's reader bought none.
+    // No earlier period: nothing compared, and no grey note either, but the pre-unlock's: over
+    // a range before the EUR 1.99 was on sale (23 Oct) it says when, never 0%.
+    for (const t of q.tiles) if (t.key !== "pre") expect(t.note).toBeUndefined();
     expect(q.tiles.find((t) => t.key === "pre")).toMatchObject({
       label: "Pre unlock rate",
-      value: 0,
+      value: null,
+      note: "Counted from 23 Oct 2026",
     });
   });
 
   // The Initial plan (EUR 1.99, the initial report since 19.10): a reader whose first paid
   // plan is `initial` is a pre-unlock, and an upgrade after it is a full unlock too.
-  it("counts the initial report's buyers as pre-unlocks", () => {
+  it("counts the openers who pre-unlocked (EUR 1.99 paid), as the full unlock's", () => {
+    const at = Date.parse("2026-10-26T12:00:00Z") / 1000;
     const cur = factsFixture({
+      from: "2026-10-24",
+      to: "2026-10-30",
       subs: [
-        sub({ id: 1, ...day("2026-10-02"), paidAt: "2026-10-02T10:10:00Z", plan: "initial" }),
+        sub({ id: 1, ...day("2026-10-25"), pays: [[at, 1.99, "initial"]] }),
         sub({
           id: 2,
-          ...day("2026-10-03"),
-          paidAt: "2026-10-03T10:10:00Z",
-          plan: "initial",
+          ...day("2026-10-26"),
+          paidAt: "2026-10-26T10:10:00Z",
           full: true,
+          pays: [
+            [at, 1.99, "initial"],
+            [at + 60, 19.99, "full_report"],
+          ],
         }),
-        sub({ id: 3, ...day("2026-10-03") }),
-        sub({ id: 4, ...day("2026-10-04") }),
+        // E07's EUR 0 gift is no pre-unlock.
+        sub({ id: 3, ...day("2026-10-26"), pays: [[at, 0, "initial"]] }),
+        sub({ id: 4, ...day("2026-10-27") }),
       ],
     });
-    const tiles = page({ facts: cur, benchmark: cur }).tiles;
+    const tiles = page({
+      facts: cur,
+      benchmark: cur,
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-24", to: "2026-10-30" },
+        "2026-10-31"
+      ),
+      today: "2026-10-31",
+      now: new Date("2026-10-31T10:00:00Z"),
+    }).tiles;
     expect(tiles.find((t) => t.key === "pre")).toMatchObject({
       value: 2 / 4,
-      foot: "Initial plan purchases ÷ report openers",
+      foot: "Core Archetype (€1.99) purchases ÷ report openers",
     });
     expect(tiles.find((t) => t.key === "full")?.value).toBe(1 / 4);
+    // "Free survey" sells it only through the report's gate: off, and none sold, blank with why;
+    // one sold anyway is never hidden.
+    const free = (subs: ReturnType<typeof sub>[], gateOn: boolean | null) =>
+      page({
+        facts: factsFixture({ from: "2026-10-24", to: "2026-10-30", subs }),
+        benchmark: cur,
+        gateOn,
+        filters: parseFilters(
+          { period: "custom", from: "2026-10-24", to: "2026-10-30", funnel: "free" },
+          "2026-10-31"
+        ),
+        today: "2026-10-31",
+        now: new Date("2026-10-31T10:00:00Z"),
+      }).tiles.find((t) => t.key === "pre")!;
+    const none = [sub({ id: 4, ...day("2026-10-27") })];
+    expect(free(none, false)).toMatchObject({
+      value: null,
+      note: "Not sold in the free survey: the report's €1.99 gate is switched off.",
+    });
+    expect(free(none, null).note).toMatch(/switch couldn't be read/);
+    expect(free(none, true).value).toBe(0);
+    expect(free(cur.subs, false).value).toBe(2 / 4);
   });
 
   it("gives the headline rates two figures and the wizard's none, as the design writes them", () => {
@@ -328,12 +367,11 @@ describe("report page", () => {
       ["55+", 200_000],
       ["Not stated", 200_000],
     ]);
+    // The design's groups: Other only when a reader answered it (none here).
     expect(t.byGender.map((r) => [r.label, r.ms])).toEqual([
       ["Women", 100_000],
       ["Men", null],
       ["Non-binary", null],
-      ["Other", null],
-      ["Prefer not to say", null],
       ["Not stated", 250_000],
     ]);
     // The medians beside the means, for the design's Median / Average switch.
@@ -437,13 +475,15 @@ describe("report page", () => {
       { slide: 1, n: 2, sids: [2, 7] },
       { slide: 5, n: 1, sids: [6] },
     ];
+    // Over the same readers: Continue, Skip intro and Exit share each slide's readers out. A skip
+    // counts where the reader stopped (7 went back from slide 4 and skipped on slide 2).
     const all = wizard("all", skips, "2026-10-05");
-    expect(all[1]).toMatchObject({ reached: 7, cont: 4 / 7, skip: 2 / 6, exit: 2 / 7 });
-    expect(all[3]).toMatchObject({ reached: 3, skip: 0, exit: 0 });
-    expect(all[5]).toMatchObject({ reached: 2, cont: 1, skip: 0.5, exit: 0 });
+    expect(all[1]).toMatchObject({ reached: 7, cont: 4 / 7, skip: 1 / 7, exit: 2 / 7 });
+    expect(all[3]).toMatchObject({ reached: 3, skip: 1 / 3, exit: 0 });
+    expect(all[5]).toMatchObject({ reached: 2, cont: 1, skip: 0, exit: 0 });
     expect(all[0]!.skip).toBe(0);
     const ads = wizard("google_ads", skips, "2026-10-05");
-    expect(ads[1]).toMatchObject({ reached: 6, skip: 0.4, exit: 2 / 6 });
+    expect(ads[1]).toMatchObject({ reached: 6, skip: 1 / 6, exit: 2 / 6 });
     expect(ads[5]).toMatchObject({ reached: 1, skip: 0, exit: 0 });
     // Not recorded yet: no Skip intro, and Exit as it always was.
     const none = wizard("all", [], null);
@@ -549,6 +589,12 @@ describe("report page", () => {
             stat("typical_beliefs"),
             stat("core_archetype", { reached: 10, ms_avg: 30_000, show_all: 3, pw_seen: 0 }),
             stat("summary"),
+            // Left out of the slimmed report on 22 Oct: read while it was in it.
+            stat("core_insecurities", { reached: 3 }),
+            // A key no report version had (any browser can send one) is never listed, nor one
+            // that only an object's prototype has.
+            stat("made_up_chapter"),
+            stat("constructor"),
           ],
           chapter_readers: 10,
           chapter_stats_from: from,
@@ -570,6 +616,15 @@ describe("report page", () => {
     // A live chapter nobody reached is 0%; an earlier version's has no reading at all.
     expect(row("love_language")).toMatchObject({ reach: 0, avgMs: null, learnMore: null });
     expect(row("summary")).toMatchObject({ reach: null, avgMs: null, paywall: null });
+    expect(row("core_insecurities")).toMatchObject({
+      name: "Core insecurities",
+      part: "Earlier report versions",
+      reach: 0.3,
+      paywall: 0.2,
+    });
+    expect(p.chapters.some((c) => c.id === "made_up_chapter" || c.id === "constructor")).toBe(
+      false
+    );
     expect(p.chapterReading).toEqual({ from: "2026-10-03", readers: 10, recorded: true });
     // A range before the first recorded day, or none yet: blank, never 0.
     for (const from of ["2026-10-08", null]) {
@@ -656,11 +711,14 @@ describe("report page", () => {
     expect(narrowed.time.benchAvgMs).toBe(400_000);
   });
 
-  it("what brought readers back: PostHog's four ways in a fixed order, by the design's names", () => {
+  it("what brought readers back: PostHog's ways in a fixed order, by the design's names", () => {
     const p = page({
       returns: posthog({
         sources: [
-          { source: "Email link", sessions: 3 },
+          // A nurture email or a chapter nudge (its link carries a campaign), and the
+          // report-ready email every finisher gets (none): only the first is a campaign.
+          { source: "Email campaign link", sessions: 2 },
+          { source: "Email link", sessions: 1 },
           { source: "Bookmark or direct", sessions: 1 },
         ],
       }),
@@ -668,13 +726,54 @@ describe("report page", () => {
     expect(p.returns.sources).toEqual({
       ok: true,
       value: [
-        { source: "Bookmark or direct", sessions: 1, share: 0.25 },
-        { source: "Email campaign", sessions: 3, share: 0.75 },
+        { source: "Bookmark / direct", sessions: 1, share: 0.25 },
+        { source: "Email campaign", sessions: 2, share: 0.5 },
+        { source: "Report or invite email", sessions: 1, share: 0.25 },
         { source: "Share link from a friend", sessions: 0, share: 0 },
         { source: "Other", sessions: 0, share: 0 },
       ],
     });
+    // Returned via email: any email's link.
     expect(p.returns.viaEmail).toBe(0.75);
+    // PostHog starts on 23 Aug 2026: a range reaching back before it says so, never shares.
+    const early = page({
+      filters: { ...filters, from: "2026-08-01", to: "2026-08-31" },
+      returns: posthog({ sources: [{ source: "Email link", sessions: 3 }] }),
+    });
+    expect(early.returns.sources).toEqual({
+      ok: false,
+      error: "From PostHog, which starts on 23 Aug 2026: pick a range from that day on.",
+    });
+    expect(early.returns.viaEmail).toBeNull();
+  });
+
+  it("an email stage with no code to date its sends: listed, its returns blank", () => {
+    const c = page({
+      extras: {
+        ...extras,
+        emails: [
+          {
+            stage: "6h_no_view",
+            sent: 476,
+            opened: null,
+            clicked: null,
+            returned: 12,
+            bought: 0,
+            revenue: 0,
+            estimated: true,
+          },
+        ],
+      },
+    }).returns.campaigns.find((x) => x.stage === "6h_no_view")!;
+    // Sends dated from the report's time: who came back "after" one can't be told.
+    expect(c).toMatchObject({
+      status: "Retired",
+      sent: 476,
+      returned: null,
+      purchased: 0,
+      estimated: true,
+    });
+    expect(c.what).toMatch(/^6 h, if the report wasn't opened/);
   });
 
   it("an email's return rate is its returners over its sends, from our own records", () => {
@@ -702,17 +801,24 @@ describe("report page", () => {
         revenue: 7,
       },
     ]);
-    expect(c.map((x) => x.stage)).toEqual(["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"]);
+    // Every stage that was ever sent: the live one, then the retired ladder.
+    expect(c.map((x) => x.stage)).toEqual([
+      "72h_no_unlock",
+      "54h_no_unlock",
+      "30h_no_unlock",
+      "6h_no_view",
+      "78h_no_unlock",
+    ]);
     expect(c[0]).toMatchObject({ sent: 40, returned: 10, returnRate: 0.25, purchased: 2 });
-    // A retired stage that sent and sold nothing: every figure blank, not 0.
+    // A retired stage that sent and sold nothing: 0 sent and 0 bought, as drawn; the rest blank.
     expect(c[1]).toMatchObject({
       status: "Retired",
-      sent: null,
+      sent: 0,
       opened: null,
       clicked: null,
       returned: null,
       returnRate: null,
-      purchased: null,
+      purchased: 0,
     });
     // The live one in a range it sent nothing in: real zeros.
     expect(campaigns([])[0]).toMatchObject({ sent: 0, returned: 0, purchased: 0 });
@@ -947,6 +1053,27 @@ describe("report page, on screen", () => {
       email_events_from: "2026-09-20",
       email_opens_from: "2026-09-25",
     },
+    // The votes the page reads, all time (fetchVotes), the comment as the server masked it.
+    votes: [
+      {
+        at: "2026-10-07T21:15:00Z",
+        submission: 2,
+        user: 2,
+        section: "core_archetype",
+        vote: "down",
+        issue: "unclear",
+        comment: "Too vague in places",
+      },
+      {
+        at: "2026-10-06T12:00:00Z",
+        submission: 1,
+        user: 1,
+        section: "summary",
+        vote: "up",
+        issue: null,
+        comment: null,
+      },
+    ],
   });
   /** The data rows of a table, top to bottom, by their first column's text. */
   const rowNames = (table: string) =>
@@ -975,19 +1102,21 @@ describe("report page, on screen", () => {
     const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
     expect(campaigns.getByText("25.0%")).toBeInTheDocument();
     // Opened and Clicked: the count, its share of the delivered emails under it.
-    expect(campaigns.getByText("50.0%")).toBeInTheDocument();
-    expect(campaigns.getByText("12.5%")).toBeInTheDocument();
+    expect(campaigns.getByText("50.0% of 8 delivered")).toBeInTheDocument();
+    expect(campaigns.getByText("12.5% of 8 delivered")).toBeInTheDocument();
     expect(
       screen.getByText(
         /Clicks are of the emails delivered since 20 Sep 2026, and opens of those delivered since 25 Sep 2026/
       )
     ).toBeInTheDocument();
     expect(screen.getByText(/Opens are inflated by Apple Mail/)).toBeInTheDocument();
-    // The design's names; a retired campaign with nothing in the range reads "—" throughout.
+    // The design's names; a retired campaign with nothing in the range reads 0 sent and 0 bought.
     expect(rowNames("Email campaigns")).toEqual([
       expect.stringContaining("72h no unlock"),
       expect.stringContaining("54h no unlock"),
       expect.stringContaining("30h no unlock"),
+      expect.stringContaining("6h no view"),
+      expect.stringContaining("78h no unlock"),
     ]);
     const retired = campaigns.getAllByRole("row")[2]!;
     expect(
@@ -995,7 +1124,7 @@ describe("report page, on screen", () => {
         .getAllByRole("cell")
         .slice(1)
         .map((c) => c.textContent)
-    ).toEqual(["—", "—", "—", "—", "—", "—"]);
+    ).toEqual(["0", "—", "—", "—", "—", "0"]);
     // Both sort, blanks last whichever way: the retired campaigns' "—" stay under the live one.
     const live = expect.stringContaining("72h no unlock");
     const byOpened = campaigns.getByRole("button", { name: "Sort by Opened" });
@@ -1046,28 +1175,28 @@ describe("report page, on screen", () => {
         ],
         chapter_readers: 30,
         chapter_stats_from: "2026-10-01",
-        // The log holds only the latest votes; the totals count every one in the range.
-        chapters: [{ section: "core_archetype", up: 250, down: 50 }],
-        votes_total: 300,
-        feedback: [
-          {
-            at: "2026-10-07T21:15:00Z",
-            submission: 1,
-            section: "core_archetype",
-            vote: "up",
-            issue: null,
-            commented: false,
-          },
-          {
-            at: "2026-10-06T21:15:00Z",
-            submission: 2,
-            section: "core_archetype",
-            vote: "down",
-            issue: null,
-            commented: false,
-          },
-        ],
       },
+      // Every vote, all time: the log holds them all.
+      votes: [
+        {
+          at: "2026-10-07T21:15:00Z",
+          submission: 1,
+          user: 1,
+          section: "core_archetype",
+          vote: "up",
+          issue: null,
+          comment: null,
+        },
+        {
+          at: "2026-10-06T21:15:00Z",
+          submission: 2,
+          user: 2,
+          section: "core_archetype",
+          vote: "down",
+          issue: null,
+          comment: null,
+        },
+      ],
     });
     render(createElement(ApReport));
     // The change against the period before, as a percentage: a rate from none is New, in green;
@@ -1081,17 +1210,15 @@ describe("report page, on screen", () => {
     expect(change("Share rate")).toHaveClass("text-ap-good");
     expect(change("Invite rate").textContent).toBe("−50.0%");
     expect(change("Invite rate")).toHaveClass("text-ap-bad");
-    // On sale since 19.10: a figure like the others (none sold, in either period).
-    expect(change("Pre unlock rate").textContent).toBe("±0%");
+    // A range before the EUR 1.99 was on sale (23 Oct): no rate, the day it went on sale instead.
+    expect(change("Pre unlock rate").textContent).toBe("Counted from 23 Oct 2026");
 
     const fb = within(document.getElementById("feedback")!);
     expect(fb.queryByRole("group", { name: "Filter feedback" })).toBeNull();
     expect(fb.queryByText(/All comments in the explorer/)).toBeNull();
-    expect(
-      fb.getByText(/^The log holds the latest 2 of the range’s 300 votes\.$/)
-    ).toBeInTheDocument();
-    expect(fb.getByText(/good · 250 good \/ 50 bad · 300 votes/)).toBeInTheDocument();
-    // The design's search: by vote, chapter, issue, date or submission.
+    // Live, all time, as drawn.
+    expect(fb.getByText(/good · 1 good \/ 1 bad · 2 votes \(live, all time\)/)).toBeInTheDocument();
+    // The design's search: by vote, chapter, issue, date or user ID.
     const search = fb.getByRole("searchbox", { name: "Search feedback" });
     fireEvent.change(search, { target: { value: "bad" } });
     expect(fb.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
@@ -1148,27 +1275,27 @@ describe("report page, on screen", () => {
     expect(screen.getByText("Median total time by age")).toBeInTheDocument();
     const same = age().getByText("55+").parentElement!;
     // The all-reports figure the tick draws is read to a screen reader in the row's name.
-    expect(same.textContent).toBe("55+, all reports 2:102:10±0:00.0");
+    expect(same.textContent).toBe("55+, all reports 2:102:10±0 s");
     expect(same.lastElementChild).toHaveClass("text-ap-muted");
     expect(age().getByText("18–24").parentElement!.textContent).toBe("18–24——");
-    expect(age().getByText("Not stated")).toBeInTheDocument();
+    // Age is a required answer: no "Not stated" row unless a reader has none, as drawn.
+    expect(age().queryByText("Not stated")).toBeNull();
     const group = within(screen.getByRole("group", { name: "Statistic" }));
     expect(group.getByRole("button", { name: "Median" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(group.getByRole("button", { name: "Average" }));
     expect(group.getByRole("button", { name: "Average" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Avg. total time by age")).toBeInTheDocument();
     // (1:40 + 6:40 + 2:10) / 3 = 3:30.
-    expect(age().getByText("55+").parentElement!.textContent).toBe(
-      "55+, all reports 3:303:30±0:00.0"
-    );
+    expect(age().getByText("55+").parentElement!.textContent).toBe("55+, all reports 3:303:30±0 s");
     // The boxes: no period before, so a grey dash where the change would stand.
     const box = screen.getByText("Avg. total time").parentElement!;
-    expect(box.textContent).toBe("Avg. total time3:30—");
+    // (The space is the one before the label's info icon.)
+    expect(box.textContent).toBe("Avg. total time 3:30—");
   });
 
   it("how far into the report readers got: by the deepest chapter, split by reading time", () => {
     // The live report's chapters, in its order; a reader is placed by the latest they reached.
-    const order = payload.chapters.filter((c) => c.part !== "Earlier report versions");
+    const order = payload.chapters.filter((c) => c.part.startsWith("Part "));
     const n = order.length;
     const at = (place: number) => order[place - 1]!.id;
     const f = factsFixture({
@@ -1196,7 +1323,7 @@ describe("report page, on screen", () => {
           { sid: 3, chapters: [at(1), at(n)] },
           { sid: 4, chapters: [at(n)] },
           { sid: 5, chapters: [at(n)] },
-          // An earlier version's chapter only: no place in today's report, not counted.
+          // A chapter outside the report's nav only (V4's Summary): no place in it, not counted.
           { sid: 6, chapters: ["summary"] },
         ],
       },
@@ -1281,7 +1408,7 @@ describe("report page, on screen", () => {
     render(createElement(ApReport));
     const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
     const rows = campaigns.getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(5);
     for (const row of rows) {
       // Status and Sent, then Opened and Clicked.
       const cells = within(row)
@@ -1303,7 +1430,8 @@ describe("report page, on screen", () => {
       target: { value: "Bad" },
     });
     expect(screen.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
-    expect(screen.getByText("left a comment").className).toContain("font-serif italic");
+    // The comment itself, as the server masked it.
+    expect(screen.getByText("Too vague in places").className).toContain("font-serif italic");
     // The filters add up: the bad vote's reason, then the chapter that had only a good vote.
     fireEvent.click(log.getByRole("button", { name: "Filter Issue" }));
     fireEvent.change(log.getByRole("combobox", { name: "Filter issue" }), {
@@ -1317,15 +1445,15 @@ describe("report page, on screen", () => {
     expect(screen.getByText("No votes match the filters.")).toBeInTheDocument();
   });
 
-  it("filters the log by submission, and the campaigns and chapters by their funnels", () => {
+  it("filters the log by user ID, and the campaigns and chapters by their funnels", () => {
     screenData.payload = payload;
     render(createElement(ApReport));
     const log = within(document.getElementById("feedback")!);
-    const sub = payload.feedback.log.find((r) => r.submission !== null)!;
-    fireEvent.click(log.getByRole("button", { name: "Filter Submission" }));
-    const subs = log.getByRole("combobox", { name: "Filter submission" });
-    fireEvent.change(subs, { target: { value: `#${sub.submission}` } });
-    const want = payload.feedback.log.filter((r) => r.submission === sub.submission).length;
+    const sub = payload.feedback.log.find((r) => r.user !== null)!;
+    fireEvent.click(log.getByRole("button", { name: "Filter User ID" }));
+    const users = log.getByRole("combobox", { name: /Filter user id/i });
+    fireEvent.change(users, { target: { value: `#${sub.user}` } });
+    const want = payload.feedback.log.filter((r) => r.user === sub.user).length;
     expect(screen.getByText(`Feedback log · ${want} of ${want}`)).toBeInTheDocument();
 
     const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
@@ -1364,7 +1492,7 @@ describe("report page, on screen", () => {
     expect(table.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
       "#",
       "Slide",
-      "Time",
+      "Median time",
       "Reached",
       "Continue",
       "Skip intro",
@@ -1406,7 +1534,8 @@ describe("report page, on screen", () => {
         chapter_stats: [
           stat("typical_beliefs", {
             reached: 3,
-            ms_avg: 125_000,
+            ms_avg: 150_000,
+            ms_median: 125_000,
             learn_more: 1,
             try_this: 2,
             pw_seen: 2,
@@ -1434,10 +1563,12 @@ describe("report page, on screen", () => {
       "Exercise",
     ]);
     const table = within(screen.getByRole("table", { name: "Chapters" }));
-    for (const column of ["Reach", "Avg. time", "Show more CTR", "Paywall CTR"]) {
+    for (const column of ["Reach", "Median time", "Show more CTR", "Paywall CTR"]) {
       expect(table.getByRole("button", { name: `Sort by ${column}` })).toBeInTheDocument();
     }
+    // The median reader's time, not the average (2:30).
     expect(table.getByText("2:05")).toBeInTheDocument();
+    expect(table.queryByText("2:30")).toBeNull();
     // The paywall rate, with how many clicked of how many saw it under it.
     expect(table.getByText("1 of 2")).toBeInTheDocument();
     // Learn more and Exercise whole, as drawn: 1 and 2 of the chapter's 3 readers.
@@ -1545,7 +1676,7 @@ describe("report page, on screen", () => {
       benchmark: many,
       returns: posthog({
         sources: [
-          { source: "Email link", sessions: 3 },
+          { source: "Email campaign link", sessions: 3 },
           { source: "Bookmark or direct", sessions: 1 },
         ],
       }),
@@ -1574,7 +1705,7 @@ describe("report page, on screen", () => {
         (screen.getByText(source).nextElementSibling!.firstElementChild as HTMLElement).style.width
       );
     expect(bar("Email campaign")).toBe(100);
-    expect(bar("Bookmark or direct")).toBeCloseTo(33.33);
+    expect(bar("Bookmark / direct")).toBeCloseTo(33.33);
   });
 
   it("gives the feedback log's comment the room left, and names each chapter alone", () => {
@@ -1582,7 +1713,7 @@ describe("report page, on screen", () => {
     render(createElement(ApReport));
     const log = screen.getByRole("table", { name: "Feedback log" });
     expect(within(log).getAllByRole("row")[0]!.style.gridTemplateColumns).toBe(
-      "170px 100px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)"
+      "170px 124px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)"
     );
     expect(log.style.minWidth).toBe("880px");
     // The name alone, as redrawn on 16 Oct: no part or id under it.
@@ -1767,17 +1898,17 @@ describe("the guided tour", () => {
     expect(tileOf(p, "free", "tour-started")).toMatchObject({
       unit: "count",
       value: 3,
-      share: "75% of the 4 readers who opened their report",
       blocked: null,
     });
+    // The tile shows only its change, as drawn; its share of the openers is in the section note.
+    expect(tileOf(p, "free", "tour-started").share).toBeUndefined();
+    expect(audience(p, "free").share).toBe("75% of the 4 readers who opened their report");
     // Four runs: one completed, one skipped, one left the page, one with no end at all.
     expect(tileOf(p, "free", "tour-completed")).toMatchObject({ value: 0.25, goodWhen: "up" });
     expect(tileOf(p, "free", "tour-skipped")).toMatchObject({ value: 0.25, goodWhen: "down" });
     expect(tileOf(p, "free", "tour-left")).toMatchObject({ value: 0.5, goodWhen: "down" });
-    expect(tileOf(p, "paid", "tour-started")).toMatchObject({
-      value: 1,
-      share: "25% of the 4 readers who opened their report",
-    });
+    expect(tileOf(p, "paid", "tour-started").value).toBe(1);
+    expect(audience(p, "paid").share).toBe("25% of the 4 readers who opened their report");
     expect(tileOf(p, "paid", "tour-completed").value).toBe(1);
     // A line per day of the week, each day's own runs.
     expect(tileOf(p, "free", "tour-started").spark).toEqual([1, 1, 1, 0, 0, 0, 0]);
@@ -1787,9 +1918,7 @@ describe("the guided tour", () => {
   it("an empty week reads zero readers and blank shares, not a failure", () => {
     const p = tourPage({ tour: { days: [], stops: [], placed: [] } });
     expect(tileOf(p, "free", "tour-started")).toMatchObject({ value: 0, blocked: null });
-    expect(tileOf(p, "free", "tour-started").share).toBe(
-      "0% of the 4 readers who opened their report"
-    );
+    expect(audience(p, "free").share).toBe("0% of the 4 readers who opened their report");
     expect(tileOf(p, "free", "tour-completed").value).toBeNull();
     for (const s of audience(p, "free").stops) {
       expect([s.reached, s.reachedShare, s.next, s.skip, s.exit, s.medianMs]).toEqual([
@@ -1921,7 +2050,7 @@ describe("the guided tour", () => {
   describe("on screen", () => {
     afterEach(() => cleanup());
 
-    it("sits after the wizard in the section nav, with the share under Tour started", () => {
+    it("sits after the wizard in the section nav, the share of openers in its note", () => {
       screenData.payload = tourPage();
       render(createElement(ApReport));
       const nav = within(screen.getByRole("navigation", { name: "Report sections" }));
@@ -1934,10 +2063,26 @@ describe("the guided tour", () => {
       ]);
       const section = within(document.getElementById("tour")!);
       expect(section.getByRole("heading", { name: "Guided tour" })).toBeInTheDocument();
-      expect(section.getByText("75% of the 4 readers who opened their report")).toBeInTheDocument();
+      expect(document.getElementById("tour")!.textContent).toContain(
+        "Tour started: the range’s readers who got the tour, on this tab 75% of the 4 readers who opened their report, free and paid together"
+      );
       expect(document.getElementById("wizard")!.nextElementSibling).toBe(
         document.getElementById("tour")
       );
+    });
+
+    it("says nothing of the openers when there is no share of them: each tab is one audience", () => {
+      const p = tourPage();
+      screenData.payload = {
+        ...p,
+        tour: { ...p.tour, audiences: p.tour.audiences.map((a) => ({ ...a, share: null })) },
+      };
+      render(createElement(ApReport));
+      const text = document.getElementById("tour")!.textContent!;
+      expect(text).toContain(
+        "Tour started: the range’s readers who got the tour. A reader who later opened it"
+      );
+      expect(text).not.toContain("free and paid together");
     });
 
     it("draws the stops: Spotlight, Back from the second, Finish on the last, the design's reds", () => {
@@ -1951,9 +2096,9 @@ describe("the guided tour", () => {
           .getAllByRole("cell")
           .map((c) => c.textContent);
       // # · Time · Reached · Next · Back · Skip tour · Exit
-      expect(cells(rows[0]!)).toEqual(["1", "0:05.2", "100%", "100%", "—", "—", "0%"]);
-      expect(cells(rows[1]!)).toEqual(["2", "0:04.1", "100%", "67%", "33%", "33%", "0%"]);
-      expect(cells(rows[4]!)).toEqual(["5", "0:07.0", "33%", "Finish 100%", "0%", "—", "0%"]);
+      expect(cells(rows[0]!)).toEqual(["1", "5 s", "100%", "100%", "—", "—", "0%"]);
+      expect(cells(rows[1]!)).toEqual(["2", "4 s", "100%", "67%", "33%", "33%", "0%"]);
+      expect(cells(rows[4]!)).toEqual(["5", "7 s", "33%", "Finish 100%", "0%", "—", "0%"]);
       expect(within(rows[0]!).getByText(/^Spotlight: Chapter menu/)).toBeInTheDocument();
       // Skip tour from 8%, Exit from 4%: bold red.
       expect(within(rows[1]!).getAllByRole("cell")[5]).toHaveClass("font-bold", "text-ap-bad");
@@ -1991,5 +2136,39 @@ describe("the guided tour", () => {
         section.getByText("Recorded from 23 Oct 2026: pick a range from that day on")
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("maskContacts: a reader's words as the feedback log shows them", () => {
+  it("masks addresses, report links and phone numbers, never a date, a price or a big number", async () => {
+    const { maskContacts } = await import("@features/admin/server/ap/report-page");
+    expect(maskContacts("mail me: jo@example.com")).toBe("mail me: [email]");
+    expect(maskContacts("my report www.loveiq.org/report/rpt_ABCDEFGHIJKLMNOPQRST is broken")).toBe(
+      "my report www.loveiq.org/report/[report link] is broken"
+    );
+    expect(maskContacts("see /report?token=rpts_ABCDEFGHIJKLMNOPQRST")).toBe(
+      "see /report?token=[report link]"
+    );
+    expect(maskContacts("call +49 176 1234567 please")).toBe("call [phone] please");
+    expect(maskContacts("0176/1234567")).toBe("[phone]");
+    // A number dressed as a price, a date or a thousands figure is still masked.
+    for (const leak of [
+      "017612345.67",
+      "176.123.456",
+      "12.10.1234567",
+      "0176.1234567",
+      "45.13.2026",
+    ])
+      expect(maskContacts(leak), leak).toBe("[phone]");
+    for (const kept of [
+      "read it on 23.10.2026",
+      "on 2026-10-23 it broke",
+      "19.99 / 29.99 is too much",
+      "between 9.99-19.99 euro",
+      "1.000.000 readers",
+      "2026",
+      "5 of 10",
+    ])
+      expect(maskContacts(kept), kept).toBe(kept);
   });
 });

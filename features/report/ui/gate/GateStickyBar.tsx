@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { FC } from "react";
+import { useEffect, useRef, type FC } from "react";
 import { GATE_COPY } from "./gateContent";
 import type { GateCtaPlace, InitialUnlockCheckoutState } from "./useInitialUnlockCheckout";
 
@@ -20,8 +20,27 @@ export const GateStickyBar: FC<{
 }> = ({ guaranteeDays, onUnlock, priceCents, state }) => {
   const busy = state.status === "redirecting";
   const failed = state.status === "error" && state.place === "sticky" ? state.message : null;
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // The room the page keeps under its last line, and the scroll padding that keeps a
+  // focused button clear (initial-unlock-gate.css), read this bar's real height: more than
+  // the frame's 56px on a narrow phone, and an error line on top.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--iug-sticky-h", `${bar.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    observer?.observe(bar);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--iug-sticky-h");
+    };
+  }, []);
+
   return (
-    <div className="iug-sticky" data-testid="iug-sticky">
+    <div ref={barRef} className="iug-sticky" data-testid="iug-sticky">
       {failed ? (
         <p role="alert" className="iug-sticky__error">
           {failed}

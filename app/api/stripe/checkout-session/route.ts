@@ -19,6 +19,7 @@ import { findEntitlementByConsumedSubmission } from "@features/pay-to-start/serv
 import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  createCheckoutSession,
   ensureInitialCreditCoupon,
   ensureUpgradeCreditCoupon,
   getStripeCheckoutCustomerEmail,
@@ -360,6 +361,8 @@ export async function POST(request: Request) {
                 description: `${formatOfferPrice(creditCents)} credit applied`,
               }),
             },
+            // The price includes the VAT, which the receipt lists (`automaticTax`).
+            tax_behavior: "inclusive",
             // `chargedPriceCents`, never `currentPriceCents`: it is the same number
             // every price surface renders, so
             // the screen and the invoice cannot disagree. An upgrade credit is added
@@ -442,7 +445,7 @@ export async function POST(request: Request) {
       .update(`${Math.floor(Date.now() / 60_000)}|${JSON.stringify(params)}`)
       .digest("hex");
 
-    const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
+    const session = await createCheckoutSession(stripe, params, idempotencyKey);
 
     // Nothing above this line may record a checkout. A session without a hosted
     // URL cannot be handed off: the reader gets a 500 and never sees Stripe, so

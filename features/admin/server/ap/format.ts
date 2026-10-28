@@ -3,13 +3,23 @@
  * A missing value is "—" in a cell; the minus sign is the real one (−), as in the design.
  */
 
-export type Unit = "count" | "eur" | "eur3" | "pct" | "min" | "mmss" | "days" | "ratio";
+export type Unit = "count" | "eur" | "eur3" | "pct" | "mmss" | "days" | "ratio";
 export type Tone = "good" | "bad" | "flat";
 /** Which way a change is good; "either" for a check whose change is neither (shown grey). */
 export type GoodWhen = "up" | "down" | "either";
 
 const MINUS = "−";
 export const EMPTY = "—";
+
+/**
+ * A sentence carried on after other words: its first letter in lower case, unless the first word
+ * is a name or an acronym ("Google Ads…", "Meta's…", "AI assistants…").
+ */
+export function lowerFirst(t: string): string {
+  return /^(?:[A-Z]{2}|Google|Meta|PostHog|Stripe|Resend|Search Console)/.test(t)
+    ? t
+    : t.charAt(0).toLowerCase() + t.slice(1);
+}
 
 const grouped = (v: number, digits = 0) =>
   v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -20,31 +30,33 @@ const subEuro = (a: number) => Math.round(Math.abs(a) * 1000) < 1000;
 /** "12,608", "€1,199", "€29.00", "€0.002", "€2.39", "5.96%", "6:40", "0:02.9", "2.4 days". */
 export function fmt(unit: Unit, v: number | null | undefined, digits?: number): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return EMPTY;
-  const sign = v < 0 ? MINUS : "";
-  const a = Math.abs(v);
+  const out = written(unit, Math.abs(v), digits);
+  // A minus only on a figure that isn't written as zero: "−€0" reads as a loss that isn't there.
+  return v < 0 && /[1-9]/.test(out) ? MINUS + out : out;
+}
+
+function written(unit: Unit, a: number, digits?: number): string {
   switch (unit) {
     case "count":
-      return sign + grouped(a, digits ?? 0);
+      return grouped(a, digits ?? 0);
     case "eur":
-      return `${sign}€${grouped(a, digits ?? (a >= 1000 || Number.isInteger(a) ? 0 : 2))}`;
+      return `€${grouped(a, digits ?? (a >= 1000 || Number.isInteger(a) ? 0 : 2))}`;
     case "eur3":
       // A tenth of a cent only under a euro, as drawn ("€0.058"); cents from one ("€2.39").
-      return `${sign}€${grouped(a, digits ?? (subEuro(a) ? 3 : 2))}`;
+      return `€${grouped(a, digits ?? (subEuro(a) ? 3 : 2))}`;
     case "pct":
-      return `${sign}${(a * 100).toFixed(digits ?? (a * 100 >= 10 ? 1 : 2))}%`;
-    case "min":
-      return `${sign}${a.toFixed(digits ?? 1)} min`;
+      return `${(a * 100).toFixed(digits ?? (a * 100 >= 10 ? 1 : 2))}%`;
     case "mmss": {
-      // m:ss as the design writes it ("0:41", "6:40"). Under 10 seconds with a tenth
-      // ("0:02.9"): medians of a few seconds must not all read "0:03", nor a glance "0:00".
-      if (a < 9_950) return `${sign}0:0${(a / 1000).toFixed(digits ?? 1)}`;
+      // Whole seconds, as Marcus asked on 21 Oct 2026 ("seconds, no decimals"): "8 s" under a
+      // minute, m:ss from one ("6:40"). Under half a second reads "<1 s", never a false "0 s".
       const s = Math.round(a / 1000);
-      return `${sign}${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      if (s < 60) return a > 0 && s === 0 ? `<1 s` : `${s} s`;
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     }
     case "days":
-      return `${sign}${a.toFixed(digits ?? 1)} days`;
+      return `${a.toFixed(digits ?? 1)} days`;
     case "ratio":
-      return sign + a.toFixed(digits ?? 1);
+      return a.toFixed(digits ?? 1);
   }
 }
 

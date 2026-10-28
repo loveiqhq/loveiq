@@ -18,6 +18,21 @@ describe("migration drift — repo artifact extraction", () => {
    * repo's 61 indexes were invisible and could never be reported as drift.
    * Every form the repo actually uses has to be seen.
    */
+  it("sees a view as the live side does (its columns are in information_schema.columns)", () => {
+    const { tables } = run([
+      {
+        file: "1_a.sql",
+        sql: `
+          CREATE OR REPLACE VIEW public.ap_team_user WITH (security_invoker = true) AS
+            SELECT u.id FROM app_user u;
+          CREATE VIEW plain_view AS SELECT 1 AS one;
+        `,
+      },
+      { file: "2_b.sql", sql: "DROP VIEW IF EXISTS public.plain_view;" },
+    ]);
+    expect([...tables].sort()).toEqual(["ap_team_user"]);
+  });
+
   it("sees CONCURRENTLY indexes, not just plain ones", () => {
     const { indexes } = run([
       {
