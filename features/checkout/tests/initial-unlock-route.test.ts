@@ -206,6 +206,18 @@ describe("POST /api/stripe/initial-unlock — the EUR 1.99 session", () => {
     expect(params.invoice_creation).toEqual({ enabled: true });
   });
 
+  it("closes Stripe's page after an hour, so it can't be paid after E07's gift a day on", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-28T10:00:05.000Z"));
+      await post({ reportToken: TOKEN });
+    } finally {
+      vi.useRealTimers();
+    }
+    // The start of the minute, an hour and a minute on, in seconds (Stripe's default is a day).
+    expect(sessionCreated().params.expires_at).toBe(Date.parse("2026-10-28T11:01:00.000Z") / 1000);
+  });
+
   it("keeps the promotion-code field, so a 100% code can be redeemed on production", async () => {
     await post({ reportToken: TOKEN });
     const { params } = sessionCreated();

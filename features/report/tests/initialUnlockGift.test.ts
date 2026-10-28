@@ -117,7 +117,7 @@ describe("initialUnlockGiftEmail", () => {
       expect(part).toMatch(/Your Core Archetype is on us\./);
       expect(part).toContain("Hi Alex,");
       expect(part).toMatch(
-        /Yesterday you answered some very personal questions\. Your result is still waiting, and we(’|&rsquo;|')d rather you read it than leave it there\./
+        /You answered some very personal questions with us\. Your result is ready, and we(’|&rsquo;|')d rather you read it than leave it there\./
       );
       expect(part).toMatch(/So we(’|&rsquo;|')ve unlocked it for you\./);
       expect(part).toContain("No payment, no catch.");
@@ -133,6 +133,23 @@ describe("initialUnlockGiftEmail", () => {
       expect(part).toMatch(/(€|&euro;)10 off the full report/);
       expect(part).toContain("hello@loveiq.org");
     }
+  });
+
+  // Day 1 (Marcus, 27.10): "Yesterday" when the survey was, and no day named otherwise.
+  it("says Yesterday only when told the survey was a day ago", () => {
+    const recent = initialUnlockGiftEmail({
+      answeredYesterday: true,
+      firstName: "Alex",
+      reportUrl: REPORT_URL,
+      siteUrl: "https://www.loveiq.org",
+    });
+    for (const part of [recent.html, recent.text]) {
+      expect(part).toMatch(
+        /Yesterday you answered some very personal questions\. Your result is ready, and we(’|&rsquo;|')d rather you read it than leave it there\./
+      );
+      expect(part).not.toContain("with us.");
+    }
+    for (const part of [email.html, email.text]) expect(part).not.toMatch(/yesterday/i);
   });
 
   it("carries the preview line and leads its button to the report", () => {

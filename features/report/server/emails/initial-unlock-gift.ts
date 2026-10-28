@@ -13,11 +13,15 @@ import { PARTLY_OPEN } from "./initial-unlock";
  * on day 1 to a reader the EUR 1.99 gate stopped who has not paid, with the unlock it gives
  * (app/api/cron/initial-unlock-gift; 20% are held out and get neither). Copy as the frame
  * has it, the subject and preview line included, but for its first line: the frame was drawn
- * for later ("A few days ago"; named "day 2–3", its spec says day 4), and day 1 is Marcus's
- * call (LoveIQ Sync, 27 Oct 2026), so the email says "Yesterday".
+ * for later ("A few days ago… waiting ever since"; named "day 2–3", its spec says day 4), and
+ * day 1 is Marcus's call (LoveIQ Sync, 27 Oct 2026). So it says "Yesterday" when the survey
+ * was that recent, and names no time when it wasn't (a report that met the gate long after
+ * its survey); "is ready", so "waiting" isn't said three times.
  */
 
 export interface InitialUnlockGiftEmailParams {
+  /** The survey was about a day ago, so the email can say "Yesterday". */
+  answeredYesterday?: boolean;
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
@@ -29,6 +33,7 @@ function euros(cents: number): string {
 }
 
 export function initialUnlockGiftEmail({
+  answeredYesterday = false,
   firstName,
   reportUrl,
   siteUrl,
@@ -41,6 +46,9 @@ export function initialUnlockGiftEmail({
   const previewText = "No payment needed. Your result is waiting.";
   const heading = "Your Core Archetype is on us.";
   const ctaLabel = "Open your Core Archetype";
+  const opening = answeredYesterday
+    ? "Yesterday you answered some very personal questions."
+    : "You answered some very personal questions with us.";
   const paragraph = `margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;`;
   const bold = `<strong style="font-weight:700;">`;
 
@@ -60,7 +68,7 @@ export function initialUnlockGiftEmail({
   <tr>
     <td style="padding:16px 32px 0;">
       <p style="${paragraph}">Hi ${safeFirstName},</p>
-      <p style="${paragraph}">Yesterday you answered some very personal questions. Your result is still waiting, and we&rsquo;d rather you read it than leave it there.</p>
+      <p style="${paragraph}">${opening} Your result is ready, and we&rsquo;d rather you read it than leave it there.</p>
       <p style="${paragraph}">${bold}So we&rsquo;ve unlocked it for you.<br />No payment, no catch.</strong></p>
       <p style="${paragraph}">Inside, you&rsquo;ll find ${bold}which archetype leads for you</strong> and how your whole constellation fits together, scored across all 14 archetypes.</p>
       <p style="${paragraph}">You can also read ${bold}three chapters in full</strong>. Four featured chapters are partly open:</p>
@@ -102,7 +110,7 @@ export function initialUnlockGiftEmail({
     "",
     `Hi ${displayName},`,
     "",
-    "Yesterday you answered some very personal questions. Your result is still waiting, and we'd rather you read it than leave it there.",
+    `${opening} Your result is ready, and we'd rather you read it than leave it there.`,
     "",
     "So we've unlocked it for you.",
     "No payment, no catch.",

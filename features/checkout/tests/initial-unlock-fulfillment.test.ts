@@ -58,7 +58,10 @@ interface Seen {
 }
 
 /** Supabase and Slack as the handler meets them; every request is kept for the assertions. */
-function backend({ existingPayment = false }: { existingPayment?: boolean } = {}) {
+function backend({
+  existingPayment = false,
+  gifted = false,
+}: { existingPayment?: boolean; gifted?: boolean } = {}) {
   const seen: Seen[] = [];
   mockFetchWithTimeout.mockImplementation(
     async (url: string, options?: { body?: string; method?: string }) => {
@@ -69,6 +72,9 @@ function backend({ existingPayment = false }: { existingPayment?: boolean } = {}
         return { ok: true, status: 200, text: async () => "" } as Response;
       }
       if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) return json([]);
+      if (url.includes("/rest/v1/payment?personal_report_id=eq.5&metadata->>gifted=eq.e07")) {
+        return json(gifted ? [{ id: 77 }] : []);
+      }
       if (
         url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
         url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
@@ -267,5 +273,37 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     expect(sendGa4PurchaseEvent).not.toHaveBeenCalled();
     expect(sendPosthogPurchaseEvent).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("a EUR 1.99 paid after E07 had gifted the same unlock", () => {
+  const OPS_URL = "https://hooks.slack.com/services/TEST/OPS/secret";
+  beforeEach(() => {
+    process.env.SLACK_OPS_WEBHOOK_URL = OPS_URL;
+  });
+
+  it("tells #ops to refund it: a page opened before the gift, paid after it", async () => {
+    const seen = backend({ gifted: true });
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    const ops = seen.filter((s) => s.method === "POST" && s.url === OPS_URL);
+    expect(ops).toHaveLength(1);
+    expect(String(ops[0]!.body?.text)).toMatch(/paid on report 5 after E07 had already gifted it/);
+    expect(String(ops[0]!.body?.text)).toContain("pi_initial_1");
+    // The sale itself is still recorded as it came.
+    expect(seen.some((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))).toBe(true);
+  });
+
+  it("says nothing when there was no gift, or on Stripe's re-delivery", async () => {
+    let seen = backend();
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    expect(seen.filter((s) => s.url === OPS_URL)).toHaveLength(0);
+    vi.clearAllMocks();
+    __resetSlackDedupForTests();
+    seen = backend({ gifted: true, existingPayment: true });
+    await processStripeWebhookEvent({
+      event: completed("evt_initial_2"),
+      stripe: stripe() as never,
+    });
+    expect(seen.filter((s) => s.url === OPS_URL)).toHaveLength(0);
   });
 });

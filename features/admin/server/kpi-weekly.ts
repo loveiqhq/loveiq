@@ -374,7 +374,7 @@ export const KPIS: KpiDef[] = [
     values: (w) => [plain("All traffic", w.sales)],
     note: (w) =>
       w.gifted > 0
-        ? `Plus ${w.gifted} unlocked free with a coupon, not counted (decided 19 Sep).`
+        ? `Plus ${w.gifted} unlocked free (a coupon, E07's gift or the unlock-feedback email), not counted (decided 19 Sep).`
         : null,
   },
   {

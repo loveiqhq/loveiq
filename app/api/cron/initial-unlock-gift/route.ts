@@ -49,6 +49,12 @@ const DAY_MS = 24 * 3_600_000;
 const GIFT_AFTER_MS = DAY_MS;
 const WINDOW_MS = DAY_MS;
 /**
+ * E07 says "Yesterday you answered…" only when the survey was that recent. The gate counts
+ * from its first view, and a report can meet it long after its survey: a first open days
+ * later, or the old-user campaign's stamped reports (docs/runbooks/PRE_UNLOCK.md).
+ */
+const ANSWERED_YESTERDAY_MS = 36 * 3_600_000;
+/**
  * Readers left alone keep no arm and stay in the window for its day, read again each hour,
  * oldest first: the page is wide enough that they never crowd out the ones still to draw
  * (the run's 20 s walk budget stops it early, and the next hour carries on).
@@ -106,6 +112,7 @@ interface CandidateRow {
   initial_gate_seen_at: string;
   survey_submission?: {
     user_id?: number | null;
+    created_date_time?: string | null;
     app_user?: {
       email?: string | null;
       first_name?: string | null;
@@ -123,7 +130,7 @@ async function fetchCandidates(nowMs: number): Promise<CandidateRow[]> {
     `&initial_gate_seen_at=gt.${encodeURIComponent(seenAfter)}` +
     `&initial_gift_arm=is.null` +
     `&select=id,survey_submission_id,initial_gate_seen_at,` +
-    `survey_submission!fk_personal_report_submission(user_id,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
+    `survey_submission!fk_personal_report_submission(user_id,created_date_time,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
     `&order=initial_gate_seen_at.asc` +
     `&limit=${CANDIDATE_LIMIT}`;
   const r = await supabaseFetch(path);
@@ -298,7 +305,9 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
   const unsubscribeUrl = ctx.unsubSecret
     ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, UNSUBSCRIBE_CAMPAIGNS.initialGift)
     : undefined;
+  const surveyAt = Date.parse(candidate.survey_submission?.created_date_time ?? "");
   const tpl = initialUnlockGiftEmail({
+    answeredYesterday: Date.now() - surveyAt < ANSWERED_YESTERDAY_MS,
     firstName: user?.first_name?.trim() || null,
     reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
     siteUrl: ctx.siteUrl,

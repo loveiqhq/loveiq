@@ -55,13 +55,18 @@ function json(body: unknown, status = 200) {
   return { ok: status < 400, status, json: async () => body };
 }
 
-function candidate(id: number, appUser: Record<string, unknown> = {}) {
+function candidate(
+  id: number,
+  appUser: Record<string, unknown> = {},
+  surveyAt: string | null = new Date(Date.now() - 1.2 * 24 * 3_600_000).toISOString()
+) {
   return {
     id,
     survey_submission_id: id + 1000,
     initial_gate_seen_at: new Date(Date.now() - 1.2 * 24 * 3_600_000).toISOString(),
     survey_submission: {
       user_id: 7,
+      created_date_time: surveyAt,
       app_user: { email: `reader${id}@example.com`, first_name: "Alex", ...appUser },
     },
   };
@@ -223,6 +228,8 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
       expect(url).toContain(`initial_gate_seen_at=lte.${at("2026-10-27T16:47:00.000Z")}&`);
       expect(url).toContain(`initial_gate_seen_at=gt.${at("2026-10-26T16:47:00.000Z")}&`);
       expect(url).toContain("initial_gift_arm=is.null");
+      // The survey's own time, for the email's first line.
+      expect(url).toContain("fk_personal_report_submission(user_id,created_date_time,");
     } finally {
       vi.useRealTimers();
     }
@@ -249,7 +256,7 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
     const sent = mockResendSend.mock.calls[0]![0];
     expect(sent.to).toBe(`reader${GIFT_ID}@example.com`);
     expect(sent.subject).toBe("We unlocked your Core Archetype for you");
-    // It goes out a day after the gate, so it says when: not the frame's "A few days ago".
+    // A day after a survey of a day ago, so it says when: not the frame's "A few days ago".
     expect(sent.text).toContain("Yesterday you answered some very personal questions.");
     expect(sent.html).toContain("Yesterday you answered some very personal questions.");
     expect(`${sent.text}${sent.html}`).not.toMatch(/few days ago/i);
@@ -259,6 +266,22 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
       { name: "sub", value: String(GIFT_ID + 1000) },
     ]);
   });
+
+  it.each([
+    ["three weeks", new Date(Date.now() - 21 * 24 * 3_600_000).toISOString()],
+    ["40 hours", new Date(Date.now() - 40 * 3_600_000).toISOString()],
+    ["no time on record", null],
+  ])(
+    "names no day when the survey was %s ago: a report can meet the gate long after it",
+    async (_age, surveyAt) => {
+      // A first open days later, or the old-user campaign's stamped reports.
+      routeFetches({ candidates: [candidate(GIFT_ID, {}, surveyAt)] });
+      await GET(makeRequest("test-cron-secret"));
+      const sent = mockResendSend.mock.calls[0]![0];
+      expect(sent.text).toContain("You answered some very personal questions with us.");
+      expect(`${sent.text}${sent.html}`).not.toMatch(/yesterday/i);
+    }
+  );
 
   it("holds a report on the holdout arm out: its arm, and nothing else", async () => {
     const calls = routeFetches({ candidates: [candidate(HOLDOUT_ID)] });
