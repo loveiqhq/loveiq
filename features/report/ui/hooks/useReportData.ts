@@ -7,6 +7,7 @@ import {
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
+import type { InitialUnlockSource } from "@features/report/logic/initialUnlock";
 import {
   isInitialUnlockGatePayload,
   type InitialUnlockGatePayload,
@@ -47,6 +48,11 @@ export interface ReportData {
    * card and Summary come whole. Not a plan: `accessPlan`/`purchasedPlan` stay null for it.
    */
   initialUnlock?: boolean;
+  /**
+   * How the owner holds it: bought ("paid"), or only E07's gift. The full report's exit page
+   * words the EUR 10 by it. Absent on older responses and for a recipient.
+   */
+  initialUnlockSource?: InitialUnlockSource | null;
   /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
   userName: string | null;
   userEmail: string | null;
@@ -355,6 +361,8 @@ interface ReportIdentifier {
   previewPlan?: string | null;
   /** `?gate=1` in preview mode: the EUR 1.99 gate, as a reader it stops meets it. */
   previewGate?: boolean;
+  /** `?gift=1` with `?plan=initial` in preview mode: the EUR 1.99 unlock as E07's gift. */
+  previewGift?: boolean;
   /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
@@ -401,6 +409,7 @@ export function useReportData(identifier: ReportIdentifier) {
     preview,
     previewPlan,
     previewGate,
+    previewGift,
     v4,
   } = identifier;
   // A preview needs no identifier: there is no reader to identify. Without this
@@ -463,6 +472,7 @@ export function useReportData(identifier: ReportIdentifier) {
               plan: previewPlan ?? "",
               ...(v4 ? { v4: "1" } : {}),
               ...(previewGate ? { gate: "1" } : {}),
+              ...(previewGift ? { gift: "1" } : {}),
             }).toString()}`
           : `/api/report?${params.toString()}`;
 
@@ -561,6 +571,7 @@ export function useReportData(identifier: ReportIdentifier) {
     preview,
     previewPlan,
     previewGate,
+    previewGift,
     v4,
   ]);
 

@@ -901,3 +901,42 @@
   margin: 28px auto 0;
   text-decoration: none;
 }
+
+/* A EUR 1.99 holder's way out (Marcus's "Paygate exit pages", 28.10): the EUR 1.99 page's
+ * "Not ready to unlock yet" (initial-unlock-gate.css .iug-header__back), where the × sits for
+ * everyone else but on the left, on a light pill so it reads over the plans scrolling under
+ * it. It opens the full report's exit page. */
+.report-pricing-modal__not-ready {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #5f5a6e;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.report-pricing-modal__not-ready:focus-visible {
+  outline: 2px solid var(--rpg-purple, #561dbd);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .report-pricing-modal__not-ready:hover {
+    background: #f4f1f8;
+  }
+}

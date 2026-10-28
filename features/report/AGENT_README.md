@@ -162,10 +162,32 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   price, credit, guarantee, the token and the submission id, nothing of the report —
   `useReportData` turns it into `status: "gated"`, and `ReportPage` draws
   `ui/gate/InitialUnlockGate.tsx` in its place: a page of its own, never a pop-up.
-- **The way out.** "Not ready to unlock yet", top left, for every reader, leads to
-  `GATE_NOT_READY_HREF` (`ui/gate/gateContent.ts`): the landing page (sync 26.10, Marcus: "there
-  is no such thing as back") until his page that asks why is ready; then that constant is the
-  whole change. It still counts as `initial_gate_back`.
+- **The way out.** "Not ready to unlock yet", top left, for every reader, opens the gate's exit
+  page on the same URL (`?leave=pre`, below). Until 28.10 it led to the landing page (sync 26.10,
+  Marcus: "there is no such thing as back"). It still counts as `initial_gate_back`, now with
+  `to: "exit_page"` (`GATE_NOT_READY_TO`, `ui/gate/gateContent.ts`).
+- **The exit pages (28.10).** Marcus's "Paygate exit pages" canvas, in `ui/gate/exit/`: one page
+  (`PaygateExitPage`), two stages, each on the report's URL as `?leave=pre` / `?leave=full` on a
+  history entry of its own (`exit/exitHistory.ts`, a native `pushState`: no refetch, no jump to
+  the top), so the phone's Back closes it; `ReportPage` drops the parameter where it means
+  nothing.
+  - `pre` stands in for the gate (`PreUnlockExit`). The gate stays mounted, hidden, under it:
+    it keeps the submission bound, and Back finds it as it was. "Maybe later" leads to the
+    landing page, which does not count that reader as a visit (`markLeftInitialGate`).
+  - `full` is a dialog over the report for a EUR 1.99 holder (`FullReportExit`; the full-report
+    quote's `creditKind: "initial"`), opened by the plan picker's "Not ready to unlock yet",
+    which takes the place of its × for them (`onNotReady`). Tapping outside, Escape and Back
+    still just close the picker. "Back to my open chapters" returns to the chapter the plans
+    were opened from, and so does a cancelled checkout from it.
+  - Both make the case (the 14-day guarantee, why it is worth unlocking), ask "Not today? Tell
+    us why." (`ExitReasons`: seven reasons fitted to the stage, shuffled per reader,
+    "Something else" last with a box for a sentence), and offer the same unlock again. No
+    deadline on the credit: none exists. Trustpilot shows only with the site's switch on and
+    both numbers configured. E07's gift readers are told the EUR 10 is theirs, not earned
+    (`initialUnlockSource` on `/api/report`).
+  - Events `paygate_exit_*`, stored; the sentence under `metadata.answer_text`, masked in the
+    team export and Jarvis. AP's Payment page has a "Paygate exits" section
+    (`features/admin/server/ap/paygate-exits.ts`).
 - **What it opens, in numbers.** Three chapters in full and four partly open, counted off the
   gate's map from Part 2 on, as the report counts chapters (Eman, 27.10: Part 1 is its welcome)
   (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
@@ -186,14 +208,18 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   included), one whose address is suppressed or can't be checked yet, and a report whose
   person already has an arm on another one (a retake). The gift is never a sale: admin readers leave it out
   (`features/admin/tests/payment-gift-exclusion.test.ts`).
-- **Previews.** `/report?preview=1&v4=1&gate=1` draws the gate off production;
-  `/report?preview=1&v4=1&plan=initial` the report after the EUR 1.99; the emails at
+- **Previews.** `/report?preview=1&v4=1&gate=1` draws the gate off production, and with
+  `&leave=pre` its exit page; `/report?preview=1&v4=1&plan=initial` the report after the
+  EUR 1.99, with `&leave=full` the full report's exit page (`&gift=1`: E07's wording); the emails at
   `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`.
 - **Tests.** `tests/initialUnlockGate.test.ts`, `tests/initialGateState.test.ts`,
   `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`,
   `tests/gateChapterCounts.test.ts`, the gate blocks of
   `tests/report-handler.test.ts`, `tests/ReportPage.test.tsx` and
-  `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`.
+  `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`. The exit
+  pages: `tests/PaygateExitPage.test.tsx`, `tests/ExitReasons.test.tsx`,
+  `tests/exitContent.test.ts`, `tests/ReportPricingModal.dismiss.test.tsx` and
+  `e2e/report-paygate-exit.spec.ts`.
 
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 

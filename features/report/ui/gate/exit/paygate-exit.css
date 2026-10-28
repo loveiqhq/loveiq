@@ -1,0 +1,1002 @@
+/* ════════════════════════════════════════════════════════════════════════
+   THE PAYGATE'S EXIT PAGES: Marcus's "Paygate exit pages" canvas (28.10), drawn 390 wide.
+   Main is the EUR 1.99 gate's way out, FullUnlock the full report's after the EUR 1.99, and
+   Survey the "Not today?" card both share. Every size and colour here is the canvas's own;
+   what differs is the body font, which is the gate's (Plus Jakarta Sans), so the gate and the
+   page it leads to read as one. The canvas has no desktop board: from 768px the phone column
+   stands in the gate's 560px column, and from 1024px on its wash.
+   Classes carry `pge-` and no `__body` / `__card` / `__eyebrow` endings, which the V3
+   chapter catch-alls in reportV3.css restyle.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.pge-shell {
+  min-height: 100dvh;
+  background: #ffffff;
+}
+
+/* The page takes the focus as it opens (PaygateExitPage): a container, so no ring. */
+.pge-page:focus,
+.pge-page:focus-visible {
+  outline: none;
+}
+
+.pge-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding-top: env(safe-area-inset-top, 0px);
+  overflow-x: clip;
+  background: #ffffff;
+  color: #161021;
+  font-family: var(--font-jakarta), var(--font-sans), system-ui, sans-serif;
+}
+
+.pge-page a:focus-visible,
+.pge-page button:focus-visible,
+.pge-page textarea:focus-visible {
+  outline: 2px solid #795fc8;
+  outline-offset: 2px;
+}
+
+/* ── The header: a way back, the wordmark, and a spacer that keeps it centred ── */
+.pge-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e9e6ee;
+}
+
+.pge-header__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 9999px;
+  background: none;
+  color: #3f3a4d;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pge-header__spacer {
+  width: 44px;
+  height: 44px;
+}
+
+.pge-brand {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 25px;
+  letter-spacing: -0.01em;
+  color: #161021;
+}
+
+.pge-brand__iq {
+  background: linear-gradient(105deg, #d05976 20.51%, #c167cf 48.14%, #8887f6 79.16%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── "Unlocking is fully risk-free" ─────────────────────────────────────── */
+.pge-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 16px 0;
+  text-align: center;
+  animation: pge-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pge-hero__title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1.16;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.pge-hero__emph {
+  font-style: italic;
+  background: linear-gradient(135deg, #fe6839 0%, #bf66d9 43%, #958ef6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── The guarantee ─────────────────────────────────────────────────────── */
+.pge-safe-wrap {
+  padding: 24px 16px 0;
+}
+
+.pge-safe {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  border: 1.5px solid #c4e3cf;
+  border-radius: 24px;
+  background: #f2f9f4;
+  box-shadow: 0 18px 40px -24px rgba(0, 145, 72, 0.4);
+}
+
+.pge-safe__top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pge-safe__icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+}
+
+.pge-safe__ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #2e7d5b;
+  border-radius: 9999px;
+  animation: pge-ring 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.pge-safe__disc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid #c4e3cf;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #2e7d5b;
+}
+
+.pge-safe__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pge-safe__title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 26px;
+  color: #161021;
+  text-wrap: balance;
+}
+
+.pge-safe__sub {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 20px;
+  color: #2e7d5b;
+}
+
+.pge-safe__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 23px;
+  color: #3f3a4d;
+}
+
+.pge-safe__text strong {
+  color: #161021;
+}
+
+.pge-safe__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(46, 125, 91, 0.15);
+  list-style: none;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 20px;
+  color: #2e7d5b;
+}
+
+.pge-safe__chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── FullUnlock: "Don't lose your €10 credit" (no deadline: the credit has none) ── */
+/* The canvas's fixed section heights leave 45px over the banner and, with the next section's
+ * 40, 42 under it: the air between the page's other blocks. */
+.pge-credit-wrap {
+  padding: 45px 16px 2px;
+}
+
+.pge-credit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1.5px solid rgba(254, 104, 57, 0.4);
+  border-radius: 20px;
+  background: #fff4ef;
+}
+
+.pge-credit__tile {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  /* The canvas's #fe6839 under white is 2.9:1; its own --brand-orange-ink, the same hue a shade
+   * deeper, is 4.9:1 (WCAG AA, the 9px CREDIT too). */
+  background: #d63200;
+  color: #ffffff;
+  line-height: 1;
+  animation: pge-nudge 2.8s ease-in-out infinite;
+}
+
+.pge-credit__amount {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.pge-credit__label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.pge-credit__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pge-credit__title {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 23px;
+  color: #c2410c;
+}
+
+.pge-credit__line {
+  font-size: 14px;
+  line-height: 20px;
+  color: #3f3a4d;
+}
+
+/* ── Trustpilot (only with the site's switch on and real numbers) and "Why it's worth it" ── */
+.pge-why {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 40px 16px 0;
+}
+
+.pge-tp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 28px;
+  padding: 12px 14px;
+  border: 1px solid #e9e6ee;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #161021;
+  text-decoration: none;
+}
+
+.pge-tp__stars {
+  display: flex;
+  gap: 2px;
+}
+
+.pge-tp__star {
+  width: 20px;
+  height: 20px;
+  background: #00b67a;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.pge-tp__star--part {
+  background: linear-gradient(
+    90deg,
+    #00b67a var(--pge-tp-fill, 50%),
+    #dcdce6 var(--pge-tp-fill, 50%)
+  );
+}
+
+.pge-tp__star--empty {
+  background: #dcdce6;
+}
+
+.pge-tp__text {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.pge-tp__muted {
+  color: #6b6678;
+}
+
+.pge-tp__muted strong {
+  color: #161021;
+}
+
+.pge-h2 {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 28.8px;
+  letter-spacing: -0.24px;
+  text-wrap: balance;
+}
+
+.pge-why__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pge-why__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pge-why__icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #f5f3fa;
+  color: #9d8ad7;
+}
+
+.pge-why__text {
+  font-size: 15px;
+  line-height: 21px;
+}
+
+/* ── Survey: "Not today? Tell us why." ─────────────────────────────────── */
+.pge-reasons {
+  padding: 48px 16px 0;
+}
+
+.pge-reasons__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 20px;
+  border-radius: 27px;
+  background: #f5f6f8;
+}
+
+.pge-reasons__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pge-reasons__hint {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22.4px;
+  color: #6b6678;
+}
+
+.pge-reasons__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pge-reason {
+  border: 1px solid #e9e6ee;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 1.5px rgba(20, 15, 33, 0.05);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+/* Chosen (no board draws it): the lilac of the design system's surfaces, its violet ring. */
+.pge-reason--on {
+  border-color: #795fc8;
+  background: #f3ecff;
+}
+
+.pge-reason__button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  /* The row's 1px border makes it the canvas's 52. */
+  min-height: 50px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: #161021;
+  font: inherit;
+  font-size: 15px;
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
+/* Content-box, as on the canvas (it has no box-sizing reset): 18 inside the ring. */
+.pge-reason__dot {
+  position: relative;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #795fc8;
+  border-radius: 9999px;
+  box-sizing: content-box;
+}
+
+.pge-reason--on .pge-reason__dot::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 9999px;
+  background: #795fc8;
+}
+
+.pge-reason__note {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 14px 46px;
+}
+
+.pge-reason__textarea {
+  width: 100%;
+  min-height: 72px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e9e6ee;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #161021;
+  font: inherit;
+  /* 16px: anything smaller and iOS Safari zooms the page in when the box takes the focus. */
+  font-size: 16px;
+  line-height: 22px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.pge-reason__textarea::placeholder {
+  color: #9c95a3;
+}
+
+/* Focused, the box and its Send scroll clear of the bar on the page's foot (WCAG 2.4.11). */
+.pge-reason__textarea,
+.pge-reason__send {
+  scroll-margin-bottom: 160px;
+}
+
+.pge-reason__send {
+  align-self: flex-end;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 9999px;
+  background: #161021;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.pge-reason__send:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.pge-reasons__foot {
+  margin: 0;
+  font-size: 12px;
+  line-height: 19.2px;
+  color: #6b6678;
+}
+
+.pge-reasons__thanks {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2e7d5b;
+  font-weight: 700;
+}
+
+/* ── The offer: the gate's card, as the canvas redraws it ─────────────────── */
+.pge-offer {
+  padding: 48px 16px 0;
+}
+
+.pge-offer__box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 34px 20px 22px;
+  border: 1.5px solid #a78bfa;
+  border-radius: 26px;
+  background: #f8f7fc;
+  box-shadow: 0 22px 54px -20px rgba(103, 60, 120, 0.3);
+}
+
+.pge-offer__pill {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  padding: 6px 18px;
+  border-radius: 9999px;
+  background: #6d5ce8;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 19px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.pge-offer__title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+  color: #6d5ce8;
+}
+
+.pge-offer__desc {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: #161021;
+}
+
+.pge-offer__price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pge-offer__price--struck {
+  gap: 10px;
+}
+
+.pge-offer__amount {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.pge-offer__strike {
+  font-size: 18px;
+  line-height: 24px;
+  color: #6b6678;
+  text-decoration: line-through;
+}
+
+.pge-offer__suffix {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 21px;
+}
+
+.pge-offer__cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  margin: 0;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #e2704a 0%, #c48bb8 55%, #a58ff0 100%);
+  color: #ffffff;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pge-offer__cta:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.pge-offer__safe {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e9e6ee;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.pge-offer__safe-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(0, 145, 72, 0.08);
+  color: #009148;
+}
+
+.pge-offer__safe-text {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The canvas's #009148 is 4.1:1 on white; the EUR 1.99 page's shade darker, 5.0:1 (WCAG AA). */
+.pge-offer__safe-title {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 21px;
+  color: #00803f;
+}
+
+.pge-offer__safe-line {
+  font-size: 12px;
+  line-height: 16px;
+  color: #6b6678;
+}
+
+.pge-offer__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 15px;
+  line-height: 21px;
+  color: #3f3a4d;
+}
+
+.pge-offer__item {
+  display: flex;
+  gap: 10px;
+}
+
+.pge-offer__check {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.pge-offer__item strong {
+  color: #161021;
+}
+
+.pge-offer__error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #b42318;
+  text-align: center;
+}
+
+/* Safe checkout, under the card. */
+.pge-pay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 22px;
+}
+
+.pge-pay__label {
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 1px;
+  color: #6b6678;
+}
+
+.pge-pay__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pge-pay__chip {
+  padding: 5px 10px;
+  border: 1px solid #e9e6ee;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 17px;
+}
+
+.pge-pay__fine {
+  font-size: 12px;
+  line-height: 17px;
+  color: #6b6678;
+}
+
+/* ── The way out: "Maybe later" / "Back to my open chapters" ─────────────── */
+.pge-leave {
+  padding: 20px 16px 130px;
+  text-align: center;
+}
+
+.pge-leave__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #6b6678;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.pge-leave__link:hover {
+  color: #3f3a4d;
+}
+
+/* ── The bar: on the page's foot, above the consent banner and the phone's home bar ── */
+.pge-sticky {
+  position: sticky;
+  bottom: var(--liq-consent-h, 0px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #e9e6ee;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 -10px 30px -18px rgba(20, 15, 33, 0.25);
+}
+
+/* While the reader types a sentence the bar steps aside: on an iPhone the keyboard lifts the
+ * page's foot, and the bar would sit on the box being typed in. It stays aside through the press
+ * on Send (`:active`, as Safari gives a pressed button no focus): back under the pointer at
+ * mousedown, it would take the click. */
+.pge-page:has(.pge-reason__note:focus-within, .pge-reason__send:active) .pge-sticky {
+  display: none;
+}
+
+.pge-sticky__cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 9999px;
+  background-image: linear-gradient(
+    90deg,
+    #fe6839 0%,
+    #bf66d9 25%,
+    #958ef6 50%,
+    #bf66d9 75%,
+    #fe6839 100%
+  );
+  background-size: 200% 100%;
+  box-shadow: 0 10px 26px -12px rgba(191, 102, 217, 0.75);
+  color: #ffffff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  animation: pge-shine 4s linear infinite;
+}
+
+.pge-sticky__cta:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.pge-sticky__line {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  /* As the offer's guarantee: the EUR 1.99 page's AA green, not the canvas's 4.1:1. */
+  color: #00803f;
+  text-align: center;
+}
+
+/* FullUnlock's credit in its banner's orange, as the canvas colours it. */
+.pge-sticky__credit {
+  color: #c2410c;
+}
+
+.pge-sticky__error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #b42318;
+  text-align: center;
+}
+
+/* ── FullUnlock is a layer over the report, which stays where the reader left it ── */
+.pge-layer {
+  position: fixed;
+  inset: 0;
+  /* Over the report's chrome and its plan picker (report.css: 80), under the checkout hand-off
+   * ("Taking you to secure checkout…" and its errors, 90); CookieYes's banner stays above. */
+  z-index: 85;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+}
+
+/* The cookie banner's room at the foot, as body keeps it (globals.css): the bar steps up over
+ * the banner, and the page's last line must still scroll clear of the bar. A spacer after the
+ * page, not the layer's padding, which would lift the sticky bar a second time. */
+.pge-layer::after {
+  content: "";
+  display: block;
+  height: var(--liq-consent-h, 0px);
+}
+
+/* ── Motion: the canvas's, and none of it with "reduce motion" ───────────── */
+@keyframes pge-ring {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes pge-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pge-shine {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes pge-nudge {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-8deg);
+  }
+  40% {
+    transform: rotate(8deg);
+  }
+  60% {
+    transform: rotate(-4deg);
+  }
+  80% {
+    transform: rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pge-hero,
+  .pge-safe__ring,
+  .pge-credit__tile,
+  .pge-sticky__cta {
+    animation: none;
+  }
+  .pge-safe__ring {
+    opacity: 0;
+  }
+  .pge-reason {
+    transition: none;
+  }
+}
+
+/* A pointer that can hover: the buttons lift a little, as the gate's do. */
+@media (hover: hover) and (pointer: fine) {
+  .pge-header__back:hover {
+    background: rgba(23, 18, 31, 0.04);
+  }
+  .pge-reason:hover:not(.pge-reason--on) {
+    border-color: #d8d2e6;
+  }
+  .pge-offer__cta,
+  .pge-sticky__cta {
+    transition:
+      transform 200ms ease,
+      filter 200ms ease;
+  }
+  .pge-offer__cta:hover:not(:disabled),
+  .pge-sticky__cta:hover:not(:disabled) {
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+  }
+}
+
+/* ── Tablet and desktop: the gate's column, then its wash ─────────────────── */
+@media (min-width: 768px) {
+  .pge-page {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pge-shell,
+  .pge-layer {
+    background:
+      radial-gradient(circle at top, rgba(156, 125, 255, 0.1), transparent 34%),
+      radial-gradient(circle at bottom, rgba(254, 104, 57, 0.06), transparent 28%), #fbf9ff;
+    background-attachment: fixed;
+  }
+  .pge-page {
+    box-shadow: 0 0 0 1px rgba(23, 18, 31, 0.06);
+  }
+}

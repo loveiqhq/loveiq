@@ -33,6 +33,7 @@ import {
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 import "./paygate.css";
 import { PAYMENT_MARKS } from "./paymentMarks";
+import { GATE_COPY } from "./gate/gateContent";
 import { PAYGATE_REVIEWS as REVIEWS } from "./paygateReviews";
 
 /**
@@ -84,6 +85,12 @@ interface Props {
    *   unlock it, so no prices: the way forward is a report of their own.
    */
   variant?: "default" | "offer" | "recipient";
+  /**
+   * A EUR 1.99 holder's way out (Marcus's "Paygate exit pages", 28.10): "Not ready to unlock
+   * yet" in place of the ×, as on the EUR 1.99 page, leading to the full report's exit page.
+   * Tapping outside, Escape and Back still just close. Absent, the picker keeps its ×.
+   */
+  onNotReady?: () => void;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -195,6 +202,7 @@ const ReportPricingModal: FC<Props> = ({
   returnFocusRef,
   targetArchetype = null,
   variant = "default",
+  onNotReady,
 }) => {
   // The modal can be scoped to a specific archetype (`targetArchetype`, set
   // when the user clicks a row in "Probability of Other Archetypes") or to
@@ -437,19 +445,35 @@ const ReportPricingModal: FC<Props> = ({
           tabIndex={-1}
           onPointerDown={() => setFocusMode("pointer")}
         >
-          <button
-            type="button"
-            className="report-pricing-modal__close"
-            aria-label="Close pricing modal"
-            onClick={() => {
-              dismissReasonRef.current = "close_button";
-              onClose();
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-            </svg>
-          </button>
+          {onNotReady ? (
+            // Where the × sits for everyone else, but on the left with its word, as the EUR 1.99
+            // page's way out: "there is no such thing as back" (Marcus, 26.10).
+            <button
+              type="button"
+              className="report-pricing-modal__not-ready"
+              onClick={() => {
+                dismissReasonRef.current = "not_ready";
+                onNotReady();
+              }}
+            >
+              <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
+              <span>{GATE_COPY.notReady}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="report-pricing-modal__close"
+              aria-label="Close pricing modal"
+              onClick={() => {
+                dismissReasonRef.current = "close_button";
+                onClose();
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
 
           <div
             ref={scrollRegionRef}

@@ -387,6 +387,8 @@ export async function GET(request: Request) {
     // The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): opens the
     // reader's own archetype card and Summary below; not a plan, so pay screens keep selling.
     let initialUnlock = false;
+    // How it is held, paid or E07's gift: the full report's exit page words the EUR 10 by it.
+    let initialUnlockSource: "paid" | "gift" | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -436,6 +438,7 @@ export async function GET(request: Request) {
       accessPlan = access.accessPlan;
       purchasedPlan = access.anyPlan;
       initialUnlock = access.initialUnlock;
+      initialUnlockSource = access.initialUnlockSource;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
       personalReportId = access.personalReportId;
@@ -1158,6 +1161,8 @@ export async function GET(request: Request) {
         // A recipient never pays, so they get null and every auto-open stays off for them.
         purchasedPlan: isShareAccess ? null : purchasedPlan,
         initialUnlock,
+        // The owner's alone: a recipient is never offered the full report's exit page.
+        initialUnlockSource: isShareAccess ? null : initialUnlockSource,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

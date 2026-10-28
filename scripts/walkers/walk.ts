@@ -1201,8 +1201,12 @@ async function main(argv: string[]): Promise<number> {
         .getByRole("button", { name: "Close pricing modal" })
         .filter({ visible: true });
       const close = async (way: Escape) => {
-        if (way === "close_button") await closeButton.first().click();
-        else if (way === "escape") await page.keyboard.press("Escape");
+        if (way === "close_button") {
+          // A EUR 1.99 holder's plans have "Not ready to unlock yet" where the × is (28.10),
+          // which opens the full report's exit page: a close is Escape for them.
+          if (await closeButton.count()) await closeButton.first().click();
+          else await page.keyboard.press("Escape");
+        } else if (way === "escape") await page.keyboard.press("Escape");
         else if (way === "browser_back") await page.goBack();
         else {
           // Beside the dialog, or above it where it fills the width.
@@ -1325,11 +1329,12 @@ async function main(argv: string[]): Promise<number> {
       await page.waitForTimeout(2_500);
       if (await pricesOpen()) {
         mark("closed the plans the report opened by itself");
-        await page
+        const closeButton = page
           .getByRole("button", { name: "Close pricing modal" })
-          .filter({ visible: true })
-          .first()
-          .click({ timeout: 10_000 });
+          .filter({ visible: true });
+        // A EUR 1.99 holder's plans have "Not ready to unlock yet" in the ×'s place (28.10).
+        if (await closeButton.count()) await closeButton.first().click({ timeout: 10_000 });
+        else await page.keyboard.press("Escape");
         await page
           .locator(".report-pricing-modal.is-visible")
           .waitFor({ state: "hidden", timeout: 5_000 });
