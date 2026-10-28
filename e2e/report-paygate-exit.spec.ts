@@ -41,6 +41,14 @@ const stored = (page: Page, eventType: string) =>
     eventType
   );
 
+/**
+ * Whether this page can store events at all. It needs its CSRF cookie, `__Host-csrf`, which
+ * must be Secure, and WebKit refuses a Secure cookie on http://localhost: there the page sends
+ * nothing to record (production is https). As paywall-back.spec.ts does, the behaviour is
+ * asserted everywhere and the stored events where they can be sent, Chromium and Firefox.
+ */
+const persists = (page: Page) => page.evaluate(() => document.cookie.includes("csrf"));
+
 /** Every ask for the report, the gate's included. */
 function countReportAsks(page: Page) {
   let asks = 0;
@@ -116,15 +124,17 @@ test.describe("The EUR 1.99 gate's exit page", () => {
     await expect(page.getByText("Thank you. We read every answer.")).toBeVisible();
 
     // (The arms the page stamps on every stored event ride along: hence objectContaining.)
-    await expect
-      .poll(() => stored(page, "initial_gate_back"))
-      .toEqual([expect.objectContaining({ to: "exit_page" })]);
-    await expect
-      .poll(() => stored(page, "paygate_exit_viewed"))
-      .toEqual([expect.objectContaining({ stage: "pre" })]);
-    await expect
-      .poll(() => stored(page, "paygate_exit_reason"))
-      .toEqual([expect.objectContaining({ stage: "pre", position: 1, changed: false })]);
+    if (await persists(page)) {
+      await expect
+        .poll(() => stored(page, "initial_gate_back"))
+        .toEqual([expect.objectContaining({ to: "exit_page" })]);
+      await expect
+        .poll(() => stored(page, "paygate_exit_viewed"))
+        .toEqual([expect.objectContaining({ stage: "pre" })]);
+      await expect
+        .poll(() => stored(page, "paygate_exit_reason"))
+        .toEqual([expect.objectContaining({ stage: "pre", position: 1, changed: false })]);
+    }
 
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`/report/${GATE_TOKEN}$`));
@@ -138,11 +148,14 @@ test.describe("The EUR 1.99 gate's exit page", () => {
     await mockGate(page);
     await page.goto(`/report/${GATE_TOKEN}?leave=pre`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const canStore = await persists(page);
     await page.getByRole("link", { name: "Maybe later" }).click();
     await expect(page).toHaveURL(/\/$/);
-    await expect
-      .poll(() => stored(page, "paygate_exit_leave"))
-      .toEqual([expect.objectContaining({ stage: "pre", via: "maybe_later" })]);
+    if (canStore) {
+      await expect
+        .poll(() => stored(page, "paygate_exit_leave"))
+        .toEqual([expect.objectContaining({ stage: "pre", via: "maybe_later" })]);
+    }
   });
 });
 
@@ -164,9 +177,11 @@ test.describe("The full report's exit page, for a EUR 1.99 holder", () => {
     await expect(picker).toHaveAttribute("data-state", "closed");
     await expect(layer.getByText("You earned it with your €1.99 unlock.")).toBeVisible();
     await expect(layer.locator(".pge-offer__amount")).toHaveText("€19.99");
-    await expect
-      .poll(() => stored(page, "paywall_dismissed"))
-      .toEqual([expect.objectContaining({ source: "not_ready" })]);
+    if (await persists(page)) {
+      await expect
+        .poll(() => stored(page, "paywall_dismissed"))
+        .toEqual([expect.objectContaining({ source: "not_ready" })]);
+    }
 
     await layer.getByRole("button", { name: "Back to my open chapters" }).click();
     await expect(layer).toHaveCount(0);
