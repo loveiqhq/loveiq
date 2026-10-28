@@ -101,6 +101,11 @@ export interface GateMember {
    * 27 Oct 2026). Absent: none of them.
    */
   taps?: { card: boolean; bar: boolean; notReady: boolean };
+  /**
+   * E07's draw, a day after the page for a reader still unpaid (live from 28 Oct 2026): the
+   * Core Archetype gifted, or held out. Absent: not drawn (paid, never saw the page, too soon).
+   */
+  giftArm?: "gift" | "holdout";
 }
 
 /** A sale on a pay-to-start buyer's report after the purchase itself (an upgrade). */
@@ -486,6 +491,15 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
   );
   const seenAt = new Map(input.gateMembers.map((g) => [g.sid, g.seenAt]));
   const tapsOf = new Map(input.gateMembers.map((g) => [g.sid, g.taps]));
+  const armOf = new Map(input.gateMembers.map((g) => [g.sid, g.giftArm]));
+  /** Who went on to buy the full report, by E07's draw: the gift's effect, read side by side. */
+  const giftSplit = (subs: SubFact[]) => {
+    const gift = subs.filter((s) => armOf.get(s.id) === "gift");
+    const held = subs.filter((s) => armOf.get(s.id) === "holdout");
+    if (gift.length + held.length === 0) return null;
+    const bought = (xs: SubFact[]) => xs.filter((s) => s.full).length;
+    return `E07 gift email: ${bought(gift)} of ${gift.length} gifted bought it · ${bought(held)} of ${held.length} held out`;
+  };
   const subsOf: Record<"after" | "gate", SubFact[]> = {
     after: free.filter((s) => !gateIds.has(s.id)),
     gate: free.filter((s) => gateIds.has(s.id)),
@@ -665,7 +679,12 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
             },
             // A view of the gate is no report session (PRE_UNLOCK.md): a session is the report.
             { label: "Report opened", n: subs.filter((s) => s.visits > 0).length, pays: false },
-            { label: "Bought the full report", n: subs.filter((s) => s.full).length, pays: true },
+            {
+              label: "Bought the full report",
+              n: subs.filter((s) => s.full).length,
+              pays: true,
+              ...(giftSplit(subs) !== null && { detail: giftSplit(subs)! }),
+            },
           ];
     const refunded = input.refundedSubs;
     return {
@@ -1035,10 +1054,11 @@ export async function fetchPayToStartRecords(
       survey_submission_id: number;
       initial_gate_cohort_at: string;
       initial_gate_seen_at: string | null;
+      initial_gift_arm: string | null;
     }>(
       `/rest/v1/personal_report?initial_gate_cohort_at=gte.${sinceIso}` +
         `&initial_gate_cohort_at=lt.${new Date(until.getTime() + STAMPED_AT_SUBMIT_MS).toISOString()}` +
-        "&select=survey_submission_id,initial_gate_cohort_at,initial_gate_seen_at&order=id.asc",
+        "&select=survey_submission_id,initial_gate_cohort_at,initial_gate_seen_at,initial_gift_arm&order=id.asc",
       "personal_report"
     ),
     isInitialUnlockGateEnabled(),
@@ -1174,6 +1194,9 @@ export async function fetchPayToStartRecords(
       cohortAt: c.initial_gate_cohort_at,
       seenAt: c.initial_gate_seen_at,
       ...(taps.has(c.survey_submission_id) && { taps: taps.get(c.survey_submission_id) }),
+      ...((c.initial_gift_arm === "gift" || c.initial_gift_arm === "holdout") && {
+        giftArm: c.initial_gift_arm,
+      }),
     })),
     gateOn,
   };
