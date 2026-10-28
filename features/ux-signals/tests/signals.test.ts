@@ -513,6 +513,34 @@ describe("the EUR 1.99 gate", () => {
     }
     expect(SIGNAL_PROPS).toContain("plan");
   });
+
+  // The paygate's exit pages (28.10): the €1.99 page's is the gate's, the full report's the
+  // paywall's, by the event's own stage.
+  it("ends a visit on an exit page where that page belongs", () => {
+    expect(
+      measure("Drop-off / exit point", [
+        ...gate(0),
+        ev(10 * S, "initial_gate_back", { to: "exit_page" }),
+        ev(11 * S, "paygate_exit_viewed", { stage: "pre" }),
+        ev(20 * S, "paygate_exit_reason", { stage: "pre", reason: "see_first" }),
+      ])
+    ).toBe("gate");
+    expect(
+      measure("Drop-off / exit point", [
+        ...gatePaid(0),
+        ev(70 * S, "report_viewed"),
+        ev(120 * S, "price_shown", { plan: "full_report" }),
+        ev(121 * S, "paywall_initiated"),
+        ev(130 * S, "paywall_dismissed", { source: "not_ready" }),
+        ev(131 * S, "paygate_exit_viewed", { stage: "full" }),
+        ev(140 * S, "paygate_exit_leave", { stage: "full", via: "chapters" }),
+      ])
+    ).toBe("paywall");
+    for (const e of ["paygate_exit_viewed", "paygate_exit_reason", "paygate_exit_leave"]) {
+      expect(SIGNAL_EVENTS, e).toContain(e);
+    }
+    expect(SIGNAL_PROPS).toContain("stage");
+  });
 });
 
 describe("what production recorded", () => {

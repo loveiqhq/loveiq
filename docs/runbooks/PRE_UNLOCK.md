@@ -106,16 +106,25 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
 - The behaviour checks (`features/ux-signals`) know the gate (27.10): its checkout, return and
   unlock (plan `initial`) are never the report's paywall or payment, and a visit that went no
   further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
-- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar)
-  and, under "Saw the €1.99 page", who left by "Not ready to unlock yet", from the page's own
-  events (`initial_gate_cta_click` with its `place`, `initial_gate_back`, stored since 27.10).
+- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar,
+  and since 28.10 on the gate's exit page: `place` `exit_card` / `exit_sticky`) and, under "Saw
+  the €1.99 page", who pressed "Not ready to unlock yet", from the page's own events
+  (`initial_gate_cta_click` with its `place`, `initial_gate_back`, stored since 27.10). Since
+  28.10 that press opens the exit page, where readers can still unlock, so it no longer means
+  they left.
+- AP-Analytics, Payment, "Paygate exits" (28.10): for both exit pages, who reached each, why
+  not today (each reader's latest reason), who wrote a sentence, pressed Unlock there, paid
+  within 24 hours, and how they left, from the pages' own `paygate_exit_*` events. Their
+  sentences are shown masked.
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).
-- "Not ready to unlock yet" leads to the landing page, which does not count that reader as a
-  landing visit or give them a landing arm (the exit is `initial_gate_back`). Since 27.10
-  the event means this link, shown to every reader; before, a back arrow shown only to
-  readers who came from the survey. The sticky bar is always on screen since then too, so
+- "Not ready to unlock yet" opens the gate's exit page (28.10, `?leave=pre`,
+  `features/report/ui/gate/exit`), which makes the case again and asks why. Its "Maybe later"
+  leads to the landing page, which does not count that reader as a landing visit or give them
+  a landing arm. `initial_gate_back` is the press: `to: "exit_page"` since 28.10, `"/"` from
+  27.10, when the event came to mean this link, shown to every reader; before, a back arrow
+  shown only to readers who came from the survey. The sticky bar is always on screen since then too, so
   `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".
 - E07's holdout: compare full-report purchases after day 1 between `initial_gift_arm` = `gift`
   and `holdout`, staff left out. The gift's EUR 0 rows are never revenue. Since E07 moved to

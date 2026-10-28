@@ -490,13 +490,15 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     rows["/rest/v1/analytics_event?survey_submission_id"] = [
       { survey_submission_id: 1, event_type: "initial_gate_back", place: null },
       { survey_submission_id: 1, event_type: "initial_gate_cta_click", place: "sticky" },
+      // Since 28.10 "Not ready" opens the exit page, whose Unlock presses carry their own place.
+      { survey_submission_id: 1, event_type: "initial_gate_cta_click", place: "exit_card" },
     ];
     const body = (await (await GET(req())).json()) as PtsPayload;
     const gate = body.funnels.find((f) => f.key === "gate")!;
     const step = (label: string) => gate.steps.find((s) => s.label === label)!;
     expect(step("Pressed Unlock").n).toBe(1);
-    expect(step("Pressed Unlock").detail).toBe("on the card 0 · on the bar 1");
-    expect(step("Saw the €1.99 page").detail).toBe("1 left by “Not ready to unlock yet”");
+    expect(step("Pressed Unlock").detail).toBe("on the card 0 · on the bar 1 · on the exit page 1");
+    expect(step("Saw the €1.99 page").detail).toBe("1 pressed “Not ready to unlock yet”");
     const q = paths().find((x) => x.startsWith("/rest/v1/analytics_event?"))!;
     expect(q).toContain("survey_submission_id=in.(1)");
     expect(q).toContain("event_type=in.(initial_gate_cta_click,initial_gate_back)");
