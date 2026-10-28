@@ -729,7 +729,8 @@ export const fields: FieldRegistry = {
     stat: "Count",
     per: "per person",
     formula: { num: "Of the funnel's buyers, those who bought a full report later" },
-    caveat: "The full report: the Full, Full All or Core plan. Refunded buys are left out.",
+    caveat:
+      "The full report: the Full, Full All or Core plan. Refunded buys are left out. Under the €1.99 page's funnel, from 28 Oct 2026, the line beneath splits it by E07: a day after the page, 8 in 10 readers who haven't paid get their Core Archetype free with the gift email, and 2 in 10 are held out to compare (personal_report.initial_gift_arm). Read the two shares side by side; they grow for days after the gift.",
     tables: [T_PAYMENTS, REPORTS, T_PREPAID],
     query: SQL(STEPS),
     related: ["pts.revenue", "pts.step-paid"],

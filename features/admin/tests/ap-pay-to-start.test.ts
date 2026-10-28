@@ -611,6 +611,64 @@ describe("buildPayToStart", () => {
   });
 });
 
+describe("E07, the gift a day after the €1.99 page", () => {
+  const at = (day: string, h = 10) => `${day}T${String(h).padStart(2, "0")}:00:00Z`;
+  const later = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+  const subs = [
+    // Gifted, then bought the full report.
+    sub({
+      id: 21,
+      day: "2026-10-20",
+      at: at("2026-10-20", 9),
+      paidAt: at("2026-10-22", 10),
+      sales: 1,
+      revenue: 19.99,
+      pays: [[2, 19.99, "full_report"]],
+      plan: "full_report",
+      full: true,
+      visits: 3,
+    }),
+    sub({ id: 22, day: "2026-10-20", at: at("2026-10-20", 10), visits: 1 }),
+    sub({ id: 23, day: "2026-10-20", at: at("2026-10-20", 11), visits: 0 }),
+    sub({ id: 24, day: "2026-10-20", at: at("2026-10-20", 12), visits: 0 }),
+  ];
+  const member = (id: number, giftArm?: "gift" | "holdout") => {
+    const s = subs.find((x) => x.id === id)!;
+    return {
+      sid: id,
+      cohortAt: later(s.at, 5_000),
+      seenAt: later(s.at, 60_000),
+      ...(giftArm && { giftArm }),
+    };
+  };
+  const fullStep = (gateMembers: PtsInput["gateMembers"]) =>
+    funnel(
+      buildPayToStart(
+        input({
+          facts: { visits: [visit("2026-10-20", 50)], starts: [], subs },
+          gateMembers,
+          gateOn: true,
+        })
+      ),
+      "gate"
+    ).steps.find((s) => s.label === "Bought the full report");
+
+  it("splits the full-report buyers by its draw, under the €1.99 page's funnel", () => {
+    const step = fullStep([
+      member(21, "gift"),
+      member(22, "gift"),
+      member(23, "holdout"),
+      member(24),
+    ]);
+    expect(step?.n).toBe(1);
+    expect(step?.detail).toBe("E07 gift email: 1 of 2 gifted bought it · 0 of 1 held out");
+  });
+
+  it("says nothing before anyone is drawn", () => {
+    expect(fullStep([member(21), member(22), member(23), member(24)])?.detail).toBeUndefined();
+  });
+});
+
 describe("buildPayToStart, the edges", () => {
   it("keeps a refunded buyer who kept an upgrade as a customer, with the upgrade's money only", () => {
     const p = buildPayToStart(
