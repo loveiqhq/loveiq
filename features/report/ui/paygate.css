@@ -278,11 +278,12 @@
 }
 
 /* Sync 23.10 (Marcus and Mark): the EUR 1.99 holder's "€10.00 credit applied", bold and
- * a size up from the strike line's 14/600. The gate's darker green (initial-unlock-gate.css
- * `.iug-card__guarantee`): the frame's #00892F is under WCAG AA at this size. */
+ * a size up from the strike line it sits in (14px, 16px from 960 wide: 15 and 17). The
+ * gate's darker green (initial-unlock-gate.css `.iug-card__guarantee`): the frame's #00892F
+ * is under WCAG AA at this size. */
 .rpg-card__off--credit {
   color: #007f2d;
-  font-size: 15px;
+  font-size: calc(1em + 1px);
   font-weight: 700;
 }
 

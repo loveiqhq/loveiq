@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
   startedAt: new Date().toISOString(),
   /** The reply said the survey was paid for before it was taken (pay to start): its wizard. */
   paidWizard: null as "pay_to_start" | "pay_to_start_initial" | null,
+  /** The reply said the EUR 1.99 gate will stop this reader, at this price. */
+  gatePriceCents: null as number | null,
 }));
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
@@ -44,6 +46,7 @@ vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
     retryPending: state.retryPending,
     hasPendingCompletion: false,
     paidWizard: state.paidWizard,
+    gatePriceCents: state.gatePriceCents,
     status: "success",
   }),
 }));
@@ -88,7 +91,7 @@ vi.mock("@features/survey/ui/ProcessingSequence", () => ({
 }));
 
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
-import { PAID_WIZARD_KEY } from "@features/survey/ui/hooks/surveySession";
+import { PAID_WIZARD_KEY, GATE_PRICE_KEY } from "@features/survey/ui/hooks/surveySession";
 
 /** Let a slide's 250ms leave animation finish. */
 const flush = (ms = 260) =>
@@ -107,6 +110,7 @@ const openWizard = () => {
 beforeEach(() => {
   vi.useFakeTimers();
   state.paidWizard = null;
+  state.gatePriceCents = null;
   sessionStorage.clear();
 });
 
@@ -188,5 +192,34 @@ describe("SurveyEngine — the wizard for a survey paid before it was taken", ()
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
     expect(counter()).toBe("1 / 6");
+  });
+});
+
+// Eman, 27.10: the map names the EUR 1.99 to a reader the gate will stop, from the reply or,
+// after a reload mid-wizard, from the tab's record.
+describe("SurveyEngine — the map for a reader the EUR 1.99 gate will stop", () => {
+  const firstLine = () => screen.getByText("your opening chapters").closest("p")!.textContent;
+  const toMap = () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue to next slide/i }));
+    flush();
+  };
+
+  it("names the price the reply gave", () => {
+    state.gatePriceCents = 199;
+    toMap();
+    expect(firstLine()).toBe("Read your opening chapters in full for €1.99.");
+  });
+
+  it("keeps it after a reload mid-wizard, from the tab's record", () => {
+    sessionStorage.setItem(GATE_PRICE_KEY, "199");
+    toMap();
+    expect(firstLine()).toBe("Read your opening chapters in full for €1.99.");
+  });
+
+  it("names none for anyone else", () => {
+    toMap();
+    expect(firstLine()).toBe("Read your opening chapters in full.");
   });
 });

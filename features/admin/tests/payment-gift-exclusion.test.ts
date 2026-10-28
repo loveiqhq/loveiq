@@ -3,7 +3,7 @@ import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * E07's day-4 gift is never a sale (Pre-unlock; app/api/cron/initial-unlock-gift).
+ * E07's day-1 gift is never a sale (Pre-unlock; app/api/cron/initial-unlock-gift).
  *
  * The gift is a EUR 0 `initial` payment marked `metadata.gifted` = "e07", written
  * automatically for 80% of the readers the EUR 1.99 gate stopped who had not paid by day
@@ -45,7 +45,7 @@ function adminPaymentQueryFiles(): string[] {
 const excludesTheGift = (query: string) =>
   query.includes("metadata->>gifted=is.null") || query.includes("amount=gt.0");
 
-describe("the day-4 gift is never counted as a sale", () => {
+describe("the day-1 gift is never counted as a sale", () => {
   it("finds the admin payment query sites at all", () => {
     expect(adminPaymentQueryFiles().length).toBeGreaterThan(10);
   });

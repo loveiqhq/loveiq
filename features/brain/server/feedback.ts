@@ -1,3 +1,4 @@
+import { teamUserIds } from "@features/admin/server/ap/team";
 import { readAll } from "@features/brain/server/read-all";
 import { isStaffEmail } from "@shared/env/staff-email";
 
@@ -22,6 +23,7 @@ interface Vote {
   issue: string | null;
   comment: string | null;
   created_at: string;
+  user_id?: number | null;
   app_user?: { email: string | null } | null;
 }
 
@@ -36,9 +38,9 @@ export async function loadFeedback(since?: string, until?: string): Promise<Feed
   const range =
     (since ? `&created_at=gte.${since}T00:00:00Z` : "") +
     (until ? `&created_at=lt.${nextDay(until)}T00:00:00Z` : "");
-  const [votes, rows] = await Promise.all([
+  const [votes, rows, team] = await Promise.all([
     readAll<Vote>(
-      `/rest/v1/report_section_feedback?select=section_id,feedback,issue,comment,created_at,app_user(email)` +
+      `/rest/v1/report_section_feedback?select=section_id,feedback,issue,comment,created_at,user_id,app_user(email)` +
         `${range}&order=created_at.desc,id.desc`
     ),
     // Every part of every review, however many: a long review is several parts.
@@ -46,16 +48,20 @@ export async function loadFeedback(since?: string, until?: string): Promise<Feed
       "/rest/v1/brain_chunk?select=source_id,title&source=eq.gmail" +
         "&title=like.Trustpilot%20review*&order=source_id.asc,id.asc"
     ),
+    teamUserIds().catch(() => null),
   ]);
-  if (!votes || !rows) return null;
+  if (!votes || !rows || !team) return null;
   // One per review email: its parts share an id before "#". Two reviews with the same title
   // (same stars, day and opening words) are still two. Newest first.
   const day = (t: string) => /\d{4}-\d{2}-\d{2}/.exec(t)?.[0] ?? "";
   const byReview = new Map(rows.map((r) => [r.source_id.split("#")[0], r.title]));
   const titles = [...byReview.values()];
   return {
-    // The team's own test votes are not customers (4 of 74 on 2026-10-11).
-    votes: votes.filter((v) => !isStaffEmail(v.app_user?.email)),
+    // The team's own test votes are not customers (4 of 74 on 2026-10-11): an @loveiq.org
+    // address, or an account that redeemed the team's test coupon (ap_team_user, as AP).
+    votes: votes.filter(
+      (v) => !isStaffEmail(v.app_user?.email) && !(v.user_id != null && team.has(Number(v.user_id)))
+    ),
     reviews: titles.sort((a, b) => day(b).localeCompare(day(a))),
   };
 }

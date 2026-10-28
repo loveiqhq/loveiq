@@ -109,7 +109,10 @@ test.describe("guided tour on the first open", () => {
     await page.waitForTimeout(5_000);
     await expect(page.locator(".rv4-tour")).toHaveCount(0);
 
-    // The reader's next report starts it again (Marcus, 20.10).
+    // The reader's next report starts it again (Marcus, 20.10). It is another address in
+    // real life; here the same one reloads, and the browser would put back the 600px above,
+    // past AUTO_START_SCROLL_LIMIT, before or after the tour looks: the flake in CI.
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.unroute("**/api/report?**");
     await mockReport(
       page,

@@ -67,6 +67,7 @@ describe("fetchDropoffRuns", () => {
           reached: ["00001", "01002"],
           left_at: "01002",
           source: "other",
+          last_at: "2026-10-09T10:01:30+00:00",
         },
       ],
     });
@@ -79,6 +80,7 @@ describe("fetchDropoffRuns", () => {
         startedAt: Date.parse("2026-10-09T10:00:00Z"),
         reached: ["00001", "01002"],
         leftAt: "01002",
+        lastAt: Date.parse("2026-10-09T10:01:30Z"),
         source: "other",
         device: null,
       },

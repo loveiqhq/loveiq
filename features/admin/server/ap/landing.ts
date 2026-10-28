@@ -5,24 +5,33 @@
  * engagement from PostHog. For Assessment A the landing page is its assessment page.
  */
 import { addDays } from "./days";
-import { armLabel } from "@features/attribution/server/labels";
 import {
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
-import { classifySource, FULL_PLANS, PRE_PLANS, preBuysOf, type Facts } from "./facts";
-import { rangeLabel, trendBuckets, type ApFilters } from "./filters";
 import {
+  classifySource,
+  PAY_TO_START_FROM,
+  PRE_ON_SALE_FROM,
+  PRE_PLANS,
+  preBuysOf,
+  type Facts,
+} from "./facts";
+import { comparisonRange, rangeLabel, trendBuckets, type ApFilters } from "./filters";
+import {
+  ageMatched,
   armStartsComplete,
   comparableStarts,
   ratio,
-  salesIn,
+  sameAge,
   startsComplete,
+  subsIn,
   totals,
   type Scope,
 } from "./metrics";
-import { head, type PageHead, type Tile } from "./common";
+import { freePreBlocked, head, type PageHead, type Tile } from "./common";
+import { SURVEY_STARTED_FROM, type PtsPayload } from "./pay-to-start";
 import {
   POSTHOG_FROM,
   type LandingArmEngagement,
@@ -33,8 +42,8 @@ import {
 export interface LandingTest {
   key: string;
   /**
-   * The one name every line uses (the table, the compare title, "Not in this range"), with the
-   * registry number if any, as the design's "LP-07 · Hero promise".
+   * The one name every line uses (both tables, the Traffic page's landing rows), with the
+   * registry number, as the design's "#6 · Landing hero".
    */
   name: string;
   /** The compare tab's few characters, as the design's "LP-07". */
@@ -50,11 +59,15 @@ export interface LandingTest {
   arms: [string, string];
 }
 
-/** The landing tests our records can read, newest first (shared/experiments/landingVariant.ts). */
+/**
+ * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), named
+ * as the design names them (Traffic board: "#6 · Landing hero"). The rebuild test (V1 vs V2,
+ * Aug–Sep 2026) was taken off the page on the 21 Oct 2026 call.
+ */
 export const LANDING_TESTS: LandingTest[] = [
   {
     key: "hero",
-    name: "#6 · Hero video vs Q1",
+    name: "#6 · Landing hero",
     code: "#6",
     from: LANDING_TEST_START_DAY,
     to: null,
@@ -63,27 +76,23 @@ export const LANDING_TESTS: LandingTest[] = [
   },
   {
     key: "hero-first-run",
-    name: "Hero video vs Q1, first run",
+    name: "#6 · Landing hero · first run (7–13 Oct)",
     code: "#6 · run 1",
     from: LANDING_HERO_VIDEO_LAUNCH_DAY,
     to: addDays(LANDING_TEST_START_DAY, -1),
     outcome: `Run again from ${rangeLabel(LANDING_TEST_START_DAY, LANDING_TEST_START_DAY)}, when the video or question 1 moves onto a phone's first screen and both versions take the new copy.`,
     arms: ["white_card", "white_video"],
   },
-  {
-    key: "rebuild",
-    name: "Landing rebuild V1 vs V2",
-    code: "Rebuild",
-    // The test ran from 21 Aug, but V1's visits were logged without their version until the
-    // evening of 24 Aug (49e71d0f): the comparison starts on the first whole day after.
-    from: "2026-08-25",
-    to: "2026-09-19",
-    winner: "white",
-    outcome: "V2 kept on 19 Sep 2026, called on the checkout rate (not a proven win).",
-    note: "Read from 25 Aug: the test began on 21 Aug, but until then V1's visits were logged without their page version. V2's visits include returning visitors who kept an earlier V2 cookie, which lowers its rates.",
-    arms: ["white_prev", "white"],
-  },
 ];
+
+/**
+ * The versions' names on this page, as the design writes them: arm A has question 1 in the hero,
+ * arm B the presenter video. The Slack digest keeps its own names (attribution/server/labels.ts).
+ */
+const ARM_NAMES = new Map([
+  ["white_card", "Question card"],
+  ["white_video", "Presenter video"],
+]);
 
 /**
  * PostHog's arm tag is read from the first page view of a visit only since round 3 (#540,
@@ -91,7 +100,10 @@ export const LANDING_TESTS: LandingTest[] = [
  */
 export const POSTHOG_ARMS_FROM = LANDING_HERO_VIDEO_LAUNCH_DAY;
 
-/** A test's days inside a range, or null when none are (`today` ends a running test). */
+/**
+ * A test's days inside a range, or null when none are. A running test ends yesterday, or today
+ * when the range itself runs through today ("Today", or a custom range ending today).
+ */
 export function testWindow(
   test: LandingTest,
   from: string,
@@ -99,7 +111,7 @@ export function testWindow(
   today: string
 ): { from: string; to: string } | null {
   const start = test.from > from ? test.from : from;
-  const last = test.to ?? addDays(today, -1);
+  const last = test.to ?? (to >= today ? today : addDays(today, -1));
   const end = last < to ? last : to;
   return start > end ? null : { from: start, to: end };
 }
@@ -121,7 +133,7 @@ export type ArmStatus = "Running" | "Winner" | "Ended";
 export interface ArmRow {
   testKey: string;
   test: string;
-  /** "A · Landing Page V2 (Survey in Hero)". */
+  /** "A · Question card". */
   label: string;
   arm: string;
   status: ArmStatus;
@@ -167,17 +179,81 @@ export interface LandingEngagement {
   scroll: Array<{ label: string; share: number | null }>;
 }
 
+/** What the headline figures divide, for their info cards ("990 ÷ 10,086 = 9.82%"). */
+export interface LandingCounts {
+  visits: number | null;
+  starts: number | null;
+  subs: number;
+  /** The range's finishers who bought a full unlock, so far. */
+  fullBuyers: number;
+  /** Sales paid in the range, EUR. */
+  revenue: number;
+}
+
 export interface LandingPayload extends PageHead {
   /** The six headline figures, against the period before (all traffic). */
   tiles: Tile[];
+  counts: LandingCounts;
   rows: ArmRow[];
-  /** Tests with no days in the range. */
-  outside: string[];
   /** Why a test's bounce and time are blank: its PostHog read failed. */
   unread: string[];
-  /** Every landing visit in the range together: the engagement table's average row. */
+  /** Every landing visit in the range together: the engagement table's last row. */
   engagement: PostHogResult<LandingEngagement> | null;
-  footnotes: string[];
+  /**
+   * The pay-to-start pages, step by step, as the Pay to start page counts them (so the two
+   * agree); null when they could not be read.
+   */
+  payFirst: { rows: PayFirstRow[]; notes: string[] } | null;
+}
+
+/** One pay-to-start page: its Step by step card's figures on the Pay to start page. */
+export interface PayFirstRow {
+  key: "full" | "pre";
+  /** "/sexual-archetype · €29.99". */
+  name: string;
+  /** "Pay to start · full". */
+  sub: string;
+  visitors: number | null;
+  checkout: number;
+  paid: number;
+  /** Paid ÷ visitors. */
+  v2p: number | null;
+  /** Of the paying buyers ("Paid"), the share who then finished the survey. */
+  p2c: number | null;
+  /** Paying buyers who started the survey; null where it can't be told (paidStarted). */
+  started: number | null;
+}
+
+/** Pay to start page notes about what this table doesn't show: ads, and the free survey's funnels. */
+const NOT_PAY_FIRST = [
+  /^No ad in this range/,
+  /^Pay after the report/,
+  /page after the survey was on/,
+  /the free survey's visits/,
+];
+
+/** The two pay-to-start pages, from their funnels on the Pay to start page. */
+function payFirstRows(pts: PtsPayload): PayFirstRow[] {
+  return (["full", "pre"] as const).flatMap((key): PayFirstRow[] => {
+    const x = pts.funnels.find((f) => f.key === key);
+    if (!x || !x.live) return [];
+    const step = (pick: (label: string) => boolean) => x.steps.find((s) => pick(s.label))?.n ?? 0;
+    const visitors = x.steps.find((s) => s.label === "Visits")?.n ?? null;
+    const paid = step((l) => l.startsWith("Paid"));
+    return [
+      {
+        key,
+        name: `${key === "full" ? "/sexual-archetype" : "/sexual-archetype/initial"} · ${x.label.replace("Pay to start · ", "")}`,
+        sub: key === "full" ? "Pay to start · full" : "Pay to start · €1.99 pre",
+        visitors,
+        checkout: step((l) => l === "Checkout started"),
+        paid,
+        v2p: visitors ? paid / visitors : null,
+        p2c: paid > 0 && x.paidFinished !== undefined ? x.paidFinished / paid : null,
+        started: x.paidStarted ?? null,
+      },
+    ];
+  });
 }
 
 /** Under this many PostHog visits (or timed views) in an arm, its bounce and time are noise. */
@@ -190,9 +266,14 @@ function armRow(
   arm: string,
   letter: "A" | "B",
   today: string,
-  ph: LandingArmEngagement | undefined
+  ph: LandingArmEngagement | undefined,
+  /** "Free survey": pay to start's finishers and their starts are out, as on every page. */
+  free = false,
+  /** The free survey sold no EUR 1.99 (its gate off): the pre-unlock rate is blank, never 0%. */
+  preOff = false
 ): ArmRow {
   const inWindow = (d: string) => d >= w.from && d <= w.to;
+  const inFunnel = (x: { pts?: boolean }) => !(free && x.pts);
   // Our own probes are never counted, here as on every page (classifySource "test").
   const visits = facts.visits
     .filter(
@@ -204,10 +285,16 @@ function armRow(
     .reduce((n, v) => n + v.n, 0);
   const complete = armStartsComplete(w.from, today);
   const starts = facts.starts
-    .filter((s) => s.arm === arm && inWindow(s.day) && !(s.known && classifySource(s) === "test"))
+    .filter(
+      (s) =>
+        s.arm === arm &&
+        inWindow(s.day) &&
+        !(s.known && classifySource(s) === "test") &&
+        inFunnel(s)
+    )
     .reduce((n, s) => n + s.n, 0);
   const subs = facts.subs.filter(
-    (s) => s.arm === arm && inWindow(s.day) && classifySource(s) !== "test"
+    (s) => s.arm === arm && inWindow(s.day) && classifySource(s) !== "test" && inFunnel(s)
   );
   const payers = subs.filter((s) => s.paidAt);
   const revenue = Math.round(payers.reduce((n, s) => n + s.revenue, 0) * 100) / 100;
@@ -215,7 +302,7 @@ function armRow(
   return {
     testKey: test.key,
     test: test.name,
-    label: `${letter} · ${armLabel("landing", arm).short}`,
+    label: `${letter} · ${ARM_NAMES.get(arm) ?? arm}`,
     arm,
     status: test.to === null ? "Running" : test.winner === arm ? "Winner" : "Ended",
     from: w.from,
@@ -229,10 +316,12 @@ function armRow(
     startCvr: complete ? ratio(starts, visits) : null,
     submitCvr: ratio(subs.length, visits),
     paymentCvr: ratio(payers.length, visits),
-    // Pre-unlocks (the Initial plan) per visit, as the other rates; blank while not on sale.
-    preCvr: PRE_PLANS.size
-      ? ratio(subs.filter((s) => preBuysOf(s).length > 0).length, visits)
-      : null,
+    // Pre-unlocks (the Initial plan) per visit, as the other rates; blank over a window that
+    // reaches back before it was on sale (nobody could, so the rate would read low).
+    preCvr:
+      PRE_PLANS.size && w.from >= PRE_ON_SALE_FROM && !preOff
+        ? ratio(subs.filter((s) => preBuysOf(s).length > 0).length, visits)
+        : null,
     fullCvr: ratio(subs.filter((s) => s.full).length, visits),
     perVisit: ratio(revenue, visits),
     phSessions: phOk ? ph.sessions : null,
@@ -286,28 +375,54 @@ export function buildLanding(input: {
   engagement: PostHogResult<LandingArmEngagement[]> | null;
   /** The page's time on page over the range, every version together. */
   pageTime?: PostHogResult<LandingTime> | null;
+  /** The Pay to start page's figures for the range (payToStartFor); null when not read. */
+  pts?: PtsPayload | null;
+  /** The report's EUR 1.99 gate now, read under "Free survey" only; null when it couldn't be. */
+  gateOn?: boolean | null;
 }): LandingPayload {
   const { facts, previous, filters: f, today, now } = input;
   const rows: ArmRow[] = [];
-  const outside: string[] = [];
   const unread: string[] = [];
+  // "Free survey" sells the EUR 1.99 only through the report's gate: with it off and none sold,
+  // the arms' pre-unlock rate is blank with why, as the tile's is.
+  const preFreeWhy =
+    f.funnel === "free"
+      ? freePreBlocked(
+          input.gateOn,
+          subsIn(facts, {
+            assessment: "a",
+            source: "all",
+            device: "all",
+            tier: "all",
+            visitor: "all",
+            funnel: "free",
+          }).some((s) => preBuysOf(s).length > 0)
+        )
+      : null;
   for (const test of LANDING_TESTS) {
     const w = testWindow(test, facts.from, facts.to, today);
-    if (!w) {
-      outside.push(
-        `${test.name} (${test.to === null ? `from ${rangeLabel(test.from, test.from)}` : rangeLabel(test.from, test.to)})`
-      );
-      continue;
-    }
+    if (!w) continue;
     const ph = input.armEngagement[test.key];
     const byArm = new Map(ph && ph.ok ? ph.value.map((e) => [e.arm, e]) : []);
     const [a, b] = test.arms.map((arm, i) =>
-      armRow(facts, test, w, arm, i === 0 ? "A" : "B", today, byArm.get(arm))
+      armRow(
+        facts,
+        test,
+        w,
+        arm,
+        i === 0 ? "A" : "B",
+        today,
+        byArm.get(arm),
+        f.funnel === "free",
+        preFreeWhy !== null
+      )
     ) as [ArmRow, ArmRow];
     rows.push(a, b);
     // A failed read is not a small sample: the table says which it was.
     if (ph && !ph.ok)
-      unread.push(`${test.name}: bounce, avg. time, CTA clicks and scroll are blank. ${ph.error}`);
+      unread.push(
+        `${test.name}: bounce, median time, CTA clicks and scroll are blank. ${ph.error}`
+      );
   }
 
   // The page reads every visit (the visit log has no source, device, tier or visitor
@@ -315,17 +430,18 @@ export function buildLanding(input: {
   const all: ApFilters = { ...f, source: "all", device: "all", tier: "all", visitor: "all" };
   const pageHead = head(all, today, now);
   const notes = [...pageHead.notes];
+  // The tile and the tests' Pre-unlock CVR are blank: said once, for both.
+  if (preFreeWhy) notes.push(preFreeWhy);
   if (facts.from < POSTHOG_FROM)
     notes.push(
-      `Bounce, time, CTA clicks and scroll come from PostHog, which starts on ${POSTHOG_FROM}.`
+      `Bounce, time, CTA clicks and scroll come from PostHog, which starts on ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}.`
     );
 
   return {
     ...pageHead,
-    tiles: landingTiles(facts, previous, all, today),
+    ...landingTiles(facts, previous, all, today, now, input.gateOn),
     notes,
     rows,
-    outside,
     unread,
     engagement:
       input.engagement === null
@@ -333,25 +449,59 @@ export function buildLanding(input: {
         : input.engagement.ok
           ? { ok: true, value: pageEngagement(input.engagement.value, input.pageTime ?? null) }
           : input.engagement,
-    footnotes: [
-      "Visits: our own visit log, one per browser per day, by the arm the visitor was shown. Starts: answered at least one question; submissions and payments: the people of that arm, paid whenever.",
-      "Round 1 (dark vs white, June 2026) is left out: the records from then cannot reliably tell its two pages' visitors apart.",
-    ],
+    // Free survey leaves pay to start out, here as on every page: its pages aren't the free funnel.
+    payFirst:
+      f.funnel === "free"
+        ? {
+            rows: [],
+            notes: [
+              "The Funnel filter is on Free survey, which leaves pay to start out: pick All funnels to see its pages.",
+            ],
+          }
+        : input.pts
+          ? {
+              rows: payFirstRows(input.pts),
+              // Before its pages went live, when they did is all there is to say; then the Pay
+              // to start page's notes about the pages, and why a blank Started survey is blank.
+              notes: input.pts.funnels.some((x) => x.key !== "after" && x.key !== "gate" && !x.live)
+                ? [
+                    `Pay to start's pages went live on ${rangeLabel(PAY_TO_START_FROM, PAY_TO_START_FROM)}: pick a range reaching that day.`,
+                  ]
+                : [
+                    ...input.pts.notes.filter((x) => !NOT_PAY_FIRST.some((re) => re.test(x))),
+                    ...(payFirstRows(input.pts).some((r) => r.started === null)
+                      ? [
+                          `Started survey is recorded from ${rangeLabel(SURVEY_STARTED_FROM, SURVEY_STARTED_FROM)}: a paying buyer before then who hasn't finished the survey can't be told apart from one who never started.`,
+                        ]
+                      : []),
+                  ],
+            }
+          : null,
   };
 }
 
 /**
  * The design's six figures over every visit, against the period before: survey start and
  * completion, pre-unlock and full-unlock purchases per finished survey, and revenue per
- * visitor and per finished survey. Starts that aren't all recorded leave their rates blank.
+ * visitor (per visit: the visit log counts a browser once a day) and per finished survey.
+ * Starts that aren't all recorded leave their rates blank.
  */
-function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today: string): Tile[] {
+function landingTiles(
+  facts: Facts,
+  previous: Facts | null,
+  f: ApFilters,
+  today: string,
+  now: Date,
+  /** The report's EUR 1.99 gate now (under "Free survey" only). */
+  gateOn?: boolean | null
+): { tiles: Tile[]; counts: LandingCounts } {
   const scope: Scope = {
     assessment: "a",
     source: "all",
     device: "all",
     tier: "all",
     visitor: "all",
+    funnel: f.funnel ?? "all",
   };
   const t = totals(facts, scope);
   const p = comparableStarts(
@@ -363,14 +513,31 @@ function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today:
   const startsWhy = startsComplete(facts.from, today)
     ? null
     : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared.";
-  const fullSales = (x: Facts, from = x.from, to = x.to) =>
-    salesIn(x, scope, from, to).filter((m) => FULL_PLANS.has(m.plan ?? "")).length;
-  const preSales = (x: Facts, from = x.from, to = x.to) =>
-    salesIn(x, scope, from, to).filter((m) => PRE_PLANS.has(m.plan ?? "")).length;
+  // The finishers who bought a full unlock so far: the same people as the submissions they are
+  // a share of. The earlier period is read at the same age, as every "so far" rate is.
+  const fullBuyers = (x: Facts, from = x.from, to = x.to) =>
+    subsIn(x, scope, from, to).filter((s) => s.full).length;
+  // And those who pre-unlocked (EUR 1.99) so far, the same way.
+  const preBuyers = (x: Facts, from = x.from, to = x.to) =>
+    subsIn(x, scope, from, to).filter((s) => preBuysOf(s).length > 0).length;
+  // "Free survey" sells the EUR 1.99 only through the report's gate: with it off and none sold,
+  // blank with why, never 0%.
+  const preWhy = f.funnel === "free" ? freePreBlocked(gateOn, preBuyers(facts) > 0) : null;
+  const prevAged = previous ? ageMatched(previous, sameAge(facts, previous, now)) : null;
   const points = trendBuckets(facts.from, facts.to);
   const spark = (pick: (from: string, to: string) => number | null) =>
     points.map((b) => pick(b.from, b.to));
   const startsOk = (from: string) => startsComplete(from, today);
+  // A tile with nothing to compare with says why, in grey where the change would stand (the
+  // Survey page's words), never a bare dash. `gap`: what the period before is missing.
+  const noCmp = (prev: number | null, gap: string | null = null): string | undefined =>
+    prev !== null
+      ? undefined
+      : !comparisonRange(f)
+        ? "No comparison while today runs"
+        : `No comparison: ${!p ? "the period before is before LoveIQ's records" : (gap ?? "nothing in the period before")}`;
+  const startsGap = p?.starts === null ? "earlier starts incomplete" : null;
+  const visitsGap = p?.visits === null ? "earlier visits not counted" : null;
   const tile = (
     key: string,
     label: string,
@@ -391,43 +558,63 @@ function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today:
     foot: "",
     blocked,
     trend: "",
-    ...(note !== undefined ? { note } : {}),
+    ...(note !== undefined && !blocked ? { note } : {}),
   });
-  const prevFull = previous && p ? fullSales(previous) : null;
-  const prevPre = previous && p ? preSales(previous) : null;
-  return [
+  const full = fullBuyers(facts);
+  const prevFull = prevAged && p ? fullBuyers(prevAged) : null;
+  // Nobody could pre-unlock before it was on sale: an earlier period has no rate to compare.
+  const prevPre = prevAged && p && previous!.from >= PRE_ON_SALE_FROM ? preBuyers(prevAged) : null;
+  const prevStart = p ? ratio(p.starts, p.visits) : null;
+  const prevComplete = p ? ratio(p.subs, p.starts) : null;
+  const prevFullCvr = p && prevFull !== null ? ratio(prevFull, p.subs) : null;
+  const prevPreCvr = p && prevPre !== null ? ratio(prevPre, p.subs) : null;
+  const prevPerVisit = p ? ratio(p.revenue, p.visits) : null;
+  const prevPerSub = p ? ratio(p.revenue, p.subs) : null;
+  const tiles = [
     tile(
       "start-cvr",
       "Survey start CVR",
       "pct",
       ratio(t.starts, t.visits),
-      p ? ratio(p.starts, p.visits) : null,
+      prevStart,
       spark((from, to) => {
         const x = totals(facts, scope, from, to);
         return startsOk(from) ? ratio(x.starts, x.visits) : null;
       }),
-      startsWhy
+      startsWhy,
+      noCmp(prevStart, startsGap ?? visitsGap)
     ),
     tile(
       "complete-cvr",
       "Survey complete CVR",
       "pct",
       ratio(t.subs, t.starts),
-      p ? ratio(p.subs, p.starts) : null,
+      prevComplete,
       spark((from, to) => {
         const x = totals(facts, scope, from, to);
         return startsOk(from) ? ratio(x.subs, x.starts) : null;
       }),
-      startsWhy
+      startsWhy,
+      noCmp(prevComplete, startsGap)
     ),
     PRE_PLANS.size
       ? tile(
           "pre-cvr",
           "Pre-unlock CVR",
           "pct",
-          ratio(preSales(facts), t.subs),
-          p && prevPre !== null ? ratio(prevPre, p.subs) : null,
-          spark((from, to) => ratio(preSales(facts, from, to), totals(facts, scope, from, to).subs))
+          facts.from < PRE_ON_SALE_FROM || preWhy ? null : ratio(preBuyers(facts), t.subs),
+          preWhy ? null : prevPreCvr,
+          preWhy
+            ? []
+            : spark((from, to) =>
+                from < PRE_ON_SALE_FROM
+                  ? null
+                  : ratio(preBuyers(facts, from, to), totals(facts, scope, from, to).subs)
+              ),
+          facts.from < PRE_ON_SALE_FROM
+            ? `Pre-unlock figures start on ${rangeLabel(PRE_ON_SALE_FROM, PRE_ON_SALE_FROM)}, its first whole day on sale (from the evening before): pick a range from that day on.`
+            : preWhy,
+          noCmp(prevPreCvr, p && previous!.from < PRE_ON_SALE_FROM ? "not on sale then" : null)
         )
       : tile(
           "pre-cvr",
@@ -443,31 +630,47 @@ function landingTiles(facts: Facts, previous: Facts | null, f: ApFilters, today:
       "full-cvr",
       "Full-unlock CVR",
       "pct",
-      ratio(fullSales(facts), t.subs),
-      p && prevFull !== null ? ratio(prevFull, p.subs) : null,
-      spark((from, to) => ratio(fullSales(facts, from, to), totals(facts, scope, from, to).subs))
+      ratio(full, t.subs),
+      prevFullCvr,
+      spark((from, to) => ratio(fullBuyers(facts, from, to), totals(facts, scope, from, to).subs)),
+      null,
+      noCmp(prevFullCvr)
     ),
     tile(
       "rev-visit",
       "Revenue / visitor",
       "eur3",
       ratio(t.revenue, t.visits),
-      p ? ratio(p.revenue, p.visits) : null,
+      prevPerVisit,
       spark((from, to) => {
         const x = totals(facts, scope, from, to);
         return ratio(x.revenue, x.visits);
-      })
+      }),
+      null,
+      noCmp(prevPerVisit, visitsGap)
     ),
     tile(
       "rev-sub",
       "Revenue / survey complete",
       "eur3",
       ratio(t.revenue, t.subs),
-      p ? ratio(p.revenue, p.subs) : null,
+      prevPerSub,
       spark((from, to) => {
         const x = totals(facts, scope, from, to);
         return ratio(x.revenue, x.subs);
-      })
+      }),
+      null,
+      noCmp(prevPerSub)
     ),
   ];
+  return {
+    tiles,
+    counts: {
+      visits: t.visits,
+      starts: t.starts,
+      subs: t.subs,
+      fullBuyers: full,
+      revenue: t.revenue,
+    },
+  };
 }

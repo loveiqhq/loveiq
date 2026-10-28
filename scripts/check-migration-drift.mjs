@@ -92,6 +92,13 @@ const DROP_TABLE_RE = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
  * caught through one index it happened to have.
  */
 const TABLE_RE = /^[ \t]*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/gim;
+/**
+ * A view's columns are in information_schema.columns too, so the live side lists it with the
+ * tables: the repo's first, ap_team_user (20261024160000), read as created by no migration.
+ */
+const VIEW_RE =
+  /^[ \t]*CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/gim;
+const DROP_VIEW_RE = /DROP\s+VIEW\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
 const CONSTRAINT_RE = /ALTER\s+TABLE\s+(?:public\.)?(\w+)\s+ADD\s+CONSTRAINT\s+(\w+)/gi;
 const DROP_FUNCTION_RE = /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
 const DROP_INDEX_RE = /DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
@@ -147,6 +154,8 @@ export function extractArtifacts(files) {
     };
     collect(FUNCTION_RE, (m) => artifacts.functions.add(m[1]));
     collect(TABLE_RE, (m) => artifacts.tables.add(m[1].toLowerCase()));
+    collect(VIEW_RE, (m) => artifacts.tables.add(m[1].toLowerCase()));
+    collect(DROP_VIEW_RE, (m) => artifacts.tables.delete(m[1].toLowerCase()));
     collect(INDEX_RE, (m) => artifacts.indexes.set(m[1], m[2].toLowerCase()));
     collect(CONSTRAINT_RE, (m) => artifacts.constraints.set(m[2], m[1]));
     collect(ADD_COLUMN_RE, (m) =>

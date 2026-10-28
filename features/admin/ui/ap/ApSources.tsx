@@ -13,22 +13,33 @@ import type {
 import { berlinTime } from "@features/admin/server/ap/explorer-spec";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { reportingDay } from "@shared/time/reporting-day";
 
+import { Info } from "./field-info";
 import { AP_BASE } from "./nav";
 import { Failed, FilterIcon, HeaderFilter, ICON_BTN, Loading, PageHeader, SortIcon } from "./kit";
 import { useApRole, useApStatus, type ApStatus } from "./status";
 
-const PRIVACY_TAG: Record<"masked" | "partly", { label: string; title: string }> = {
+const PRIVACY_TAG: Record<"masked" | "partly" | "free", { label: string; title: string }> = {
   masked: { label: "PII", title: "Personal: masked in the raw data explorer unless unlocked" },
   partly: {
     label: "Partly PII",
     title: "Some values are personal (the email, name and postcode answers): those are masked",
   },
+  free: {
+    label: "Partly PII",
+    title: "Free text, shown as typed: it can hold a name or other personal details",
+  },
 };
+
+/** A stored time as the design writes it: "21 Oct, 11:20", the year only when not this one. */
+function stamp(value: string): string | null {
+  return berlinTime(value, ", ")?.replace(` ${reportingDay(new Date()).slice(0, 4)}`, "") ?? null;
+}
 
 const FACT = "rounded-full bg-ap-ground px-2.5 py-1.5 text-xs text-ap-body";
 const FIELD_COLUMNS =
-  "minmax(170px,1.2fr) minmax(100px,0.7fr) minmax(260px,2.4fr) minmax(90px,0.6fr)";
+  "minmax(170px,1.2fr) minmax(100px,0.7fr) minmax(260px,2.4fr) minmax(104px,0.6fr)";
 const HEAD =
   "flex items-center gap-1 px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted";
 const headButton = (on: boolean) => `${ICON_BTN} ${on ? "text-ap-violet" : "text-ap-muted"}`;
@@ -45,7 +56,7 @@ function livePosthog(s: CatalogSource, live: ApStatus | null, failed: boolean): 
   return {
     ...s,
     status: last ? "Live" : "Connected",
-    fresh: last ? `Last event ${berlinTime(last, ", ")}` : "No events in two days",
+    fresh: last ? `Last event ${stamp(last)}` : "No events in two days",
   };
 }
 
@@ -176,8 +187,11 @@ function Description({
   );
 }
 
-/** The table's row count and newest row; `fresh` is the source's, for a table without a date. */
-function TableStats({ table, fresh }: { table: CatalogTable; fresh: string }) {
+/**
+ * The table's facts, in the design's order (Key, Joins, Rows, Fresh) and then its field count,
+ * each with its info card. Rows and the newest row are read for the table picked.
+ */
+function TableFacts({ table }: { table: CatalogTable }) {
   const params = useMemo(
     () => ({ source: table.source, table: table.name }),
     [table.source, table.name]
@@ -186,21 +200,35 @@ function TableStats({ table, fresh }: { table: CatalogTable; fresh: string }) {
     "/api/admin/ap/catalog/rows",
     params
   );
-  const newest = data?.newest ? berlinTime(data.newest, ", ") : null;
+  const newest = data?.newest ? stamp(data.newest) : null;
+  const facts = [
+    { k: "data.key", label: "Key", v: table.key.join(" + ") || "none" },
+    // Dropped when the table joins none, as the design does.
+    ...(table.joins.length ? [{ k: "data.joins", label: "Joins", v: table.joins.join(", ") }] : []),
+    {
+      k: "data.rows",
+      label: "Rows",
+      v: loading ? "…" : data?.rows == null ? "—" : data.rows.toLocaleString("en-US"),
+    },
+    {
+      k: "data.fresh",
+      label: "Fresh",
+      v: loading
+        ? "…"
+        : [table.feed, newest ? `newest row ${newest}` : data?.rows === 0 ? "no rows" : ""]
+            .filter(Boolean)
+            .join(" · "),
+    },
+  ];
   return (
-    <>
-      <span className={FACT}>
-        <strong>Rows</strong>{" "}
-        {loading
-          ? "…"
-          : data?.rows === null || data?.rows === undefined
-            ? "—"
-            : data.rows.toLocaleString("en-US")}
-      </span>
-      <span className={FACT}>
-        <strong>Fresh</strong> {loading ? "…" : newest ? `newest row ${newest}` : fresh}
-      </span>
-    </>
+    <div className="flex flex-wrap gap-2">
+      {facts.map((f) => (
+        <span key={f.label} className={FACT}>
+          <strong>{f.label}</strong>
+          <Info k={f.k} label={f.label} /> {f.v}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -226,7 +254,7 @@ function FieldGrid({
     (f) =>
       (!needle || f.name.toLowerCase().includes(needle)) &&
       (!type || f.type === type) &&
-      (!personal || f.privacy)
+      (!personal || f.privacy || f.freeText)
   );
   if (dir) fields.sort((a, b) => a.name.localeCompare(b.name) * dir);
   const hit = q.trim().toLowerCase();
@@ -325,54 +353,57 @@ function FieldGrid({
               No fields match the filters.
             </p>
           )}
-          {fields.map((f) => (
-            <div
-              key={f.name}
-              role="row"
-              className={`group grid items-start border-t border-ap-line ${hit && f.name.toLowerCase().includes(hit) ? "bg-ap-lilac" : ""}`}
-              style={{ gridTemplateColumns: FIELD_COLUMNS }}
-            >
-              <span
-                role="cell"
-                className="flex flex-col gap-0.5 px-3.5 py-[11px] font-mono text-[13px] font-semibold text-ap-violet [overflow-wrap:anywhere]"
+          {fields.map((f) => {
+            const tag = f.privacy ?? (f.freeText ? "free" : null);
+            return (
+              <div
+                key={f.name}
+                role="row"
+                className={`group grid items-start border-t border-ap-line ${hit && f.name.toLowerCase().includes(hit) ? "bg-ap-lilac" : ""}`}
+                style={{ gridTemplateColumns: FIELD_COLUMNS }}
               >
-                {f.name}
-                {(f.pk || f.joins) && (
-                  <span className="font-sans text-[11px] font-medium text-ap-muted">
-                    {f.pk ? "key" : `joins ${f.joins}`}
-                  </span>
-                )}
-              </span>
-              <span role="cell" className="px-3.5 py-[11px] font-mono text-xs text-ap-muted">
-                {f.type}
-              </span>
-              <span
-                role="cell"
-                className="px-3.5 py-[11px] text-[13px] leading-normal text-ap-body"
-              >
-                <Description
-                  key={`${table.source}.${table.name}.${f.name}`}
-                  label={f.name}
-                  value={f.description}
-                  origin={f.origin}
-                  editedBy={f.editedBy}
-                  editedAt={f.editedAt}
-                  onSave={(text) => onSave(f.name, text)}
-                  reveal
-                />
-              </span>
-              <span role="cell" className="px-3.5 py-[11px]">
-                {f.privacy && (
-                  <span
-                    title={PRIVACY_TAG[f.privacy].title}
-                    className="rounded-full bg-ap-pii/[0.12] px-2 py-[3px] text-[11px] font-bold text-ap-pii"
-                  >
-                    {PRIVACY_TAG[f.privacy].label}
-                  </span>
-                )}
-              </span>
-            </div>
-          ))}
+                <span
+                  role="cell"
+                  className="flex flex-col gap-0.5 px-3.5 py-[11px] font-mono text-[13px] font-semibold text-ap-violet [overflow-wrap:anywhere]"
+                >
+                  {f.name}
+                  {(f.pk || f.joins) && (
+                    <span className="font-sans text-[11px] font-medium text-ap-muted">
+                      {f.pk ? "key" : `joins ${f.joins}`}
+                    </span>
+                  )}
+                </span>
+                <span role="cell" className="px-3.5 py-[11px] font-mono text-xs text-ap-muted">
+                  {f.type}
+                </span>
+                <span
+                  role="cell"
+                  className="px-3.5 py-[11px] text-[13px] leading-normal text-ap-body"
+                >
+                  <Description
+                    key={`${table.source}.${table.name}.${f.name}`}
+                    label={f.name}
+                    value={f.description}
+                    origin={f.origin}
+                    editedBy={f.editedBy}
+                    editedAt={f.editedAt}
+                    onSave={(text) => onSave(f.name, text)}
+                    reveal
+                  />
+                </span>
+                <span role="cell" className="px-3.5 py-[11px]">
+                  {tag && (
+                    <span
+                      title={PRIVACY_TAG[tag].title}
+                      className="rounded-full bg-ap-pii/[0.12] px-2 py-[3px] text-[11px] font-bold text-ap-pii"
+                    >
+                      {PRIVACY_TAG[tag].label}
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </>
@@ -638,25 +669,11 @@ export default function ApSources() {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    ["Key", table.key.join(" + ") || "none"],
-                    // Dropped when the table points to none, as the design does.
-                    ...(table.joins.length ? [["Joins", table.joins.join(", ")]] : []),
-                    ["Fields", String(table.fields.length)],
-                  ].map(([k, v]) => (
-                    <span key={k} className={FACT}>
-                      <strong>{k}</strong> {v}
-                    </span>
-                  ))}
-                  <TableStats
-                    key={`${table.source}.${table.name}`}
-                    table={table}
-                    fresh={current?.fresh ?? ""}
-                  />
-                </div>
+                {/* Each keyed by its table so a new table starts fresh; the keys differ by part,
+                    as two siblings with one key leave the old table's parts behind. */}
+                <TableFacts key={`facts.${table.source}.${table.name}`} table={table} />
                 <FieldGrid
-                  key={`${table.source}.${table.name}`}
+                  key={`fields.${table.source}.${table.name}`}
                   table={table}
                   q={q}
                   onSave={(column, text) => save(table, column, text)}

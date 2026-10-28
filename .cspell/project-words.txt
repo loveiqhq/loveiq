@@ -58,6 +58,8 @@ Vercel
 Virality
 Vitest
 WCAG
+WCTA
+WFAQ
 Waitlist
 XLOOKUP
 adkim

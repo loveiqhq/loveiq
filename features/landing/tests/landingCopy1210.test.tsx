@@ -129,7 +129,8 @@ describe.each(["card", "video"] as const)("the 12.10 landing copy, %s arm", (med
       "It doesn't always switch on. It warms up, and you can learn how.",
       "The conditions under which your desire flourishes and quietly dies.",
       "Knowing your sexuality better is the difference between guessing and asking.",
-      "The moment you finish, your personality and your full 50+ page report can be unlocked.",
+      // Counted in chapters, not pages, since 27.10 (Eman).
+      "The moment you finish, your personality and your full 17-chapter report can be unlocked.",
       "Take the test to reveal your result",
       "14 sexual personalities.",
       "Built by researchers and on practical wisdom.",

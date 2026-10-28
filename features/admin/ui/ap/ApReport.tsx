@@ -2,10 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 
+import { shortDate } from "@features/admin/server/ap/days";
 import { rangeLabel } from "@features/admin/server/ap/filters";
 import { delta, deltaRel, EMPTY, fmt, type Tone } from "@features/admin/server/ap/format";
 import type {
   ChangeBox,
+  Parts,
   ReportPayload,
   ReportTile,
   TimeGroup,
@@ -15,6 +17,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info, type Worked } from "./field-info";
 import { bucketTitles, IndexHover, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
@@ -39,18 +42,53 @@ import {
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
-/** The reader's submission in the Explorer: that one row, over all time. */
-const submissionHref = (id: number | string) =>
+/** The reader's surveys in the Explorer, over all time. */
+const userHref = (id: number | string) =>
   `/admin/ap/explorer?${new URLSearchParams({
     source: "production",
     table: "survey_submission",
     date: "",
-    filters: JSON.stringify([["id", "eq", String(id)]]),
+    filters: JSON.stringify([["user_id", "eq", String(id)]]),
   })}`;
 
 /** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
 const wholePct = (v: number | null) =>
   v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
+
+/**
+ * Continue, Skip intro and Exit in whole percents that add up to 100 (largest remainder), as the
+ * note under the table promises; where Skip intro wasn't recorded, the others add up to their
+ * own total. Equal shares read alike: the points left go to whole groups of equal shares, the
+ * groups that fit with the most remainder; when none fit, plain largest remainder. A skip of
+ * none reads "—", as the design writes it.
+ */
+export function wholeSplit(parts: Array<number | null>): string[] {
+  const pct = parts.map((p) => (p === null ? 0 : p * 100));
+  const whole = pct.map(Math.floor);
+  const known = parts.flatMap((p, i) => (p === null ? [] : [i]));
+  const left =
+    Math.round(known.reduce((a, i) => a + pct[i]!, 0)) - known.reduce((a, i) => a + whole[i]!, 0);
+  const rem = (i: number) => pct[i]! - whole[i]!;
+  const groups = [...new Set(known.map((i) => parts[i]!))].map((v) =>
+    known.filter((i) => parts[i] === v)
+  );
+  let best: number[][] | null = null;
+  let bestRem = -1;
+  for (let mask = 1; mask < 1 << groups.length; mask++) {
+    const pick = groups.filter((_, g) => mask & (1 << g));
+    const size = pick.reduce((a, g) => a + g.length, 0);
+    const r = pick.reduce((a, g) => a + g.length * rem(g[0]!), 0);
+    if (size === left && r > bestRem) [best, bestRem] = [pick, r];
+  }
+  const up = new Set(
+    best ? best.flat() : [...known].sort((a, b) => rem(b) - rem(a)).slice(0, Math.max(0, left))
+  );
+  return parts.map((p, i) => {
+    if (p === null) return wholePct(null);
+    const v = whole[i]! + (up.has(i) ? 1 : 0);
+    return v === 0 && p > 0 ? "<1%" : `${v}%`;
+  });
+}
 
 /** At least `pct` percent as the whole percentage shows it: the design's highlights. */
 const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 100) >= pct;
@@ -58,15 +96,87 @@ const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 
 /** "1 vote", "74 votes". */
 const votes = (n: number) => `${fmt("count", n)} vote${n === 1 ? "" : "s"}`;
 
+/** A total reading time as h:mm:ss ("47:22:20") from an hour, m:ss below. */
+const hms = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  return s < 3600
+    ? fmt("mmss", ms)
+    : `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/** A figure for its info card: as printed, with what it is worked out of where it has parts. */
+const workedOf = (shown: string, parts?: Parts, time = false): Worked =>
+  parts
+    ? {
+        num: time ? hms(parts.num) : fmt("count", parts.num),
+        den: fmt("count", parts.den),
+        value: shown,
+      }
+    : { value: shown };
+
 const TONE: Record<Tone, string> = {
   good: "text-ap-good",
   bad: "text-ap-bad",
   flat: "text-ap-muted",
 };
 
-/** The design's headline tile (KpiTileV2), at the tile's own decimals. */
+/**
+ * Each tile's info card by the tile's key; a headline tile's 12-week line is read by the same
+ * key (field-info finds it among the payload's `tiles`). The wizard's tiles sit in their own
+ * list, which the card does not read, so theirs is not offered; nor Pre unlock's, never sold.
+ */
+const TILE_INFO: Record<string, { k: string; trend?: true }> = {
+  opened: { k: "report.opened", trend: true },
+  read: { k: "report.read", trend: true },
+  median: { k: "report.median", trend: true },
+  returned: { k: "report.returned", trend: true },
+  initiated: { k: "report.initiated", trend: true },
+  share: { k: "report.share", trend: true },
+  rating: { k: "report.rating", trend: true },
+  invite: { k: "report.invite", trend: true },
+  pre: { k: "report.pre" },
+  full: { k: "report.full", trend: true },
+  intro: { k: "report.intro" },
+  completed: { k: "report.completed" },
+  skipped: { k: "report.skipped" },
+  left: { k: "report.left" },
+  "tour-started": { k: "report.tour-started" },
+  "tour-completed": { k: "report.tour-completed" },
+  "tour-skipped": { k: "report.tour-skipped" },
+  "tour-left": { k: "report.tour-left" },
+};
+
+/** Each box's info card under Time in report and Returns, by the box's key. */
+const BOX_INFO: Record<string, { k: string }> = {
+  avg: { k: "report.time_avg" },
+  median: { k: "report.time_median" },
+  session: { k: "report.time_session" },
+  readers: { k: "report.time_readers" },
+  back: { k: "report.came_back" },
+  days: { k: "report.days_to_return" },
+  email: { k: "report.via_email" },
+  visits: { k: "report.sessions_per_reader" },
+};
+
+/** The design's headline tile (KpiTileV2), at the tile's own decimals, with its info card. */
 function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: string; to: string } }) {
-  return <KpiTileV2 tile={tile} digits={tile.digits} titles={bucketTitles(range.from, range.to)} />;
+  const about = TILE_INFO[tile.key];
+  return (
+    <KpiTileV2
+      tile={tile}
+      digits={tile.digits}
+      titles={bucketTitles(range.from, range.to)}
+      info={
+        about && {
+          k: about.k,
+          worked: tile.blocked
+            ? undefined
+            : workedOf(fmt(tile.unit, tile.value, tile.digits), tile.parts, tile.unit === "mmss"),
+          trend: about.trend ? { route: "report", tile: tile.key, unit: tile.unit } : undefined,
+        }
+      }
+    />
+  );
 }
 
 /**
@@ -75,14 +185,27 @@ function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: strin
  */
 function ChangeBoxView({ box }: { box: ChangeBox }) {
   const d = box.note === undefined ? deltaRel(box.value, box.prev, box.goodWhen) : null;
+  const shown =
+    box.unit === "pct" && box.digits === 0
+      ? wholePct(box.value)
+      : fmt(box.unit, box.value, box.digits);
+  const about = BOX_INFO[box.key];
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-ap-ground p-3.5">
-      <span className="text-xs text-ap-muted">{box.label}</span>
-      <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">
-        {box.unit === "pct" && box.digits === 0
-          ? wholePct(box.value)
-          : fmt(box.unit, box.value, box.digits)}
+      <span className="text-xs text-ap-muted">
+        {box.label}
+        {about && (
+          <>
+            {" "}
+            <Info
+              k={about.k}
+              label={box.label}
+              worked={workedOf(shown, box.parts, box.unit === "mmss")}
+            />
+          </>
+        )}
       </span>
+      <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">{shown}</span>
       <span
         className={`text-sm font-bold tabular-nums ${box.note !== undefined ? "text-ap-muted" : TONE[d?.tone ?? "flat"]}`}
       >
@@ -124,7 +247,10 @@ function sortRows<T, K extends string>(
   });
 }
 
-/** A header cell: the design's sort arrows on a sortable column, a funnel where one filters. */
+/**
+ * A header cell: the design's sort arrows on a sortable column, a funnel where one filters,
+ * and a figure's info icon after its name.
+ */
 function Th<K extends string>({
   label,
   right = false,
@@ -132,6 +258,7 @@ function Th<K extends string>({
   sort = null,
   onSort,
   filter,
+  info,
 }: {
   label: string;
   right?: boolean;
@@ -139,6 +266,7 @@ function Th<K extends string>({
   sort?: Sort<K>;
   onSort?: (key: K) => void;
   filter?: ReactNode;
+  info?: string;
 }) {
   const dir = col !== undefined && sort?.key === col ? sort.dir : null;
   return (
@@ -150,6 +278,7 @@ function Th<K extends string>({
       className={`flex items-center gap-1 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${right ? "justify-end text-right" : ""}`}
     >
       {label}
+      {info && <Info k={info} label={label} />}
       {filter}
       {col !== undefined && onSort && (
         <button
@@ -309,9 +438,10 @@ export default function ApReport() {
                         columns: [
                           { label: "Chapter", unit: "text" },
                           { label: "Reach", unit: "pct" },
+                          { label: "Median time", unit: "mmss" },
                           { label: "Avg. time", unit: "mmss" },
-                          { label: "Good votes", unit: "count" },
-                          { label: "Bad votes", unit: "count" },
+                          { label: "Good votes (all time)", unit: "count" },
+                          { label: "Bad votes (all time)", unit: "count" },
                           { label: "Show more CTR", unit: "pct" },
                           { label: "Paywall CTR", unit: "pct" },
                           { label: "Saw the paywall (readers)", unit: "count" },
@@ -324,6 +454,7 @@ export default function ApReport() {
                           label: `${c.n} · ${c.name} (${c.id})`,
                           values: [
                             c.reach,
+                            c.medianMs,
                             c.avgMs,
                             c.up,
                             c.down,
@@ -440,9 +571,13 @@ export default function ApReport() {
                       table: {
                         columns: [
                           { label: "Campaign", unit: "text" },
+                          { label: "Status", unit: "text" },
                           { label: "Sent", unit: "count" },
+                          { label: "Send times estimated", unit: "text" },
+                          { label: "Delivered (since opens)", unit: "count" },
                           { label: "Opened", unit: "count" },
                           { label: "Open rate", unit: "pct" },
+                          { label: "Delivered", unit: "count" },
                           { label: "Clicked", unit: "count" },
                           { label: "Click rate", unit: "pct" },
                           { label: "Returned", unit: "count" },
@@ -452,9 +587,13 @@ export default function ApReport() {
                         rows: data.returns.campaigns.map((c) => ({
                           label: c.stage,
                           values: [
+                            c.status,
                             c.sent,
+                            c.estimated ? "yes" : "no",
+                            c.deliveredOpens,
                             c.opened,
                             c.openRate,
+                            c.delivered,
                             c.clicked,
                             c.clickRate,
                             c.returned,
@@ -465,7 +604,7 @@ export default function ApReport() {
                       },
                     },
                     {
-                      name: "Feedback reasons (bad votes)",
+                      name: "Feedback reasons (bad votes, all time)",
                       table: {
                         columns: [
                           { label: "Reason", unit: "text" },
@@ -475,24 +614,28 @@ export default function ApReport() {
                       },
                     },
                     {
-                      name: "Feedback log (latest 200)",
+                      name: "Feedback log (all time)",
                       table: {
                         columns: [
                           { label: "When", unit: "text" },
+                          { label: "User ID", unit: "text" },
                           { label: "Submission", unit: "text" },
                           { label: "Chapter", unit: "text" },
+                          { label: "Chapter id", unit: "text" },
                           { label: "Vote", unit: "text" },
                           { label: "Reason", unit: "text" },
-                          { label: "Comment left", unit: "text" },
+                          { label: "Comment (contacts masked)", unit: "text" },
                         ],
                         rows: data.feedback.log.map((x) => ({
                           label: x.at,
                           values: [
+                            x.user === null ? "" : String(x.user),
                             x.submission === null ? "" : String(x.submission),
                             x.chapter,
+                            x.id,
                             x.vote,
                             x.issue ?? "",
-                            x.commented ? "yes" : "no",
+                            x.comment ?? "",
                           ],
                         })),
                       },
@@ -563,7 +706,16 @@ function WizardSection({ data }: { data: ReportPayload }) {
               : s.exit
   );
   const skipsFrom = w.skipsFrom ? rangeLabel(w.skipsFrom, w.skipsFrom) : null;
-  const gtc = "44px minmax(260px,2.6fr) 74px minmax(130px,1.2fr) 90px 90px 80px 80px";
+  // What Skip intro can't see in this range: a skip before it was recorded reads as an exit.
+  const skipNote = !w.skipsFrom
+    ? " Skip Intro is not recorded yet, so a skip counts as an exit."
+    : data.range.to < w.skipsFrom
+      ? ` Skip Intro is recorded from ${skipsFrom}: in this range a skip counts as an exit.`
+      : data.range.from < w.skipsFrom
+        ? ` Skip Intro is recorded from ${skipsFrom}: before ${skipsFrom} a skip counts as an exit.`
+        : "";
+  // Wider than drawn: each heading also carries its info icon.
+  const gtc = "44px minmax(208px,2.6fr) 148px minmax(150px,1.2fr) 124px 140px 96px 96px";
   const head = { sort, onSort };
   return (
     <Card id="wizard" labelledBy="h-rwiz">
@@ -573,89 +725,83 @@ function WizardSection({ data }: { data: ReportPayload }) {
           <ReportKpiTile key={t.key} tile={t} range={data.range} />
         ))}
       </TileGrid>
-      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Intro wizard slides" style={{ minWidth: 980 }}>
-          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
-            <Th label="#" />
-            <Th label="Slide" />
-            <Th label="Time" col="time" right {...head} />
-            <Th label="Reached" col="reached" {...head} />
-            <Th label="Continue" col="cont" right {...head} />
-            <Th label="Skip intro" col="skip" right {...head} />
-            <Th label="Back" col="back" right {...head} />
-            <Th label="Exit" col="exit" right {...head} />
-          </div>
-          {slides.map((s) => (
-            <div
-              key={s.n}
-              role="row"
-              className="grid items-center border-t border-ap-line"
-              style={{ gridTemplateColumns: gtc }}
-            >
-              <span role="cell" className="px-3 py-2.5 text-xs tabular-nums text-ap-muted">
-                {s.n}
-              </span>
-              <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
-                <span className="text-sm font-bold">{s.name}</span>
-                <span className="text-xs leading-snug text-ap-muted">{s.purpose}</span>
-              </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                {fmt("mmss", s.medianMs)}
-              </span>
-              <span role="cell" className="flex items-center gap-2 px-3 py-2.5">
-                <span className="flex-1">
-                  <Bar pct={s.reachedShare} height={8} />
-                </span>
-                <span className="text-xs font-bold tabular-nums">
-                  {fmt("pct", s.reachedShare, 0)}
-                </span>
-              </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                {wholePct(s.cont)}
-              </span>
-              <span
-                role="cell"
-                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.skip, 11) ? "font-bold text-ap-bad" : ""}`}
-              >
-                {wholePct(s.skip)}
-              </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                {s.n === 1
-                  ? "—"
-                  : s.backShare === null
-                    ? fmt("count", s.back)
-                    : wholePct(s.backShare)}
-              </span>
-              <span
-                role="cell"
-                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.exit, 5) ? "font-bold text-ap-bad" : ""}`}
-              >
-                {wholePct(s.exit)}
-              </span>
+      {data.blocked ? (
+        <p className="m-0 text-sm leading-relaxed text-ap-muted">{data.blocked}</p>
+      ) : (
+        <>
+          {data.narrowed && (
+            <AllTraffic note="Back and Median time are all traffic, as the slides' own events carry no funnel, source, device or tier: under any of these filters, Back is a count." />
+          )}
+          <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+            <div role="table" aria-label="Intro wizard slides" style={{ minWidth: 1040 }}>
+              <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+                <Th label="#" />
+                <Th label="Slide" />
+                <Th label="Median time" col="time" right info="report.wizard_time" {...head} />
+                <Th label="Reached" col="reached" info="report.wizard_reached" {...head} />
+                <Th label="Continue" col="cont" right info="report.wizard_continue" {...head} />
+                <Th label="Skip intro" col="skip" right info="report.wizard_skip" {...head} />
+                <Th label="Back" col="back" right info="report.wizard_back" {...head} />
+                <Th label="Exit" col="exit" right info="report.wizard_exit" {...head} />
+              </div>
+              {slides.map((s) => (
+                <div
+                  key={s.n}
+                  role="row"
+                  className="grid items-center border-t border-ap-line"
+                  style={{ gridTemplateColumns: gtc }}
+                >
+                  <span role="cell" className="px-3 py-2.5 text-xs tabular-nums text-ap-muted">
+                    {s.n}
+                  </span>
+                  <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
+                    <span className="text-sm font-bold">{s.name}</span>
+                    <span className="text-xs leading-snug text-ap-muted">{s.purpose}</span>
+                  </span>
+                  <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                    {fmt("mmss", s.medianMs)}
+                  </span>
+                  <span role="cell" className="flex items-center gap-2 px-3 py-2.5">
+                    <span className="flex-1">
+                      <Bar pct={s.reachedShare} height={8} />
+                    </span>
+                    <span className="text-xs font-bold tabular-nums">
+                      {fmt("pct", s.reachedShare, 0)}
+                    </span>
+                  </span>
+                  <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                    {wholeSplit([s.cont, s.skip, s.exit])[0]}
+                  </span>
+                  <span
+                    role="cell"
+                    className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.skip, 11) ? "font-bold text-ap-bad" : ""}`}
+                  >
+                    {s.skip === 0 ? "—" : wholeSplit([s.cont, s.skip, s.exit])[1]}
+                  </span>
+                  <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                    {s.n === 1
+                      ? "—"
+                      : s.backShare === null
+                        ? fmt("count", s.back)
+                        : wholePct(s.backShare)}
+                  </span>
+                  <span
+                    role="cell"
+                    className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.exit, 5) ? "font-bold text-ap-bad" : ""}`}
+                  >
+                    {wholeSplit([s.cont, s.skip, s.exit])[2]}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-      <details className="text-xs leading-relaxed text-ap-muted">
-        <summary className="cursor-pointer font-semibold text-ap-body">
-          How these are counted
-        </summary>
-        <p className="m-0 mt-1.5">
-          Reached, Continue, Skip intro and Exit follow the filters; Back and Time are all traffic,
-          as the slides&rsquo; own events carry no source or device. Continue on slide 6 = opened
-          the report.{" "}
-          {skipsFrom
-            ? `Skip intro = pressed Skip Intro on the slide, of its readers who finished from ${skipsFrom}, when it began to be recorded. Exit = did not go on and did not skip (closed, or still on it); before ${skipsFrom} a skip counts as an exit.`
-            : "Skip intro is not recorded yet. Exit = did not go on (closed, skipped, or still on it)."}{" "}
-          Back = went back from the slide, of those who reached it
-          {data.narrowed
-            ? "; with a filter on it is a count, since back clicks carry no source"
-            : ""}
-          . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
-          time on the last slide. In red: Skip intro from 11%, Exit from 5%. The CSV also has, for
-          slide 2, the readers who stepped through the map&rsquo;s deep dives.
-        </p>
-      </details>
+          </div>
+          <p className="m-0 text-xs text-ap-muted">
+            Continue + Skip intro + Exit add up to 100% of readers on each slide; Back is counted
+            separately.{skipNote}
+          </p>
+          {data.wizardNote && <p className="m-0 text-xs text-ap-muted">{data.wizardNote}</p>}
+        </>
+      )}
     </Card>
   );
 }
@@ -699,12 +845,12 @@ function TourSection({ data }: { data: ReportPayload }) {
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: TOUR_GRID }}>
             <Th label="#" />
             <Th label="Stop" />
-            <Th label="Time" right />
-            <Th label="Reached" />
-            <Th label="Next" right />
-            <Th label="Back" right />
-            <Th label="Skip tour" right />
-            <Th label="Exit" right />
+            <Th label="Time" right info="report.tour-time" />
+            <Th label="Reached" info="report.tour-reached" />
+            <Th label="Next" right info="report.tour-next" />
+            <Th label="Back" right info="report.tour-back" />
+            <Th label="Skip tour" right info="report.tour-skip" />
+            <Th label="Exit" right info="report.tour-exit" />
           </div>
           {a.stops.map((s, i) => (
             <div
@@ -763,22 +909,26 @@ function TourSection({ data }: { data: ReportPayload }) {
         <p className="m-0 mt-1.5">
           Our own records of each reader&rsquo;s first run of the tour in a browser, from {t.from}
           (PostHog sees about a quarter of readers); a replay from the chapter menu is left out. All
-          traffic: the runs carry no source, device or tier. Tour started: the range&rsquo;s readers
-          who got the tour, and their share of those who opened their report. A reader who later
-          opened it in another browser got the tour there too: that run counts in the rest.
-          Completed, Skipped tour and Left the tour / bounced are shares of the runs; Left the tour
-          / bounced also holds the {fmt("count", a.unended)} {a.unended === 1 ? "run" : "runs"}{" "}
-          whose end was never recorded (the page went without a word, or the browser kept it and
-          never brought it back), which are on no stop. The table is of the {fmt("count", a.placed)}{" "}
-          {a.placed === 1 ? "run" : "runs"} whose end was recorded with its stops. Reached: of
-          those, the runs that came to the stop; a stop whose control was not on the page is left
-          out of that reader&rsquo;s tour. Next: went on from it, Finish on the last. Skip tour:
-          Skip Tour, Escape or the browser&rsquo;s Back there. Exit: left the page there. A run that
-          went back before it ended is placed on the furthest stop it reached. Next + Skip tour +
-          Exit add up to 100% of the runs on each stop; Back is counted separately, as the share who
-          went back from it at least once. Time: the median time with the stop&rsquo;s bubble up,
-          over every visit to it. From 1280px wide the first stop points at the sidebar, and its
-          text says &ldquo;the menu on the left&rdquo;. In red: Skip tour from 8%, Exit from 4%.
+          traffic: the runs carry no funnel, source, device or tier. Tour started: the range&rsquo;s
+          readers who got the tour
+          {a.share
+            ? `, on this tab ${a.share}, free and paid together (an opener’s audience isn’t recorded)`
+            : ""}
+          . A reader who later opened it in another browser got the tour there too: that run counts
+          in the rest. Completed, Skipped tour and Left the tour / bounced are shares of the runs;
+          Left the tour / bounced also holds the {fmt("count", a.unended)}{" "}
+          {a.unended === 1 ? "run" : "runs"} whose end was never recorded (the page went without a
+          word, or the browser kept it and never brought it back), which are on no stop. The table
+          is of the {fmt("count", a.placed)} {a.placed === 1 ? "run" : "runs"} whose end was
+          recorded with its stops. Reached: of those, the runs that came to the stop; a stop whose
+          control was not on the page is left out of that reader&rsquo;s tour. Next: went on from
+          it, Finish on the last. Skip tour: Skip Tour, Escape or the browser&rsquo;s Back there.
+          Exit: left the page there. A run that went back before it ended is placed on the furthest
+          stop it reached. Next + Skip tour + Exit add up to 100% of the runs on each stop; Back is
+          counted separately, as the share who went back from it at least once. Time: the median
+          time with the stop&rsquo;s bubble up, over every visit to it. From 1280px wide the first
+          stop points at the sidebar, and its text says &ldquo;the menu on the left&rdquo;. In red:
+          Skip tour from 8%, Exit from 4%.
         </p>
       </details>
     </Card>
@@ -800,147 +950,155 @@ function TimeSection({ data }: { data: ReportPayload }) {
       <h2 id="h-time" className="m-0 font-serif text-[22px] font-semibold">
         Time in report
       </h2>
-      <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))" }}
-      >
-        {t.boxes.map((b) => (
-          <ChangeBoxView key={b.key} box={b} />
-        ))}
-      </div>
-      <SubHead
-        title="Share of readers by total active reading time"
-        description="Readers grouped by how long they actively read in total, against the average of all reports"
-      />
-      <div className="flex flex-wrap gap-4 text-xs text-ap-body">
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-3 w-3 rounded-[3px] bg-ap-purple" />
-          This report
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-0 w-4 border-t-2 border-dashed border-ap-ink" />
-          Benchmark · all reports
-        </span>
-      </div>
-      <div className="relative flex h-[150px] items-end border-b border-ap-line">
-        {t.buckets.map((b) => (
+      {data.blocked ? (
+        <p className="m-0 text-sm leading-relaxed text-ap-muted">{data.blocked}</p>
+      ) : (
+        <>
+          <p className="m-0 text-[13px] text-ap-muted">
+            Reading time is recorded for {fmt("count", t.recorded)} of {fmt("count", t.readers)}{" "}
+            reader
+            {t.readers === 1 ? "" : "s"}: every figure below is theirs.
+          </p>
           <div
-            key={b.label}
-            className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 px-[5px]"
+            className="grid gap-3"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))" }}
           >
-            <span className="text-xs font-bold">
-              {fmt("pct", b.share, 0)}{" "}
-              <span className="font-medium text-ap-muted">· {fmt("pct", b.bench, 0)}</span>
+            {t.boxes.map((b) => (
+              <ChangeBoxView key={b.key} box={b} />
+            ))}
+          </div>
+          <SubHead
+            title="Share of readers by total active reading time"
+            info="report.time_buckets"
+            description="Readers grouped by how long they actively read in total, against all reports"
+          />
+          <div className="flex flex-wrap gap-4 text-xs text-ap-body">
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-3 w-3 rounded-[3px] bg-ap-purple" />
+              This report
             </span>
-            <span
-              className="w-full max-w-12 rounded-t-md rounded-b-sm bg-ap-purple"
-              style={{ height: `${Math.round((b.share / max) * 110)}px` }}
-            />
-            <span
-              aria-hidden="true"
-              className="absolute left-[4%] right-[4%] border-t-2 border-dashed border-ap-ink"
-              style={{ bottom: `${Math.round((b.bench / max) * 110)}px` }}
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-0 w-4 border-t-2 border-dashed border-ap-ink" />
+              Benchmark · all reports
+            </span>
+          </div>
+          <div className="relative flex h-[150px] items-end border-b border-ap-line">
+            {t.buckets.map((b) => (
+              <div
+                key={b.label}
+                className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 px-[5px]"
+              >
+                <span className="text-xs font-bold">
+                  {fmt("pct", b.share, 0)}{" "}
+                  <span className="font-medium text-ap-muted">· {fmt("pct", b.bench, 0)}</span>
+                </span>
+                <span
+                  className="w-full max-w-12 rounded-t-md rounded-b-sm bg-ap-purple"
+                  style={{ height: `${Math.round((b.share / max) * 110)}px` }}
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute left-[4%] right-[4%] border-t-2 border-dashed border-ap-ink"
+                  style={{ bottom: `${Math.round((b.bench / max) * 110)}px` }}
+                />
+              </div>
+            ))}
+            <IndexHover
+              xs={t.buckets.map((_, i) => ((i + 0.5) / t.buckets.length) * 100)}
+              label="Share of readers by total active reading time"
+              band={(i) => ({ left: (i / t.buckets.length) * 100, width: 100 / t.buckets.length })}
+              tip={(i) => {
+                const b = t.buckets[i]!;
+                return {
+                  title: `${b.label}${b.label.includes("min") ? "" : " min"} of reading`,
+                  sub: "Readers’ total active reading time",
+                  rows: [
+                    {
+                      label: "This report",
+                      value: fmt("pct", b.share, 1),
+                      color: "#795fc8",
+                      mark: "square",
+                    },
+                    {
+                      label: "Benchmark · all reports",
+                      value: fmt("pct", b.bench, 1),
+                      color: "#161021",
+                      mark: "dashed",
+                    },
+                    {
+                      label: "Difference",
+                      value: delta("pct", b.share, b.bench, "either")?.text ?? EMPTY,
+                      strong: true,
+                    },
+                  ],
+                };
+              }}
             />
           </div>
-        ))}
-        <IndexHover
-          xs={t.buckets.map((_, i) => ((i + 0.5) / t.buckets.length) * 100)}
-          label="Share of readers by total active reading time"
-          band={(i) => ({ left: (i / t.buckets.length) * 100, width: 100 / t.buckets.length })}
-          tip={(i) => {
-            const b = t.buckets[i]!;
-            return {
-              title: `${b.label}${b.label.includes("min") ? "" : " min"} of reading`,
-              sub: "Readers’ total active reading time",
-              rows: [
-                {
-                  label: "This report",
-                  value: fmt("pct", b.share, 1),
-                  color: "#795fc8",
-                  mark: "square",
-                },
-                {
-                  label: "Benchmark · all reports",
-                  value: fmt("pct", b.bench, 1),
-                  color: "#161021",
-                  mark: "dashed",
-                },
-                {
-                  label: "Difference",
-                  value: delta("pct", b.share, b.bench, "either")?.text ?? EMPTY,
-                  strong: true,
-                },
-              ],
-            };
-          }}
-        />
-      </div>
-      <div className="flex">
-        {t.buckets.map((b) => (
-          <span
-            key={b.label}
-            className="min-w-0 flex-1 px-[5px] text-center text-[11px] text-ap-muted"
-          >
-            {b.label}
-          </span>
-        ))}
-      </div>
-      <DepthChart data={data} />
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ap-line pt-4">
-        <span className="text-[15px] font-bold text-ap-ink">Total reading time by group</span>
-        <div
-          role="group"
-          aria-label="Statistic"
-          className="inline-flex gap-1 rounded-full bg-ap-ground p-1"
-        >
-          {(
-            [
-              ["median", "Median"],
-              ["avg", "Average"],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={stat === k}
-              onClick={() => setStat(k)}
-              className={`min-h-9 cursor-pointer rounded-full border-0 px-4 text-[13px] font-semibold ${stat === k ? "bg-ap-ink text-white" : "bg-transparent text-ap-body"}`}
+          <div className="flex">
+            {t.buckets.map((b) => (
+              <span
+                key={b.label}
+                className="min-w-0 flex-1 px-[5px] text-center text-[11px] text-ap-muted"
+              >
+                {b.label}
+              </span>
+            ))}
+          </div>
+          <DepthChart data={data} />
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ap-line pt-4">
+            <span className="text-[15px] font-bold text-ap-ink">Total reading time by group</span>
+            <div
+              role="group"
+              aria-label="Statistic"
+              className="inline-flex gap-1 rounded-full bg-ap-ground p-1"
             >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div
-        className="grid gap-6"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))" }}
-      >
-        <TimeSplit title="gender" rows={t.byGender} stat={stat} />
-        <TimeSplit title="age" rows={t.byAge} stat={stat} />
-      </div>
-      <details className="text-xs leading-relaxed text-ap-muted">
-        <summary className="cursor-pointer font-semibold text-ap-body">
-          How these are counted
-        </summary>
-        <p className="m-0 mt-1.5">
-          Reading time counts sessions whose end was recorded (saved since 18 Sep 2026, for about
-          half of the sessions) and under 4 hours, each counted up to 30 minutes. Each box&rsquo;s
-          change is against the period before, its readers read as they stood at the same age. All
-          reports: every reader since 18 Sep 2026 whose reading was recorded, whatever the filters.
-          By group: bars are this report, the tick all reports for the same group, and the right
-          column the difference; &ldquo;—&rdquo; where a group has no reader. Gender from question
-          15010, age from 15003 (55+ is its 55–64 and 65+).
-        </p>
-      </details>
+              {(
+                [
+                  ["median", "Median"],
+                  ["avg", "Average"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={stat === k}
+                  onClick={() => setStat(k)}
+                  className={`min-h-9 cursor-pointer rounded-full border-0 px-4 text-[13px] font-semibold ${stat === k ? "bg-ap-ink text-white" : "bg-transparent text-ap-body"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div
+            className="grid gap-6"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))" }}
+          >
+            <TimeSplit title="gender" info="report.time_gender" rows={t.byGender} stat={stat} />
+            <TimeSplit title="age" info="report.time_age" rows={t.byAge} stat={stat} />
+          </div>
+        </>
+      )}
     </Card>
   );
 }
 
 /** A figure's title and its line of description, as the design sets them under a section. */
-function SubHead({ title, description }: { title: string; description: string }) {
+function SubHead({
+  title,
+  info,
+  description,
+}: {
+  title: string;
+  info: string;
+  description: string;
+}) {
   return (
     <div className="flex flex-col gap-1 border-t border-ap-line pt-4">
-      <span className="text-[15px] font-bold text-ap-ink">{title}</span>
+      <span className="text-[15px] font-bold text-ap-ink">
+        {title} <Info k={info} label={title} />
+      </span>
       <span className="text-[13px] text-ap-muted">{description}</span>
     </div>
   );
@@ -963,7 +1121,8 @@ function DepthChart({ data }: { data: ReportPayload }) {
     <figure className="m-0 flex flex-col gap-3 border-t border-ap-line pt-4">
       <figcaption className="flex flex-col gap-1">
         <span className="text-[15px] font-bold text-ap-ink">
-          How far into the report readers got
+          How far into the report readers got{" "}
+          <Info k="report.depth" label="How far into the report readers got" />
         </span>
         <span className="text-[13px] text-ap-muted">
           Readers by the deepest chapter they reached, as a share of the report&rsquo;s {d.chapters}{" "}
@@ -1064,9 +1223,7 @@ function DepthChart({ data }: { data: ReportPayload }) {
           </div>
           <span className="text-xs text-ap-muted">
             {fmt("count", d.readers)} {d.readers === 1 ? "reader" : "readers"} whose reading per
-            chapter was recorded (those who finished from {from}). A chapter is reached once they
-            spent a second or more in it or used anything in it; the deepest is the latest in the
-            report&rsquo;s order, which readers can also jump to from the chapter list.
+            chapter was recorded (those who finished from {from}).
           </span>
         </>
       )}
@@ -1076,10 +1233,12 @@ function DepthChart({ data }: { data: ReportPayload }) {
 
 function TimeSplit({
   title,
+  info,
   rows,
   stat,
 }: {
   title: string;
+  info: string;
   rows: TimeGroup[];
   stat: "median" | "avg";
 }) {
@@ -1092,7 +1251,8 @@ function TimeSplit({
     <div className="flex flex-col gap-2.5">
       {rowTip.card}
       <span className="text-[13px] font-bold text-ap-body">
-        {stat === "median" ? "Median" : "Avg."} total time by {title}
+        {stat === "median" ? "Median" : "Avg."} total time by {title}{" "}
+        <Info k={info} label={`Total time by ${title}`} />
       </span>
       {rows.map((r, i) => {
         const { v, b } = pick(r);
@@ -1158,9 +1318,13 @@ function TimeSplit({
   );
 }
 
+/** Days until first return's columns; its two figures' headings each carry an info icon. */
+const DAYS_GTC = "110px minmax(0,1fr) 72px 96px";
+
 /** The design's colours for the ways back; bookmarks and direct visits keep the purple. */
 const SOURCE_COLOURS: Record<string, string> = {
   "Email campaign": "#fe6839",
+  "Report or invite email": "#ffb59e",
   "Share link from a friend": "#9d8ad7",
   Other: "#d6cff0",
 };
@@ -1176,8 +1340,19 @@ const campaignName = (stage: string) => stage.replace(/_/g, " ");
 const campaignValue = (c: CampaignRow, k: CampaignFilter) =>
   k === "campaign" ? campaignName(c.stage) : c.status;
 
-/** A count with its share of the emails sent under it; "—" while it is not counted. */
-function CountAndRate({ n, rate }: { n: number | null; rate: number | null }) {
+/**
+ * A count with its share of the emails Resend reported delivered under it, and that base
+ * ("of 18 delivered"); "—" while it is not counted.
+ */
+function CountAndRate({
+  n,
+  rate,
+  of,
+}: {
+  n: number | null;
+  rate: number | null;
+  of: number | null;
+}) {
   return (
     <span
       role="cell"
@@ -1185,7 +1360,10 @@ function CountAndRate({ n, rate }: { n: number | null; rate: number | null }) {
     >
       {fmt("count", n)}
       {n !== null && rate !== null && (
-        <span className="text-xs text-ap-muted">{fmt("pct", rate, 1)}</span>
+        <span className="text-xs text-ap-muted">
+          {fmt("pct", rate, 1)}
+          {of !== null && ` of ${fmt("count", of)} delivered`}
+        </span>
       )}
     </span>
   );
@@ -1220,8 +1398,9 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         Returns
       </h2>
       {data.narrowed && (
-        <AllTraffic note="How people came back and the email campaigns are all traffic: those records carry no source, device or tier." />
+        <AllTraffic note="What brought readers back, Returned via email and the email campaigns are all traffic: those records carry no funnel, source, device or tier. The rest follows the filters." />
       )}
+      {data.blocked && <p className="m-0 text-sm leading-relaxed text-ap-muted">{data.blocked}</p>}
       <div
         className="grid gap-3"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))" }}
@@ -1231,48 +1410,60 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         ))}
       </div>
       <div className="flex max-w-[880px] flex-col gap-6">
-        <div className="flex flex-col gap-2.5">
-          <span className="flex flex-col gap-1">
-            <span className="text-[15px] font-bold text-ap-ink">Days until first return</span>
-            <span className="text-[13px] text-ap-muted">
-              Share of all readers, by days between first read and first return
+        {!data.blocked && (
+          <div className="flex flex-col gap-2.5">
+            <span className="flex flex-col gap-1">
+              <span className="text-[15px] font-bold text-ap-ink">
+                Days until first return{" "}
+                <Info k="report.return_days" label="Days until first return" />
+              </span>
+              <span className="text-[13px] text-ap-muted">
+                Share of all readers, by days between first read and first return
+              </span>
             </span>
-          </span>
-          <div
-            className="grid items-end gap-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted"
-            style={{ gridTemplateColumns: "110px minmax(0,1fr) 56px 80px" }}
-          >
-            <span>Time to return</span>
-            <span />
-            <span className="text-right">In this band</span>
-            <span className="text-right">Returned by then</span>
-          </div>
-          {r.days.map((d) => (
             <div
-              key={d.label}
-              className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
-              style={{ gridTemplateColumns: "110px minmax(0,1fr) 56px 80px" }}
+              className="grid items-end gap-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted"
+              style={{ gridTemplateColumns: DAYS_GTC }}
             >
-              <span>{d.label}</span>
-              <Bar
-                pct={d.share / maxBand}
-                color={d.cumulative === null ? "#d6cff0" : "#795fc8"}
-                height={12}
-              />
-              <span className="text-right font-bold tabular-nums">{wholePct(d.share)}</span>
-              <span className="text-right text-xs tabular-nums text-ap-muted">
-                {wholePct(d.cumulative)}
+              <span>Time to return</span>
+              <span />
+              <span className="text-right">
+                In this band <Info k="report.return_band" label="In this band" />
+              </span>
+              <span className="text-right">
+                Returned by then <Info k="report.return_by_then" label="Returned by then" />
               </span>
             </div>
-          ))}
-          <span className="text-xs leading-normal text-ap-muted">
-            <strong>In this band</strong> = readers whose first return fell in that window.{" "}
-            <strong>Returned by then</strong> = all readers who had come back by the end of it.
-          </span>
-        </div>
+            {r.days.map((d) => (
+              <div
+                key={d.label}
+                className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
+                style={{ gridTemplateColumns: DAYS_GTC }}
+              >
+                <span>{d.label}</span>
+                <Bar
+                  pct={d.share / maxBand}
+                  color={d.cumulative === null ? "#d6cff0" : "#795fc8"}
+                  height={12}
+                />
+                <span className="text-right font-bold tabular-nums">{wholePct(d.share)}</span>
+                <span className="text-right text-xs tabular-nums text-ap-muted">
+                  {wholePct(d.cumulative)}
+                </span>
+              </div>
+            ))}
+            <span className="text-xs leading-normal text-ap-muted">
+              <strong>In this band</strong> = readers whose first return fell in that window.{" "}
+              <strong>Returned by then</strong> = all readers who had come back by the end of it.
+            </span>
+          </div>
+        )}
         <div className="flex flex-col gap-2.5">
           <span className="flex flex-col gap-1">
-            <span className="text-[15px] font-bold text-ap-ink">What brought readers back</span>
+            <span className="text-[15px] font-bold text-ap-ink">
+              What brought readers back{" "}
+              <Info k="report.return_sources" label="What brought readers back" />
+            </span>
             {sourceTip.card}
             <span className="text-[13px] text-ap-muted">
               Share of the return visits PostHog saw, by how each one arrived
@@ -1325,21 +1516,27 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             Email campaigns that bring readers back
           </span>
           <span className="text-[13px] text-ap-muted">
-            Active campaigns and the returns they generated
+            Every nurture email that was sent, with the returns and sales it brought
           </span>
         </span>
         {filters.choice}
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-          <div role="table" aria-label="Email campaigns" style={{ minWidth: 900 }}>
+          <div role="table" aria-label="Email campaigns" style={{ minWidth: 1000 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <Th label="Campaign" filter={filters.funnel("campaign")} />
               <Th label="Status" filter={filters.funnel("status")} />
-              <Th label="Sent" col="sent" right {...head} />
-              <Th label="Opened" col="opened" right {...head} />
-              <Th label="Clicked" col="clicked" right {...head} />
-              <Th label="Returned" col="returned" right {...head} />
-              <Th label="Return rate" col="rate" right {...head} />
-              <Th label="Purchased" col="purchased" right {...head} />
+              <Th label="Sent" col="sent" right info="report.campaign_sent" {...head} />
+              <Th label="Opened" col="opened" right info="report.campaign_opened" {...head} />
+              <Th label="Clicked" col="clicked" right info="report.campaign_clicked" {...head} />
+              <Th label="Returned" col="returned" right info="report.campaign_returned" {...head} />
+              <Th label="Return rate" col="rate" right info="report.campaign_rate" {...head} />
+              <Th
+                label="Purchased"
+                col="purchased"
+                right
+                info="report.campaign_purchased"
+                {...head}
+              />
             </div>
             {campaigns.length === 0 && (
               <p className="m-0 border-t border-ap-line px-3 py-3 text-sm text-ap-muted">
@@ -1358,9 +1555,8 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
                   <span className="text-sm font-bold">{campaignName(c.stage)}</span>
                   <span className="text-xs text-ap-muted">
-                    {c.status === "Live"
-                      ? "Sent 72 h after the report if not unlocked, with a 50% code"
-                      : "Retired with Pricing 2.0"}
+                    {c.what}
+                    {c.estimated && c.sent > 0 ? " · send times estimated" : ""}
                   </span>
                 </span>
                 <span role="cell" className="px-3 py-2.5">
@@ -1373,8 +1569,8 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
                   {fmt("count", c.sent)}
                 </span>
-                <CountAndRate n={c.opened} rate={c.openRate} />
-                <CountAndRate n={c.clicked} rate={c.clickRate} />
+                <CountAndRate n={c.opened} rate={c.openRate} of={c.deliveredOpens} />
+                <CountAndRate n={c.clicked} rate={c.clickRate} of={c.delivered} />
                 <span
                   role="cell"
                   className="px-3 py-2.5 text-right text-[13px] font-bold tabular-nums"
@@ -1391,27 +1587,11 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             ))}
           </div>
         </div>
-        <details className="text-xs leading-relaxed text-ap-muted">
-          <summary className="cursor-pointer font-semibold text-ap-body">
-            How these are counted
-          </summary>
-          <p className="m-0 mt-1.5">
-            Came back: readers who opened their report again 30+ minutes after their last visit.
-            Median days to return: from the first visit to the second. Returned via email: of the
-            return visits PostHog saw, the share from an email link. Each box&rsquo;s change is
-            against the period before, its readers read as they stood at the same age. Sent: emails
-            sent in the range (marked just before sending, so a failed send still counts). Opened
-            and Clicked: of those, readers whose email was opened, or a link in it clicked, as
-            Resend reports each email; under the count, the share of the emails Resend reported
-            delivered. {r.emailEvents} Opens are inflated by Apple Mail, which loads images for
-            privacy, so clicks are the surer signal. Returned: of those sent, readers who opened
-            their report from the email&rsquo;s link after it was sent, as the report records every
-            such arrival since 18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about
-            a quarter of visits. Return rate = returned ÷ sent. Purchased: sales in the range that
-            used the email&rsquo;s code. A retired campaign that sent and sold nothing in the range
-            reads &ldquo;—&rdquo;.
-          </p>
-        </details>
+        <p className="m-0 text-xs leading-relaxed text-ap-muted">
+          {r.emailEvents} Opens are inflated by Apple Mail, which loads images for privacy, so
+          clicks are the surer signal.
+        </p>
+        {r.campaignNote && <p className="m-0 text-xs text-ap-muted">{r.campaignNote}</p>}
       </div>
     </Card>
   );
@@ -1434,6 +1614,10 @@ const CHAPTER_SORTS: Array<{ value: Exclude<ChapterKey, "name">; label: string }
 
 function ChaptersSection({ data }: { data: ReportPayload }) {
   const reading = data.chapterReading;
+  // The live report's own chapters (its nav), as the depth section counts them.
+  const liveChapters = data.chapters.filter(
+    (c) => c.part !== "Earlier report versions" && c.id !== "summary"
+  ).length;
   const [sort, setSort] = useState<Sort<ChapterKey>>(null);
   const filters = useColumnFilters(data.chapters, { name: "Chapter" }, (c) => c.name);
   // A range with no reading per chapter shows the readers who clicked a paywall, as before.
@@ -1444,9 +1628,10 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
       : k === "reach"
         ? c.reach
         : k === "time"
-          ? c.avgMs
+          ? c.medianMs
           : k === "votes"
-            ? c.up + c.down
+            ? // The design's order: most votes first, a tie by the larger good share (under 1).
+              c.up + c.down + (c.up + c.down ? c.up / (c.up + c.down) / 2 : 0)
             : k === "showMore"
               ? c.showMore
               : k === "paywall"
@@ -1460,8 +1645,9 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
     onSort: (k: ChapterKey) => setSort((s) => nextSort(s, k, k === "name" ? 1 : -1)),
   };
   const maxVotes = Math.max(1, ...data.chapters.map((c) => c.up + c.down));
+  // Wider than drawn: each heading also carries its info icon.
   const gtc =
-    "40px minmax(220px,2fr) minmax(120px,1fr) 80px minmax(190px,1.5fr) repeat(4, minmax(96px,0.7fr))";
+    "40px minmax(220px,2fr) minmax(130px,1fr) 132px minmax(200px,1.5fr) repeat(4, minmax(120px,0.7fr))";
   const from = reading.from ? rangeLabel(reading.from, reading.from) : null;
   return (
     <Card id="chapters" labelledBy="h-ch">
@@ -1485,35 +1671,55 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
       <AllTraffic note={data.narrowed} />
       <NotTracked>{from ? `Recorded from ${from}` : "Not recorded yet"}</NotTracked>
       <p className="m-0 text-[13px] leading-relaxed text-ap-muted">
-        All {data.chapters.length} chapters, in the live report&rsquo;s order, then chapters of
-        earlier report versions that were voted on. Reach: of the range&rsquo;s{" "}
-        {fmt("count", reading.readers)} {reading.readers === 1 ? "reader" : "readers"} whose reading
-        per chapter was recorded (those who finished from {from ?? "the day it starts"}), the ones
-        who spent a second or more in the chapter or used anything in it. Avg. time: their mean time
-        with it as the chapter on screen, up to 30 minutes each. Show more, Learn more and Exercise
-        CTR: of those readers, the share who opened its Show all, Learn More &amp; Go Deeper or Try
-        This &amp; See What Shifts; a dash where nobody did or the chapter has none. Paywall CTR: of
-        the readers who saw a paywall in the chapter, the share who clicked one (under it, how many
-        clicked of how many saw). Feedback: votes given in the range; the bar is relative to the
-        most-voted chapter, green good and red bad. Green: Show more 18% or more, Paywall 5% or
-        more; red: Show more 4% or less.
+        The live report&rsquo;s {liveChapters} chapters in its order, its Summary, then the{" "}
+        {data.chapters.length - liveChapters - 1} chapters of earlier report versions that were
+        voted on or read in this range (one read here is a share of the readers who read the report
+        while it was in it). Feedback (live, all time): bar length = number of votes relative to the
+        most-voted chapter, split into good (green) and bad (red). Reach, median time and the
+        click-through rates are of the {fmt("count", reading.readers)}{" "}
+        {reading.readers === 1 ? "reader" : "readers"} in this range whose reading per chapter was
+        recorded (those who finished from {from ?? "the day it starts"}); &ldquo;—&rdquo; = nobody
+        did it, or the chapter has no such button.
         {reading.recorded
           ? ""
           : " With no reading recorded in this range, Paywall shows the readers who clicked a paywall or lock button in the chapter, as a count."}
       </p>
       {filters.choice}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Chapters" style={{ minWidth: 1150 }}>
+        <div role="table" aria-label="Chapters" style={{ minWidth: 1300 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
             <Th label="#" />
             <Th label="Chapter" col="name" filter={filters.funnel("name")} {...head} />
-            <Th label="Reach" col="reach" {...head} />
-            <Th label="Avg. time" col="time" right {...head} />
-            <Th label="Feedback · good / bad" col="votes" {...head} />
-            <Th label="Show more CTR" col="showMore" right {...head} />
-            <Th label="Paywall CTR" col="paywall" right {...head} />
-            <Th label="Learn more CTR" col="learnMore" right {...head} />
-            <Th label="Exercise CTR" col="exercise" right {...head} />
+            <Th label="Reach" col="reach" info="report.chapter_reach" {...head} />
+            <Th label="Median time" col="time" right info="report.chapter_time" {...head} />
+            <Th
+              label="Feedback · good / bad"
+              col="votes"
+              info="report.chapter_feedback"
+              {...head}
+            />
+            <Th
+              label="Show more CTR"
+              col="showMore"
+              right
+              info="report.chapter_show_more"
+              {...head}
+            />
+            <Th label="Paywall CTR" col="paywall" right info="report.chapter_paywall" {...head} />
+            <Th
+              label="Learn more CTR"
+              col="learnMore"
+              right
+              info="report.chapter_learn_more"
+              {...head}
+            />
+            <Th
+              label="Exercise CTR"
+              col="exercise"
+              right
+              info="report.chapter_exercise"
+              {...head}
+            />
           </div>
           {rows.map((c) => (
             <div
@@ -1538,7 +1744,7 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                 </span>
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {fmt("mmss", c.avgMs)}
+                {fmt("mmss", c.medianMs)}
               </span>
               <span role="cell" className="flex items-center gap-2 px-3 py-2">
                 <span className="flex h-2.5 flex-1 overflow-hidden rounded-full bg-ap-track">
@@ -1551,7 +1757,10 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                     style={{ width: `${(c.down / maxVotes) * 100}%` }}
                   />
                 </span>
-                {c.up + c.down > 0 ? (
+                {/* As drawn, a chapter nobody voted on reads 0 and 0 / 0; "—" unread. */}
+                {data.feedback.error ? (
+                  <span className="min-w-[74px] text-right text-xs text-ap-muted">—</span>
+                ) : (
                   <>
                     <span className="min-w-[26px] text-right text-xs font-bold tabular-nums">
                       {c.up + c.down}
@@ -1561,8 +1770,6 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                       <span className="font-bold text-ap-bad-ink">{c.down}</span>
                     </span>
                   </>
-                ) : (
-                  <span className="min-w-[74px] text-right text-xs text-ap-muted">no votes</span>
                 )}
               </span>
               {/* Whole percentages, as drawn, and the highlights by the figure shown. */}
@@ -1617,31 +1824,32 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
 }
 
 type LogKey = "at" | "chapter";
-type LogFilter = "submission" | "chapter" | "vote" | "issue";
+type LogFilter = "user" | "chapter" | "vote" | "issue";
 type LogRow = ReportPayload["feedback"]["log"][number];
 
 const LOG_FILTERS: Record<LogFilter, string> = {
-  submission: "Submission",
+  user: "User ID",
   chapter: "Chapter",
   vote: "Vote",
   issue: "Issue",
 };
 /** A vote's time, Berlin, as the log writes it ("14 Oct 2026, 09:36"). */
-const when = (at: string) =>
-  new Date(at).toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+const when = (at: string) => {
+  const d = new Date(at);
+  const day = d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+  const time = d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Berlin",
   });
+  return `${shortDate(day)} ${day.slice(0, 4)}, ${time}`;
+};
 
 const logValue = (r: LogRow, k: LogFilter) =>
-  k === "submission"
-    ? r.submission === null
+  k === "user"
+    ? r.user === null
       ? ""
-      : `#${r.submission}`
+      : `#${r.user}`
     : k === "chapter"
       ? r.chapter
       : k === "vote"
@@ -1661,11 +1869,11 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
     fixed: { vote: ["Good", "Bad"] },
     onPick: () => setAll(false),
   });
-  // The design's search: the submission, its date, the chapter, the vote or the issue.
+  // The design's search: the user ID, the date, the chapter by name or id, the vote or the issue.
   const term = search.trim().toLowerCase();
   const found = term
     ? kept.filter((r) =>
-        [when(r.at), `#${r.submission ?? ""}`, r.chapter, r.vote, r.issue ?? ""]
+        [when(r.at), `#${r.user ?? ""}`, r.chapter, r.id, r.vote, r.issue ?? ""]
           .join(" ")
           .toLowerCase()
           .includes(term)
@@ -1680,13 +1888,26 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
   const goodShare = fb.good + fb.bad ? fb.good / (fb.good + fb.bad) : null;
   // The comment takes the room left over, as in the design (the issue keeps 140px: our
   // reasons, as "Not relevant to me", are longer than the design's).
-  const gtc = "170px 100px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)";
+  const gtc = "170px 124px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)";
+  if (fb.error)
+    return (
+      <Card id="feedback" labelledBy="h-fb">
+        <SectionHead
+          id="h-fb"
+          title="Feedback"
+          description="Every chapter vote (report_section_feedback), live, all time."
+        />
+        <p className="m-0 text-sm leading-relaxed text-ap-muted">{fb.error}</p>
+      </Card>
+    );
   return (
     <Card id="feedback" labelledBy="h-fb">
       <SectionHead
         id="h-fb"
         title="Feedback"
-        description="Chapter votes (report_section_feedback) given in the range."
+        description={`Every chapter vote (report_section_feedback), live, all time${
+          fb.from ? ` since ${rangeLabel(fb.from, fb.from)}` : ""
+        }: the period filter doesn't apply here.`}
       />
       <AllTraffic note={data.narrowed} />
       <div
@@ -1699,7 +1920,16 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
               {fmt("pct", goodShare, 0)}
             </span>
             <span className="text-[13px] text-ap-muted">
-              good · {fb.good} good / {fb.bad} bad · {votes(fb.total)}
+              good · {fb.good} good / {fb.bad} bad · {votes(fb.total)} (live, all time){" "}
+              <Info
+                k="report.feedback_good"
+                label="Good votes"
+                worked={{
+                  num: fmt("count", fb.good),
+                  den: fmt("count", fb.total),
+                  value: fmt("pct", goodShare, 0),
+                }}
+              />
             </span>
           </div>
           <div className="flex h-3.5 overflow-hidden rounded-full bg-ap-track" aria-hidden="true">
@@ -1713,7 +1943,9 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[13px] font-bold text-ap-body">Issues reported</span>
+          <span className="text-[13px] font-bold text-ap-body">
+            Issues reported <Info k="report.feedback_issues" label="Issues reported" />
+          </span>
           {fb.issues.map((i) => (
             <div
               key={i.label}
@@ -1739,7 +1971,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 setSearch(e.target.value);
                 setAll(false);
               }}
-              placeholder="Search #id, chapter, issue, good/bad"
+              placeholder="Search user ID, chapter, issue, good/bad"
               className="min-h-10 w-full rounded-full border border-ap-ink/[0.18] bg-white px-4 text-sm text-ap-ink"
             />
           </label>
@@ -1749,7 +1981,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           <div role="table" aria-label="Feedback log" style={{ minWidth: 880 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <Th label="Date & time (Berlin)" col="at" {...head} />
-              <Th label="Submission" filter={funnel("submission")} />
+              <Th label="User ID" filter={funnel("user")} />
               <Th label="Chapter" col="chapter" filter={funnel("chapter")} {...head} />
               <Th label="Vote" filter={funnel("vote")} />
               <Th label="Issue" filter={funnel("issue")} />
@@ -1771,12 +2003,9 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                   {when(r.at)}
                 </span>
                 <span role="cell" className="px-3 py-2">
-                  {r.submission ? (
-                    <a
-                      href={submissionHref(r.submission)}
-                      className="font-mono text-xs text-ap-violet"
-                    >
-                      #{r.submission}
+                  {r.user ? (
+                    <a href={userHref(r.user)} className="font-mono text-xs text-ap-violet">
+                      #{r.user}
                     </a>
                   ) : (
                     "—"
@@ -1797,9 +2026,9 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 </span>
                 <span
                   role="cell"
-                  className={`px-3 py-2 font-serif italic ${r.commented ? "text-ap-body" : "text-ap-muted"}`}
+                  className={`min-w-0 break-words px-3 py-2 ${r.comment ? "font-serif italic text-ap-body" : "text-ap-muted"}`}
                 >
-                  {r.commented ? "left a comment" : "—"}
+                  {r.comment ?? "—"}
                 </span>
               </div>
             ))}
@@ -1814,12 +2043,6 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           >
             {all ? "Show fewer" : `Show all ${matches.length}`}
           </button>
-        )}
-        {fb.log.length < fb.total && (
-          <span className="text-xs text-ap-muted">
-            The log holds the latest {fmt("count", fb.log.length)} of the range&rsquo;s{" "}
-            {votes(fb.total)}.
-          </span>
         )}
       </div>
     </Card>

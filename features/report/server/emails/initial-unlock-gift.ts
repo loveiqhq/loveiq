@@ -10,13 +10,17 @@ import { PARTLY_OPEN } from "./initial-unlock";
 
 /**
  * E07, "Core Archetype gifted" (Figma Report-3.0 1669:2835, the Pre-Paywall board): sent
- * on day 4 to a reader the EUR 1.99 gate stopped who has not paid, with the unlock it gives
+ * on day 1 to a reader the EUR 1.99 gate stopped who has not paid, with the unlock it gives
  * (app/api/cron/initial-unlock-gift; 20% are held out and get neither). Copy as the frame
- * has it; the subject and preview line are the board's. The frame is named "day 2–3", the
- * board's journey says day 4: day 4 is built, and the name is flagged for Marcus.
+ * has it, the subject and preview line included, but for its first three words: the frame was
+ * drawn for later ("A few days ago"; named "day 2–3", its spec says day 4), and day 1 is
+ * Marcus's call (LoveIQ Sync, 27 Oct 2026). So it says "Yesterday" when the survey was that
+ * recent, and names no time when it wasn't (a report that met the gate long after its survey).
  */
 
 export interface InitialUnlockGiftEmailParams {
+  /** The survey was about a day ago, so the email can say "Yesterday". */
+  answeredYesterday?: boolean;
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
@@ -28,6 +32,7 @@ function euros(cents: number): string {
 }
 
 export function initialUnlockGiftEmail({
+  answeredYesterday = false,
   firstName,
   reportUrl,
   siteUrl,
@@ -40,6 +45,9 @@ export function initialUnlockGiftEmail({
   const previewText = "No payment needed. Your result is waiting.";
   const heading = "Your Core Archetype is on us.";
   const ctaLabel = "Open your Core Archetype";
+  const opening = answeredYesterday
+    ? "Yesterday you answered some very personal questions."
+    : "You answered some very personal questions.";
   const paragraph = `margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;`;
   const bold = `<strong style="font-weight:700;">`;
 
@@ -59,10 +67,10 @@ export function initialUnlockGiftEmail({
   <tr>
     <td style="padding:16px 32px 0;">
       <p style="${paragraph}">Hi ${safeFirstName},</p>
-      <p style="${paragraph}">A few days ago you answered some very personal questions. Your result has been waiting ever since, and we&rsquo;d rather you read it than leave it there.</p>
+      <p style="${paragraph}">${opening} Your result has been waiting ever since, and we&rsquo;d rather you read it than leave it there.</p>
       <p style="${paragraph}">${bold}So we&rsquo;ve unlocked it for you.<br />No payment, no catch.</strong></p>
       <p style="${paragraph}">Inside, you&rsquo;ll find ${bold}which archetype leads for you</strong> and how your whole constellation fits together, scored across all 14 archetypes.</p>
-      <p style="${paragraph}">You can also read ${bold}five chapters in full</strong>. Four featured chapters are partly open:</p>
+      <p style="${paragraph}">You can also read ${bold}three chapters in full</strong>. Four featured chapters are partly open:</p>
       <ul style="margin:0 0 16px 0; padding-left:22px; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         ${listItems}
       </ul>
@@ -101,14 +109,14 @@ export function initialUnlockGiftEmail({
     "",
     `Hi ${displayName},`,
     "",
-    "A few days ago you answered some very personal questions. Your result has been waiting ever since, and we'd rather you read it than leave it there.",
+    `${opening} Your result has been waiting ever since, and we'd rather you read it than leave it there.`,
     "",
     "So we've unlocked it for you.",
     "No payment, no catch.",
     "",
     "Inside, you'll find which archetype leads for you and how your whole constellation fits together, scored across all 14 archetypes.",
     "",
-    "You can also read five chapters in full. Four featured chapters are partly open:",
+    "You can also read three chapters in full. Four featured chapters are partly open:",
     ...PARTLY_OPEN.map(([name, line]) => `- ${name} ${line}`),
     "",
     "Every other chapter shows what it covers, so you can see what's waiting for you.",

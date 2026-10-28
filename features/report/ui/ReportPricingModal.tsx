@@ -112,8 +112,8 @@ const WHY_CARDS: ReadonlyArray<{
     body: "Your report is based on insights from hundreds of scientific papers and leading books on sexuality.",
   },
   {
-    // 963:94's "50+"; 842:663 has "+ 50", with a stray space.
-    emph: "50+ Pages",
+    // 963:94 drew "50+ Pages"; the report is counted in chapters since 27.10 (Eman).
+    emph: "17 Chapters",
     tail: " That Can Change Your Life",
     body: "Most of us were never taught any of this. Your report finally puts language to it.",
   },

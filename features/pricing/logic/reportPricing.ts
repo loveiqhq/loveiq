@@ -743,6 +743,14 @@ function normalizeCountryCode(value: string | null | undefined) {
   return COUNTRY_NAME_TO_CODE[collapsed] ?? null;
 }
 
+/** Each price tier's country codes (the rest are "default"), for readers that group by tier. */
+export function countryCodesByTier(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [code, { tier }] of Object.entries(COUNTRY_CODE_TO_TIER))
+    out.set(tier, [...(out.get(tier) ?? []), code]);
+  return out;
+}
+
 /** The price tier a country (ISO code or English name) falls in, as quotes record it. */
 export function countryTierOf(code: string | null): string {
   return getCountryPricing(code).tier;
@@ -1728,7 +1736,7 @@ export async function getUpgradeCreditCents(personalReportId: number): Promise<n
  * - `upgradeCents`, All 14's (`getUpgradeCreditCents` above);
  * - `initialCents`, the initial unlock's EUR 10 off the full report
  *   (`features/report/logic/initialUnlock.ts`): granted by a succeeded, non-test EUR 1.99
- *   payment that was not refunded in full, or by E07's day-4 gift (a EUR 0 row marked
+ *   payment that was not refunded in full, or by E07's day-1 gift (a EUR 0 row marked
  *   `gifted`), which promises the same EUR 10; used up by the report's first full-report
  *   purchase: one EUR 10, "toward the full Premium Report" (Marcus, 14.10: a EUR 10
  *   voucher), never off every single report bought after it. Its money counts towards

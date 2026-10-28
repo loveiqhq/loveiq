@@ -220,10 +220,12 @@ export default function UnlockFeedbackSend() {
       />
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-ap-ink">
+          <label className="flex max-w-full items-center gap-2 text-sm text-ap-ink">
             Subject
+            {/* overflow-hidden: WebKit lays a shrunk select's long option out at full width
+                (464 px), unseen, and an iPhone page then scrolls sideways by 108 px. */}
             <select
-              className="min-h-9 rounded-full border border-ap-line bg-white px-3 text-sm"
+              className="min-h-9 min-w-0 overflow-hidden rounded-full border border-ap-line bg-white px-3 text-sm"
               value={arm}
               onChange={(e) => setArm(e.target.value as SubjectArm)}
             >

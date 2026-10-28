@@ -68,6 +68,7 @@ process.env.RESEND_API_KEY = "re_test_key";
 process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
+import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import logger from "@shared/observability/logger";
 import {
   __resetSurveyStatusCacheForTests,
@@ -374,6 +375,30 @@ describe("POST /api/survey", () => {
 
     const json = await res.json();
     expect(json.success).toBe(true);
+  });
+
+  // Eman, 27.10: the pre-report map names the EUR 1.99 to a reader the gate will stop, so the
+  // reply says so, and only then.
+  it("tells a reader in the EUR 1.99 gate's cohort its price, and no one else", async () => {
+    vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: 10 } as never);
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+    const gated = await (await POST(makeRequest())).json();
+    expect(gated.initialGatePriceCents).toBe(199);
+
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+    mockIsFeatureEnabled.mockImplementation(
+      (async (key: string) =>
+        key !== "report_initial_unlock_gate") as unknown as () => Promise<boolean>
+    );
+    const free = await (await POST(makeRequest())).json();
+    expect(free.success).toBe(true);
+    expect(free).not.toHaveProperty("initialGatePriceCents");
   });
 
   it("emits X-Server-Timing header with gate/submit/post-submit markers on success", async () => {

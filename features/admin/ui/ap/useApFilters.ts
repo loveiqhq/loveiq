@@ -37,6 +37,7 @@ export function useApFilters() {
         "device",
         "tier",
         "visitor",
+        "funnel",
       ])
         params.delete(k);
       for (const [k, v] of Object.entries(filterParams(next))) params.set(k, v);

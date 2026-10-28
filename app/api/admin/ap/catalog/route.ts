@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { shortDate } from "@features/admin/server/ap/days";
+import { addDays, shortDate } from "@features/admin/server/ap/days";
+import { reportingDay } from "@shared/time/reporting-day";
 import { z } from "zod";
 
 import { logAdminAction } from "@features/admin/server/audit";
@@ -13,7 +14,6 @@ import {
   type CatalogSource,
   type SourceKey,
 } from "@features/admin/server/ap/catalog";
-import { POSTHOG_FROM } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { getClientIp } from "@shared/http/ratelimit";
@@ -39,6 +39,10 @@ export async function GET(request: Request) {
     ]);
     const tables = buildCatalog(schema ?? [], notes);
     const count = (k: SourceKey) => tables.filter((t) => t.source === k).length;
+    // Both sync every 15 minutes with today's partial day: a last day before yesterday means the
+    // syncs have stopped (just after midnight the new day may not have rows yet).
+    const behind = (day: string | null) =>
+      day !== null && day < addDays(reportingDay(new Date()), -1);
     const posthog = Boolean(process.env.POSTHOG_API_KEY);
     const sources: CatalogSource[] = [
       {
@@ -58,32 +62,40 @@ export async function GET(request: Request) {
         ok: posthog,
         description:
           "Product events and visits from the site and the report, for part of the visitors.",
-        fresh: `Real time, from ${POSTHOG_FROM}`,
+        // Its first day is in the events table's description; the page swaps in the last event.
+        fresh: "Real time",
         tables: count("posthog"),
       },
+      // The cards say what each source holds, in a line; what to watch out for (who is
+      // counted, what is read live, the days still filling in) is in its tables' descriptions.
       {
         key: "ga4",
         name: "Google Analytics",
-        status: gaDay ? "Synced" : "No data",
-        ok: Boolean(gaDay),
-        description:
-          "GA4 sessions, users and engagement by day and channel, for visitors who accepted cookies.",
-        fresh: gaDay
-          ? `Every 15 minutes, last day ${shortDate(gaDay)} ${gaDay.slice(0, 4)}`
-          : "Every 15 minutes",
+        status: gaDay ? (behind(gaDay) ? "Behind" : "Synced") : "No data",
+        ok: Boolean(gaDay) && !behind(gaDay),
+        description: "GA4 sessions, users, channels, pages and events by day.",
+        // How fresh, and the last day it holds: a stalled sync shows here.
+        fresh: gaDay ? `Every 15 minutes, to ${shortDate(gaDay)}` : "Every 15 minutes",
         tables: count("ga4"),
       },
       {
         key: "ads",
         name: "Google Ads",
-        status: adsDay ? "Synced" : "No data",
-        ok: Boolean(adsDay),
+        status: adsDay ? (behind(adsDay) ? "Behind" : "Synced") : "No data",
+        ok: Boolean(adsDay) && !behind(adsDay),
         description:
-          "Spend, clicks, impressions and conversions by day and campaign, from the Ads account.",
-        fresh: adsDay
-          ? `Every 15 minutes, last day ${shortDate(adsDay)} ${adsDay.slice(0, 4)}`
-          : "Every 15 minutes",
+          "Campaign spend, clicks and conversions, by campaign, keyword, device and country.",
+        fresh: adsDay ? `Every 15 minutes, to ${shortDate(adsDay)}` : "Every 15 minutes",
         tables: count("ads"),
+      },
+      {
+        key: "gsc",
+        name: "Search Console",
+        status: process.env.SEARCH_CONSOLE_SITE ? "Live" : "Not set up",
+        ok: Boolean(process.env.SEARCH_CONSOLE_SITE),
+        description: "Google Search clicks, impressions and position, by search and page.",
+        fresh: "Live, 2–3 days behind",
+        tables: count("gsc"),
       },
     ];
     const payload: CatalogPayload = { sources, tables, generatedAt: new Date().toISOString() };

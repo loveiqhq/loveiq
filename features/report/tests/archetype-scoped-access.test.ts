@@ -198,4 +198,21 @@ describe("ownsFullReportFor (the unlock bar)", () => {
     expect(ownsFullReportFor(null, { [OTHER]: "essentials" }, OTHER)).toBe(false);
     expect(ownsFullReportFor("all_reports", {}, OTHER)).toBe(true);
   });
+  it("takes the archetype's own tier over the reader's own plan, as its chapter locks do", () => {
+    // Own report full, another archetype's at Essentials: that report's chapters past
+    // Essentials stay locked, so the nav and the bar must not call it owned.
+    for (const own of ["full_report", "core"] as const) {
+      expect(ownsFullReportFor(own, { [OTHER]: "essentials" }, OTHER)).toBe(false);
+      expect(
+        isSectionUnlockedForPlan({
+          accessPlan: own,
+          archetypeTier: "essentials",
+          isPremium: true,
+          sectionId: "power_orientation",
+        })
+      ).toBe(false);
+    }
+    // The own report, with no tier written for it (purchases before the tiers), keeps its plan.
+    expect(ownsFullReportFor("full_report", { [OTHER]: "essentials" }, OWN)).toBe(true);
+  });
 });

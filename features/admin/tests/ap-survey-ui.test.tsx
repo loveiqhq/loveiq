@@ -32,7 +32,8 @@ const questions = buildSurveyQuestions(
     run("c", "2026-10-02T10:00:00Z", ["00001"]),
     run("d", "2026-10-03T10:00:00Z", every),
   ],
-  { steps: [], exits: [] },
+  // 16019 first asked on 2 Oct: after a and b began.
+  { steps: [], exits: [], first_asked: { "16019": "2026-10-02T00:00:00Z" } },
   "2026-10-01",
   "2026-10-07",
   "All traffic",
@@ -64,6 +65,7 @@ const payload = buildSurveyPage({
       trust: 6,
       terms: 8,
       answered: 55,
+      reachedQ1: 70,
       silhouette: 31,
     },
   },
@@ -117,29 +119,30 @@ describe("the Survey page as drawn", () => {
   it("intro: the design's four tiles, six numbered cards, their times and engagement, sortable", () => {
     render(<ApSurvey />);
     // Before the tracking day the tiles are PostHog's: 100 sessions opened the intro, 20
-    // skipped, 60 agreed, 55 answered question 1. No period before, so no change.
+    // skipped, 60 agreed, 70 reached question 1 (55 of them answered it). No period before,
+    // so no change.
     const tile = (label: string) => screen.getByText(label).nextSibling!.textContent;
     expect(tile("Saw the intro")).toBe("100");
     // Whole percentages, as drawn.
     expect(tile("Agreed to consent")).toBe("60%");
     expect(tile("Skipped slides")).toBe("20%");
-    expect(tile("Left before Q1")).toBe("45%");
+    expect(tile("Left before Q1")).toBe("30%");
     expect(screen.queryByText(/The engagement column is blank/)).toBeNull();
 
     const intro = "Intro wizard cards";
     expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);
-    expect(column(intro, 1)).toEqual(["—", "0:05.0", "0:12", "—", "1:05", "—"]);
+    expect(column(intro, 1)).toEqual(["—", "5 s", "12 s", "—", "1:05", "—"]);
     const text = rows(intro).map((r) => r.textContent);
     expect(text[0]).toContain("31% tap the silhouette");
     // Whole percentages as drawn; a tenth under 10%, so a handful never reads "0%".
-    expect(text[3]).toContain("6.0% open the Trust Zone");
-    expect(text[5]).toContain("Return to site 5.0% · read the terms 8.0%");
+    expect(text[3]).toContain("6.0% open Trust Zone");
+    expect(text[5]).toContain("Return to site 5.0% · read terms 8.0%");
 
-    const byTime = within(table(intro)).getByRole("button", { name: "Sort by Time" });
+    const byTime = within(table(intro)).getByRole("button", { name: "Sort by Median time" });
     fireEvent.click(byTime);
-    expect(column(intro, 1)).toEqual(["1:05", "0:12", "0:05.0", "—", "—", "—"]);
+    expect(column(intro, 1)).toEqual(["1:05", "12 s", "5 s", "—", "—", "—"]);
     fireEvent.click(byTime);
-    expect(column(intro, 1)).toEqual(["0:05.0", "0:12", "1:05", "—", "—", "—"]);
+    expect(column(intro, 1)).toEqual(["5 s", "12 s", "1:05", "—", "—", "—"]);
   });
 
   it("intro: Skip intro, Back and Exit columns, which say when they start for an earlier range", () => {
@@ -254,6 +257,7 @@ describe("the Survey page as drawn", () => {
       type: "scale",
       multiple: false,
       segments: [{ name: "All submissions", n: 10 }],
+      hidden: [],
       answers: [{ label: "Strongly agree", shares: [0.5] }],
       gap: null,
       respondents: 10,
@@ -272,11 +276,15 @@ describe("the Survey page as drawn", () => {
     expect(
       (screen.getByText("Strongly agree").parentElement as HTMLElement).style.gridTemplateColumns
     ).toBe("140px minmax(0,1fr)");
-    expect(screen.getByText(/less our own finished test runs/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /A question added during the range was\s+asked only from the day it was added/
+      )
+    ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Question funnel" })).toBeTruthy();
     expect(
       screen.getByText(
-        "Survey sessions reaching each question, 1 Oct – 7 Oct 2026. Click a row to open it in Question detail."
+        "Survey runs begun in the range reaching each question, 1 Oct – 7 Oct 2026. Click a row to open it in Question detail."
       )
     ).toBeTruthy();
     // Four began; three went through to the last question (the third left on question 1).
@@ -284,16 +292,18 @@ describe("the Survey page as drawn", () => {
     expect(screen.getByText("Reached last step").nextSibling!.textContent).toBe("75.0% · 3");
   });
 
-  it("funnel: no orange for a question first asked in the range; sorts; searches", () => {
+  it("funnel: a question first asked in the range is orange as drawn, with its note; sorts; searches", () => {
     render(<ApSurvey />);
     const funnel = "Survey question funnel";
     const row = (id: string) => rows(funnel).find((r) => r.textContent!.includes(id))!;
     // The picked row is purple, so pick one that is not under test.
     fireEvent.click(within(row(every[0]!)).getByRole("button"));
-    // Both lose more than 5% of the step before; only the older question is shaded.
+    // Both fall more than 5% from the step before; only the older question lost people, so
+    // only it is shaded. The added one has no "% of prev." and carries its note.
     expect(row("01002").className).toContain("bg-ap-orange");
-    expect(row("16019").textContent).toContain("33.3%");
+    expect(row("16019").textContent).not.toContain("33.3%");
     expect(row("16019").className).not.toContain("bg-ap-orange");
+    expect(row("16019").textContent).toContain("added during the range");
 
     fireEvent.click(within(table(funnel)).getByRole("button", { name: "Sort by Reached" }));
     const reached = column(funnel, 1).map(Number);

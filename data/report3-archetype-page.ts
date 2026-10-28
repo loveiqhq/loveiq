@@ -188,6 +188,19 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
 ];
 
 /**
+ * The same heading over one of the reader's other archetypes, opened from the report's
+ * list of all 14. It read "your core archetype" over any of them (Marcus, 27.10).
+ */
+export const REPORT_V4_OTHER_ARCHETYPE_TITLE = "Another";
+export const reportV4OtherArchetypeLede = (core: string): readonly Report3Run[] => [
+  { text: "You are reading one of your other archetypes. Your " },
+  { weight: 700, text: "core archetype " },
+  { text: "- the highest probability match of all 14 - is " },
+  { weight: 700, text: core },
+  { text: "." },
+];
+
+/**
  * Part II · the three highest-scoring archetypes — 1:493.
  *
  * The frame draws 43.4 / 39.5 / 36.2. `V3TopThree` already renders this section and

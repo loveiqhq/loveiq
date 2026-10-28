@@ -40,7 +40,8 @@ export const GATE_COPY = {
     features: (creditCents: number): ReadonlyArray<{ strong?: string; text: string }> => [
       { text: "Your Core Archetype and what drives it" },
       { text: "How you rank against all 14 archetypes" },
-      { text: "5x full chapters + 4x partly open" },
+      // Chapters as the report counts them, from Part 2 on (Eman, 27.10): Part 1 is its welcome.
+      { text: "3x full chapters + 4x partly open" },
       { strong: `${euros(creditCents)} credit`, text: " toward your Full Report" },
     ],
   },

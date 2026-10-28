@@ -266,6 +266,17 @@ Stripe webhook hits the unique constraint on
 `payment_webhook_event.stripe_event_id` and is refused on purpose. Logged at
 `warn`, so it stays out of Slack.
 
+**Neither is a 422 "already registered" from `/auth/v1/admin/users`.** The
+admin login and Jarvis's sign-in code create the auth user before minting a
+link, and every returning admin gets that answer. Logged at `warn` since
+2026-10-27. Any other 422 there still alerts.
+
+**`57014` is a timeout.** Postgres cancelled the statement at PostgREST's 8 s
+limit. The alert says `TIMED OUT (statement timeout, 57014)`, not REJECTED or
+REFUSED: the request was valid, the database was too slow at that moment. On the
+Micro instance that has meant memory pressure (swap) from write churn. Look at
+what else was writing, not at the failing request's columns.
+
 **An RPC is a call, not a write.** PostgREST expresses both a table insert and
 a database function call as a `POST`, and every analysis function in this
 codebase (`get_conversion_funnel` and the rest of the analysis RPCs) is reached that

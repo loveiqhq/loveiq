@@ -187,7 +187,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
                   drawn) and the desktop's break still lands after "research." */}
               {"Grounded in state-of-the-art science & research. "}
               <br className="hidden lg:inline" />
-              <strong className="font-extrabold text-black">In just 9 minutes</strong>, decode your
+              <strong className="font-extrabold text-black">In just 15 minutes</strong>, decode your
               sexual personality and patterns, so you get clear, practical steps to improve
               intimacy.
             </p>

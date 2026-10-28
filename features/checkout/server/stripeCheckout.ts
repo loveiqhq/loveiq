@@ -217,6 +217,80 @@ export function getStripeServerClient() {
   return stripeClient;
 }
 
+/** How long one read of the account's tax settings is trusted. */
+const TAX_STATUS_TTL_MS = 10 * 60_000;
+let taxStatus: { at: number; active: Promise<boolean> } | null = null;
+
+/**
+ * Stripe Tax on a checkout, so the receipt and invoice show the VAT the price includes
+ * (LoveIQ Sync, 12 Oct 2026: "Stripe invoices for paid reports must show German VAT").
+ * Every line is `tax_behavior: "inclusive"`, so the price a reader sees stays the total.
+ * What is charged follows the account's tax registrations: with none, Stripe adds nothing.
+ *
+ * On only where that mode's tax settings are active. In a mode without them (the test
+ * account staging runs on), Stripe refuses a session that asks for automatic tax, and a
+ * checkout that cannot open costs more than a receipt without a VAT line.
+ */
+export async function automaticTax(
+  stripe: Stripe
+): Promise<Pick<Stripe.Checkout.SessionCreateParams, "automatic_tax">> {
+  if (!taxStatus || Date.now() - taxStatus.at > TAX_STATUS_TTL_MS) {
+    taxStatus = {
+      at: Date.now(),
+      active: Promise.resolve()
+        .then(() => stripe.tax.settings.retrieve())
+        .then((settings) => settings.status === "active")
+        .catch((err: unknown) => {
+          logger.warn(
+            { err: err instanceof Error ? err.message : String(err) },
+            "stripe: tax settings unreadable; checkout opens without automatic tax"
+          );
+          return false;
+        }),
+    };
+  }
+  return (await taxStatus.active) ? { automatic_tax: { enabled: true } } : {};
+}
+
+/** For tests: forget the cached tax status. */
+export function resetAutomaticTaxCache() {
+  taxStatus = null;
+}
+
+/**
+ * Every checkout's session, with automatic tax when the account has it (`automaticTax`).
+ *
+ * A session Stripe refuses over tax is made again without it, and that is an error in the
+ * log (so a #prod-alerts post): a sale with a receipt missing its VAT line beats no sale.
+ * Any other refusal is the caller's, as before. The tax variant has its own idempotency
+ * key, because Stripe refuses a reused key whose parameters differ.
+ */
+export async function createCheckoutSession(
+  stripe: Stripe,
+  params: Stripe.Checkout.SessionCreateParams,
+  idempotencyKey: string
+): Promise<Stripe.Checkout.Session> {
+  const tax = await automaticTax(stripe);
+  if (!tax.automatic_tax) return stripe.checkout.sessions.create(params, { idempotencyKey });
+  try {
+    return await stripe.checkout.sessions.create(
+      { ...params, ...tax },
+      { idempotencyKey: `${idempotencyKey}:tax` }
+    );
+  } catch (err) {
+    const e = err as { type?: string; param?: string; message?: string };
+    const overTax =
+      e?.type === "StripeInvalidRequestError" &&
+      (e.param?.startsWith("automatic_tax") || /\btax/i.test(e.message ?? ""));
+    if (!overTax) throw err;
+    logger.error(
+      { param: e.param, message: e.message?.slice(0, 200) },
+      "stripe: checkout refused automatic tax; opened without it, so this receipt shows no VAT"
+    );
+    return stripe.checkout.sessions.create(params, { idempotencyKey });
+  }
+}
+
 /** How the credit reads on Stripe's page and the receipt. */
 export const UPGRADE_CREDIT_COUPON_NAME = "Reports you already bought";
 /** The initial unlock's EUR 10 off the full report, as Stripe's page and the receipt name it. */

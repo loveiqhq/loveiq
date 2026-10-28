@@ -286,6 +286,21 @@ describe("ReportStickyUnlockBar — the credit above the button", () => {
     }
   });
 
+  it("tells its click that the credit was showing", async () => {
+    const { trackStickyUnlockClicked } = await import("@features/analytics/client");
+    vi.mocked(trackStickyUnlockClicked).mockClear();
+    render(
+      <ReportStickyUnlockBar quote={credited} onUnlock={() => {}} v4 archetype="Spark Seeker" />
+    );
+    const desktopBar = document.querySelector<HTMLElement>(".report-sticky-unlock--desktop")!;
+    fireEvent.click(within(desktopBar).getByRole("button", { name: "Unlock full report" }));
+    expect(trackStickyUnlockClicked).toHaveBeenCalledWith({
+      variant: "desktop",
+      archetype: "Spark Seeker",
+      creditKind: "initial",
+    });
+  });
+
   it("draws no credit line for anyone else", () => {
     const { container } = render(
       <ReportStickyUnlockBar

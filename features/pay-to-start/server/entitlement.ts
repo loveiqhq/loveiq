@@ -242,6 +242,32 @@ export async function findEntitlementByToken(token: string): Promise<Entitlement
   );
 }
 
+/**
+ * When a paid buyer's survey first saves an answer: AP-Analytics' "Started survey" for the
+ * pay-to-start pages (20261025170000). Once, on a paid row only. Best-effort and never throws:
+ * a failed stamp is logged at warn, and the draft is saved whatever happens here.
+ */
+export async function markEntitlementSurveyStarted(token: string): Promise<void> {
+  if (!PREPAID_TOKEN_REGEX.test(token)) return;
+  try {
+    const response = await serviceFetch(
+      `/rest/v1/prepaid_report_access?prepaid_token=eq.${encodeURIComponent(token)}` +
+        "&offer=not.is.null&paid_at=not.is.null&survey_started_at=is.null",
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ survey_started_at: new Date().toISOString() }),
+      }
+    );
+    if (!response.ok)
+      logger.warn({ status: response.status }, "pay-to-start: survey start stamp failed");
+  } catch {
+    // Not logged with the error: a timeout's message carries the URL, and with it the buyer's
+    // token, which unlocks their report.
+    logger.warn("pay-to-start: survey start stamp threw");
+  }
+}
+
 export async function findEntitlementById(id: number): Promise<Entitlement | null> {
   if (!Number.isSafeInteger(id) || id <= 0) return null;
   return findOne(

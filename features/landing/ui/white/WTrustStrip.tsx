@@ -31,7 +31,7 @@ const items: { icon: ReactNode; label: string }[] = [
     ),
   },
   {
-    label: "About 9 minutes",
+    label: "About 15 minutes",
     icon: (
       <>
         <path d="M7.5 13.125a5.625 5.625 0 1 0 0-11.25 5.625 5.625 0 0 0 0 11.25Z" />

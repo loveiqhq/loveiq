@@ -6252,6 +6252,9 @@ async function callTool(
           b.uncoveredSpendDays
             ? `ad_spend unknown (${b.uncoveredSpendDays} day(s) outside GA4's window)`
             : null,
+          ...Object.entries(b.unknown).map(
+            ([k, n]) => `${k} unknown (${n} day(s) the dashboard can't count)`
+          ),
         ].filter(Boolean);
         return (
           `${b.bucket}  ${JSON.stringify({ ...b.totals, ...(b.adSpend === null ? {} : { ad_spend: b.adSpend }) })}` +

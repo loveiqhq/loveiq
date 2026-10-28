@@ -41,7 +41,7 @@ import {
   salesIn,
   sameAge,
   spend,
-  tabletBlocked,
+  peopleBlocked,
   totals,
 } from "@features/admin/server/ap/metrics";
 import { wholeDays, type DayRow, type Period } from "@features/brain/server/compare";
@@ -395,7 +395,8 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
     ...notes,
     "",
     "Row keys, as the dashboard counts them: unique_visitors (its Visitors: unique daily " +
-      "visits); survey_starts (people who began the survey, by the day they began); " +
+      "visits; null, unknown, before 15 Jun 2026, when the visit log began counting every " +
+      "visitor); survey_starts (people who began the survey, by the day they began); " +
       "intro_completed (reached the intro's last slide, the Survey page's slide 4); submissions " +
       "(finished surveys); reports_opened and paid_so_far (of that day's finishers, how many " +
       "have opened their report, and paid, so far); paid_sales and free_unlocks (sales above " +
@@ -516,7 +517,7 @@ export function renderApSales(facts: Facts, by: SaleGroup[], f: ApFilters, today
     .sort(([, a], [, b]) => b.revenue - a.revenue || b.sales - a.sales || b.comps - a.comps)
     .map(([key, g]) => {
       const filtered = g.filter ? apFilters(f.from, f.to, today, g.filter) : null;
-      const blank = filtered ? tabletBlocked(filtered, filtered.from) : null;
+      const blank = filtered ? peopleBlocked(filtered, filtered.from) : null;
       return (
         `- ${key}: ${plural(g.sales, "sale")}, ${eur(g.revenue)}` +
         (g.sales ? ` (average ${eur(g.revenue / g.sales)})` : "") +

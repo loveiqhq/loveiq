@@ -4,7 +4,7 @@ import DashboardErrorBoundary from "@features/admin/ui/DashboardErrorBoundary";
 import ApSurvey from "@features/admin/ui/ap/ApSurvey";
 
 export const metadata: Metadata = {
-  title: "AP-Analytics · Survey",
+  title: "AP-Analytics · Survey analytics",
   robots: { index: false, follow: false },
 };
 

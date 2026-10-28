@@ -207,6 +207,18 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     press(continueButton());
   };
 
+  // Eman, 27.10: a reader the EUR 1.99 gate will stop is told the price on the map; no one
+  // else's line changes.
+  it("names the gate's price in the first line for a reader the gate will stop, only", () => {
+    const firstLine = () => screen.getByText("your opening chapters").closest("p")!.textContent;
+    const { unmount } = render(<PreReportWizard onComplete={vi.fn()} gatePriceCents={199} />);
+    press(continueButton());
+    expect(firstLine()).toBe("Read your opening chapters in full for €1.99.");
+    unmount();
+    openMap();
+    expect(firstLine()).toBe("Read your opening chapters in full.");
+  });
+
   it("opens on the overview: the pitch copy, ▲ off and ▼ on, nothing marked yet", () => {
     openMap();
     expect(screen.getByText("your opening chapters")).toBeInTheDocument();

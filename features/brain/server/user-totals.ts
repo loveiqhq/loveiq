@@ -1,5 +1,6 @@
 import { dimensions as TRAIT_DEFS } from "@/data/scoring-config";
 import { surveyQuestions } from "@/data/survey-data";
+import { teamUserIds } from "@features/admin/server/ap/team";
 import { readerSessionDurationsMs } from "@features/admin/server/reader-sessions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { readAll } from "@features/brain/server/read-all";
@@ -423,14 +424,15 @@ async function readSubmissions(
   until: string | undefined,
   opts: LoadOptions
 ): Promise<{ rows: Row[]; mail?: MailFacts; labels: Map<string, string> } | null> {
-  const [question, labels] = await Promise.all([
+  const [question, labels, team] = await Promise.all([
     supabaseFetch(`/rest/v1/survey_question?select=id&frontend_qid=eq.${AGE_QUESTION}&limit=1`),
     relationshipLabels(),
+    teamUserIds().catch(() => null),
   ]);
   const ageId = question.ok
     ? ((await question.json().catch(() => [])) as Array<{ id?: number }>)[0]?.id
     : undefined;
-  if (typeof ageId !== "number" || !labels) return null;
+  if (typeof ageId !== "number" || !labels || !team) return null;
   const range =
     (since ? `&created_date_time=gte.${since}T00:00:00Z` : "") +
     (until ? `&created_date_time=lt.${nextDay(until)}T00:00:00Z` : "");
@@ -461,7 +463,11 @@ async function readSubmissions(
         : "") +
       `&status=eq.completed${range}&order=id.asc`
   );
-  return rows ? { rows, mail, labels } : null;
+  // The team's surveys from other addresses (the test coupon's accounts, ap_team_user as AP
+  // counts them); toPerson leaves the @loveiq.org ones out.
+  return rows
+    ? { rows: rows.filter((r) => r.user_id == null || !team.has(Number(r.user_id))), mail, labels }
+    : null;
 }
 
 /**

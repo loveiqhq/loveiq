@@ -213,8 +213,8 @@ re-enabling it later means wiring the call back and setting `JIRA_*`, not rewrit
 it. Do not add `jira` back to the source list before chunks exist: naming a source
 with zero rows tells the model to search something that cannot answer.
 
-Both are idempotent and both sweep rows they did not rewrite, guarded by the
-write count **of their own source** so an empty run can never wipe a source.
+Both are idempotent and both sweep rows their run no longer produces, guarded by the
+row count **of their own source** so an empty run can never wipe a source.
 
 Books are a source, and an opt-in one (decision 2026-09-28). Eleven third-party books on
 love, desire and sex that we keep in Drive are loaded whole as `book` by `npm run
@@ -256,6 +256,15 @@ deletes the parts its new version no longer has in the same write (`leftoverPart
 since 2026-09-24). Only documents that write produced are looked at, so a read that
 failed or was skipped deletes nothing. WhatsApp numbers its parts differently and
 is still left to the sweep.
+
+The sources rebuilt whole every run (`report`, `domain`, `skill`, `analytics`, `people`,
+`plan` and `corporate`) write only the documents that changed (`syncSource`, since
+2026-10-27). They used to rewrite all ~1,300 of their rows every 15 minutes so that the
+timestamp sweep would keep them, and on a database in swap that churn pushed brain-fast's
+writes past the 8-second statement timeout (57014). A run now reads what is stored,
+writes a document whole only when it differs from what the write would store, and sweeps
+by the build's ids. A read that fails writes everything, as before, and sweeps nothing.
+For these sources `list_sources`' "last wrote" is the last time something changed.
 
 Git commits are **not** a source either, since 2026-09-09. They were 1,795 chunks —
 7.5% of the corpus — and the `[skip ci]`/dependabot noise in them consistently

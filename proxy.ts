@@ -18,6 +18,11 @@ import {
   PAY_TO_START_RETURN_PATH,
   readPrepaidToken,
 } from "@features/pay-to-start/logic/journey";
+import {
+  PAY_TO_START_STATUS_PATH,
+  getOfferDefinition,
+  type PayToStartOfferId,
+} from "@features/pay-to-start/logic/offer";
 
 // Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
 // `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
@@ -192,6 +197,17 @@ const PAY_TO_START_CONTINUE_PATH = `${PAY_TO_START_RETURN_PATH}/continue`;
 
 export function isPayToStartPage(path: string): boolean {
   return path === PAY_TO_START_RETURN_PATH || path.startsWith(`${PAY_TO_START_RETURN_PATH}/`);
+}
+
+/**
+ * Which offer's page a pay-to-start visit landed on, for the visit's `offer` column: the
+ * EUR 1.99 page, or the status page Stripe returns its buyers to (`&offer=pre`), else the
+ * full offer's. The label stays `pay_to_start` for both. Exported for unit testing.
+ */
+export function payToStartOfferOf(path: string, offerParam: string | null): PayToStartOfferId {
+  const pre = getOfferDefinition("pre").landingPath;
+  if (path === pre || path.startsWith(`${pre}/`)) return "pre";
+  return path === PAY_TO_START_STATUS_PATH && offerParam === "pre" ? "pre" : "full";
 }
 
 /**
@@ -536,6 +552,7 @@ export async function proxy(request: NextRequest) {
   // funnel_event. These headers are only ever produced by this middleware.
   requestHeaders.delete("x-liq-new-visit");
   requestHeaders.delete("x-liq-new-visit-utm");
+  requestHeaders.delete("x-liq-new-visit-offer");
   requestHeaders.delete("x-liq-new-survey");
 
   // R-22: mint a request correlation id per request. Honor an inbound
@@ -585,6 +602,12 @@ export async function proxy(request: NextRequest) {
       ? PAY_TO_START_JOURNEY
       : (landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "unknown"));
     requestHeaders.set("x-liq-new-visit", visitVariant);
+    if (visitVariant === PAY_TO_START_JOURNEY) {
+      requestHeaders.set(
+        "x-liq-new-visit-offer",
+        payToStartOfferOf(request.nextUrl.pathname, request.nextUrl.searchParams.get("offer"))
+      );
+    }
     // Last-touch acquisition source for THIS visit. sanitizeUtmSource strips to
     // a safe charset + length-caps + lowercases at the trust boundary (the raw
     // query param is attacker-controllable) using the SAME normalizer as the

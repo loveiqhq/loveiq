@@ -254,7 +254,7 @@ does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a 
 The 78h call invite was removed with the Calendly integration on 2026-09-14, so one
 nurture email goes out per unconverted reader. The manual 100% grant remains. The one
 exception: while the EUR 1.99 gate is on, a reader in its cohort gets no nurture email
-(`skippedInitialGate`); the gate and its day-4 gift are their offer.
+(`skippedInitialGate`); the gate and its day-1 gift are their offer.
 
 Pricing 2.0 retired the earlier escalating ladder; the 6h reminders and the 30h/54h
 discounts are gone. This paragraph previously described that retired ladder, copied from

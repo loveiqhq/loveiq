@@ -9,7 +9,8 @@ import { useIsV4 } from "./v3/V3Chapter";
  * `8993:19278`).
  *
  * Three states:
- * - `free`     — an open chapter (Part I). White `FREE` chip.
+ * - `free`     — a chapter open in full to this reader. White `IN FULL` chip (`FREE` until
+ *   27.10, Eman: nothing in the report is sold as free once the EUR 1.99 gate follows the map).
  * - `locked`   — a gated chapter the reader has not bought. Closed padlock.
  * - `unlocked` — a gated chapter the reader's plan HAS opened. Renders NOTHING,
  *   except in Report V4 (below).
@@ -63,7 +64,7 @@ const ReportNavBadge: FC<{ access: ReportNavAccess }> = ({ access }) => {
   const isV4 = useIsV4();
 
   if (access === "free") {
-    return <span className="report-nav-badge report-nav-badge--free">Free</span>;
+    return <span className="report-nav-badge report-nav-badge--free">In full</span>;
   }
 
   if (access === "unlocked") {

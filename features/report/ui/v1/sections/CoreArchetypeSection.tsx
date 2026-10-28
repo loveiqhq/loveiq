@@ -7,6 +7,8 @@ interface Props {
   archetypeHtml: string | null;
   matchScore: number;
   theme: ReportTheme;
+  /** False for one of the reader's other archetypes, opened from the list of 14. */
+  isCore?: boolean;
 }
 
 const ANIMATION_DURATION_MS = 1800;
@@ -24,7 +26,7 @@ function splitMottoForWrap(motto: string) {
   return trailingSegment ? [leadSegment, trailingSegment] : [motto];
 }
 
-const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) => {
+const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme, isCore = true }) => {
   const matchPct = Math.round(matchScore);
   const mottoSegments = splitMottoForWrap(theme.motto);
   const fillRef = useRef<HTMLDivElement>(null);
@@ -92,7 +94,9 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
         {/* Header: badge + name + motto (left) + match strength (right) */}
         <div className="report-hero-card__header">
           <div className="report-hero-card__header-copy">
-            <div className="report-hero-card__badge">Your Core Archetype</div>
+            <div className="report-hero-card__badge">
+              {isCore ? "Your Core Archetype" : "Another Archetype"}
+            </div>
             <h3 className="report-hero-card__title">{theme.archetype}</h3>
           </div>
           <p className="report-hero-card__motto">

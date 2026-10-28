@@ -36,7 +36,7 @@ const WResultTeaser: FC = () => (
         </h2>
 
         <p className="animate-on-scroll stagger-2 mt-3.5 max-w-[34rem] text-[16px] leading-[28px] text-[#5f6675]">
-          The moment you finish, your personality and your full 50+ page report can be unlocked.
+          The moment you finish, your personality and your full 17-chapter report can be unlocked.
         </p>
 
         <div className="animate-on-scroll stagger-3 mt-6">

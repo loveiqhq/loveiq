@@ -288,6 +288,20 @@ const payload: TrafficPayload = {
       why: null,
     },
   },
+  adsSeen: {
+    rows: keywordRows.map((r, i) => ({
+      key: r.key,
+      keyword: r.name,
+      campaign: r.sub,
+      ad: {
+        headlines: [`Headline ${i + 1}`, "Take The Test", "LoveIQ"],
+        descriptions: ["Discover your sexual archetype."],
+        display: "www.loveiq.org/Test",
+      },
+      counts: r.counts,
+    })),
+    why: null,
+  },
   cohorts: {
     rows: [
       {
@@ -484,28 +498,30 @@ describe("the Traffic page as drawn", () => {
   it("lays the sections out in the section bar's order, with their headings and the section nav", () => {
     render(<ApTraffic />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Traffic");
-    // Cost vs quality fourth, as the section bar lists it (the artboard drew it last).
+    // Cost vs quality last, as the artboard draws it (the section bar follows).
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Executive scorecard",
       "Traffic and submissions by channel",
       "Performance by channel",
       "Funnel leakage by channel",
-      "Cost vs quality",
       "Buyers vs curiosity clicks",
+      "Ads as searchers see them",
       "Cohorts by acquisition source",
       "Experiments",
       "Audience by source",
+      "Cost vs quality",
     ]);
     expect([...document.querySelectorAll("section[id]")].map((s) => s.id)).toEqual([
       "scorecard",
       "channel-trend",
       "performance",
       "leakage",
-      "quality",
       "intent",
+      "ads-seen",
       "cohorts",
       "experiments",
       "audience",
+      "quality",
     ]);
     const nav = within(screen.getByRole("navigation", { name: "Traffic sections" }));
     expect(
@@ -514,18 +530,19 @@ describe("the Traffic page as drawn", () => {
       "Scorecard #scorecard",
       "Performance #performance",
       "Funnel leakage #leakage",
-      "Cost vs quality #quality",
       "Creatives & intent #intent",
+      "Ads as seen #ads-seen",
       "Cohorts #cohorts",
       "Experiments #experiments",
       "Audience #audience",
+      "Cost vs quality #quality",
     ]);
     expect(nav.getByRole("link", { name: "Scorecard" })).toHaveAttribute("aria-current", "true");
     // Attribution: under half the visitors with a source reads red; no purchases yet.
     expect(screen.getByText("Visitors with a source").nextSibling).toHaveTextContent("42.0%");
     expect(screen.getByText("Visitors with a source").nextSibling).toHaveClass("text-ap-bad");
     expect(screen.getByText("Unattributed visitors").nextSibling).toHaveTextContent("995 of 3,239");
-    expect(screen.getByText("Purchases with a source").nextSibling).toHaveTextContent("—");
+    expect(screen.queryByText("Buyers with a source")).toBeNull();
     clean();
   });
 
@@ -556,9 +573,11 @@ describe("the Traffic page as drawn", () => {
       "9.00% start CVR",
       "44.4% completion",
       "1.00% purchase CVR",
-      "€250 CAC",
+      // Buyers, then their purchases: 4 people bought, 4 purchases.
+      "4 purchases · €250 CAC",
       "€25.00 AOV",
       "0.10× ROAS",
+      // Contribution in whole euros, as the design writes it.
       "−€924",
       "−€0.092 per visitor",
     ])
@@ -570,11 +589,11 @@ describe("the Traffic page as drawn", () => {
     expect(score.getByText("−€941")).toBeTruthy();
     // Every contribution figure follows: Google Ads' row of the table too (€62.50 net).
     const google = () => within(rowOf(perf(), "Google Ads")).getAllByRole("cell").at(-2)!;
-    expect(google().textContent).toBe("−€955");
+    expect(google().textContent).toBe("−€955 (worse)");
     // A cleared input counts as its default again.
     fireEvent.change(screen.getByLabelText("VAT on revenue %"), { target: { value: "" } });
     expect(tileValue("Contribution / visitor")).toBe("−€0.092");
-    expect(google().textContent).toBe("−€943");
+    expect(google().textContent).toBe("−€943 (worse)");
     clean();
   });
 
@@ -596,13 +615,18 @@ describe("the Traffic page as drawn", () => {
     breakDownBy("creative");
     expect(screen.queryByRole("table", { name: "Performance by creative" })).toBeNull();
     expect(screen.queryByRole("table", { name: "Funnel leakage by creative" })).toBeNull();
-    // In the performance and the leakage sections, and on the creatives tab (not shown).
-    expect(screen.getAllByText(CREATIVE_WHY)).toHaveLength(3);
+    // In the performance and the leakage sections; the intent section opens on keywords.
+    expect(screen.getAllByText(CREATIVE_WHY)).toHaveLength(2);
 
-    // A blocked row keeps its name, its figures blank and its reason under it.
+    // A blocked row keeps its name and its figures blank; its reason is said under the table.
     breakDownBy("device");
     const tablet = rowOf(perf("device"), "Tablet");
-    expect(within(tablet).getByRole("rowheader")).toHaveTextContent(`Tablet${TABLET_WHY}`);
+    expect(within(tablet).getByRole("rowheader").textContent).toBe("Tablet");
+    expect(
+      within(document.getElementById("performance")!).getByText(
+        `Tablet: tablets are told apart from 15 Oct 2026: pick a range from that day on.`
+      )
+    ).toBeTruthy();
     expect(
       new Set(
         within(tablet)
@@ -614,6 +638,106 @@ describe("the Traffic page as drawn", () => {
     breakDownBy("assessment");
     expect(names(perf("assessment"))).toEqual(["Assessment A", "Assessment B"]);
     clean();
+  });
+
+  // Marcus, 15 Oct: the ads as searchers see them, with what each keyword's clicks brought.
+  it("shows each ad as Google lays it out, with its keywords' cost, payment CVR and revenue per survey", () => {
+    // The first two keywords share an ad group, so its ad.
+    const shared = payload.adsSeen.rows[0]!.ad;
+    view.payload = {
+      ...payload,
+      adsSeen: {
+        rows: payload.adsSeen.rows.map((r, i) => (i < 2 ? { ...r, ad: shared } : r)),
+        why: null,
+      },
+    };
+    render(<ApTraffic />);
+    const section = within(document.getElementById("ads-seen")!);
+    const first = section.getAllByRole("article")[0]!;
+    expect(first).toHaveAccessibleName("Ad 1: Headline 1 | Take The Test | LoveIQ");
+    const card = within(first);
+    expect(card.getByText("Sponsored")).toBeTruthy();
+    expect(card.getByText("www.loveiq.org/Test")).toBeTruthy();
+    expect(card.getByText("Headline 1 | Take The Test | LoveIQ")).toBeTruthy();
+    expect(card.getByText("Discover your sexual archetype.")).toBeTruthy();
+    const table = card.getByRole("table", { name: "Keywords for ad 1" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    // Both keywords of the shared ad, each with its own figures: €120 over 20 finished surveys.
+    expect(rows.map((r) => within(r).getByRole("rowheader").firstChild!.textContent)).toEqual(
+      payload.adsSeen.rows.slice(0, 2).map((r) => r.keyword)
+    );
+    expect(within(rows[0]!).getAllByRole("cell")[0]!.textContent).toBe("€120");
+    expect(within(rows[0]!).getAllByRole("cell")[1]!.textContent).toBe("€6.00 (worse)");
+    // Not by colour alone: the word a screen reader reads, held in its own cell.
+    const shaded = within(rows[0]!).getAllByRole("cell")[1]!;
+    expect(shaded.querySelector(".sr-only")!.textContent).toBe(" (worse)");
+    expect(shaded.className).toContain("relative");
+    // The colours are thirds of the range, over every keyword, hidden ads' too.
+    expect(
+      section.getByText(/the top and the bottom third of the range on that figure, across every/)
+    ).toBeTruthy();
+    for (const label of ["Spend", "Cost / survey", "Payment CVR", "Rev. / survey"])
+      expect(within(table).getByRole("button", { name: `About ${label}` })).toBeTruthy();
+    clean();
+  });
+
+  it("shows four ads by spend, then all of them on request", () => {
+    const one = payload.adsSeen.rows[0]!;
+    const rows = Array.from({ length: 6 }, (_, i) => ({
+      ...one,
+      key: `k${i}`,
+      keyword: `kw ${i}`,
+      ad: { ...one.ad, headlines: [`Ad ${i}`] },
+    }));
+    view.payload = { ...payload, adsSeen: { rows, why: null } };
+    render(<ApTraffic />);
+    const section = within(document.getElementById("ads-seen")!);
+    expect(section.getAllByRole("article")).toHaveLength(4);
+    fireEvent.click(section.getByRole("button", { name: "Show all 6 ads" }));
+    expect(section.getAllByRole("article")).toHaveLength(6);
+    fireEvent.click(section.getByRole("button", { name: "Show fewer" }));
+    expect(section.getAllByRole("article")).toHaveLength(4);
+  });
+
+  it("says why there are no ads to show", () => {
+    view.payload = {
+      ...payload,
+      adsSeen: { rows: [], why: "Google Ads' search ads could not be read just now." },
+    };
+    render(<ApTraffic />);
+    expect(
+      within(document.getElementById("ads-seen")!).getByText(
+        "Google Ads' search ads could not be read just now."
+      )
+    ).toBeTruthy();
+  });
+
+  it("shades each audience group's Pre-unlock rate like its other rates, as drawn", () => {
+    // Gender: the section opens on it.
+    const d = dim("gender", "Gender", "survey");
+    view.payload = {
+      ...payload,
+      audience: {
+        dims: payload.audience.dims.map((x) =>
+          x.key === "gender"
+            ? {
+                ...d,
+                perf: [
+                  { ...d.perf[0]!, preRate: 0.02 },
+                  { ...d.perf[1]!, completeRate: 0.03, preRate: 0.005, fullRate: 0.02 },
+                ],
+              }
+            : x
+        ),
+      },
+    } satisfies TrafficPayload;
+    render(<ApTraffic />);
+    const t = screen.getByRole("table", { name: "How each gender group performs" });
+    // Share, Complete rate, Pre-unlock rate, Full unlock rate, Median read.
+    const pre = (name: string) => within(rowOf(t, name)).getAllByRole("cell")[2]!;
+    expect(pre("Gender one")).toHaveTextContent("2.0%");
+    expect(pre("Gender one").style.color).toBe("rgb(31, 92, 66)");
+    expect(pre("Gender two").style.color).toBe("rgb(166, 39, 0)");
   });
 
   it("switches the column set, the rank chart and the sort as the design does", () => {
@@ -651,9 +775,8 @@ describe("the Traffic page as drawn", () => {
     ]);
     const rankBy = within(screen.getByRole("group", { name: "Rank by" }));
     expect(rankBy.getByRole("button", { name: "ROAS" })).toHaveAttribute("aria-pressed", "true");
-    expect(
-      within(document.getElementById("performance")!).getByText(/^Pre-unlock figures are blank/)
-    ).toBeTruthy();
+    // The pre-unlock columns come from the rows' own counts: nothing says it isn't on sale.
+    expect(within(document.getElementById("performance")!).queryByText(/isn't on sale/)).toBeNull();
     // A cost ranks cheapest first, and says lower is better.
     fireEvent.click(rankBy.getByRole("button", { name: "CPM" }));
     expect(screen.getByText("CPM by channel · lower is better")).toBeTruthy();
@@ -691,13 +814,16 @@ describe("the Traffic page as drawn", () => {
     ).toBeTruthy();
     // Without a buyer there are no curves of equal CAC.
     expect(screen.queryByText(/^CAC €/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Search terms" }));
-    expect(screen.getByText("No purchases yet, so no buyer index.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Keywords" }));
+    expect(
+      screen.getByText("No purchase came through a keyword in this range, so no buyer index.")
+    ).toBeTruthy();
     clean();
     cleanup();
 
     // A filter the ads can't follow: the campaigns still drawn, and the reason said under them.
-    const why = "Ad spend can't be split by device here.";
+    const why =
+      "Ad spend isn't split by device in these figures: Google's own split is on Traffic, under Performance › Device, with no device filter on.";
     view.payload = { ...payload, quality: { ...payload.quality, why } };
     render(<ApTraffic />);
     expect(within(document.getElementById("quality")!).getByText(why)).toBeTruthy();
@@ -762,7 +888,7 @@ describe("the Traffic page as drawn", () => {
         clean();
       }
     }
-    for (const tab of ["Search terms", "Creatives & messages"]) {
+    for (const tab of ["Keywords", "Creatives & messages"]) {
       pick("Show", tab);
       clean();
     }

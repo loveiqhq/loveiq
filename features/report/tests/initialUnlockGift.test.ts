@@ -98,7 +98,11 @@ describe("grantGiftedInitialUnlock", () => {
   });
 });
 
-/** E07, "Your Core Archetype is on us" (Figma Report-3.0 1669:2835), verbatim. */
+/**
+ * E07, "Your Core Archetype is on us" (Figma Report-3.0 1669:2835), verbatim but for its first
+ * three words: it goes out on day 1 (Marcus, 27.10), so "Yesterday" when the survey was that
+ * recent and no day otherwise, never the frame's "A few days ago".
+ */
 describe("initialUnlockGiftEmail", () => {
   const REPORT_URL = "https://www.loveiq.org/report/rpt_ABCDEFGHIJKLMNOPQRST?from=email";
   const email = initialUnlockGiftEmail({
@@ -108,17 +112,17 @@ describe("initialUnlockGiftEmail", () => {
     unsubscribeUrl: "https://www.loveiq.org/api/unsubscribe?token=t&src=initial_gift",
   });
 
-  it("says what the frame says, in both parts", () => {
+  it("says what the frame says, in both parts, naming no day by default", () => {
     expect(email.subject).toBe("We unlocked your Core Archetype for you");
     for (const part of [email.html, email.text]) {
       expect(part).toMatch(/Your Core Archetype is on us\./);
       expect(part).toContain("Hi Alex,");
       expect(part).toMatch(
-        /A few days ago you answered some very personal questions\. Your result has been waiting ever since, and we(’|&rsquo;|')d rather you read it than leave it there\./
+        /You answered some very personal questions\. Your result has been waiting ever since, and we(’|&rsquo;|')d rather you read it than leave it there\./
       );
       expect(part).toMatch(/So we(’|&rsquo;|')ve unlocked it for you\./);
       expect(part).toContain("No payment, no catch.");
-      expect(part).toContain("five chapters in full");
+      expect(part).toContain("three chapters in full");
       // Sync 26.10: a locked V4 chapter draws no body, so no "preview" is promised.
       expect(part).toMatch(
         /Every other chapter shows what it covers, so you can see what(’|&rsquo;|')s waiting for you\./
@@ -130,6 +134,22 @@ describe("initialUnlockGiftEmail", () => {
       expect(part).toMatch(/(€|&euro;)10 off the full report/);
       expect(part).toContain("hello@loveiq.org");
     }
+  });
+
+  // Day 1 (Marcus, 27.10): "Yesterday" when the survey was, and no day named otherwise.
+  it("says Yesterday only when told the survey was a day ago", () => {
+    const recent = initialUnlockGiftEmail({
+      answeredYesterday: true,
+      firstName: "Alex",
+      reportUrl: REPORT_URL,
+      siteUrl: "https://www.loveiq.org",
+    });
+    for (const part of [recent.html, recent.text]) {
+      expect(part).toMatch(
+        /Yesterday you answered some very personal questions\. Your result has been waiting ever since, and we(’|&rsquo;|')d rather you read it than leave it there\./
+      );
+    }
+    for (const part of [email.html, email.text]) expect(part).not.toMatch(/yesterday/i);
   });
 
   it("carries the preview line and leads its button to the report", () => {

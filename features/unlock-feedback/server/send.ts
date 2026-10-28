@@ -146,7 +146,7 @@ async function paidAnotherReport(userId: number, row: CandidateRow): Promise<boo
 
 /**
  * Whether the report is in the EUR 1.99 pre-unlock gate's cohort (`initial_gate_cohort_at`,
- * features/report/server/initialGateState.ts): the gate, its EUR 10 credit and the day-4 gift
+ * features/report/server/initialGateState.ts): the gate, its EUR 10 credit and the day-1 gift
  * are that reader's offer, and a free full report would undercut them, as the 72h email
  * skips them too. Asked unless the gate is switched off: off, a stamped reader reads their
  * report like anyone (the 72h email does the same), and before the gate's migration the

@@ -38,11 +38,14 @@ function Dot({ health }: { health: Health }) {
   return <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${tone}`} />;
 }
 
-/** GA4 syncs every 15 minutes: a last day more than two days back means syncs have stopped. */
+/**
+ * GA4 syncs every 15 minutes with today's partial day: a last day before yesterday means syncs
+ * have stopped (just after midnight the new day may not have rows yet).
+ */
 function ga4Health(lastDay: string | null | undefined, today: string): Health {
   if (lastDay === undefined) return null;
   if (lastDay === null) return "down";
-  return lastDay < addDays(today, -2) ? "stale" : "ok";
+  return lastDay < addDays(today, -1) ? "stale" : "ok";
 }
 
 /** PostHog hears the site all day: half a day of silence is worth a look. */

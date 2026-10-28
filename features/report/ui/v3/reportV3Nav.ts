@@ -304,6 +304,25 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
  */
 export const REPORT_V4_TOP_THREE_ANCHOR = "top_archetypes";
 
+/**
+ * The nav with its Core Archetype row renamed while one of the reader's other archetypes is on
+ * screen, opened from the list of all 14: it read "Core Archetype" over any of them
+ * (Marcus, 27.10). Every nav variant names that row `core_archetype`.
+ */
+export function withCoreRowLabel<P extends { items: readonly { id: string; label: string }[] }>(
+  parts: readonly P[],
+  label: string | undefined
+): readonly P[] {
+  if (!label) return parts;
+  return parts.map(
+    (part) =>
+      ({
+        ...part,
+        items: part.items.map((item) => (item.id === "core_archetype" ? { ...item, label } : item)),
+      }) as P
+  );
+}
+
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
   numerals: { "1": "2", "2": "3", "3": "4", "4": "5", "5": "6" },
   snapshotLabel: null,

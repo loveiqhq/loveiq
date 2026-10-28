@@ -26,16 +26,17 @@ type Row = {
   meta: Record<string, unknown>;
 };
 let written: Row[] = [];
-const sweepStale = vi.fn(async () => 0);
+const syncSource = vi.fn(async (_source: string, rows: Row[], _opts?: { sweep?: boolean }) => {
+  written = rows;
+  return { rows: rows.length, swept: 0 };
+});
 vi.mock("@features/brain/server/ingest/upsert", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  upsertChunks: vi.fn(async (rows: Row[]) => {
-    written = rows;
-    return rows.length;
-  }),
   recordSweep: vi.fn(async () => undefined),
-  sweepStale: (...a: unknown[]) => sweepStale(...(a as [])),
+  syncSource: (...a: Parameters<typeof syncSource>) => syncSource(...a),
 }));
+const swept = { sweep: true };
+const notSwept = { sweep: false };
 
 /** One GA4 row: dimension values, then metric values. */
 const r = (dims: string[], metrics: number[]) => ({
@@ -139,7 +140,7 @@ describe("the corporate website's traffic and searches", () => {
     expect(result).toMatchObject({ source: "corporate", rows: written.length });
     expect(new Set(written.map((w) => w.source))).toEqual(new Set(["corporate"]));
     expect(written.every((w) => w.meta.site === "appliedpsychometrics.org")).toBe(true);
-    expect(sweepStale).toHaveBeenCalledWith("corporate", STAMP, written.length);
+    expect(syncSource).toHaveBeenCalledWith("corporate", written, swept);
   });
 
   it("says whose site it is and that only consenting visitors are counted", async () => {
@@ -184,7 +185,7 @@ describe("the corporate website's traffic and searches", () => {
     await expect(ingestCorporateSite(STAMP)).rejects.toThrow();
     expect(byId("ga4-day:2026-10-01")).toBeDefined();
     expect(written.some((w) => w.source_id.startsWith("gsc-"))).toBe(false);
-    expect(sweepStale).not.toHaveBeenCalled();
+    expect(syncSource).toHaveBeenCalledWith("corporate", written, notSwept);
   });
 
   it("keeps last night's traffic rows when a traffic report stopped before its last page", async () => {
@@ -196,7 +197,7 @@ describe("the corporate website's traffic and searches", () => {
       sweepBlocked: true,
       swept: 0,
     });
-    expect(sweepStale).not.toHaveBeenCalled();
+    expect(syncSource).toHaveBeenCalledWith("corporate", written, notSwept);
     // Written from a partial report, these would overwrite complete rows from an earlier run.
     expect(written.some((w) => w.source_id.startsWith("ga4-"))).toBe(false);
     expect(byId("gsc-day:2026-10-02")).toBeDefined();
@@ -206,7 +207,7 @@ describe("the corporate website's traffic and searches", () => {
     truncateQueries = true;
     const result = await ingestCorporateSite(STAMP, () => outOfTime);
     expect(result).toMatchObject({ complete: false, sweepBlocked: true, swept: 0 });
-    expect(sweepStale).not.toHaveBeenCalled();
+    expect(syncSource).toHaveBeenCalledWith("corporate", written, notSwept);
     expect(written.some((w) => w.source_id.startsWith("gsc-"))).toBe(false);
     expect(byId("ga4-day:2026-10-01")).toBeDefined();
   });
@@ -219,6 +220,6 @@ describe("the corporate website's traffic and searches", () => {
     expect(byId("ga4-day:2026-10-01")).toBeDefined();
     expect(byId("ga4-week:2026-W40")).toBeDefined();
     expect(result).toMatchObject({ complete: false, sweepBlocked: true });
-    expect(sweepStale).not.toHaveBeenCalled();
+    expect(syncSource).toHaveBeenCalledWith("corporate", written, notSwept);
   });
 });

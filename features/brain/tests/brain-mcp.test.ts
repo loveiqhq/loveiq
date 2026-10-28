@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { addDays } from "@features/admin/server/ap/days";
+import { reportingDay } from "@shared/time/reporting-day";
+
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -1186,11 +1189,10 @@ describe("/api/mcp", () => {
             )
           ).json()
         ).result as { content: Array<{ text: string }>; isError?: boolean };
-      // Berlin days, as the dashboard's facts and break_even count them.
-      const day = (i: number) =>
-        new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(
-          new Date(Date.now() - i * 86_400_000)
-        );
+      // Berlin days, as the dashboard's facts and break_even count them. Counted back on the
+      // calendar: taking 24 hours off the clock lands on the same Berlin day twice, for one hour
+      // a day (22:00 to 23:00 UTC), in the days after the clocks go back.
+      const day = (i: number) => addDays(reportingDay(new Date()), -i);
 
       beforeEach(() => {
         // 1,000 visitors and 50 finishers a day, one EUR 25 purchase two days ago, EUR 50 a day

@@ -72,5 +72,9 @@ export const isTrustpilotEnabled = (): boolean =>
 export const isTrustpilotLiveConfigured = (config: TrustpilotConfig): boolean =>
   config.businessUnitId !== null;
 
-/** Where the "See our reviews" link points when no domain is configured. */
-export const TRUSTPILOT_FALLBACK_URL = "https://www.trustpilot.com";
+/**
+ * Where the "See our reviews" link points when no domain is configured: our own profile.
+ * It was Trustpilot's home page, and production sets no domain, so every report email's
+ * badge led there (Maria, 22.10: "The Trustpilot link doesn't lead to your profile").
+ */
+export const TRUSTPILOT_FALLBACK_URL = "https://www.trustpilot.com/review/loveiq.org";

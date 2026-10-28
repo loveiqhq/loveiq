@@ -2,13 +2,14 @@
 
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 
-import type { Column, Table } from "@features/admin/server/ap/common";
+import type { Column, Table, Tile } from "@features/admin/server/ap/common";
 import { rangeLabel, type Grain } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt, quarterTop } from "@features/admin/server/ap/format";
 import type {
   CheckoutPoint,
   OverTimeRow,
   PaymentPayload,
+  PaymentTypeRow,
   PricingArmRow,
   SegmentRow,
   SegmentTable,
@@ -18,6 +19,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info, type TrendSource, type Worked } from "./field-info";
 import { bucketTitles, IndexHover, periodTitle, ROW_HOVER } from "./hover";
 import {
   Bar,
@@ -47,7 +49,8 @@ const LINK_ICON =
 const CARD_ICON =
   "M3 2.5h18a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 12V4A1.5 1.5 0 0 1 3 2.5zM1.5 6h21M5 10.5h4";
 const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
-const NOT_ON_SALE = "The Initial plan (pre-unlock) isn't on sale yet.";
+const NOT_ON_SALE =
+  "Pre-unlock figures start on 23 Oct 2026, the first whole day the €1.99 Core Archetype was on sale (from the evening of 22 Oct): earlier periods have none to count.";
 const GRAIN_NAME: Record<Grain, string> = { day: "Day", week: "Week", month: "Month" };
 /** The tiles' decimals as the design writes them ("€650", "1.60%", "14.0%"). */
 const TILE_DIGITS: Record<string, number> = {
@@ -58,6 +61,37 @@ const TILE_DIGITS: Record<string, number> = {
   "pay-cvr": 2,
   checkout: 1,
 };
+
+/** Each tile's info card (fields/payment.ts). */
+const TILE_INFO: Record<string, { k: string }> = {
+  revenue: { k: "payment.revenue" },
+  sales: { k: "payment.sales" },
+  pre: { k: "payment.pre" },
+  "pre-cvr": { k: "payment.pre-cvr" },
+  full: { k: "payment.full" },
+  "full-cvr": { k: "payment.full-cvr" },
+  aov: { k: "payment.aov" },
+  "pay-cvr": { k: "payment.pay-cvr" },
+  checkout: { k: "payment.checkout" },
+};
+
+/** Each multiplier card's info card, by the card's label. */
+const MULT_INFO: Record<string, { k: string }> = {
+  "Country tier": { k: "payment.mult-tier" },
+  Device: { k: "payment.mult-device" },
+  "Traffic source": { k: "payment.mult-source" },
+  "Behaviour bucket": { k: "payment.mult-behaviour" },
+  "Engagement score": { k: "payment.mult-engagement" },
+  "Discount step": { k: "payment.mult-discount" },
+};
+
+/** Groups under this many finishers are left out of these segments, as drawn. */
+const SMALL_GROUP = 15;
+const SMALL_LEFT_OUT: ReadonlySet<string> = new Set(["relationship", "country"]);
+
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+/** "five" for 5, as the design writes the model's points; figures from ten. */
+const inWords = (n: number) => WORDS[n] ?? String(n);
 
 const SECTIONS = [
   { id: "over-time", label: "Over time" },
@@ -77,7 +111,8 @@ const SEGMENTS = [
   { value: "source", label: "Traffic source" },
 ];
 
-const ratio = (a: number, b: number | null) => (b !== null && b > 0 ? a / b : null);
+const ratio = (a: number | null, b: number | null) =>
+  a !== null && b !== null && b > 0 ? a / b : null;
 
 type Shade = "plain" | "good" | "bad";
 const SHADE: Record<Shade, string> = {
@@ -87,15 +122,33 @@ const SHADE: Record<Shade, string> = {
 };
 const WEIGHT = { medium: "font-medium", semibold: "font-semibold", bold: "font-bold" };
 
-/** The design's shading: the top third of a column's range green, the bottom third red. */
-function band(xs: Array<number | null>, v: number | null): Shade {
+/**
+ * The design's shading: the top third of a column's range green, the bottom third red (the
+ * other way round where lower is better).
+ */
+function band(xs: Array<number | null>, v: number | null, lowerBetter = false): Shade {
   const ok = xs.filter((x): x is number => x !== null && Number.isFinite(x));
   if (v === null || !Number.isFinite(v) || ok.length < 2) return "plain";
   const lo = Math.min(...ok);
   const hi = Math.max(...ok);
   if (hi === lo) return "plain";
-  const t = (v - lo) / (hi - lo);
+  const t = lowerBetter ? (hi - v) / (hi - lo) : (v - lo) / (hi - lo);
   return t >= 0.67 ? "good" : t <= 0.33 ? "bad" : "plain";
+}
+
+/** A heading with its info icon, the last word and the icon kept on one line. */
+function Labelled({ label, info }: { label: string; info?: string }) {
+  if (!info) return <>{label}</>;
+  const cut = label.lastIndexOf(" ") + 1;
+  return (
+    <>
+      {label.slice(0, cut)}
+      <span className="whitespace-nowrap">
+        {label.slice(cut)}
+        <Info k={info} label={label} />
+      </span>
+    </>
+  );
 }
 
 /**
@@ -143,7 +196,7 @@ function PayTable({
   label: string;
   columns: string;
   minWidth: number;
-  head: Array<{ label: string; left?: boolean }>;
+  head: Array<{ label: string; left?: boolean; info?: string }>;
   rows: Array<{ key: string; cells: Cell[]; dashed?: boolean }>;
   pad?: string;
   group?: ReactNode;
@@ -166,7 +219,7 @@ function PayTable({
               role="columnheader"
               className={`px-3 py-2.5 text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted ${h.left ? "text-left" : "text-right"}`}
             >
-              {h.label}
+              <Labelled label={h.label} info={h.info} />
             </span>
           ))}
         </div>
@@ -210,26 +263,33 @@ function Swatch({ color, children }: { color: string; children: ReactNode }) {
   );
 }
 
+/** A section left blank, and why. */
+function Why({ children }: { children: ReactNode }) {
+  return <p className="m-0 text-[13px] leading-relaxed text-ap-muted">{children}</p>;
+}
+
 /** A subsection's title, as the design sets it (15px bold), kept a heading for screen readers. */
-function SubHead({ title, children }: { title: string; children: ReactNode }) {
+function SubHead({ title, info, children }: { title: string; info?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="m-0 font-sans text-[15px] font-bold text-ap-ink">{title}</h3>
+      <h3 className="m-0 font-sans text-[15px] font-bold text-ap-ink">
+        <Labelled label={title} info={info} />
+      </h3>
       <p className="m-0 text-[13px] text-ap-muted">{children}</p>
     </div>
   );
 }
 
-/** Paid sales stacked by unlock (bars, left axis) under the finishers (dotted, right axis). */
 /** A point's period as its read-out's title: its days where the server sent them. */
 const pointTitle = (p: { label: string; from?: string; to?: string; partial: boolean }) =>
   p.from && p.to ? periodTitle({ from: p.from, to: p.to }, p.partial) : p.label;
 
+/** Paid sales stacked by unlock (bars, left axis) under the survey submissions (dotted, right). */
 function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boolean }) {
   const n = rows.length;
   const H = 240;
   const sTop = quarterTop(Math.max(...rows.map((r) => r.preSales + r.fullSales)) * 1.1);
-  const fTop = quarterTop(Math.max(...rows.map((r) => r.finishers)) * 1.1);
+  const fTop = quarterTop(Math.max(...rows.map((r) => r.submissions)) * 1.1);
   const x = (i: number) => ((i + 0.5) / n) * 100;
   const fy = (v: number) => (Math.min(v, fTop) / fTop) * 100;
   const margin = "0 56px 0 40px";
@@ -284,7 +344,7 @@ function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boole
           >
             <polyline
               points={rows
-                .map((r, i) => `${x(i).toFixed(2)},${(100 - fy(r.finishers)).toFixed(2)}`)
+                .map((r, i) => `${x(i).toFixed(2)},${(100 - fy(r.submissions)).toFixed(2)}`)
                 .join(" ")}
               fill="none"
               stroke={INK}
@@ -298,16 +358,16 @@ function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boole
             <span
               key={r.label}
               className="absolute -translate-x-1/2 -translate-y-2 rounded bg-white/90 px-[3px] text-[11px] font-bold tabular-nums text-ap-ink"
-              style={{ left: `${x(i)}%`, bottom: `${fy(r.finishers)}%` }}
+              style={{ left: `${x(i)}%`, bottom: `${fy(r.submissions)}%` }}
             >
-              {fmt("count", r.finishers)}
+              {fmt("count", r.submissions)}
             </span>
           ))}
           <IndexHover
             xs={rows.map((_, i) => x(i))}
             label="Paid sales over time"
             band={(i) => ({ left: (i / n) * 100, width: 100 / n })}
-            markers={(i) => [{ y: fy(rows[i]!.finishers), color: INK }]}
+            markers={(i) => [{ y: fy(rows[i]!.submissions), color: INK }]}
             tip={(i) => {
               const r = rows[i]!;
               const paid = r.preSales + r.fullSales;
@@ -316,10 +376,11 @@ function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boole
                 rows: [
                   {
                     label: "Pre-unlock sales",
-                    value: preOnSale ? fmt("count", r.preSales) : "not on sale",
+                    value:
+                      preOnSale && r.preOn !== false ? fmt("count", r.preSales) : "not on sale",
                     color: PRE,
                     mark: "square",
-                    muted: !preOnSale,
+                    muted: !preOnSale || r.preOn === false,
                   },
                   {
                     label: "Full-unlock sales",
@@ -331,13 +392,14 @@ function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boole
                   { label: "Revenue", value: fmt("eur", r.revenue, 2) },
                   {
                     label: "Survey submissions",
-                    value: fmt("count", r.finishers),
+                    value: fmt("count", r.submissions),
                     color: INK,
                     mark: "dotted",
                   },
+                  { label: "Finishers (each person once)", value: fmt("count", r.finishers) },
                   {
                     label: "Payment CVR",
-                    value: fmt("pct", ratio(paid, r.finishers), 2),
+                    value: fmt("pct", ratio(r.payers, r.finishers), 2),
                     muted: !r.finishers,
                   },
                 ],
@@ -361,54 +423,137 @@ function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boole
 }
 
 function OverTime({ d }: { d: PaymentPayload }) {
-  const { grain, rows, preOnSale } = d.overTime;
-  const cvrs = rows.map((r) => ratio(r.preSales + r.fullSales, r.finishers));
+  const { grain, rows, preOnSale, note } = d.overTime;
+  const cvrs = rows.map((r) => ratio(r.payers, r.finishers));
   return (
     <Card id="over-time" labelledBy="h-time">
       <SectionHead
         id="h-time"
         title="Pre-unlock and full-unlock payments over time"
+        info="payment.over-time"
         description={`Paid sales per ${GRAIN_NAME[grain].toLowerCase()} by unlock type, against total survey submissions.`}
       />
-      <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-ap-body">
-        <Swatch color={PRE}>Pre-unlock (Initial plan)</Swatch>
-        <Swatch color={FULL}>Full unlock (Full, Full All, Core)</Swatch>
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-0 w-4 border-t-2 border-dotted border-ap-ink" />
-          Survey submissions
-        </span>
-      </div>
-      {rows.length > 0 && <SalesChart rows={rows} preOnSale={preOnSale} />}
-      <PayTable
-        label="Payments over time"
-        columns="minmax(120px, 1.2fr) repeat(7, minmax(90px, 1fr))"
-        minWidth={900}
-        pad="py-[9px]"
-        head={[
-          { label: GRAIN_NAME[grain], left: true },
-          { label: "Pre-unlock sales" },
-          { label: "Pre-unlock avg." },
-          { label: "Full-unlock sales" },
-          { label: "Full-unlock avg." },
-          { label: "Revenue" },
-          { label: "Finishers" },
-          { label: "Payment CVR" },
-        ]}
-        rows={rows.map((r, i) => ({
-          key: r.label,
-          cells: [
-            { v: r.label, left: true, weight: "bold" },
-            { v: preOnSale ? fmt("count", r.preSales) : EMPTY },
-            { v: preOnSale ? fmt("eur", ratio(r.preRevenue, r.preSales), 2) : EMPTY },
-            { v: fmt("count", r.fullSales) },
-            { v: fmt("eur", ratio(r.fullRevenue, r.fullSales), 2) },
-            { v: fmt("eur", r.revenue, 2) },
-            { v: fmt("count", r.finishers) },
-            { v: fmt("pct", cvrs[i], 2), weight: "bold", shade: band(cvrs, cvrs[i] ?? null) },
-          ],
-        }))}
+      {d.blocked ? (
+        <Why>{d.blocked}</Why>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-ap-body">
+            <Swatch color={PRE}>Pre-unlock (Initial plan)</Swatch>
+            <Swatch color={FULL}>Full unlock (Full, Full All, Core)</Swatch>
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-0 w-4 border-t-2 border-dotted border-ap-ink" />
+              Survey submissions
+            </span>
+          </div>
+          {rows.length > 0 && <SalesChart rows={rows} preOnSale={preOnSale} />}
+          <PayTable
+            label="Payments over time"
+            columns="minmax(120px, 1.2fr) repeat(7, minmax(90px, 1fr))"
+            minWidth={900}
+            pad="py-[9px]"
+            head={[
+              { label: GRAIN_NAME[grain], left: true },
+              { label: "Pre-unlock sales", info: "payment.ot-pre-sales" },
+              { label: "Pre-unlock avg.", info: "payment.ot-pre-avg" },
+              { label: "Full-unlock sales", info: "payment.ot-full-sales" },
+              { label: "Full-unlock avg.", info: "payment.ot-full-avg" },
+              { label: "Revenue", info: "payment.ot-revenue" },
+              { label: "Finishers", info: "payment.ot-finishers" },
+              { label: "Payment CVR", info: "payment.ot-cvr" },
+            ]}
+            rows={rows.map((r, i) => ({
+              key: r.label,
+              cells: [
+                { v: r.label, left: true, weight: "bold" },
+                { v: preOnSale && r.preOn !== false ? fmt("count", r.preSales) : EMPTY },
+                {
+                  v:
+                    preOnSale && r.preOn !== false
+                      ? fmt("eur", ratio(r.preRevenue, r.preSales), 2)
+                      : EMPTY,
+                },
+                { v: fmt("count", r.fullSales) },
+                { v: fmt("eur", ratio(r.fullRevenue, r.fullSales), 2) },
+                { v: fmt("eur", r.revenue, 2) },
+                { v: fmt("count", r.finishers) },
+                { v: fmt("pct", cvrs[i], 2), weight: "bold", shade: band(cvrs, cvrs[i] ?? null) },
+              ],
+            }))}
+          />
+          {(note || !preOnSale || rows.some((r) => r.preOn === false)) && (
+            <p className="m-0 text-xs text-ap-muted">
+              {[
+                note,
+                preOnSale && rows.every((r) => r.preOn !== false)
+                  ? null
+                  : (d.overTime.preWhy ?? NOT_ON_SALE),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            </p>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** Every way a reader pays, live or not yet (the design's "Payment types"). */
+function PaymentTypes({ d }: { d: PaymentPayload }) {
+  const { rows, refundsWhy } = d.types;
+  const live = rows.filter((r) => r.live);
+  const total = live.reduce((n, r) => n + (r.revenue ?? 0), 0);
+  // Of the sales made, refunded: a sale refunded in full left the sales, so it is counted back.
+  const rate = (r: PaymentTypeRow) =>
+    r.refunds === null || r.sales === null || r.fullRefunds === null
+      ? null
+      : ratio(r.refunds, r.sales + r.fullRefunds);
+  // Shaded only across the live rows, as drawn: sales and revenue up, the refund rate down.
+  const sales = live.map((r) => r.sales);
+  const revenue = live.map((r) => r.revenue);
+  const rates = live.map(rate);
+  return (
+    <Card id="payment-types" labelledBy="h-payment-types">
+      <SectionHead
+        id="h-payment-types"
+        title="Payment types"
+        description="Every way a reader pays, across both funnels, each sale in one row: pay to start's are the purchases made on its pages, what a pay-to-start reader later buys on their report has its own row, and an upgrade after €1.99 is a full unlock bought after paying for the €1.99 Core Archetype."
       />
-      {!preOnSale && <p className="m-0 text-xs text-ap-muted">{NOT_ON_SALE}</p>}
+      {d.blocked ? (
+        <Why>{d.blocked}</Why>
+      ) : (
+        <>
+          <PayTable
+            label="Payment types"
+            columns="minmax(240px, 2fr) repeat(6, minmax(96px, 1fr))"
+            minWidth={1000}
+            head={[
+              { label: "Payment type", left: true },
+              { label: "Sales", info: "payment.type-sales" },
+              { label: "Average price", info: "payment.type-avg" },
+              { label: "Revenue", info: "payment.type-revenue" },
+              { label: "Share of revenue", info: "payment.type-share" },
+              { label: "Refunds", info: "payment.type-refunds" },
+              { label: "Refund rate", info: "payment.type-refund-rate" },
+            ]}
+            rows={rows.map((r) => ({
+              key: r.key,
+              cells: [
+                { v: r.name, sub: r.line, left: true, weight: "bold" },
+                { v: fmt("count", r.sales), shade: r.live ? band(sales, r.sales) : "plain" },
+                { v: fmt("eur", ratio(r.revenue, r.sales), 2) },
+                { v: fmt("eur", r.revenue, 2), shade: r.live ? band(revenue, r.revenue) : "plain" },
+                { v: fmt("pct", r.live ? ratio(r.revenue, total) : null, 1) },
+                { v: fmt("count", r.refunds) },
+                { v: fmt("pct", rate(r), 1), shade: r.live ? band(rates, rate(r), true) : "plain" },
+              ],
+            }))}
+          />
+          <p className="m-0 text-xs leading-relaxed text-ap-muted">
+            {`Refunds come from the payment records (refunded in full or in part).${refundsWhy ? ` ${refundsWhy}` : ""} Pay to start is live from 22 Oct 2026; the report's €1.99 gate only while it is switched on.`}
+          </p>
+        </>
+      )}
     </Card>
   );
 }
@@ -541,10 +686,12 @@ const stepTone = (v: number | null, ok: number, warn: number) =>
 function Methods({ c }: { c: PaymentPayload["checkout"] }) {
   const total = c.methods.reduce((n, m) => n + m.sales, 0);
   const color = (i: number) => RANK[Math.min(i, RANK.length - 1)]!;
-  const columns = "minmax(130px, 1.5fr) repeat(4, minmax(70px, 1fr))";
+  // The method's name and kind stay on one line beside its swatch and card icon: room for
+  // "Mastercard card" (the longest), so it never runs into the sales.
+  const columns = "minmax(190px, 1.5fr) repeat(4, minmax(78px, 1fr))";
   return (
     <div className="flex min-w-0 flex-col gap-2.5 border-t border-ap-line pt-5">
-      <SubHead title="Payment methods">
+      <SubHead title="Payment methods" info="payment.methods">
         {fmt("count", c.sales)} paid sale{c.sales === 1 ? "" : "s"} in this range, via Stripe
       </SubHead>
       {total === 0 ? (
@@ -565,19 +712,25 @@ function Methods({ c }: { c: PaymentPayload["checkout"] }) {
             aria-label="Payment methods, scrolls sideways"
             className="overflow-x-auto rounded-[14px] border border-ap-line"
           >
-            <div role="table" aria-label="Payment methods" className="min-w-[440px]">
+            <div role="table" aria-label="Payment methods" className="min-w-[510px]">
               <div
                 role="row"
                 className="grid bg-ap-ground"
                 style={{ gridTemplateColumns: columns }}
               >
-                {["Method", "Sales", "Share", "Revenue", "AOV"].map((h, i) => (
+                {[
+                  { label: "Method" },
+                  { label: "Sales", info: "payment.m-sales" },
+                  { label: "Share", info: "payment.m-share" },
+                  { label: "Revenue", info: "payment.m-revenue" },
+                  { label: "AOV", info: "payment.m-aov" },
+                ].map((h, i) => (
                   <span
-                    key={h}
+                    key={h.label}
                     role="columnheader"
                     className={`px-3 py-[9px] text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted ${i ? "text-right" : "text-left"}`}
                   >
-                    {h}
+                    <Labelled label={h.label} info={h.info} />
                   </span>
                 ))}
               </div>
@@ -644,6 +797,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
   const steps = [
     {
       label: "a) Reached payment page",
+      k: "payment.co-reached",
       n: c.reached,
       w: c.reached > 0 ? 1 : 0,
       color: PRE,
@@ -652,6 +806,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
     },
     {
       label: "b) Filled in and attempted",
+      k: "payment.co-attempted",
       n: c.attempted,
       w: ratio(c.attempted, c.reached),
       color: ATTEMPTED,
@@ -660,6 +815,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
     },
     {
       label: "c) Payment succeeded",
+      k: "payment.co-paid",
       n: c.paid,
       w: ratio(c.paid, c.reached),
       color: GREEN,
@@ -675,11 +831,11 @@ function Checkout({ d }: { d: PaymentPayload }) {
         description="How many checkouts turn into a payment, and how people pay."
       />
       {c.why ? (
-        <p className="m-0 text-[13px] leading-relaxed text-ap-muted">{c.why}</p>
+        <Why>{c.why}</Why>
       ) : (
         <div className="flex flex-col gap-7">
           <div className="flex min-w-0 flex-col gap-2.5">
-            <SubHead title="Checkout success">
+            <SubHead title="Checkout success" info="payment.checkout">
               Paid checkouts in this range: a) reached the payment page, b) filled in their details
               and attempted to pay, c) payment succeeded. Free (€0) unlocks are left out.
               {c.note ? ` ${c.note}` : ""}
@@ -690,7 +846,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
                 className={`grid grid-cols-[minmax(0,1fr)_minmax(44px,auto)_minmax(84px,auto)] items-center gap-x-3 gap-y-1 py-0.5 text-[13px] sm:grid-cols-[230px_minmax(0,1fr)_70px_120px] ${ROW_HOVER}`}
               >
                 <span className="col-span-3 font-semibold text-ap-ink sm:col-span-1">
-                  {s.label}
+                  <Labelled label={s.label} info={s.k} />
                 </span>
                 <Bar pct={s.w} color={s.color} height={18} track="#f5f6f8" />
                 <span className="text-right font-bold tabular-nums text-ap-ink">
@@ -716,46 +872,13 @@ function Checkout({ d }: { d: PaymentPayload }) {
 }
 
 /**
- * The rows shown: all of them, but for countries the 12 largest and the rest added up as
- * "Other countries", from the counts behind each rate.
+ * The rows shown: all of them, but relationships and countries with fewer than SMALL_GROUP
+ * finishers are left out, as drawn (the CSV keeps every row).
  */
-function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number } {
-  if (t.key !== "country" || t.rows.length <= 12) return { rows: t.rows, merged: 0 };
-  const sorted = [...t.rows].sort((a, b) => b.finishers - a.finishers);
-  const rest = sorted.slice(12);
-  const sum = (f: (r: SegmentRow) => number) => rest.reduce((n, r) => n + f(r), 0);
-  const finishers = sum((r) => r.finishers);
-  const fullSales = sum((r) => r.fullSales);
-  const fullRevenue = Math.round(sum((r) => r.fullRevenue) * 100) / 100;
-  // A row's pre-unlock rate is blank only while the Initial plan isn't on sale.
-  const preOnSale = !rest.some((r) => r.preCvr === null);
-  const preSales = sum((r) => r.preSales);
-  const preRevenue = Math.round(sum((r) => r.preRevenue) * 100) / 100;
-  const other: SegmentRow = {
-    label: "Other countries",
-    finishers,
-    sales: sum((r) => r.sales),
-    preCvr: preOnSale
-      ? ratio(
-          sum((r) => r.preBuyers),
-          finishers
-        )
-      : null,
-    preAvg: preOnSale ? ratio(preRevenue, preSales) : null,
-    fullCvr: ratio(
-      sum((r) => r.fullBuyers),
-      finishers
-    ),
-    fullAvg: ratio(fullRevenue, fullSales),
-    revenue: Math.round(sum((r) => r.revenue) * 100) / 100,
-    fullBuyers: sum((r) => r.fullBuyers),
-    fullSales,
-    fullRevenue,
-    preBuyers: sum((r) => r.preBuyers),
-    preSales,
-    preRevenue,
-  };
-  return { rows: [...sorted.slice(0, 12), other], merged: rest.length };
+function shownRows(t: SegmentTable): { rows: SegmentRow[]; leftOut: number } {
+  if (!SMALL_LEFT_OUT.has(t.key)) return { rows: t.rows, leftOut: 0 };
+  const rows = t.rows.filter((r) => r.finishers >= SMALL_GROUP);
+  return { rows, leftOut: t.rows.length - rows.length };
 }
 
 const SEGMENT_COLUMNS = "minmax(200px, 1.8fr) repeat(8, minmax(92px, 1fr))";
@@ -770,7 +893,7 @@ function Segments({
   onSegKey: (k: string) => void;
 }) {
   const t = d.segments.find((s) => s.key === segKey);
-  const { rows, merged } = t ? shownRows(t) : { rows: [], merged: 0 };
+  const { rows, leftOut } = t ? shownRows(t) : { rows: [], leftOut: 0 };
   const allSales = (t?.rows ?? []).reduce((n, r) => n + r.sales, 0);
   const cv = rows.map((r) => r.fullCvr);
   const av = rows.map((r) => r.fullAvg);
@@ -799,62 +922,68 @@ function Segments({
           </label>
         }
       />
-      <PayTable
-        label={`Who pays by ${t?.label ?? "segment"}`}
-        columns={SEGMENT_COLUMNS}
-        minWidth={1040}
-        group={
-          <div
-            aria-hidden="true"
-            className="grid border-b border-ap-line bg-white"
-            style={{ gridTemplateColumns: SEGMENT_COLUMNS }}
-          >
-            <span className="col-span-3 px-3 py-2" />
-            {["Pre-unlock", "Full unlock", "Total"].map((g) => (
-              <span
-                key={g}
-                className="col-span-2 border-l border-ap-line px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-plum"
+      {d.blocked ? (
+        <Why>{d.blocked}</Why>
+      ) : (
+        <>
+          <PayTable
+            label={`Who pays by ${t?.label ?? "segment"}`}
+            columns={SEGMENT_COLUMNS}
+            minWidth={1040}
+            group={
+              <div
+                aria-hidden="true"
+                className="grid border-b border-ap-line bg-white"
+                style={{ gridTemplateColumns: SEGMENT_COLUMNS }}
               >
-                {g}
-              </span>
-            ))}
+                <span className="col-span-3 px-3 py-2" />
+                {["Pre-unlock", "Full unlock", "Total"].map((g) => (
+                  <span
+                    key={g}
+                    className="col-span-2 border-l border-ap-line px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-plum"
+                  >
+                    {g}
+                  </span>
+                ))}
+              </div>
+            }
+            head={[
+              { label: "Segment", left: true },
+              { label: "Finishers", info: "payment.seg-finishers" },
+              { label: "Share of sales", info: "payment.seg-share" },
+              { label: "Pre CVR", info: "payment.seg-pre-cvr" },
+              { label: "Pre avg. €", info: "payment.seg-pre-avg" },
+              { label: "Full CVR", info: "payment.seg-full-cvr" },
+              { label: "Full avg. €", info: "payment.seg-full-avg" },
+              { label: "Revenue", info: "payment.seg-revenue" },
+              { label: "Rev. / finisher", info: "payment.seg-rev-per" },
+            ]}
+            rows={rows.map((r, i) => ({
+              key: r.label,
+              cells: [
+                { v: r.label, left: true, weight: "bold" },
+                { v: fmt("count", r.finishers) },
+                { v: fmt("pct", ratio(r.sales, allSales), 0) },
+                { v: fmt("pct", r.preCvr, 2) },
+                { v: fmt("eur", r.preAvg, 2) },
+                { v: fmt("pct", r.fullCvr, 2), weight: "bold", shade: band(cv, r.fullCvr) },
+                { v: fmt("eur", r.fullAvg, 2), shade: band(av, r.fullAvg) },
+                { v: fmt("eur", r.revenue, 0) },
+                { v: fmt("eur", rf[i], 2), shade: band(rf, rf[i] ?? null) },
+              ],
+            }))}
+          />
+          <div className="flex flex-col gap-1 text-xs leading-relaxed text-ap-muted">
+            {(t?.note || leftOut > 0) && (
+              <p className="m-0">
+                {t?.note}
+                {leftOut > 0 && " Smaller groups are left out."}
+              </p>
+            )}
+            {!d.overTime.preOnSale && <p className="m-0">{d.overTime.preWhy ?? NOT_ON_SALE}</p>}
           </div>
-        }
-        head={[
-          { label: "Segment", left: true },
-          { label: "Finishers" },
-          { label: "Share of sales" },
-          { label: "Pre CVR" },
-          { label: "Pre avg. €" },
-          { label: "Full CVR" },
-          { label: "Full avg. €" },
-          { label: "Revenue" },
-          { label: "Rev. / finisher" },
-        ]}
-        rows={rows.map((r, i) => ({
-          key: r.label,
-          cells: [
-            { v: r.label, left: true, weight: "bold" },
-            { v: fmt("count", r.finishers) },
-            { v: fmt("pct", ratio(r.sales, allSales), 0) },
-            { v: fmt("pct", r.preCvr, 2) },
-            { v: fmt("eur", r.preAvg, 2) },
-            { v: fmt("pct", r.fullCvr, 2), weight: "bold", shade: band(cv, r.fullCvr) },
-            { v: fmt("eur", r.fullAvg, 2), shade: band(av, r.fullAvg) },
-            { v: fmt("eur", r.revenue, 0) },
-            { v: fmt("eur", rf[i], 2), shade: band(rf, rf[i] ?? null) },
-          ],
-        }))}
-      />
-      <div className="flex flex-col gap-1 text-xs leading-relaxed text-ap-muted">
-        {(t?.note || merged > 0) && (
-          <p className="m-0">
-            {t?.note}
-            {merged > 0 && ` Other countries: the ${merged} smaller countries added together.`}
-          </p>
-        )}
-        {!d.overTime.preOnSale && <p className="m-0">{NOT_ON_SALE}</p>}
-      </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -905,61 +1034,81 @@ function Pricing({ d }: { d: PaymentPayload }) {
       <SectionHead
         id="h-exp"
         title="Pricing tests"
-        description="Every price arm with its funnel, revenue and how credible the difference is."
+        description="Every price arm with its funnel, revenue and how credible the difference is. A test is one stretch of unchanged price lists: the people who finished in it, each on the list they were dealt, and their own checkouts and sales up to its end."
       />
-      <PayTable
-        label="Pricing tests"
-        columns={PRICING_COLUMNS}
-        minWidth={1240}
-        rowHeaders={false}
-        head={[
-          { label: "Test", left: true },
-          { label: "Arm", left: true },
-          { label: "Base price" },
-          { label: "Paywall views" },
-          { label: "Checkouts" },
-          { label: "Paid sales" },
-          { label: "Revenue" },
-          { label: "AOV" },
-          { label: "Checkout → paid" },
-          { label: "Rev. / paywall view" },
-          { label: "AOV lift · confidence" },
-        ]}
-        rows={arms.map((a, i) => {
-          const first = i === 0 || arms[i - 1]!.test !== a.test;
-          // The arm whose sales were larger on average, where the test can compare them.
-          const lift = arms.find((x) => x.test === a.test && !x.control)?.aovLift ?? null;
-          const won = lift !== null && lift !== 0 && lift > 0 !== a.control;
-          const stalled: Partial<Cell> =
-            a.paidSales === 0 && (a.checkouts ?? 0) > 0 ? { weight: "bold", shade: "bad" } : {};
-          return {
-            key: `${a.test}-${a.arm}`,
-            dashed: !first,
-            cells: [
-              first
-                ? { v: a.test, sub: a.note, left: true, weight: "bold" }
-                : { v: "", left: true },
-              { v: a.arm, sub: a.control ? "Control" : "", left: true, weight: "semibold" },
-              basePrice(a.basePrice),
-              a.paywallViews === null
-                ? { v: EMPTY, sub: "not logged" }
-                : { v: fmt("count", a.paywallViews) },
-              { v: fmt("count", a.checkouts) },
-              { v: fmt("count", a.paidSales), ...stalled },
-              { v: fmt("eur", a.revenue, 0) },
-              {
-                v: fmt("eur", ratio(a.revenue, a.paidSales), 2),
-                ...(won ? { weight: "bold" as const, shade: "good" as const } : {}),
-              },
-              { v: fmt("pct", ratio(a.paidSales, a.checkouts), 0), ...stalled },
-              {
-                v: fmt("eur", a.paywallViews === null ? null : ratio(a.revenue, a.paywallViews), 2),
-              },
-              liftCell(a),
-            ],
-          };
-        })}
-      />
+      {d.blocked ? (
+        <Why>{d.blocked}</Why>
+      ) : (
+        <PayTable
+          label="Pricing tests"
+          columns={PRICING_COLUMNS}
+          minWidth={1240}
+          rowHeaders={false}
+          head={[
+            { label: "Test", left: true },
+            { label: "Arm", left: true, info: "payment.pt-arm" },
+            { label: "Base price", info: "payment.pt-base" },
+            { label: "Paywall views", info: "payment.pt-views" },
+            { label: "Checkouts", info: "payment.pt-checkouts" },
+            { label: "Paid sales", info: "payment.pt-sales" },
+            { label: "Revenue", info: "payment.pt-revenue" },
+            { label: "AOV", info: "payment.pt-aov" },
+            { label: "Checkout → paid", info: "payment.pt-co-paid" },
+            { label: "Rev. / paywall view", info: "payment.pt-rev-view" },
+            { label: "AOV lift · confidence", info: "payment.pt-lift" },
+          ]}
+          rows={arms.map((a, i) => {
+            const first = i === 0 || arms[i - 1]!.test !== a.test;
+            // The arm whose sales were larger on average, where the test can compare them.
+            const lift = arms.find((x) => x.test === a.test && !x.control)?.aovLift ?? null;
+            const won = lift !== null && lift !== 0 && lift > 0 !== a.control;
+            const stalled: Partial<Cell> =
+              a.paidSales === 0 && (a.checkouts ?? 0) > 0 ? { weight: "bold", shade: "bad" } : {};
+            return {
+              key: `${a.test}-${a.arm}`,
+              dashed: !first,
+              cells: [
+                first
+                  ? { v: a.test, sub: a.note, left: true, weight: "bold" }
+                  : { v: "", left: true },
+                {
+                  v: a.arm,
+                  sub: [
+                    a.control ? "Control" : "",
+                    a.finishers === null
+                      ? ""
+                      : `${fmt("count", a.finishers)} finisher${a.finishers === 1 ? "" : "s"}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                  left: true,
+                  weight: "semibold",
+                },
+                basePrice(a.basePrice),
+                a.paywallViews === null
+                  ? { v: EMPTY, sub: a.finishers === null ? "" : "recorded from 6 Sep 2026" }
+                  : { v: fmt("count", a.paywallViews) },
+                { v: fmt("count", a.checkouts) },
+                { v: fmt("count", a.paidSales), ...stalled },
+                { v: fmt("eur", a.revenue, 0) },
+                {
+                  v: fmt("eur", ratio(a.revenue, a.paidSales), 2),
+                  ...(won ? { weight: "bold" as const, shade: "good" as const } : {}),
+                },
+                { v: fmt("pct", ratio(a.paidSales, a.checkouts), 0), ...stalled },
+                {
+                  v: fmt(
+                    "eur",
+                    a.paywallViews === null ? null : ratio(a.revenue, a.paywallViews),
+                    2
+                  ),
+                },
+                liftCell(a),
+              ],
+            };
+          })}
+        />
+      )}
       <div className="flex flex-col gap-2.5 border-t border-ap-line pt-4">
         <SubHead title="Personal price multipliers in Pricing 3.0">{sentence}</SubHead>
         <div
@@ -972,7 +1121,7 @@ function Pricing({ d }: { d: PaymentPayload }) {
               className="flex flex-col gap-1.5 rounded-[14px] bg-ap-ground px-3.5 py-3"
             >
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
-                {g.label}
+                <Labelled label={g.label} info={MULT_INFO[g.label]?.k} />
               </span>
               {g.items.map((it) => (
                 <span key={it.key} className="flex justify-between gap-2 text-[13px] text-ap-ink">
@@ -1028,18 +1177,19 @@ function modelOf(el: PaymentPayload["elasticity"]): Model | null {
 
 function Elasticity({ el }: { el: PaymentPayload["elasticity"] }) {
   const [probe, setProbe] = useState(15);
-  const n = el.points.length;
   const model = modelOf(el);
+  // Per finisher: the model's conversion counts people, each once.
   return (
     <Card id="elasticity" labelledBy="h-el">
       <SectionHead
         id="h-el"
         title="Price elasticity prediction"
+        info="payment.elasticity"
         align="end"
         description={
-          model
-            ? `A constant-elasticity model fitted to ${n} month${n === 1 ? "" : "s"} of full-unlock price and payment conversion in this range. It predicts conversion and net revenue per submission at any price.`
-            : "A constant-elasticity model of full-unlock price and payment conversion. It predicts conversion and net revenue per submission at any price."
+          model && el.months
+            ? `A constant-elasticity model fitted to monthly full-unlock price and payment conversion, ${el.months}. It predicts conversion and net revenue per finisher at any price.`
+            : "A constant-elasticity model of full-unlock price and payment conversion. It predicts conversion and net revenue per finisher at any price."
         }
         right={
           model ? (
@@ -1061,9 +1211,7 @@ function Elasticity({ el }: { el: PaymentPayload["elasticity"] }) {
       {model ? (
         <ElasticityModel el={el} m={model} probe={probe} onProbe={setProbe} />
       ) : (
-        <p className="m-0 text-[13px] leading-relaxed text-ap-muted">
-          {el.why ?? "The model could not be fitted to this range."}
-        </p>
+        <Why>{el.why ?? "The model could not be fitted to this range."}</Why>
       )}
     </Card>
   );
@@ -1085,9 +1233,10 @@ function ElasticityModel({
   const n = el.points.length;
   const today = el.today.find((t) => t.arm === "A3") ?? el.today[0];
   const bestNet = netAt(best);
-  const tiles: Array<{ label: string; value: string; sub: string; look: string }> = [
+  const tiles: Array<{ label: string; k: string; value: string; sub: string; look: string }> = [
     {
       label: "Price elasticity",
+      k: "payment.el-e",
       value: fmt("ratio", e, 2),
       sub:
         e <= 0
@@ -1097,22 +1246,25 @@ function ElasticityModel({
     },
     {
       label: "Best price (net revenue)",
+      k: "payment.el-best",
       value: fmt("eur", best, 2),
-      sub: `Where net revenue per submission peaks: ${fmt("eur", bestNet, 3)}`,
+      sub: `Where net revenue per finisher peaks: ${fmt("eur", bestNet, 3)}`,
       look: "border-ap-good/25 bg-ap-good/[0.08]",
     },
     {
       label: `At ${fmt("eur", probe, 2)}`,
+      k: "payment.el-at",
       value: fmt("pct", cvrAt(probe), 2),
-      sub: `Predicted payment CVR · ${fmt("eur", netAt(probe), 3)} net per submission`,
+      sub: `Predicted payment CVR · ${fmt("eur", netAt(probe), 3)} net per finisher`,
       look: "border-ap-line bg-white",
     },
     ...(today
       ? [
           {
             label: `At today’s ${fmt("eur", today.price, 2)} (${today.arm})`,
+            k: "payment.el-today",
             value: fmt("pct", cvrAt(today.price), 2),
-            sub: `${fmt("eur", netAt(today.price), 3)} net per submission${
+            sub: `${fmt("eur", netAt(today.price), 3)} net per finisher${
               bestNet > 0
                 ? ` · ${((1 - netAt(today.price) / bestNet) * 100).toFixed(0)}% less than at the best price`
                 : ""
@@ -1137,7 +1289,9 @@ function ElasticityModel({
             key={t.label}
             className={`flex flex-col gap-1.5 rounded-[18px] border px-4 py-3.5 ${t.look}`}
           >
-            <Eyebrow>{t.label}</Eyebrow>
+            <Eyebrow>
+              {t.label} <Info k={t.k} label={t.label} worked={{ value: t.value }} />
+            </Eyebrow>
             <span className="font-serif text-[26px] font-semibold leading-[1.1] tabular-nums text-ap-ink">
               {t.value}
             </span>
@@ -1152,7 +1306,7 @@ function ElasticityModel({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="h-[3px] w-4 bg-ap-good" />
-          Net revenue per submission
+          Net revenue per finisher
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-ap-ink" />
@@ -1263,7 +1417,7 @@ function ElasticityModel({
                       mark: "line",
                     },
                     {
-                      label: "Net revenue per submission",
+                      label: "Net revenue per finisher",
                       value: fmt("eur", netAt(p), 3),
                       color: GREEN,
                       mark: "line",
@@ -1294,7 +1448,7 @@ function ElasticityModel({
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        {`Low confidence: ${n} monthly points, and price moved together with traffic and the paywall over those months. Conversion is capped at ${fmt("pct", m.cap, 1)}, the best month observed, so the model does not promise more than we have seen. Net revenue takes off Stripe's 2.9% + €0.25. Use it to choose the next price test, not as a forecast.`}
+        {`Low confidence: ${inWords(n)} monthly points, and price moved together with traffic and the paywall over those months. Conversion is capped at ${fmt("pct", m.cap, 1)}, the best month observed, so the model does not promise more than we have seen. Net revenue takes off Stripe's 2.9% + €0.25. Use it to choose the next price test, not as a forecast.`}
       </p>
     </>
   );
@@ -1308,7 +1462,37 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
   const seg = d.segments.find((s) => s.key === segKey);
   const segSales = (seg?.rows ?? []).reduce((n, r) => n + r.sales, 0);
   const methodSales = d.checkout.methods.reduce((n, m) => n + m.sales, 0);
+  const typeRevenue = d.types.rows.reduce((n, r) => n + (r.live ? (r.revenue ?? 0) : 0), 0);
   return [
+    {
+      name: "Payment types",
+      table: {
+        columns: [
+          col("Payment type", "text"),
+          col("Line", "text"),
+          col("Sales", "count"),
+          col("Average price", "eur"),
+          col("Revenue", "eur"),
+          col("Share of revenue", "pct"),
+          col("Refunds", "count"),
+          col("Refund rate", "pct"),
+        ],
+        rows: d.types.rows.map((r) => ({
+          label: r.name,
+          values: [
+            r.line,
+            r.sales,
+            ratio(r.revenue, r.sales),
+            r.revenue,
+            r.live ? ratio(r.revenue, typeRevenue) : null,
+            r.refunds,
+            r.refunds === null || r.sales === null || r.fullRefunds === null
+              ? null
+              : ratio(r.refunds, r.sales + r.fullRefunds),
+          ],
+        })),
+      },
+    },
     {
       name: "Payments over time",
       table: {
@@ -1325,13 +1509,14 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
         rows: d.overTime.rows.map((r) => ({
           label: r.label,
           values: [
-            pre ? r.preSales : null,
-            pre ? ratio(r.preRevenue, r.preSales) : null,
+            // As on screen: a row from before the EUR 1.99 was on sale is blank, never 0.
+            pre && r.preOn !== false ? r.preSales : null,
+            pre && r.preOn !== false ? ratio(r.preRevenue, r.preSales) : null,
             r.fullSales,
             ratio(r.fullRevenue, r.fullSales),
             r.revenue,
             r.finishers,
-            ratio(r.preSales + r.fullSales, r.finishers),
+            ratio(r.payers, r.finishers),
           ],
         })),
       },
@@ -1415,6 +1600,7 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
           col("Test · arm", "text"),
           col("Note", "text"),
           col("Base price", "text"),
+          col("Finishers", "count"),
           col("Paywall views", "count"),
           col("Checkouts", "count"),
           col("Paid sales", "count"),
@@ -1430,6 +1616,7 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
           values: [
             a.note,
             a.basePrice,
+            a.finishers,
             a.paywallViews,
             a.checkouts,
             a.paidSales,
@@ -1446,7 +1633,35 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
   ];
 }
 
-/** Assessment A · Payment, as Marcus drew it on 16 Oct 2026. */
+/**
+ * A tile's info card: its field, this range's figures as the page prints them (a rate or an
+ * average with what it divides), and its weekly line where it has one.
+ */
+function tileInfo(
+  t: Tile,
+  d: PaymentPayload
+): { k: string; worked?: Worked; trend?: TrendSource } | undefined {
+  const k = TILE_INFO[t.key]?.k;
+  if (!k) return undefined;
+  const c = d.counts;
+  const n = (v: number | null | undefined) => fmt("count", v);
+  const value = fmt(t.unit, t.value, TILE_DIGITS[t.key]);
+  const of = (key: string) => d.tiles.find((x) => x.key === key)?.value;
+  const parts: Record<string, Omit<Worked, "value">> = {
+    "pre-cvr": { num: n(of("pre")), den: n(c.submissions) },
+    "full-cvr": { num: n(c.fullSubmissions), den: n(c.submissions) },
+    "pay-cvr": { num: n(c.payers), den: n(c.finishers) },
+    checkout: { num: n(d.checkout.paid), den: n(d.checkout.reached) },
+    aov: { num: fmt("eur", of("revenue"), 2), den: n(of("sales")) },
+  };
+  return {
+    k,
+    worked: t.blocked || t.value === null ? undefined : { ...parts[t.key], value },
+    trend: t.spark.length ? { route: "payment", tile: t.key, unit: t.unit } : undefined,
+  };
+}
+
+/** Assessment A · Payment, as Marcus drew it on 16 Oct 2026 and synced on 21 Oct. */
 export default function ApPayment() {
   const { params } = useApFilters();
   const { data, loading, error, refetch } = useAdminFetch<PaymentPayload>(
@@ -1521,9 +1736,11 @@ export default function ApPayment() {
                 tile={t}
                 digits={TILE_DIGITS[t.key]}
                 titles={bucketTitles(data.range.from, data.range.to)}
+                info={tileInfo(t, data)}
               />
             ))}
           </div>
+          <PaymentTypes d={data} />
           <OverTime d={data} />
           <Checkout d={data} />
           <Segments d={data} segKey={segKey} onSegKey={setSegKey} />

@@ -2211,9 +2211,12 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
       const tier = tiers(container);
 
-      for (const id of ["introduction", "what_shaped_this_report", "core_archetype"]) {
+      for (const id of ["introduction", "what_shaped_this_report"]) {
         expect(tier.get(id), id).toBe("free");
       }
+      // Its card half veiled and its Summary locked until the EUR 1.99: partly open, as the
+      // pre-report map draws it (Eman, 27.10).
+      expect(tier.get("core_archetype")).toBe("unlocked");
       // The four designed chapters open, in part, to every reader.
       for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
       for (const id of ["power_orientation", LIBIDO, "biochemical_reward_system_dynamics"]) {
@@ -2224,6 +2227,46 @@ describe("ReportPage", () => {
       // The chapters the nav calls locked are the ones the page locks.
       const lockedInNav = [...tier].filter(([, t]) => t === "locked").map(([id]) => id);
       expect(lockedIds(container).sort()).toEqual(lockedInNav.sort());
+    });
+
+    it("says IN FULL on the Core Archetype once the EUR 1.99 has opened it (Eman, 27.10)", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = withPlan(null);
+      (response.data as Record<string, unknown>).initialUnlock = true;
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+      const tier = tiers(container);
+
+      expect(tier.get("core_archetype")).toBe("free");
+      expect(
+        container.querySelector('.report-sidebar__item[href="#core_archetype"] .report-nav-badge')
+          ?.textContent
+      ).toBe("In full");
+      // Nothing else moves: the EUR 1.99 is not a plan.
+      expect(tier.get("power_orientation")).toBe("locked");
+      for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
+    });
+
+    // V4 sends the card and the Summary half-locked (`locked`) until they are opened: the
+    // row reads the server's own verdict, so it can never disagree with the page.
+    it("reads the Core Archetype's tier off the card and Summary the server sent", async () => {
+      const { buildArchetypeCard } = await import("@/data/report3-archetype-card");
+      const { buildSummary } = await import("@/data/report3-summary");
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      for (const locked of [true, false]) {
+        const response = withPlan(null);
+        const data = response.data as Record<string, unknown>;
+        data.archetypeCard = buildArchetypeCard("Emotional Voyeur", { locked });
+        data.summaryChapter = buildSummary("Emotional Voyeur", { locked });
+        expect(data.archetypeCard, "card copy for the fixture's archetype").not.toBeNull();
+        mockUseReportData.mockReturnValue(response);
+        const { container, unmount } = render(<ReportPage />);
+        expect(tiers(container).get("core_archetype"), `locked ${locked}`).toBe(
+          locked ? "unlocked" : "free"
+        );
+        unmount();
+      }
     });
 
     // Sync 23.10 (Mark, Marcus, Fatih): a reader who owns the whole report sees no FREE
@@ -2252,6 +2295,64 @@ describe("ReportPage", () => {
       expect(tier.get(LIBIDO)).toBe("locked");
       expect(tier.get("power_orientation")).toBe("locked");
       for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
+    });
+  });
+
+  // Marcus, 27.10: at the bottom of his report he opened another archetype's report, and
+  // its Core Archetype heading still read "The following archetype is your core archetype".
+  describe("V4 — another of the reader's archetypes is never called their core one", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    /** An all-reports reader whose core is Emotional Voyeur, on Spark Seeker or on their own. */
+    const showing = async (slug: string | null) => {
+      const { buildArchetypeCard } = await import("@/data/report3-archetype-card");
+      const viewed = slug ? "Spark Seeker" : "Emotional Voyeur";
+      mockSearchParams.mockImplementation(
+        () => new URLSearchParams(slug ? `v4=1&archetype=${slug}` : "v4=1")
+      );
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        accessPlan: "all_reports",
+        unlockedArchetypes: ["Emotional Voyeur", "Spark Seeker"],
+        archetypeTiers: { "Emotional Voyeur": "full_report", "Spark Seeker": "full_report" },
+        contentArchetype: viewed,
+        archetypeCard: buildArchetypeCard(viewed),
+      });
+      mockUseReportData.mockReturnValue(response);
+      return render(<ReportPage />).container;
+    };
+    const text = (el: Element | null) => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const navRow = (page: HTMLElement) =>
+      text(page.querySelector('.report-sidebar__item[href="#core_archetype"]'));
+
+    it("says so over one of the others, and names the core one", async () => {
+      const page = await showing("spark-seeker");
+
+      expect(text(page.querySelector(".rv4-corehead__title"))).toBe("Another Archetype");
+      const lede = text(page.querySelector(".rv4-corehead__lede"));
+      expect(lede).toContain("You are reading one of your other archetypes.");
+      expect(lede).toContain("the highest probability match of all 14 - is Emotional Voyeur.");
+      expect(lede).not.toContain("The following archetype is your core archetype");
+      expect(
+        page.querySelector('[aria-label="Spark Seeker — one of your other archetypes"]')
+      ).not.toBeNull();
+      expect(navRow(page)).toContain("Another Archetype");
+      expect(navRow(page)).not.toContain("Core Archetype");
+    });
+
+    it("keeps the frame's copy over the reader's own core archetype", async () => {
+      const page = await showing(null);
+
+      expect(text(page.querySelector(".rv4-corehead__title"))).toBe("Core Archetype");
+      expect(text(page.querySelector(".rv4-corehead__lede"))).toBe(
+        "The following archetype is your core archetype - the highest probability match of all 14."
+      );
+      expect(
+        page.querySelector('[aria-label="Emotional Voyeur — your core archetype"]')
+      ).not.toBeNull();
+      expect(navRow(page)).toContain("Core Archetype");
     });
   });
 

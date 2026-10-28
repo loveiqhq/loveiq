@@ -24,6 +24,7 @@ export const sub = (over: Partial<Facts["subs"][number]> = {}): Facts["subs"][nu
   device: "iOS",
   tier: "tier_1",
   priceArm: "A3",
+  quotedAt: null,
   country: "DE",
   gender: null,
   relationship: null,

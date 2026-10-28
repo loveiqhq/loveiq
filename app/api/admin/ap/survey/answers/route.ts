@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { fetchAnswers, isDimension, splitAnswers } from "@features/admin/server/ap/answers";
 import { assessmentScope } from "@features/admin/server/ap/assessment";
 import { fetchFactsFor } from "@features/admin/server/ap/facts";
-import { parseFilters } from "@features/admin/server/ap/filters";
-import { subsIn } from "@features/admin/server/ap/metrics";
+import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
+import { peopleBlocked, SOURCE_FROM, subsIn } from "@features/admin/server/ap/metrics";
 import { markVisitors } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -45,9 +45,15 @@ export async function GET(request: Request) {
     }
     // "N of M finished surveys": M are the filters' people (probes out), as N's are.
     const finished = subsIn(facts, scope).length;
-    return NextResponse.json(splitAnswers(qid, rows, dim, otherQid, scope, finished), {
-      headers: NO_STORE,
-    });
+    // A filter, or a split by source, the records can't follow over this range: said, never
+    // a split of the few it could read.
+    const blocked =
+      peopleBlocked(scope, filters.from) ??
+      (dim === "source" && filters.from < SOURCE_FROM
+        ? `Sources are recorded from ${rangeLabel(SOURCE_FROM, SOURCE_FROM)}: pick a range from that day on to split by source.`
+        : null);
+    const split = splitAnswers(qid, blocked ? [] : rows, dim, otherQid, scope, finished);
+    return NextResponse.json({ ...split, blocked }, { headers: NO_STORE });
   } catch (err) {
     logger.error({ err }, "AP survey answers failed");
     return NextResponse.json({ error: "Unable to load the answers." }, { status: 500 });

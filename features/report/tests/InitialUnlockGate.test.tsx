@@ -142,7 +142,7 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
       "14-day money-back guarantee.",
       "Your Core Archetype and what drives it",
       "How you rank against all 14 archetypes",
-      "5x full chapters + 4x partly open",
+      "3x full chapters + 4x partly open",
       "€10 credit toward your Full Report",
       "Guaranteed Safe & Secure Checkout",
     ]) {
@@ -358,16 +358,35 @@ describe("around the card", () => {
     expect(mockSetContext).toHaveBeenLastCalledWith(null);
   });
 
-  it("counts a reader who leaves, and never sends them back through the survey", () => {
+  it("counts a reader who leaves, once, with where the way out led", () => {
     setReferrer("https://www.loveiq.org/survey?step=done");
-    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     renderGate();
     const link = notReady();
     // jsdom cannot follow a link; the href is the destination under test.
     link.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(link);
+    // A second tap while the landing page loads is the same exit.
+    fireEvent.click(link);
     expect(mockTrackBack).toHaveBeenCalledTimes(1);
-    expect(back).not.toHaveBeenCalled();
+    expect(mockTrackBack).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("publishes its bar's height for the room under the page, and takes it back", () => {
+    const root = document.documentElement;
+    const { unmount } = renderGate();
+    expect(root.style.getPropertyValue("--iug-sticky-h")).toMatch(/^\d+(\.\d+)?px$/);
+    unmount();
+    expect(root.style.getPropertyValue("--iug-sticky-h")).toBe("");
+  });
+
+  it("does not count a reader who opens the way out in a new tab", () => {
+    renderGate();
+    const link = notReady();
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link, { metaKey: true });
+    fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { button: 1 });
+    expect(mockTrackBack).not.toHaveBeenCalled();
   });
 
   it("counts the gate as seen once, for this reader", () => {
@@ -378,6 +397,10 @@ describe("around the card", () => {
     expect(mockSetContext).toHaveBeenCalledWith(55);
     expect(mockTrackViewed).toHaveBeenCalledTimes(1);
     expect(mockTrackViewed).toHaveBeenCalledWith({ submission_id: 55 });
+    // Bound first: the stored row of a reader who came from an email needs the submission.
+    expect(mockSetContext.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTrackViewed.mock.invocationCallOrder[0]!
+    );
   });
 
   it("fills a progress bar before the badge, unless the reader asks for less motion", () => {
