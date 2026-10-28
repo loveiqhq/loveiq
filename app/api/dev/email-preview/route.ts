@@ -31,7 +31,13 @@ const TEMPLATES: Record<string, () => { subject: string; html: string }> = {
     initialUnlockEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
   // E07 — the Core Archetype gifted on day 1 to a reader the gate stopped (Figma 1669:2835)
   "initial-unlock-gift": () =>
-    initialUnlockGiftEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
+    // As most readers get it; a survey over 36 hours old gets the line without "Yesterday".
+    initialUnlockGiftEmail({
+      answeredYesterday: true,
+      firstName: "Alex",
+      reportUrl: REPORT_URL,
+      siteUrl: SITE,
+    }),
   // Tier 1 — "Just a snapshot" (reuses the full-report confirmation)
   full: () =>
     reportFullEmail({

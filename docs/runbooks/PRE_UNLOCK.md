@@ -85,6 +85,12 @@ meets the gate again. If the full report was bought with the credit before the r
 gets `credited_payment_refunded`: the reader keeps the full report for EUR 10 less, and
 charging the difference is a person's call.
 
+A EUR 1.99 paid on a report E07 had already gifted (a Stripe page opened before the gift,
+paid after it, or a payment landing as the cron gifts) posts `initial_paid_after_gift` to
+#ops, from the webhook or from the cron, whichever sees it: refund that EUR 1.99. The gift
+keeps the Core Archetype and the EUR 10 credit open, so the reader loses nothing, and a
+`credited_payment_refunded` that follows it needs no charge: the gift covers that credit.
+
 ## Reading it
 
 - AP-Analytics, Focus: "Completion → pre-unlock", EUR 1.99 sales per finished survey and the

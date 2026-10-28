@@ -14,10 +14,7 @@ import {
   isStripeCheckoutEnabled,
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
-import {
-  payToStartSessionExpiresAt,
-  toMetadataValue,
-} from "@features/pay-to-start/server/checkout";
+import { toMetadataValue } from "@features/pay-to-start/server/checkout";
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
 import { ownerMeetsInitialGate } from "@features/report/server/initialUnlockGate";
@@ -151,10 +148,6 @@ export async function POST(request: Request) {
       allow_promotion_codes: true,
       billing_address_collection: "auto",
       customer_email: customerEmail,
-      // An hour, as pay to start's (Stripe's default is a day): E07 gives this same unlock a
-      // day after the gate, and a page left open since then could still be paid after it.
-      // In the minute, as the idempotency key below needs.
-      expires_at: payToStartSessionExpiresAt(),
       line_items: [
         {
           price_data: {

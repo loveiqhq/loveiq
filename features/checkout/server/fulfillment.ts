@@ -606,7 +606,11 @@ async function supabaseServiceFetch(path: string, options: ServiceFetchOptions =
  * checkout opened before the gift and paid after it bought nothing new. Said to #ops, to be
  * refunded by hand. It never holds the fulfillment up, and a lookup that fails says nothing.
  */
-async function alertIfPaidAfterGift(personalReportId: number, paymentIntentId: string | null) {
+async function alertIfPaidAfterGift(
+  personalReportId: number,
+  paymentIntentId: string | null,
+  internalTag: string
+) {
   try {
     const res = await supabaseServiceFetch(
       `/rest/v1/payment?personal_report_id=eq.${personalReportId}&metadata->>gifted=eq.${INITIAL_UNLOCK_GIFT}&select=id&limit=1`
@@ -615,7 +619,8 @@ async function alertIfPaidAfterGift(personalReportId: number, paymentIntentId: s
     await notifySlack({
       channel: "ops",
       kind: "initial_paid_after_gift",
-      text: `:warning: A €1.99 Core Archetype was paid on report ${personalReportId} after E07 had already gifted it. Refund it in Stripe (payment intent \`${escapeSlack(paymentIntentId ?? "?")}\`).`,
+      // The payment intent first: Slack's dedupe reads the first 100 characters.
+      text: `${internalTag}:warning: Refund \`${escapeSlack(paymentIntentId ?? "?")}\`: a €1.99 Core Archetype paid on report ${personalReportId} after E07 had already gifted it.`,
       username: "ops_alerts",
     });
   } catch (err) {
@@ -1580,7 +1585,7 @@ async function syncCheckoutSessionPayment({
         utmTracker: recipient.utmTracker,
       });
       if (isInitialUnlockPlan(plan) && (amount ?? 0) > 0) {
-        await alertIfPaidAfterGift(personalReport.id, paymentIntentId);
+        await alertIfPaidAfterGift(personalReport.id, paymentIntentId, internalTag);
       }
 
       // The old tier 3 ("For you & your partner") only: hand the buyer a one-time

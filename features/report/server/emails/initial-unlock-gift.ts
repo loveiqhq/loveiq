@@ -12,11 +12,10 @@ import { PARTLY_OPEN } from "./initial-unlock";
  * E07, "Core Archetype gifted" (Figma Report-3.0 1669:2835, the Pre-Paywall board): sent
  * on day 1 to a reader the EUR 1.99 gate stopped who has not paid, with the unlock it gives
  * (app/api/cron/initial-unlock-gift; 20% are held out and get neither). Copy as the frame
- * has it, the subject and preview line included, but for its first line: the frame was drawn
- * for later ("A few days ago… waiting ever since"; named "day 2–3", its spec says day 4), and
- * day 1 is Marcus's call (LoveIQ Sync, 27 Oct 2026). So it says "Yesterday" when the survey
- * was that recent, and names no time when it wasn't (a report that met the gate long after
- * its survey); "is ready", so "waiting" isn't said three times.
+ * has it, the subject and preview line included, but for its first three words: the frame was
+ * drawn for later ("A few days ago"; named "day 2–3", its spec says day 4), and day 1 is
+ * Marcus's call (LoveIQ Sync, 27 Oct 2026). So it says "Yesterday" when the survey was that
+ * recent, and names no time when it wasn't (a report that met the gate long after its survey).
  */
 
 export interface InitialUnlockGiftEmailParams {
@@ -48,7 +47,7 @@ export function initialUnlockGiftEmail({
   const ctaLabel = "Open your Core Archetype";
   const opening = answeredYesterday
     ? "Yesterday you answered some very personal questions."
-    : "You answered some very personal questions with us.";
+    : "You answered some very personal questions.";
   const paragraph = `margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;`;
   const bold = `<strong style="font-weight:700;">`;
 
@@ -68,7 +67,7 @@ export function initialUnlockGiftEmail({
   <tr>
     <td style="padding:16px 32px 0;">
       <p style="${paragraph}">Hi ${safeFirstName},</p>
-      <p style="${paragraph}">${opening} Your result is ready, and we&rsquo;d rather you read it than leave it there.</p>
+      <p style="${paragraph}">${opening} Your result has been waiting ever since, and we&rsquo;d rather you read it than leave it there.</p>
       <p style="${paragraph}">${bold}So we&rsquo;ve unlocked it for you.<br />No payment, no catch.</strong></p>
       <p style="${paragraph}">Inside, you&rsquo;ll find ${bold}which archetype leads for you</strong> and how your whole constellation fits together, scored across all 14 archetypes.</p>
       <p style="${paragraph}">You can also read ${bold}three chapters in full</strong>. Four featured chapters are partly open:</p>
@@ -110,7 +109,7 @@ export function initialUnlockGiftEmail({
     "",
     `Hi ${displayName},`,
     "",
-    `${opening} Your result is ready, and we'd rather you read it than leave it there.`,
+    `${opening} Your result has been waiting ever since, and we'd rather you read it than leave it there.`,
     "",
     "So we've unlocked it for you.",
     "No payment, no catch.",

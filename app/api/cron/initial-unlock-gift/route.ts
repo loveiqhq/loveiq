@@ -39,6 +39,7 @@ import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 
 export const maxDuration = 60;
@@ -291,6 +292,20 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
         )
     );
     summary.failed++;
+    return;
+  }
+
+  // A EUR 1.99 can land between the read above and the grant, and its webhook then found no
+  // gift to report (features/checkout/server/fulfillment.ts). Read again, so one side always
+  // tells #ops to refund it; the reader has paid, so no "no payment needed" email.
+  if ((await hasPaid(candidate.id)) === true) {
+    await notifySlack({
+      channel: "ops",
+      kind: "initial_paid_after_gift",
+      text: `:warning: Refund report ${candidate.id}'s €1.99: it was paid as E07 gifted the same unlock. E07's email was not sent.`,
+      username: "ops_alerts",
+    });
+    summary.skippedPaid++;
     return;
   }
 
