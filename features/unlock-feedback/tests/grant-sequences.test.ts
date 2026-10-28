@@ -221,7 +221,7 @@ describe("someone who paid gets nothing for an answer", () => {
   it.each([
     // An email sent before the gate's campaign stamped the report, answered after the EUR 1.99.
     ["bought the EUR 1.99 Core Archetype between the email and the tap", { amount: 1.99 }],
-    ["holds the Core Archetype E07 gifted on day 4", { amount: 0, gifted: "e07" }],
+    ["holds the Core Archetype E07 gifted on day 1", { amount: 0, gifted: "e07" }],
   ])("%s", async (_label, held) => {
     holdInitial(held);
     expect(await unlock()).toEqual({ kind: "already_paid" });

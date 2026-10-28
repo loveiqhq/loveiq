@@ -135,7 +135,7 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   [UNSUBSCRIBE_CAMPAIGNS.reportShared]: "Report shared with you",
   [UNSUBSCRIBE_CAMPAIGNS.reportUnlocked]: "Report unlocked (purchase confirmation)",
   [UNSUBSCRIBE_CAMPAIGNS.initialUnlocked]: "Core Archetype unlocked (EUR 1.99 confirmation)",
-  [UNSUBSCRIBE_CAMPAIGNS.initialGift]: "Core Archetype gift (E07, day 4)",
+  [UNSUBSCRIBE_CAMPAIGNS.initialGift]: "Core Archetype gift (E07, day 1)",
   [UNSUBSCRIBE_CAMPAIGNS.chapterNudge]: "Chapter nudge drip",
   [UNSUBSCRIBE_CAMPAIGNS.postCallCoupon]: "Post-call 100% coupon",
   [UNSUBSCRIBE_CAMPAIGNS.testLink]: "Test link (landing email capture)",

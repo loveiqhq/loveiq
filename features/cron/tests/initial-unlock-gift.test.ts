@@ -59,7 +59,7 @@ function candidate(id: number, appUser: Record<string, unknown> = {}) {
   return {
     id,
     survey_submission_id: id + 1000,
-    initial_gate_seen_at: new Date(Date.now() - 4.2 * 24 * 3_600_000).toISOString(),
+    initial_gate_seen_at: new Date(Date.now() - 1.2 * 24 * 3_600_000).toISOString(),
     survey_submission: {
       user_id: 7,
       app_user: { email: `reader${id}@example.com`, first_name: "Alex", ...appUser },
@@ -146,7 +146,7 @@ function routeFetches({
   return calls;
 }
 
-describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
+describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetSystemFlagsCacheForTests({ initial_unlock_gift_email: true });
@@ -210,13 +210,22 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     expect(mockResendSend).not.toHaveBeenCalled();
   });
 
-  it("looks only at reports first gated four to five days ago, with no arm yet", async () => {
-    const calls = routeFetches({ candidates: [] });
-    await GET(makeRequest("test-cron-secret"));
-    const url = calls.candidateUrl ?? "";
-    expect(url).toContain("initial_gate_seen_at=lte.");
-    expect(url).toContain("initial_gate_seen_at=gt.");
-    expect(url).toContain("initial_gift_arm=is.null");
+  it("looks only at reports first gated one to two days ago, with no arm yet", async () => {
+    // Day 1, not the board's day 4 (Marcus, LoveIQ Sync 27 Oct 2026): the bounds themselves,
+    // since a check that only finds the two filters passes on any day.
+    vi.useFakeTimers({ now: new Date("2026-10-28T16:47:00.000Z"), toFake: ["Date"] });
+    try {
+      __resetSystemFlagsCacheForTests({ initial_unlock_gift_email: true });
+      const calls = routeFetches({ candidates: [] });
+      await GET(makeRequest("test-cron-secret"));
+      const url = calls.candidateUrl ?? "";
+      const at = (iso: string) => encodeURIComponent(iso);
+      expect(url).toContain(`initial_gate_seen_at=lte.${at("2026-10-27T16:47:00.000Z")}&`);
+      expect(url).toContain(`initial_gate_seen_at=gt.${at("2026-10-26T16:47:00.000Z")}&`);
+      expect(url).toContain("initial_gift_arm=is.null");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("gifts a report on the gift arm: the arm, the EUR 0 unlock, one E07, the stamp", async () => {
@@ -240,6 +249,10 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-4 gift)", () => {
     const sent = mockResendSend.mock.calls[0]![0];
     expect(sent.to).toBe(`reader${GIFT_ID}@example.com`);
     expect(sent.subject).toBe("We unlocked your Core Archetype for you");
+    // It goes out a day after the gate, so it says when: not the frame's "A few days ago".
+    expect(sent.text).toContain("Yesterday you answered some very personal questions.");
+    expect(sent.html).toContain("Yesterday you answered some very personal questions.");
+    expect(`${sent.text}${sent.html}`).not.toMatch(/few days ago/i);
     expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
     expect(sent.tags).toEqual([
       { name: "stage", value: "initial_gift" },

@@ -29,7 +29,7 @@ const TEMPLATES: Record<string, () => { subject: string; html: string }> = {
   // E06 — the EUR 1.99 Core Archetype: pay to start's initial report, or the pre-unlock gate (Figma 1669:2703)
   "initial-unlock": () =>
     initialUnlockEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
-  // E07 — the Core Archetype gifted on day 4 to a reader the gate stopped (Figma 1669:2835)
+  // E07 — the Core Archetype gifted on day 1 to a reader the gate stopped (Figma 1669:2835)
   "initial-unlock-gift": () =>
     initialUnlockGiftEmail({ firstName: "Alex", reportUrl: REPORT_URL, siteUrl: SITE }),
   // Tier 1 — "Just a snapshot" (reuses the full-report confirmation)

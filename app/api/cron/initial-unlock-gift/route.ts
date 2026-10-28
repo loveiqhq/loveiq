@@ -1,8 +1,9 @@
 /**
- * E07, the day-4 gift (Pre-unlock, Notion "RFD > Pre-Unlock"; Figma Report-3.0 1669:2835).
+ * E07, the day-1 gift (Pre-unlock, Notion "RFD > Pre-Unlock"; Figma Report-3.0 1669:2835). Day 1,
+ * not the board's day 4: Marcus, LoveIQ Sync 27 Oct 2026 ("one day post-survey").
  *
  * Hourly. A reader the EUR 1.99 gate stopped (`personal_report.initial_gate_seen_at`, its
- * first view) who has paid nothing four days on gets one of two arms
+ * first view) who has paid nothing a day on gets one of two arms
  * (shared/experiments/initialGiftArm.ts), written to `personal_report.initial_gift_arm`:
  *   - gift (80%): the initial unlock as a EUR 0 payment (features/report/server/
  *     initialUnlockGift.ts) and E07, "We unlocked your Core Archetype for you";
@@ -13,7 +14,7 @@
  * it goes out, as the nurture email does (F-06): a lost send is preferred to a double one.
  * A gift that could not be written gives its arm back, and the next run tries again.
  *
- * Who is looked at: reports first gated between four and five days ago, with no arm. A
+ * Who is looked at: reports first gated between one and two days ago, with no arm. A
  * reader who paid (a refund or a dispute included), unsubscribed, bounced or froze their
  * data (GDPR Art. 18) is left alone and given no arm, so they are in neither group, and so
  * is a report whose person already has an arm on another report: a retake is not a second
@@ -45,7 +46,7 @@ export const maxDuration = 60;
 const SUPABASE_TIMEOUT_MS = 8_000;
 const RESEND_TIMEOUT_MS = 10_000;
 const DAY_MS = 24 * 3_600_000;
-const GIFT_AFTER_MS = 4 * DAY_MS;
+const GIFT_AFTER_MS = DAY_MS;
 const WINDOW_MS = DAY_MS;
 /**
  * Readers left alone keep no arm and stay in the window for its day, read again each hour,
@@ -133,7 +134,7 @@ async function fetchCandidates(nowMs: number): Promise<CandidateRow[]> {
 /**
  * Whether the reader paid anything since: any payment but the gift itself that took money,
  * refunded or disputed ones included, so a EUR 1.99 refunded under the guarantee (or
- * charged back) never comes back free on day 4. A checkout left open (`canceled`) is not
+ * charged back) never comes back free on day 1. A checkout left open (`canceled`) is not
  * a payment: E07 is for those readers. Null when it can't be read; the report waits.
  */
 async function hasPaid(personalReportId: number): Promise<boolean | null> {

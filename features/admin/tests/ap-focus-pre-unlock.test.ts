@@ -7,7 +7,7 @@ import { factsFixture, sub } from "./ap-fixtures";
 /**
  * Pre-unlock's success KPI (Notion "RFD > Pre-Unlock"): the share of finished surveys whose Core
  * Archetype was pre-unlocked (EUR 1.99 paid) so far, and what each of those sales brings in, as
- * the full unlock's chart counts its own. E07's day-4 gift is a EUR 0 `initial` row and is never
+ * the full unlock's chart counts its own. E07's day-1 gift is a EUR 0 `initial` row and is never
  * counted. Before it was on sale (23 Oct 2026) nobody could: those points are blank, never 0%.
  */
 const TODAY = "2026-10-31";

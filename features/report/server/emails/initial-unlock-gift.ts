@@ -10,10 +10,11 @@ import { PARTLY_OPEN } from "./initial-unlock";
 
 /**
  * E07, "Core Archetype gifted" (Figma Report-3.0 1669:2835, the Pre-Paywall board): sent
- * on day 4 to a reader the EUR 1.99 gate stopped who has not paid, with the unlock it gives
+ * on day 1 to a reader the EUR 1.99 gate stopped who has not paid, with the unlock it gives
  * (app/api/cron/initial-unlock-gift; 20% are held out and get neither). Copy as the frame
- * has it; the subject and preview line are the board's. The frame is named "day 2–3", the
- * board's journey says day 4: day 4 is built, and the name is flagged for Marcus.
+ * has it, the subject and preview line included, but for its first line: the frame was drawn
+ * for later ("A few days ago"; named "day 2–3", its spec says day 4), and day 1 is Marcus's
+ * call (LoveIQ Sync, 27 Oct 2026), so the email says "Yesterday".
  */
 
 export interface InitialUnlockGiftEmailParams {
@@ -59,7 +60,7 @@ export function initialUnlockGiftEmail({
   <tr>
     <td style="padding:16px 32px 0;">
       <p style="${paragraph}">Hi ${safeFirstName},</p>
-      <p style="${paragraph}">A few days ago you answered some very personal questions. Your result has been waiting ever since, and we&rsquo;d rather you read it than leave it there.</p>
+      <p style="${paragraph}">Yesterday you answered some very personal questions. Your result is still waiting, and we&rsquo;d rather you read it than leave it there.</p>
       <p style="${paragraph}">${bold}So we&rsquo;ve unlocked it for you.<br />No payment, no catch.</strong></p>
       <p style="${paragraph}">Inside, you&rsquo;ll find ${bold}which archetype leads for you</strong> and how your whole constellation fits together, scored across all 14 archetypes.</p>
       <p style="${paragraph}">You can also read ${bold}three chapters in full</strong>. Four featured chapters are partly open:</p>
@@ -101,7 +102,7 @@ export function initialUnlockGiftEmail({
     "",
     `Hi ${displayName},`,
     "",
-    "A few days ago you answered some very personal questions. Your result has been waiting ever since, and we'd rather you read it than leave it there.",
+    "Yesterday you answered some very personal questions. Your result is still waiting, and we'd rather you read it than leave it there.",
     "",
     "So we've unlocked it for you.",
     "No payment, no catch.",

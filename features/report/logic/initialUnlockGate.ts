@@ -17,7 +17,7 @@ export const INITIAL_UNLOCK_TITLE = "Your Core Archetype";
 export const INITIAL_UNLOCK_GUARANTEE_DAYS = 14;
 
 /**
- * `payment.metadata.gifted` on the EUR 0 `initial` row E07 grants on day 4: the gift opens
+ * `payment.metadata.gifted` on the EUR 0 `initial` row E07 grants on day 1: the gift opens
  * what the EUR 1.99 does and carries its EUR 10 credit (`getReportCredits`).
  */
 export const INITIAL_UNLOCK_GIFT = "e07";

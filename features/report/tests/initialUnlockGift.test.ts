@@ -98,7 +98,10 @@ describe("grantGiftedInitialUnlock", () => {
   });
 });
 
-/** E07, "Your Core Archetype is on us" (Figma Report-3.0 1669:2835), verbatim. */
+/**
+ * E07, "Your Core Archetype is on us" (Figma Report-3.0 1669:2835), verbatim but for its first
+ * line: it goes out on day 1 (Marcus, 27.10), so "Yesterday", not the frame's "A few days ago".
+ */
 describe("initialUnlockGiftEmail", () => {
   const REPORT_URL = "https://www.loveiq.org/report/rpt_ABCDEFGHIJKLMNOPQRST?from=email";
   const email = initialUnlockGiftEmail({
@@ -114,7 +117,7 @@ describe("initialUnlockGiftEmail", () => {
       expect(part).toMatch(/Your Core Archetype is on us\./);
       expect(part).toContain("Hi Alex,");
       expect(part).toMatch(
-        /A few days ago you answered some very personal questions\. Your result has been waiting ever since, and we(’|&rsquo;|')d rather you read it than leave it there\./
+        /Yesterday you answered some very personal questions\. Your result is still waiting, and we(’|&rsquo;|')d rather you read it than leave it there\./
       );
       expect(part).toMatch(/So we(’|&rsquo;|')ve unlocked it for you\./);
       expect(part).toContain("No payment, no catch.");
