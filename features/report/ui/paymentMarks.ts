@@ -1,11 +1,11 @@
 /**
- * 842:591's row: Apple Pay, Visa, Google Pay, Klarna, American Express, Mastercard.
- * The marks are the frame's own artwork (public/report/paygate/mark-*.svg), except
- * Apple Pay's: 842:591 sets "Pay" after U+F8FF, a glyph only Apple's fonts have, so
- * that one is cut from the repo's Apple Pay mark (public/payment-logos). PayPal is not
- * in the row: Checkout cannot take PayPal (#451 on main).
+ * 842:591's row: Apple Pay, Visa, Google Pay, Klarna, American Express, Mastercard, each a
+ * method the report's Checkout offers. PayPal is not in the row: Checkout cannot take PayPal
+ * (#451 on main).
  *
- * Shared with the EUR 1.99 pre-unlock gate (features/report/ui/gate, 1604:2426): the same row.
+ * Drawn by PaymentLogos as the official logos (public/payment-logos/official, from Figma's
+ * "Payment Icons" 11482:1487; Marcus, sync 29.10), in place of the frame's own artwork: the
+ * same row on the EUR 1.99 page, the plan picker and both exit pages.
  */
 export const PAYMENT_MARKS = [
   { logo: "apple-pay", label: "Apple Pay" },

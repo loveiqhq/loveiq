@@ -32,7 +32,7 @@ import {
 } from "@features/analytics/client";
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 import "./paygate.css";
-import { PAYMENT_MARKS } from "./paymentMarks";
+import { PaymentLogos } from "./PaymentLogos";
 import { GATE_COPY } from "./gate/gateContent";
 import { PAYGATE_REVIEWS as REVIEWS } from "./paygateReviews";
 
@@ -556,16 +556,7 @@ const ReportPricingModal: FC<Props> = ({
                     {/* 842:672 / 963:76 — under All 14 on the phone, under both from 960px. */}
                     <div className="rpg__payments">
                       <p className="rpg__payments-label">Guaranteed Safe &amp; Secure Checkout</p>
-                      <div className="rpg__payments-row" aria-label="Accepted payment methods">
-                        {PAYMENT_MARKS.map(({ logo, label }) => (
-                          <span
-                            key={logo}
-                            className={`rpg__mark rpg__mark--${logo}`}
-                            role="img"
-                            aria-label={label}
-                          />
-                        ))}
-                      </div>
+                      <PaymentLogos />
                     </div>
                   </div>
                 )}
