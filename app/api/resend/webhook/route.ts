@@ -5,6 +5,7 @@ import { addToSuppression } from "@shared/emails/suppression";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * R-02: Application-level idempotency. Returns true if this svix_id is new
@@ -24,7 +25,7 @@ async function claimResendEvent(
   svixId: string,
   eventType: string
 ): Promise<{ process: boolean; certain: boolean }> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { process: true, certain: false };
   try {
@@ -99,7 +100,7 @@ async function recordExperimentEvent(
   payload: { data?: { tags?: unknown } },
   eventType: string
 ): Promise<void> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return;
 
@@ -171,7 +172,7 @@ async function recordMessageEvent(payload: {
   created_at?: unknown;
   data?: { email_id?: unknown; tags?: unknown };
 }): Promise<void> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key || typeof payload.type !== "string" || !PER_EMAIL_EVENTS.has(payload.type)) {
     return;

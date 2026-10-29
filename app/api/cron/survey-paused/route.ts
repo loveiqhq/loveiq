@@ -30,6 +30,7 @@ import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsub
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { SurveyAnswers } from "@features/survey/server/types";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -69,7 +70,7 @@ interface PartialSaveRow {
 }
 
 async function supabaseGet(path: string) {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) throw new Error("supabase_not_configured");
 

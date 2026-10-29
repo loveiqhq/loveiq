@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * R-05: mark the address unsubscribed in Resend, so campaigns sent from Resend
@@ -37,7 +38,7 @@ async function unsubscribeInResend(email: string): Promise<void> {
 export type SuppressionState = "suppressed" | "clear" | "unknown";
 
 export async function suppressionState(email: string): Promise<SuppressionState> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return "unknown";
 
@@ -74,7 +75,7 @@ export async function addToSuppression(
   // NOTHING, in one statement), for a caller that must not relabel a reason.
   opts?: { campaign?: string; channel?: "footer" | "one-click"; ifAbsent?: boolean }
 ): Promise<boolean> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return false;
 

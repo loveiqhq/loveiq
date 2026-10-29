@@ -54,6 +54,7 @@ import {
 // The 50%-off template is timing-agnostic (it references the code's 24h expiry,
 // not the send hour), so the single 72h discount stage reuses it as-is.
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -136,7 +137,7 @@ function getResend(): Resend | null {
 }
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };

@@ -55,6 +55,7 @@ import {
 } from "@features/report/server/shareAccess";
 import { maskEmail, verifyCookieForShare } from "@features/report/server/shareVerify";
 import { fromArchetypeSlug, KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
@@ -176,7 +177,7 @@ export async function GET(request: Request) {
   }
 
   // 4. Supabase config
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {

@@ -41,6 +41,7 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const maxDuration = 60;
 
@@ -80,7 +81,7 @@ function getResend(): Resend | null {
 }
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };

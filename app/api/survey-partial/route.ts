@@ -20,6 +20,7 @@ import {
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import { markEntitlementSurveyStarted } from "@features/pay-to-start/server/entitlement";
 import { scheduleAfterResponse } from "@shared/http/after-response";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
   }
 
   // 5. Supabase upsert
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

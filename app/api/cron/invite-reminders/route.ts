@@ -32,6 +32,7 @@ import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -71,7 +72,7 @@ interface PaidUserRow {
 }
 
 async function supabaseGet(path: string) {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) throw new Error("supabase_not_configured");
   return getBreaker("supabase").fire(() =>

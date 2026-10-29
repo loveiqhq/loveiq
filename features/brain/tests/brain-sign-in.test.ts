@@ -290,6 +290,36 @@ describe("memberByEmail", () => {
   });
 });
 
+/** Auth on an address of its own (SUPABASE_AUTH_URL): a sign-in is Auth's business alone. */
+describe("with SUPABASE_AUTH_URL set", () => {
+  const AUTH = "https://auth.example.net";
+  beforeEach(() => {
+    process.env.SUPABASE_AUTH_URL = `${AUTH}/`;
+  });
+  afterEach(() => {
+    delete process.env.SUPABASE_AUTH_URL;
+  });
+
+  it("checks a sign-in against Auth's address, issuer included", async () => {
+    signedIn("mo@loveiq.org", "Mark Oldenburg");
+    expect(await resolveCaller(bearer(oauth({ iss: `${AUTH}/auth/v1` })), NOW)).toMatchObject({
+      ok: true,
+    });
+    expect(mockFetch.mock.calls[0]![0]).toBe(`${AUTH}/auth/v1/user`);
+  });
+
+  it("refuses, without asking, a token issued at SUPABASE_URL", async () => {
+    expect(await resolveCaller(bearer(oauth()), NOW)).toMatchObject({ status: 401 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("points Claude at Auth's address", () => {
+    expect(protectedResourceMetadata("https://www.loveiq.org")).toMatchObject({
+      authorization_servers: [`${AUTH}/auth/v1`],
+    });
+  });
+});
+
 describe("the sign-in documents", () => {
   it("points Claude at Supabase's OAuth server for this origin, asking only for email", () => {
     expect(protectedResourceMetadata("https://www.loveiq.org")).toMatchObject({

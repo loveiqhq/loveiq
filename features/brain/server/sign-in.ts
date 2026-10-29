@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { supabaseAuthUrl } from "@shared/env/supabase-urls";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 
@@ -180,7 +181,7 @@ export async function resolveCaller(
   const shared = process.env.LOVEIQ_MCP_TOKEN;
   if (shared && sameSecret(presented, shared)) return { ok: true, caller: { kind: "shared" } };
 
-  const base = process.env.SUPABASE_URL?.replace(/\/+$/, "");
+  const base = supabaseAuthUrl()?.replace(/\/+$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const claims = claimsOf(presented);
   // Only a token Supabase issued to an OAuth client. An ordinary session token (the admin
@@ -272,7 +273,7 @@ export function signInChallenge(origin: string): string {
 export function protectedResourceMetadata(origin: string): Record<string, unknown> {
   return {
     resource: `${origin}/api/mcp`,
-    authorization_servers: [`${process.env.SUPABASE_URL?.replace(/\/+$/, "")}/auth/v1`],
+    authorization_servers: [`${supabaseAuthUrl()?.replace(/\/+$/, "")}/auth/v1`],
     bearer_methods_supported: ["header"],
     scopes_supported: ["email"],
     resource_name: "LoveIQ Jarvis",

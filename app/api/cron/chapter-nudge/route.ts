@@ -53,6 +53,7 @@ import {
   pickNextChapter,
 } from "@features/report/server/chapterTease";
 import { chapterNudgeEmail } from "@features/report/server/emails/nurture/chapter-nudge";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,7 +105,7 @@ function getResend(): Resend | null {
 }
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };
