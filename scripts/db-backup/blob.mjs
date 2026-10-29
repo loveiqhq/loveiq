@@ -46,20 +46,19 @@ if (command === "upload") {
   const cutoff = Date.now() - days * 24 * 3_600_000;
   const old = (await copies()).filter((b) => new Date(b.uploadedAt).getTime() < cutoff);
   if (old.length > 0) await del(old.map((b) => b.url));
-  console.log(`Deleted ${old.length} copies older than ${days} days.`);
+  console.log(`Deleted ${old.length} files older than ${days} days.`);
 } else if (command === "check") {
   // The token that uploads can also delete, so a copy that vanishes must be noticed: every
   // successful run of the workflow uploaded `db/<time>_run-<id>.pgdump.age`.
   const stored = (await copies()).map((b) => b.pathname);
-  const missing = args.filter((id) => !stored.some((p) => p.includes(`_run-${id}.`)));
-  console.log(`${stored.length} copies stored, ${args.length} expected.`);
+  const missing = args.filter((id) => !stored.some((p) => p.endsWith(`_run-${id}.pgdump.age`)));
+  const dumps = stored.filter((p) => p.endsWith(".pgdump.age")).length;
+  console.log(`${dumps} copies stored, ${args.length} expected.`);
   if (missing.length > 0) {
     console.error(`::error::Backups are missing from the store, runs ${missing.join(", ")}.`);
     process.exit(1);
   }
 } else {
-  console.error(
-    "usage: db-backup-blob.mjs upload <file> <pathname> | prune <days> | check <runId>..."
-  );
+  console.error("usage: blob.mjs upload <file> <pathname> | prune <days> | check <runId>...");
   process.exit(2);
 }

@@ -32,7 +32,9 @@ describe("the database backup", () => {
     expect(encrypt).toBeGreaterThan(-1);
     expect(remove).toBeGreaterThan(encrypt);
     expect(upload).toBeGreaterThan(remove);
-    expect(yml.match(/blob\.mjs upload/g)).toHaveLength(1);
+    // The only other upload is the pg_cron statements, which hold no data.
+    const uploaded = [...yml.matchAll(/blob\.mjs upload "([^"]+)"/g)].map((m) => m[1]);
+    expect(uploaded).toEqual(["$RUNNER_TEMP/db.pgdump.age", "$RUNNER_TEMP/cron.sql"]);
   });
 
   it("installs nothing beside the plain data but the pinned Blob client, without install scripts", () => {
@@ -61,6 +63,6 @@ describe("the database backup", () => {
 
   it("names every copy after its run, which is what the missing-copy check looks for", () => {
     expect(yml).toContain("_run-${GITHUB_RUN_ID}.pgdump.age");
-    expect(read("scripts/db-backup/blob.mjs")).toContain("`_run-${id}.`");
+    expect(read("scripts/db-backup/blob.mjs")).toContain("`_run-${id}.pgdump.age`");
   });
 });

@@ -108,6 +108,12 @@ jobs:
             | grep -c -E ' TABLE (public|supabase_migrations) ' || true)
           echo "tables=$tables" >> "$GITHUB_OUTPUT"
           echo "Dumped $tables tables, $(stat -c %s "$RUNNER_TEMP/db.pgdump") bytes."
+          # The pg_cron jobs live in the `cron` schema, not in the dump, and their migrations are
+          # marked applied once supabase_migrations is restored, so nothing would recreate them.
+          # Saved as the statements that do; they hold no secrets.
+          psql "$dsn" -X -q -tA -v ON_ERROR_STOP=1 -c "select format('select cron.schedule(%L, %L, %L);',
+            jobname, schedule, command) from cron.job where active order by jobid" > "$RUNNER_TEMP/cron.sql"
+          echo "Saved $(wc -l < "$RUNNER_TEMP/cron.sql") scheduled database jobs."
 
       - name: Restore it into an empty database
         # This log is public, so restore errors are shown without the DETAIL and CONTEXT lines,
@@ -164,6 +170,8 @@ jobs:
           rm "$RUNNER_TEMP/db.pgdump"
           name="db/$(date -u +%Y-%m-%dT%H%MZ)_run-${GITHUB_RUN_ID}.pgdump.age"
           node scripts/db-backup/blob.mjs upload "$RUNNER_TEMP/db.pgdump.age" "$name"
+          node scripts/db-backup/blob.mjs upload "$RUNNER_TEMP/cron.sql" "${name%.pgdump.age}.cron.sql"
+          echo "SHA-256 of the dump before encryption: $plain_sha"
           {
             echo "### Database backup stored"
             echo "- Copy: \`$name\` in the Vercel Blob store \`loveiq-db-backups\`"
@@ -173,7 +181,7 @@ jobs:
 
       - name: Delete the plain dump, whatever happened
         if: always()
-        run: rm -f "$RUNNER_TEMP/db.pgdump" "$RUNNER_TEMP/restore.err" "$RUNNER_TEMP/restore.list"
+        run: rm -f "$RUNNER_TEMP/db.pgdump" "$RUNNER_TEMP/restore.err" "$RUNNER_TEMP/restore.list" "$RUNNER_TEMP/cron.sql"
 
       - name: Delete copies older than 30 days
         # The privacy policy keeps a deleted account's data for at most 30 days, copies included.
