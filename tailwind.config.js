@@ -60,6 +60,17 @@ module.exports = {
       backgroundImage: {
         "gradient-brand": "var(--gradient-brand)",
       },
+      keyframes: {
+        // The landing video's play button (WHeroVideo): a soft ring that swells out of the
+        // circle and fades. Tailwind's own `ping` grows to twice the size, too loud there.
+        "play-pulse": {
+          "0%": { transform: "scale(1)", opacity: "0.55" },
+          "75%, 100%": { transform: "scale(1.45)", opacity: "0" },
+        },
+      },
+      animation: {
+        "play-pulse": "play-pulse 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
+      },
     },
   },
   plugins: [],
