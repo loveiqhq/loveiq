@@ -2,7 +2,8 @@
  * The landing page of AP-Analytics (Marcus's "Landing page & assessment page" artboard, as
  * updated on 16 Oct 2026): six headline figures against the period before, every landing test
  * arm by arm from our own visit log and the people each arm brought, and each version's
- * engagement from PostHog. For Assessment A the landing page is its assessment page.
+ * engagement from PostHog, the presenter video's step by step. For Assessment A the landing
+ * page is its assessment page.
  */
 import { addDays } from "./days";
 import {
@@ -34,6 +35,7 @@ import { freePreBlocked, head, type PageHead, type Tile } from "./common";
 import { SURVEY_STARTED_FROM, type PtsPayload } from "./pay-to-start";
 import {
   POSTHOG_FROM,
+  type HeroVideo,
   type LandingArmEngagement,
   type LandingTime,
   type PostHogResult,
@@ -116,6 +118,19 @@ export function testWindow(
   return start > end ? null : { from: start, to: end };
 }
 
+/**
+ * The first whole (Berlin) day PostHog recorded who saw the hero video: cta_seen 'hero_video' is
+ * sent from 12 Oct 2026, 13:00, the film's plays from 8 Oct. The video block reads from here,
+ * as a play before it would have no view to be a share of.
+ */
+export const HERO_VIDEO_SEEN_FROM = "2026-10-13";
+
+/** The range's days the hero video block reads: from HERO_VIDEO_SEEN_FROM on, or none. */
+export function heroVideoWindow(from: string, to: string): { from: string; to: string } | null {
+  const start = from > HERO_VIDEO_SEEN_FROM ? from : HERO_VIDEO_SEEN_FROM;
+  return start > to ? null : { from: start, to };
+}
+
 /** The windows to read PostHog's per-arm engagement for: tests it tags reliably. */
 export function engagementWindows(
   from: string,
@@ -179,6 +194,28 @@ export interface LandingEngagement {
   scroll: Array<{ label: string; share: number | null }>;
 }
 
+export type VideoStepKey =
+  "saw" | "tapped" | "started" | "p25" | "p50" | "p75" | "finished" | "failed";
+
+/** One row of the hero video block: a step's people, and their share of those who saw it. */
+export interface VideoStep {
+  key: VideoStepKey;
+  label: string;
+  people: number;
+  /** Of the people who saw the video; null when nobody did. */
+  share: number | null;
+}
+
+/** The presenter video (version B's hero), step by step, from PostHog. */
+export interface HeroVideoBlock {
+  /** The days read: the range's own, from HERO_VIDEO_SEEN_FROM on; null when none are. */
+  days: { from: string; to: string } | null;
+  /** Each step, PostHog's failure, or null when it wasn't read. */
+  steps: PostHogResult<VideoStep[]> | null;
+  /** What the figures can't see in this range, said under them. */
+  notes: string[];
+}
+
 /** What the headline figures divide, for their info cards ("990 ÷ 10,086 = 9.82%"). */
 export interface LandingCounts {
   visits: number | null;
@@ -204,6 +241,8 @@ export interface LandingPayload extends PageHead {
    * agree); null when they could not be read.
    */
   payFirst: { rows: PayFirstRow[]; notes: string[] } | null;
+  /** The presenter video, step by step: how many of those who saw it tapped play, and on. */
+  heroVideo: HeroVideoBlock;
 }
 
 /** One pay-to-start page: its Step by step card's figures on the Pay to start page. */
@@ -363,6 +402,63 @@ function pageEngagement(
   };
 }
 
+/** The video block's rows, in its order: a watch's steps, then the starts that failed. */
+const VIDEO_STEPS: Array<{ key: VideoStepKey; label: string; of: (v: HeroVideo) => number }> = [
+  { key: "saw", label: "Saw the video", of: (v) => v.saw },
+  { key: "tapped", label: "Tapped play", of: (v) => v.tapped },
+  { key: "started", label: "Started", of: (v) => v.started },
+  { key: "p25", label: "Reached 25%", of: (v) => v.reached[0] },
+  { key: "p50", label: "Reached 50%", of: (v) => v.reached[1] },
+  { key: "p75", label: "Reached 75%", of: (v) => v.reached[2] },
+  { key: "finished", label: "Finished", of: (v) => v.finished },
+  { key: "failed", label: "Failed to start", of: (v) => v.failed },
+];
+
+/**
+ * The presenter video's block over the range: each step's people and their share of the people
+ * who saw it, read from HERO_VIDEO_SEEN_FROM on, with what the figures can't see.
+ */
+function heroVideoBlock(
+  from: string,
+  to: string,
+  read: PostHogResult<HeroVideo> | null
+): HeroVideoBlock {
+  const first = rangeLabel(HERO_VIDEO_SEEN_FROM, HERO_VIDEO_SEEN_FROM);
+  const days = heroVideoWindow(from, to);
+  if (!days)
+    return {
+      days: null,
+      steps: null,
+      notes: [`PostHog records who saw the video from ${first}: pick a range reaching that day.`],
+    };
+  const notes =
+    days.from === from
+      ? []
+      : [
+          `Read from ${first}: PostHog records who saw the video from that day, and a play before it would have no view to be a share of.`,
+        ];
+  if (!read || !read.ok) return { days, steps: read, notes };
+  const v = read.value;
+  // A start comes after a tap, so fewer taps than starts means days before taps were recorded.
+  if (v.tapped < v.started)
+    notes.push(
+      "Tapped play is recorded only since its release, so here it counts fewer people than Started: Started, a tap whose film began, is the closest measure for the days before it."
+    );
+  return {
+    days,
+    steps: {
+      ok: true,
+      value: VIDEO_STEPS.map((s) => ({
+        key: s.key,
+        label: s.label,
+        people: s.of(v),
+        share: ratio(s.of(v), v.saw),
+      })),
+    },
+    notes,
+  };
+}
+
 export function buildLanding(input: {
   facts: Facts;
   /** The period before, for the headline figures; null when there is none. */
@@ -379,6 +475,8 @@ export function buildLanding(input: {
   pts?: PtsPayload | null;
   /** The report's EUR 1.99 gate now, read under "Free survey" only; null when it couldn't be. */
   gateOn?: boolean | null;
+  /** PostHog's hero video over heroVideoWindow's days; null (or left out) when not read. */
+  video?: PostHogResult<HeroVideo> | null;
 }): LandingPayload {
   const { facts, previous, filters: f, today, now } = input;
   const rows: ArmRow[] = [];
@@ -477,6 +575,7 @@ export function buildLanding(input: {
                   ],
             }
           : null,
+    heroVideo: heroVideoBlock(facts.from, facts.to, input.video ?? null),
   };
 }
 
