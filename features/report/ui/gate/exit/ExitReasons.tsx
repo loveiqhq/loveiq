@@ -30,9 +30,15 @@ interface ExitReasonsProps {
   random?: () => number;
 }
 
-/** Answers and sentences recorded per visit: the events share 20 a minute with the report's. */
-const MAX_ANSWERS = 6;
+/**
+ * Answers and sentences recorded per visit: the events share 20 a minute with the report's.
+ * Every tap is saved as it is made (Marcus and Mark, sync 29.10: "even the random clicks"),
+ * up to twelve; past that, only the reader's last choice, once, as they leave.
+ */
+const MAX_ANSWERS = 12;
 const MAX_NOTES = 3;
+
+type ExitReasonAnswer = Parameters<typeof trackPaygateExitReason>[0];
 
 /**
  * The canvas's Survey board, "Not today? Tell us why.", with the states it does not draw
@@ -49,7 +55,9 @@ const ExitReasons: FC<ExitReasonsProps> = ({ stage, priceCents, seed, random }) 
   const [reasons] = useState<ExitReason[]>(() =>
     orderExitReasons(exitReasons(stage, priceCents), random ?? seededRandom(`${seed}:${stage}`))
   );
-  const recorded = useRef({ answers: 0, notes: 0 });
+  const recorded = useRef({ answers: 0, notes: 0, last: null as ExitReason["code"] | null });
+  /** A choice made past the cap, still unsent: the reader's final answer, sent as they leave. */
+  const pending = useRef<ExitReasonAnswer | null>(null);
   const order = reasons.map((r) => r.code);
   const [chosen, setChosen] = useState<ExitReason["code"] | null>(null);
   const [focusIndex, setFocusIndex] = useState(0);
@@ -63,18 +71,40 @@ const ExitReasons: FC<ExitReasonsProps> = ({ stage, priceCents, seed, random }) 
     if (chosen === "other") noteRef.current?.focus();
   }, [chosen]);
 
+  // Leaving (Back, the way out, Unlock, a closed tab): a final choice past the cap is sent now.
+  // The event goes by sendBeacon, which outlives the page.
+  useEffect(() => {
+    const flush = () => {
+      const answer = pending.current;
+      pending.current = null;
+      if (!answer || answer.reason === recorded.current.last) return;
+      recorded.current.last = answer.reason;
+      trackPaygateExitReason(answer);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+
   const choose = (reason: ExitReason, index: number) => {
     setFocusIndex(index);
     if (chosen === reason.code) return;
+    const answer: ExitReasonAnswer = {
+      stage,
+      reason: reason.code,
+      position: index + 1,
+      order,
+      changed: chosen !== null,
+    };
     if (recorded.current.answers < MAX_ANSWERS) {
       recorded.current.answers += 1;
-      trackPaygateExitReason({
-        stage,
-        reason: reason.code,
-        position: index + 1,
-        order,
-        changed: chosen !== null,
-      });
+      recorded.current.last = reason.code;
+      pending.current = null;
+      trackPaygateExitReason(answer);
+    } else {
+      pending.current = answer;
     }
     setChosen(reason.code);
   };

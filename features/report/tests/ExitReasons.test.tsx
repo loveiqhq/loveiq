@@ -86,13 +86,45 @@ describe("“Not today? Tell us why.”", () => {
     expect(radio("I’ll come back to it later")).toHaveAttribute("aria-checked", "false");
   });
 
-  // The events share 20 a minute with the report's own.
-  it("stops recording after six answers on one visit, and still marks the row", () => {
-    renderReasons();
-    const rows = radios().slice(0, 7);
-    for (const row of rows) fireEvent.click(row);
-    expect(mockReason).toHaveBeenCalledTimes(6);
-    expect(rows[6]).toHaveAttribute("aria-checked", "true");
+  // The events share 20 a minute with the report's own: every tap up to twelve (sync 29.10:
+  // "even the random clicks"), then the last choice, once, as the reader leaves.
+  it("saves twelve taps of a visit, and a later last choice as the reader leaves", () => {
+    const { unmount } = renderReasons();
+    const [a, b, c] = radios();
+    for (let i = 0; i < 12; i += 1) fireEvent.click(i % 2 === 0 ? a! : b!);
+    expect(mockReason).toHaveBeenCalledTimes(12);
+    fireEvent.click(a!);
+    fireEvent.click(c!);
+    expect(mockReason).toHaveBeenCalledTimes(12);
+    expect(c).toHaveAttribute("aria-checked", "true");
+    unmount();
+    expect(mockReason).toHaveBeenCalledTimes(13);
+    expect(mockReason.mock.calls[12]?.[0]).toMatchObject({
+      reason: "unclear_value",
+      position: 3,
+      changed: true,
+    });
+  });
+
+  it("sends that last choice when the tab goes, once, and nothing already saved", () => {
+    const { unmount } = renderReasons();
+    const [a, b, c] = radios();
+    for (let i = 0; i < 12; i += 1) fireEvent.click(i % 2 === 0 ? a! : b!);
+    fireEvent.click(c!);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(mockReason).toHaveBeenCalledTimes(13);
+    unmount();
+    expect(mockReason).toHaveBeenCalledTimes(13);
+  });
+
+  it("sends nothing as the reader leaves when their last choice is the one saved", () => {
+    const { unmount } = renderReasons();
+    const [a, b] = radios();
+    for (let i = 0; i < 12; i += 1) fireEvent.click(i % 2 === 0 ? a! : b!);
+    fireEvent.click(a!);
+    fireEvent.click(b!);
+    unmount();
+    expect(mockReason).toHaveBeenCalledTimes(12);
   });
 
   it("opens a box for a sentence under “Something else”, and thanks only once it is sent", () => {
