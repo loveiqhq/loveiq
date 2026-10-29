@@ -89,6 +89,7 @@ import InitialUnlockGate from "./gate/InitialUnlockGate";
 import FullReportExit from "./gate/exit/FullReportExit";
 import PreUnlockExit from "./gate/exit/PreUnlockExit";
 import { EXIT_LEAVE_PARAM, isExitStage } from "./gate/exit/exitContent";
+import { previewPaidHref } from "./previewCheckout";
 import { closeExit, dropExitParam, openExit } from "./gate/exit/exitHistory";
 import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
 import SharedViewerBanner from "./SharedViewerBanner";
@@ -2848,6 +2849,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     });
   }, [promoFromUrl, sessionId, token]);
 
+  // `?preview=1` renders the report from the repository's own copy, with no database behind
+  // it — see app/api/report/preview/route.ts. It 404s on production, and /api/report is
+  // untouched either way. Nothing can be bought in it (previewCheckout.ts).
+  const isPreview = searchParams.get("preview") === "1";
   const { data, status, error, challenge, gate, retry } = useReportData({
     token,
     sessionId: token ? null : sessionId,
@@ -2855,15 +2860,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Raw slug on purpose — the server validates it against the archetypes this
     // reader has actually paid for and resolves the report copy for that one.
     archetypeSlug: searchParams.get("archetype"),
-    // `?preview=1` renders the report from the repository's own copy, with no
-    // database behind it — see app/api/report/preview/route.ts. It 404s on
-    // production, and /api/report is untouched either way.
-    preview: searchParams.get("preview") === "1",
+    preview: isPreview,
     previewPlan: searchParams.get("plan"),
     // `?preview=1&gate=1`: the EUR 1.99 pre-unlock gate, as a reader it stops meets it.
-    previewGate: searchParams.get("preview") === "1" && searchParams.get("gate") === "1",
+    previewGate: isPreview && searchParams.get("gate") === "1",
     // `&gift=1` with `?plan=initial`: the EUR 1.99 unlock as E07's gift, for its wording.
-    previewGift: searchParams.get("preview") === "1" && searchParams.get("gift") === "1",
+    previewGift: isPreview && searchParams.get("gift") === "1",
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,
@@ -3495,6 +3497,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       setIsPricingModalOpen(true);
       return;
     }
+    // A preview has no report to buy for: the plan's own preview opens instead, as its
+    // buyer would come back to it (previewCheckout.ts). Nothing is sent and nothing counted.
+    if (isPreview) {
+      setCheckoutHandoff({ status: "redirecting", message: null });
+      window.location.assign(previewPaidHref(plan));
+      return;
+    }
     const quote = pricingQuotes?.[plan];
     trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     // Essentials + Full Report are per-archetype; All Reports is a global
@@ -3652,6 +3661,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             gate={gate}
             reportToken={token ?? null}
             reportSessionId={token ? null : sessionId}
+            preview={isPreview}
           />
         </div>
         {preExitOpen ? (
@@ -3659,6 +3669,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             gate={gate}
             reportToken={token ?? null}
             reportSessionId={token ? null : sessionId}
+            preview={isPreview}
             onBack={closeExit}
             onLeave={markLeftInitialGate}
           />

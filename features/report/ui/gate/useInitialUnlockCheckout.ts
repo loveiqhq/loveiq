@@ -12,7 +12,9 @@ import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
+import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { previewPaidHref } from "../previewCheckout";
 import { GATE_COPY } from "./gateContent";
 
 /** The gate's card and bar, and the same two on its exit page (`exit_card` / `exit_sticky`). */
@@ -36,15 +38,19 @@ const IDLE: InitialUnlockCheckoutState = { status: "idle", message: null, place:
  *   5xx, whose bodies are internal ("Unable to process request."), as startReportCheckout.
  * - One checkout at a time, however often a button is pressed; back from Stripe through the
  *   back-forward cache (`pageshow`, persisted) puts both buttons back.
+ * - A preview (`?preview=1`) has no report to buy: the buttons open the preview of the
+ *   report after the EUR 1.99 (previewCheckout.ts), with no request and nothing recorded.
  */
 export function useInitialUnlockCheckout({
   priceCents,
   reportSessionId,
   reportToken,
+  preview = false,
 }: {
   priceCents: number;
   reportSessionId: string | null;
   reportToken: string | null;
+  preview?: boolean;
 }) {
   const [state, setState] = useState<InitialUnlockCheckoutState>(IDLE);
   const inFlight = useRef(false);
@@ -64,6 +70,10 @@ export function useInitialUnlockCheckout({
       if (inFlight.current) return;
       inFlight.current = true;
       setState({ status: "redirecting", message: null, place });
+      if (preview) {
+        window.location.assign(previewPaidHref(INITIAL_UNLOCK_PLAN));
+        return;
+      }
       trackInitialGateCta({ place });
       trackBeginCheckout("initial", priceCents / 100, "EUR");
 
@@ -118,7 +128,7 @@ export function useInitialUnlockCheckout({
         fail(GATE_COPY.checkout.unreachable);
       }
     },
-    [priceCents, reportSessionId, reportToken]
+    [preview, priceCents, reportSessionId, reportToken]
   );
 
   return { start, state };
