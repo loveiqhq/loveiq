@@ -52,6 +52,7 @@ const LOCKED_TABLES = [
   "data_subject_request_log",
   "system_flags",
   "email_suppression",
+  "invite_event",
 ];
 
 async function anonFetch(path: string): Promise<Response> {
@@ -69,8 +70,8 @@ describeMaybe("RLS boundary — anon key cannot read locked tables", () => {
    *
    * Every assertion below accepts 401/403 as "more restrictive than expected —
    * still a pass", which is right when the anon role genuinely has no grants. But
-   * a WRONG, EMPTY or ROTATED key also returns 401 for every table, so all fifteen
-   * checks go green while testing nothing. Measured 2026-09-19: against the real
+   * a WRONG, EMPTY or ROTATED key also returns 401 for every table, so every
+   * check goes green while testing nothing. Measured 2026-09-19: against the real
    * host with the key replaced by "not-a-real-key", 15 passed, 0 failed.
    *
    * `survey_question` is deliberately NOT in LOCKED_TABLES: anon holds grants on
