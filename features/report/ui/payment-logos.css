@@ -1,0 +1,57 @@
+/* The official payment logos (PaymentLogos.tsx; public/payment-logos/official, exported from
+ * Figma's "Payment Icons" 11482:1487, each cropped to its artwork). Every logo keeps the height
+ * the paygate's row gave its mark (Figma 973:591), and its own proportions set the width, so
+ * none is squeezed or recoloured. */
+.pay-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pay-logos__item {
+  display: flex;
+}
+
+.pay-logos__mark {
+  display: block;
+  flex: 0 0 auto;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.pay-logos__mark--apple-pay {
+  width: 29.23px;
+  height: 12px;
+  background-image: url("/payment-logos/official/apple-pay.svg");
+}
+.pay-logos__mark--visa {
+  width: 39.39px;
+  height: 12.72px;
+  background-image: url("/payment-logos/official/visa.svg");
+}
+.pay-logos__mark--google-pay {
+  width: 66.26px;
+  height: 12px;
+  background-image: url("/payment-logos/official/google-pay.svg");
+}
+.pay-logos__mark--klarna {
+  width: 37.08px;
+  height: 15px;
+  background-image: url("/payment-logos/official/klarna.svg");
+}
+.pay-logos__mark--amex {
+  width: 35.93px;
+  height: 13.13px;
+  background-image: url("/payment-logos/official/amex.svg");
+}
+.pay-logos__mark--mastercard {
+  width: 27.68px;
+  height: 17.11px;
+  background-image: url("/payment-logos/official/mastercard.svg");
+}

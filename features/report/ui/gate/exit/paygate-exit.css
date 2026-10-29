@@ -741,25 +741,6 @@
   color: #6b6678;
 }
 
-.pge-pay__chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pge-pay__chip {
-  padding: 5px 10px;
-  border: 1px solid #e9e6ee;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 17px;
-}
-
 .pge-pay__fine {
   font-size: 12px;
   line-height: 17px;

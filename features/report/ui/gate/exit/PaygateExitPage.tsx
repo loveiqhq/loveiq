@@ -16,7 +16,7 @@ import {
   isTrustpilotEnabled,
   TRUSTPILOT_FALLBACK_URL,
 } from "@shared/ui/trustpilot/config";
-import { PAYMENT_MARKS } from "../../paymentMarks";
+import { PaymentLogos } from "../../PaymentLogos";
 import { euros } from "../gateContent";
 import ExitReasons from "./ExitReasons";
 import {
@@ -379,13 +379,9 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
           </div>
           <div className="pge-pay">
             <span className="pge-pay__label">{EXIT_COPY.offer.paymentsLabel}</span>
-            <ul className="pge-pay__chips" aria-label="Accepted payment methods">
-              {PAYMENT_MARKS.map(({ logo, label }) => (
-                <li key={logo} className="pge-pay__chip">
-                  {label}
-                </li>
-              ))}
-            </ul>
+            {/* The official logos, as on the EUR 1.99 page and the plans (Marcus, sync 29.10),
+                where the canvas wrote the names in chips. */}
+            <PaymentLogos />
             <span className="pge-pay__fine">{EXIT_COPY.offer.fineprint}</span>
           </div>
         </section>

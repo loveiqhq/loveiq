@@ -476,53 +476,8 @@
   text-align: center;
 }
 
-.rpg__payments-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 8px 14px;
-}
-
-.rpg__mark {
-  display: block;
-  flex: 0 0 auto;
-  background-position: center bottom;
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-
-/* Sizes are 973:591's own. Apple Pay is the artwork's glyphs at the frame's text size. */
-.rpg__mark--apple-pay {
-  width: 28px;
-  height: 12px;
-  background-image: url("/report/paygate/mark-apple-pay.svg");
-}
-.rpg__mark--visa {
-  width: 39.38px;
-  height: 12.72px;
-  background-image: url("/report/paygate/mark-visa.svg");
-}
-.rpg__mark--google-pay {
-  width: 30.79px;
-  height: 12px;
-  background-image: url("/report/paygate/mark-google-pay.svg");
-}
-.rpg__mark--klarna {
-  width: 35.64px;
-  height: 15px;
-  background-image: url("/report/paygate/mark-klarna.svg");
-}
-.rpg__mark--amex {
-  width: 35.93px;
-  height: 13.13px;
-  background-image: url("/report/paygate/mark-amex.svg");
-}
-.rpg__mark--mastercard {
-  width: 22px;
-  height: 17.11px;
-  background-image: url("/report/paygate/mark-mastercard.svg");
-}
+/* The row of logos under the label is PaymentLogos (payment-logos.css), shared with the
+ * EUR 1.99 page and both exit pages. */
 
 /* ── Why unlock your Report? (842:656) ──────────────────────────────────── */
 .rpg__why {

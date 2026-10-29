@@ -108,14 +108,15 @@ describe("the EUR 1.99 gate's exit page (Marcus's Main board)", () => {
     expect(text()).not.toContain("Premium Report");
   });
 
-  it("lists the live payment methods, in the live order", () => {
+  it("shows the live payment methods as their official logos, in the live order", () => {
     render(<PaygateExitPage {...PRE} />);
     const list = screen.getByRole("list", { name: "Accepted payment methods" });
     expect(
       within(list)
-        .getAllByRole("listitem")
-        .map((li) => li.textContent)
+        .getAllByRole("img")
+        .map((logo) => logo.getAttribute("aria-label"))
     ).toEqual(PAYMENT_MARKS.map((m) => m.label));
+    expect(list.querySelector(".pay-logos__mark--klarna")).not.toBeNull();
   });
 
   it("asks why, and leaves by “Maybe later” to the landing page", () => {
