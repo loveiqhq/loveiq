@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { bucketOf, median, type SignalValue } from "@features/ux-signals/logic/signals";
 
 import personasFile from "./personas.json";
-import { PLANS, type Plan } from "./rotation";
+import { PLANS, ROTATION_PLANS, type Plan } from "./rotation";
 
 export type Escape = "close_button" | "escape" | "backdrop" | "browser_back";
 export type Quit = "survey" | "report" | "paywall" | "checkout";
@@ -102,7 +102,7 @@ export function proofWalksFor(at: Date, personas = personasFile.personas.map((p)
   const walks: ProofWalk[] = [0, 1, 2, 3].map((k) => ({
     persona: personas[(day * 4 + k) % personas.length]!,
     device: k % 2 === 0 ? "iPhone 15 Pro" : "Desktop Chrome",
-    plan: PLANS[(day + k) % PLANS.length]!,
+    plan: ROTATION_PLANS[(day + k) % ROTATION_PLANS.length]!,
   }));
   // The slot moves on by one more every four days, so each way of leaving meets a phone and
   // a desktop within eight nights; the same index for both kept survey quits on a phone.
