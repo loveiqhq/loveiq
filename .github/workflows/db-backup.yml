@@ -126,9 +126,13 @@ jobs:
           psql -q -v ON_ERROR_STOP=1 -d restore_test \
             -c 'create extension vector' -c 'create extension pg_trgm' \
             -c 'create role service_role nologin'
-          # Supabase's own roles do not exist here, so owners and grants are left out.
-          if ! pg_restore --no-owner --no-privileges -d restore_test "$RUNNER_TEMP/db.pgdump" \
-            2> "$RUNNER_TEMP/restore.err"; then
+          # Every database already has a `public` schema, so the dump's CREATE SCHEMA public is
+          # skipped (its comment still restores). Supabase's own roles do not exist here, so
+          # owners and grants are left out.
+          pg_restore --list "$RUNNER_TEMP/db.pgdump" \
+            | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' > "$RUNNER_TEMP/restore.list"
+          if ! pg_restore --no-owner --no-privileges --use-list="$RUNNER_TEMP/restore.list" \
+            -d restore_test "$RUNNER_TEMP/db.pgdump" 2> "$RUNNER_TEMP/restore.err"; then
             grep -E '^pg_restore: error:' "$RUNNER_TEMP/restore.err" \
               | sed -E 's/(COPY failed for table "[^"]+").*/\1/' | cut -c1-240 | head -30 || true
             echo "::error::The backup did not restore cleanly into an empty Postgres."
@@ -169,7 +173,7 @@ jobs:
 
       - name: Delete the plain dump, whatever happened
         if: always()
-        run: rm -f "$RUNNER_TEMP/db.pgdump" "$RUNNER_TEMP/restore.err"
+        run: rm -f "$RUNNER_TEMP/db.pgdump" "$RUNNER_TEMP/restore.err" "$RUNNER_TEMP/restore.list"
 
       - name: Delete copies older than 30 days
         # The privacy policy keeps a deleted account's data for at most 30 days, copies included.
@@ -195,8 +199,9 @@ jobs:
           node scripts/db-backup/blob.mjs check "$GITHUB_RUN_ID" $ids
 
       - name: Tell the brain channel the backup failed
-        # cancelled() too: a run that hits timeout-minutes ends as CANCELLED.
-        if: failure() || cancelled()
+        # cancelled() too: a run that hits timeout-minutes ends as CANCELLED. Only the runs of
+        # main: a run from a branch is someone testing a change, not the weekly backup.
+        if: (failure() || cancelled()) && github.ref == 'refs/heads/main'
         env:
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
         run: |
@@ -213,7 +218,8 @@ jobs:
     name: Record the run for the stall watchdog
     # A runner of its own, away from the data: `npm ci` runs every package's install script.
     needs: backup
-    if: always()
+    # The runs of main only, for the reason the alert step gives.
+    if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
