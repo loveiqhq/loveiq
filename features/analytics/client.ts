@@ -1544,25 +1544,38 @@ export const trackFaqExpanded = (params: { question_index: number; question_text
 /**
  * The landing hero video (arm `white_video` of the landing A/B). The arm is not a
  * param: it rides on every event as the `landing_variant` super-property, so these
- * say only what the video did. A play is counted when frames start, not at the tap,
- * so a start that fails is an error below rather than a play; `replay` separates a
- * second watch from a first.
+ * say only what the video did. A tap on play is counted at once (`hero_video_tap`, the
+ * click-through, since 29.10); a play when frames start, so a start that fails is an
+ * error below rather than a play. `replay` separates a second watch from a first.
  */
+export const trackHeroVideoTap = (params: { replay: boolean }) => track("hero_video_tap", params);
+
 export const trackHeroVideoPlay = (params: { replay: boolean }) => track("hero_video_play", params);
 
 /**
- * A video that would not play: the full one after a tap (`reason` is the rejected
- * play()'s error name, `media-error-<code>`, `paused-before-playing` or `timeout`),
- * or the silent loop failing for a reason other than a blocked autoplay. Without it a
- * broken file or codec reads in PostHog as visitors not tapping.
+ * A film that would not start after a tap: `reason` is the rejected play()'s error name,
+ * `media-error-<code>`, `paused-before-playing`, `timeout`, or `abandoned` (below).
+ * Without it a broken file or codec reads in PostHog as visitors not tapping. `video` is
+ * always `full` since the silent loop went (29.10), kept so old and new events read alike.
  */
-export const trackHeroVideoError = (params: { video: "full" | "preview"; reason: string }) =>
+export const trackHeroVideoError = (params: { video: "full"; reason: string }) =>
   track("hero_video_error", params);
 
-export const trackHeroVideoProgress = (params: { percent: 25 | 50 | 75 }) =>
+/**
+ * A start still waiting for its first frame when the visitor left: the error above with
+ * reason `abandoned`. A beacon, because it is sent as the page goes, after PostHog has
+ * emptied its own queue.
+ */
+export const trackHeroVideoAbandoned = () =>
+  track("hero_video_error", { video: "full", reason: "abandoned" }, undefined, {
+    transport: "sendBeacon",
+  });
+
+export const trackHeroVideoProgress = (params: { percent: 25 | 50 | 75; replay: boolean }) =>
   track("hero_video_progress", params);
 
-export const trackHeroVideoComplete = () => track("hero_video_complete");
+export const trackHeroVideoComplete = (params: { replay: boolean }) =>
+  track("hero_video_complete", params);
 
 export const trackHeroVideoPaused = (params: { current_time_sec: number }) =>
   track("hero_video_paused", params);
