@@ -172,8 +172,12 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   the top), so the phone's Back closes it; `ReportPage` drops the parameter where it means
   nothing.
   - `pre` stands in for the gate (`PreUnlockExit`). The gate stays mounted, hidden, under it:
-    it keeps the submission bound, and Back finds it as it was. "Maybe later" leads to the
-    landing page, which does not count that reader as a visit (`markLeftInitialGate`).
+    it keeps the submission bound, and Back finds it as it was. Under its guarantee, Marcus's
+    box (29.10): "Your result is ready and saved · You invested 14 minutes into your answers…",
+    the minutes the reader's own (`surveyMinutes` on the gate payload, from
+    `survey_submission.duration_ms`; none outside 3–90). "Maybe later" stays on the page
+    since 29.10 (sync: the landing page loses a finished reader) and says "Saved. The link to
+    your result is in your email."; from 28.10 to 29.10 it led to the landing page.
   - `full` is a dialog over the report for a EUR 1.99 holder (`FullReportExit`; the full-report
     quote's `creditKind: "initial"`), opened by the plan picker's "Not ready to unlock yet",
     which takes the place of its × for them (`onNotReady`). Tapping outside, Escape and Back
@@ -186,8 +190,13 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
     both numbers configured. E07's gift readers are told the EUR 10 is theirs, not earned
     (`initialUnlockSource` on `/api/report`).
   - Events `paygate_exit_*`, stored; the sentence under `metadata.answer_text`, masked in the
-    team export and Jarvis. AP's Payment page has a "Paygate exits" section
-    (`features/admin/server/ap/paygate-exits.ts`).
+    team export and Jarvis. Every reason tap is sent as it is made, up to twelve a visit, then
+    the last choice as the reader leaves (`ExitReasons`). AP's Payment page has a "Paygate
+    exits" section (`features/admin/server/ap/paygate-exits.ts`).
+- **Payment logos.** `ui/PaymentLogos.tsx` draws `PAYMENT_MARKS` as the official logos (Figma
+  "Payment Icons", LoveIQ file 11482:1487; `public/payment-logos/official`), the same row on the
+  gate, the plan picker and both exit pages (Marcus, 29.10). Pay to start keeps its own wallet
+  badges.
 - **What it opens, in numbers.** Three chapters in full and four partly open, counted off the
   gate's map from Part 2 on, as the report counts chapters (Eman, 27.10: Part 1 is its welcome)
   (`ui/gate/gateChapters.ts`). The card, the EUR 1.99 pay-to-start page, E06, E07 and
@@ -211,7 +220,9 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
 - **Previews.** `/report?preview=1&v4=1&gate=1` draws the gate off production, and with
   `&leave=pre` its exit page; `/report?preview=1&v4=1&plan=initial` the report after the
   EUR 1.99, with `&leave=full` the full report's exit page (`&gift=1`: E07's wording); the emails at
-  `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`.
+  `/api/dev/email-preview?template=initial-unlock` and `…=initial-unlock-gift`. A preview buys
+  nothing: its buttons open the preview of what was bought (`plan=initial` or the plan pressed,
+  `ui/previewCheckout.ts`), never a checkout for the browser's own last survey.
 - **Tests.** `tests/initialUnlockGate.test.ts`, `tests/initialGateState.test.ts`,
   `tests/InitialUnlockGate.test.tsx`, `tests/initialUnlockGift.test.ts`,
   `tests/gateChapterCounts.test.ts`, the gate blocks of
@@ -219,7 +230,8 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   `tests/hooks/useReportData.test.ts`, and `e2e/report-initial-unlock-gate.spec.ts`. The exit
   pages: `tests/PaygateExitPage.test.tsx`, `tests/ExitReasons.test.tsx`,
   `tests/exitContent.test.ts`, `tests/ReportPricingModal.dismiss.test.tsx` and
-  `e2e/report-paygate-exit.spec.ts`.
+  `e2e/report-paygate-exit.spec.ts`; the logos, `tests/PaymentLogos.test.ts`; a preview's
+  buttons, `tests/previewCheckout.test.ts`.
 
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 
