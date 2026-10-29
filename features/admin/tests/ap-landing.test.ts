@@ -10,6 +10,13 @@ vi.mock("@features/ux-review/server/review", () => ({
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+// The team's own PostHog visits (teamVisits), which every PostHog figure leaves out; unset, a
+// read fails and leaves nobody out, as an unconfigured Supabase does.
+const mockSupabaseFetch = vi.fn();
+vi.mock("@features/admin/server/supabase", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/admin/server/supabase")>()),
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
+}));
 // The screen test draws a payload the builder made, without the network or the URL.
 const screenData = vi.hoisted(() => ({ payload: null as unknown }));
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
@@ -28,13 +35,18 @@ import type { PtsPayload } from "@features/admin/server/ap/pay-to-start";
 import {
   buildLanding,
   engagementWindows,
+  HERO_VIDEO_SEEN_FROM,
+  heroVideoWindow,
   LANDING_TESTS,
   testWindow,
 } from "@features/admin/server/ap/landing";
 import {
+  fetchHeroVideo,
   fetchLandingEngagement,
   fetchLandingTime,
+  type HeroVideo,
   type LandingArmEngagement,
+  type PostHogResult,
 } from "@features/admin/server/ap/posthog";
 import ApLanding from "@features/admin/ui/ap/ApLanding";
 import {
@@ -63,6 +75,24 @@ const ph = (arm: string, sessions: number, bounced: number): LandingArmEngagemen
     sqSeconds: sessions * (100 + mean ** 2),
   };
 };
+
+/**
+ * PostHog's hero video over 14-28 Oct 2026 as read live on 29 Oct (8 of the 364 who saw it
+ * started it), with one failed start, which that range didn't have, to read its row.
+ */
+const video = (over: Partial<HeroVideo> = {}): HeroVideo => ({
+  saw: 364,
+  tapped: 0,
+  started: 8,
+  reached: [6, 3, 2],
+  finished: 0,
+  failed: 1,
+  ...over,
+});
+
+/** Under the block while taps aren't recorded for all of the range's days. */
+const TAP_NOTE =
+  "Tapped play is recorded only since its release, so here it counts fewer people than Started: Started, a tap whose film began, is the closest measure for the days before it.";
 
 const test = (key: string) => LANDING_TESTS.find((t) => t.key === key)!;
 const now = new Date("2026-10-13T12:00:00Z");
@@ -94,6 +124,103 @@ describe("landing test windows", () => {
     const keys = engagementWindows("2026-08-01", "2026-10-31", "2026-11-01").map((w) => w.key);
     expect(keys).toEqual(["hero", "hero-first-run"]);
     expect(test("hero-first-run").from).toBe(LANDING_HERO_VIDEO_LAUNCH_DAY);
+  });
+
+  it("reads the hero video from the first whole day PostHog recorded who saw it", () => {
+    // cta_seen 'hero_video' is sent from 12 Oct 2026, 13:00 (Berlin); plays from 8 Oct.
+    expect(HERO_VIDEO_SEEN_FROM).toBe("2026-10-13");
+    expect(heroVideoWindow("2026-10-14", "2026-10-28")).toEqual({
+      from: "2026-10-14",
+      to: "2026-10-28",
+    });
+    expect(heroVideoWindow("2026-09-29", "2026-10-28")).toEqual({
+      from: "2026-10-13",
+      to: "2026-10-28",
+    });
+    expect(heroVideoWindow("2026-10-13", "2026-10-13")).toEqual({
+      from: "2026-10-13",
+      to: "2026-10-13",
+    });
+    expect(heroVideoWindow("2026-10-01", "2026-10-12")).toBeNull();
+  });
+});
+
+describe("the hero video block", () => {
+  const page = (from: string, to: string, read?: PostHogResult<HeroVideo> | null) =>
+    buildLanding({
+      facts: factsFixture({ from, to, visits: [], starts: [], subs: [], money: [] }),
+      previous: null,
+      filters: parseFilters({ period: "custom", from, to }, "2026-10-29"),
+      today: "2026-10-29",
+      now: new Date("2026-10-29T10:00:00Z"),
+      armEngagement: {},
+      engagement: null,
+      video: read,
+    });
+
+  it("lists each step's people and their share of the people who saw the video", () => {
+    const block = page("2026-10-14", "2026-10-28", { ok: true, value: video() }).heroVideo;
+    expect(block.days).toEqual({ from: "2026-10-14", to: "2026-10-28" });
+    const steps = block.steps?.ok ? block.steps.value : [];
+    expect(steps.map((s) => [s.key, s.label, s.people])).toEqual([
+      ["saw", "Saw the video", 364],
+      ["tapped", "Tapped play", 0],
+      ["started", "Started", 8],
+      ["p25", "Reached 25%", 6],
+      ["p50", "Reached 50%", 3],
+      ["p75", "Reached 75%", 2],
+      ["finished", "Finished", 0],
+      ["failed", "Failed to start", 1],
+    ]);
+    // Every row a share of the people who saw it: 8 of 364 started it, the hand count's 2.2%.
+    expect(steps.map((s) => s.share)).toEqual([
+      1,
+      0,
+      8 / 364,
+      6 / 364,
+      3 / 364,
+      2 / 364,
+      0,
+      1 / 364,
+    ]);
+    // Films started while no tap was recorded: taps came with a later release, as it says.
+    expect(block.notes).toEqual([TAP_NOTE]);
+    const tapped = page("2026-10-14", "2026-10-28", { ok: true, value: video({ tapped: 9 }) });
+    expect(tapped.heroVideo.notes).toEqual([]);
+  });
+
+  it("reads from 13 Oct 2026 for a range starting earlier, and nothing for a range before it", () => {
+    const early = page("2026-10-01", "2026-10-20", { ok: true, value: video({ tapped: 9 }) });
+    expect(early.heroVideo.days).toEqual({ from: "2026-10-13", to: "2026-10-20" });
+    expect(early.heroVideo.notes).toEqual([
+      "Read from 13 Oct 2026: PostHog records who saw the video from that day, and a play before it would have no view to be a share of.",
+    ]);
+    expect(page("2026-10-01", "2026-10-12").heroVideo).toEqual({
+      days: null,
+      steps: null,
+      notes: [
+        "PostHog records who saw the video from 13 Oct 2026: pick a range reaching that day.",
+      ],
+    });
+  });
+
+  it("passes PostHog's failure on, and leaves every share blank when nobody saw it", () => {
+    const failed = {
+      ok: false as const,
+      error: "PostHog could not be read just now. Try again in a minute.",
+    };
+    expect(page("2026-10-14", "2026-10-20", failed).heroVideo).toEqual({
+      days: { from: "2026-10-14", to: "2026-10-20" },
+      steps: failed,
+      notes: [],
+    });
+    // Not read at all: no figures, and no error of PostHog's to show.
+    expect(page("2026-10-14", "2026-10-20").heroVideo.steps).toBeNull();
+    const nobody = page("2026-10-14", "2026-10-20", {
+      ok: true,
+      value: { saw: 0, tapped: 0, started: 0, reached: [0, 0, 0], finished: 0, failed: 0 },
+    }).heroVideo.steps;
+    expect(nobody?.ok && nobody.value.map((s) => s.share)).toEqual(Array(8).fill(null));
   });
 });
 
@@ -509,10 +636,75 @@ describe("PostHog's landing readers", () => {
   // and mockReset() returns the mock.
   beforeEach(() => {
     mockHogql.mockReset();
+    mockSupabaseFetch.mockReset();
   });
   const answer = (rows: unknown[][]) => ({ ok: true, cut: null, rows });
   const query = (has: string) =>
     String(mockHogql.mock.calls.map(([q]) => String(q)).find((q) => q.includes(has)));
+  /** A query's words, its line breaks and indents read as single spaces. */
+  const flat = (q: string) => q.replace(/\s+/g, " ");
+
+  it("counts the hero video's people step by step, over the range's Berlin days", async () => {
+    mockHogql.mockResolvedValue(answer([[364, 0, 8, 6, 3, 2, 0, 1]]));
+    expect(await fetchHeroVideo("2026-10-14", "2026-10-28")).toEqual({ ok: true, value: video() });
+    const q = flat(query("hero_video_play"));
+    // Each step's own event: the views by the video's call to action, the quarters by their
+    // percent, and the film's own failed starts only (the muted loop's were no tap's).
+    expect(q).toContain(
+      "event IN ('cta_seen', 'hero_video_tap', 'hero_video_play', 'hero_video_progress', 'hero_video_complete', 'hero_video_error')"
+    );
+    for (const step of [
+      "uniqExactIf(person_id, event = 'cta_seen' AND properties.cta = 'hero_video') AS saw",
+      "uniqExactIf(person_id, event = 'hero_video_tap') AS tapped",
+      "uniqExactIf(person_id, event = 'hero_video_play') AS started",
+      "uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 25) AS p25",
+      "uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 50) AS p50",
+      "uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 75) AS p75",
+      "uniqExactIf(person_id, event = 'hero_video_complete') AS finished",
+      "uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full') AS failed",
+    ])
+      expect(q).toContain(step);
+    // The live site, from the start of Berlin's 14 Oct to the end of the 28th (the clocks went
+    // back on the 25th).
+    expect(q).toContain("properties.$host = 'www.loveiq.org'");
+    expect(q).toContain(
+      "timestamp >= toDateTime('2026-10-13 22:00:00', 'UTC') AND timestamp < toDateTime('2026-10-28 23:00:00', 'UTC')"
+    );
+    // One row, asked for as one.
+    expect(mockHogql.mock.calls[0]![1]).toBe(1);
+  });
+
+  it("leaves out the team, and for good anyone who ever forced a version with ?variant=", async () => {
+    const TEAM_VISIT = "0192f0aa-7777-7000-8000-000000000007";
+    mockSupabaseFetch.mockImplementation(async (path: string) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        path.startsWith("/rest/v1/ap_team_user")
+          ? [{ id: 7 }]
+          : [{ posthog_session_id: TEAM_VISIT }],
+    }));
+    mockHogql.mockResolvedValue(answer([[10, 1, 1, 1, 0, 0, 0, 0]]));
+    await fetchHeroVideo("2026-10-21", "2026-10-27");
+    const q = flat(query("hero_video_play"));
+    // The override re-stamps the version's cookie (proxy.ts), so its later visits are forced
+    // with nothing in their address to tell: the person is out, not only the visit that had it.
+    expect(q).toContain(
+      "person_id NOT IN (SELECT person_id FROM events WHERE properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC') AND match(toString(properties.$current_url), '[?&]variant='))"
+    );
+    // The people behind the team's own finished surveys, as every PostHog figure leaves out.
+    expect(q).toContain(
+      `person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN ('${TEAM_VISIT}') AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC'))`
+    );
+  });
+
+  it("says so when PostHog can't be read, rather than showing a row of zeros", async () => {
+    mockHogql.mockResolvedValue({ ok: false, error: "boom" });
+    expect(await fetchHeroVideo("2026-10-07", "2026-10-13")).toEqual({
+      ok: false,
+      error: "PostHog could not be read just now. Try again in a minute.",
+    });
+  });
 
   it("reads the average time beside the median, each view up to 30 minutes", async () => {
     mockHogql.mockImplementation(async (q: string) =>
@@ -555,7 +747,7 @@ describe("the landing page's screen", () => {
   afterEach(cleanup);
   const f = parseFilters({ period: "custom", from: "2026-10-14", to: "2026-10-20" }, "2026-10-21");
   const arms = { ok: true as const, value: [ph("white_card", 200, 80), ph("white_video", 60, 15)] };
-  const payload = () =>
+  const payload = (over: Partial<Parameters<typeof buildLanding>[0]> = {}) =>
     buildLanding({
       facts: factsFixture({
         from: "2026-10-14",
@@ -575,7 +767,48 @@ describe("the landing page's screen", () => {
       armEngagement: { hero: arms },
       engagement: arms,
       pageTime: { ok: true, value: { median: 30, mean: 44 } },
+      ...over,
     });
+  /** A cell's words as the eye reads them: what is there for a screen reader alone is left out. */
+  const seen = (el: Element) => {
+    const copy = el.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll(".sr-only").forEach((x) => x.remove());
+    return copy.textContent!.trim();
+  };
+
+  it("draws the hero video: each step's people and its share of those who saw it", () => {
+    screenData.payload = payload({ video: { ok: true, value: video() } });
+    render(createElement(ApLanding));
+    const block = document.getElementById("hero-video")!;
+    expect(within(block).getByRole("heading", { name: "Hero video" })).toBeTruthy();
+    const table = within(block).getByRole("table", { name: "Hero video, step by step" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent)
+    ).toEqual(["Step", "People", "Of those who saw it"]);
+    const rows = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => [...r.querySelectorAll('[role="rowheader"], [role="cell"]')].map(seen));
+    expect(rows).toEqual([
+      // The base of every share: its own is no figure.
+      ["Saw the video", "364", ""],
+      ["Tapped play", "0", "0.0%"],
+      ["Started", "8", "2.2%"],
+      ["Reached 25%", "6", "1.6%"],
+      ["Reached 50%", "3", "0.8%"],
+      ["Reached 75%", "2", "0.5%"],
+      ["Finished", "0", "0.0%"],
+      ["Failed to start", "1", "0.3%"],
+    ]);
+    // A screen reader hears what the row's read-out adds: of those whose film started.
+    const quarter = within(table).getByRole("row", { name: /Reached 25%/ });
+    expect(quarter.textContent).toContain("75% of those who started it");
+    // No tap recorded while films started: said under the block.
+    expect(block.textContent).toContain(TAP_NOTE);
+    expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
 
   it("draws the six tiles, the tests with both unlock columns, and engagement per page", () => {
     screenData.payload = payload();

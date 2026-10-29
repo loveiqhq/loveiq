@@ -631,6 +631,76 @@ export async function fetchLandingTime(
 }
 
 /**
+ * A HogQL condition leaving out everyone who ever forced a landing version with `?variant=` in
+ * the address (the team's QA override). The override re-stamps the version's cookie (proxy.ts),
+ * so their later visits are forced too with nothing in the address to tell: the person goes,
+ * not only the visit that carried it.
+ */
+const NOT_FORCED = `person_id NOT IN (SELECT person_id FROM events
+        WHERE properties.$host = '${HOST}'
+          AND timestamp >= toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC')
+          AND match(toString(properties.$current_url), '[?&]variant='))`;
+
+/** The people at each step of the landing hero's presenter video (version B), from PostHog. */
+export interface HeroVideo {
+  /** Had at least half of the video's box on screen (cta_seen 'hero_video'): the shares' base. */
+  saw: number;
+  /** Tapped play (hero_video_tap): recorded only since its release, none before. */
+  tapped: number;
+  /** Saw the film's first frame after a tap (hero_video_play). */
+  started: number;
+  /** Watched a quarter, half and three quarters of it (hero_video_progress). */
+  reached: [number, number, number];
+  /** Watched it to the end (hero_video_complete). */
+  finished: number;
+  /** Tapped play and the film never started (hero_video_error, the film's own). */
+  failed: number;
+}
+
+/**
+ * The landing hero's presenter video (version B), step by step: the people PostHog recorded who
+ * saw it, tapped play, saw it start, reached each quarter and watched it to the end, and those
+ * whose start failed. People, not visits: what share of those who see the video tap play is
+ * the question it answers. Anyone who ever forced a version is left out with the team.
+ */
+export async function fetchHeroVideo(from: string, to: string): Promise<PostHogResult<HeroVideo>> {
+  const { since, until } = windowOf({ from, to });
+  const q = `
+    SELECT uniqExactIf(person_id, event = 'cta_seen' AND properties.cta = 'hero_video') AS saw,
+           uniqExactIf(person_id, event = 'hero_video_tap') AS tapped,
+           uniqExactIf(person_id, event = 'hero_video_play') AS started,
+           uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 25) AS p25,
+           uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 50) AS p50,
+           uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 75) AS p75,
+           uniqExactIf(person_id, event = 'hero_video_complete') AS finished,
+           -- The muted loop's own errors (video 'preview', a loop the page no longer has) were
+           -- no tap's: only the film's count as a start that failed.
+           uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full') AS failed
+    FROM events
+    WHERE event IN ('cta_seen', 'hero_video_tap', 'hero_video_play', 'hero_video_progress',
+                    'hero_video_complete', 'hero_video_error')
+      AND properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+      AND ${NOT_FORCED}${await notStaff()}
+    LIMIT 1`;
+  const r = await rows(q, 1);
+  if (!r.ok) return r;
+  const [saw, tapped, started, p25, p50, p75, finished, failed] = (r.value[0] ?? []).map(
+    (v) => Number(v) || 0
+  );
+  return {
+    ok: true,
+    value: {
+      saw: saw ?? 0,
+      tapped: tapped ?? 0,
+      started: started ?? 0,
+      reached: [p25 ?? 0, p50 ?? 0, p75 ?? 0],
+      finished: finished ?? 0,
+      failed: failed ?? 0,
+    },
+  };
+}
+
+/**
  * The first page view of each live-site visit in a range, as a HogQL subquery: its start, the
  * link's tags (source, medium, campaign, keyword, click ids), the referring site, the device,
  * the country and the browser's offset from UTC. Pages the visit log leaves out (admin, Jarvis,

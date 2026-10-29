@@ -1,8 +1,9 @@
 /**
  * The Landing page's fields (Assessment A): its six headline tiles, the tests table's columns
  * and the engagement table's. Each query was run read-only for 21 Sep – 20 Oct 2026 and gave the
- * page's own figures at "Last 30 days" (checked 21 Oct 2026). SQL reads the production database,
- * HogQL PostHog; `:from` and `:to` are the first and last Berlin day.
+ * page's own figures at "Last 30 days" (checked 21 Oct 2026); the hero video block's for 14 – 28
+ * Oct 2026 (checked 29 Oct 2026). SQL reads the production database, HogQL PostHog; `:from` and
+ * `:to` are the first and last Berlin day.
  */
 import { addDays } from "@features/admin/server/ap/days";
 import {
@@ -373,6 +374,48 @@ GROUP BY version
 ORDER BY version
 LIMIT 20`;
 
+/**
+ * Everyone who ever forced a version with ?variant= in the address: the override re-stamps the
+ * version's cookie, so their later visits are forced too, with nothing in the address to tell.
+ */
+const PH_NOT_FORCED = `person_id NOT IN (SELECT person_id FROM events
+                          WHERE properties.$host = 'www.loveiq.org'
+                            AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC')
+                            AND match(toString(properties.$current_url), '[?&]variant='))`;
+
+/** The hero video block's query: run read-only for 14 – 28 Oct 2026 on 29 Oct, 8 of 364 started. */
+const Q_PH_VIDEO = `-- The landing hero's presenter video (version B, white_video), step by step: the people
+-- PostHog recorded at each step in the range, and each step's share of the people who saw it
+-- (half of its box on screen). Read from 13 Oct 2026, the first whole day PostHog recorded who
+-- saw it. The team's own people are left out, and so is anyone who ever forced a version with
+-- ?variant= in the address: it sticks to their later visits.
+SELECT saw,
+       tapped_play, round(100 * tapped_play / nullIf(saw, 0), 1) AS tapped_play_pct,
+       started, round(100 * started / nullIf(saw, 0), 1) AS started_pct,
+       reached_25, round(100 * reached_25 / nullIf(saw, 0), 1) AS reached_25_pct,
+       reached_50, round(100 * reached_50 / nullIf(saw, 0), 1) AS reached_50_pct,
+       reached_75, round(100 * reached_75 / nullIf(saw, 0), 1) AS reached_75_pct,
+       finished, round(100 * finished / nullIf(saw, 0), 1) AS finished_pct,
+       failed_start, round(100 * failed_start / nullIf(saw, 0), 1) AS failed_start_pct
+FROM (
+  SELECT uniqExactIf(person_id, event = 'cta_seen' AND properties.cta = 'hero_video') AS saw,
+         -- recorded only since its release: none on the days before
+         uniqExactIf(person_id, event = 'hero_video_tap') AS tapped_play,
+         uniqExactIf(person_id, event = 'hero_video_play') AS started,
+         uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 25) AS reached_25,
+         uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 50) AS reached_50,
+         uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 75) AS reached_75,
+         uniqExactIf(person_id, event = 'hero_video_complete') AS finished,
+         -- the film's own: the muted loop the page used to have sent 'preview' errors, no tap's
+         uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full') AS failed_start
+  FROM events
+  WHERE event IN ('cta_seen', 'hero_video_tap', 'hero_video_play', 'hero_video_progress',
+                  'hero_video_complete', 'hero_video_error')
+    AND ${PH_RANGE}
+    AND timestamp >= toDateTime('2026-10-13 00:00:00', 'Europe/Berlin')
+    AND ${PH_NOT_FORCED}
+)`;
+
 const ALL_TRAFFIC =
   "Nothing else: this page reads all traffic (source, device, tier and visitor are fixed). Under the Funnel filter's Free survey, surveys bought before they were taken (pay to start) are left out with their money.";
 
@@ -451,6 +494,16 @@ const T_PH_VIEWS: FieldTable = {
   columns:
     "event ($pageleave, $pageview), timestamp, person_id, properties.$prev_pageview_pathname, $prev_pageview_duration, $prev_pageview_max_scroll_percentage, landing_variant",
 };
+const T_PH_VIDEO: FieldTable = {
+  source: "posthog",
+  table: "events",
+  columns:
+    "event (cta_seen, hero_video_tap, hero_video_play, hero_video_progress, hero_video_complete, hero_video_error), properties.cta, properties.percent, properties.video, timestamp, person_id, $session_id, properties.$host, properties.$current_url",
+  filters:
+    "Period, by timestamp (Berlin days), from 13 Oct 2026 at the earliest. Nothing else: the video is version B's on every visit PostHog recorded (source, device, tier and visitor are fixed on this page, and the Funnel filter doesn't reach it).",
+  watch:
+    "Only version B (white_video) shows the video, so only its visitors send these events. A person counts once in the range, however often they came back.",
+};
 
 const PER_VISIT = "per visit (a browser counts once a day)";
 const POSTHOG_PART =
@@ -470,6 +523,47 @@ const SCROLL_KEYS = [
   "landing.scroll-75",
   "landing.scroll-100",
 ];
+
+/** What every hero video figure counts, reads and leaves out. */
+const VIDEO_PEOPLE =
+  "People, not visits: PostHog's person, counted once in the range however often they came back. From PostHog, which records only part of the visits: nearly every Google Ads visit, far fewer of the rest.";
+const VIDEO_FROM =
+  "Read from 13 Oct 2026, the first whole day PostHog recorded who saw the video: a range starting earlier is read from then.";
+const VIDEO_LEFT_OUT =
+  "The team's own people are left out, and so is anyone who ever forced a version with ?variant= in the address: the override sticks to their later visits.";
+const VIDEO_BOTS =
+  "About 11% of version B's visitors look like bots (no click at all, on Linux and Chrome; 14–28 Oct 2026): those among the people who saw the video never play it, so every share here reads a little low.";
+const VIDEO_WATCH = `${VIDEO_PEOPLE} ${VIDEO_FROM} ${VIDEO_LEFT_OUT} ${VIDEO_BOTS}`;
+
+/** Every hero video card's table and query: the block reads all its steps at once. */
+const VIDEO_SOURCE: Pick<FieldDef, "tables" | "query"> = {
+  tables: [T_PH_VIDEO],
+  query: { lang: "HogQL", text: Q_PH_VIDEO },
+};
+
+const VIDEO_QUARTERS = ["landing.video-25", "landing.video-50", "landing.video-75"];
+
+/** The video's quarter marks, each its own row. */
+function reached(pct: 25 | 50 | 75, how: string): FieldDef {
+  return {
+    label: `Reached ${pct}%`,
+    what: `The share of the people who saw the presenter video who watched at least ${how} of it. With the quarters after it, it shows how long the video holds the people who start it.`,
+    good: "up",
+    stat: "Share",
+    per: "per person PostHog recorded",
+    formula: {
+      num: `People who reached ${pct}% (hero_video_progress)`,
+      den: "People who saw the video",
+      mult: "× 100",
+    },
+    caveat: `A person counts once, whichever of their watches passed ${pct}%: a replay is the same person. Its share of the people whose film started is in the row's read-out. ${VIDEO_WATCH}`,
+    ...VIDEO_SOURCE,
+    related: [
+      ...VIDEO_QUARTERS.filter((k) => k !== `landing.video-${pct}`),
+      "landing.video-finished",
+    ],
+  };
+}
 
 /** The engagement table's four scroll columns, each its own depth. */
 function scroll(pct: 25 | 50 | 75 | 100, how: string, at: string): FieldDef {
@@ -817,4 +911,87 @@ export const fields: FieldRegistry = {
   "landing.scroll-50": scroll(50, "at least half way down", "50%"),
   "landing.scroll-75": scroll(75, "at least three quarters of the way down", "75%"),
   "landing.scroll-100": scroll(100, "to the bottom (99% or more)", "99%"),
+  "landing.hero-video": {
+    label: "Hero video",
+    what: "How far the people who saw version B's presenter video got with it: how many tapped play, saw it start, reached each quarter and watched it to the end, and whose start failed. Each step is a share of the people who saw it.",
+    stat: "Share",
+    per: "per person PostHog recorded",
+    formula: { num: "People at the step", den: "People who saw the video", mult: "× 100" },
+    caveat: VIDEO_WATCH,
+    ...VIDEO_SOURCE,
+    related: ["landing.video-saw", "landing.video-tapped", "landing.video-started"],
+  },
+  "landing.video-saw": {
+    label: "Saw the video",
+    what: "People who had at least half of the presenter video's box on screen. Every other step of the video is a share of them.",
+    stat: "Count",
+    per: "per person PostHog recorded",
+    formula: { num: "People with half of the video's box on screen (cta_seen 'hero_video')" },
+    caveat: `Sent once a page, the first time half of the box is in view: a page view alone isn't enough, as the video can sit below a small phone's first screen and a visitor can leave before it shows. Only version B shows it. ${VIDEO_WATCH}`,
+    ...VIDEO_SOURCE,
+    related: ["landing.video-tapped", "landing.video-started", "landing.hero-video"],
+  },
+  "landing.video-tapped": {
+    label: "Tapped play",
+    what: "The share of the people who saw the presenter video who tapped play: the video's click-through. It shows how many of the people who see the video it makes curious enough to start it.",
+    good: "up",
+    stat: "Share",
+    per: "per person PostHog recorded",
+    formula: {
+      num: "People who tapped play (hero_video_tap)",
+      den: "People who saw the video",
+      mult: "× 100",
+    },
+    caveat: `New: it is recorded only since the release that added it, so a range before then reads 0, and one reaching back before it reads low. Until then Started is the closest measure: a tap whose film began. A tap counts at once, whether or not the film then starts. ${VIDEO_WATCH}`,
+    ...VIDEO_SOURCE,
+    related: ["landing.video-started", "landing.video-saw", "landing.video-failed"],
+  },
+  "landing.video-started": {
+    label: "Started",
+    what: "The share of the people who saw the presenter video whose film showed its first frame after they tapped play.",
+    good: "up",
+    stat: "Share",
+    per: "per person PostHog recorded",
+    formula: {
+      num: "People whose film started (hero_video_play)",
+      den: "People who saw the video",
+      mult: "× 100",
+    },
+    caveat: `Counted when the first frame shows, not at the tap: a start that failed is under Failed to start instead. Until Tapped play was recorded, it is the closest measure of a tap. A second watch is the same person. ${VIDEO_WATCH}`,
+    ...VIDEO_SOURCE,
+    related: ["landing.video-tapped", "landing.video-25", "landing.video-failed"],
+  },
+  "landing.video-25": reached(25, "a quarter"),
+  "landing.video-50": reached(50, "half"),
+  "landing.video-75": reached(75, "three quarters"),
+  "landing.video-finished": {
+    label: "Finished",
+    what: "The share of the people who saw the presenter video who watched it to the end.",
+    good: "up",
+    stat: "Share",
+    per: "per person PostHog recorded",
+    formula: {
+      num: "People who watched to the end (hero_video_complete)",
+      den: "People who saw the video",
+      mult: "× 100",
+    },
+    caveat: `A replay watched to the end counts too: it is the same person. Its share of the people whose film started is in the row's read-out. ${VIDEO_WATCH}`,
+    ...VIDEO_SOURCE,
+    related: ["landing.video-75", "landing.video-started"],
+  },
+  "landing.video-failed": {
+    label: "Failed to start",
+    what: "The share of the people who saw the presenter video who tapped play and whose film never started. Lower is better: it points at the film or the connection (a broken file, a codec, a slow start), not at a lack of interest.",
+    good: "down",
+    stat: "Share",
+    per: "per person PostHog recorded",
+    formula: {
+      num: "People with a start that failed (hero_video_error, the film's)",
+      den: "People who saw the video",
+      mult: "× 100",
+    },
+    caveat: `Its reason says why: the browser's own error name, media-error-N (the file or its codec), paused-before-playing, timeout, or abandoned, the visitor leaving while it was still starting. abandoned is new, recorded only since the release that added Tapped play, so before then a visitor who left mid-start isn't counted here. The muted loop the page used to have sent its own errors (video 'preview'): no tap started it, so they are left out. ${VIDEO_WATCH}`,
+    ...VIDEO_SOURCE,
+    related: ["landing.video-started", "landing.video-tapped"],
+  },
 };
