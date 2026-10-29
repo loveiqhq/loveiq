@@ -55,6 +55,13 @@ describe("legal pages, extracted from JSX", () => {
     expect(text).toContain("Controller");
   });
 
+  // The UG's VAT ID, as on its Stripe receipts and invoice template; the imprint said "TBD".
+  it("gives the imprint's VAT ID, not a placeholder", () => {
+    const text = md("imprint");
+    expect(text).toContain("VAT Identification Number pursuant to §27a UStG: DE465199902");
+    expect(text).not.toContain("TBD");
+  });
+
   /**
    * EVERY NEXT ROUTE FILE IS CALLED `page.tsx`.
    *
