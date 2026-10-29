@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 
 import { fetchFacts } from "@features/admin/server/ap/facts";
 import { beforeData, comparisonRange, parseFilters } from "@features/admin/server/ap/filters";
-import { buildLanding, engagementWindows } from "@features/admin/server/ap/landing";
+import {
+  buildLanding,
+  engagementWindows,
+  heroVideoWindow,
+} from "@features/admin/server/ap/landing";
 import { payToStartFor } from "@features/admin/server/ap/pay-to-start";
 import {
   postHogFailed,
+  fetchHeroVideo,
   fetchLandingEngagement,
   fetchLandingTime,
   type PostHogResult,
@@ -23,7 +28,10 @@ export const maxDuration = 60;
 const settle = <T>(p: Promise<PostHogResult<T>>): Promise<PostHogResult<T>> =>
   p.catch(postHogFailed);
 
-/** AP-Analytics, the landing page: six figures, the tests arm by arm, and each version's engagement. */
+/**
+ * AP-Analytics, the landing page: six figures, the tests arm by arm, each version's engagement
+ * and the presenter video step by step.
+ */
 export async function GET(request: Request) {
   const admin = await apGuard(request, { bucket: "admin-ap-landing" });
   if (admin instanceof NextResponse) return admin;
@@ -40,12 +48,15 @@ export async function GET(request: Request) {
       : Promise.resolve(null);
   try {
     const windows = engagementWindows(filters.from, filters.to, today);
+    const videoDays = heroVideoWindow(filters.from, filters.to);
     const factsRead = fetchFacts(filters.from, filters.to);
-    const [facts, previous, engagement, pageTime, pts, ...perTest] = await Promise.all([
+    const [facts, previous, engagement, pageTime, video, pts, ...perTest] = await Promise.all([
       factsRead,
       cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
       settle(fetchLandingEngagement(filters.from, filters.to)),
       settle(fetchLandingTime(filters.from, filters.to)),
+      // The presenter video, over the days PostHog recorded who saw it.
+      videoDays ? settle(fetchHeroVideo(videoDays.from, videoDays.to)) : Promise.resolve(null),
       // The pay-to-start pages, as the Pay to start page counts them.
       factsRead.then((f) => payToStartFor(filters, f, today, readVercelOidcToken(request))),
       ...windows.map((w) => settle(fetchLandingEngagement(w.from, w.to))),
@@ -63,6 +74,7 @@ export async function GET(request: Request) {
         pageTime,
         pts,
         gateOn: await gateRead,
+        video,
       }),
       {
         headers: NO_STORE,

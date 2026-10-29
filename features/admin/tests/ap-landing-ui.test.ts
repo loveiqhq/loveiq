@@ -83,3 +83,47 @@ describe("landing page tests table", () => {
     expect(screen.queryByText("PostHog saw too few visits")).toBeNull();
   });
 });
+
+describe("the hero video block", () => {
+  const block = () => document.getElementById("hero-video")!;
+
+  it("says PostHog's failure in red, and from when the week is read", () => {
+    const error = "PostHog could not be read just now. Try again in a minute.";
+    // The first run's week ends on 13 Oct, the first whole day PostHog recorded who saw it.
+    screenData.payload = firstRun({ video: { ok: false, error } });
+    render(createElement(ApLanding));
+    expect(within(block()).getByText(error)).toHaveClass("text-ap-bad-ink");
+    expect(within(block()).queryByRole("table")).toBeNull();
+    expect(block().textContent).toContain(
+      "Read from 13 Oct 2026: PostHog records who saw the video from that day"
+    );
+  });
+
+  it("says when it wasn't read, and asks for a range reaching 13 Oct before it", () => {
+    screenData.payload = firstRun();
+    render(createElement(ApLanding));
+    expect(block().textContent).toContain(
+      "PostHog’s video figures could not be read just now. Try again in a minute."
+    );
+    cleanup();
+    screenData.payload = firstRun({
+      facts: factsFixture({
+        from: "2026-10-07",
+        to: "2026-10-12",
+        visits: [],
+        starts: [],
+        subs: [],
+      }),
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-07", to: "2026-10-12" },
+        "2026-10-14"
+      ),
+    });
+    render(createElement(ApLanding));
+    expect(within(block()).queryByRole("table")).toBeNull();
+    expect(block().textContent).toContain(
+      "PostHog records who saw the video from 13 Oct 2026: pick a range reaching that day."
+    );
+    expect(block().textContent).not.toContain("could not be read");
+  });
+});

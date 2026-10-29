@@ -6,7 +6,7 @@
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const screenData = vi.hoisted(() => ({ payload: null as unknown, exported: null as unknown }));
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
@@ -41,14 +41,18 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
 import type { Table } from "@features/admin/server/ap/common";
 import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
-import { buildLanding, LANDING_TESTS } from "@features/admin/server/ap/landing";
+import {
+  buildLanding,
+  HERO_VIDEO_SEEN_FROM,
+  LANDING_TESTS,
+} from "@features/admin/server/ap/landing";
 import {
   measuresOf,
   SURVEY_STARTED_FROM,
   type PtsFunnel,
   type PtsPayload,
 } from "@features/admin/server/ap/pay-to-start";
-import type { LandingArmEngagement } from "@features/admin/server/ap/posthog";
+import type { HeroVideo, LandingArmEngagement } from "@features/admin/server/ap/posthog";
 import ApLanding from "@features/admin/ui/ap/ApLanding";
 import { FieldInfoProvider } from "@features/admin/ui/ap/field-info";
 import { FIELDS } from "@features/admin/ui/ap/fields";
@@ -81,6 +85,16 @@ const ph = (
   timed: sessions,
   sqSeconds: sessions * (median * 14) ** 2,
 });
+
+/** The presenter video's week: 8 of the 364 who saw it started it, and no tap recorded yet. */
+const VIDEO: HeroVideo = {
+  saw: 364,
+  tapped: 0,
+  started: 8,
+  reached: [6, 3, 2],
+  finished: 0,
+  failed: 1,
+};
 
 /** The running hero test's last week, compared with the first run's week. */
 function heroInput(): Parameters<typeof buildLanding>[0] {
@@ -123,6 +137,7 @@ function heroInput(): Parameters<typeof buildLanding>[0] {
     armEngagement: { hero: arms },
     engagement: arms,
     pageTime: { ok: true, value: { median: 4.763, mean: 38.4 } },
+    video: { ok: true, value: VIDEO },
   };
 }
 const heroWeek = () => buildLanding(heroInput());
@@ -439,9 +454,9 @@ describe("an info icon on every figure", () => {
     screenData.payload = heroWeek();
     render(createElement(ApLanding));
     const icons = screen.getAllByRole("button", { name: /^About / });
-    // Six tiles, the tests table's eight figures, the engagement table's seven.
-    // …and the two section titles.
-    expect(icons).toHaveLength(6 + 8 + 7 + 2);
+    // Six tiles, the tests table's eight figures, the engagement table's seven, the hero
+    // video's eight steps …and the three section titles.
+    expect(icons).toHaveLength(6 + 8 + 7 + 8 + 3);
     for (const i of icons) expect(i.getAttribute("title")).not.toBe("Not defined yet.");
     const tests = screen.getByRole("table", { name: "Landing tests and variants" });
     for (const h of within(tests).getAllByRole("columnheader").slice(2))
@@ -455,13 +470,147 @@ describe("an info icon on every figure", () => {
       expect(within(h).getByRole("button", { name: /^About / })).toBeTruthy();
   });
 
+  it("gives each hero video step's card this range's numbers", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {}))
+    );
+    screenData.payload = heroWeek();
+    render(createElement(FieldInfoProvider, null, createElement(ApLanding)));
+    fireEvent.click(screen.getByRole("button", { name: "About Started" }));
+    // 8 of the 364 who saw it: the hand count's 2.2%.
+    expect(screen.getByText("8 ÷ 364 = 2.2%")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "About Saw the video" }));
+    expect(within(document.querySelector("dialog")!).getByText("364")).toBeTruthy();
+  });
+
   it("says for every landing field whether it is a share, an average or a median, and per what", () => {
     const keys = Object.keys(FIELDS).filter((k) => k.startsWith("landing."));
-    expect(keys).toHaveLength(27);
+    // 27, and the hero video's block and its eight steps (29 Oct 2026).
+    expect(keys).toHaveLength(36);
     for (const k of keys) {
       expect(FIELDS[k]!.stat, k).toMatch(/^(Share|Average|Median|Count)$/);
       expect(FIELDS[k]!.per, k).toMatch(/^per /);
     }
     expect(FIELDS["landing.median-time"]!.stat).toBe("Median");
+  });
+});
+
+describe("the hero video block", () => {
+  beforeEach(() => {
+    // A pointer event that carries its pointerType, as a browser's does (jsdom has none).
+    if (!("PointerEvent" in window)) {
+      class PE extends MouseEvent {
+        pointerType: string;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerType = init.pointerType ?? "mouse";
+        }
+      }
+      vi.stubGlobal("PointerEvent", PE);
+    }
+  });
+
+  it("reads a step out on a tap: its people, its share of those who saw it, and of those who started", () => {
+    screenData.payload = heroWeek();
+    render(createElement(ApLanding));
+    const table = screen.getByRole("table", { name: "Hero video, step by step" });
+    fireEvent.pointerDown(within(table).getByRole("row", { name: /Reached 25%/ }), {
+      pointerType: "touch",
+    });
+    const card = document.querySelector("[data-ap-tip]");
+    expect(card).toHaveTextContent("Reached 25%");
+    expect(card).toHaveTextContent("People6");
+    expect(card).toHaveTextContent("Of those who saw it1.6%");
+    // 6 of the 8 whose film started: how far a watch goes.
+    expect(card).toHaveTextContent("Of those who started it75%");
+  });
+
+  it("draws the bar from a tablet up, the failed starts in red and apart", () => {
+    screenData.payload = heroWeek();
+    render(createElement(ApLanding));
+    const table = screen.getByRole("table", { name: "Hero video, step by step" });
+    const groups = within(table).getAllByRole("rowgroup");
+    expect(groups.map((g) => within(g).getAllByRole("row").length)).toEqual([7, 1]);
+    // The bar is the row's last part: hidden from a screen reader, which hears the figures.
+    const bar = within(groups[1]!).getByRole("row").lastElementChild as HTMLElement;
+    expect(bar).toHaveAttribute("aria-hidden", "true");
+    expect(bar).toHaveClass("hidden", "sm:flex");
+    const fill = bar.querySelector(".h-full") as HTMLElement;
+    expect(fill.style.background).toMatch(/^(rgb\(214, 50, 0\)|#d63200)$/i);
+  });
+
+  it("exports its steps: people, and each one's share of those who saw it", () => {
+    screenData.payload = heroWeek();
+    render(createElement(ApLanding));
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const tables = screenData.exported as Array<{ name: string; table: Table }>;
+    const video = tables.find((t) => t.name.startsWith("Hero video"))!;
+    expect(video.name).toBe("Hero video (PostHog, 14 Oct – 20 Oct 2026)");
+    expect(video.table.columns.map((c) => c.label)).toEqual([
+      "Step",
+      "People",
+      "Of those who saw it",
+    ]);
+    expect(video.table.rows[2]).toEqual({ label: "Started", values: [8, 8 / 364] });
+  });
+
+  it("says under it that Tapped play isn't recorded yet, and points to Started", () => {
+    screenData.payload = heroWeek();
+    render(createElement(ApLanding));
+    expect(document.getElementById("hero-video")!.textContent).toContain(
+      "Tapped play is recorded only since its release, so here it counts fewer people than Started: Started, a tap whose film began, is the closest measure for the days before it."
+    );
+  });
+});
+
+describe("the hero video's info cards", () => {
+  const VIDEO_KEYS = [
+    "landing.hero-video",
+    "landing.video-saw",
+    "landing.video-tapped",
+    "landing.video-started",
+    "landing.video-25",
+    "landing.video-50",
+    "landing.video-75",
+    "landing.video-finished",
+    "landing.video-failed",
+  ];
+
+  it("count people, from the day the page reads from, and warn that bots lower every share", () => {
+    for (const k of VIDEO_KEYS) {
+      const f = FIELDS[k]!;
+      expect(f.per, k).toBe("per person PostHog recorded");
+      expect(f.caveat, k).toContain(rangeLabel(HERO_VIDEO_SEEN_FROM, HERO_VIDEO_SEEN_FROM));
+      expect(f.caveat, k).toMatch(/About 11% of version B's visitors look like bots/);
+      expect(f.caveat, k).toMatch(/every share here reads a little low/);
+      // The query the block runs: from the same day, the forced versions and the team left out.
+      expect(f.query.lang, k).toBe("HogQL");
+      expect(f.query.text, k).toContain(
+        `timestamp >= toDateTime('${HERO_VIDEO_SEEN_FROM} 00:00:00', 'Europe/Berlin')`
+      );
+      expect(f.query.text, k).toContain("match(toString(properties.$current_url), '[?&]variant=')");
+      expect(f.query.text, k).toContain("$session_id IN :team_visits");
+    }
+  });
+
+  it("say Tapped play reads 0 before its release, Started being the closest earlier measure", () => {
+    const tapped = FIELDS["landing.video-tapped"]!.caveat!;
+    expect(tapped).toMatch(
+      /recorded only since the release that added it, so a range before then reads 0/
+    );
+    expect(tapped).toMatch(/Until then Started is the closest measure/);
+    expect(FIELDS["landing.video-started"]!.related).toContain("landing.video-tapped");
+  });
+
+  it("say why a start failed, abandoned among the reasons and new", () => {
+    const failed = FIELDS["landing.video-failed"]!;
+    expect(failed.good).toBe("down");
+    for (const reason of ["media-error-N", "paused-before-playing", "timeout", "abandoned"])
+      expect(failed.caveat).toContain(reason);
+    expect(failed.caveat).toMatch(/abandoned is new/);
+    // The muted loop's errors were no tap's: left out.
+    expect(failed.query.text).toContain("properties.video = 'full'");
   });
 });
