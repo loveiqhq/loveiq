@@ -56,6 +56,8 @@ export interface PaygateExitPageProps {
   initialPriceCents?: number;
   /** FullUnlock only: a gift reader (E07) never paid the EUR 1.99, so is told so. */
   unlockSource?: InitialUnlockSource | null;
+  /** Main only: the reader's minutes on the survey, for the box under the guarantee. */
+  surveyMinutes?: number | null;
   /**
    * The reader's submission, or "preview": it seeds the reasons' order. Neither page binds it
    * to the events: the gate stays mounted under its exit page and keeps it bound, and the full
@@ -148,6 +150,7 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
   guaranteeDays,
   initialPriceCents = 199,
   unlockSource = null,
+  surveyMinutes = null,
   seed,
   checkout,
   onUnlock,
@@ -290,7 +293,37 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
               </div>
             </div>
           </div>
-        ) : null}
+        ) : (
+          // Main's box (Marcus, 29.10): the same box as the credit's, under the guarantee.
+          <div className="pge-credit-wrap">
+            <div className="pge-credit">
+              <span className="pge-credit__tile" aria-hidden="true">
+                {surveyMinutes ? (
+                  <>
+                    <span className="pge-credit__amount">{surveyMinutes}</span>
+                    <span className="pge-credit__label">{EXIT_COPY.saved.tileLabel}</span>
+                  </>
+                ) : (
+                  <TickIcon size={22} />
+                )}
+              </span>
+              <div className="pge-credit__text">
+                <span className="pge-credit__title">{EXIT_COPY.saved.title}</span>
+                <span className="pge-credit__line">
+                  {surveyMinutes ? (
+                    <>
+                      {EXIT_COPY.saved.lead}{" "}
+                      <strong>{EXIT_COPY.saved.minutes(surveyMinutes)}</strong>{" "}
+                      {EXIT_COPY.saved.rest}
+                    </>
+                  ) : (
+                    EXIT_COPY.saved.noMinutes
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <section className="pge-why" aria-labelledby={`${offerTitleId}-why`}>
           <ExitTrustpilot />
