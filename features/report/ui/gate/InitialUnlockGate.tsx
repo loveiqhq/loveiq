@@ -17,6 +17,8 @@ export interface InitialUnlockGateProps {
   gate: InitialUnlockGatePayload;
   reportToken: string | null;
   reportSessionId: string | null;
+  /** `?preview=1`: nothing to buy, so its buttons open the report's preview after the EUR 1.99. */
+  preview?: boolean;
 }
 
 /**
@@ -31,11 +33,13 @@ export default function InitialUnlockGate({
   gate,
   reportToken,
   reportSessionId,
+  preview = false,
 }: InitialUnlockGateProps) {
   const { start, state } = useInitialUnlockCheckout({
     priceCents: gate.priceCents,
     reportSessionId,
     reportToken,
+    preview,
   });
 
   // The submission is bound while the gate is on screen, and let go when it goes: "Not ready
