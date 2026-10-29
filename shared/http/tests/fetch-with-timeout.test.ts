@@ -91,6 +91,35 @@ describe("fetchWithTimeout", () => {
     await expect(promise).rejects.toThrow("Request timeout after 5000ms");
   });
 
+  // The message is logged, and a PostgREST query string names the reader: an email filter,
+  // a report token. Only the origin and path may reach it.
+  it("keeps the query string, and the email in it, out of the timeout error", async () => {
+    globalThis.fetch = vi.fn().mockImplementation(
+      (_url: string, opts: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          opts.signal?.addEventListener("abort", () => {
+            const err = new Error("The operation was aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        })
+    );
+
+    const promise = fetchWithTimeout(
+      "https://proj.supabase.co/rest/v1/email_suppression" +
+        `?email=eq.${encodeURIComponent("reader@example.com")}&token=eq.rpt_abc123&select=email`,
+      { timeoutMs: 3000 }
+    );
+    vi.advanceTimersByTime(3000);
+    const err = (await promise.catch((e: unknown) => e)) as Error;
+
+    expect(err.message).toBe(
+      "Request timeout after 3000ms: https://proj.supabase.co/rest/v1/email_suppression"
+    );
+    // pino logs the stack too, whose first line repeats the message.
+    expect(err.stack).not.toMatch(/reader|example\.com|rpt_abc123|email=/);
+  });
+
   it("re-throws non-abort errors", async () => {
     const networkError = new Error("Network failure");
     globalThis.fetch = vi.fn().mockRejectedValue(networkError);

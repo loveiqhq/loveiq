@@ -52,7 +52,10 @@ export async function fetchWithTimeout(
     return response;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout after ${timeoutMs}ms: ${url}`);
+      // Origin and path only: this message ends up in logs, and a query string carries
+      // PostgREST filters such as `email=eq.<address>` or `token=eq.rpt_…`. Callers match
+      // on the "Request timeout after" prefix, never on the URL.
+      throw new Error(`Request timeout after ${timeoutMs}ms: ${url.split("?")[0]}`);
     }
     throw error;
   }
