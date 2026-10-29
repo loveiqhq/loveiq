@@ -44,7 +44,6 @@ const PRE: PaygateExitPageProps = {
   onUnlock,
   onBack,
   onLeave,
-  leaveHref: "/",
   random: () => 0,
 };
 
@@ -119,11 +118,12 @@ describe("the EUR 1.99 gate's exit page (Marcus's Main board)", () => {
     expect(list.querySelector(".pay-logos__mark--klarna")).not.toBeNull();
   });
 
-  it("asks why, and leaves by “Maybe later” to the landing page", () => {
+  it("asks why, and offers “Maybe later”, which leads nowhere else", () => {
     render(<PaygateExitPage {...PRE} />);
     expect(screen.getByRole("heading", { name: "Not today? Tell us why." })).toBeTruthy();
     expect(screen.getAllByRole("radio")).toHaveLength(8);
-    expect(screen.getByRole("link", { name: "Maybe later" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "Maybe later" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Maybe later" })).toBeNull();
   });
 
   it("says the result is saved, with the minutes the reader put in (Marcus's box, 29.10)", () => {
@@ -208,7 +208,8 @@ describe("the full report's exit page (Marcus's FullUnlock board)", () => {
     );
     expect(document.querySelector(".pge-sticky__credit")?.textContent).toBe("€10 credit applied");
     expect(screen.getByRole("button", { name: "Back to my open chapters" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Maybe later" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Maybe later" })).toBeNull();
+    expect(document.querySelector(".pge-leave__saved")).toBeNull();
   });
 
   // It sits in its dialog over the report, whose <main> is still there.
@@ -262,16 +263,24 @@ describe("what the exit pages record and do", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("records “Maybe later” on a plain click only; a new tab is no leaving", () => {
+  // Sync 29.10: the landing page loses a reader who has finished the survey, so "Maybe later"
+  // keeps them here and tells them how they come back.
+  it("records “Maybe later” once, stays, and says the result is saved in its place", () => {
     render(<PaygateExitPage {...PRE} />);
-    const later = screen.getByRole("link", { name: "Maybe later" });
-    later.addEventListener("click", (event) => event.preventDefault());
-    fireEvent.click(later, { metaKey: true });
-    fireEvent.click(later, { button: 1 });
-    expect(mockLeave).not.toHaveBeenCalled();
-    fireEvent.click(later);
+    // A live region from the start (the reasons' thank-you is another), filled on the press.
+    const status = document.querySelector<HTMLElement>(".pge-leave__saved")!;
+    expect(status).toHaveAttribute("role", "status");
+    expect(status.textContent).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Maybe later" }));
+    expect(mockLeave).toHaveBeenCalledTimes(1);
     expect(mockLeave).toHaveBeenCalledWith({ stage: "pre", via: "maybe_later" });
-    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Maybe later" })).toBeNull();
+    expect(status.textContent).toBe("Saved. The link to your result is in your email.");
+    expect(document.activeElement).toBe(status);
+    // The offer stays usable.
+    expect(screen.getByRole("button", { name: "Unlock risk-free · €1.99" })).toBeEnabled();
   });
 
   it("records “Back to my open chapters”", () => {

@@ -189,7 +189,6 @@ import {
   trackReportChapterMenuOpened,
   trackReportShareOpened,
   trackReportViewed,
-  markLeftInitialGate,
 } from "@features/analytics/client";
 import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { REPORT_LAYOUT_V4_SLIM } from "@features/analytics/reportLayout";
@@ -3671,7 +3670,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             reportSessionId={token ? null : sessionId}
             preview={isPreview}
             onBack={closeExit}
-            onLeave={markLeftInitialGate}
           />
         ) : null}
       </>

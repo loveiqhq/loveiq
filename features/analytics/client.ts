@@ -899,8 +899,9 @@ const LEFT_INITIAL_GATE_KEY = "liq_left_initial_gate";
 
 /**
  * A reader the EUR 1.99 gate stopped is on their way to the landing page: the gate's own way
- * out did this until 28.10, its exit page's "Maybe later" does it now. The landing page then
- * neither counts a visit nor registers a landing arm for them.
+ * out did this until 28.10, and its exit page's "Maybe later" from 28.10 to 29.10 (since then it
+ * stays on the page). The landing page then neither counts a visit nor registers a landing arm
+ * for them.
  */
 export const markLeftInitialGate = () => {
   try {
@@ -975,8 +976,9 @@ export const trackPaygateExitCta = (params: {
 };
 
 /**
- * Left an exit page: its back arrow (`back`), "Maybe later" to the landing page, or "Back to
- * my open chapters" (`chapters`).
+ * Left an exit page: its back arrow (`back`), "Maybe later" (`maybe_later`: to the landing page
+ * until 29.10, since then the page stays and says the result is saved), or "Back to my open
+ * chapters" (`chapters`).
  */
 export const trackPaygateExitLeave = (params: {
   stage: PaygateExitStage;
