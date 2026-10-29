@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * P-09: write a failed Slack send to the dead-letter table so an operator can
@@ -15,7 +16,7 @@ async function writeSlackDeadLetter(input: {
   failureReason: string;
   httpStatus?: number;
 }): Promise<void> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) return;
 

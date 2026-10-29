@@ -23,6 +23,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 import { withoutTrackingParams } from "@shared/url/utm";
 
 import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "./scanners";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * Scanners the digest must stay silent about.
@@ -543,7 +544,7 @@ export interface CoverageStat {
  * healthy one.
  */
 export async function fetchCoverageStats(at = Date.now()): Promise<CoverageStat | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const posthogKey = process.env.POSTHOG_API_KEY;
   if (!url || !key || !posthogKey) return null;
@@ -846,7 +847,7 @@ export async function fetchScannerCoverage(days = 7): Promise<ScannerCoverage[] 
 }
 
 export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
@@ -1126,7 +1127,7 @@ export function buildScorecardMessage(
 }
 
 export async function fetchVerificationStats(at = Date.now()): Promise<VerificationStat | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
@@ -1636,7 +1637,7 @@ export function isSafeSessionId(sessionId: string): boolean {
  * the probe then keeps its own default rather than being handed a guess.
  */
 export async function reportTokenForSession(sessionId: string): Promise<string | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key || !isSafeSessionId(sessionId)) return null;
   const headers = { apikey: key, Authorization: `Bearer ${key}` };
@@ -1742,7 +1743,7 @@ export const SURVEY_RESTART_MIN_DROP = 5;
 export async function restartForSurveySession(
   surveySessionId: string
 ): Promise<SurveyRestartWitness | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key || !isSafeSessionId(surveySessionId)) return null;
   try {
@@ -1766,7 +1767,7 @@ export async function restartForSurveySession(
 export async function surveyRestartWitness(
   sessionId: string
 ): Promise<SurveyRestartWitness | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key || !isSafeSessionId(sessionId)) return null;
   const headers = { apikey: key, Authorization: `Bearer ${key}` };

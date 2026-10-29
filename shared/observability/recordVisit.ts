@@ -5,6 +5,7 @@ import { isPayToStartOfferId } from "@features/pay-to-start/logic/offer";
 import { sanitizeUtmSource } from "@shared/url/utm";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * Record ONE aggregate, non-identifying daily unique-visit in `funnel_event`.
@@ -26,7 +27,7 @@ async function writeFunnelEvent(
   utmSource?: string,
   offer?: string
 ): Promise<void> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) return;
 

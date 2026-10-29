@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const REQUIRED_ENV_VARS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RESEND_API_KEY"];
 
@@ -21,13 +22,13 @@ const REQUIRED_ENV_VARS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RESEND_
 // that fired a false UptimeRobot outage while every real dependency was up).
 
 async function pingSupabase(): Promise<boolean> {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return false;
+  if (!supabaseRestUrl() || !process.env.SUPABASE_SERVICE_ROLE_KEY) return false;
   // Retry once: a single dropped/slow response shouldn't read as "DB down" when
   // Supabase is actually healthy — this is the one liveness-critical dependency,
   // so a transient blip must not surface as a hard 503.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const res = await fetchWithTimeout(`${process.env.SUPABASE_URL}/rest/v1/`, {
+      const res = await fetchWithTimeout(`${supabaseRestUrl()}/rest/v1/`, {
         headers: {
           apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
           Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,

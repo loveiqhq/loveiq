@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
+import { supabaseAuthUrl, supabaseRestUrl } from "@shared/env/supabase-urls";
 import logger from "@shared/observability/logger";
 
 const TIMEOUT_MS = 8000;
@@ -237,7 +238,9 @@ export async function supabaseFetch(
   path: string,
   options: SupabaseFetchOptions = {}
 ): Promise<Response> {
-  const url = process.env.SUPABASE_URL;
+  // The admin login and Jarvis's sign-in codes call Auth (`/auth/v1/admin/...`) through
+  // here too; everything else is the data API.
+  const url = path.startsWith("/auth/v1/") ? supabaseAuthUrl() : supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

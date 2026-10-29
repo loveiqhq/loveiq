@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * Atomically claim a Slack alert slot for (kind, entityType, entityId).
@@ -24,7 +25,7 @@ export async function tryClaimSlackAlert(
   entityType: string,
   entityId: string
 ): Promise<boolean> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     logger.warn({ kind, entityType, entityId }, "tryClaimSlackAlert: supabase not configured");
@@ -86,7 +87,7 @@ export async function markSlackAlertDelivered(
   entityType: string,
   entityId: string
 ): Promise<void> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return;
 
@@ -169,7 +170,7 @@ export async function recordCronRun(
   status: "success" | "error" | "timeout",
   errorMessage?: string
 ): Promise<void> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     logger.warn({ cronName }, "recordCronRun: supabase not configured");

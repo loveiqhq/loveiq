@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 // Pinning the API version makes Stripe API changes deterministic — they cannot
 // silently shift behavior on us between SDK upgrades.
@@ -363,7 +364,7 @@ export async function getStripeCheckoutCustomerEmail({
   reportSessionId?: string | null;
   reportToken?: string | null;
 }) {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {

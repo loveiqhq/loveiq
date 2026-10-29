@@ -15,6 +15,7 @@ import { resolveSubmissionAccessContext } from "@features/report/server/personal
 import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 // Whitelist sectionId against the sections the page rates (the canonical list, plus
 // the five panels it rates that have no row there). Without this allowlist, an
@@ -219,7 +220,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

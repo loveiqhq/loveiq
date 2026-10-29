@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const SUPABASE_TIMEOUT_MS = 5_000;
 
@@ -35,7 +36,7 @@ function asNumber(v: unknown): number | null {
 }
 
 function getSupabaseHeaders() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) return null;
   return {

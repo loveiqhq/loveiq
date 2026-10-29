@@ -3,6 +3,7 @@ import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const REPORT_SHARE_TOKEN_REGEX = /^rpts_[A-Za-z0-9]{20}$/;
 export { REPORT_ACCESS_TOKEN_REGEX };
@@ -50,7 +51,7 @@ export interface ShareAccessContext {
 const SUPABASE_TIMEOUT_MS = 8_000;
 
 function getSupabaseServiceConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

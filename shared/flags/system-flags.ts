@@ -27,6 +27,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export type SystemFlagKey =
   | "survey_submissions"
@@ -52,7 +53,7 @@ interface CacheEntry {
 const cache = new Map<SystemFlagKey, CacheEntry>();
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };

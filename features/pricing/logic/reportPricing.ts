@@ -19,6 +19,7 @@ import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
 import { readInitialGateState } from "@features/report/server/initialGateState";
 import logger from "@shared/observability/logger";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
@@ -505,7 +506,7 @@ function pinsListPrice(
 }
 
 function getSupabaseServiceConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

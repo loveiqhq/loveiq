@@ -50,3 +50,41 @@ describe("supabaseFetch: which breaker a call counts against", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * The admin login and Jarvis's sign-in codes call Auth through supabaseFetch too, so the
+ * path decides the address: SUPABASE_AUTH_URL for `/auth/v1/`, SUPABASE_REST_URL for the rest.
+ */
+describe("supabaseFetch: which address a call goes to", () => {
+  const ok = { ok: true, status: 200, headers: { get: () => null }, json: async () => [] };
+  const urls = () => mockFetch.mock.calls.map(([url]) => url);
+  beforeEach(() => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue(ok);
+    vi.stubEnv("SUPABASE_URL", "https://proj.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sends both to SUPABASE_URL while the overrides are unset", async () => {
+    await supabaseFetch("/rest/v1/payment?select=id");
+    await supabaseFetch("/auth/v1/admin/users", { method: "POST", body: "{}" });
+    expect(urls()).toEqual([
+      "https://proj.supabase.co/rest/v1/payment?select=id",
+      "https://proj.supabase.co/auth/v1/admin/users",
+    ]);
+  });
+
+  it("sends the data API and Auth to their own addresses when set", async () => {
+    vi.stubEnv("SUPABASE_REST_URL", "https://db.example");
+    vi.stubEnv("SUPABASE_AUTH_URL", "https://auth.example");
+    await supabaseFetch("/rest/v1/payment?select=id");
+    await supabaseFetch("/auth/v1/admin/generate_link", { method: "POST", body: "{}" });
+    expect(urls()).toEqual([
+      "https://db.example/rest/v1/payment?select=id",
+      "https://auth.example/auth/v1/admin/generate_link",
+    ]);
+  });
+});

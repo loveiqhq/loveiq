@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { isStaffEmail } from "@shared/env/staff-email";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -572,7 +573,7 @@ interface ServiceFetchOptions {
 type PaymentStatus = "canceled" | "disputed" | "failed" | "refunded" | "succeeded";
 
 function getSupabaseServiceConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {
