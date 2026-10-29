@@ -24,7 +24,7 @@ import { HERO_POSTER_SRC, HERO_VIDEO_SRC } from "./heroVideoFiles";
  * so nothing reflows when one takes over from the other:
  *   1. the poster, a caption-free pause from the video, server-rendered and fetched at
  *      high priority — it is the largest thing above the fold on a desktop — under a big
- *      white play button, after Pay to start's player (Figma 1706:1720);
+ *      play button in the brand gradient (the old corner pill's), pulsing softly;
  *   2. the full video with sound, mounted from the start but with no src: the tap names
  *      the file and calls `play()` inside the gesture (iOS plays with sound only from
  *      one), so no engine fetches a byte of it before the tap.
@@ -340,19 +340,30 @@ const WHeroVideo: FC = () => {
           <span
             aria-hidden
             data-testid="hero-video-play-icon"
-            className="absolute left-1/2 top-[70%] flex h-[60px] w-[60px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_-8px_rgba(22,16,33,0.45)] transition-transform duration-300 motion-safe:group-hover:scale-[1.08] sm:h-[84px] sm:w-[84px]"
+            className="absolute left-1/2 top-[70%] h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 transition-transform duration-300 motion-safe:group-hover:scale-[1.08] sm:h-[72px] sm:w-[72px]"
           >
-            {phase === "starting" ? (
-              <span className="h-5 w-5 rounded-full border-2 border-[#161021]/25 border-t-[#161021] motion-safe:animate-spin sm:h-7 sm:w-7" />
-            ) : (
-              <svg
-                viewBox="0 0 12 12"
-                fill="#161021"
-                className="ml-[3px] h-5 w-5 sm:ml-1 sm:h-7 sm:w-7"
-              >
-                <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
-              </svg>
+            {/* A soft ring swelling out of the circle and fading, as the hero's live dot pings:
+                none under reduced motion, and none while the film starts. */}
+            {phase !== "starting" && (
+              <span
+                data-testid="hero-video-play-pulse"
+                className="absolute inset-0 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] opacity-0 motion-safe:animate-play-pulse motion-reduce:hidden"
+              />
             )}
+            {/* The old corner pill's circle (before 29.10): the brand gradient, a white triangle. */}
+            <span className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] shadow-[0_8px_24px_-8px_rgba(22,16,33,0.55)] ring-2 ring-white/30">
+              {phase === "starting" ? (
+                <span className="h-[18px] w-[18px] rounded-full border-2 border-white/40 border-t-white motion-safe:animate-spin sm:h-6 sm:w-6" />
+              ) : (
+                <svg
+                  viewBox="0 0 12 12"
+                  fill="white"
+                  className="ml-[2px] h-[18px] w-[18px] sm:ml-[3px] sm:h-6 sm:w-6"
+                >
+                  <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
+                </svg>
+              )}
+            </span>
           </span>
           <span className="absolute bottom-2.5 right-2.5 rounded-full bg-[#161021]/75 px-2 py-0.5 text-[12px] font-medium leading-[18px] text-white tabular-nums sm:bottom-4 sm:right-4 sm:px-2.5 sm:py-1 sm:text-[14px] sm:leading-[20px]">
             {DURATION_LABEL}
