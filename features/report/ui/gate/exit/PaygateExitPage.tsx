@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
+import Link from "next/link";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FC,
+  type MouseEvent,
+} from "react";
 import { trackPaygateExitLeave, trackPaygateExitViewed } from "@features/analytics/client";
 import {
   getTrustpilotConfig,
@@ -58,11 +67,9 @@ export interface PaygateExitPageProps {
   checkout: { busy: boolean; error: string | null; errorPlace: ExitCtaPlace | null };
   onUnlock: (place: ExitCtaPlace) => void;
   onBack: () => void;
-  /**
-   * FullUnlock's quiet way out at the foot, "Back to my open chapters". Main's "Maybe later"
-   * leaves nothing: it stays and says the result is saved (sync 29.10).
-   */
-  onLeave?: () => void;
+  /** The quiet way out at the foot: "Maybe later" (a link, `leaveHref`) or "Back to my open chapters". */
+  onLeave: () => void;
+  leaveHref?: string;
   /** Tests pin the reasons' order outright. */
   random?: () => number;
 }
@@ -149,6 +156,7 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
   onUnlock,
   onBack,
   onLeave,
+  leaveHref,
   random,
 }) => {
   const offerTitleId = useId();
@@ -184,18 +192,15 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
     trackPaygateExitLeave({ stage, via: "back" });
     onBack();
   };
-  // "Maybe later" (Main) keeps the reader in the loop (sync 29.10: the landing page loses
-  // them) and tells them how they come back: the result is saved and its link is in their
-  // email. The line takes the focus the button had, and is read out.
-  const [later, setLater] = useState(false);
-  const savedRef = useRef<HTMLParagraphElement | null>(null);
-  useEffect(() => {
-    if (later) savedRef.current?.focus({ preventScroll: true });
-  }, [later]);
   const leave = () => {
     trackPaygateExitLeave({ stage, via: full ? "chapters" : "maybe_later" });
-    if (full) onLeave?.();
-    else setLater(true);
+    onLeave();
+  };
+  // As the gate's own way out: a plain left click counts; a new tab or window does not leave.
+  const leaveByLink = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    leave();
   };
 
   const features = full
@@ -415,20 +420,19 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
         </section>
 
         <div className="pge-leave">
-          {later ? null : (
+          {leaveHref ? (
+            <Link
+              href={leaveHref}
+              prefetch={false}
+              className="pge-leave__link"
+              onClick={leaveByLink}
+            >
+              {EXIT_COPY.leave[stage]}
+            </Link>
+          ) : (
             <button type="button" className="pge-leave__link" onClick={leave}>
               {EXIT_COPY.leave[stage]}
             </button>
-          )}
-          {full ? null : (
-            <p ref={savedRef} className="pge-leave__saved" role="status" tabIndex={-1}>
-              {later ? (
-                <>
-                  <TickIcon />
-                  {EXIT_COPY.leave.saved}
-                </>
-              ) : null}
-            </p>
           )}
         </div>
 
