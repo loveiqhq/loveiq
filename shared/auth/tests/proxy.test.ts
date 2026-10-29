@@ -1129,7 +1129,6 @@ describe("the landing hero video stays outside the middleware", () => {
 
   it("serves everything under /videos/ without running the middleware", () => {
     expect(runsOn("/videos/white/emma-intro.96705e65.mp4")).toBe(false);
-    expect(runsOn("/videos/white/emma-preview.a47a3687.mp4")).toBe(false);
   });
 
   it("still runs on a video at the site root, so the exclusion is the folder, not the type", () => {

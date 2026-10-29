@@ -3,34 +3,36 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 import Image from "next/image";
 import {
+  trackHeroVideoAbandoned,
   trackHeroVideoComplete,
   trackHeroVideoError,
   trackHeroVideoPaused,
   trackHeroVideoPlay,
   trackHeroVideoProgress,
   trackHeroVideoResumed,
+  trackHeroVideoTap,
 } from "@features/analytics/client";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
-import { HERO_POSTER_SRC, HERO_PREVIEW_SRC, HERO_VIDEO_SRC } from "./heroVideoFiles";
+import { HERO_POSTER_SRC, HERO_VIDEO_SRC } from "./heroVideoFiles";
 
 /**
  * Arm B's hero (Figma Report-3.0 `1503:12473`, "B- Landingpage_5.10.26"): the presenter
  * video in the slot where arm A asks question 1.
  *
- * Three layers in one rounded box, so nothing reflows when one takes over from another:
+ * Paused until tapped. The silent loop asked for at the 2026-10-06 sync went at the 29.10
+ * one: Marcus suspected it of keeping people from tapping. Two layers in one rounded box,
+ * so nothing reflows when one takes over from the other:
  *   1. the poster, a caption-free pause from the video, server-rendered and fetched at
- *      high priority — it is the largest thing above the fold on a desktop;
- *   2. a 7.5 s silent loop of the opening ("the animated GIF that already rolls" asked
- *      for at the 2026-10-06 sync), which only rolls on screen, in a visible tab, and
- *      never under reduced motion, Save-Data or a 2G/3G link;
- *   3. the full video with sound, mounted from the start but with no src: the tap names
+ *      high priority — it is the largest thing above the fold on a desktop — under a big
+ *      white play button, after Pay to start's player (Figma 1706:1720);
+ *   2. the full video with sound, mounted from the start but with no src: the tap names
  *      the file and calls `play()` inside the gesture (iOS plays with sound only from
  *      one), so no engine fetches a byte of it before the tap.
  *
  * Files: encoded from Marcus's VEED export (see public/AGENT_README.md). The captions are
- * burned in, so the silent loop stays readable and no caption track is needed.
+ * burned in, so no caption track is needed.
  */
-export { HERO_POSTER_SRC, HERO_PREVIEW_SRC, HERO_VIDEO_SRC };
+export { HERO_POSTER_SRC, HERO_VIDEO_SRC };
 
 /** The full video runs 70.4 s. */
 const DURATION_LABEL = "1:10";
@@ -43,39 +45,16 @@ const MILESTONES = [25, 50, 75] as const;
  */
 const START_TIMEOUT_MS = 12_000;
 
-/** preview: poster + loop + button · starting: tapped, waiting for frames · playing: own controls. */
-type Phase = "preview" | "starting" | "playing";
+/** poster: the poster and the button · starting: tapped, waiting for frames · playing: own controls. */
+type Phase = "poster" | "starting" | "playing";
 
 const errorName = (error: unknown): string =>
   (error as { name?: string } | null)?.name || "play-rejected";
 
-type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
 type WebkitVideo = HTMLVideoElement & {
   webkitDisplayingFullscreen?: boolean;
   webkitExitFullscreen?: () => void;
 };
-
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-
-const subscribeToMotion = (onChange: () => void) => {
-  if (typeof window.matchMedia !== "function") return () => {};
-  const query = window.matchMedia(REDUCED_MOTION);
-  query.addEventListener?.("change", onChange);
-  return () => query.removeEventListener?.("change", onChange);
-};
-
-/** Whether the silent loop may roll at all on this device and connection. */
-const previewAllowed = (): boolean => {
-  if (typeof window.matchMedia === "function" && window.matchMedia(REDUCED_MOTION).matches) {
-    return false;
-  }
-  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
-  if (connection?.saveData) return false;
-  return !/^(slow-2g|2g|3g)$/.test(connection?.effectiveType ?? "");
-};
-
-// The server never renders the loop's src: the decision needs the visitor's device.
-const previewAllowedOnServer = () => false;
 
 // True once this component has hydrated, i.e. once the button has its click handler.
 const subscribeToNothing = () => () => {};
@@ -90,24 +69,36 @@ const exitFullscreen = (video: WebkitVideo) => {
   }
 };
 
+/**
+ * The full video as it was before the first tap: no source, nothing loading, no error.
+ *
+ * A media element that has failed keeps its error, and play() on it then rejects at
+ * once (NotSupportedError, in Chrome, Safari and Firefox alike), so without this the
+ * button came back after a dropped connection and every later tap failed. One given up
+ * on by the timeout would also keep downloading, and could start later, with sound,
+ * behind the poster. The next tap names the file again, exactly like the first.
+ */
+const unload = (video: HTMLVideoElement) => {
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+};
+
 const WHeroVideo: FC = () => {
-  const previewOn = useSyncExternalStore(subscribeToMotion, previewAllowed, previewAllowedOnServer);
   const hydrated = useSyncExternalStore(subscribeToNothing, hydratedInBrowser, notHydratedOnServer);
-  const [phase, setPhase] = useState<Phase>("preview");
-  const [loopShowing, setLoopShowing] = useState(false);
+  const [phase, setPhase] = useState<Phase>("poster");
 
   const boxRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<HTMLVideoElement>(null);
   const fullRef = useRef<HTMLVideoElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  // Mirrors of state that the media and observer callbacks read between renders.
-  const phaseRef = useRef<Phase>("preview");
-  const inViewRef = useRef(false);
+  // Mirrors of state that the media callbacks read between renders.
+  const phaseRef = useRef<Phase>("poster");
   const playsRef = useRef(0);
+  // Whether the watch now playing is a replay, for its milestones and its finish.
+  const replayRef = useRef(false);
   const milestonesSentRef = useRef(new Set<number>());
   const pausedByViewerRef = useRef(false);
   const startTimerRef = useRef<number | undefined>(undefined);
-  const previewErrorSentRef = useRef(false);
   // Set when the video had focus as it handed back to the poster: the button it returns
   // focus to exists only once that render has committed.
   const refocusButtonRef = useRef(false);
@@ -122,87 +113,44 @@ const WHeroVideo: FC = () => {
     startTimerRef.current = undefined;
   }, []);
 
-  useEffect(() => clearStartTimer, [clearStartTimer]);
-
   useEffect(() => {
-    if (phase !== "preview" || !refocusButtonRef.current) return;
+    if (phase !== "poster" || !refocusButtonRef.current) return;
     refocusButtonRef.current = false;
     buttonRef.current?.focus({ preventScroll: true });
   }, [phase]);
 
-  /** Once per page: a broken loop file or codec. A blocked autoplay never gets here. */
-  const reportPreviewError = useCallback((reason: string) => {
-    if (previewErrorSentRef.current) return;
-    previewErrorSentRef.current = true;
-    trackHeroVideoError({ video: "preview", reason });
-  }, []);
-
-  /** Rolls the loop only while it is on screen, in a visible tab, and nothing else plays. */
-  const syncPreview = useCallback(() => {
-    const preview = previewRef.current;
-    if (!preview) return;
-    const shouldRoll =
-      phaseRef.current === "preview" && inViewRef.current && document.visibilityState === "visible";
-    if (!shouldRoll) {
-      preview.pause();
-      return;
-    }
-    // React sets `muted` as a property and never writes the attribute; iOS reads both.
-    preview.muted = true;
-    preview.defaultMuted = true;
-    void preview.play()?.catch((error: unknown) => {
-      const name = errorName(error);
-      // Low Power Mode or a blocked autoplay, or one of our own pause() calls: the
-      // poster and the button stay, as designed. Anything else is a fault worth seeing.
-      if (name === "NotAllowedError" || name === "AbortError") return;
-      reportPreviewError(name);
-    });
-  }, [reportPreviewError]);
-
+  /**
+   * A tap whose film had not started when the visitor left sent nothing: the timeout that
+   * would have reported it dies with the page. So leaving ends the start, once, and says
+   * so by beacon — on `pagehide` (the tab closed, or another site), or on unmount (another
+   * page of the app). Back on the poster with nothing loading, should the page come back
+   * from the browser's cache.
+   */
   useEffect(() => {
-    if (!previewOn) return;
-    const box = boxRef.current;
-    const preview = previewRef.current;
-    if (!box || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // One callback can carry several crossings; the last is where the box is now.
-        const entry = entries[entries.length - 1];
-        inViewRef.current = !!entry && entry.intersectionRatio >= 0.25;
-        syncPreview();
-      },
-      { threshold: [0, 0.25] }
-    );
-    observer.observe(box);
-    document.addEventListener("visibilitychange", syncPreview);
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", syncPreview);
-      preview?.pause();
+    // The film's element lives as long as this component; React lets go of the ref before
+    // an unmount's cleanup runs.
+    const full = fullRef.current;
+    const leave = () => {
+      if (phaseRef.current !== "starting") return;
+      clearStartTimer();
+      if (full) unload(full);
+      moveTo("poster");
+      trackHeroVideoAbandoned();
     };
-  }, [previewOn, syncPreview]);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, [clearStartTimer, moveTo]);
 
-  // Whether it was on screen, loop or no loop: under reduced motion or Save-Data the poster
-  // and the button are what a visitor sees. Since the condensed phone hero (12.10) it sits
-  // on the first screen of most phones, not all, and a visitor can leave before it loads,
-  // so this, not the page view, is the denominator for the share who tapped play.
+  // Whether it was on screen. Since the condensed phone hero (12.10) it sits on the first
+  // screen of most phones, not all, and a visitor can leave before it loads, so this, not
+  // the page view, is the denominator for the share who tap play.
   useCtaSeen(boxRef, "hero_video");
 
-  /**
-   * The full video as it was before the first tap: no source, nothing loading, no error.
-   *
-   * A media element that has failed keeps its error, and play() on it then rejects at
-   * once (NotSupportedError, in Chrome, Safari and Firefox alike), so without this the
-   * button came back after a dropped connection and every later tap failed. One given up
-   * on by the timeout would also keep downloading, and could start later, with sound,
-   * behind the poster. The next tap names the file again, exactly like the first.
-   */
   const resetFull = () => {
-    const full = fullRef.current;
-    if (!full) return;
-    full.pause();
-    full.removeAttribute("src");
-    full.load();
+    if (fullRef.current) unload(fullRef.current);
   };
 
   /**
@@ -216,12 +164,11 @@ const WHeroVideo: FC = () => {
     resetFull();
     // The button is disabled while it starts, and a focused control that is disabled
     // loses focus to the page (measured: Chrome, Safari and Firefox), so a keyboard
-    // user who pressed Watch was left at the top of the page. Back on the button,
+    // user who pressed play was left at the top of the page. Back on the button,
     // unless they have moved on to something else meanwhile.
     const active = document.activeElement;
     refocusButtonRef.current = !active || active === document.body || active === buttonRef.current;
-    moveTo("preview");
-    syncPreview();
+    moveTo("poster");
     trackHeroVideoError({ video: "full", reason });
   };
 
@@ -229,15 +176,16 @@ const WHeroVideo: FC = () => {
   const backToPoster = (full: WebkitVideo) => {
     refocusButtonRef.current = document.activeElement === full;
     exitFullscreen(full);
-    moveTo("preview");
-    syncPreview();
+    moveTo("poster");
   };
 
   const startFullVideo = () => {
     const full = fullRef.current;
-    if (!full || phaseRef.current !== "preview") return;
+    if (!full || phaseRef.current !== "poster") return;
+    // Counted at once: the share who tap is the click-through, and a start that stalls
+    // is still a tap. A play is counted later, when frames show.
+    trackHeroVideoTap({ replay: playsRef.current > 0 });
     // Everything up to play() happens inside the tap, before any state update.
-    previewRef.current?.pause();
     // The file is named only now. With the src in the page and `preload="none"`, WebKit
     // on Linux still opened a request for the 5 MB file on load (CI, 2026-10-07); with
     // no src there is nothing any engine can fetch before the tap.
@@ -262,7 +210,8 @@ const WHeroVideo: FC = () => {
     clearStartTimer();
     moveTo("playing");
     // Counted when frames start, not at the tap, so a failed start is never a play.
-    trackHeroVideoPlay({ replay: playsRef.current > 0 });
+    replayRef.current = playsRef.current > 0;
+    trackHeroVideoPlay({ replay: replayRef.current });
     playsRef.current += 1;
     // The button that had focus is gone; the video's own controls take it.
     requestAnimationFrame(() => fullRef.current?.focus({ preventScroll: true }));
@@ -307,14 +256,14 @@ const WHeroVideo: FC = () => {
     for (const milestone of MILESTONES) {
       if (percent >= milestone && !milestonesSentRef.current.has(milestone)) {
         milestonesSentRef.current.add(milestone);
-        trackHeroVideoProgress({ percent: milestone });
+        trackHeroVideoProgress({ percent: milestone, replay: replayRef.current });
       }
     }
   };
 
   const onFullEnded = () => {
     const full = fullRef.current as WebkitVideo | null;
-    trackHeroVideoComplete();
+    trackHeroVideoComplete({ replay: replayRef.current });
     // Not reset: a replay plays from what is already loaded.
     if (full) backToPoster(full);
   };
@@ -341,26 +290,6 @@ const WHeroVideo: FC = () => {
         fetchPriority="high"
         loading="eager"
         className="rounded-[inherit] object-cover"
-      />
-      <video
-        ref={previewRef}
-        data-testid="hero-video-preview"
-        src={previewOn ? HERO_PREVIEW_SRC : undefined}
-        muted
-        loop
-        playsInline
-        preload="none"
-        aria-hidden
-        tabIndex={-1}
-        disablePictureInPicture
-        disableRemotePlayback
-        onPlaying={() => setLoopShowing(true)}
-        onError={() =>
-          reportPreviewError(`media-error-${previewRef.current?.error?.code ?? "unknown"}`)
-        }
-        className={`absolute inset-0 h-full w-full rounded-[inherit] object-cover transition-opacity duration-500 ${
-          loopShowing && !fullShowing ? "opacity-100" : "opacity-0"
-        }`}
       />
       <video
         ref={fullRef}
@@ -392,35 +321,41 @@ const WHeroVideo: FC = () => {
           data-testid="hero-video-play"
           onClick={startFullVideo}
           disabled={phase === "starting"}
-          // Contains both visible words ("Watch", "1:10"), so a voice user saying what they
-          // see finds it (WCAG 2.5.3).
+          // Contains the visible "1:10", so a voice user saying what they see finds it
+          // (WCAG 2.5.3).
           aria-label={`Watch the intro video with sound (${DURATION_LABEL})`}
-          // The whole video is the target; the pill is only the visible affordance. It sits
-          // bottom-left: the presenter's face is in the middle and the captions are low and
-          // centred, so a centred button would cover one or the other.
-          className="focus-visible-ring group absolute inset-0 z-10 flex cursor-pointer items-end justify-start rounded-[inherit] p-[3.4%] disabled:cursor-progress"
+          // The whole video is the target; the circle is the visible affordance. Its focus
+          // ring is drawn inside the edge: the box clips anything outside it, and the
+          // site's `focus-visible-ring` (an outer shadow) was cut off entirely. An outline,
+          // because forced colours keep outlines and drop shadows; the white band inside
+          // it keeps it apart from the photo.
+          className="group absolute inset-0 z-10 cursor-pointer rounded-[inherit] outline-none focus-visible:shadow-[inset_0_0_0_5px_#fff] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-[-3px] focus-visible:outline-[#9c7dff] disabled:cursor-progress"
         >
-          <span className="inline-flex items-center gap-2 rounded-full bg-[#161021]/60 py-[5px] pl-[5px] pr-3.5 text-white shadow-[0_6px_18px_-6px_rgba(22,16,33,0.55)] backdrop-blur-[6px] transition duration-300 group-hover:bg-[#161021]/75 lg:gap-2.5 lg:py-1.5 lg:pl-1.5 lg:pr-4">
-            <span
-              aria-hidden
-              className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] lg:h-8 lg:w-8"
-            >
-              {phase === "starting" ? (
-                <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white motion-safe:animate-spin lg:h-3.5 lg:w-3.5" />
-              ) : (
-                <svg
-                  viewBox="0 0 12 12"
-                  className="ml-[2px] h-3 w-3 lg:h-3.5 lg:w-3.5"
-                  fill="white"
-                >
-                  <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
-                </svg>
-              )}
-            </span>
-            <span className="text-[13px] font-semibold leading-none lg:text-[14px]">Watch</span>
-            <span className="text-[13px] font-medium leading-none text-white/75 lg:text-[14px]">
-              {DURATION_LABEL}
-            </span>
+          {/* Under a mouse the poster dims a little (hover: Tailwind's hoverOnlyWhenSupported). */}
+          <span
+            aria-hidden
+            className="absolute inset-0 rounded-[inherit] bg-[#161021]/0 transition-colors duration-300 group-hover:bg-[#161021]/15"
+          />
+          {/* Low, on Emma's chest, so her face stays clear: its centre at 70% of the box. */}
+          <span
+            aria-hidden
+            data-testid="hero-video-play-icon"
+            className="absolute left-1/2 top-[70%] flex h-[60px] w-[60px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_-8px_rgba(22,16,33,0.45)] transition-transform duration-300 motion-safe:group-hover:scale-[1.08] sm:h-[84px] sm:w-[84px]"
+          >
+            {phase === "starting" ? (
+              <span className="h-5 w-5 rounded-full border-2 border-[#161021]/25 border-t-[#161021] motion-safe:animate-spin sm:h-7 sm:w-7" />
+            ) : (
+              <svg
+                viewBox="0 0 12 12"
+                fill="#161021"
+                className="ml-[3px] h-5 w-5 sm:ml-1 sm:h-7 sm:w-7"
+              >
+                <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
+              </svg>
+            )}
+          </span>
+          <span className="absolute bottom-2.5 right-2.5 rounded-full bg-[#161021]/75 px-2 py-0.5 text-[12px] font-medium leading-[18px] text-white tabular-nums sm:bottom-4 sm:right-4 sm:px-2.5 sm:py-1 sm:text-[14px] sm:leading-[20px]">
+            {DURATION_LABEL}
           </span>
         </button>
       )}

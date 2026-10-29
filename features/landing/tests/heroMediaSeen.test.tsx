@@ -38,7 +38,7 @@ class FakeObserver {
   }
 }
 
-/** cta_seen's observers: half of the element on screen. The video's loop uses [0, 0.25]. */
+/** cta_seen's observers: half of the element on screen. */
 const halfObservers = () => FakeObserver.all.filter((o) => o.opts?.threshold === 0.5);
 const seenEvents = () => ph.capture.mock.calls.filter(([name]) => name === "cta_seen");
 
