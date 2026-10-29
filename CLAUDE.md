@@ -152,6 +152,7 @@ loveiq-web/
 │   ├── codeql.yml              # Advanced CodeQL analysis
 │   ├── release.yml             # Release workflow
 │   ├── health-monitor.yml      # Health monitoring
+│   ├── db-backup.yml           # Weekly encrypted DB copy outside Supabase (DISASTER_RECOVERY.md §1)
 │   ├── lighthouse.yml          # Lighthouse CI
 │   └── load-test.yml           # Load testing
 ├── docs/architecture/          # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, AGENTS.md, etc.)
@@ -233,6 +234,7 @@ NEXT_PUBLIC_SITE_URL=https://www.loveiq.org npm run build \
 - **Server-only secrets:** Supabase service key, Resend API key, reCAPTCHA secret, Slack webhooks
 - **Client-safe:** Only `NEXT_PUBLIC_*` vars (site URL, reCAPTCHA site key, Supabase URL + anon key)
 - **No direct DB client:** All Supabase access via REST API in API routes
+- **Backups:** Supabase daily backups (7 days; PITR is off) plus a weekly encrypted copy outside Supabase (`db-backup.yml`, 30 days). Restore steps, tested 2026-10-29: `docs/runbooks/DISASTER_RECOVERY.md` §1
 
 ---
 
@@ -443,6 +445,7 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 - `docs-truth.yml` — Documentation truth validation (links, scripts, env vars)
 - `release.yml` — Release workflow
 - `health-monitor.yml` — Health monitoring
+- `db-backup.yml` — Weekly encrypted copy of the production database (`public` + `supabase_migrations`, plus the pg_cron jobs) outside Supabase, in the private Vercel Blob store `loveiq-db-backups` (fra1), kept 30 days; every copy is test-restored first. Started Sundays 03:41 UTC by Vercel's clock; the decryption key is with Eman only. Restore: `docs/runbooks/DISASTER_RECOVERY.md` §1
 - `lighthouse.yml` — Lighthouse CI
 - `load-test.yml` — Load testing
 - `visual-regression.yml` — Visual regression testing (Playwright screenshots)

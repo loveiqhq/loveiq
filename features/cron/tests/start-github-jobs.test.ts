@@ -130,6 +130,20 @@ describe("when each GitHub job is due", () => {
     expect(hours).toEqual([2]);
   });
 
+  it("backs up the database once a week, Sundays at 03:41", () => {
+    const starts = [...Array(7).keys()].flatMap((d) =>
+      [...Array(24).keys()]
+        .filter((h) =>
+          jobsDue(new Date(Date.UTC(2026, 8, 28 + d, h, 41))).some(
+            (j) => j.workflow === "db-backup.yml"
+          )
+        )
+        .map((h) => `${d}:${h}`)
+    );
+    // 2026-09-28 is a Monday, so day 6 is the Sunday.
+    expect(starts).toEqual(["6:3"]);
+  });
+
   it("starts the digest audit after the digest in winter as well as summer", () => {
     // The digest posts at 08:17 UTC in winter; the audit's first start must be later.
     const hours = [...Array(24).keys()].filter((h) =>

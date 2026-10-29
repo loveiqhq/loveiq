@@ -136,6 +136,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // The UX checker's proof walks (persona-walkers.yml `proof`), nightly at 02:41: a day and
   // two hours is one night missed. Quiet, the proofs stop growing and nothing else says so.
   "ux-proof-walks": 26 * 3_600_000,
+  // The copy of the database kept outside Supabase (db-backup.yml), Sundays at 03:41: eight
+  // days is one missed week. A missed backup is not something to wait two weeks to hear about.
+  "db-backup": 8 * 24 * 3_600_000,
   /**
    * EVERY FIVE MINUTES ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
    * closed, and only a successful run counts. Three days because a closed laptop only
@@ -181,6 +184,7 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "ux-review-verify": "ux-review-verify.yml",
   "ux-digest-audit": "ux-digest-audit.yml",
   "ux-proof-walks": "persona-walkers.yml",
+  "db-backup": "db-backup.yml",
 };
 
 /**
