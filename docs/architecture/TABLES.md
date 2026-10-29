@@ -2,7 +2,7 @@
 
 <!-- cspell:disable -->
 
-> **Generated:** 2026-10-27 | **Source:** the live schema (PostgREST OpenAPI) | 98 relations, 1031 columns, 72 foreign keys
+> **Generated:** 2026-10-29 | **Source:** the live schema (PostgREST OpenAPI) | 99 relations, 1040 columns, 72 foreign keys
 
 A map of every table and view the API exposes. It is generated, so it matches production on the day shown. Rebuild it with `node scripts/generate-table-map.mjs` (read-only; needs the Supabase URL and service key).
 
@@ -85,17 +85,18 @@ flowchart LR
 | `report_price_quote`             | 40      | `app_user`, `personal_report`, `survey_submission`  |                                                                                                               |
 | `report_price_quote_arm_history` | 14      | `report_price_quote`                                | Every change to a price quote's arm (experiment_group) or list price (msrp, starting_price), one row each,... |
 
-## Events and analytics (7)
+## Events and analytics (8)
 
-| Relation                        | Columns | Points to                                                            | What it holds                                         |
-| ------------------------------- | ------- | -------------------------------------------------------------------- | ----------------------------------------------------- |
-| `analytics_event`               | 11      | `app_user`, `personal_report`, `report_session`, `survey_submission` |                                                       |
-| `digest_recommendation_history` | 8       |                                                                      | Weekly Slack-digest recommendation history.           |
-| `funnel_event`                  | 8       |                                                                      | Top-of-funnel signals that predate survey_submission. |
-| `marketing_spend`               | 11      |                                                                      |                                                       |
-| `product_changelog`             | 13      |                                                                      |                                                       |
-| `report_session`                | 8       | `app_user`, `personal_report`                                        |                                                       |
-| `user_interactions`             | 9       | `app_user`                                                           |                                                       |
+| Relation                        | Columns | Points to                                                            | What it holds                                                                                                  |
+| ------------------------------- | ------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `analytics_event`               | 11      | `app_user`, `personal_report`, `report_session`, `survey_submission` |                                                                                                                |
+| `digest_recommendation_history` | 8       |                                                                      | Weekly Slack-digest recommendation history.                                                                    |
+| `funnel_event`                  | 8       |                                                                      | Top-of-funnel signals that predate survey_submission.                                                          |
+| `marketing_spend`               | 11      |                                                                      |                                                                                                                |
+| `product_changelog`             | 13      |                                                                      |                                                                                                                |
+| `report_session`                | 8       | `app_user`, `personal_report`                                        |                                                                                                                |
+| `short_link`                    | 9       |                                                                      | Short links for the AI influencer pilot (Seedlane, from 2026-10-30): loveiq.org/<code> redirects to the lan... |
+| `user_interactions`             | 9       | `app_user`                                                           |                                                                                                                |
 
 ## Email and invites (6)
 

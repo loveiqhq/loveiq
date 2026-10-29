@@ -41,7 +41,7 @@ const RULES = [
   [/^(admin_|ap_)/, "Admin and AP-Analytics"],
   [/^(payment|report_price_quote|prepaid_report_access)/, "Payments and prices"],
   [
-    /^(report_session|analytics_|funnel_|user_interactions|marketing_spend|product_changelog|digest_)/,
+    /^(report_session|analytics_|funnel_|user_interactions|marketing_spend|product_changelog|digest_|short_link)/,
     "Events and analytics",
   ],
   [/^(report|personal_report|unlock_feedback)/, "Reports"],
