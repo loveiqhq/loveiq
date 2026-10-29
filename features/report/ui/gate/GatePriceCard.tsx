@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
-import { PAYMENT_MARKS } from "../paymentMarks";
+import { PaymentLogos } from "../PaymentLogos";
 import { GATE_COPY, euros } from "./gateContent";
 import type { GateCtaPlace, InitialUnlockCheckoutState } from "./useInitialUnlockCheckout";
 
@@ -99,14 +99,10 @@ export const GatePriceCard = ({ gate, onUnlock, state }: GatePriceCardProps) => 
   );
 };
 
-/** 1604:2426: the pricing modal's row of payment marks (paymentMarks.ts), as drawn. */
+/** 1604:2426: the pricing modal's row of payment logos (PaymentLogos), as drawn. */
 export const GatePayments = () => (
   <div className="iug-payments">
     <p className="rpg__payments-label">{GATE_COPY.paymentsLabel}</p>
-    <div className="rpg__payments-row" aria-label="Accepted payment methods">
-      {PAYMENT_MARKS.map(({ logo, label }) => (
-        <span key={logo} className={`rpg__mark rpg__mark--${logo}`} role="img" aria-label={label} />
-      ))}
-    </div>
+    <PaymentLogos />
   </div>
 );
