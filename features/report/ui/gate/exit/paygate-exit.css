@@ -219,11 +219,17 @@
   gap: 6px;
 }
 
-/* ── FullUnlock: "Don't lose your €10 credit" (no deadline: the credit has none) ── */
+/* ── FullUnlock: "Don't lose your €10 credit" (no deadline: the credit has none), and Main's
+ * box in the same place and style: "Your result is ready and saved" (29.10) ── */
 /* The canvas's fixed section heights leave 45px over the banner and, with the next section's
- * 40, 42 under it: the air between the page's other blocks. */
+ * 40, 42 under it: the air between the page's other blocks. Main sets its guarantee's section
+ * to the same height, and no height on its box's, so nothing more under it. */
 .pge-credit-wrap {
   padding: 45px 16px 2px;
+}
+
+.pge-page[data-stage="pre"] .pge-credit-wrap {
+  padding-bottom: 0;
 }
 
 .pge-credit {

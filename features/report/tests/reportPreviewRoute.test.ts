@@ -66,6 +66,7 @@ describe("GET /api/report/preview — the EUR 1.99 gate", () => {
       reportToken: null,
       submissionId: null,
       viewMode: "owner",
+      surveyMinutes: 14,
     });
   });
 

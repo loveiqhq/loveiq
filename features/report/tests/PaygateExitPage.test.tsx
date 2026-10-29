@@ -124,7 +124,34 @@ describe("the EUR 1.99 gate's exit page (Marcus's Main board)", () => {
     expect(screen.getByRole("heading", { name: "Not today? Tell us why." })).toBeTruthy();
     expect(screen.getAllByRole("radio")).toHaveLength(8);
     expect(screen.getByRole("link", { name: "Maybe later" })).toHaveAttribute("href", "/");
-    expect(document.querySelector(".pge-credit")).toBeNull();
+  });
+
+  it("says the result is saved, with the minutes the reader put in (Marcus's box, 29.10)", () => {
+    render(<PaygateExitPage {...PRE} surveyMinutes={14} />);
+    const box = document.querySelector<HTMLElement>(".pge-credit")!;
+    const boxText = box.textContent?.replace(/\s+/g, " ");
+    expect(boxText).toContain("Your result is ready and saved");
+    expect(boxText).toContain(
+      "You invested 14 minutes into your answers. Don’t leave without seeing what they say."
+    );
+    expect(box.querySelector(".pge-credit__amount")?.textContent).toBe("14");
+    expect(box.querySelector(".pge-credit__label")?.textContent).toBe("MIN");
+    // Under the guarantee, where the canvas puts it.
+    expect(document.querySelector(".pge-safe-wrap")?.nextElementSibling).toHaveClass(
+      "pge-credit-wrap"
+    );
+    // Leaving loses nothing, so the page never says it does.
+    expect(text()).not.toMatch(/lose your result/i);
+  });
+
+  it("says it without a number when the survey's clock says nothing true", () => {
+    render(<PaygateExitPage {...PRE} surveyMinutes={null} />);
+    const box = document.querySelector<HTMLElement>(".pge-credit")!;
+    expect(box.textContent).toContain(
+      "Your answers are in. Don’t leave without seeing what they say."
+    );
+    expect(box.querySelector(".pge-credit__amount")).toBeNull();
+    expect(box.textContent).not.toMatch(/\d/);
   });
 
   it("captions its bar with the guarantee and a one-time payment", () => {

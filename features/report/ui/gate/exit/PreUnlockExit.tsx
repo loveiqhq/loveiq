@@ -58,6 +58,7 @@ export default function PreUnlockExit({
       offer={{ priceCents: gate.priceCents }}
       creditCents={gate.creditCents}
       guaranteeDays={gate.guaranteeDays}
+      surveyMinutes={gate.surveyMinutes ?? null}
       seed={String(gate.submissionId ?? "preview")}
       checkout={{
         busy: state.status === "redirecting",

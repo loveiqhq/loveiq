@@ -132,6 +132,20 @@ export const EXIT_COPY = {
     care: "We care that this helps you. If it doesn’t, you shouldn’t pay for it.",
     chips: ["Full refund", "No questions asked", "Zero risk"],
   },
+  /**
+   * Main's box under the guarantee (Marcus's canvas, 29.10), with Fatih's headline in place of
+   * "Don't lose your results": leaving loses nothing, the result is saved and its link is in
+   * the reader's email, so the box says so and keeps Marcus's line. The minutes are the
+   * reader's own (surveyMinutesFromDuration); without them, the line has no number.
+   */
+  saved: {
+    tileLabel: "MIN",
+    title: "Your result is ready and saved",
+    lead: "You invested",
+    minutes: (minutes: number) => `${minutes} minutes`,
+    rest: "into your answers. Don’t leave without seeing what they say.",
+    noMinutes: "Your answers are in. Don’t leave without seeing what they say.",
+  },
   /** FullUnlock's banner, with no expiry: the credit has none. */
   credit: {
     tileLabel: "CREDIT",
