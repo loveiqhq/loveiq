@@ -111,10 +111,15 @@ describe("POST /api/short-links", () => {
   });
 
   it("rate-limits before it looks at the key", async () => {
-    checkRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    checkRateLimit.mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: new Date(Date.now() + 30_000),
+    });
     const res = await POST(post({}, "wrong"));
     expect(res.status).toBe(429);
-    expect(res.headers.get("Retry-After")).not.toBeNull();
+    expect(Number(res.headers.get("Retry-After"))).toBeGreaterThanOrEqual(29);
+    expect(Number(res.headers.get("Retry-After"))).toBeLessThanOrEqual(30);
   });
 
   it("refuses input it would have to guess at", async () => {
@@ -134,6 +139,16 @@ describe("POST /api/short-links", () => {
         placement: "dm",
         meta: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, i])),
       },
+      // Within 20 keys and 200 characters each, but over the 2,000 characters in all.
+      {
+        influencer: "mila",
+        platform: "tiktok",
+        placement: "dm",
+        meta: Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`k${i}`, "x".repeat(200)])),
+      },
+      // Texts the database's jsonb would refuse: a NUL, and half of a surrogate pair.
+      { influencer: "mila", platform: "tiktok", placement: "dm", meta: { note: "a\u0000b" } },
+      { influencer: "mila", platform: "tiktok", placement: "dm", meta: { note: "a\ud800b" } },
     ];
     for (const body of bad) {
       const res = await POST(post(body));
@@ -181,7 +196,15 @@ describe("GET /api/short-links", () => {
   });
 
   it("refuses filters it cannot use", async () => {
-    for (const query of ["?since=yesterday", "?limit=5000", "?limit=0", "?code=abc"]) {
+    for (const query of [
+      "?since=yesterday",
+      "?since=2026-02-31",
+      "?since=2026-13-01",
+      "?limit=5000",
+      "?limit=0",
+      "?limit=abc",
+      "?code=abc",
+    ]) {
       const res = await GET(get(query));
       expect(res.status, query).toBe(400);
     }

@@ -376,22 +376,27 @@ export function stripTrailingSlash(request: NextRequest): NextResponse | null {
 /**
  * The redirect for a short link's code, or null for a code nobody created (the 404 page, as
  * for any unknown path). A click is counted only for a person: a link preview (TikTok's,
- * Instagram's, iMessage's) and our own probes follow it uncounted, as does a HEAD. When the
- * database cannot answer, the visitor still reaches the landing page, untagged.
+ * Instagram's, iMessage's), a prefetch and our own probes follow it uncounted, as does a HEAD.
+ * When the database cannot answer, the visitor still reaches the landing page, untagged.
+ *
+ * ponytail: every path of seven characters with a digit costs one indexed lookup, unthrottled,
+ * like the visit write any page costs; add a fail-open checkRateLimit here if scanners show up.
  */
 async function answerShortLink(request: NextRequest, code: string): Promise<NextResponse | null> {
   const count =
     request.method === "GET" &&
+    // A browser's own prefetch (Chrome's speculation, the address bar) is not a click either.
+    !request.headers.get("sec-purpose")?.includes("prefetch") &&
     !LANDING_BOT_UA_REGEX.test(request.headers.get("user-agent") || "") &&
     !isProbeRequest(request.headers.get("cookie"));
   let target: URL;
   try {
     const link = await followShortLink(code, count);
     if (!link) return null;
-    target = shortLinkTarget(link, code, request.url);
+    target = shortLinkTarget(link, code, request.url, request.nextUrl.searchParams);
   } catch (err) {
     logger.warn({ err, code }, "short link: lookup failed, sent to the landing page untagged");
-    target = new URL("/", request.url);
+    target = new URL(`/${request.nextUrl.search}`, request.url);
   }
   return NextResponse.redirect(target, {
     status: 307,

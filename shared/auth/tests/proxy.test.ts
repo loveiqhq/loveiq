@@ -1152,7 +1152,7 @@ describe("short links", () => {
 
   function shortLinkRequest(
     path: string,
-    opts: { ua?: string; method?: string; cookie?: string } = {}
+    opts: { ua?: string; method?: string; cookie?: string; purpose?: string } = {}
   ) {
     const request = makeNextRequest(
       `https://www.loveiq.org${path}`,
@@ -1168,6 +1168,7 @@ describe("short links", () => {
     };
     if (opts.method) request.method = opts.method;
     if (opts.cookie) request.headers.set("cookie", opts.cookie);
+    if (opts.purpose) request.headers.set("sec-purpose", opts.purpose);
     return request as never;
   }
 
@@ -1192,20 +1193,22 @@ describe("short links", () => {
     expect(init.headers["Cache-Control"]).toBe("private, no-store");
   });
 
-  it("follows a link preview, a HEAD and our own probe without counting them", async () => {
+  it("follows a link preview, a HEAD, a prefetch and our own probe without counting them", async () => {
     await proxy(
       shortLinkRequest("/k3x9p2a", { ua: "facebookexternalhit/1.1 Facebot Twitterbot/1.0" })
     );
     await proxy(shortLinkRequest("/k3x9p2a", { ua: "Mozilla/5.0 (compatible; Bytespider)" }));
     await proxy(shortLinkRequest("/k3x9p2a", { method: "HEAD" }));
     await proxy(shortLinkRequest("/k3x9p2a", { cookie: "loveiq_probe=1" }));
+    await proxy(shortLinkRequest("/k3x9p2a", { purpose: "prefetch;prerender" }));
     expect(mockFollowShortLink.mock.calls).toEqual([
       ["k3x9p2a", false],
       ["k3x9p2a", false],
       ["k3x9p2a", false],
       ["k3x9p2a", false],
+      ["k3x9p2a", false],
     ]);
-    expect(mockRedirect).toHaveBeenCalledTimes(4);
+    expect(mockRedirect).toHaveBeenCalledTimes(5);
   });
 
   it("counts a click from TikTok's in-app browser", async () => {
@@ -1219,18 +1222,29 @@ describe("short links", () => {
 
   it("lets a code nobody created fall through to the page, like any unknown path", async () => {
     mockFollowShortLink.mockResolvedValue(null);
-    const response = await proxy(shortLinkRequest("/k3x9p2a"));
+    await proxy(shortLinkRequest("/k3x9p2a"));
     expect(mockRedirect).not.toHaveBeenCalled();
-    expect(response).toBeDefined();
+    // The page's own handling ran: NextResponse.next() with the security headers set.
+    expect(mockNextOpts.value).not.toBeNull();
+    expect(mockResponseHeaders.get("Content-Security-Policy")).toBeTruthy();
   });
 
   it("still sends people to the landing page, untagged, when the database fails", async () => {
     mockFollowShortLink.mockRejectedValue(new Error("short_link lookup failed (503)"));
-    await proxy(shortLinkRequest("/k3x9p2a"));
+    await proxy(shortLinkRequest("/k3x9p2a?fbclid=IwAR0"));
     const [target, init] = mockRedirect.mock.calls[0] as unknown as [URL, { status: number }];
-    expect(target.toString()).toBe("https://www.loveiq.org/");
+    expect(target.toString()).toBe("https://www.loveiq.org/?fbclid=IwAR0");
     expect(init.status).toBe(307);
     expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it("keeps a click id the platform added, and the link's own tags over any it came with", async () => {
+    await proxy(shortLinkRequest("/k3x9p2a?fbclid=IwAR0&utm_source=other&ttclid=E.C.P"));
+    const [target] = mockRedirect.mock.calls[0] as unknown as [URL];
+    expect(target.searchParams.get("fbclid")).toBe("IwAR0");
+    expect(target.searchParams.get("ttclid")).toBe("E.C.P");
+    expect(target.searchParams.getAll("utm_source")).toEqual(["tiktok"]);
+    expect(target.searchParams.get("utm_term")).toBe("k3x9p2a");
   });
 
   it("never looks up a page, nor a write to a code's path", async () => {

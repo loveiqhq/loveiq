@@ -54,16 +54,29 @@ export function newShortCode(
   return /\d/.test(code) ? code : code.slice(0, -1) + DIGITS.charAt((bytes[CODE_LENGTH] ?? 0) % 8);
 }
 
-/** Where a link sends people: the landing page on `base`'s host, tagged. */
-export function shortLinkTarget(link: ShortLinkFields, code: string, base: string): URL {
+/**
+ * Where a link sends people: the landing page on `base`'s host, tagged. Anything else the
+ * address carried (a click id Meta or TikTok adds to a promoted post) goes along, and the
+ * link's own tags win over any utm_ it came with.
+ */
+export function shortLinkTarget(
+  link: ShortLinkFields,
+  code: string,
+  base: string,
+  carried?: URLSearchParams
+): URL {
   const url = new URL("/", base);
-  url.search = new URLSearchParams({
+  const params = new URLSearchParams({
     utm_source: link.platform,
     utm_medium: link.placement === "ad" ? "paid_social" : "social",
     utm_campaign: `ai_${link.influencer}`,
     utm_content: link.placement,
     utm_term: code,
-  }).toString();
+  });
+  carried?.forEach((value, key) => {
+    if (!key.toLowerCase().startsWith("utm_")) params.append(key, value);
+  });
+  url.search = params.toString();
   return url;
 }
 

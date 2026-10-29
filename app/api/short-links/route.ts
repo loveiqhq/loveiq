@@ -29,12 +29,16 @@ const lower = <T extends z.ZodType>(schema: T) =>
 
 const INFLUENCER = z.string().regex(/^[a-z0-9_]{2,30}$/);
 
-/** Seedlane's own notes on a link: flat, small, and kept off the address. */
+/**
+ * Seedlane's own notes on a link: flat, small, and kept off the address. A text the database's
+ * jsonb refuses (a NUL, a lone surrogate) is refused here, as a 400, not as a failed insert.
+ */
+const NOTE = z
+  .string()
+  .max(200)
+  .refine((s) => !s.includes("\u0000") && s.isWellFormed());
 const META = z
-  .record(
-    z.string().regex(/^[A-Za-z0-9_]{1,40}$/),
-    z.union([z.string().max(200), z.number(), z.boolean()])
-  )
+  .record(z.string().regex(/^[A-Za-z0-9_]{1,40}$/), z.union([NOTE, z.number(), z.boolean()]))
   .refine((m) => Object.keys(m).length <= 20 && JSON.stringify(m).length <= 2000);
 
 const createSchema = z.object({
@@ -47,10 +51,8 @@ const createSchema = z.object({
 const listSchema = z.object({
   code: lower(z.string().regex(/^[a-z0-9]{7}$/)).optional(),
   influencer: lower(INFLUENCER).optional(),
-  since: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  // A real calendar day: 2026-02-31 passes a digits pattern and then fails in the database.
+  since: z.iso.date().optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(200),
 });
 

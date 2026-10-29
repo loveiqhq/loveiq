@@ -52,6 +52,7 @@ describe("areaOf", () => {
    */
   it("puts the look-alike names in the right area", () => {
     expect(areaOf("report_session")).toBe("Events and analytics");
+    expect(areaOf("short_link")).toBe("Events and analytics");
     expect(areaOf("report_price_quote")).toBe("Payments and prices");
     expect(areaOf("personal_report_section")).toBe("Reports");
     expect(areaOf("payment_webhook_event")).toBe("Payments and prices");

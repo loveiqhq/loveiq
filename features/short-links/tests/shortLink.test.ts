@@ -76,6 +76,18 @@ describe("shortLinkTarget", () => {
     expect(url.searchParams.get("utm_medium")).toBe("paid_social");
     expect(url.searchParams.get("utm_content")).toBe("ad");
   });
+
+  it("carries other parameters along, never a utm_ one", () => {
+    const url = shortLinkTarget(
+      { influencer: "mila", platform: "instagram", placement: "ad" },
+      "k3x9p2a",
+      "https://www.loveiq.org/k3x9p2a",
+      new URLSearchParams("fbclid=IwAR0&UTM_CAMPAIGN=x&utm_source=other")
+    );
+    expect(url.searchParams.get("fbclid")).toBe("IwAR0");
+    expect(url.searchParams.getAll("utm_source")).toEqual(["instagram"]);
+    expect(url.searchParams.get("UTM_CAMPAIGN")).toBeNull();
+  });
 });
 
 describe("shortLinkUrl", () => {
