@@ -104,6 +104,11 @@ psql "$TARGET" -c 'create extension if not exists pg_cron' -f copy.cron.sql
 psql "$TARGET" -c "notify pgrst, 'reload schema'"
 ```
 
+**Not on Eman's Mac** (the Keychain is only there): take the private key from his password
+manager into a file and decrypt with `age -d -i key.txt -o copy.pgdump copy.pgdump.age`, then
+delete `key.txt`. Take the store token from Vercel (Storage → `loveiq-db-backups`; the
+dashboard's Browser tab also lists and downloads the copies).
+
 Then §5 from step 4 (Vercel env, redeploy, webhooks). Also:
 
 - Create `loveiq_backup` on the new project (`create role loveiq_backup login bypassrls`,
