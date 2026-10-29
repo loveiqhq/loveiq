@@ -143,14 +143,21 @@ test.describe("The EUR 1.99 gate's exit page", () => {
     expect(asks()).toBe(1);
   });
 
-  test("“Maybe later” leads to the landing page", async ({ page }) => {
+  // Sync 29.10: the landing page loses a reader who has finished the survey, so "Maybe later"
+  // keeps them on the page and says how they come back.
+  test("“Maybe later” stays, and says the result is saved and its link is in the email", async ({
+    page,
+  }) => {
     await recordAnalytics(page);
     await mockGate(page);
     await page.goto(`/report/${GATE_TOKEN}?leave=pre`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText("Your result is ready and saved")).toBeVisible();
     const canStore = await persists(page);
-    await page.getByRole("link", { name: "Maybe later" }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await page.getByRole("button", { name: "Maybe later" }).click();
+    await expect(page.getByText("Saved. The link to your result is in your email.")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/report/${GATE_TOKEN}\\?leave=pre$`));
+    await expect(page.getByRole("button", { name: "Maybe later" })).toHaveCount(0);
     if (canStore) {
       await expect
         .poll(() => stored(page, "paygate_exit_leave"))
