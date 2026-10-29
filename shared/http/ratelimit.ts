@@ -281,6 +281,12 @@ function ipv6Slash64Key(addr: string): string {
 
 const DEFAULT_CLIENT_IP_HEADER = "x-real-ip";
 
+/**
+ * Lists that every proxy appends an address to and the client can start, so never one
+ * client's key: "6.6.6.6, 1.2.3.4" and "7.7.7.7, 1.2.3.4" would be two clients.
+ */
+const ADDRESS_LIST_HEADERS = new Set(["x-forwarded-for", "forwarded"]);
+
 // Once-per-process gate, as for the KV log above.
 let invalidIpHeaderLogged = false;
 
@@ -291,17 +297,20 @@ let invalidIpHeaderLogged = false;
  * Never a fallback to a second header: a header the host does not set is one the
  * client can, and the rate-limit key would be theirs to choose. A value that is not
  * a plain header name falls back to the default rather than reaching
- * `Headers.get`, which throws on an invalid name and would fail every request.
+ * `Headers.get`, which throws on an invalid name and would fail every request, and so
+ * does a list header (ADDRESS_LIST_HEADERS).
  */
 function trustedClientIpHeader(): string {
   const configured = process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
   if (!configured) return DEFAULT_CLIENT_IP_HEADER;
-  if (/^[a-z0-9][a-z0-9-]*$/.test(configured)) return configured;
+  if (/^[a-z0-9][a-z0-9-]*$/.test(configured) && !ADDRESS_LIST_HEADERS.has(configured)) {
+    return configured;
+  }
   if (!invalidIpHeaderLogged) {
     invalidIpHeaderLogged = true;
     logger.error(
       { value: configured.slice(0, 80) },
-      "[ratelimit] TRUSTED_CLIENT_IP_HEADER is not a plain header name — reading x-real-ip instead"
+      "[ratelimit] TRUSTED_CLIENT_IP_HEADER is not a single-address header — reading x-real-ip instead"
     );
   }
   return DEFAULT_CLIENT_IP_HEADER;
@@ -313,7 +322,7 @@ function trustedClientIpHeader(): string {
  * Trusts ONLY one header: x-real-ip by default, which Vercel sets to the
  * actual client IP and strips any client-provided x-real-ip header (platform
  * guarantee), or the one TRUSTED_CLIENT_IP_HEADER names. X-Forwarded-For is
- * ignored unless named there — it is attacker-controlled and would allow
+ * never read, even when named there — it is attacker-controlled and would allow
  * rate-limit key spoofing if used.
  *
  * R-08: IPv6 is collapsed to its /64 prefix (every consumer IPv6 allocation IS

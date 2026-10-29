@@ -29,6 +29,14 @@ describe("supabaseRestUrl / supabaseAuthUrl", () => {
     expect(supabaseRestUrl()).toBe(BASE);
   });
 
+  it("drop a trailing slash from an override, so the path is never //auth/v1", () => {
+    vi.stubEnv("SUPABASE_URL", BASE);
+    vi.stubEnv("SUPABASE_REST_URL", "https://db.example/");
+    vi.stubEnv("SUPABASE_AUTH_URL", "https://auth.example// ");
+    expect(supabaseRestUrl()).toBe("https://db.example");
+    expect(supabaseAuthUrl()).toBe("https://auth.example");
+  });
+
   it.each(["", "   "])("treat an override of %j as unset", (value) => {
     vi.stubEnv("SUPABASE_URL", BASE);
     vi.stubEnv("SUPABASE_REST_URL", value);

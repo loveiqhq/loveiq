@@ -115,9 +115,10 @@ describe("getClientIp with TRUSTED_CLIENT_IP_HEADER", () => {
     expect(getClientIp(makeRequest({ "cf-connecting-ip": "5.6.7.8" }))).toBe("5.6.7.8");
   });
 
-  it("reads x-forwarded-for only when it is named explicitly", () => {
+  it("never reads x-forwarded-for, even when named: the client can start that list", () => {
     vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", "x-forwarded-for");
-    expect(getClientIp(makeRequest({ "x-forwarded-for": "9.9.9.9" }))).toBe("9.9.9.9");
+    const req = makeRequest({ "x-real-ip": "1.1.1.1", "x-forwarded-for": "6.6.6.6, 1.2.3.4" });
+    expect(getClientIp(req)).toBe("1.1.1.1");
   });
 
   it("still collapses IPv6 from the named header to its /64", () => {
@@ -138,6 +139,8 @@ describe("getClientIp with TRUSTED_CLIENT_IP_HEADER", () => {
     "x_forwarded_for",
     "cf-connecting-ip:",
     "-x-real-ip",
+    "X-Forwarded-For",
+    "forwarded",
   ])("falls back to x-real-ip, never x-forwarded-for, for %j", (value) => {
     vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", value);
     const req = makeRequest({ "x-real-ip": "1.1.1.1", "x-forwarded-for": "2.2.2.2" });
