@@ -273,6 +273,17 @@ describe("unlocking", () => {
     expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_2");
   });
 
+  it("on a preview, opens the report's preview after the EUR 1.99, asking Stripe nothing", async () => {
+    setLocation("https://staging.loveiq.org/report?preview=1&v4=1&gate=1&leave=pre");
+    render(<InitialUnlockGate gate={GATE} reportToken={null} reportSessionId="sid-1" preview />);
+    fireEvent.click(cardCta());
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(assign).toHaveBeenCalledWith("/report?preview=1&v4=1&plan=initial");
+    expect(mockTrackCta).not.toHaveBeenCalled();
+    expect(mockTrackBeginCheckout).not.toHaveBeenCalled();
+  });
+
   it("reloads into the report when the server says it is already unlocked", async () => {
     fetchMock.mockReturnValue(reply({ error: "already_unlocked" }, 409));
     renderGate();

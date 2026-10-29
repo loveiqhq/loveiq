@@ -9,6 +9,8 @@ export interface PreUnlockExitProps {
   gate: InitialUnlockGatePayload;
   reportToken: string | null;
   reportSessionId: string | null;
+  /** `?preview=1`: nothing to buy, so its buttons open the report's preview after the EUR 1.99. */
+  preview?: boolean;
   /** The header's arrow: back to the EUR 1.99 page, which stays mounted under this one. */
   onBack: () => void;
   /** "Maybe later": the landing page, as "Not ready to unlock yet" led until 28.10. */
@@ -25,6 +27,7 @@ export default function PreUnlockExit({
   gate,
   reportToken,
   reportSessionId,
+  preview = false,
   onBack,
   onLeave,
 }: PreUnlockExitProps) {
@@ -32,6 +35,7 @@ export default function PreUnlockExit({
     priceCents: gate.priceCents,
     reportSessionId,
     reportToken,
+    preview,
   });
 
   // The link sat at the top of the gate; the exit page opens at its own top too, and going back

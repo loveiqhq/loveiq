@@ -1220,6 +1220,39 @@ describe("ReportPage", () => {
       });
     });
 
+    it("on a preview, opens the plan's own preview: no checkout for the browser's last survey", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=0&preview=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const realLocation = window.location;
+      const assign = vi.fn();
+      const url = new URL("https://staging.loveiq.org/report?v4=0&preview=1&leave=full");
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: {
+          href: url.href,
+          origin: url.origin,
+          pathname: url.pathname,
+          search: url.search,
+          hash: url.hash,
+          assign,
+          replace: vi.fn(),
+          reload: vi.fn(),
+        },
+      });
+      try {
+        render(<ReportPage />);
+        await user.click(
+          screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+        );
+        expect(assign).toHaveBeenCalledWith("/report?v4=0&preview=1&plan=full_report");
+        expect(mockStartReportCheckout).not.toHaveBeenCalled();
+        expect(mockTrackBeginCheckout).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(window, "location", { configurable: true, value: realLocation });
+      }
+    });
+
     it("keeps ?v2=1 when the reader opens another archetype", async () => {
       const user = userEvent.setup();
       mockRouterPush.mockReset();
