@@ -49,19 +49,87 @@ test.describe("Landing arm B — the hero video", () => {
     await instantScroll(page);
   });
 
-  test("shows the video instead of question 1, and fetches nothing big before a tap", async ({
+  test("shows the video instead of question 1, and fetches no video before a tap", async ({
     page,
   }) => {
-    const fullVideoRequests: string[] = [];
+    const videoRequests: string[] = [];
     page.on("request", (r) => {
-      if (r.url().includes("emma-intro")) fullVideoRequests.push(r.url());
+      if (r.url().includes("/videos/")) videoRequests.push(r.url());
     });
-    await page.goto("/?variant=white_video");
+    await openArmB(page);
     await expect(page.getByTestId("hero-video")).toBeVisible();
     await expect(page.getByTestId("hero-video-play")).toBeVisible();
     // Only the closing card is left on the page; the hero has none.
     await expect(page.getByRole("button", { name: /^4 of 7/ })).toHaveCount(1);
-    expect(fullVideoRequests).toHaveLength(0);
+    expect(videoRequests).toHaveLength(0);
+  });
+
+  /**
+   * 29.10 sync: no autoplay (Marcus), "a bigger play button in the middle, hover". The
+   * button sits below the middle so it covers Emma's chest, not her face.
+   */
+  test("waits paused on the poster, the play button low in the middle and the running time in the corner", async ({
+    page,
+  }) => {
+    // The slot rises 24px into place on load; under reduced motion it starts there.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openArmB(page);
+    // Nothing rolls on its own: nothing has played, and no video has a source.
+    expect(
+      await page.evaluate(() => (window as unknown as { __played: string[] }).__played)
+    ).toEqual([]);
+    await expect(page.locator('[data-testid="hero-video"] video[src]')).toHaveCount(0);
+
+    const box = (await page.getByTestId("hero-video").boundingBox())!;
+    const circle = (await page.getByTestId("hero-video-play-icon").boundingBox())!;
+    const size = page.viewportSize()!.width >= 640 ? 84 : 60;
+    expect(Math.abs(circle.width - size)).toBeLessThanOrEqual(1);
+    expect(Math.abs(circle.height - size)).toBeLessThanOrEqual(1);
+    // Centred left to right; its middle at 70% of the box's height.
+    expect(Math.abs(circle.x + circle.width / 2 - (box.x + box.width / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(circle.y + circle.height / 2 - (box.y + 0.7 * box.height))).toBeLessThanOrEqual(
+      1
+    );
+    // The running time: bottom right, inside the box, clear of the circle.
+    const time = (await page.getByTestId("hero-video-play").getByText("1:10").boundingBox())!;
+    expect(time.x).toBeGreaterThan(circle.x + circle.width);
+    expect(time.x + time.width).toBeLessThanOrEqual(box.x + box.width);
+    expect(time.y).toBeGreaterThan(box.y + box.height / 2);
+    expect(time.y + time.height).toBeLessThanOrEqual(box.y + box.height);
+  });
+
+  test("under a mouse, hovering grows the play button and dims the poster", async ({ page }) => {
+    await openArmB(page);
+    const canHover = await page.evaluate(
+      () => matchMedia("(hover: hover) and (pointer: fine)").matches
+    );
+    test.skip(!canHover, "a touch screen has no hover");
+    const circle = page.getByTestId("hero-video-play-icon");
+    const veil = page.getByTestId("hero-video-play").locator("span").first();
+    const scale = () => circle.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a);
+    const shade = () => veil.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await scale()).toBeCloseTo(1, 2);
+    await page.getByTestId("hero-video-play").hover();
+    await expect.poll(scale).toBeCloseTo(1.08, 2);
+    await expect.poll(shade).toBe("rgba(22, 16, 33, 0.15)");
+  });
+
+  test("shows keyboard focus inside the box, where its rounded clip cannot cut it off", async ({
+    page,
+  }) => {
+    await openArmB(page);
+    const button = page.getByTestId("hero-video-play");
+    // A key press first, so the focus below counts as a keyboard user's.
+    await page.keyboard.press("Shift");
+    await button.focus();
+    const focusVisible = await button.evaluate((el) => el.matches(":focus-visible"));
+    test.skip(!focusVisible, "this engine does not show focus-visible for a scripted focus");
+    const ring = await button.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { style: s.outlineStyle, width: s.outlineWidth, offset: s.outlineOffset };
+    });
+    // The box clips its overflow, so a ring drawn outside the button is never seen.
+    expect(ring).toEqual({ style: "solid", width: "3px", offset: "-3px" });
   });
 
   test("plays the full video with sound on a tap and hands over its controls", async ({ page }) => {
@@ -72,7 +140,8 @@ test.describe("Landing arm B — the hero video", () => {
     const played = await page.evaluate(
       () => (window as unknown as { __played: string[] }).__played
     );
-    expect(played).toContain("hero-video-full:sound");
+    // The film, with sound, and nothing else ever played.
+    expect(played).toEqual(["hero-video-full:sound"]);
   });
 
   test("keeps the hero's own call to action", async ({ page }) => {
