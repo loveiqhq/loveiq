@@ -3496,15 +3496,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       setIsPricingModalOpen(true);
       return;
     }
+    const quote = pricingQuotes?.[plan];
+    trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     // A preview has no report to buy for: the plan's own preview opens instead, as its
-    // buyer would come back to it (previewCheckout.ts). Nothing is sent and nothing counted.
+    // buyer would come back to it (previewCheckout.ts), and nothing reaches Stripe. Counted
+    // above all the same, as every press of this door is; previews never run on production.
     if (isPreview) {
       setCheckoutHandoff({ status: "redirecting", message: null });
       window.location.assign(previewPaidHref(plan));
       return;
     }
-    const quote = pricingQuotes?.[plan];
-    trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     // Essentials + Full Report are per-archetype; All Reports is a global
     // unlock so it stays archetype-less.
     const archetypeForCheckout = plan === "all_reports" ? null : (archetype ?? null);

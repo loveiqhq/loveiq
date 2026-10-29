@@ -1247,7 +1247,8 @@ describe("ReportPage", () => {
         );
         expect(assign).toHaveBeenCalledWith("/report?v4=0&preview=1&plan=full_report");
         expect(mockStartReportCheckout).not.toHaveBeenCalled();
-        expect(mockTrackBeginCheckout).not.toHaveBeenCalled();
+        // Every press of the one door to Stripe is counted (unlock-funnel-events.test.ts).
+        expect(mockTrackBeginCheckout).toHaveBeenCalledTimes(1);
       } finally {
         Object.defineProperty(window, "location", { configurable: true, value: realLocation });
       }
