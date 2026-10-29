@@ -55,7 +55,7 @@ const ExitReasons: FC<ExitReasonsProps> = ({ stage, priceCents, seed, random }) 
   const [reasons] = useState<ExitReason[]>(() =>
     orderExitReasons(exitReasons(stage, priceCents), random ?? seededRandom(`${seed}:${stage}`))
   );
-  const recorded = useRef({ answers: 0, notes: 0, last: null as ExitReason["code"] | null });
+  const recorded = useRef({ answers: 0, notes: 0, last: null as string | null });
   /** A choice made past the cap, still unsent: the reader's final answer, sent as they leave. */
   const pending = useRef<ExitReasonAnswer | null>(null);
   const order = reasons.map((r) => r.code);
