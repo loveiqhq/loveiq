@@ -1,0 +1,9 @@
+{
+  "name": "loveiq-db-backup",
+  "private": true,
+  "description": "The Blob client of the weekly database backup (.github/workflows/db-backup.yml), pinned by its own lockfile so the app does not carry it.",
+  "type": "module",
+  "dependencies": {
+    "@vercel/blob": "2.8.0"
+  }
+}
