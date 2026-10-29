@@ -780,6 +780,29 @@
   color: #3f3a4d;
 }
 
+/* Main's "Maybe later", once pressed: the reasons' thank-you green, in the button's place. The
+ * line is there from the start, empty, so it is read out as it fills. */
+.pge-leave__saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 0;
+  color: #2e7d5b;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+  text-align: left;
+}
+
+.pge-leave__saved:empty {
+  min-height: 0;
+}
+
+.pge-leave__saved:focus {
+  outline: none;
+}
+
 /* ── The bar: on the page's foot, above the consent banner and the phone's home bar ── */
 .pge-sticky {
   position: sticky;
