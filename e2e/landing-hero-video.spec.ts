@@ -82,7 +82,7 @@ test.describe("Landing arm B — the hero video", () => {
 
     const box = (await page.getByTestId("hero-video").boundingBox())!;
     const circle = (await page.getByTestId("hero-video-play-icon").boundingBox())!;
-    const size = page.viewportSize()!.width >= 640 ? 84 : 60;
+    const size = page.viewportSize()!.width >= 640 ? 72 : 52;
     expect(Math.abs(circle.width - size)).toBeLessThanOrEqual(1);
     expect(Math.abs(circle.height - size)).toBeLessThanOrEqual(1);
     // Centred left to right; its middle at 70% of the box's height.
@@ -96,6 +96,28 @@ test.describe("Landing arm B — the hero video", () => {
     expect(time.x + time.width).toBeLessThanOrEqual(box.x + box.width);
     expect(time.y).toBeGreaterThan(box.y + box.height / 2);
     expect(time.y + time.height).toBeLessThanOrEqual(box.y + box.height);
+  });
+
+  test("wears the old corner pill's gradient and pulses gently, but not under reduced motion", async ({
+    page,
+  }) => {
+    await openArmB(page);
+    // The circle: orange into violet into lavender, as the "Watch" pill's was.
+    const fill = await page
+      .locator('[data-testid="hero-video-play-icon"] > span')
+      .last()
+      .evaluate((el) => getComputedStyle(el).backgroundImage);
+    expect(fill).toContain("rgb(254, 104, 57)");
+    expect(fill).toContain("rgb(149, 142, 246)");
+    const pulse = page.getByTestId("hero-video-play-pulse");
+    const animation = () =>
+      pulse.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { name: s.animationName, iterations: s.animationIterationCount };
+      });
+    expect(await animation()).toEqual({ name: "play-pulse", iterations: "infinite" });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect((await animation()).name).toBe("none");
   });
 
   test("under a mouse, hovering grows the play button and dims the poster", async ({ page }) => {

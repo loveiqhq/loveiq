@@ -502,6 +502,19 @@ describe("hero video — the button", () => {
     expect(button().getAttribute("aria-label")).toBe("Watch the intro video with sound (1:10)");
   });
 
+  /**
+   * 29.10 evening (Fatih): the circle takes the old corner pill's look back (the brand
+   * gradient, a white triangle), a little smaller, with a small pulse to draw the eye. A
+   * film that is starting shows its spinner instead, without the pulse.
+   */
+  it("pulses gently while it waits, and stops once the film is starting", () => {
+    playResult = never;
+    render(<WHeroVideo />);
+    expect(screen.getByTestId("hero-video-play-pulse")).toBeTruthy();
+    tap();
+    expect(screen.queryByTestId("hero-video-play-pulse")).toBeNull();
+  });
+
   it("shows a spinner in the circle while the film starts, and the triangle otherwise", () => {
     playResult = never;
     render(<WHeroVideo />);
