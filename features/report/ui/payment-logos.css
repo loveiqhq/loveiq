@@ -13,6 +13,13 @@
   list-style: none;
 }
 
+/* The narrowest phones: closer together, so the six still make one row (about 276px). */
+@media (max-width: 359px) {
+  .pay-logos {
+    column-gap: 8px;
+  }
+}
+
 .pay-logos__item {
   display: flex;
 }
