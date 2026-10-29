@@ -1145,7 +1145,24 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
       reportToken: OWNER_TOKEN,
       submissionId: 55,
       viewMode: "owner",
+      surveyMinutes: null,
     });
+  });
+
+  it("tells the gate the minutes the reader spent on the survey, from the survey's own clock", async () => {
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/report_access_token?token=eq.")) {
+        return rows([{ survey_submission_id: 55 }]);
+      }
+      if (url.includes("/rest/v1/survey_submission?")) {
+        expect(url).toContain("duration_ms");
+        return rows([{ ...SUBMISSION, duration_ms: 13 * 60_000 + 40_000 }]);
+      }
+      if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
+      return rows([]);
+    });
+    const res = await ownerGet();
+    expect((await res.json()).surveyMinutes).toBe(14);
   });
 
   it("never lets the gate be cached", async () => {

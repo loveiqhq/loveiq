@@ -73,14 +73,36 @@ export interface InitialUnlockGatePayload {
   reportToken: string | null;
   submissionId: number | null;
   viewMode: "owner";
+  /**
+   * The minutes the reader spent on the survey, for the exit page's "You invested 14 minutes
+   * into your answers" (Marcus's canvas, 29.10); null when it would not be true of them
+   * (surveyMinutesFromDuration). Absent from a payload older than it.
+   */
+  surveyMinutes?: number | null;
+}
+
+/** Below this a run is a skim, above it the survey was left open: neither is time "invested". */
+const SURVEY_MINUTES_MIN = 3;
+const SURVEY_MINUTES_MAX = 90;
+
+/**
+ * The survey's own clock (survey_submission.duration_ms, start to submit) in whole minutes, or
+ * null when it says nothing a reader would recognise as the time they put in.
+ */
+export function surveyMinutesFromDuration(durationMs: number | null | undefined): number | null {
+  if (typeof durationMs !== "number" || !Number.isFinite(durationMs)) return null;
+  const minutes = Math.round(durationMs / 60_000);
+  return minutes >= SURVEY_MINUTES_MIN && minutes <= SURVEY_MINUTES_MAX ? minutes : null;
 }
 
 export function buildInitialUnlockGatePayload({
   reportToken,
   submissionId,
+  surveyMinutes = null,
 }: {
   reportToken: string | null;
   submissionId: number | null;
+  surveyMinutes?: number | null;
 }): InitialUnlockGatePayload {
   return {
     gate: "initial_unlock",
@@ -91,6 +113,7 @@ export function buildInitialUnlockGatePayload({
     reportToken,
     submissionId,
     viewMode: "owner",
+    surveyMinutes,
   };
 }
 
