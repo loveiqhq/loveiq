@@ -17,6 +17,8 @@ name: Database Backup
 # Every run is recorded in cron_run, so the stall watchdog alerts if the backups stop.
 on:
   workflow_dispatch:
+  push: # TEMPORARY: proves the workflow on its branch; removed before merge
+    branches: [chore/db-backup]
 
 concurrency:
   group: ${{ github.workflow }}
