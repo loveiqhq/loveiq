@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 // Mock @upstash/redis so the module can be imported without the package installed
 vi.mock("@upstash/redis", () => ({
@@ -89,5 +89,59 @@ describe("getClientIp", () => {
 
   it("leaves IPv4 addresses keyed on the full /32", () => {
     expect(ipv6Key("203.0.113.5")).toBe("203.0.113.5");
+  });
+});
+
+// A host other than Vercel names its own header. Only that one header is read.
+describe("getClientIp with TRUSTED_CLIENT_IP_HEADER", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("reads the header it names, not x-real-ip", () => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", "cf-connecting-ip");
+    const req = makeRequest({ "cf-connecting-ip": "5.6.7.8", "x-real-ip": "1.1.1.1" });
+    expect(getClientIp(req)).toBe("5.6.7.8");
+  });
+
+  it("never falls back to another header when the named one is absent", () => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", "cf-connecting-ip");
+    const req = makeRequest({ "x-real-ip": "1.1.1.1", "x-forwarded-for": "2.2.2.2" });
+    expect(getClientIp(req)).toBe("unknown");
+  });
+
+  it("accepts the name in any case and with padding", () => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", " CF-Connecting-IP ");
+    expect(getClientIp(makeRequest({ "cf-connecting-ip": "5.6.7.8" }))).toBe("5.6.7.8");
+  });
+
+  it("reads x-forwarded-for only when it is named explicitly", () => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", "x-forwarded-for");
+    expect(getClientIp(makeRequest({ "x-forwarded-for": "9.9.9.9" }))).toBe("9.9.9.9");
+  });
+
+  it("still collapses IPv6 from the named header to its /64", () => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", "fly-client-ip");
+    const req = makeRequest({ "fly-client-ip": "2001:db8::dead:beef" });
+    expect(getClientIp(req)).toBe("2001:db8:0:0::/64");
+  });
+
+  it.each(["", "   "])("treats %j as unset", (value) => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", value);
+    expect(getClientIp(makeRequest({ "x-real-ip": "1.2.3.4" }))).toBe("1.2.3.4");
+  });
+
+  it.each([
+    "x real ip",
+    "x-forwarded-for, x-real-ip",
+    "x-forwarded-for\nx-real-ip",
+    "x_forwarded_for",
+    "cf-connecting-ip:",
+    "-x-real-ip",
+  ])("falls back to x-real-ip, never x-forwarded-for, for %j", (value) => {
+    vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", value);
+    const req = makeRequest({ "x-real-ip": "1.1.1.1", "x-forwarded-for": "2.2.2.2" });
+    expect(getClientIp(req)).toBe("1.1.1.1");
+    expect(getClientIp(makeRequest({ "x-forwarded-for": "2.2.2.2" }))).toBe("unknown");
   });
 });
