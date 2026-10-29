@@ -3,8 +3,9 @@ name: Database Backup
 # A weekly copy of the production database, kept OUTSIDE Supabase: if the Supabase account is
 # locked or lost, or bad data goes unnoticed past Supabase's own 7 days of backups, this is what
 # we restore from. It holds the `public` schema (every table, row, function and policy that is
-# ours) and `supabase_migrations` (which migrations are applied). Staff sign-in accounts (`auth`)
-# are left out: no customer row points at them, and staff sign in again after a restore.
+# ours) and `supabase_migrations` (which migrations are applied); beside it, the live pg_cron
+# jobs as the statements that recreate them. Staff sign-in accounts (`auth`) are left out: no
+# customer row points at them, and staff sign in again after a restore.
 #
 # Each dump is test-restored into an empty Postgres, encrypted with age, and stored in the
 # private Vercel Blob store `loveiq-db-backups` (Frankfurt), which no Vercel project is
@@ -17,8 +18,6 @@ name: Database Backup
 # Every run is recorded in cron_run, so the stall watchdog alerts if the backups stop.
 on:
   workflow_dispatch:
-  push: # TEMPORARY: proves the workflow on its branch; removed before merge
-    branches: [chore/db-backup]
 
 concurrency:
   group: ${{ github.workflow }}

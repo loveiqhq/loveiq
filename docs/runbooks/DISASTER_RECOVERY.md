@@ -1,5 +1,7 @@
 # Disaster Recovery — LoveIQ Web
 
+<!-- cspell:ignore pooler pgdump bypassrls sqzxwvwbsdgyxrlvvtye awfmcvpezgimfvaylcpp -->
+
 > Owner: Eman + on-call. Source of truth for "the database is broken, what now."
 
 This document covers Supabase database recovery, Vercel deployment rollback, and the
@@ -11,25 +13,106 @@ quarterly restore drill. For per-migration backout SQL, see [MIGRATION_ROLLBACK.
 | --------------------------- | -------------------------------------------------------------- | ------------------------ |
 | Bad migration in prod       | Apply matching `supabase/rollbacks/*.sql`                      | < 15 min                 |
 | Bad code deploy             | `vercel rollback` to previous prod deployment                  | < 5 min                  |
-| Data corruption (1 table)   | Restore from PITR to a branch, copy table                      | < 60 min                 |
-| Catastrophic loss (full DB) | Restore Supabase PITR snapshot to new project                  | < 4 h                    |
+| Data corruption (1 table)   | Restore a daily backup to a new project, copy the table back   | < 60 min                 |
+| Catastrophic loss (full DB) | Daily backup to a new project; Supabase gone: weekly copy (§1) | < 4 h                    |
 | Wrong nurture email sent    | `PATCH /api/admin/system-flags` set `nurture_sequence=false`   | < 1 min                  |
 | Survey contamination        | `PATCH /api/admin/system-flags` set `survey_submissions=false` | < 1 min                  |
 
 ## 1. Where backups live
 
-Supabase Pro plan includes **Point-In-Time Recovery (PITR) with a 7-day retention window**.
-Backups are managed by Supabase and live in the same region as the project.
-There is **no off-Supabase backup** in this repo today.
+There are two, and they fail in different ways.
 
-- Dashboard: `https://supabase.com/dashboard/project/<project-id>/database/backups`
-- Restore is via Supabase UI (Database → Backups → Restore to point in time).
-- Restoring goes to a **new branch**, not the live project. You then:
-  1. Verify the restored snapshot is healthy (row counts, recent timestamps).
-  2. Decide whether to promote the branch (full cutover) or copy specific rows.
+### Supabase's daily backups (inside Supabase)
 
-**Gap**: no automated backup verification cron exists. The quarterly drill below
-is the manual substitute.
+Production (`pveqkhdpypfzxggwjsnk`, eu-central-2) is on Pro **without** the Point-in-Time
+Recovery add-on (checked 2026-10-29: `pitr_enabled: false`). Supabase keeps one physical
+backup a day for 7 days, so up to a day of writes can be lost.
+
+- Dashboard → Database → Backups. A daily backup restores either **in place** (the project
+  is unreachable meanwhile, and everything written after the backup is gone) or **to a new
+  project**. A new project also gets the pg_cron jobs, which start running at once.
+- They do not hold Storage files. LoveIQ stores none (0 buckets, 2026-10-29).
+- They do not keep custom roles' passwords. After an in-place restore, reset
+  `loveiq_backup`'s password (below), or the weekly copy fails.
+- They live in the Supabase account, so they are lost with it.
+
+### The weekly copy outside Supabase
+
+`.github/workflows/db-backup.yml`, since 2026-10-29.
+
+- **What:** `pg_dump --format=custom` of the `public` schema (every table, row, function,
+  view and policy) and `supabase_migrations` (which migrations are applied). Beside each copy,
+  a small `.cron.sql` file holds the live pg_cron jobs as `cron.schedule(...)` statements:
+  the restored migration history would otherwise stop the migrations from recreating them.
+- **Not in it:** staff sign-in accounts (`auth`: 5 staff, email magic link). No customer row
+  points at them (`app_user.auth_user_id` is always empty), and staff sign in again after a
+  restore; the allowlist `admin_users` is in `public`.
+- **When:** Sundays at 03:41 UTC, started by Vercel's clock. Every dump is first restored into
+  an empty Postgres 17 with pgvector, and the run fails if a table or its rows are missing.
+- **Where:** the Vercel Blob store `loveiq-db-backups` (`store_su8rg2sP8Aia8d5P`): private,
+  Frankfurt (fra1), connected to no Vercel project. Each copy is
+  `db/<UTC time>_run-<GitHub run id>.pgdump.age`, about 126 MB.
+- **Locked:** encrypted with [age](https://age-encryption.org) to the public key in the
+  workflow. **The private key is only in Eman's macOS Keychain ("LoveIQ DB backup key (age)")
+  and his password manager. Without it no copy can be opened.**
+- **Kept 30 days** (four or five copies), because the privacy policy (§9) keeps a deleted
+  account's data for at most 30 days. So a copy is at most a week old, and the oldest is a
+  month old.
+- **Watched:** a failed run posts to the brain channel. A week and a day without a run alerts
+  the ops channel (the stall watchdog). Each run checks that the copy of every successful run
+  in the last 28 days is still stored, because the token that stores a copy can also delete one.
+- **Access:** the login `loveiq_backup` (read-only through `pg_read_all_data`, `BYPASSRLS` so
+  pg_dump sees every row) through the session port of the pooler. GitHub secrets
+  `BACKUP_DATABASE_URL` and `BACKUP_BLOB_READ_WRITE_TOKEN`; the store token is also in the
+  Keychain ("LoveIQ DB backup Blob token"). Rotation: `docs/runbooks/SECURITY.md`.
+
+### Restore the weekly copy
+
+Done end to end on 2026-10-29 (drill log, §6): about 10 minutes from a laptop. You need
+[age](https://github.com/FiloSottile/age/releases) and the PostgreSQL 17 client tools
+(Postgres.app has them), and a new Supabase project in eu-central-2 as `$TARGET` (the
+session URL of its pooler, port 5432, with the password in `PGPASSWORD`).
+
+```bash
+# 1. Pick a copy, then download it. Use curl: `vercel blob get` once saved a truncated file
+#    and still printed "Success!". age refuses a damaged file, so a bad download cannot slip by.
+export BLOB_READ_WRITE_TOKEN="$(security find-generic-password -s 'LoveIQ DB backup Blob token' -w)"
+vercel blob list --prefix db/
+COPY=db/<UTC time>_run-<id>
+for f in pgdump.age cron.sql; do
+  curl -fsS -H "Authorization: Bearer $BLOB_READ_WRITE_TOKEN" -o "copy.$f" \
+    "https://su8rg2sp8aia8d5p.private.blob.vercel-storage.com/$COPY.$f"
+done
+
+# 2. Decrypt with the private key, straight from the Keychain (no key file on disk).
+security find-generic-password -s 'LoveIQ DB backup key (age)' -w \
+  | age -d -i - -o copy.pgdump copy.pgdump.age
+
+# 3. Prepare the new project: the extensions prod has in public, and the two read-only
+#    roles some tables are granted to (without them, ~100 grants fail).
+psql "$TARGET" -c 'create extension if not exists vector with schema public' \
+  -c 'create extension if not exists pg_trgm with schema public' \
+  -c 'create role posthog_readonly nologin' -c 'create role claude_readonly nologin'
+
+# 4. Restore everything but CREATE SCHEMA public, which every database already has.
+#    Expect exactly 3 errors, "permission denied to change default privileges": harmless.
+pg_restore --list copy.pgdump | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' > restore.list
+pg_restore --no-owner --use-list=restore.list -d "$TARGET" copy.pgdump
+
+# 5. The pg_cron jobs, then let the data API see the tables.
+psql "$TARGET" -c 'create extension if not exists pg_cron' -f copy.cron.sql
+psql "$TARGET" -c "notify pgrst, 'reload schema'"
+```
+
+Then §5 from step 4 (Vercel env, redeploy, webhooks). Also:
+
+- Create `loveiq_backup` on the new project (`create role loveiq_backup login bypassrls`,
+  `grant pg_read_all_data to loveiq_backup`, then `\password loveiq_backup` in psql, which sends
+  only a hash) and update `BACKUP_DATABASE_URL`, or next Sunday's backup fails.
+- Re-apply deletion requests that came in after the copy was taken (hello@ inbox): the restored
+  `data_subject_request_log` only knows the earlier ones.
+- Give `posthog_readonly` and `claude_readonly` logins again if PostHog or Claude needs them.
+- Delete `copy.pgdump` when done: it is every customer's data, unencrypted.
 
 ## 2. Vercel deployment rollback
 
@@ -67,13 +150,16 @@ Propagation: up to 30 s across all Vercel instances (in-process cache TTL).
 
 ## 4. Data corruption — single table
 
-1. Restore PITR snapshot to a Supabase branch as of the timestamp before corruption.
+1. Get the known-good rows from before the corruption: restore the last daily backup taken
+   before it **to a new project** (§1; never in place, which throws away everything since), or,
+   if it is older than 7 days, decrypt a weekly copy (§1) and restore just that table into a
+   scratch database: `pg_restore --data-only --table=<table> -d <scratch> copy.pgdump`.
 2. From the live DB, take a temporary dump of the affected table:
    `pg_dump --table=<table> --data-only > affected.sql`
-3. From the branch, dump the known-good rows:
+3. From the restored copy, dump the known-good rows:
    `pg_dump --table=<table> --data-only > recovered.sql`
 4. Diff, decide which rows to replace, apply via psql.
-5. Drop the branch.
+5. Delete the new project or scratch database, and any decrypted copy.
 
 ## 5. Catastrophic loss — full DB
 
@@ -82,13 +168,16 @@ If the live Supabase project is destroyed or unreachable for an extended outage:
 1. **Communicate**: post incident to ops Slack.
 2. **Flip kill switches**: set `survey_submissions=false` (via admin) **only** if a
    read-replica is responsive. If write path is dead, skip — site already 5xxing.
-3. **Restore PITR** to a new Supabase project (Supabase UI; new project = new ref).
+3. **Restore the newest daily backup to a new project** (Supabase UI; new project = new ref).
+   If the Supabase account itself is gone or locked, restore **the weekly copy** (§1) into a
+   new Supabase project instead, or into any Postgres 17 with pgvector.
 4. **Update Vercel env vars** to point at the new project's URL + service role key.
 5. **Redeploy** so the new vars take effect.
 6. **Reconfigure Stripe webhook URL** if the project URL changed.
 7. **Reconfigure Resend webhook URL** likewise.
 
-Target RTO: 4 hours. Target RPO: 5 minutes (PITR granularity).
+Target RTO: 4 hours. Target RPO: 24 hours from a daily backup (PITR is not enabled), up to
+7 days from the weekly copy alone.
 
 ## 6. Quarterly restore drill
 
@@ -96,21 +185,23 @@ Schedule: **first Friday of every calendar quarter**, owner Eman.
 
 Goal: prove the restore path works under low-stakes conditions before a real incident.
 
-Drill steps:
+Drill steps (alternate between the two kinds of backup in §1):
 
-1. Pick a timestamp 24 h in the past.
-2. Restore PITR to a new branch.
-3. Pick 3 tables (e.g. `survey_submission`, `personal_report`, `app_user`).
-4. Run row-count comparison: branch vs live. Note any expected new rows in live.
-5. Run a sample query on the branch (e.g. recent submissions for a known test user).
-6. Record outcome in the drill log section below (date, branch ref, anomalies).
-7. Drop the branch.
+1. Restore the newest weekly copy (§1, "Restore the weekly copy") or a daily backup into a new,
+   temporary Supabase project in eu-central-2.
+2. Compare it with live: the count of tables, functions, policies, indexes and constraints,
+   and every table's rows. Live may only be ahead by rows written since the backup.
+3. Through the data API with the new project's keys: the service-role key sees the same counts
+   as the database; the anon key sees no rows.
+4. Record the outcome in the drill log below (date, what was restored, timings, anomalies).
+5. Delete the temporary project and every decrypted file.
 
 ### Drill log
 
-| Date       | Branch  | Outcome     | Notes                                                                                                                                              |
-| ---------- | ------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-04 | _to do_ | _scheduled_ | First scheduled drill (first Friday of Q3 2026). Owner: Eman. Run the 7-step procedure above; record actual restore latency for use as a baseline. |
+| Date       | Branch                                                                                                          | Outcome    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-09-04 | _not run_                                                                                                       | _skipped_  | First scheduled drill (first Friday of Q3 2026). Not run; the 2026-10-29 drill below is the first.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 2026-10-29 | weekly copy `db/2026-10-29T2108Z_run-40954830931` into temporary project `sqzxwvwbsdgyxrlvvtye` (deleted after) | **passed** | Download 126 MB with curl in 30 s (the Vercel CLI once truncated it; age refused the file), decrypt from the Keychain in under a second, restore from a laptop in 7 min. Identical to live: 97 tables, 98 functions, 86 policies, 314 indexes, 300 constraints, 7 triggers; 92 tables with identical rows, 5 ahead in live by 71 rows written after the copy. Data API counts matched, the anon key saw no rows, two functions returned the same rows as live. Found and fixed: grants to `posthog_readonly`/`claude_readonly` need those roles first; the pg_cron jobs were in no backup. Then the commands of §1 "Restore the weekly copy", run word for word on a second temporary project (`awfmcvpezgimfvaylcpp`, deleted after) with `db/2026-10-29T2132Z_run-40958302873`: 7.5 min, exactly the 3 expected errors, the decrypted dump's SHA-256 equal to the one the backup run logged, the 3 pg_cron jobs identical to live, every object count identical. |
 
 ## 7. Branch protection — required GitHub rule
 
@@ -153,8 +244,8 @@ fast 30/180/365-day tiers in F‑02.
 
 ## 10. The company brain — what comes back, and the 14 rows that do not
 
-The brain is 28,087 rows in `brain_chunk` in the same database, so PITR covers it and
-sections 4 and 5 apply unchanged. What a restore does not tell you is which of it would
+The brain is 28,087 rows in `brain_chunk` in the same database, so both backups in §1 cover it
+and sections 4 and 5 apply unchanged. What a restore does not tell you is which of it would
 have come back on its own, and under pressure that is the only part worth deciding.
 
 **Almost all of it rebuilds itself.** Every source but one is a copy of something
@@ -187,14 +278,15 @@ returned zero rows, which reads exactly like "there is nothing to back up".
 
 **Nothing deletes them in normal operation** — checked 2026-09-22: `decision` is the one
 source with no ingest module, and therefore no sweep. The exposure is a bad restore or
-corruption older than the 7-day PITR window, not a runaway cron.
+corruption older than the backups in §1 reach (7 days of daily backups, 30 days of weekly
+copies), not a runaway cron.
 
 ## 11. Known gaps (TODO)
 
-- **No off-Supabase backup**: PITR is the only path. If Supabase itself loses the
-  region, recovery depends on Supabase's own DR. Mitigation: nightly `pg_dump` to S3
-  is a sensible follow-up if regulatory or contractual requirements demand it.
-- **No automated backup verification**: the drill is manual. Could be automated via
-  a weekly cron that restores to a branch and asserts row counts.
+- **One person holds the key to the weekly copies**: the age private key is only with Eman
+  (Keychain and password manager). If both are lost, the copies cannot be opened. A second
+  key, held by someone else, would be a second `-r` recipient in `db-backup.yml`.
+- **Up to a day of writes can be lost**: PITR is off. The add-on would bring that down to
+  minutes; it is a cost decision.
 - **No incident comms template**: status-page integration would help during long
   outages. Currently incident updates are ad-hoc on Slack.
