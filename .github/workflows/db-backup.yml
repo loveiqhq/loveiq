@@ -37,6 +37,11 @@ jobs:
     name: Dump, test-restore, encrypt, store
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # This job holds the whole database in plain text for a few minutes, so the only code it
+    # runs is pg_dump, age and the Blob client, pinned by scripts/db-backup/package-lock.json
+    # and installed without install scripts. The app's `npm ci` runs in the job below.
+    outputs:
+      start_ms: ${{ steps.start.outputs.ms }}
     services:
       # The empty Postgres every dump is restored into. Same major version and pgvector as prod.
       restore:
@@ -48,18 +53,16 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 20
-    # The service key is given to the step that records the run, not the whole job: at job
-    # level it would also reach `npm ci`, and every package install script with it.
     steps:
       - name: Note the start
-        run: echo "START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
+        id: start
+        run: echo "ms=$(date +%s%3N)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: "npm"
 
       - name: Install pg_dump 17, age and the Blob client
         run: |
@@ -76,16 +79,13 @@ jobs:
             | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/age.tgz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/age" >> "$GITHUB_PATH"
-          # Next to the script that uses it, so the app's package.json does not carry it.
-          mkdir -p "$RUNNER_TEMP/blob"
-          cp scripts/db-backup-blob.mjs "$RUNNER_TEMP/blob/"
-          cd "$RUNNER_TEMP/blob"
-          npm install --no-save --no-package-lock --silent @vercel/blob@2.8.0
+          npm ci --prefix scripts/db-backup --ignore-scripts --no-audit --no-fund
 
       - name: Dump the database
         id: dump
         # A read-only login (loveiq_backup, BYPASSRLS so every row is seen) through the
-        # pooler's session port; the runner has no IPv6 for the direct address.
+        # pooler's session port; the runner has no IPv6 for the direct address. The password
+        # goes to pg_dump through the environment, not its command line.
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           PGAPPNAME: db-backup
@@ -95,16 +95,22 @@ jobs:
             echo "::error::BACKUP_DATABASE_URL is not set, so there is nothing to back up from."
             exit 1
           fi
-          pg_dump "$BACKUP_DATABASE_URL" --schema=public --schema=supabase_migrations \
+          # postgresql://user:password@host:port/db?sslmode=require, the password plain hex.
+          creds=${BACKUP_DATABASE_URL#*://}
+          creds=${creds%%@*}
+          export PGPASSWORD=${creds#*:}
+          dsn=${BACKUP_DATABASE_URL/":${PGPASSWORD}@"/@}
+          pg_dump "$dsn" --schema=public --schema=supabase_migrations \
             --format=custom --file="$RUNNER_TEMP/db.pgdump"
           tables=$(pg_restore --list "$RUNNER_TEMP/db.pgdump" \
             | grep -c -E ' TABLE (public|supabase_migrations) ' || true)
           echo "tables=$tables" >> "$GITHUB_OUTPUT"
           echo "Dumped $tables tables, $(stat -c %s "$RUNNER_TEMP/db.pgdump") bytes."
 
-      - name: Restore it into the empty Postgres
+      - name: Restore it into an empty database
         # This log is public, so restore errors are shown without the DETAIL and CONTEXT lines,
-        # and a failed COPY without its message: both can quote row values.
+        # and a failed COPY without its message: both can quote row values. The database is
+        # dropped once counted, so the data is not left running beside the steps after this.
         env:
           PGHOST: localhost
           PGUSER: postgres
@@ -112,24 +118,26 @@ jobs:
           TABLES: ${{ steps.dump.outputs.tables }}
         run: |
           set -euo pipefail
+          createdb restore_test
           # What the dump assumes but does not carry: the two extensions prod installed in
           # public, and the role the row-level-security policies name.
-          psql -q -v ON_ERROR_STOP=1 -d postgres \
+          psql -q -v ON_ERROR_STOP=1 -d restore_test \
             -c 'create extension vector' -c 'create extension pg_trgm' \
             -c 'create role service_role nologin'
           # Supabase's own roles do not exist here, so owners and grants are left out.
-          if ! pg_restore --no-owner --no-privileges -d postgres "$RUNNER_TEMP/db.pgdump" \
+          if ! pg_restore --no-owner --no-privileges -d restore_test "$RUNNER_TEMP/db.pgdump" \
             2> "$RUNNER_TEMP/restore.err"; then
             grep -E '^pg_restore: error:' "$RUNNER_TEMP/restore.err" \
               | sed -E 's/(COPY failed for table "[^"]+").*/\1/' | cut -c1-240 | head -30 || true
             echo "::error::The backup did not restore cleanly into an empty Postgres."
             exit 1
           fi
-          restored=$(psql -tA -d postgres -c "select count(*) from pg_tables
+          restored=$(psql -tA -d restore_test -c "select count(*) from pg_tables
             where schemaname in ('public', 'supabase_migrations')")
-          rows=$(psql -tA -d postgres -c "select sum((xpath('/row/n/text()', query_to_xml(
+          rows=$(psql -tA -d restore_test -c "select sum((xpath('/row/n/text()', query_to_xml(
             format('select count(*) as n from %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint)
             from pg_tables where schemaname in ('public', 'supabase_migrations')")
+          dropdb restore_test
           echo "Restored $restored of $TABLES tables, $rows rows."
           if [ "$restored" != "$TABLES" ] || [ "${rows:-0}" -eq 0 ]; then
             echo "::error::The restore is incomplete: $restored of $TABLES tables, ${rows:-0} rows."
@@ -149,7 +157,7 @@ jobs:
           age -r "$AGE_RECIPIENT" -o "$RUNNER_TEMP/db.pgdump.age" "$RUNNER_TEMP/db.pgdump"
           rm "$RUNNER_TEMP/db.pgdump"
           name="db/$(date -u +%Y-%m-%dT%H%MZ)_run-${GITHUB_RUN_ID}.pgdump.age"
-          node "$RUNNER_TEMP/blob/db-backup-blob.mjs" upload "$RUNNER_TEMP/db.pgdump.age" "$name"
+          node scripts/db-backup/blob.mjs upload "$RUNNER_TEMP/db.pgdump.age" "$name"
           {
             echo "### Database backup stored"
             echo "- Copy: \`$name\` in the Vercel Blob store \`loveiq-db-backups\`"
@@ -157,12 +165,16 @@ jobs:
             echo "- SHA-256 of the dump before encryption: \`$plain_sha\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Delete the plain dump, whatever happened
+        if: always()
+        run: rm -f "$RUNNER_TEMP/db.pgdump" "$RUNNER_TEMP/restore.err"
+
       - name: Delete copies older than 30 days
         # The privacy policy keeps a deleted account's data for at most 30 days, copies included.
         # Only after a new copy is stored, so a broken backup never deletes the last good one.
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BACKUP_BLOB_READ_WRITE_TOKEN }}
-        run: node "$RUNNER_TEMP/blob/db-backup-blob.mjs" prune 30
+        run: node scripts/db-backup/blob.mjs prune 30
 
       - name: Check every copy from the last 28 days is still stored
         # The token that stores a copy can also delete one, so a copy that vanishes must be
@@ -178,7 +190,7 @@ jobs:
             --limit 100 --json databaseId,createdAt \
             -q ".[] | select(.createdAt > \"$since\") | .databaseId")
           # shellcheck disable=SC2086 # one argument per run id
-          node "$RUNNER_TEMP/blob/db-backup-blob.mjs" check "$GITHUB_RUN_ID" $ids
+          node scripts/db-backup/blob.mjs check "$GITHUB_RUN_ID" $ids
 
       - name: Tell the brain channel the backup failed
         # cancelled() too: a run that hits timeout-minutes ends as CANCELLED.
@@ -195,18 +207,32 @@ jobs:
             --data "{\"text\":\":rotating_light: The weekly database backup FAILED. Until it runs clean, the newest copy outside Supabase is more than a week old. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
             "$SLACK_BRAIN_WEBHOOK_URL"
 
-      - if: always()
-        run: npm ci
+  record:
+    name: Record the run for the stall watchdog
+    # A runner of its own, away from the data: `npm ci` runs every package's install script.
+    needs: backup
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
 
       - name: Record that the backup ran
         # For the stall watchdog (features/cron/server/cron-stall.ts): a week and a day with no
         # row alerts the ops channel, which catches a clock that stopped starting this. The
-        # status comes through env, not spliced into `run:`.
-        if: always()
+        # result comes through env, not spliced into `run:`.
         env:
-          JOB_STATUS: ${{ job.status }}
+          RESULT: ${{ needs.backup.result }}
+          START_MS: ${{ needs.backup.outputs.start_ms }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          if [ "$JOB_STATUS" = "success" ]; then outcome=success; else outcome=error; fi
+          if [ "$RESULT" = "success" ]; then outcome=success; else outcome=error; fi
           npx tsx scripts/record-cron-run.mjs db-backup "$outcome"

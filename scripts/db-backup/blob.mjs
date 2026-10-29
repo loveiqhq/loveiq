@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * The two Vercel Blob calls of the weekly database backup (.github/workflows/db-backup.yml).
+ * The Vercel Blob calls of the weekly database backup (.github/workflows/db-backup.yml).
  *
  *   upload <file> <pathname>   store an encrypted dump; never overwrites a copy
  *   prune <days>               delete the copies older than this many days
  *   check <runId>...           fail when the copy of any of these runs is missing
  *
  * Reads BLOB_READ_WRITE_TOKEN, the token of the private store `loveiq-db-backups`. The
- * workflow installs @vercel/blob next to this file, so the app does not depend on it.
+ * package.json and lockfile beside this file pin @vercel/blob, so the app does not carry it.
  */
 import { createReadStream, statSync } from "node:fs";
 
