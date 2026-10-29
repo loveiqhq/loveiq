@@ -175,9 +175,9 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
     it keeps the submission bound, and Back finds it as it was. Under its guarantee, Marcus's
     box (29.10): "Your result is ready and saved · You invested 14 minutes into your answers…",
     the minutes the reader's own (`surveyMinutes` on the gate payload, from
-    `survey_submission.duration_ms`; none outside 3–90). "Maybe later" stays on the page
-    since 29.10 (sync: the landing page loses a finished reader) and says "Saved. The link to
-    your result is in your email."; from 28.10 to 29.10 it led to the landing page.
+    `survey_submission.duration_ms`; none outside 3–90). "Maybe later" leads to the landing
+    page (`markLeftInitialGate`: not counted as a landing visit), the page's way out; the
+    header's arrow goes back to the gate, whose "Not ready to unlock yet" opens this page.
   - `full` is a dialog over the report for a EUR 1.99 holder (`FullReportExit`; the full-report
     quote's `creditKind: "initial"`), opened by the plan picker's "Not ready to unlock yet",
     which takes the place of its × for them (`onNotReady`). Tapping outside, Escape and Back

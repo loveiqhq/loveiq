@@ -213,12 +213,7 @@ export const EXIT_COPY = {
     paymentsLabel: GATE_COPY.paymentsLabel,
     fineprint: "Anonymous · No subscription · Discreet billing",
   },
-  /** Main's "Maybe later" stays on the page and says how the reader comes back (sync 29.10). */
-  leave: {
-    pre: "Maybe later",
-    full: "Back to my open chapters",
-    saved: "Saved. The link to your result is in your email.",
-  },
+  leave: { pre: "Maybe later", full: "Back to my open chapters" },
   sticky: {
     cta: (priceCents: number) => `Unlock risk-free · ${euros(priceCents)}`,
     guarantee: (days: number) => `${days}-day money-back guarantee`,
