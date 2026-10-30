@@ -8,8 +8,9 @@ import { PTS_VIDEO } from "./payToStartContent";
 
 /**
  * The hero's film (Figma 1706:1720, phone 1706:2057): Emma's intro, the landing's video
- * files, in Figma's wide box (850 x 360, radius 24) with a white play button in the middle
- * and the running time in a dark pill at the bottom right.
+ * files, in Figma's wide box (850 x 360, radius 24) with a play button in the middle (the home
+ * page's gradient one with its pulse, since 30.10) and the running time in a dark pill at the
+ * bottom right.
  *
  * Its own component, not the landing's WHeroVideo: that one reports to the landing test's
  * hero-video events, and nothing on this page may count there. It keeps WHeroVideo's two
@@ -132,15 +133,35 @@ export const PtsHeroMedia: FC = () => {
         >
           <span
             aria-hidden
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_-8px_rgba(22,16,33,0.45)] transition-transform duration-300 motion-safe:group-hover:scale-105 sm:h-[76px] sm:w-[76px]"
+            className="absolute inset-0 rounded-[inherit] bg-[#161021]/0 transition-colors duration-300 group-hover:bg-[#161021]/15"
+          />
+          {/* The home page's play button (Fatih, 29.10, #677) on this page's film too (30.10):
+              the brand gradient, a white triangle, and a soft ring that swells out of it and
+              fades; none under reduced motion, and none while the film starts. */}
+          <span
+            aria-hidden
+            data-testid="pts-hero-play-icon"
+            className="relative h-[52px] w-[52px] transition-transform duration-300 motion-safe:group-hover:scale-[1.08] sm:h-[72px] sm:w-[72px]"
           >
-            {phase === "starting" ? (
-              <span className="h-4 w-4 rounded-full border-2 border-[#161021]/25 border-t-[#161021] motion-safe:animate-spin sm:h-6 sm:w-6" />
-            ) : (
-              <svg viewBox="0 0 12 12" fill="#161021" className="ml-[2px] h-3 w-3 sm:h-4 sm:w-4">
-                <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
-              </svg>
+            {phase !== "starting" && (
+              <span
+                data-testid="pts-hero-play-pulse"
+                className="absolute inset-0 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] opacity-0 motion-safe:animate-play-pulse motion-reduce:hidden"
+              />
             )}
+            <span className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] shadow-[0_8px_24px_-8px_rgba(22,16,33,0.55)] ring-2 ring-white/30">
+              {phase === "starting" ? (
+                <span className="h-[18px] w-[18px] rounded-full border-2 border-white/40 border-t-white motion-safe:animate-spin sm:h-6 sm:w-6" />
+              ) : (
+                <svg
+                  viewBox="0 0 12 12"
+                  fill="white"
+                  className="ml-[2px] h-[18px] w-[18px] sm:ml-[3px] sm:h-6 sm:w-6"
+                >
+                  <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
+                </svg>
+              )}
+            </span>
           </span>
           <span
             aria-hidden
