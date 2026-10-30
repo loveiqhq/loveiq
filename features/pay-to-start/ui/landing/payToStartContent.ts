@@ -33,7 +33,6 @@ export const PTS_SUPPORT_EMAIL = "hello@loveiq.org";
 export const PTS_BREADCRUMB = ["Assessments", "Sexuality", "What’s my sexual archetype?"] as const;
 
 export const PTS_HERO = {
-  badge: "Applied Psychometrics original",
   title: "What’s my sexual archetype?",
   lead: "You were never taught the words for what you want. This gives you the language, and a precise map of how you desire.",
   ratingStars: "★★★★★",
@@ -43,174 +42,115 @@ export const PTS_HERO = {
   length: "62 questions · ~15 min",
 } as const;
 
-export const PTS_FIND_OUT = {
-  title: "What you’ll find out",
-  lead: "In about 15 minutes you’ll know things about yourself most people never learn. Your desire has a logic; we put it into plain words you can use.",
+/**
+ * Landing V2's chapter overview (Mark, final 30.10), `#inside-your-report` (the ads' "See a
+ * sample page" sitelink): the report's own chapter menu beside the questions it answers. The
+ * rows are the live menu's (REPORT_V4_NAV_PARTS), not V2's drawing of the menu before the
+ * slimmed report (16.10); the five questions are Mark's, each beside its chapter.
+ */
+export const PTS_INSIDE = {
+  title: { lead: "The questions", emph: "your report", tail: "answers." },
+  /** The menu row the drawing highlights, as if the reader were on it. */
+  activeId: "core_archetype",
+  notes: [
+    {
+      id: "core_archetype",
+      title: "Start with who you are.",
+      body: "Your Core Archetype, your constellation and how this report was built.",
+    },
+    { id: "typical_beliefs", title: "Which rules about sex did you never agree to?" },
+    {
+      id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+      title: "What turns you on, and what shuts you down?",
+    },
+    {
+      id: "challenges_in_partnership",
+      title: "Where do you and your partners keep missing each other?",
+    },
+    {
+      id: "typical_sexual_fantasy_amp_practice_tendencies",
+      title: "Which fantasies belong in your head, and which in your bed?",
+    },
+  ],
+} as const;
+
+/**
+ * Landing V2's "Inside Each Chapter" (Mark, final 30.10; the sync's label, in the report's
+ * heading case): how one chapter reads, Typical Beliefs, in four cards. Its words are the
+ * report's own (data/report3-typical-beliefs.ts). The lead is the offer's (PtsOfferCopy).
+ */
+export const PTS_SAMPLE = {
+  title: { lead: "Inside", emph: "Each Chapter", tail: "." },
   cards: [
     {
-      number: "01",
-      title: "Identify your core archetype out of 14",
-      body: "Your sexual personality among 14 research-based types, and how closely you match the others.",
+      icon: "book",
+      eyebrow: "Read",
+      title: "What drives your pattern",
+      kind: "read",
+      label: "Part 3 · Typical Beliefs",
+      text: "The goal is not to eliminate shadow beliefs or replace them with artificially positive ones. It is to notice when an automatic interpretation has quietly turned into a fact.",
     },
     {
-      number: "02",
-      title: "What actually turns you on",
-      body: "Your desire has a logic. We put it into plain words you can use.",
+      icon: "eye",
+      eyebrow: "Recognise",
+      title: "The belief, and the shift",
+      kind: "shift",
+      from: "“If sex has to be planned, the spark must be gone.”",
+      shiftLabel: "THE SHIFT",
+      to: "“Planning can create the conditions for anticipation and spark.”",
     },
     {
-      number: "03",
-      title: "What raises the heat, and what kills it",
-      body: "The exact conditions that switch desire on for you, and the ones that shut it down.",
+      icon: "target",
+      eyebrow: "Practice time: ~15 min.",
+      title: "Something to try",
+      kind: "try",
+      lead: "Separate the event from its meaning.",
+      text: "First describe what actually happened without interpretation. Then ask: ",
+      quote: "“What did I decide that meant?”",
     },
     {
-      number: "04",
-      title: "Words for what you crave",
-      body: "You can’t ask for what you can’t name. The report gives you the vocabulary.",
-    },
-    {
-      number: "05",
-      title: "Where you and a partner keep missing each other",
-      body: "See how your patterns collide in bed, and where the real gap is.",
+      icon: "layers",
+      eyebrow: "Go deeper",
+      title: "Where it comes from",
+      kind: "deeper",
+      sources: [
+        { title: "100+ research papers", body: "peer-reviewed, across several scientific fields" },
+        { title: "Clinical models", body: "the frameworks therapists use, and their pointers" },
+        {
+          title: "Foundational books",
+          body: "the texts experts return to, and their key insights",
+        },
+      ],
     },
   ],
+  swipe: "Swipe",
 } as const;
 
-export const PTS_INSIDE = {
-  title: "Inside your report",
-  lead: (price: string) =>
-    `A 17-chapter report written for your archetype, in chapters you can read in a few minutes each. All of it is included in ${price}; nothing is held back after you pay.`,
-  chapters: [
-    {
-      number: "01",
-      title: "Your core archetype",
-      body: "Your sexual personality out of 14 and how closely you match the neighbouring types.",
-    },
-    {
-      number: "02",
-      title: "Desire accelerators & brakes",
-      body: "Your strongest turn-on, named, and what quietly kills the mood for you.",
-    },
-    {
-      number: "03",
-      title: "How your archetype works",
-      body: "Your typical sun and shadow beliefs, the challenges they create, and a 15-minute practice.",
-    },
-    {
-      number: "04",
-      title: "Attachment style",
-      body: "How your attachment style shapes the way you seek connection, protect yourself and experience intimacy with a partner.",
-    },
-    {
-      number: "05",
-      title: "Fantasy vs. reality",
-      body: "What your fantasies say about what you want, and how they compare with what you actually do.",
-    },
-    {
-      number: "06",
-      title: "Power orientation",
-      body: "The balance of dominance, submission and equality that feels most natural to you.",
-    },
-  ],
-  sample: {
-    label: "SAMPLE PAGE · SPARK SEEKER",
-    title: "Typical beliefs, and the shift",
-    shiftLabel: "THE SHIFT",
-    beliefs: [
-      {
-        from: "“If sex has to be planned, the spark must be gone.”",
-        to: "“Planning can create the conditions for anticipation and spark.”",
-      },
-      {
-        from: "“Real desire should happen spontaneously.”",
-        to: "“Spontaneous desire excites me, but desire can also emerge once intimacy begins.”",
-      },
-      {
-        from: "“I need novelty to stay sexually interested.”",
-        to: "“Novelty strongly activates my desire, but I can create freshness without constantly needing something completely new.”",
-      },
-    ],
-    caption: "From “How your archetype works”, one of the chapters in every report.",
-  },
-} as const;
-
-export const PTS_PERSONALITIES = {
-  title: "14 sexual personalities. You are more than just one of them.",
-  lead: "You get matched to your nearest archetype, with your distance to the neighbouring types kept visible, because most people lead with one and borrow from others.",
-  archetypes: [
-    {
-      name: "Spark Seeker",
-      color: "#FE6839",
-      motto: "“Let’s find the spark, then turn it into a blaze.”",
-    },
-    {
-      name: "Sensual Connector",
-      color: "#D05976",
-      motto: "“Touch me with presence and meet me with heart.”",
-    },
-    {
-      name: "Authority Conductor",
-      color: "#E09A2A",
-      motto: "“I set the frame, and we play inside it.”",
-    },
-    { name: "Tender Devotee", color: "#BF66D9", motto: "“Tell me I’m enough.”" },
-    { name: "Minimalist Companion", color: "#8F9BB3", motto: "“Simple is enough.”" },
-    { name: "Radiant Performer", color: "#E0A83A", motto: "“Watch me shine.”" },
-    { name: "Curious Apprentice", color: "#56B4D3", motto: "“Teach me everything.”" },
-    {
-      name: "Explorer of Edges",
-      color: "#E0518F",
-      motto: "“Take me somewhere new, intense, and real enough to shake me awake.”",
-    },
-    {
-      name: "Analytical Sexualist",
-      color: "#795FC8",
-      motto: "“Tell me what works, and I’ll get better at pleasing you.”",
-    },
-    {
-      name: "Loyal Ritualist",
-      color: "#1F9D6B",
-      motto: "“Give me the familiar touch and the trusted rhythm.”",
-    },
-    {
-      name: "Relational Nurturer",
-      color: "#C97B5A",
-      motto: "“Let us make each other feel safe, cared for, and wanted again.”",
-    },
-    {
-      name: "Emotional Voyeur",
-      color: "#6B8FD6",
-      motto: "“Let me watch, imagine, and feel the tension before I fully step in.”",
-    },
-    {
-      name: "Spiritual Lover",
-      color: "#A58BD9",
-      motto: "“Make it feel meaningful, like our bodies are saying something deeper.”",
-    },
-    {
-      name: "Quiet Withdrawer",
-      color: "#7A8A99",
-      motto: "“Come slowly, ask gently, and let me feel that I can say no and still be safe.”",
-    },
-  ],
-} as const;
-
+/**
+ * Landing V2 (Mark, final 30.10): each step under an eyebrow, the price no longer in step 1.
+ * The survey's own facts stand where V2 drew the older count, length and page total (Fatih,
+ * 30.10; survey-facts.test.ts holds them).
+ */
 export const PTS_HOW_IT_WORKS = {
   title: "How it works",
   steps: [
     {
-      number: "01",
+      number: "1",
+      eyebrow: "One payment",
       title: "Unlock once",
-      body: (price: string) =>
-        `${price}, paid securely with Apple Pay, card or Link. One payment covers the survey and the full report.`,
+      body: () =>
+        "Paid securely with Apple Pay, card or Link. One payment covers the survey and the full report.",
     },
     {
-      number: "02",
+      number: "2",
+      eyebrow: "About 15 minutes",
       title: "Answer 62 questions",
       body: () =>
         "About 15 minutes, at your own pace. Anonymous by default; pause and come back anytime.",
     },
     {
-      number: "03",
+      number: "3",
+      eyebrow: "The moment you finish",
       title: "Read your report",
       body: () =>
         "Your archetype and your full 17-chapter report open the moment you finish. Nothing left to pay.",
@@ -218,100 +158,39 @@ export const PTS_HOW_IT_WORKS = {
   ],
 } as const;
 
-export const PTS_TESTIMONIALS = {
-  title: "What people say",
-  ratingStars: "★★★★★",
-  ratingValue: "4.9/5",
-  ratingLabel: " · 10,000+ people",
-  quotes: [
-    {
-      // The frame sets this one without quotation marks; the other three have them.
-      quote:
-        "The results are extensive and spot-on, without the test being too long. I got to know myself better, and it will help my partner understand me better as well.",
-      name: "Dorian, 34",
-      role: "File manager",
-      avatar: "/testimonials/dorian.jpg",
-    },
-    {
-      quote:
-        "“I’d never really explored my sexuality or the patterns behind it before. The insights in the full report were truly eye-opening. Absolutely worth it.”",
-      name: "Philipp Leonhard, 42",
-      role: "Product Owner IT",
-      avatar: "/testimonials/philipp.jpg",
-    },
-    {
-      quote:
-        "“The results were more insightful than I expected. It connected dots between emotional triggers and communication styles I hadn’t noticed before.”",
-      name: "Richard Petrich, 34",
-      role: "Entrepreneur",
-      avatar: "/testimonials/richard.jpg",
-    },
-    {
-      quote:
-        "“Unlocking my report was one of the best investments made for my sexuality. It is shockingly precise.”",
-      name: "Marija Mustapić, 41",
-      role: "IT Infrastructure",
-      avatar: "/testimonials/marija.jpg",
-    },
-  ],
-} as const;
-
-export const PTS_RESEARCH = {
-  title: "Built by researchers, not for clicks",
-  lead: "Science-backed, not a horoscope. We show our work.",
-  stats: [
-    {
-      value: "≈60",
-      label: "Calibrated items",
-      body: "Situational questions across the full instrument, not self-flattering ones.",
-    },
-    {
-      value: "30,000+",
-      label: "Responses scored against",
-      body: "Each answer loads onto the model’s dimensions, weighted by data.",
-    },
-    {
-      value: "100+",
-      label: "Papers and books",
-      body: "Clinical models and peer-reviewed research behind every chapter.",
-    },
-  ],
-  experts: [
-    {
-      quote:
-        "“Care and transparency should go hand in hand. Especially when technology touches intimacy.”",
-      name: "Dr. Dijana Galijašević",
-      role: "Business Ethics & Social Science · HHL & ESADE",
-      photo: "/academic/dijana-avatar.jpg",
-    },
-    {
-      quote:
-        "“The 14 personalities aren’t invented categories. They’re recurring patterns in how desire, attachment and arousal cluster across the research.”",
-      name: "Dr. Bruno Steinkraus",
-      role: "Biochemistry & Neuroscience · Oxford & Imperial",
-      photo: "/academic/bruno-avatar.jpg",
-    },
-  ],
-} as const;
-
+/**
+ * Landing V2's "One price" (Mark, final 30.10): the plan picker's card. The survey's own facts
+ * stand where V2 drew older ones (Fatih, 30.10): 62 questions, about 15 minutes, 17 chapters.
+ */
 export const PTS_ONE_PRICE = {
-  title: "One price. Survey and full report.",
-  terms: "One-time payment · no subscription",
+  title: { lead: "One price.", emph: "Every chapter unlocked." },
+  badge: "Survey + full report",
+  cardTitle: { strong: "Your survey", rest: "and full archetype report" },
+  covers: "One payment covers the survey and ",
+  coversStrong: "the full report.",
+  terms: "one-time payment",
   cta: "Unlock Survey & Full Report",
+  guarantee: "14-day money-back guarantee.",
   includes: [
-    "The full survey: 62 questions, about 15 minutes",
-    "Your core archetype out of 14, with your closest matches",
-    "Your full 17-chapter report, unlocked the moment you finish",
-    "Practices and one-sentence scripts you can use with a partner",
-    "Lifetime access to your report",
-    "A receipt and invoice by email",
+    "62 questions · ~15 minutes",
+    "Full 17-chapter report included",
+    "Anonymous by default",
+    "Pay once · no subscription",
   ],
-  guaranteeLead: "14-day money-back guarantee.",
-  guaranteeRest: ` If the report doesn’t give you anything new, write to ${PTS_SUPPORT_EMAIL} and we refund you. No questions asked.`,
+  secure: "Guaranteed Safe & Secure Checkout",
+  chapters: { emph: "All chapters", rest: " of the report", second: "fully unlocked" },
+} as const;
+
+/** Landing V2's guarantee box under the desktop's price card (Mark, final 30.10). */
+export const PTS_GUARANTEE = {
+  title: "14-day money-back guarantee",
+  body: "Risk-free. If it isn’t valuable to you, full refund, ",
+  strong: "no questions asked.",
 } as const;
 
 export const PTS_FAQ = {
-  title: "Questions before you pay",
+  // Landing V2's heading (Mark, 30.10), the home page's; the answers stay this page's own.
+  title: { lead: "The questions people", emph: "actually ask." },
   items: [
     {
       question: "Why do I pay before the survey?",
@@ -399,19 +278,17 @@ export const PTS_STICKY_BAR = {
  */
 export const PTS_INITIAL = {
   insideLead:
-    "A 17-chapter report (when fully unlocked) written for your archetype, in chapters you can read in a few minutes each.",
+    "A 17-chapter report (when fully unlocked) written for your archetype, in chapters you can read in a few minutes each. This is how “Typical Beliefs” reads.",
   steps: [
     {
-      number: "01",
-      title: "Unlock once",
+      ...PTS_HOW_IT_WORKS.steps[0],
       // The frames dropped the price here (the phone's reads "Paid securely …").
       body: () =>
         "Paid securely with Apple Pay, card or Link. One payment covers the survey and your initial report.",
     },
     PTS_HOW_IT_WORKS.steps[1],
     {
-      number: "03",
-      title: "Read your report",
+      ...PTS_HOW_IT_WORKS.steps[2],
       body: () =>
         "Your archetype and your initial report open the moment you finish. Nothing left to pay.",
     },
@@ -452,7 +329,12 @@ export const PTS_INITIAL = {
 /** One offer's page: what it says where the two pages differ. */
 export interface PtsOfferCopy {
   insideLead: (price: string) => string;
-  steps: ReadonlyArray<{ number: string; title: string; body: (price: string) => string }>;
+  steps: ReadonlyArray<{
+    number: string;
+    eyebrow: string;
+    title: string;
+    body: (price: string) => string;
+  }>;
   faqItems: ReadonlyArray<{ question: string; answer: string }>;
   priceCard: {
     eyebrow: string;
@@ -479,7 +361,8 @@ export interface PtsOfferCopy {
 
 export const PTS_OFFER_COPY: Record<PayToStartOfferId, PtsOfferCopy> = {
   full: {
-    insideLead: PTS_INSIDE.lead,
+    insideLead: () =>
+      "A 17-chapter report written for your archetype, in chapters you can read in a few minutes each. This is how “Typical Beliefs” reads.",
     steps: PTS_HOW_IT_WORKS.steps,
     faqItems: PTS_FAQ.items,
     priceCard: PTS_PRICE_CARD,
