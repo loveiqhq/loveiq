@@ -11,10 +11,12 @@ export interface PreUnlockExitProps {
   reportSessionId: string | null;
   /** `?preview=1`: nothing to buy, so its buttons open the report's preview after the EUR 1.99. */
   preview?: boolean;
-  /** The header's arrow: back to the EUR 1.99 page, which stays mounted under this one. */
+  /**
+   * The header's arrow, and "Maybe later" too: back to the EUR 1.99 page, which stays mounted
+   * under this one. Nothing on the gate's loop leads off the report (Marcus, 30.10: "we loop them
+   * back to the paygate").
+   */
   onBack: () => void;
-  /** "Maybe later": the landing page, as "Not ready to unlock yet" led until 28.10. */
-  onLeave: () => void;
 }
 
 /**
@@ -29,7 +31,6 @@ export default function PreUnlockExit({
   reportSessionId,
   preview = false,
   onBack,
-  onLeave,
 }: PreUnlockExitProps) {
   const { start, state } = useInitialUnlockCheckout({
     priceCents: gate.priceCents,
@@ -39,7 +40,7 @@ export default function PreUnlockExit({
   });
 
   // The link sat at the top of the gate; the exit page opens at its own top too, and going back
-  // finds the gate where the reader left it ("Maybe later" leaves the report: not there).
+  // (the arrow or "Maybe later") finds the gate where the reader left it.
   useEffect(() => {
     const gateY = window.scrollY;
     const path = window.location.pathname;
@@ -67,8 +68,7 @@ export default function PreUnlockExit({
       }}
       onUnlock={(place) => void start(place === "card" ? "exit_card" : "exit_sticky")}
       onBack={onBack}
-      onLeave={onLeave}
-      leaveHref="/"
+      onLeave={onBack}
     />
   );
 }

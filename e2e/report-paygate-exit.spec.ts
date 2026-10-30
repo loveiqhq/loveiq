@@ -143,19 +143,32 @@ test.describe("The EUR 1.99 gate's exit page", () => {
     expect(asks()).toBe(1);
   });
 
-  test("“Maybe later” leads to the landing page", async ({ page }) => {
+  // Marcus, 30.10: "we loop them back to the paygate". "Maybe later" goes back to the EUR 1.99
+  // page as the arrow does, whether the page was opened from it or by a link.
+  test("“Maybe later” goes back to the EUR 1.99 page, never off the report", async ({ page }) => {
     await recordAnalytics(page);
     await mockGate(page);
-    await page.goto(`/report/${GATE_TOKEN}?leave=pre`);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.goto(`/report/${GATE_TOKEN}`);
+    await expect(page.locator(".iug-page")).toBeVisible();
+    await page.getByRole("link", { name: "Not ready to unlock yet" }).click();
+    await expect(page).toHaveURL(new RegExp(`/report/${GATE_TOKEN}\\?leave=pre$`));
     const canStore = await persists(page);
-    await page.getByRole("link", { name: "Maybe later" }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await page.getByRole("button", { name: "Maybe later" }).click();
+    await expect(page).toHaveURL(new RegExp(`/report/${GATE_TOKEN}$`));
+    await expect(page.locator(".iug-page")).toBeVisible();
+    await expect(page.locator(".pge-page")).toHaveCount(0);
     if (canStore) {
       await expect
         .poll(() => stored(page, "paygate_exit_leave"))
         .toEqual([expect.objectContaining({ stage: "pre", via: "maybe_later" })]);
     }
+
+    // Opened by a link, it drops its parameter in place: still the report, the gate on screen.
+    await page.goto(`/report/${GATE_TOKEN}?leave=pre`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.getByRole("button", { name: "Maybe later" }).click();
+    await expect(page).toHaveURL(new RegExp(`/report/${GATE_TOKEN}$`));
+    await expect(page.locator(".iug-page")).toBeVisible();
   });
 });
 
