@@ -21,6 +21,7 @@ import {
   stampInitialGateSeen,
 } from "@features/report/server/initialGateState";
 import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
+import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
 import {
   buildInitialUnlockGatePayload,
   needsInitialUnlockGate,
@@ -550,17 +551,40 @@ export async function GET(request: Request) {
           accessLookupFailed: !accessLookupOk,
         })
       ) {
+        const gatePayload = buildInitialUnlockGatePayload({
+          reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
+          submissionId: submission.id,
+          surveyMinutes: surveyMinutesFromDuration(submission.duration_ms),
+        });
+        // Tour first (sync 30.10): a reader who has never met the gate gets their report under
+        // the guided tour first, with who they are left out (tourFirstReport.ts), and the
+        // gate's payload beside it; the page meets the gate as the tour ends, and asks with
+        // `gate=now`, which lands below and stamps it seen. V4 only (the tour's page); never a
+        // persona walk's (the probe cookie), which goes straight to the gate as it always has.
+        if (
+          isV4Request &&
+          url.searchParams.get("gate") !== "now" &&
+          !gateState?.seenAt &&
+          !isProbeRequest(request.headers.get("cookie"))
+        ) {
+          const tourFirst = NextResponse.json(
+            buildTourFirstReportPayload({
+              submissionId: submission.id,
+              userName: getSubmissionUserName(submission),
+              reportDate: submission.created_date_time,
+              archetype: scoring.v5_primary_archetype || scoring.primary_archetype,
+              gate: gatePayload,
+            })
+          );
+          tourFirst.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+          tourFirst.headers.set("Pragma", "no-cache");
+          return tourFirst;
+        }
         if (personalReportId && !gateState?.seenAt) {
           const seenReportId = personalReportId;
           scheduleAfterResponse("initial-gate-seen", () => stampInitialGateSeen(seenReportId));
         }
-        const gated = NextResponse.json(
-          buildInitialUnlockGatePayload({
-            reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
-            submissionId: submission.id,
-            surveyMinutes: surveyMinutesFromDuration(submission.duration_ms),
-          })
-        );
+        const gated = NextResponse.json(gatePayload);
         gated.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
         gated.headers.set("Pragma", "no-cache");
         return gated;

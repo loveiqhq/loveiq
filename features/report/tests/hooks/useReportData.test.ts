@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useReportData } from "@features/report/ui/hooks/useReportData";
 import { REPORT_SESSION_KEY, SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
 
@@ -241,6 +241,64 @@ describe("useReportData", () => {
 
       await waitFor(() => expect(result.current.status).toBe("success"));
       expect(result.current.gate).toBeNull();
+    });
+
+    // Tour first (sync 30.10): the report arrives with the gate beside it; the page meets the
+    // gate as the tour ends, at once, and tells the API, which stamps it seen.
+    it("meets the gate the report arrived with, and tells the API with gate=now", async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ primaryArchetype: "", percentages: {}, initialGate: GATE }),
+        })
+        .mockResolvedValue({ ok: true, status: 200, json: async () => GATE });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() =>
+        useReportData({ token: "rpt_abcdefghij0123456789", v4: true })
+      );
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      expect(result.current.data?.initialGate).toEqual(GATE);
+
+      act(() => result.current.meetInitialGate());
+      expect(result.current.status).toBe("gated");
+      expect(result.current.gate).toEqual(GATE);
+      expect(result.current.data).toBeNull();
+      const stamp = String(mockFetch.mock.calls[1]?.[0] ?? "");
+      expect(stamp).toContain("/api/report?");
+      expect(stamp).toContain("token=rpt_abcdefghij0123456789");
+      expect(stamp).toContain("gate=now");
+    });
+
+    it("leaves a report with no gate as it is", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Emotional Voyeur", percentages: {} }),
+      }) as unknown as typeof globalThis.fetch;
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      act(() => result.current.meetInitialGate());
+      expect(result.current.status).toBe("success");
+    });
+
+    it("asks the preview for the tour first with previewGate tour, and stamps nothing", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "", percentages: {}, initialGate: GATE }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+      const { result } = renderHook(() =>
+        useReportData({ preview: true, previewGate: "tour", v4: true })
+      );
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      expect(String(mockFetch.mock.calls[0]?.[0] ?? "")).toContain("gate=tour");
+      act(() => result.current.meetInitialGate());
+      expect(result.current.status).toBe("gated");
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it("asks the preview for the gate with previewGate", async () => {

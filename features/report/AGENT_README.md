@@ -102,7 +102,7 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
 - **Stops.** The chapter menu (the pill below 1280px, the sidebar from there, whose copy says "on
   the left"), Typical Beliefs' first "Show All", its chapter toggle, its "Try This" header and,
   for a reader who has not paid for the report on screen, the first locked chapter's lock
-  (Power Orientation). Essentials buyers count as paid (Fatih, 17.10). Copy in
+  (Power Orientation); not for a reader the EUR 1.99 gate meets right after (tour first, 30.10). Essentials buyers count as paid (Fatih, 17.10). Copy in
   `ui/v3/guidedTourContent.ts`, Title Case; what each stop points at in
   `ui/v3/guidedTourAnchors.ts`.
 - **When.** Owners and previews, never a shared view, a probe (the persona walks' cookie) or a
@@ -162,6 +162,22 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   price, credit, guarantee, the token and the submission id, nothing of the report —
   `useReportData` turns it into `status: "gated"`, and `ReportPage` draws
   `ui/gate/InitialUnlockGate.tsx` in its place: a page of its own, never a pop-up.
+- **Tour first (30.10).** Marcus's card "Lets first do the tour > Then open the pre paygate"
+  (sync 30.10). A gated owner's first open on the V4 page (never met the gate, not a probe)
+  is answered with the report under the guided tour, and who they are left out (Fatih, 30.10):
+  `server/tourFirstReport.ts` builds an ALLOW-LISTED payload (no archetype name anywhere, no
+  percentages, no card or Summary, Typical Beliefs locked with the name taken out of its words,
+  every other copy null, no quotes) with the gate's payload as `initialGate`; no seen stamp, no
+  `report_session`, no Slack step. The page (`tourFirst` in `ReportPage`) veils the card and the
+  top three (`V4IdentityVeil`, `V4TopThreeSection veiled`), locks every chapter but Part I's
+  two and Typical Beliefs (the menu says so too), sells nothing (no plans, sticky bar, paywall
+  ping or `report_viewed`; a lock leads to the gate) and runs the tour's first four stops (no
+  lock stop; `audience: free`). As the tour ends (`useGuidedTour` `over`), or at once where it
+  won't run (seen before, a probe, `?anchor`, `?leave=pre`, not V4), or when the reader scrolls
+  first or ~12 s pass without a start, `useReportData` `meetInitialGate` swaps in the gate it
+  carried and asks `/api/report?…&gate=now`, which answers with the gate alone and stamps
+  `initial_gate_seen_at`. So a reader who leaves mid-tour has no seen stamp (no E07, not in
+  "Saw the €1.99 page") until they come back. Preview: `/report?preview=1&v4=1&gate=tour`.
 - **The way out.** "Not ready to unlock yet", top left, for every reader, opens the gate's exit
   page on the same URL (`?leave=pre`, below). Until 28.10 it led to the landing page (sync 26.10,
   Marcus: "there is no such thing as back"). It still counts as `initial_gate_back`, now with
