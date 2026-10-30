@@ -1,15 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type CSSProperties,
-  type FC,
-  type MouseEvent,
-} from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
 import { trackPaygateExitLeave, trackPaygateExitViewed } from "@features/analytics/client";
 import {
   getTrustpilotConfig,
@@ -67,9 +58,11 @@ export interface PaygateExitPageProps {
   checkout: { busy: boolean; error: string | null; errorPlace: ExitCtaPlace | null };
   onUnlock: (place: ExitCtaPlace) => void;
   onBack: () => void;
-  /** The quiet way out at the foot: "Maybe later" (a link, `leaveHref`) or "Back to my open chapters". */
+  /**
+   * The quiet way out at the foot: "Maybe later" back to the EUR 1.99 page (pre) or "Back to my
+   * open chapters" (full). Neither leaves the report.
+   */
   onLeave: () => void;
-  leaveHref?: string;
   /** Tests pin the reasons' order outright. */
   random?: () => number;
 }
@@ -156,7 +149,6 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
   onUnlock,
   onBack,
   onLeave,
-  leaveHref,
   random,
 }) => {
   const offerTitleId = useId();
@@ -195,12 +187,6 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
   const leave = () => {
     trackPaygateExitLeave({ stage, via: full ? "chapters" : "maybe_later" });
     onLeave();
-  };
-  // As the gate's own way out: a plain left click counts; a new tab or window does not leave.
-  const leaveByLink = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-      return;
-    leave();
   };
 
   const features = full
@@ -420,20 +406,9 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
         </section>
 
         <div className="pge-leave">
-          {leaveHref ? (
-            <Link
-              href={leaveHref}
-              prefetch={false}
-              className="pge-leave__link"
-              onClick={leaveByLink}
-            >
-              {EXIT_COPY.leave[stage]}
-            </Link>
-          ) : (
-            <button type="button" className="pge-leave__link" onClick={leave}>
-              {EXIT_COPY.leave[stage]}
-            </button>
-          )}
+          <button type="button" className="pge-leave__link" onClick={leave}>
+            {EXIT_COPY.leave[stage]}
+          </button>
         </div>
 
         <div className="pge-sticky">

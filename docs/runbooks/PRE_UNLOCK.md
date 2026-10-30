@@ -121,8 +121,8 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   (each view, behind the consent banner).
 - "Not ready to unlock yet" opens the gate's exit page (28.10, `?leave=pre`,
   `features/report/ui/gate/exit`), which makes the case again and asks why. Its "Maybe later"
-  leads to the landing page (not counted as a landing visit), the page's way out; its top-left
-  arrow goes back to the gate. `initial_gate_back` is the press: `to: "exit_page"` since 28.10, `"/"` from
+  and its top-left arrow both go back to the gate (Marcus, 30.10: "we loop them back to the
+  paygate"); nothing on the loop leads off the report. `initial_gate_back` is the press: `to: "exit_page"` since 28.10, `"/"` from
   27.10, when the event came to mean this link, shown to every reader; before, a back arrow
   shown only to readers who came from the survey. The sticky bar is always on screen since then too, so
   `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".

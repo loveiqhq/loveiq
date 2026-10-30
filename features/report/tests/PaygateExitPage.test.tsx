@@ -44,7 +44,6 @@ const PRE: PaygateExitPageProps = {
   onUnlock,
   onBack,
   onLeave,
-  leaveHref: "/",
   random: () => 0,
 };
 
@@ -119,18 +118,20 @@ describe("the EUR 1.99 gate's exit page (Marcus's Main board)", () => {
     expect(list.querySelector(".pay-logos__mark--klarna")).not.toBeNull();
   });
 
-  it("asks why, and leaves by “Maybe later” to the landing page", () => {
+  // Marcus, 30.10: "we loop them back to the paygate". Nothing on the page leads off the report.
+  it("asks why, and offers “Maybe later” as a button, not a link off the report", () => {
     render(<PaygateExitPage {...PRE} />);
     expect(screen.getByRole("heading", { name: "Not today? Tell us why." })).toBeTruthy();
     expect(screen.getAllByRole("radio")).toHaveLength(8);
-    expect(screen.getByRole("link", { name: "Maybe later" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "Maybe later" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Maybe later" })).toBeNull();
   });
 
-  it("says the result is saved, with the minutes the reader put in (Marcus's box, 29.10)", () => {
+  it("says not to lose the results, with the minutes the reader put in (Marcus's box and copy)", () => {
     render(<PaygateExitPage {...PRE} surveyMinutes={14} />);
     const box = document.querySelector<HTMLElement>(".pge-credit")!;
     const boxText = box.textContent?.replace(/\s+/g, " ");
-    expect(boxText).toContain("Your result is ready and saved");
+    expect(boxText).toContain("Don’t lose your results");
     expect(boxText).toContain(
       "You invested 14 minutes into your answers. Don’t leave without seeing what they say."
     );
@@ -140,8 +141,9 @@ describe("the EUR 1.99 gate's exit page (Marcus's Main board)", () => {
     expect(document.querySelector(".pge-safe-wrap")?.nextElementSibling).toHaveClass(
       "pge-credit-wrap"
     );
-    // Leaving loses nothing, so the page never says it does.
-    expect(text()).not.toMatch(/lose your result/i);
+    // Leaving loses nothing: Marcus's line asks the reader not to walk away from the results,
+    // and the page never claims they would be lost.
+    expect(text()).not.toMatch(/(will|would) (be )?lose|(are|be|get) lost|deleted/i);
   });
 
   it("says it without a number when the survey's clock says nothing true", () => {
@@ -208,7 +210,7 @@ describe("the full report's exit page (Marcus's FullUnlock board)", () => {
     );
     expect(document.querySelector(".pge-sticky__credit")?.textContent).toBe("€10 credit applied");
     expect(screen.getByRole("button", { name: "Back to my open chapters" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Maybe later" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Maybe later" })).toBeNull();
   });
 
   // It sits in its dialog over the report, whose <main> is still there.
@@ -262,14 +264,9 @@ describe("what the exit pages record and do", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("records “Maybe later” on a plain click only; a new tab is no leaving", () => {
+  it("records “Maybe later” and hands it to the page, which goes back to the EUR 1.99 page", () => {
     render(<PaygateExitPage {...PRE} />);
-    const later = screen.getByRole("link", { name: "Maybe later" });
-    later.addEventListener("click", (event) => event.preventDefault());
-    fireEvent.click(later, { metaKey: true });
-    fireEvent.click(later, { button: 1 });
-    expect(mockLeave).not.toHaveBeenCalled();
-    fireEvent.click(later);
+    fireEvent.click(screen.getByRole("button", { name: "Maybe later" }));
     expect(mockLeave).toHaveBeenCalledWith({ stage: "pre", via: "maybe_later" });
     expect(onLeave).toHaveBeenCalledTimes(1);
   });

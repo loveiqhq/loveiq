@@ -133,14 +133,13 @@ export const EXIT_COPY = {
     chips: ["Full refund", "No questions asked", "Zero risk"],
   },
   /**
-   * Main's box under the guarantee (Marcus's canvas, 29.10), with Fatih's headline in place of
-   * "Don't lose your results": leaving loses nothing, the result is saved and its link is in
-   * the reader's email, so the box says so and keeps Marcus's line. The minutes are the
-   * reader's own (surveyMinutesFromDuration); without them, the line has no number.
+   * Main's box under the guarantee, in Marcus's own words from his canvas (29.10; his ask on
+   * 30.10: "use my copy as it is designed to have more FOMO"). The minutes are the reader's own
+   * (surveyMinutesFromDuration); without them, the line has no number.
    */
   saved: {
     tileLabel: "MIN",
-    title: "Your result is ready and saved",
+    title: "Don’t lose your results",
     lead: "You invested",
     minutes: (minutes: number) => `${minutes} minutes`,
     rest: "into your answers. Don’t leave without seeing what they say.",
