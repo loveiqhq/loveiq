@@ -9,42 +9,56 @@ import { PTS_H2, PTS_REVEAL, PTS_SECTION, ptsRevealItem } from "./ptsStyles";
  */
 
 /**
- * Six answers. Native <details>, every one folded at first (Marcus, 20.10: "Collapse the
- * FAQ by default"; Figma drew them open with a "−", as the main landing's FAQ is not): a
- * question opens its answer, and the answers are in the page for search engines and
- * readers alike. The answers are the offer's (PtsOfferCopy).
+ * The questions, in Landing V2's look (Mark, final 30.10: the home page's numbered list under
+ * "The questions people actually ask."), holding this page's own answers about paying first and
+ * refunds, and the disclaimer (Fatih, 30.10). Native <details>, every one folded at first
+ * (Marcus, 20.10: "Collapse the FAQ by default"): a question opens its answer, and the answers
+ * are in the page for search engines and readers alike. The answers are the offer's.
  */
 export const PtsFaq: FC<{ items: PtsOfferCopy["faqItems"] }> = ({ items }) => (
   <section aria-labelledby="pts-faq" className={PTS_SECTION}>
-    <h2 id="pts-faq" className={`${PTS_H2} ${PTS_REVEAL}`}>
-      {PTS_FAQ.title}
+    <h2
+      id="pts-faq"
+      className={`text-center font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[44px] ${PTS_REVEAL}`}
+    >
+      {PTS_FAQ.title.lead}
+      <br />
+      <span className="text-[#c2410c]">{PTS_FAQ.title.emph}</span>
     </h2>
-    <div className="mt-[26px] border-t border-[#e9e6ee]">
+    <div className="mx-auto mt-10 max-w-3xl border-t border-black/[0.08]">
       {items.map((item, i) => (
         <details
           key={item.question}
-          className={`group border-b border-[#e9e6ee] ${ptsRevealItem(i, 3)}`}
+          className={`group border-b border-black/[0.08] ${ptsRevealItem(i, 3)}`}
         >
-          <summary className="focus-visible-ring flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm px-1 py-[22px] [&::-webkit-details-marker]:hidden">
-            <span className="font-sans text-[16px] font-bold leading-[21.86px] text-[#161021]">
-              {item.question}
+          <summary className="focus-visible-ring flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm py-5 text-left [&::-webkit-details-marker]:hidden">
+            <span className="flex items-baseline gap-4">
+              <span aria-hidden className="font-serif text-sm text-[#6f6a7a]">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="font-serif text-lg font-medium text-[#161021]">{item.question}</span>
             </span>
-            <span
+            <svg
               aria-hidden
-              className="w-4 shrink-0 text-center font-sans text-[22px] font-normal leading-[22px] text-[#795fc8]"
+              viewBox="0 0 20 20"
+              className="h-5 w-5 shrink-0 text-[#6f6a7a] transition-transform duration-300 group-open:rotate-180"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <span className="group-open:hidden">+</span>
-              <span className="hidden group-open:inline">−</span>
-            </span>
+              <path d="m5 7.5 5 5 5-5" />
+            </svg>
           </summary>
-          <p className="max-w-[640px] px-1 pb-[18px] font-sans text-[15px] leading-6 text-[#3f3a4d]">
+          <p className="pb-5 pl-9 font-sans text-[15px] leading-relaxed text-[#6b6678]">
             {item.answer}
           </p>
         </details>
       ))}
     </div>
     <div
-      className={`mt-6 flex items-start gap-3.5 rounded-[18px] bg-[#f5f6f8] py-[18px] pl-[22px] pr-5 ${PTS_REVEAL}`}
+      className={`mx-auto mt-6 flex max-w-3xl items-start gap-3.5 rounded-[18px] bg-[#f5f6f8] py-[18px] pl-[22px] pr-5 ${PTS_REVEAL}`}
     >
       <ShieldIcon check={false} color="#2E7D5B" className="h-5 w-5" />
       <p className="font-sans text-[13.5px] leading-[21px] text-[#3f3a4d]">

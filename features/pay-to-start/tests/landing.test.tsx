@@ -33,20 +33,22 @@ import { __resetArrivalNoticeForTests } from "@features/pay-to-start/ui/landing/
 import {
   PTS_BREADCRUMB,
   PTS_FAQ,
-  PTS_FIND_OUT,
   PTS_FINAL_CTA,
   PTS_FOOTER,
+  PTS_GUARANTEE,
   PTS_HERO,
   PTS_HOW_IT_WORKS,
   PTS_INITIAL,
   PTS_INSIDE,
   PTS_NOTICES,
   PTS_ONE_PRICE,
-  PTS_PERSONALITIES,
   PTS_PRICE_CARD,
-  PTS_RESEARCH,
-  PTS_TESTIMONIALS,
+  PTS_SAMPLE,
 } from "@features/pay-to-start/ui/landing/payToStartContent";
+import { WHY_UNLOCK_CARDS } from "@features/report/logic/whyUnlockCards";
+import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const assign = vi.fn();
 const reload = vi.fn();
@@ -110,48 +112,61 @@ afterEach(() => {
 });
 
 describe("the pay-to-start page, as drawn", () => {
-  it("prints every line of Figma's copy", () => {
+  // Landing V2 (Mark, final 30.10), with the survey's own facts where V2 drew older ones.
+  it("prints every line of Landing V2's copy", () => {
     renderPage();
     const text = pageText();
     const price = "€29";
+    const sampleText = PTS_SAMPLE.cards.flatMap((c) => {
+      switch (c.kind) {
+        case "read":
+          return [c.label, c.text];
+        case "shift":
+          return [c.from, c.shiftLabel, c.to];
+        case "try":
+          return [c.lead, `${c.text}${c.quote}`];
+        case "deeper":
+          return c.sources.flatMap((s) => [s.title, s.body]);
+      }
+    });
     const expected = [
       ...PTS_BREADCRUMB,
-      PTS_HERO.badge,
       PTS_HERO.title,
       PTS_HERO.lead,
       PTS_HERO.takers,
       PTS_HERO.length,
-      PTS_FIND_OUT.title,
-      PTS_FIND_OUT.lead,
-      ...PTS_FIND_OUT.cards.flatMap((c) => [c.title, c.body]),
-      PTS_INSIDE.title,
-      PTS_INSIDE.lead(price),
-      ...PTS_INSIDE.chapters.flatMap((c) => [c.title, c.body]),
-      PTS_INSIDE.sample.label,
-      PTS_INSIDE.sample.title,
-      ...PTS_INSIDE.sample.beliefs.flatMap((b) => [b.from, b.to]),
-      PTS_INSIDE.sample.caption,
-      PTS_PERSONALITIES.title,
-      PTS_PERSONALITIES.lead,
-      ...PTS_PERSONALITIES.archetypes.flatMap((a) => [a.name, a.motto]),
       PTS_HOW_IT_WORKS.title,
-      ...PTS_HOW_IT_WORKS.steps.flatMap((s) => [s.title, s.body(price)]),
-      PTS_TESTIMONIALS.title,
-      ...PTS_TESTIMONIALS.quotes.flatMap((q) => [q.quote, q.name, q.role]),
-      PTS_RESEARCH.title,
-      PTS_RESEARCH.lead,
-      ...PTS_RESEARCH.stats.flatMap((s) => [s.value, s.label, s.body]),
-      ...PTS_RESEARCH.experts.flatMap((e) => [e.quote, e.name, e.role]),
-      PTS_ONE_PRICE.title,
+      ...PTS_HOW_IT_WORKS.steps.flatMap((s) => [s.eyebrow, s.title, s.body(price)]),
+      "In 15 minutes, you'll know things about yourself most people never learn.",
+      "What actually turns you on",
+      "Where you and a partner keep missing each other",
+      `${PTS_INSIDE.title.lead}${PTS_INSIDE.title.emph} ${PTS_INSIDE.title.tail}`,
+      ...PTS_INSIDE.notes.flatMap((n) => ("body" in n ? [n.title, n.body] : [n.title])),
+      "Typical Beliefs",
+      "Other Archetypes",
+      `${PTS_SAMPLE.title.lead} ${PTS_SAMPLE.title.emph}${PTS_SAMPLE.title.tail}`,
+      ...PTS_SAMPLE.cards.flatMap((c) => [c.eyebrow, c.title]),
+      ...sampleText,
+      "14 sexual personalities.",
+      "10,000+",
+      "Built by researchers and on practical wisdom.",
+      `${PTS_ONE_PRICE.title.lead} ${PTS_ONE_PRICE.title.emph}`,
+      PTS_ONE_PRICE.badge,
+      `${PTS_ONE_PRICE.cardTitle.strong} ${PTS_ONE_PRICE.cardTitle.rest}`,
+      `${PTS_ONE_PRICE.covers}${PTS_ONE_PRICE.coversStrong}`,
       PTS_ONE_PRICE.terms,
+      PTS_ONE_PRICE.guarantee,
       ...PTS_ONE_PRICE.includes,
-      `${PTS_ONE_PRICE.guaranteeLead}${PTS_ONE_PRICE.guaranteeRest}`,
-      PTS_FAQ.title,
+      PTS_ONE_PRICE.secure,
+      ...WHY_UNLOCK_CARDS.flatMap((c) => [c.emph, c.body]),
+      `${PTS_FAQ.title.lead}${PTS_FAQ.title.emph}`,
       ...PTS_FAQ.items.flatMap((i) => [i.question, i.answer]),
       `${PTS_FAQ.disclaimerBefore}${PTS_FAQ.disclaimerBold}${PTS_FAQ.disclaimerAfter}`,
       PTS_PRICE_CARD.eyebrow,
       PTS_PRICE_CARD.guarantee,
       ...PTS_PRICE_CARD.includes,
+      PTS_GUARANTEE.title,
+      `${PTS_GUARANTEE.body}${PTS_GUARANTEE.strong}`,
       PTS_FINAL_CTA.title,
       `${PTS_FINAL_CTA.leadBefore}${PTS_FINAL_CTA.leadPrice(price)}`,
       PTS_FINAL_CTA.cta(price),
@@ -163,21 +178,10 @@ describe("the pay-to-start page, as drawn", () => {
     for (const line of expected) expect(text).toContain(line.replace(/\s+/g, " "));
   });
 
-  it("keeps the testimonial Figma sets without quotation marks without them", () => {
-    renderPage();
-    const first = screen.getByText(PTS_TESTIMONIALS.quotes[0].quote);
-    expect(first.textContent?.startsWith("“")).toBe(false);
-    expect(screen.getByText(PTS_TESTIMONIALS.quotes[1].quote).textContent?.startsWith("“")).toBe(
-      true
-    );
-  });
-
   it("prints every price from the server's price, never a fixed one", () => {
     renderPage(1999);
     const text = pageText();
     expect(text).not.toContain("€29");
-    expect(text).toContain("All of it is included in €19.99;");
-    expect(text).toContain("€19.99, paid securely with Apple Pay");
     expect(text).toContain("€19.99, one-time.");
     expect(text).toContain("Unlock Survey & Full Report · €19.99");
     expect(text).toContain("Unlock for €19.99");
@@ -230,7 +234,7 @@ describe("the pay-to-start page, as drawn", () => {
     const button = screen.getByRole("link", { name: "Start test now - navigation" });
     expect(button.getAttribute("href")).toBe("#price");
     expect(document.getElementById("price")?.querySelector("h2")?.textContent).toBe(
-      PTS_ONE_PRICE.title
+      `${PTS_ONE_PRICE.title.lead} ${PTS_ONE_PRICE.title.emph}`
     );
     fireEvent.click(button);
     expect(analytics.track).toHaveBeenCalledWith("pts_nav_click", {
@@ -254,6 +258,44 @@ describe("the pay-to-start page, as drawn", () => {
     });
     expect(analytics.track).toHaveBeenCalledWith("pts_nav_click", { target: "logo", place: "bar" });
     expect(analytics.trackStartSurvey).not.toHaveBeenCalled();
+  });
+
+  // Landing V2 (Mark, final 30.10).
+  it("lists the report's live chapter menu beside the questions it answers", () => {
+    renderPage();
+    const overview = within(document.getElementById("inside-your-report") as HTMLElement);
+    for (const part of REPORT_V4_NAV_PARTS) {
+      for (const item of part.items) expect(overview.getAllByText(item.label).length).toBe(1);
+    }
+    for (const note of PTS_INSIDE.notes) expect(overview.getByText(note.title)).toBeTruthy();
+  });
+
+  it("draws its section icons as Mark's rings, never filled with the buttons' gradient", () => {
+    renderPage();
+    const rings = [...document.querySelectorAll<HTMLElement>(".pts-ring-step")];
+    expect(rings).toHaveLength(3);
+    for (const ring of rings) {
+      expect(ring.getAttribute("style")).toContain("padding-box");
+      expect(ring.getAttribute("style")).toContain("border-box");
+    }
+    const sections = document.querySelectorAll(
+      '[aria-labelledby="pts-how"], [aria-labelledby="pts-find-out"], [aria-labelledby="pts-sample"]'
+    );
+    for (const section of sections) {
+      expect(section.querySelector('[class*="bg-gradient-to-br"]')).toBeNull();
+    }
+  });
+
+  it("pulses How it works' rings three times as they come into view, and never under reduced motion", () => {
+    const css = readFileSync(
+      join(process.cwd(), "features/pay-to-start/ui/landing/payToStart.css"),
+      "utf8"
+    );
+    const block = css.slice(css.indexOf("@media (prefers-reduced-motion: no-preference)"));
+    expect(block).toMatch(
+      /\.pts-how-steps\.animate \.pts-ring-step \{\s*animation: pts-ring-pulse [^;]* 3;/
+    );
+    expect(css).not.toMatch(/pts-ring-pulse[^;]*infinite/);
   });
 
   it("carries the search ad's sitelink anchors", () => {
@@ -314,7 +356,7 @@ describe("its fly-ins (Marcus, 18.10)", () => {
     }
     // In view from the first paint: it plays on load, never waits for a scroll.
     const hero = document.querySelector("h1")!.parentElement!;
-    expect(hero.querySelectorAll(".animate-on-load").length).toBeGreaterThanOrEqual(5);
+    expect(hero.querySelectorAll(".animate-on-load").length).toBeGreaterThanOrEqual(4);
     expect(hero.querySelectorAll(".animate-on-scroll")).toHaveLength(0);
     // jsdom has no IntersectionObserver, like an old browser: everything shows at once.
     expect(reveals.filter((el) => !el.classList.contains("animate"))).toEqual([]);
@@ -612,10 +654,10 @@ describe("the initial report's page", () => {
     const expected = [
       PTS_HERO.title,
       PTS_HERO.lead,
-      PTS_FIND_OUT.title,
-      PTS_INSIDE.title,
+      "In 15 minutes, you'll know things about yourself most people never learn.",
+      `${PTS_INSIDE.title.lead}${PTS_INSIDE.title.emph} ${PTS_INSIDE.title.tail}`,
       PTS_INITIAL.insideLead,
-      ...PTS_INITIAL.steps.flatMap((s) => [s.title, s.body()]),
+      ...PTS_INITIAL.steps.flatMap((s) => [s.eyebrow, s.title, s.body()]),
       ...PTS_INITIAL.faqItems.flatMap((i) => [i.question, i.answer]),
       PTS_INITIAL.priceCard.eyebrow,
       ...PTS_INITIAL.priceCard.includes,
@@ -629,7 +671,8 @@ describe("the initial report's page", () => {
     expect(text).toContain("€10 credit toward your Full Report");
     expect(text).not.toContain("Premium Report");
     for (const wrong of [
-      PTS_ONE_PRICE.title,
+      PTS_ONE_PRICE.title.emph,
+      ...WHY_UNLOCK_CARDS.map((c) => c.emph),
       "the full report.",
       "nothing locked",
       "no second paywall",

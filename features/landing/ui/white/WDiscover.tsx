@@ -1,11 +1,12 @@
 import type { FC, ReactNode } from "react";
+import { RING_ICON_INK, RING_ICON_STROKE, RING_ICON_STYLE } from "../ringIcon";
 
 /**
- * "What you'll find out" — 2×2 rule-separated list with gradient icon tiles
- * (Figma node 8947:7491).
+ * "What you'll find out" — 2×2 rule-separated list with icon tiles (Figma node 8947:7491).
  *
- * The tile gradient reaches full purple at 71.4%, not 100% (Figma's stop) —
- * ramping all the way to the corner leaves the tile visibly too orange.
+ * The tiles are Mark's ring icons since 30.10 (ringIcon.ts): an ink glyph on a soft tint in a
+ * thin brand-gradient ring, no longer filled with the buttons' gradient. The heading and the
+ * list are also the pay-to-start pages' "In 15 minutes" (Landing V2, 30.10).
  */
 
 const items: { icon: ReactNode; title: string; body: string }[] = [
@@ -42,6 +43,50 @@ const items: { icon: ReactNode; title: string; body: string }[] = [
   },
 ];
 
+/** "In 15 minutes, you'll know things…": the home page's, and the pay-to-start pages'. */
+export const DiscoverHeading: FC<{ id: string }> = ({ id }) => (
+  <h2
+    id={id}
+    className="animate-on-scroll stagger-1 mt-3.5 max-w-[620px] font-serif text-[clamp(2rem,5.5vw,2.875rem)] font-medium leading-[1.18] tracking-[-0.01em] text-[#161021]"
+  >
+    In 15 minutes, you&apos;ll know things about yourself most people never learn.
+  </h2>
+);
+
+/** The four findings, two to a row from `md`, each under a hairline, with its ring icon. */
+export const DiscoverList: FC = () => (
+  <div className="mt-10 grid gap-x-14 md:grid-cols-2">
+    {items.map((it, i) => (
+      <div
+        key={it.title}
+        className={`animate-on-scroll stagger-${(i % 2) + 1} flex items-start gap-[18px] border-t border-[#e9e6ee] py-6`}
+      >
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px]"
+          style={RING_ICON_STYLE}
+        >
+          <svg
+            aria-hidden
+            className="h-[22px] w-[22px]"
+            viewBox="0 0 22 22"
+            fill="none"
+            stroke={RING_ICON_INK}
+            strokeWidth={RING_ICON_STROKE}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {it.icon}
+          </svg>
+        </span>
+        <div className="flex flex-col gap-[5px]">
+          <h3 className="text-[16.5px] font-bold leading-snug text-[#161021]">{it.title}</h3>
+          <p className="text-[14.5px] leading-[1.5] text-[#5f6675]">{it.body}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const WDiscover: FC = () => (
   <section
     className="bg-white py-16 lg:py-[92px]"
@@ -56,40 +101,8 @@ const WDiscover: FC = () => (
         </span>
       </div>
 
-      <h2
-        id="w-discover-heading"
-        className="animate-on-scroll stagger-1 mt-3.5 max-w-[620px] font-serif text-[clamp(2rem,5.5vw,2.875rem)] font-medium leading-[1.18] tracking-[-0.01em] text-[#161021]"
-      >
-        In 15 minutes, you&apos;ll know things about yourself most people never learn.
-      </h2>
-
-      <div className="mt-10 grid gap-x-14 md:grid-cols-2">
-        {items.map((it, i) => (
-          <div
-            key={it.title}
-            className={`animate-on-scroll stagger-${(i % 2) + 1} flex items-start gap-[18px] border-t border-[#e9e6ee] py-6`}
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#fe6839] from-0% to-[#bf66d9] to-[71.429%]">
-              <svg
-                aria-hidden
-                className="h-[22px] w-[22px]"
-                viewBox="0 0 22 22"
-                fill="none"
-                stroke="#ffffff"
-                strokeWidth="1.83"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                {it.icon}
-              </svg>
-            </span>
-            <div className="flex flex-col gap-[5px]">
-              <h3 className="text-[16.5px] font-bold leading-snug text-[#161021]">{it.title}</h3>
-              <p className="text-[14.5px] leading-[1.5] text-[#5f6675]">{it.body}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <DiscoverHeading id="w-discover-heading" />
+      <DiscoverList />
     </div>
   </section>
 );
