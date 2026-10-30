@@ -1104,6 +1104,9 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   const rows = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
   const ownerGet = () =>
     GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1`));
+  // The page asks for the gate itself as the tour ends (`gate=now`, tour first since 30.10).
+  const meetGet = () =>
+    GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1&gate=now`));
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -1134,7 +1137,7 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   });
 
   it("answers a gated owner with the gate alone: price, credit, guarantee, ids", async () => {
-    const res = await ownerGet();
+    const res = await meetGet();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       gate: "initial_unlock",
@@ -1161,7 +1164,7 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
       if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
       return rows([]);
     });
-    const res = await ownerGet();
+    const res = await meetGet();
     expect((await res.json()).surveyMinutes).toBe(14);
   });
 
@@ -1209,9 +1212,55 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   });
 
   it("stamps the gate's first view once, after the reply", async () => {
-    await ownerGet();
+    await meetGet();
     await flushAfterResponse();
     expect(mockStampGateSeen.mock.calls).toEqual([[99]]);
+  });
+
+  // Tour first, then the gate (sync 30.10): a first open is the report under the tour, with who
+  // the reader is left out (server/tourFirstReport.ts), and the gate's payload beside it.
+  it("answers a first open with the report to tour, the archetype left out, the gate beside it", async () => {
+    const res = await ownerGet();
+    const body = await res.json();
+    expect(body.initialGate).toEqual({
+      gate: "initial_unlock",
+      priceCents: 199,
+      currency: "EUR",
+      creditCents: 1000,
+      guaranteeDays: 14,
+      reportToken: OWNER_TOKEN,
+      submissionId: 55,
+      viewMode: "owner",
+      surveyMinutes: null,
+    });
+    expect(body.primaryArchetype).toBe("");
+    expect(body.percentages).toEqual({});
+    expect(body.typicalBeliefs?.sunShadowTitle).toBe("Sun and Shadow Beliefs");
+    expect(JSON.stringify(body)).not.toMatch(/Emotional Voyeur|Spark Seeker/);
+    expect(res.headers.get("Cache-Control")).toBe("no-store, no-cache, must-revalidate");
+    // Not seen yet: the gate is stamped when the page meets it.
+    await flushAfterResponse();
+    expect(mockStampGateSeen).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "a persona walk (the probe cookie)",
+      () =>
+        GET(
+          new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1`, {
+            headers: { cookie: "loveiq_probe=1" },
+          })
+        ),
+    ],
+    [
+      "a page other than V4's",
+      () => GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}`)),
+    ],
+  ])("meets %s with the gate at once", async (_label, get) => {
+    const body = await (await get()).json();
+    expect(body.gate).toBe("initial_unlock");
+    expect(body.initialGate).toBeUndefined();
   });
 
   it("leaves the first view's stamp alone when the reader comes back", async () => {

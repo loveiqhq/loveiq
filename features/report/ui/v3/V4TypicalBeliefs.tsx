@@ -42,7 +42,8 @@ interface Props {
 
 const V4TypicalBeliefs: FC<Props> = ({ view, archetype, onUnlock }) => {
   const locked = view.lockedFrom !== null;
-  const archetypeTitle = `The ${archetype}`;
+  // Toured before the EUR 1.99 gate the archetype is withheld (""): the reader's own, unnamed.
+  const archetypeTitle = archetype ? `The ${archetype}` : "Your Archetype";
 
   return (
     <div

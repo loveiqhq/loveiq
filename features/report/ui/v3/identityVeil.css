@@ -1,0 +1,92 @@
+/* The Core Archetype card's veiled place before the EUR 1.99 gate (V4IdentityVeil). */
+.rv4-identity-veil {
+  margin: 0 0 32px;
+}
+
+.rv4-identity-veil__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 28px 24px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(254, 104, 57, 0.08), rgba(149, 142, 246, 0.12));
+  border: 1px solid rgba(149, 142, 246, 0.25);
+  filter: blur(3px);
+}
+
+.rv4-identity-veil__name,
+.rv4-identity-veil__line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(60, 40, 90, 0.18);
+}
+
+.rv4-identity-veil__name {
+  width: 58%;
+  height: 22px;
+  margin-bottom: 8px;
+  background: rgba(60, 40, 90, 0.28);
+}
+
+.rv4-identity-veil__line {
+  width: 92%;
+}
+
+.rv4-identity-veil__line--short {
+  width: 64%;
+}
+
+.rv4-identity-veil__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: #5b4f6e;
+}
+
+.rv4-identity-veil__lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fe6839, #bf66d9 43%, #958ef6);
+}
+
+/* The top three's place: three rows of the list's shape, nothing to read. */
+.rv4-identity-veil__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 20px 0 8px;
+  filter: blur(3px);
+}
+
+.rv4-identity-veil__row {
+  display: grid;
+  grid-template-columns: 32px 1fr 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(254, 104, 57, 0.06), rgba(149, 142, 246, 0.1));
+}
+
+.rv4-identity-veil__dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(60, 40, 90, 0.2);
+}
+
+.rv4-identity-veil__pct {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(60, 40, 90, 0.22);
+}

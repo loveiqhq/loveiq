@@ -4,6 +4,7 @@ import { REPORT_V4_TOP_THREE, REPORT_V4_TOP_THREE_HEADING } from "@/data/report3
 import { REPORT_V4_TOP_THREE_ANCHOR } from "./reportV3Nav";
 import V3TopThree from "./V3TopThree";
 import V4Rating from "./V4Rating";
+import "./identityVeil.css";
 
 /**
  * "3 highest scoring Archetypes" — Report V4, Figma 1:493; slimmed 1665:3553 (16.10).
@@ -27,9 +28,18 @@ interface Props {
    * widget, which posts to /api/report-feedback; `V4Rating` only records locally.
    */
   feedback?: ReactNode;
+  /**
+   * Toured before the EUR 1.99 gate (sync 30.10): the three names and their scores are the
+   * gate's to reveal, so three veiled rows stand in for them, and nothing asks for a rating.
+   */
+  veiled?: boolean;
 }
 
-const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedback }) => (
+const V4TopThreeSection: FC<Props> = ({
+  percentages = REPORT_V4_TOP_THREE,
+  feedback,
+  veiled = false,
+}) => (
   <section
     // Part 2's first nav row, "Highest Archetypes Scores" (961:333, 01.10), lands here.
     id={REPORT_V4_TOP_THREE_ANCHOR}
@@ -41,12 +51,24 @@ const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedb
       {REPORT_V4_TOP_THREE_HEADING}
     </h2>
 
-    {/* Mark, 28.09 (1943965090): the bars grow, the % count up, the names fade in. */}
-    <V3TopThree percentages={percentages} blurbs={report4ArchetypeBlurbs} animate />
+    {veiled ? (
+      <div className="rv4-identity-veil__rows" aria-hidden="true" data-testid="top-three-veil">
+        {[0, 1, 2].map((row) => (
+          <div key={row} className="rv4-identity-veil__row">
+            <span className="rv4-identity-veil__dot" />
+            <span className="rv4-identity-veil__line" />
+            <span className="rv4-identity-veil__pct" />
+          </div>
+        ))}
+      </div>
+    ) : (
+      /* Mark, 28.09 (1943965090): the bars grow, the % count up, the names fade in. */
+      <V3TopThree percentages={percentages} blurbs={report4ArchetypeBlurbs} animate />
+    )}
 
     {/* 1:560 — a live widget takes the rating's geometry: right-aligned row, then
      * the frame's 44px tail. */}
-    {feedback ? (
+    {veiled ? null : feedback ? (
       <div className="rv4-rating">
         <div className="rv4-rating__live">{feedback}</div>
         <div className="rv4-rating__tail" aria-hidden="true" />
