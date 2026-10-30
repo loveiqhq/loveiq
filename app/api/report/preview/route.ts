@@ -23,6 +23,7 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
 import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import { buildInitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
 
 /**
  * A report with no reader behind it — for looking at the design on a laptop.
@@ -107,6 +108,25 @@ export async function GET(request: Request) {
   const flatten = (v: string) => v.toLowerCase().replace(/[^a-z]/g, "");
   const archetype =
     KNOWN_ARCHETYPES.find((a) => flatten(a) === flatten(requested)) ?? "Spark Seeker";
+
+  // `?gate=tour`: the gate's first open since 30.10, the report under the guided tour with
+  // who the reader is left out, then the gate (features/report/server/tourFirstReport.ts).
+  if (url.searchParams.get("gate") === "tour") {
+    return NextResponse.json(
+      buildTourFirstReportPayload({
+        submissionId: null,
+        userName: null,
+        reportDate: new Date().toISOString(),
+        archetype,
+        gate: buildInitialUnlockGatePayload({
+          reportToken: null,
+          submissionId: null,
+          surveyMinutes: PREVIEW_SURVEY_MINUTES,
+        }),
+      }),
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
 
   const planParam = url.searchParams.get("plan") ?? "";
   // As on the real route, V4's chapters go only to the V4 page (final review 26.09).

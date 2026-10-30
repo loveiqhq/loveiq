@@ -47,6 +47,12 @@ export interface GuidedTour {
   replay: (source: TourReplaySource, returnTo: HTMLElement | null) => void;
   /** The tour ended (V4GuidedTour's `onDone`). */
   done: (outcome: TourOutcome) => void;
+  /**
+   * Its first open is behind it: the tour has ended, or it will not start by itself on this
+   * page (seen before, not allowed to, a probe, a reader already scrolling, no storage). The
+   * EUR 1.99 gate waits for this since 30.10 (tour first, then the gate).
+   */
+  over: boolean;
 }
 
 /** How often a waiting start looks again (an overlay, the cookie banner, a hidden tab). */
@@ -116,6 +122,7 @@ export function useGuidedTour({
   submissionId,
 }: UseGuidedTourArgs): GuidedTour {
   const [run, setRun] = useState<GuidedTourRun | null>(null);
+  const [over, setOver] = useState(false);
   const blockedRef = useRef(blocked);
   const settledRef = useRef(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -137,6 +144,8 @@ export function useGuidedTour({
     if (ruledOut === "disabled") return;
     if (ruledOut) {
       settledRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the page waits on this answer to show the EUR 1.99 gate
+      setOver(true);
       return;
     }
 
@@ -161,8 +170,14 @@ export function useGuidedTour({
       }
       settledRef.current = true;
       // The page reads the probe cookie only after hydration; ask again as it starts.
-      if (isProbeRequest(document.cookie) || tourTooLate(window.scrollY)) return;
-      if (!writeRecord(key, new Date().toISOString(), stores)) return;
+      if (
+        isProbeRequest(document.cookie) ||
+        tourTooLate(window.scrollY) ||
+        !writeRecord(key, new Date().toISOString(), stores)
+      ) {
+        setOver(true);
+        return;
+      }
       runIds += 1;
       setRun({ id: runIds, trigger: "auto" });
     };
@@ -220,7 +235,8 @@ export function useGuidedTour({
 
   const done = useCallback(() => {
     setRun(null);
+    setOver(true);
   }, []);
 
-  return { available: enabled, run, running: enabled && run !== null, replay, done };
+  return { available: enabled, run, running: enabled && run !== null, replay, done, over };
 }

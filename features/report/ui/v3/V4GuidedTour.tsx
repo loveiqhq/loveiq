@@ -45,6 +45,12 @@ interface Props {
   /** The unlock stop, for a reader who has not paid (Fatih, 17.10: Essentials buyers have). */
   includeUnlock: boolean;
   /**
+   * Whose tour it is, where the unlock stop can't say: a reader the EUR 1.99 gate meets after
+   * the tour gets no unlock stop (Fatih, 30.10: "unlock them all" isn't what the EUR 1.99
+   * sells) and has paid nothing, so "free". Omitted, it follows the unlock stop.
+   */
+  audience?: TourAudience;
+  /**
    * The tour is over: the page unmounts it, which lets go of the page, and puts focus back
    * on whatever replayed it (it cannot from here: the page is still inert at this point).
    */
@@ -117,7 +123,7 @@ const prefersReducedMotion = () =>
  * Positions are written straight to the layer's elements from one animation frame loop;
  * React only renders which bubble is up.
  */
-const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
+const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, audience: audienceProp, onDone }) => {
   const [bubble, setBubble] = useState<Bubble | null>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -219,7 +225,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
     // The run as its stored end carries it (TourStopSummary): every stop it has reached, in
     // order, with the time its bubble has been up and the Back presses on it. A stop counts
     // as reached once the tour goes to it, so an end on the way to one is placed there.
-    const audience: TourAudience = includeUnlock ? "free" : "paid";
+    const audience: TourAudience = audienceProp ?? (includeUnlock ? "free" : "paid");
     const stops: TourStopSummary[] = [];
     let shownAt: number | null = null;
     // The run's end is told once: completed, skipped or left, whichever comes first.
@@ -549,7 +555,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, onDone }) => {
       stopGesture();
       apiRef.current = null;
     };
-  }, [includeUnlock, trigger]);
+  }, [includeUnlock, audienceProp, trigger]);
 
   /** Focus to the new bubble's Next, so Enter and Space carry on through the tour. */
   useEffect(() => {
