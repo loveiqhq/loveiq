@@ -1,0 +1,18 @@
+{
+  "criterion": "L1",
+  "label": "loop back to an earlier screen",
+  "session_id": "01a184f8-f4d5-7afd-8db0-75f9616536e8",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a184f8-f4d5-7afd-8db0-75f9616536e8",
+  "viewport": {
+    "min": 1251,
+    "max": 2518,
+    "os": "Windows"
+  },
+  "probes": [
+    {
+      "file": "survey-behaviour-log",
+      "output": "Our own survey log records the reader jumping back 16 questions (166 transitions) — the restart is independently confirmed"
+    }
+  ],
+  "reproduced": true
+}
