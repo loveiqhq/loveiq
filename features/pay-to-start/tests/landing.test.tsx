@@ -319,6 +319,16 @@ describe("the pay-to-start page, as drawn", () => {
     expect(details[1]!.open).toBe(false);
   });
 
+  // The home page's play button (Fatih, 29.10) on this page's film too (30.10).
+  it("plays from the brand-gradient button, its pulse only where motion is allowed", () => {
+    renderPage();
+    const icon = screen.getByTestId("pts-hero-play-icon");
+    expect(icon.querySelector('[class*="from-[#fe6839]"]')).not.toBeNull();
+    const pulse = screen.getByTestId("pts-hero-play-pulse");
+    expect(pulse.className).toContain("motion-safe:animate-play-pulse");
+    expect(pulse.className).toContain("motion-reduce:hidden");
+  });
+
   it("names no video file before the play button is pressed", () => {
     renderPage();
     const video = screen.getByTestId("pts-hero-video") as HTMLVideoElement;
