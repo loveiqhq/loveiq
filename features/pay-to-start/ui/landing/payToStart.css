@@ -12,3 +12,31 @@
     zoom: 0.75;
   }
 }
+
+/* Landing V2's How it works (Mark, 30.10; the sync: "pulsing icons"): as the steps scroll into
+ * view, each ring pulses three times, one after another, and rests. A halo outside the ring's
+ * white 6px gap, never the ring or the number, and nothing under reduced motion. */
+@keyframes pts-ring-pulse {
+  0% {
+    box-shadow:
+      0 0 0 6px #ffffff,
+      0 0 0 6px rgba(191, 102, 217, 0.45);
+  }
+  100% {
+    box-shadow:
+      0 0 0 6px #ffffff,
+      0 0 0 18px rgba(191, 102, 217, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pts-how-steps.animate .pts-ring-step {
+    animation: pts-ring-pulse 1.1s ease-out 3;
+  }
+  .pts-how-steps.animate li:nth-child(2) .pts-ring-step {
+    animation-delay: 0.45s;
+  }
+  .pts-how-steps.animate li:nth-child(3) .pts-ring-step {
+    animation-delay: 0.9s;
+  }
+}

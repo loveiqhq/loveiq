@@ -209,8 +209,10 @@ export const PtsCtaButton: FC<{
   className: string;
   /** False for the sticky bar's button, which Figma draws without the glow. */
   glow?: boolean;
+  /** The button's gradient; Landing V2's One price card draws the plan picker's (Mark, 30.10). */
+  gradientClass?: string;
   children: ReactNode;
-}> = ({ location, className, glow = true, children }) => {
+}> = ({ location, className, glow = true, gradientClass = PTS_CTA_GRADIENT, children }) => {
   const { state, start } = usePtsCheckout();
   const busy = state.status === "starting";
   const mine = busy && state.location === location;
@@ -221,7 +223,7 @@ export const PtsCtaButton: FC<{
       disabled={busy}
       aria-busy={mine || undefined}
       data-pts-cta={location}
-      className={`focus-visible-ring group inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-sans font-semibold text-white transition-[filter,box-shadow] duration-200 hover:brightness-[1.04] disabled:cursor-progress ${PTS_CTA_GRADIENT} ${
+      className={`focus-visible-ring group inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-sans font-semibold text-white transition-[filter,box-shadow] duration-200 hover:brightness-[1.04] disabled:cursor-progress ${gradientClass} ${
         glow ? "shadow-[0_12px_28px_-12px_rgba(191,102,217,0.8)]" : ""
       } ${busy && !mine ? "opacity-80" : ""} ${className}`}
     >
