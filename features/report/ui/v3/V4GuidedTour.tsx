@@ -51,6 +51,13 @@ interface Props {
    */
   audience?: TourAudience;
   /**
+   * False for the tour before the EUR 1.99 gate (Mark, 01.11: "taking out the skip the tour
+   * option when we show the tour before the paywall"; Fatih agreed): no "Skip Tour", Escape
+   * does nothing, and the browser's or phone's Back steps back a stop, doing nothing on the
+   * first, so the gate is reached through every stop. True (the default) for every other run.
+   */
+  skippable?: boolean;
+  /**
    * The tour is over: the page unmounts it, which lets go of the page, and puts focus back
    * on whatever replayed it (it cannot from here: the page is still inert at this point).
    */
@@ -123,8 +130,17 @@ const prefersReducedMotion = () =>
  * Positions are written straight to the layer's elements from one animation frame loop;
  * React only renders which bubble is up.
  */
-const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, audience: audienceProp, onDone }) => {
+const V4GuidedTour: FC<Props> = ({
+  trigger,
+  includeUnlock,
+  audience: audienceProp,
+  skippable = true,
+  onDone,
+}) => {
   const [bubble, setBubble] = useState<Bubble | null>(null);
+  // Bumped each time an unskippable run answers Back with a step back: the Back catch is taken
+  // again (useCloseOnBack), so the next Back is caught too.
+  const [backArm, setBackArm] = useState(0);
   const layerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
@@ -191,7 +207,19 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, audience: audiencePro
     };
   }, []);
 
-  useCloseOnBack(true, () => apiRef.current?.skip("browser_back"));
+  useCloseOnBack(
+    true,
+    () => {
+      if (skippable) {
+        apiRef.current?.skip("browser_back");
+        return;
+      }
+      // Before the EUR 1.99 gate: a stop back, as the bubble's Back (nothing on the first).
+      apiRef.current?.back();
+      setBackArm((n) => n + 1);
+    },
+    backArm
+  );
 
   /** The tour itself: a loop of animation frames over the stops. */
   useEffect(() => {
@@ -577,9 +605,10 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, audience: audiencePro
       const inBubble =
         event.target instanceof Element && Boolean(bubbleRef.current?.contains(event.target));
       if (event.key === "Escape") {
-        // Cancels the close request too, so it ends once, as "escape".
+        // Cancels the close request too, so it ends once, as "escape". Before the EUR 1.99
+        // gate it ends nothing: the tour is finished from its own buttons.
         event.preventDefault();
-        api.skip("escape");
+        if (skippable) api.skip("escape");
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         api.next();
@@ -603,7 +632,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, audience: audiencePro
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, []);
+  }, [skippable]);
 
   if (typeof document === "undefined") return null;
 
@@ -651,7 +680,7 @@ const V4GuidedTour: FC<Props> = ({ trigger, includeUnlock, audience: audiencePro
               {body}
             </p>
             <div className="rv4-tour__actions">
-              {!last && (
+              {!last && skippable && (
                 <button
                   type="button"
                   className="rv4-tour__skip"

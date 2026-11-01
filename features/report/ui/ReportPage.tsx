@@ -4129,6 +4129,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           // sells; Fatih, 30.10), and still a free reader's tour.
           includeUnlock={viewedReportPlan === null && !tourFirst}
           audience={tourFirst ? "free" : undefined}
+          // Before the gate it can't be skipped: the gate comes after every stop (Mark, 01.11).
+          skippable={!tourFirst}
           onDone={tour.done}
         />
       )}

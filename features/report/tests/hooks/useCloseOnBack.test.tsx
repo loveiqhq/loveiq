@@ -167,6 +167,30 @@ describe("useCloseOnBack — the shared history entry (all of it without CloseWa
     expect(close).not.toHaveBeenCalled();
   });
 
+  // The guided tour before the EUR 1.99 gate answers Back with a stop back and stays (01.11).
+  it("takes a fresh entry when its rearm key changes, so the next back is caught too", async () => {
+    const close = vi.fn();
+    const { rerender } = renderHook(({ key }) => useCloseOnBack(true, close, key), {
+      initialProps: { key: 0 },
+    });
+    expect(onEntry()).toBe(true);
+
+    let done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(onEntry()).toBe(false);
+
+    rerender({ key: 1 });
+    await settle();
+    expect(onEntry()).toBe(true);
+
+    done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
   it("does nothing while closed", () => {
     const before = window.history.length;
     renderHook(() => useCloseOnBack(false, vi.fn()));

@@ -102,7 +102,8 @@ Mark's prototype, tab "Guided tour"; Notion "Add the guided tooltip into the rep
 - **Stops.** The chapter menu (the pill below 1280px, the sidebar from there, whose copy says "on
   the left"), Typical Beliefs' first "Show All", its chapter toggle, its "Try This" header and,
   for a reader who has not paid for the report on screen, the first locked chapter's lock
-  (Power Orientation); not for a reader the EUR 1.99 gate meets right after (tour first, 30.10). Essentials buyers count as paid (Fatih, 17.10). Copy in
+  (Power Orientation); not for a reader the EUR 1.99 gate meets right after (tour first, 30.10),
+  whose four stops can't be skipped (01.11). Essentials buyers count as paid (Fatih, 17.10). Copy in
   `ui/v3/guidedTourContent.ts`, Title Case; what each stop points at in
   `ui/v3/guidedTourAnchors.ts`.
 - **When.** Owners and previews, never a shared view, a probe (the persona walks' cookie) or a
@@ -172,7 +173,10 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   top three (`V4IdentityVeil`, `V4TopThreeSection veiled`), locks every chapter but Part I's
   two and Typical Beliefs (the menu says so too), sells nothing (no plans, sticky bar, paywall
   ping or `report_viewed`; a lock leads to the gate) and runs the tour's first four stops (no
-  lock stop; `audience: free`). As the tour ends (`useGuidedTour` `over`), or at once where it
+  lock stop; `audience: free`), which can't be skipped (Mark, 01.11): no "Skip Tour", Escape
+  ends nothing, and Back steps back a stop, nothing on the first (`V4GuidedTour`
+  `skippable={false}`; `useCloseOnBack`'s `rearmKey` takes the Back catch again), so these runs
+  end `completed` or `left`, never `skipped`. As the tour ends (`useGuidedTour` `over`), or at once where it
   won't run (seen before, a probe, `?anchor`, `?leave=pre`, not V4), or when the reader scrolls
   first or ~12 s pass without a start, `useReportData` `meetInitialGate` swaps in the gate it
   carried and asks `/api/report?…&gate=now`, which answers with the gate alone and stamps
