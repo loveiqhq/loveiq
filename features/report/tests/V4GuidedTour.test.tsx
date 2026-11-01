@@ -139,6 +139,102 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * Before the EUR 1.99 gate the tour can't be skipped (Mark, 01.11: "taking out the skip the tour
+ * option when we show the tour before the paywall"; Fatih agreed): no "Skip Tour", Escape ends
+ * nothing, and the browser's or phone's Back steps back a stop, doing nothing on the first.
+ */
+describe("the guided tour before the EUR 1.99 gate", () => {
+  /** The reader's Back: the browser leaves the tour's own entry, then tells the page. */
+  const readerBack = () =>
+    act(() => {
+      window.history.replaceState(null, "");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+  const tourBeforeGate = (onDone = vi.fn()) =>
+    render(
+      <V4GuidedTour
+        trigger="auto"
+        includeUnlock={false}
+        audience="free"
+        skippable={false}
+        onDone={onDone}
+      />
+    );
+
+  it("has no Skip Tour on any stop, and no Back on the first", () => {
+    tourBeforeGate();
+    arrive();
+    for (let n = 1; n <= 4; n += 1) {
+      expect(stepLabel()).toBe(`Step ${n} of 4`);
+      expect(button("Skip Tour"), `Skip on stop ${n}`).toBeNull();
+      expect(Boolean(button("Back")), `Back on stop ${n}`).toBe(n > 1);
+      if (n < 4) {
+        fireEvent.click(button("Next")!);
+        arrive();
+      }
+    }
+    expect(button("Finish")).toBeTruthy();
+  });
+
+  it("ends nothing on Escape, and keeps it from the page", () => {
+    const onDone = vi.fn();
+    tourBeforeGate(onDone);
+    arrive();
+    fireEvent.click(button("Next")!);
+    arrive();
+    const escape = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+    document.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(analytics.trackTourSkipped).not.toHaveBeenCalled();
+    expect(stepLabel()).toBe("Step 2 of 4");
+  });
+
+  it("answers the browser's Back with a stop back, nothing on the first, and keeps catching it", () => {
+    const onDone = vi.fn();
+    tourBeforeGate(onDone);
+    arrive();
+    fireEvent.click(button("Next")!);
+    arrive();
+    fireEvent.click(button("Next")!);
+    arrive();
+    expect(stepLabel()).toBe("Step 3 of 4");
+
+    readerBack();
+    arrive();
+    expect(stepLabel()).toBe("Step 2 of 4");
+    readerBack();
+    arrive();
+    expect(stepLabel()).toBe("Step 1 of 4");
+    readerBack();
+    arrive();
+    expect(stepLabel()).toBe("Step 1 of 4");
+
+    expect(onDone).not.toHaveBeenCalled();
+    expect(analytics.trackTourSkipped).not.toHaveBeenCalled();
+    expect(analytics.trackTourBack.mock.calls.map(([p]) => p.to)).toEqual([2, 1]);
+    // Its own entry is back on top, ready for the next Back.
+    expect(window.history.state?.__loveiqOverlay).toBe(true);
+  });
+
+  it("ends completed only from Finish, after every stop", () => {
+    const onDone = vi.fn();
+    tourBeforeGate(onDone);
+    arrive();
+    for (let n = 1; n < 4; n += 1) {
+      fireEvent.click(button("Next")!);
+      arrive();
+    }
+    fireEvent.click(button("Finish")!);
+    run(1_500);
+    expect(onDone).toHaveBeenCalledWith("completed");
+    expect(analytics.trackTourCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "free", steps: 4 })
+    );
+  });
+});
+
 describe("the guided tour", () => {
   it("starts at the chapter menu: step 1 of 5, Skip Tour and Next, no Back", () => {
     render(<V4GuidedTour trigger="auto" includeUnlock onDone={vi.fn()} />);

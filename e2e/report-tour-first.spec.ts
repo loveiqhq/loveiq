@@ -34,6 +34,21 @@ async function open(page: Page, baseURL: string | undefined) {
 const bubble = (page: Page) => page.locator(".rv4-tour__bubble[data-state='in']");
 const button = (page: Page, name: string) =>
   bubble(page).getByRole("button", { name, exact: true });
+const stepLabel = (page: Page) => bubble(page).locator(".rv4-tour__step");
+
+/** Next through every stop, then Finish: how many stops it had. */
+async function walkTour(page: Page): Promise<number> {
+  let stops = 0;
+  for (;;) {
+    await expect(bubble(page)).toBeVisible();
+    stops += 1;
+    if (await button(page, "Finish").isVisible()) {
+      await button(page, "Finish").click();
+      return stops;
+    }
+    await button(page, "Next").click();
+  }
+}
 
 test.describe("Tour first, then the EUR 1.99 gate", () => {
   test("tours the report with no archetype named, four stops, then the EUR 1.99 page", async ({
@@ -47,28 +62,32 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
     for (const name of KNOWN_ARCHETYPES) expect(body).not.toContain(name);
     await expect(page.locator(".iug-page")).toHaveCount(0);
 
-    let stops = 0;
-    for (;;) {
-      await expect(bubble(page)).toBeVisible();
-      stops += 1;
-      if (await button(page, "Finish").isVisible()) {
-        await button(page, "Finish").click();
-        break;
-      }
-      await button(page, "Next").click();
-    }
-    expect(stops).toBe(4);
+    expect(await walkTour(page)).toBe(4);
     await expect(page.locator(".iug-page")).toBeVisible({ timeout: 15_000 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
   });
 
-  test("meets the EUR 1.99 page when the reader leaves the tour early", async ({
+  // Mark, 01.11: "taking out the skip the tour option when we show the tour before the
+  // paywall". No Skip Tour, Escape ends nothing, and Back steps back a stop.
+  test("can't be skipped: no Skip Tour, Escape stays, Back steps back a stop", async ({
     page,
     baseURL,
   }) => {
     await open(page, baseURL);
     await expect(bubble(page)).toBeVisible({ timeout: 20_000 });
+    await expect(bubble(page).getByRole("button", { name: "Skip Tour" })).toHaveCount(0);
     await page.keyboard.press("Escape");
+    await expect(bubble(page)).toBeVisible();
+    await expect(stepLabel(page)).toHaveText("Step 1 of 4");
+
+    await button(page, "Next").click();
+    await expect(stepLabel(page)).toHaveText("Step 2 of 4");
+    await page.goBack();
+    await expect(stepLabel(page)).toHaveText("Step 1 of 4");
+    await expect(page.locator(".iug-page")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/report\?preview=1&v4=1&gate=tour$/);
+
+    expect(await walkTour(page)).toBe(4);
     await expect(page.locator(".iug-page")).toBeVisible({ timeout: 15_000 });
   });
 
@@ -78,7 +97,7 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
   }) => {
     await open(page, baseURL);
     await expect(bubble(page)).toBeVisible({ timeout: 20_000 });
-    await page.keyboard.press("Escape");
+    await walkTour(page);
     await expect(page.locator(".iug-page")).toBeVisible({ timeout: 15_000 });
     await page.getByRole("link", { name: "Not ready to unlock yet" }).click();
     await expect(page.locator(".pge-page")).toBeVisible();
