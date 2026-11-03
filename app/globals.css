@@ -699,6 +699,24 @@ input.autofill-dark:-internal-autofill-previewed {
   opacity: 1;
   transform: translateY(0);
 }
+/* The observer that adds `.is-visible` is JavaScript, so without it (or for a reader who
+   asked for less motion) this content is simply shown. Before, it stayed at opacity 0:
+   with JavaScript off, production hid all 19 such blocks on /about and all 40 on
+   /trust-zone (3 Nov 2026). Scoped to reveal-on-scroll; the landing's
+   `.animate-on-scroll` arms are under test and untouched. */
+@media (scripting: none) {
+  .reveal-on-scroll {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 
 /* Stagger classes for reveal-on-scroll */
 .stagger-1 {
