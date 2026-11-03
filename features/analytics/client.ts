@@ -228,10 +228,15 @@ const persistAnalyticsEvent = (
   // Prefer sendBeacon when available — it survives page navigations. Beacon
   // can't set custom headers, so we encode CSRF in the body too; the route
   // accepts either header- or body-supplied tokens.
+  //
+  // The JSON goes as a string (text/plain), never a Blob: Playwright's WebKit
+  // empties a Blob beacon sent as the page hides whenever a request route is
+  // set, which every persona walk and many e2e specs do (400 "refused a body
+  // that does not parse" on every walk since 19.10). Real Safari, Chrome and
+  // Firefox deliver both alike (measured 04.11); the routes read `request.json()`,
+  // which ignores the content type.
   if (navigator.sendBeacon) {
-    const beaconBody = JSON.stringify({ ...headerBody, _csrf: csrf });
-    const blob = new Blob([beaconBody], { type: "application/json" });
-    if (navigator.sendBeacon(url, blob)) return;
+    if (navigator.sendBeacon(url, JSON.stringify({ ...headerBody, _csrf: csrf }))) return;
   }
 
   fetch(url, {
@@ -559,9 +564,9 @@ export const pingFunnelEvent = (event: string) => {
   const url = "/api/funnel-event";
   const payload = JSON.stringify({ event, visitor_id: visitorId, _csrf: csrf });
   // Beacon survives the page navigation to Stripe; header-CSRF fallback otherwise.
+  // A string, not a Blob, as persistAnalyticsEvent's.
   if (navigator.sendBeacon) {
-    const blob = new Blob([payload], { type: "application/json" });
-    if (navigator.sendBeacon(url, blob)) return;
+    if (navigator.sendBeacon(url, payload)) return;
   }
   fetch(url, {
     method: "POST",

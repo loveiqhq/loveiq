@@ -33,4 +33,15 @@ describe("pingFunnelEvent", () => {
     pingFunnelEvent("intro_view");
     expect(sent()).toEqual(["intro_view", "intro_view"]);
   });
+
+  it("beacons the JSON as a string, never a Blob, with the CSRF token inside", () => {
+    // Playwright's WebKit empties a Blob beacon under a request route (persistAnalyticsEvent).
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, "sendBeacon", { value: beacon, configurable: true });
+    pingFunnelEvent("intro_view");
+    expect(beacon).toHaveBeenCalledWith("/api/funnel-event", expect.any(String));
+    const [, body] = beacon.mock.calls[0] as unknown as [string, string];
+    expect(JSON.parse(body)).toMatchObject({ event: "intro_view", _csrf: "test-token" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
