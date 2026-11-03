@@ -151,15 +151,17 @@ export function buildPaygateExits(input: {
     const notes: ExitEventRow[] = [];
 
     for (const r of rows) {
+      if (r.event_type !== "paygate_exit_viewed") continue;
+      views += 1;
+      if (!firstView.has(r.survey_submission_id))
+        firstView.set(r.survey_submission_id, r.event_time);
+    }
+    for (const r of rows) {
       const sid = r.survey_submission_id;
-      if (r.event_type === "paygate_exit_viewed") {
-        views += 1;
-        if (!firstView.has(sid)) firstView.set(sid, r.event_time);
-        continue;
-      }
-      // Every step after it is of the readers who reached the page (its view), as the SQL
-      // beside the section counts them, so no step can read more than 100% of "Reached".
-      if (!firstView.has(sid)) continue;
+      // Every step is of the readers who reached the page (a view), as the SQL beside the
+      // section counts them, so none can read over 100% of "Reached". Whatever the order the
+      // events arrived in: beacons can land a reason before the view it followed.
+      if (r.event_type === "paygate_exit_viewed" || !firstView.has(sid)) continue;
       switch (r.event_type) {
         case "paygate_exit_reason":
           if (r.reason) latestReason.set(sid, r.reason);

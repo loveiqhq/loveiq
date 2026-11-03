@@ -172,6 +172,21 @@ describe("AP Payment · Paygate exits", () => {
     expect(pre.words).toEqual([]);
   });
 
+  // Beacons arrive in no fixed order: on staging (03.11) a reason was stored a moment before
+  // the view it followed. The reader reached the page; their answer counts.
+  it("counts a reader's steps whatever order their events were stored in", () => {
+    const out = build(
+      [sub(1)],
+      [
+        row(1, "paygate_exit_reason", 0, { stage: "pre", reason: "later" }),
+        row(1, "paygate_exit_viewed", 1, { stage: "pre" }),
+        row(1, "paygate_exit_leave", 2, { stage: "pre", via: "browser_back" }),
+      ]
+    );
+    expect(out.pages[0]).toMatchObject({ reached: 1, answered: 1 });
+    expect(out.pages[0]!.left.browserBack).toBe(1);
+  });
+
   it("leaves out readers the page's people do not include (the team, our tests, the filters)", () => {
     const out = build([sub(1)], [row(9, "paygate_exit_viewed", 0, { stage: "pre" })]);
     expect(out.pages[0]!.reached).toBe(0);
