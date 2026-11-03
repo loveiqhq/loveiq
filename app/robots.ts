@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
+// Trailing slashes trimmed: "https://www.loveiq.org/" must still count as production
+// below. Without the trim, that one character would serve "Disallow: /" to every crawler.
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org").replace(/\/+$/, "");
 
 // Paths every crawler should skip:
 //   /api/      — server-side endpoints with no public content
