@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { getAllSlugs } from "@/data/glossary-data";
+import redirectsConfig from "@features/glossary/glossary-redirects.constants.js";
+
+const { GLOSSARY_MERGED } = redirectsConfig;
 
 /**
  * What crawlers get from the glossary. GPTBot, OAI-SearchBot, ClaudeBot and
@@ -93,5 +96,29 @@ test.describe("Glossary — term pages", () => {
     expect(definedTerm.url).toMatch(/\/glossary\/aftercare$/);
     expect(definedTerm["@id"]).toMatch(/\/glossary\/aftercare#term$/);
     expect(definedTerm.inDefinedTermSet["@id"]).toMatch(/\/glossary#glossary$/);
+  });
+});
+
+test.describe("Glossary — merged duplicates", () => {
+  for (const [from, to] of Object.entries(GLOSSARY_MERGED)) {
+    test(`/glossary/${from} moves permanently to /glossary/${to}`, async ({ request }) => {
+      const direct = await request.get(`/glossary/${from}`, { maxRedirects: 0 });
+      expect(direct.status()).toBe(308);
+      expect(direct.headers()["location"]).toMatch(new RegExp(`/glossary/${to}$`));
+
+      // With a trailing slash the proxy strips the slash first: assert where a visitor
+      // ends up, not how many hops it takes.
+      const followed = await request.get(`/glossary/${from}/`);
+      await expect(followed).toBeOK();
+      expect(followed.url()).toMatch(new RegExp(`/glossary/${to}$`));
+    });
+  }
+
+  test("the sitemap lists the kept terms, not the merged ones", async ({ request }) => {
+    const xml = await (await request.get("/sitemap.xml")).text();
+    for (const [from, to] of Object.entries(GLOSSARY_MERGED)) {
+      expect(xml).not.toContain(`/glossary/${from}<`);
+      expect(xml).toContain(`/glossary/${to}<`);
+    }
   });
 });
