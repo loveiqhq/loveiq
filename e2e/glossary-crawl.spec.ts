@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { getAllSlugs } from "@/data/glossary-data";
 import redirectsConfig from "@features/glossary/glossary-redirects.constants.js";
 
-const { GLOSSARY_MERGED } = redirectsConfig;
+const { GLOSSARY_MERGED, GLOSSARY_REMOVED } = redirectsConfig;
 
 /**
  * What crawlers get from the glossary. GPTBot, OAI-SearchBot, ClaudeBot and
@@ -120,5 +120,27 @@ test.describe("Glossary — merged duplicates", () => {
       expect(xml).not.toContain(`/glossary/${from}<`);
       expect(xml).toContain(`/glossary/${to}<`);
     }
+  });
+});
+
+test.describe("Glossary — removed terms", () => {
+  const BOT_UA =
+    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)";
+
+  test("answer a real 404, to browsers and crawlers alike", async ({ request }) => {
+    for (const slug of GLOSSARY_REMOVED) {
+      const asBrowser = await request.get(`/glossary/${slug}`, { maxRedirects: 0 });
+      expect(asBrowser.status(), `${slug} as a browser`).toBe(404);
+      const asBot = await request.get(`/glossary/${slug}`, {
+        maxRedirects: 0,
+        headers: { "user-agent": BOT_UA },
+      });
+      expect(asBot.status(), `${slug} as GPTBot`).toBe(404);
+    }
+  });
+
+  test("are gone from the sitemap", async ({ request }) => {
+    const xml = await (await request.get("/sitemap.xml")).text();
+    for (const slug of GLOSSARY_REMOVED) expect(xml).not.toContain(`/glossary/${slug}<`);
   });
 });
