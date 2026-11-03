@@ -135,7 +135,8 @@ export const EXIT_COPY = {
   /**
    * Main's box under the guarantee, in Marcus's own words from his canvas (29.10; his ask on
    * 30.10: "use my copy as it is designed to have more FOMO"). The minutes are the reader's own
-   * (surveyMinutesFromDuration); without them, the line has no number.
+   * (surveyActiveMs: the time on the questions, not the survey's clock); without them, the
+   * line has no number.
    */
   saved: {
     tileLabel: "MIN",

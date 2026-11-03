@@ -26,6 +26,7 @@ import {
   buildInitialUnlockGatePayload,
   isInitialUnlockGatePayload,
   needsInitialUnlockGate,
+  surveyActiveMs,
   surveyMinutesFromDuration,
   type InitialUnlockGateInput,
 } from "@features/report/logic/initialUnlockGate";
@@ -96,6 +97,20 @@ describe("the gate payload", () => {
     expect(surveyMinutesFromDuration(null)).toBeNull();
     expect(surveyMinutesFromDuration(undefined)).toBeNull();
     expect(surveyMinutesFromDuration(Number.NaN)).toBeNull();
+  });
+
+  it("counts the time on the questions, a pause cut to two minutes, not the survey's clock", () => {
+    // 62 questions at 15 s, one left open for an hour and a half: 15 min 15 s + 2 min.
+    const times = [...Array.from({ length: 61 }, () => 15_000), 90 * 60_000];
+    expect(surveyActiveMs(times)).toBe(61 * 15_000 + 120_000);
+    expect(surveyMinutesFromDuration(surveyActiveMs(times))).toBe(17);
+    // A question that took two minutes counts whole.
+    expect(surveyActiveMs([120_000, 30_000])).toBe(150_000);
+    // Nonsense rows add nothing; no rows is no time, never zero minutes.
+    expect(surveyActiveMs([-5, Number.NaN, 10_000])).toBe(10_000);
+    expect(surveyActiveMs([])).toBeNull();
+    expect(surveyActiveMs(null)).toBeNull();
+    expect(surveyMinutesFromDuration(surveyActiveMs(null))).toBeNull();
   });
 
   it("is told apart from a report", () => {
