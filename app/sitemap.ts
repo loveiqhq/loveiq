@@ -46,7 +46,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.3,
   }));
 
-  const glossaryLastModified = new Date("2026-02-28");
+  // The day the term pages' content last changed. Google uses lastmod only while it
+  // stays accurate, so bump it with real content edits, not on every deploy.
+  // 2026-11-03: the template card left every page; filler examples and duplicates went.
+  const glossaryLastModified = new Date("2026-11-03");
 
   const glossaryEntries = getAllSlugs().map((slug) => ({
     url: `${siteUrl}/glossary/${slug}`,
