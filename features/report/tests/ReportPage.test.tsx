@@ -3321,6 +3321,17 @@ describe("ReportPage", () => {
         expect(window.history.scrollRestoration).toBe("manual");
         unmount();
         await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
+
+        // Mounted again at once (React's development double mount, a refetch): the first
+        // run's pending restore must not land while the tour-first report is up again.
+        window.history.scrollRestoration = "auto";
+        const first = render(<ReportPage />);
+        first.unmount();
+        const again = render(<ReportPage />);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(window.history.scrollRestoration).toBe("manual");
+        again.unmount();
+        await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
       } finally {
         mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
       }

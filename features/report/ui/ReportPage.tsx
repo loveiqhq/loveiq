@@ -224,6 +224,8 @@ const readProbeCookie = () => isProbeRequest(document.cookie);
 const TOUR_FIRST_SCROLL_PX = 100;
 /** …and this long without a start (an unanswered cookie question holds it) is long enough. */
 const TOUR_FIRST_WAIT_MS = 12_000;
+/** The pending return of history's scroll restoration after the tour-first report (ReportPage). */
+let tourFirstScrollRestore = 0;
 
 // Report 2.0 part dividers (Figma 8427:794 / 1440 / 1751 / 2554) — the big
 // centered "PART N" heading that opens each part.
@@ -3175,14 +3177,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // met the gate 2,446px down on an iPhone (the rearmed catch had saved that stop's place).
   // While the tour-first report is up, history restores no scroll; the mode comes back once
   // the step-off has landed, so the exit page's Back still finds the gate where it was.
+  // "auto", the browser's own, is what it goes back to: a remount (React's development double
+  // mount, a refetch) would otherwise read the "manual" set here as the mode to restore, and
+  // a pending restore from the run before is dropped so it can't land mid-tour.
   useEffect(() => {
     if (!tourFirst) return;
-    const { history } = window;
-    const was = history.scrollRestoration;
-    history.scrollRestoration = "manual";
+    window.clearTimeout(tourFirstScrollRestore);
+    window.history.scrollRestoration = "manual";
     return () => {
-      window.setTimeout(() => {
-        history.scrollRestoration = was;
+      tourFirstScrollRestore = window.setTimeout(() => {
+        window.history.scrollRestoration = "auto";
       }, 0);
     };
   }, [tourFirst]);

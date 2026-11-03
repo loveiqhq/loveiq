@@ -464,6 +464,7 @@ describe("POST /api/analytics-event — the paygate's exit pages (28.10)", () =>
   ])("stores %s", async (_name, event_type, metadata) => {
     const res = await POST(makeRequest({ event_type, submission_id: 42, metadata }));
     expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({ event_type, metadata });
   });
 });
 

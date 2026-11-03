@@ -219,10 +219,12 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
 describe("focus", () => {
   it("takes the focus as it opens when nothing holds it, without scrolling", () => {
     (document.activeElement as HTMLElement | null)?.blur();
-    const scrollIntoView = vi.spyOn(window, "scrollTo");
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
     renderGate();
     expect(document.activeElement).toBe(document.querySelector("main.iug-page"));
-    expect(scrollIntoView).not.toHaveBeenCalled();
+    // jsdom never scrolls on focus, so the option itself is what is checked.
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    focus.mockRestore();
   });
 
   it("leaves the focus where it is when something holds it", () => {
