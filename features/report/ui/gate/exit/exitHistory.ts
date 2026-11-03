@@ -24,6 +24,25 @@ export function exitUrl(stage: ExitStage | null, href: string = window.location.
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/** How long a swap between the gate and an exit page swallows taps (shieldTaps). */
+export const TAP_SHIELD_MS = 400;
+
+/**
+ * A double tap's second tap lands on whatever has just replaced the page under the finger:
+ * opening, the exit page's back arrow (it sits where "Not ready to unlock yet" was), which
+ * bounced the reader straight back; closing, a second step back off the report itself (to the
+ * page before it, measured on Chrome) or the gate's Unlock (Safari). For a moment after either
+ * swap a clear layer over the whole screen takes the taps instead. Keys go through.
+ */
+function shieldTaps(): void {
+  const shield = document.createElement("div");
+  shield.setAttribute("aria-hidden", "true");
+  shield.dataset.exitTapShield = "";
+  shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;";
+  document.body.appendChild(shield);
+  window.setTimeout(() => shield.remove(), TAP_SHIELD_MS);
+}
+
 /**
  * Opens an exit page on an entry of its own, once: a second tap before the page has drawn
  * (a double tap, a slow phone) would push a second entry, and the first "Maybe later" would
@@ -32,6 +51,7 @@ export function exitUrl(stage: ExitStage | null, href: string = window.location.
 export function openExit(stage: ExitStage): void {
   if (window.history.state?.[EXIT_STATE_KEY] === stage) return;
   window.history.pushState({ [EXIT_STATE_KEY]: stage }, "", exitUrl(stage));
+  shieldTaps();
 }
 
 /**
@@ -39,6 +59,7 @@ export function openExit(stage: ExitStage): void {
  * (it was opened by a reload or a link), the parameter is dropped in place.
  */
 export function closeExit(): void {
+  shieldTaps();
   if (window.history.state?.[EXIT_STATE_KEY]) window.history.back();
   else dropExitParam();
 }

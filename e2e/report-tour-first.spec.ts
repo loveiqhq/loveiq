@@ -186,4 +186,43 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
       .poll(() => tapped(page, "paygate_exit_leave"))
       .toEqual([{ stage: "pre", via: "browser_back" }]);
   });
+
+  // A double tap's second tap landed on whatever had just replaced the page under the finger:
+  // closing, a second step back off the report itself (Chrome); opening, the exit page's arrow,
+  // which sits where "Not ready to unlock yet" was, and straight back to the gate.
+  test("a double tap opens and closes the exit page once, and never leaves the report", async ({
+    page,
+    baseURL,
+  }) => {
+    await instantScroll(page);
+    await page.route("**/api/analytics-event", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+    );
+    await page.route("**/cdn-cookieyes.com/**", (route) => route.abort());
+    await page
+      .context()
+      .addCookies([{ name: "loveiq_probe", value: "1", url: baseURL ?? "http://localhost:3000" }]);
+    await page.goto("/glossary");
+    await page.goto("/report?preview=1&v4=1&gate=1");
+    await expect(page.locator(".iug-page")).toBeVisible({ timeout: 20_000 });
+
+    /** Two taps on one spot, `gap` ms apart: a person's double tap, or a very quick one. */
+    const doubleTap = async (target: ReturnType<Page["locator"]>, gap: number) => {
+      await target.scrollIntoViewIfNeeded();
+      const box = (await target.boundingBox())!;
+      const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(gap);
+      await page.mouse.click(x, y);
+    };
+
+    await doubleTap(page.getByRole("link", { name: "Not ready to unlock yet" }), 150);
+    await page.waitForTimeout(800);
+    await expect(page.locator(".pge-page")).toBeVisible();
+
+    await doubleTap(page.getByRole("button", { name: "Maybe later" }), 40);
+    await page.waitForTimeout(800);
+    await expect(page.locator(".iug-page")).toBeVisible();
+    await expect(page).toHaveURL(/\/report\?preview=1&v4=1&gate=1$/);
+  });
 });

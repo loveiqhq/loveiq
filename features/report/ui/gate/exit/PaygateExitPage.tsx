@@ -141,6 +141,9 @@ const ExitTrustpilot: FC = () => {
  * holder. Both make the case (the guarantee first), ask why ("Not today?"), and offer the same
  * unlock again, with a quiet way out at the foot and the bar on the page's foot.
  */
+/** A second press of a way out within this is the same press (PaygateExitPage's `once`). */
+const CLOSE_REPEAT_MS = 800;
+
 const PaygateExitPage: FC<PaygateExitPageProps> = ({
   stage,
   offer,
@@ -185,8 +188,17 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
   // no Back; one whose checkout failed to open stays on the page.
   const unlocking = useRef(false);
   useEffect(() => {
-    if (checkout.error) unlocking.current = false;
-  }, [checkout.error]);
+    // Its checkout failed to open (or is over): the reader is still here.
+    if (!checkout.busy || checkout.error) unlocking.current = false;
+  }, [checkout.busy, checkout.error]);
+  useEffect(() => {
+    // Back from checkout through the browser's page cache: here again, so a Back is a Back.
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) unlocking.current = false;
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
   const unlock = (place: ExitCtaPlace) => {
     if (checkout.busy) return;
     unlocking.current = true;
@@ -212,11 +224,22 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
     },
     [stage]
   );
+  // A way out pressed twice before the first has landed (two Escapes, a double Enter) would
+  // step back twice, off the report itself: a second press within the moment does nothing.
+  const closing = useRef(0);
+  const once = () => {
+    const now = performance.now();
+    if (closing.current && now - closing.current < CLOSE_REPEAT_MS) return false;
+    closing.current = now;
+    return true;
+  };
   const back = () => {
+    if (!once()) return;
     recordLeave("back");
     onBack();
   };
   const leave = () => {
+    if (!once()) return;
     recordLeave(full ? "chapters" : "maybe_later");
     onLeave();
   };

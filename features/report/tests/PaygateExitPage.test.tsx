@@ -27,7 +27,7 @@ vi.mock("@shared/ui/trustpilot/config", () => ({
 import PaygateExitPage, {
   type PaygateExitPageProps,
 } from "@features/report/ui/gate/exit/PaygateExitPage";
-import { openExit } from "@features/report/ui/gate/exit/exitHistory";
+import { closeExit, openExit, TAP_SHIELD_MS } from "@features/report/ui/gate/exit/exitHistory";
 import { GATE_COPY } from "@features/report/ui/gate/gateContent";
 import { PAYMENT_MARKS } from "@features/report/ui/paymentMarks";
 
@@ -328,6 +328,49 @@ describe("what the exit pages record and do", () => {
     expect(mockLeave.mock.calls).toEqual([[{ stage: "pre", via: "browser_back" }]]);
   });
 
+  // Two Escapes (or a double Enter) before the first has landed stepped back twice, off the
+  // report itself.
+  it("takes a way out pressed twice at once as one press", () => {
+    render(<PaygateExitPage {...FULL} />);
+    const page = document.querySelector(".pge-page")!;
+    fireEvent.keyDown(page, { key: "Escape" });
+    fireEvent.keyDown(page, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Back to my open chapters" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(mockLeave.mock.calls).toEqual([[{ stage: "full", via: "back" }]]);
+  });
+
+  it("counts a later Back once checkout is over without leaving (a failure, or back from it)", () => {
+    window.history.replaceState(null, "", "/report/rpt_x?leave=full");
+    const view = render(<PaygateExitPage {...FULL} />);
+    fireEvent.click(within(offerCard()).getAllByRole("button")[0]!);
+    view.rerender(
+      <PaygateExitPage {...FULL} checkout={{ busy: true, error: null, errorPlace: null }} />
+    );
+    view.rerender(<PaygateExitPage {...FULL} />);
+    window.history.replaceState(null, "", "/report/rpt_x");
+    view.unmount();
+    expect(mockLeave.mock.calls).toEqual([[{ stage: "full", via: "browser_back" }]]);
+  });
+
+  // The full report's checkout stays "redirecting" on a page the browser restores from its
+  // cache (nothing resets it), so only the page's return says the reader is back.
+  it("counts a later Back after a return from checkout through the page cache", () => {
+    window.history.replaceState(null, "", "/report/rpt_x?leave=full");
+    const view = render(<PaygateExitPage {...FULL} />);
+    fireEvent.click(within(offerCard()).getAllByRole("button")[0]!);
+    view.rerender(
+      <PaygateExitPage {...FULL} checkout={{ busy: true, error: null, errorPlace: null }} />
+    );
+    const shown = new Event("pageshow") as PageTransitionEvent;
+    Object.defineProperty(shown, "persisted", { value: true });
+    window.dispatchEvent(shown);
+    window.history.replaceState(null, "", "/report/rpt_x");
+    view.unmount();
+    expect(mockLeave.mock.calls).toEqual([[{ stage: "full", via: "browser_back" }]]);
+  });
+
   it("closes the full report's dialog on Escape, as its arrow does", () => {
     render(<PaygateExitPage {...FULL} />);
     fireEvent.keyDown(document.querySelector(".pge-page")!, { key: "Escape" });
@@ -400,5 +443,26 @@ describe("the exit page's history entry", () => {
     openExit("pre");
     expect(window.history.length).toBe(before + 1);
     expect(window.location.search).toBe("?leave=pre");
+  });
+});
+
+// A double tap's second tap landed on what had just replaced the page under the finger: the
+// exit page's arrow on opening (straight back), a second step back off the report on closing.
+describe("the swap between the gate and an exit page", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("takes the taps for a moment as it opens and as it closes, then lets them through", () => {
+    document.querySelectorAll("[data-exit-tap-shield]").forEach((shield) => shield.remove());
+    vi.useFakeTimers();
+    const shields = () => document.querySelectorAll("[data-exit-tap-shield]").length;
+    window.history.replaceState(null, "", "/report/rpt_x");
+    openExit("pre");
+    expect(shields()).toBe(1);
+    vi.advanceTimersByTime(TAP_SHIELD_MS);
+    expect(shields()).toBe(0);
+    closeExit();
+    expect(shields()).toBe(1);
+    vi.advanceTimersByTime(TAP_SHIELD_MS);
+    expect(shields()).toBe(0);
   });
 });
