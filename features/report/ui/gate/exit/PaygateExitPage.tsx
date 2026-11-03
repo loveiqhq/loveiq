@@ -181,29 +181,37 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
 
   // The press is recorded where its checkout starts: the gate's, as `initial_gate_cta_click`
   // from the exit page (pre), and FullReportExit's own (full).
+  // An Unlock press leaves for checkout (a preview's, for the preview of what it buys), which is
+  // no Back; one whose checkout failed to open stays on the page.
+  const unlocking = useRef(false);
+  useEffect(() => {
+    if (checkout.error) unlocking.current = false;
+  }, [checkout.error]);
   const unlock = (place: ExitCtaPlace) => {
     if (checkout.busy) return;
+    unlocking.current = true;
     onUnlock(place);
   };
   // How the reader left, once: the page's own ways out below, or the browser's or phone's Back
-  // (a swipe, Android's back), which closes the page through its history entry and was not
-  // counted at all, though it is a phone's usual way out.
+  // (a swipe, Android's back), a phone's usual way out, which was not counted at all. Back takes
+  // `?leave=` off the address and the router drops the page before any listener of its own
+  // hears it (Chrome's router acts on the navigation itself, before popstate), so it is read as
+  // the page goes: gone with none of its ways out or Unlock pressed, and no `?leave=` left.
   const left = useRef(false);
   const recordLeave = (via: PaygateExitLeaveVia) => {
     if (left.current) return;
     left.current = true;
     trackPaygateExitLeave({ stage, via });
   };
-  useEffect(() => {
-    const onPop = () => {
-      if (left.current) return;
+  useEffect(
+    () => () => {
+      if (left.current || unlocking.current) return;
       if (new URLSearchParams(window.location.search).get(EXIT_LEAVE_PARAM) === stage) return;
       left.current = true;
       trackPaygateExitLeave({ stage, via: "browser_back" });
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [stage]);
+    },
+    [stage]
+  );
   const back = () => {
     recordLeave("back");
     onBack();

@@ -165,4 +165,25 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
     await expect(page.locator(".pge-page")).toHaveCount(0);
     await expect(page).toHaveURL(/\/report\?preview=1&v4=1&gate=tour$/);
   });
+
+  // A phone's usual way off the exit page, its own Back (a swipe, Android's back), was counted
+  // nowhere: the router drops the page before any listener of the page hears the Back.
+  test("counts the browser's Back off the exit page as a way out, once", async ({
+    page,
+    baseURL,
+  }) => {
+    await tapEvents(page);
+    await open(page, baseURL);
+    await expect(bubble(page)).toBeVisible({ timeout: 20_000 });
+    await walkTour(page);
+    await expect(page.locator(".iug-page")).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("link", { name: "Not ready to unlock yet" }).click();
+    await expect(page.locator(".pge-page")).toBeVisible();
+    await page.goBack();
+    await expect(page.locator(".iug-page")).toBeVisible();
+    await expect(page.locator(".pge-page")).toHaveCount(0);
+    await expect
+      .poll(() => tapped(page, "paygate_exit_leave"))
+      .toEqual([{ stage: "pre", via: "browser_back" }]);
+  });
 });

@@ -279,31 +279,53 @@ describe("what the exit pages record and do", () => {
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
 
-  // The phone's usual way out (a swipe, Android's back) closes the page through its history
-  // entry and was counted nowhere: AP read those readers as having neither unlocked nor left.
-  it("records the browser's or phone's own Back as a way out, once", () => {
+  // The phone's usual way out (a swipe, Android's back) takes `?leave=` off the address, and the
+  // router drops the page before any listener of its own hears the Back: it is read as the page
+  // goes. AP read those readers as having neither unlocked nor left.
+  it("records the browser's or phone's own Back as a way out, once, as the page goes", () => {
     window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
-    render(<PaygateExitPage {...PRE} />);
+    const { unmount } = render(<PaygateExitPage {...PRE} />);
     window.history.replaceState(null, "", "/report/rpt_x");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    unmount();
     expect(mockLeave.mock.calls).toEqual([[{ stage: "pre", via: "browser_back" }]]);
   });
 
-  it("does not take a Back that leaves the page open for a way out", () => {
+  it("does not take a page that goes with ?leave= still there for a Back", () => {
     window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
-    render(<PaygateExitPage {...PRE} />);
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    const { unmount } = render(<PaygateExitPage {...PRE} />);
+    unmount();
     expect(mockLeave).not.toHaveBeenCalled();
   });
 
   it("counts a button's way out once, not again as the Back it makes", () => {
     window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
-    render(<PaygateExitPage {...PRE} />);
+    const { unmount } = render(<PaygateExitPage {...PRE} />);
     fireEvent.click(screen.getByRole("button", { name: "Maybe later" }));
     window.history.replaceState(null, "", "/report/rpt_x");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    unmount();
     expect(mockLeave.mock.calls).toEqual([[{ stage: "pre", via: "maybe_later" }]]);
+  });
+
+  it("does not take leaving for checkout for a Back, unless its checkout failed to open", () => {
+    window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
+    const first = render(<PaygateExitPage {...PRE} />);
+    fireEvent.click(within(offerCard()).getByRole("button", { name: GATE_COPY.card.cta }));
+    window.history.replaceState(null, "", "/report/rpt_x?plan=initial");
+    first.unmount();
+    expect(mockLeave).not.toHaveBeenCalled();
+
+    window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
+    const second = render(<PaygateExitPage {...PRE} />);
+    fireEvent.click(within(offerCard()).getByRole("button", { name: GATE_COPY.card.cta }));
+    second.rerender(
+      <PaygateExitPage
+        {...PRE}
+        checkout={{ busy: false, error: "Try again", errorPlace: "card" }}
+      />
+    );
+    window.history.replaceState(null, "", "/report/rpt_x");
+    second.unmount();
+    expect(mockLeave.mock.calls).toEqual([[{ stage: "pre", via: "browser_back" }]]);
   });
 
   it("closes the full report's dialog on Escape, as its arrow does", () => {
