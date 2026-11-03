@@ -49,7 +49,7 @@ loveiq-web/
 │   ├── flags/                  # system feature flags
 │   └── ui/                     # branding/, GtmScript, HydrationMarker, NonceProvider, SmoothScroll, UtmCapture, WebVitals
 ├── data/                       # Static + generated data
-│   ├── glossary-data.ts / glossary-source.csv
+│   ├── glossary-data.ts (edited directly; generator retired)
 │   ├── survey-data.ts / survey-source.csv
 │   ├── scoring-config.ts / scoring-config/ (source CSVs)
 │   ├── report-*.ts             # Generated report content
