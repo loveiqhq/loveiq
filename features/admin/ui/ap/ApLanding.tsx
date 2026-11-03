@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { rangeLabel } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type {
   ArmRow,
@@ -9,6 +10,8 @@ import type {
   LandingCounts,
   LandingPayload,
   PayFirstRow,
+  VideoStep,
+  VideoStepKey,
 } from "@features/admin/server/ap/landing";
 import type { Table, Tile } from "@features/admin/server/ap/common";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
@@ -16,14 +19,16 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
 import { Info, type Worked } from "./field-info";
-import { bucketTitles } from "./hover";
+import { bucketTitles, ROW_HOVER, useRowTip, type TipRow } from "./hover";
 import {
+  Bar,
   BlackButton,
   Busy,
   Card,
   Failed,
   FilterIcon,
   ICON_BTN,
+  InfoLabel,
   KpiTileV2,
   Loading,
   PageHeader,
@@ -621,6 +626,156 @@ function EngagementTable({ data }: { data: LandingPayload }) {
   );
 }
 
+/** Each hero video step's info card. */
+const VIDEO_ROWS: Array<{ key: VideoStepKey; info: string }> = [
+  { key: "saw", info: "landing.video-saw" },
+  { key: "tapped", info: "landing.video-tapped" },
+  { key: "started", info: "landing.video-started" },
+  { key: "p25", info: "landing.video-25" },
+  { key: "p50", info: "landing.video-50" },
+  { key: "p75", info: "landing.video-75" },
+  { key: "finished", info: "landing.video-finished" },
+  { key: "failed", info: "landing.video-failed" },
+];
+
+/** The steps of a watch: each is read out as a share of the people whose film started, too. */
+const WATCHED: ReadonlySet<VideoStepKey> = new Set(["p25", "p50", "p75", "finished"]);
+
+/** The block's columns: the step, its people and its share; from a tablet up, the bar after. */
+const VIDEO_COLS =
+  "grid-cols-[minmax(0,1fr)_56px_96px] sm:grid-cols-[200px_72px_120px_minmax(0,1fr)]";
+
+/**
+ * The presenter video (version B's hero), step by step from PostHog: the people who had it on
+ * screen, then how many of them tapped play, saw it start, reached each quarter and watched it
+ * to the end, and whose start failed, each with its share of those who saw it.
+ */
+function HeroVideoCard({ data }: { data: LandingPayload }) {
+  const v = data.heroVideo;
+  const rowTip = useRowTip();
+  const steps = v.steps?.ok ? v.steps.value : null;
+  const people = (key: VideoStepKey) => steps?.find((s) => s.key === key)?.people ?? 0;
+  const saw = people("saw");
+  const started = people("started");
+  // A range starting before 13 Oct is read from then: the cards' queries are written for it.
+  const span = v.days && v.days.from !== data.range.from ? v.days : undefined;
+  const row = (s: VideoStep) => {
+    const ofStarted = WATCHED.has(s.key) && started > 0 ? s.people / started : null;
+    const color = s.key === "failed" ? "#d63200" : "#795fc8";
+    const worked: Worked =
+      s.key === "saw"
+        ? { value: fmt("count", s.people), span }
+        : {
+            num: fmt("count", s.people),
+            den: fmt("count", saw),
+            value: fmt("pct", s.share, 1),
+            span,
+          };
+    const tip: TipRow[] = [
+      { label: "People", value: fmt("count", s.people), strong: true },
+      ...(s.key === "saw"
+        ? []
+        : [
+            {
+              label: "Of those who saw it",
+              value: fmt("pct", s.share, 1),
+              color,
+              mark: "square" as const,
+              muted: s.share === null,
+            },
+          ]),
+      ...(WATCHED.has(s.key)
+        ? [
+            {
+              label: "Of those who started it",
+              value: fmt("pct", ofStarted, 0),
+              muted: ofStarted === null,
+            },
+          ]
+        : []),
+    ];
+    return (
+      <div
+        key={s.key}
+        role="row"
+        className={`grid items-center gap-x-3 py-1.5 text-[13px] ${VIDEO_COLS} ${ROW_HOVER}`}
+        {...rowTip.bind(() => ({
+          title: s.label,
+          rows: tip,
+          note: s.key === "saw" ? "Every row below is a share of these people." : null,
+        }))}
+      >
+        <span role="rowheader" className="min-w-0 font-semibold text-ap-ink">
+          <InfoLabel
+            label={s.label}
+            info={{ k: VIDEO_ROWS.find((r) => r.key === s.key)!.info, worked }}
+          />
+        </span>
+        <span role="cell" className="text-right font-bold tabular-nums text-ap-ink">
+          {fmt("count", s.people)}
+        </span>
+        <span role="cell" className="text-right font-bold tabular-nums text-ap-muted">
+          {s.key === "saw" ? "" : fmt("pct", s.share, 1)}
+          {/* What the row's read-out adds, for a screen reader. */}
+          {ofStarted !== null && (
+            <span className="sr-only">, {fmt("pct", ofStarted, 0)} of those who started it</span>
+          )}
+        </span>
+        <span aria-hidden="true" className="hidden items-center sm:flex">
+          <span className="w-full">
+            <Bar pct={s.share} color={color} height={10} minWidth={s.people > 0 ? 3 : 0} />
+          </span>
+        </span>
+      </div>
+    );
+  };
+  return (
+    <Card id="hero-video" labelledBy="h-video">
+      {rowTip.card}
+      <SectionHead
+        id="h-video"
+        title="Hero video"
+        info="landing.hero-video"
+        description="Version B's presenter video, step by step: of the people who had it on screen, how many tapped play, saw it start and watched on. People, not visits, from PostHog."
+      />
+      {steps ? (
+        <div role="table" aria-label="Hero video, step by step" className="flex flex-col">
+          <div role="row" className={`grid gap-x-3 border-b border-ap-line pb-2 ${VIDEO_COLS}`}>
+            {["Step", "People", "Of those who saw it"].map((h, i) => (
+              <span
+                key={h}
+                role="columnheader"
+                className={`text-[11px] font-bold uppercase leading-[1.3] tracking-[0.06em] text-ap-muted ${i ? "text-right" : ""}`}
+              >
+                {h}
+              </span>
+            ))}
+            <span aria-hidden="true" className="hidden sm:block" />
+          </div>
+          <div role="rowgroup" className="flex flex-col pt-1">
+            {steps.filter((s) => s.key !== "failed").map(row)}
+          </div>
+          {/* A failed start is no step of a watch: apart, under them. */}
+          <div role="rowgroup" className="mt-1 flex flex-col border-t border-ap-line pt-1">
+            {steps.filter((s) => s.key === "failed").map(row)}
+          </div>
+        </div>
+      ) : v.steps && !v.steps.ok ? (
+        <p className="m-0 text-xs text-ap-bad-ink">{v.steps.error}</p>
+      ) : v.days ? (
+        <p className="m-0 text-sm text-ap-muted">
+          PostHog&rsquo;s video figures could not be read just now. Try again in a minute.
+        </p>
+      ) : null}
+      {v.notes.map((n) => (
+        <p key={n} className="m-0 text-xs leading-relaxed text-ap-muted">
+          {n}
+        </p>
+      ))}
+    </Card>
+  );
+}
+
 function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
   const tests: Table = {
     columns: [
@@ -721,6 +876,22 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
       ],
     },
   });
+  // The presenter video's steps, over the days the block read.
+  const video = data.heroVideo;
+  if (video.days && video.steps?.ok) {
+    const steps: Table = {
+      columns: [
+        { label: "Step", unit: "text" },
+        { label: "People", unit: "count" },
+        { label: "Of those who saw it", unit: "pct" },
+      ],
+      rows: video.steps.value.map((s) => ({ label: s.label, values: [s.people, s.share] })),
+    };
+    out.push({
+      name: `Hero video (PostHog, ${rangeLabel(video.days.from, video.days.to)})`,
+      table: steps,
+    });
+  }
   return out;
 }
 
@@ -828,6 +999,7 @@ export default function ApLanding() {
           >
             <EngagementTable data={data} />
           </section>
+          <HeroVideoCard data={data} />
         </Busy>
       )}
     </>

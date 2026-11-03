@@ -27,6 +27,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
+import { exitReasons, type ExitStage } from "@features/report/ui/gate/exit/exitContent";
 
 const ALLOWED_EVENTS = [
   // Original 8 — funnel + engagement timers
@@ -85,6 +86,13 @@ const ALLOWED_EVENTS = [
   "initial_gate_viewed",
   "initial_gate_cta_click",
   "initial_gate_back",
+  // The paygate's exit pages (pre: the gate's way out; full: the full report's, after the
+  // EUR 1.99): seen, the reason tapped, a sentence written, Unlock pressed, and left
+  "paygate_exit_viewed",
+  "paygate_exit_reason",
+  "paygate_exit_note",
+  "paygate_exit_cta_click",
+  "paygate_exit_leave",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -125,6 +133,11 @@ function entityTypeFor(event: AllowedEvent): string {
     case "initial_gate_viewed":
     case "initial_gate_cta_click":
     case "initial_gate_back":
+    case "paygate_exit_viewed":
+    case "paygate_exit_reason":
+    case "paygate_exit_note":
+    case "paygate_exit_cta_click":
+    case "paygate_exit_leave":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
@@ -153,6 +166,43 @@ function entityTypeFor(event: AllowedEvent): string {
     case "experiment_exposure":
     case "experiment_card_flipped":
       return "experiment";
+  }
+}
+
+/**
+ * A reader's own sentence from an exit page's "Something else" (paygate_exit_note) is kept
+ * at the page's own cap even if a client sends more: the whole metadata would otherwise be
+ * bounded only by its 8 KB.
+ */
+const EXIT_NOTE_MAX = 500;
+function clampExitNote(
+  event: AllowedEvent,
+  metadata: Record<string, unknown>
+): Record<string, unknown> {
+  if (event !== "paygate_exit_note" || typeof metadata.answer_text !== "string") return metadata;
+  return { ...metadata, answer_text: metadata.answer_text.slice(0, EXIT_NOTE_MAX) };
+}
+
+/**
+ * The exit pages' fields AP-Analytics counts and shows (features/admin/server/ap/paygate-exits.ts)
+ * hold only what the pages send: a made-up stage, way out or place would be counted nowhere, and
+ * a made-up reason code would be shown on the admin page as a reason of its own.
+ */
+const EXIT_VIA = new Set(["back", "maybe_later", "chapters", "browser_back"]);
+const EXIT_PLACES = new Set(["card", "sticky"]);
+function exitFieldsValid(event: AllowedEvent, metadata: Record<string, unknown> = {}): boolean {
+  if (!event.startsWith("paygate_exit_")) return true;
+  const stage = metadata.stage;
+  if (stage !== "pre" && stage !== "full") return false;
+  switch (event) {
+    case "paygate_exit_reason":
+      return exitReasons(stage as ExitStage, 0).some((r) => r.code === metadata.reason);
+    case "paygate_exit_leave":
+      return EXIT_VIA.has(String(metadata.via));
+    case "paygate_exit_cta_click":
+      return EXIT_PLACES.has(String(metadata.place));
+    default:
+      return true;
   }
 }
 
@@ -195,6 +245,10 @@ export async function POST(request: Request) {
       },
       "analytics-event: refused a body that does not parse"
     );
+    return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+  }
+  if (!exitFieldsValid(parsed.data.event_type, parsed.data.metadata)) {
+    logger.warn({ event: parsed.data.event_type }, "analytics-event: refused an exit page's field");
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
@@ -258,7 +312,7 @@ export async function POST(request: Request) {
       // only point that sees exactly what is about to be written — and the
       // PostHog event, which we decided to keep intact, has already been sent
       // from the client by now. See shared/format/redact-report-token.ts.
-      metadata: redactReportTokensDeep(metadata ?? {}),
+      metadata: redactReportTokensDeep(clampExitNote(event_type, metadata ?? {})),
       ...(typeof duration_ms === "number" ? { duration_ms } : {}),
     }),
   });

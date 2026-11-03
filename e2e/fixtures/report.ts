@@ -102,6 +102,7 @@ export function buildInitialGateFixture(reportToken: string) {
     reportToken,
     submissionId: 1,
     viewMode: "owner",
+    surveyMinutes: 14,
   };
 }
 

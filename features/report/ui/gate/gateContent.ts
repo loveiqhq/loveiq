@@ -13,11 +13,12 @@ export function euros(cents: number): string {
 }
 
 /**
- * Where "Not ready to unlock yet" leads. Sync 26.10 (Marcus): "there is no such thing as
- * back"; the landing page until his page that asks why, and makes the case, is ready
- * (Notion "Replace 'Back' with 'Not ready to unlock'"). Then this line is the whole change.
+ * Where "Not ready to unlock yet" leads, as `initial_gate_back` records it. Sync 26.10
+ * (Marcus): "there is no such thing as back". Until 28.10 it led to the landing page; now to
+ * the gate's exit page (Marcus's "Paygate exit pages", ./exit), which makes the case and asks
+ * why, on the report's own URL (`?leave=pre`), and whose "Maybe later" leads to the landing.
  */
-export const GATE_NOT_READY_HREF = "/";
+export const GATE_NOT_READY_TO = "exit_page";
 
 export const GATE_COPY = {
   notReady: "Not ready to unlock yet",

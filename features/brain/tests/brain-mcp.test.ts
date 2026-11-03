@@ -5745,6 +5745,7 @@ describe("/api/mcp", () => {
         resend_webhook_event: { properties: { id: {}, type: {}, received_at: {} } },
         unlock_feedback: { properties: { id: {}, reason: {}, note: {} } },
         admin_chart_annotation: { properties: { id: {}, note: {} } },
+        analytics_event: { properties: { id: {}, event_type: {}, metadata: {} } },
       },
       paths: {
         "/payment": {},
@@ -5848,6 +5849,23 @@ describe("/api/mcp", () => {
         wire([{ id: 1, note: "Ads paused for the holiday" }]);
         const team = await call({ table: "admin_chart_annotation" });
         expect(team.content[0].text).toContain("Ads paused for the holiday");
+      });
+
+      // A paygate exit page's "Something else" (28.10), in the event's own metadata.
+      it("masks a reader's sentence from an exit page inside the event's metadata", async () => {
+        const WORDS = "I wanted to read a sample chapter before paying";
+        for (const select of [undefined, "id,event_type,metadata"] as const) {
+          wire([
+            {
+              id: 1,
+              event_type: "paygate_exit_note",
+              metadata: { stage: "pre", length: WORDS.length, answer_text: WORDS },
+            },
+          ]);
+          const r = await call({ table: "analytics_event", ...(select ? { select } : {}) });
+          expect(r.content[0].text).not.toContain(WORDS);
+          expect(r.content[0].text).toContain('"stage":"pre"');
+        }
       });
 
       it("masks the value of every private column and says which", async () => {

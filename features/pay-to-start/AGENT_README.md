@@ -57,6 +57,18 @@ record, and no landing test arm.
   (`PTS_OFFER_COPY` picks per offer), where the lines its frames kept from the full report's,
   and that EUR 1.99 does not buy, are corrected and flagged. It has no "One price" band, so its
   one price card is `#price`: under the film below 1280, beside the column from there.
+- **Landing V2 (Mark, final 30.10)** is the page's layout: How it works under the hero (ring
+  numbers that pulse three times on view, `payToStart.css`), the home page's "In 15 minutes"
+  (`WDiscover`'s `DiscoverHeading` / `DiscoverList`), the chapter overview beside the live menu
+  (`PtsChapters.tsx`, `#inside-your-report`), "Inside Each Chapter", the home page's archetypes,
+  reviews and research (wrapped in `#personalities` / `#reviews`), the plan picker's One price
+  card and Why cards (`features/report/logic/whyUnlockCards.ts`; the full offer only), the FAQ in
+  V2's numbered look with this page's own answers and disclaimer, and the guarantee box under the
+  desktop's price card. Icons are Mark's rings (`features/landing/ui/ringIcon.ts`), never filled
+  with the buttons' gradient. Where V2 drew older survey facts the survey's own stand
+  (`survey-facts.test.ts`); four colors were darkened to AA (part labels `#b8405e`, the
+  guarantee green `#00803f`, two greys). The €1.99 page shares the sections but has no One price
+  or Why.
 - **The header is the site's, pointed at this page's price.** `ui/landing/PtsHeader.tsx` mounts
   `WNavSection` with its button on `#price` (the One price section), never the free survey, and
   counts every press as `pts_nav_click`, never the landing test's `cta_click`. Its other links

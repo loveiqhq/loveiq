@@ -66,7 +66,20 @@ describe("GET /api/report/preview — the EUR 1.99 gate", () => {
       reportToken: null,
       submissionId: null,
       viewMode: "owner",
+      surveyMinutes: 14,
     });
+  });
+
+  // `?gate=tour`: the gate's first open since 30.10, the report under the tour with who the
+  // reader is left out, and the gate beside it (features/report/server/tourFirstReport.ts).
+  it("sends the report to tour first with gate=tour, naming no archetype, the gate beside it", async () => {
+    const { status, json } = await get("archetype=Explorer%20of%20Edges&v4=1&gate=tour");
+    expect(status).toBe(200);
+    const body = json as Record<string, unknown> & { initialGate?: { gate: string } };
+    expect(body.initialGate?.gate).toBe("initial_unlock");
+    expect(body.primaryArchetype).toBe("");
+    expect(body.percentages).toEqual({});
+    for (const name of KNOWN_ARCHETYPES) expect(JSON.stringify(body)).not.toContain(name);
   });
 
   it("is not found on production", async () => {
@@ -111,6 +124,25 @@ describe("GET /api/report/preview — the initial unlock", () => {
     expect(json.summaryChapter.locked).toBe(true);
     expect(json.pricingQuotes.full_report.chargedPriceCents).toBe(2999);
     expect(json.pricingQuotes.full_report.creditKind).toBeUndefined();
+  });
+});
+
+/** `&gift=1` with it: E07's gift, which the full report's exit page words as theirs (28.10). */
+describe("GET /api/report/preview — how the initial unlock is held", () => {
+  it("is bought, unless the preview asks for the gift", async () => {
+    expect((await get("archetype=Spark%20Seeker&plan=initial&v4=1")).json.initialUnlockSource).toBe(
+      "paid"
+    );
+    expect(
+      (await get("archetype=Spark%20Seeker&plan=initial&gift=1&v4=1")).json.initialUnlockSource
+    ).toBe("gift");
+  });
+
+  it("is nothing without the initial unlock, gift or not", async () => {
+    expect((await get("archetype=Spark%20Seeker&gift=1&v4=1")).json.initialUnlockSource).toBeNull();
+    expect(
+      (await get("archetype=Spark%20Seeker&plan=full_report&v4=1")).json.initialUnlockSource
+    ).toBeNull();
   });
 });
 

@@ -236,6 +236,34 @@ describe("useGuidedTour", () => {
     expect(document.activeElement).toBe(origin);
   });
 
+  // Tour first, then the EUR 1.99 gate (30.10): the page waits on `over` to show the gate.
+  it("is over once it has ended, and at once where it will not start by itself", () => {
+    const { result } = renderHook((args: UseGuidedTourArgs) => useGuidedTour(args), {
+      initialProps: ready,
+    });
+    expect(result.current.over).toBe(false);
+    advance(2_000);
+    expect(result.current.running).toBe(true);
+    expect(result.current.over).toBe(false);
+    act(() => result.current.done("completed"));
+    expect(result.current.over).toBe(true);
+
+    const notAuto = renderHook(() => useGuidedTour({ ...ready, autoStart: false }));
+    expect(notAuto.result.current.over).toBe(true);
+
+    localStorage.setItem(KEY, "2026-10-30T09:00:00.000Z");
+    const seen = renderHook(() => useGuidedTour(ready));
+    expect(seen.result.current.over).toBe(true);
+  });
+
+  it("is over when the reader has begun to read before it could start", () => {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 400 });
+    const { result } = renderHook(() => useGuidedTour({ ...ready, submissionId: 3012 }));
+    advance(2_000);
+    expect(result.current.running).toBe(false);
+    expect(result.current.over).toBe(true);
+  });
+
   it("drops its run with the report it was for", () => {
     const { result, rerender } = renderHook((args: UseGuidedTourArgs) => useGuidedTour(args), {
       initialProps: ready,

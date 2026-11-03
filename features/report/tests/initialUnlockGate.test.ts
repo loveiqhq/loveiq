@@ -26,6 +26,7 @@ import {
   buildInitialUnlockGatePayload,
   isInitialUnlockGatePayload,
   needsInitialUnlockGate,
+  surveyMinutesFromDuration,
   type InitialUnlockGateInput,
 } from "@features/report/logic/initialUnlockGate";
 import {
@@ -77,7 +78,24 @@ describe("the gate payload", () => {
       reportToken: "rpt_abc",
       submissionId: 123,
       viewMode: "owner",
+      surveyMinutes: null,
     });
+    expect(
+      buildInitialUnlockGatePayload({ reportToken: null, submissionId: 1, surveyMinutes: 14 })
+        .surveyMinutes
+    ).toBe(14);
+  });
+
+  it("counts the survey's minutes only when they are time a reader would call invested", () => {
+    expect(surveyMinutesFromDuration(13 * 60_000 + 40_000)).toBe(14);
+    expect(surveyMinutesFromDuration(3 * 60_000)).toBe(3);
+    expect(surveyMinutesFromDuration(90 * 60_000)).toBe(90);
+    // A skim, a survey left open overnight, and no clock at all say nothing true.
+    expect(surveyMinutesFromDuration(2 * 60_000)).toBeNull();
+    expect(surveyMinutesFromDuration(91 * 60_000)).toBeNull();
+    expect(surveyMinutesFromDuration(null)).toBeNull();
+    expect(surveyMinutesFromDuration(undefined)).toBeNull();
+    expect(surveyMinutesFromDuration(Number.NaN)).toBeNull();
   });
 
   it("is told apart from a report", () => {

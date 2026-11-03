@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { WHY_UNLOCK_CARDS } from "@features/report/logic/whyUnlockCards";
 import {
   useState,
   useEffect,
@@ -32,7 +33,8 @@ import {
 } from "@features/analytics/client";
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 import "./paygate.css";
-import { PAYMENT_MARKS } from "./paymentMarks";
+import { PaymentLogos } from "./PaymentLogos";
+import { GATE_COPY } from "./gate/gateContent";
 import { PAYGATE_REVIEWS as REVIEWS } from "./paygateReviews";
 
 /**
@@ -84,45 +86,19 @@ interface Props {
    *   unlock it, so no prices: the way forward is a report of their own.
    */
   variant?: "default" | "offer" | "recipient";
+  /**
+   * A EUR 1.99 holder's way out (Marcus's "Paygate exit pages", 28.10): "Not ready to unlock
+   * yet" in place of the ×, as on the EUR 1.99 page, leading to the full report's exit page.
+   * Tapping outside, Escape and Back still just close. Absent, the picker keeps its ×.
+   */
+  onNotReady?: () => void;
 }
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-/**
- * "Why unlock your Report?" — 842:658 / 963:86. `lead`, then `emph` in the brand gradient.
- * Every heading here is in the report's 02.10 heading case (features/report/logic/titleCase.ts);
- * the frames still carry the sentence case they were drawn in.
- */
-const WHY_CARDS: ReadonlyArray<{
-  body: string;
-  emph: string;
-  /** 842:660 sets "Money-back guarantee." in the guarantee's green, bold. */
-  green?: string;
-  lead?: string;
-  tail?: string;
-}> = [
-  {
-    green: "Money-Back Guarantee.",
-    emph: "Zero Risk.",
-    body: "Read the full report. If it doesn’t land, every cent back, no questions asked.",
-  },
-  {
-    emph: "Insights From Hundreds of Research Papers and Books.",
-    body: "Your report is based on insights from hundreds of scientific papers and leading books on sexuality.",
-  },
-  {
-    // 963:94 drew "50+ Pages"; the report is counted in chapters since 27.10 (Eman).
-    emph: "17 Chapters",
-    tail: " That Can Change Your Life",
-    body: "Most of us were never taught any of this. Your report finally puts language to it.",
-  },
-  {
-    lead: "Become ",
-    emph: "an Expert Around Your Sexuality",
-    body: "Learn the essential concepts and language to better understand and improve your sexuality grounded in the latest science and practical wisdom.",
-  },
-];
+/** "Why unlock your Report?" — 842:658 / 963:86; shared with the pay-to-start pages since 30.10. */
+const WHY_CARDS = WHY_UNLOCK_CARDS;
 
 /** The brand gradient over a run of text (842:597's "Sexual Self"). */
 const Gradient: FC<{ children: ReactNode }> = ({ children }) => (
@@ -195,6 +171,7 @@ const ReportPricingModal: FC<Props> = ({
   returnFocusRef,
   targetArchetype = null,
   variant = "default",
+  onNotReady,
 }) => {
   // The modal can be scoped to a specific archetype (`targetArchetype`, set
   // when the user clicks a row in "Probability of Other Archetypes") or to
@@ -437,19 +414,35 @@ const ReportPricingModal: FC<Props> = ({
           tabIndex={-1}
           onPointerDown={() => setFocusMode("pointer")}
         >
-          <button
-            type="button"
-            className="report-pricing-modal__close"
-            aria-label="Close pricing modal"
-            onClick={() => {
-              dismissReasonRef.current = "close_button";
-              onClose();
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-            </svg>
-          </button>
+          {onNotReady ? (
+            // Where the × sits for everyone else, but on the left with its word, as the EUR 1.99
+            // page's way out: "there is no such thing as back" (Marcus, 26.10).
+            <button
+              type="button"
+              className="report-pricing-modal__not-ready"
+              onClick={() => {
+                dismissReasonRef.current = "not_ready";
+                onNotReady();
+              }}
+            >
+              <Image src="/report/gate/back.svg" alt="" width={12} height={12} unoptimized />
+              <span>{GATE_COPY.notReady}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="report-pricing-modal__close"
+              aria-label="Close pricing modal"
+              onClick={() => {
+                dismissReasonRef.current = "close_button";
+                onClose();
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
 
           <div
             ref={scrollRegionRef}
@@ -532,16 +525,7 @@ const ReportPricingModal: FC<Props> = ({
                     {/* 842:672 / 963:76 — under All 14 on the phone, under both from 960px. */}
                     <div className="rpg__payments">
                       <p className="rpg__payments-label">Guaranteed Safe &amp; Secure Checkout</p>
-                      <div className="rpg__payments-row" aria-label="Accepted payment methods">
-                        {PAYMENT_MARKS.map(({ logo, label }) => (
-                          <span
-                            key={logo}
-                            className={`rpg__mark rpg__mark--${logo}`}
-                            role="img"
-                            aria-label={label}
-                          />
-                        ))}
-                      </div>
+                      <PaymentLogos />
                     </div>
                   </div>
                 )}
