@@ -38,9 +38,11 @@ export const metadata: Metadata = {
   },
 };
 
+// Each term page's DefinedTerm points back here through this @id.
 const definedTermSetSchema = {
   "@context": "https://schema.org",
   "@type": "DefinedTermSet",
+  "@id": `${siteUrl}/glossary#glossary`,
   name: "LoveIQ Glossary",
   description:
     "Your guide to the terminology of self-understanding. Decode the language of intimacy, psychology, and personal growth with LoveIQ's comprehensive glossary.",

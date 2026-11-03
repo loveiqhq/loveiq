@@ -25,24 +25,40 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
+  const title = `${term.term} | LoveIQ Glossary`;
+  const url = `${siteUrl}/glossary/${slug}`;
+  const image = `${siteUrl}/images/og-image.png`;
+
+  // A page's openGraph and twitter replace the root layout's wholesale, so both are
+  // spelled out: without them every term page shared the homepage's title and
+  // description on X, and its OG tags had no url or site name.
   return {
-    title: `${term.term} | LoveIQ Glossary`,
+    title,
     description: term.definition,
     alternates: {
-      canonical: `${siteUrl}/glossary/${slug}`,
+      canonical: url,
     },
     openGraph: {
-      title: `${term.term} | LoveIQ Glossary`,
+      title,
       description: term.definition,
       type: "article",
+      url,
+      siteName: "LoveIQ",
+      locale: "en_US",
       images: [
         {
-          url: `${siteUrl}/images/og-image.png`,
+          url: image,
           width: 1200,
           height: 630,
           alt: `${term.term} - LoveIQ Glossary`,
         },
       ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: term.definition,
+      images: [image],
     },
   };
 }
@@ -55,13 +71,17 @@ export default async function Page({ params }: PageProps) {
     notFound();
   }
 
+  // `@id`s tie each term to the one glossary set the index page declares.
   const definedTermSchema = {
     "@context": "https://schema.org",
     "@type": "DefinedTerm",
+    "@id": `${siteUrl}/glossary/${slug}#term`,
     name: term.term,
     description: term.definition,
+    url: `${siteUrl}/glossary/${slug}`,
     inDefinedTermSet: {
       "@type": "DefinedTermSet",
+      "@id": `${siteUrl}/glossary#glossary`,
       name: "LoveIQ Glossary",
       url: `${siteUrl}/glossary`,
     },

@@ -77,3 +77,21 @@ test.describe("Glossary — search in the browser", () => {
     expect(warnings).toEqual([]);
   });
 });
+
+test.describe("Glossary — term pages", () => {
+  test("carry their own share tags and schema, and no template card", async ({ request }) => {
+    const html = await (await request.get("/glossary/aftercare")).text();
+
+    // The "Inside LoveIQ" card (same text and a hard-coded 66% bar on every term) is gone.
+    expect(html).not.toContain("Inside LoveIQ");
+    expect(html).toContain('<meta name="twitter:title" content="Aftercare | LoveIQ Glossary"');
+    expect(html).toMatch(/<meta property="og:url" content="[^"]*\/glossary\/aftercare"/);
+
+    const definedTerm = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)]
+      .map((m) => JSON.parse(m[1]!))
+      .find((data) => data["@type"] === "DefinedTerm");
+    expect(definedTerm.url).toMatch(/\/glossary\/aftercare$/);
+    expect(definedTerm["@id"]).toMatch(/\/glossary\/aftercare#term$/);
+    expect(definedTerm.inDefinedTermSet["@id"]).toMatch(/\/glossary#glossary$/);
+  });
+});
