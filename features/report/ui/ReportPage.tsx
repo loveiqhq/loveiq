@@ -827,9 +827,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowInvite(true);
   }, [shouldAutoOpenInvite]);
-  // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only.
+  // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only,
+  // and not the veiled report the tour runs over before the EUR 1.99 gate (nothing read there).
   useChapterStats({
-    enabled: isV4 && viewMode === "owner",
+    enabled: isV4 && viewMode === "owner" && !veilIdentity,
     chapters: navIds,
     active: activeSection,
     archetype: viewArchetype || null,
@@ -3169,15 +3170,42 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!tourFirst) return;
     if (!isV4 || leaveParam === "pre" || tour.over) meetGate();
   }, [isV4, leaveParam, meetGate, tour.over, tourFirst]);
+  // Safari puts back the scroll a history entry was left at when the tour's Back catch steps
+  // off it, after the gate has opened at its top: a reader who pressed Back during the tour
+  // met the gate 2,446px down on an iPhone (the rearmed catch had saved that stop's place).
+  // While the tour-first report is up, history restores no scroll; the mode comes back once
+  // the step-off has landed, so the exit page's Back still finds the gate where it was.
+  useEffect(() => {
+    if (!tourFirst) return;
+    const { history } = window;
+    const was = history.scrollRestoration;
+    history.scrollRestoration = "manual";
+    return () => {
+      window.setTimeout(() => {
+        history.scrollRestoration = was;
+      }, 0);
+    };
+  }, [tourFirst]);
   useEffect(() => {
     if (!tourFirst || tour.running || tour.over) return;
     const onScroll = () => {
       if (window.scrollY > TOUR_FIRST_SCROLL_PX) meetGate();
     };
-    const timer = window.setTimeout(meetGate, TOUR_FIRST_WAIT_MS);
+    // The wait counts only while the page can be seen. The tour waits for a hidden tab, so a
+    // report opened in a background tab met the gate unseen after 12 s, stamped as seen (E07's
+    // clock, AP's "Saw the €1.99 page"), and never got its tour.
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer =
+        document.visibilityState === "hidden" ? 0 : window.setTimeout(meetGate, TOUR_FIRST_WAIT_MS);
+    };
+    arm();
+    document.addEventListener("visibilitychange", arm);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", arm);
       window.removeEventListener("scroll", onScroll);
     };
   }, [meetGate, tour.over, tour.running, tourFirst]);
@@ -4126,9 +4154,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           key={tour.run.id}
           trigger={tour.run.trigger}
           // Before the EUR 1.99 gate: no lock stop ("unlock them all" is not what the EUR 1.99
-          // sells; Fatih, 30.10), and still a free reader's tour.
+          // sells; Fatih, 30.10), stored as its own audience, `gate`, for AP's tour table.
           includeUnlock={viewedReportPlan === null && !tourFirst}
-          audience={tourFirst ? "free" : undefined}
+          audience={tourFirst ? "gate" : undefined}
           // Before the gate it can't be skipped: the gate comes after every stop (Mark, 01.11).
           skippable={!tourFirst}
           onDone={tour.done}

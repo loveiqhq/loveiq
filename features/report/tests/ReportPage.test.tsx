@@ -3300,6 +3300,32 @@ describe("ReportPage", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
     });
 
+    // Tour first (30.10): the report the tour runs over before the gate is veiled and nothing
+    // is read there, so no chapter reading is saved; and while it is up, history restores no
+    // scroll (Safari put the gate back 2,446px down after a Back during the tour).
+    it("saves no chapter reading under the tour before the gate, and keeps no scroll in history", async () => {
+      chapterStats.enabled.length = 0;
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        viewMode: "owner",
+        submissionId: 55,
+        initialGate: GATE,
+      });
+      mockUseReportData.mockReturnValue({ ...response, meetInitialGate: vi.fn() });
+      window.history.scrollRestoration = "auto";
+      try {
+        const { unmount } = render(<ReportPage />);
+        expect(chapterStats.enabled.length).toBeGreaterThan(0);
+        expect(chapterStats.enabled.every((on) => on === false)).toBe(true);
+        expect(window.history.scrollRestoration).toBe("manual");
+        unmount();
+        await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    });
+
     it("opens a report just bought for EUR 1.99 at its top, and drops ?unlocked=", async () => {
       const before = `${window.location.pathname}${window.location.search}`;
       window.history.replaceState(

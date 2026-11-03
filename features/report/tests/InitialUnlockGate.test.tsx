@@ -214,6 +214,27 @@ describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {
   });
 });
 
+// Tour first (30.10): the gate replaces the report the tour ran over, whose bubble held the
+// focus; with nothing focused a screen reader heard nothing change.
+describe("focus", () => {
+  it("takes the focus as it opens when nothing holds it, without scrolling", () => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    const scrollIntoView = vi.spyOn(window, "scrollTo");
+    renderGate();
+    expect(document.activeElement).toBe(document.querySelector("main.iug-page"));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("leaves the focus where it is when something holds it", () => {
+    const held = document.createElement("button");
+    document.body.appendChild(held);
+    held.focus();
+    renderGate();
+    expect(document.activeElement).toBe(held);
+    held.remove();
+  });
+});
+
 describe("the chapter map", () => {
   const row = (id: string) => document.querySelector<HTMLElement>(`[data-iug-chapter="${id}"]`);
 

@@ -31,6 +31,32 @@ async function open(page: Page, baseURL: string | undefined) {
   await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
 }
 
+/**
+ * Every event the page tracks, as PostHog is sent it (`window.__loveiqEventTap`, the hook the
+ * persona walks listen on). A preview stores nothing (it has no submission), but its events
+ * carry what a reader's would.
+ */
+async function tapEvents(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __tapped: Array<{ name: string; props: Record<string, unknown> }>;
+      __loveiqEventTap: (name: string, props: Record<string, unknown>) => void;
+    };
+    w.__tapped = [];
+    w.__loveiqEventTap = (name, props) => w.__tapped.push({ name, props });
+  });
+}
+const tapped = (page: Page, name: string) =>
+  page.evaluate(
+    (n) =>
+      (
+        window as unknown as { __tapped: Array<{ name: string; props: Record<string, unknown> }> }
+      ).__tapped
+        .filter((e) => e.name === n)
+        .map((e) => e.props),
+    name
+  );
+
 const bubble = (page: Page) => page.locator(".rv4-tour__bubble[data-state='in']");
 const button = (page: Page, name: string) =>
   bubble(page).getByRole("button", { name, exact: true });
@@ -55,6 +81,7 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
     page,
     baseURL,
   }) => {
+    await tapEvents(page);
     await open(page, baseURL);
     await expect(bubble(page)).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("identity-veil")).toBeAttached();
@@ -65,6 +92,34 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
     expect(await walkTour(page)).toBe(4);
     await expect(page.locator(".iug-page")).toBeVisible({ timeout: 15_000 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    // Its runs are the tour before the gate's own (AP counts them apart from free readers').
+    expect((await tapped(page, "tour_started")).map((p) => p.audience)).toEqual(["gate"]);
+    expect((await tapped(page, "tour_completed")).map((p) => p.audience)).toEqual(["gate"]);
+  });
+
+  // A report opened in a background tab: the tour waits for the page to be seen, and so does
+  // the gate. It met the gate unseen after 12 s, stamped as seen (E07's clock, AP's "Saw the
+  // €1.99 page"), and the tour never ran.
+  test("waits while the page can't be seen: no gate met unseen", async ({ page, baseURL }) => {
+    await page.addInitScript(() => {
+      let hidden = true;
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => (hidden ? "hidden" : "visible"),
+      });
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+      (window as unknown as { __show: () => void }).__show = () => {
+        hidden = false;
+        document.dispatchEvent(new Event("visibilitychange"));
+      };
+    });
+    await open(page, baseURL);
+    await page.waitForTimeout(14_000);
+    await expect(page.locator(".iug-page")).toHaveCount(0);
+    await expect(bubble(page)).toHaveCount(0);
+    await page.evaluate(() => (window as unknown as { __show: () => void }).__show());
+    await expect(bubble(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".iug-page")).toHaveCount(0);
   });
 
   // Mark, 01.11: "taking out the skip the tour option when we show the tour before the
@@ -89,6 +144,10 @@ test.describe("Tour first, then the EUR 1.99 gate", () => {
 
     expect(await walkTour(page)).toBe(4);
     await expect(page.locator(".iug-page")).toBeVisible({ timeout: 15_000 });
+    // At its own top: Safari put back the scroll the rearmed Back catch had saved at stop 2
+    // (2,446px down on an iPhone) once the tour stepped off it, after the gate had opened.
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
   });
 
   test("loops: “Not ready” opens the exit page, whose “Maybe later” comes back", async ({
