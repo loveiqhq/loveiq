@@ -74,4 +74,21 @@ describe("glossary data integrity", () => {
   it("keeps the term page the e2e and visual specs open", () => {
     expect(live.has("abandonment-insecurity")).toBe(true);
   });
+
+  // The full data is ~690 KB. A client component importing it (statically or with
+  // import()) ships it to every visitor; the index used to do exactly that, which is
+  // also why its server HTML had no term links. Type-only imports are fine.
+  it("keeps the full term data out of client components", { timeout: 90_000 }, () => {
+    const root = process.cwd();
+    const valueImport =
+      /import\s+(?!type\b)[^;]*?from\s+["']@\/data\/glossary-data["']|import\(\s*["']@\/data\/glossary-data["']\s*\)/;
+    const offenders = ["app", "features", "shared"]
+      .flatMap((dir) => sourceFiles(path.join(root, dir)))
+      .filter((file) => {
+        const src = readFileSync(file, "utf8");
+        return /^\s*["']use client["']/.test(src) && valueImport.test(src);
+      })
+      .map((file) => path.relative(root, file));
+    expect(offenders).toEqual([]);
+  });
 });
