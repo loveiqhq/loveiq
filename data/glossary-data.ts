@@ -10719,10 +10719,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Privacy techniques that summarize data (aggregation) or reduce precision (coarsening) to lower re-identification risk.",
     extendedNotes:
       "Often shows up as deciding what information is shared and how it’s protected. It’s shaped by sensitivity of the topic, audience, and consent.",
-    examples: [
-      "Example: Sharing only what’s needed",
-      "Another example: Keeping sensitive details private",
-    ],
+    examples: [],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
     misinterpretations: ["Numbers capture the whole truth", "Privacy and safety are optional"],
@@ -10783,11 +10780,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "The body system that regulates activation and relaxation (fight/flight/freeze vs. rest/digest), shaping arousal, comfort, and stress responses.",
     extendedNotes:
       "You might notice it as interest rising or fading based on context and cues. It often improves when sleep, stress, novelty, and emotional safety.",
-    examples: [
-      "Arousal increasing with teasing and anticipation",
-      "Losing arousal when distracted",
-      "Feeling turned on after emotional closeness",
-    ],
+    examples: ["Feeling turned on after emotional closeness"],
     domain: "Desire & Arousal",
     sensitivityLevel: "Sensitive",
     misinterpretations: ["Arousal should be constant", "If it fades, something is wrong"],
@@ -10814,11 +10807,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Feeling intentionally prioritized and desired—through actions, attention, and follow-through.",
     extendedNotes:
       "In everyday relationships, this can look like feeling close, understood, and emotionally connected. Context like responsiveness, conflict repair, and daily habits changes how it feels.",
-    examples: [
-      "Feeling close after repair",
-      "Drifting when routines disappear",
-      "Reconnecting through shared time",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -10848,7 +10837,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A felt sense that vulnerability won’t be punished—often supported by gentleness, consent, and reliable repair.",
     extendedNotes:
       "Often shows up as feeling close, understood, and emotionally connected. It’s shaped by responsiveness, conflict repair, and daily habits.",
-    examples: ["Feeling close after repair", "Drifting when routines disappear"],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -10878,11 +10867,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Feeling understood and valued for your inner experience (needs, feelings, identity), not just behavior.",
     extendedNotes:
       "In everyday relationships, this can look like feeling close, understood, and emotionally connected. Context like responsiveness, conflict repair, and daily habits changes how it feels.",
-    examples: [
-      "Feeling close after repair",
-      "Drifting when routines disappear",
-      "Reconnecting through shared time",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -10912,10 +10897,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "How reward and bonding systems (e.g., dopamine, oxytocin) interact with stress and context to shape desire, attachment, and pleasure.",
     extendedNotes:
       "Commonly described as interest rising or fading based on context and cues. It tends to shift with sleep, stress, novelty, and emotional safety.",
-    examples: [
-      "Example: Arousal increasing with teasing and anticipation",
-      "Another example: Losing arousal when distracted",
-    ],
+    examples: [],
     domain: "Desire & Arousal",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -10947,10 +10929,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Arousal that starts as bodily sensation (touch, breath, nervous-system shift) and then becomes mental desire.",
     extendedNotes:
       "In everyday relationships, this can look like interest rising or fading based on context and cues. Context like sleep, stress, novelty, and emotional safety changes how it feels.",
-    examples: [
-      "Example: Arousal increasing with teasing and anticipation",
-      "Another example: Losing arousal when distracted",
-    ],
+    examples: [],
     domain: "Desire & Arousal",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -10984,10 +10963,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Implicit rules someone carries about what commitment ‘should’ look like (timelines, exclusivity, rituals, roles).",
     extendedNotes:
       "In everyday relationships, this can look like feeling close, understood, and emotionally connected. Context like responsiveness, conflict repair, and daily habits changes how it feels.",
-    examples: [
-      "Example: Feeling close after repair",
-      "Another example: Drifting when routines disappear",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11021,7 +10997,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "The ways partners share information, feelings, needs, and boundaries—through words, tone, timing, and behavior.",
     extendedNotes:
       "You might notice it as tone, timing, and clarity in conversations. It often improves when stress, conflict, and how safe it feels to be honest.",
-    examples: ["Saying what you want directly", "Using a playful hint and then checking in"],
+    examples: [],
     domain: "Sexual Communication & Initiation",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11094,7 +11070,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "How two partners’ needs, styles, and contexts interact—creating ease, friction, or growth opportunities.",
     extendedNotes:
       "Often shows up as feeling close, understood, and emotionally connected. It’s shaped by responsiveness, conflict repair, and daily habits.",
-    examples: ["Feeling close after repair", "Drifting when routines disappear"],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11198,7 +11174,7 @@ export const glossaryTerms: GlossaryTerm[] = [
     definition: "How safe and willing someone feels sharing personal or sexual information.",
     extendedNotes:
       "Often shows up as a recognizable pattern in thoughts, feelings, or behavior. It’s shaped by context, communication, and personal history.",
-    examples: ["Saying what you want directly", "Using a playful hint and then checking in"],
+    examples: [],
     domain: "Sexual Communication & Initiation",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11268,7 +11244,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "The principles that guide what’s appropriate, respectful, and non-harmful—especially around consent, privacy, and power.",
     extendedNotes:
       "You might notice it as a recognizable pattern in thoughts, feelings, or behavior. It often improves when context, communication, and personal history.",
-    examples: ["Pausing to ask permission", "Agreeing on what’s off-limits"],
+    examples: [],
     domain: "Consent & Boundaries",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11302,11 +11278,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Constraints and checks designed to prevent harmful outputs or unsafe behavior (e.g., consent-first rules, privacy limits).",
     extendedNotes:
       "You might notice it as deciding what information is shared and how it’s protected. It often improves when sensitivity of the topic, audience, and consent.",
-    examples: [
-      "Sharing only what’s needed",
-      "Keeping sensitive details private",
-      "Using summarized insights instead of raw data",
-    ],
+    examples: [],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
     misinterpretations: ["Numbers capture the whole truth", "Privacy and safety are optional"],
@@ -11333,10 +11305,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A user-facing summary that reflects patterns over time and suggests growth areas, based on completed reflections or check-ins.",
     extendedNotes:
       "Commonly described as feeling close, understood, and emotionally connected. It tends to shift with responsiveness, conflict repair, and daily habits.",
-    examples: [
-      "Example: Feeling close after repair",
-      "Another example: Drifting when routines disappear",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11368,11 +11337,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "An umbrella for how someone experiences identity and attraction (e.g., gender identity, sexual orientation, romantic orientation).",
     extendedNotes:
       "Commonly described as feeling close, understood, and emotionally connected. It tends to shift with responsiveness, conflict repair, and daily habits.",
-    examples: [
-      "Feeling close after repair",
-      "Drifting when routines disappear",
-      "Reconnecting through shared time",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11404,11 +11369,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "How someone tends to start intimacy and how they communicate interest, consent, and preferences.",
     extendedNotes:
       "In everyday relationships, this can look like tone, timing, and clarity in conversations. Context like stress, conflict, and how safe it feels to be honest changes how it feels.",
-    examples: [
-      "Saying what you want directly",
-      "Using a playful hint and then checking in",
-      "Naming a boundary before things escalate",
-    ],
+    examples: ["Naming a boundary before things escalate"],
     domain: "Sexual Communication & Initiation",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11442,7 +11403,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "The typical way someone starts sexual or intimate connection (e.g., direct, indirect, playful, slow-build).",
     extendedNotes:
       "Often shows up as a recognizable pattern in thoughts, feelings, or behavior. It’s shaped by context, communication, and personal history.",
-    examples: ["Saying what you want directly", "Using a playful hint and then checking in"],
+    examples: [],
     domain: "Sexual Communication & Initiation",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11473,11 +11434,7 @@ export const glossaryTerms: GlossaryTerm[] = [
     definition: "A glossary entry for Interpretive Depth.",
     extendedNotes:
       "In everyday relationships, this can look like feeling close, understood, and emotionally connected. Context like responsiveness, conflict repair, and daily habits changes how it feels.",
-    examples: [
-      "Feeling close after repair",
-      "Drifting when routines disappear",
-      "Reconnecting through shared time",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11543,10 +11500,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Skills and agreements that reduce jealousy escalation and build security (e.g., reassurance, boundaries, repair).",
     extendedNotes:
       "You might notice it as feeling close, understood, and emotionally connected. It often improves when responsiveness, conflict repair, and daily habits.",
-    examples: [
-      "Example: Feeling activated after seeing flirting and asking for reassurance",
-      "Another example: Setting boundaries that reduce spirals",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11609,10 +11563,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A preference for variety and new experiences, which can affect long-term desire and relationship routines.",
     extendedNotes:
       "Often shows up as interest rising or fading based on context and cues. It’s shaped by sleep, stress, novelty, and emotional safety.",
-    examples: [
-      "Arousal increasing with teasing and anticipation",
-      "Losing arousal when distracted",
-    ],
+    examples: [],
     domain: "Desire & Arousal",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -11676,10 +11627,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Practices and expectations about what personal or sexual information is shared, with whom, and under what conditions.",
     extendedNotes:
       "Commonly described as deciding what information is shared and how it’s protected. It tends to shift with sensitivity of the topic, audience, and consent.",
-    examples: [
-      "Example: Sharing only what’s needed",
-      "Another example: Keeping sensitive details private",
-    ],
+    examples: [],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11712,10 +11660,7 @@ export const glossaryTerms: GlossaryTerm[] = [
     definition: "A glossary entry for Privacy Constraints.",
     extendedNotes:
       "In everyday relationships, this can look like deciding what information is shared and how it’s protected. Context like sensitivity of the topic, audience, and consent changes how it feels.",
-    examples: [
-      "Example: Sharing only what’s needed",
-      "Another example: Keeping sensitive details private",
-    ],
+    examples: [],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11747,10 +11692,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "The possibility that supposedly de-identified data could still be linked back to an individual.",
     extendedNotes:
       "In everyday relationships, this can look like deciding what information is shared and how it’s protected. Context like sensitivity of the topic, audience, and consent changes how it feels.",
-    examples: [
-      "Example: Sharing only what’s needed",
-      "Another example: Keeping sensitive details private",
-    ],
+    examples: [],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11782,10 +11724,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Guided questions that help someone reflect on patterns, needs, and preferences to build insight and better communication.",
     extendedNotes:
       "Commonly described as tone, timing, and clarity in conversations. It tends to shift with stress, conflict, and how safe it feels to be honest.",
-    examples: [
-      "Example: Noticing it during everyday interactions",
-      "Another example: Seeing it shift with stress or closeness",
-    ],
+    examples: [],
     domain: "Product & Assessment",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11815,11 +11754,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "The likelihood a relationship remains steady over time, influenced by trust, conflict repair, alignment, and life context.",
     extendedNotes:
       "You might notice it as feeling close, understood, and emotionally connected. It often improves when responsiveness, conflict repair, and daily habits.",
-    examples: [
-      "Feeling close after repair",
-      "Drifting when routines disappear",
-      "Reconnecting through shared time",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -11843,7 +11778,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Partner agreements that reduce STI risk (e.g., testing cadence, condom use, boundaries with outside partners).",
     extendedNotes:
       "In everyday relationships, this can look like a recognizable pattern in thoughts, feelings, or behavior. Context like context, communication, and personal history changes how it feels.",
-    examples: ["Pausing to ask permission", "Agreeing on what’s off-limits"],
+    examples: [],
     domain: "Consent & Boundaries",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -11875,11 +11810,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Erotic play centered on sensations (temperature, texture, pressure, restraint) with clear consent and boundaries.",
     extendedNotes:
       "Commonly described as curiosity, imagination, and play with themes or sensations. It tends to shift with consent, boundaries, and emotional safety.",
-    examples: [
-      "Noticing it during everyday interactions",
-      "Seeing it shift with stress or closeness",
-      "Talking about it openly",
-    ],
+    examples: [],
     domain: "Fantasy, Kink & Exploration",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -11911,11 +11842,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Touch focused on relaxation, presence, and sensory pleasure—sometimes sexual, often about pacing and safety.",
     extendedNotes:
       "Often shows up as a recognizable pattern in thoughts, feelings, or behavior. It’s shaped by context, communication, and personal history.",
-    examples: [
-      "Noticing it during everyday interactions",
-      "Seeing it shift with stress or closeness",
-      "Talking about it openly",
-    ],
+    examples: [],
     domain: "Pleasure & Sexual Wellbeing",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -11945,7 +11872,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Sexually explicit or suggestive messaging (text, audio, images) that can build anticipation and connection when consensual and secure.",
     extendedNotes:
       "Commonly described as a recognizable pattern in thoughts, feelings, or behavior. It tends to shift with context, communication, and personal history.",
-    examples: ["Saying what you want directly", "Using a playful hint and then checking in"],
+    examples: [],
     domain: "Sexual Communication & Initiation",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -12006,10 +11933,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A state where the body and mind feel open to sexual connection—often requiring safety, low stress, and sufficient arousal conditions.",
     extendedNotes:
       "Often shows up as interest rising or fading based on context and cues. It’s shaped by sleep, stress, novelty, and emotional safety.",
-    examples: [
-      "Arousal increasing with teasing and anticipation",
-      "Losing arousal when distracted",
-    ],
+    examples: [],
     domain: "Desire & Arousal",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -12043,7 +11967,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A monogamy default assumed without explicit discussion—often leading to mismatched expectations or boundary confusion.",
     extendedNotes:
       "You might notice it as clear check-ins, pausing, and respecting ‘no’ or ‘not yet’. It often improves when trust, power dynamics, and the situation.",
-    examples: ["Pausing to ask permission", "Agreeing on what’s off-limits"],
+    examples: [],
     domain: "Consent & Boundaries",
     sensitivityLevel: "Sensitive",
     misinterpretations: [
@@ -12077,10 +12001,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A short, low-pressure set of questions designed to gather preferences or context without feeling clinical or invasive.",
     extendedNotes:
       "Often shows up as a recognizable pattern in thoughts, feelings, or behavior. It’s shaped by context, communication, and personal history.",
-    examples: [
-      "Noticing it during everyday interactions",
-      "Seeing it shift with stress or closeness",
-    ],
+    examples: [],
     domain: "Product & Assessment",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -12110,11 +12031,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "A privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent.",
     extendedNotes:
       "Often shows up as deciding what information is shared and how it’s protected. It’s shaped by sensitivity of the topic, audience, and consent.",
-    examples: [
-      "Sharing only what’s needed",
-      "Keeping sensitive details private",
-      "Using summarized insights instead of raw data",
-    ],
+    examples: [],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -12146,10 +12063,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Confidence that a partner will act with care, reliability, and respect for boundaries—especially when vulnerability is involved.",
     extendedNotes:
       "Commonly described as feeling close, understood, and emotionally connected. It tends to shift with responsiveness, conflict repair, and daily habits.",
-    examples: [
-      "Example: Feeling close after repair",
-      "Another example: Drifting when routines disappear",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -12181,10 +12095,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Actions and habits that increase reliability and emotional safety over time (e.g., consistency, follow-through, transparency).",
     extendedNotes:
       "Often shows up as feeling close, understood, and emotionally connected. It’s shaped by responsiveness, conflict repair, and daily habits.",
-    examples: [
-      "Example: Feeling close after repair",
-      "Another example: Drifting when routines disappear",
-    ],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
@@ -12218,7 +12129,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Steps to restore trust after a rupture (e.g., accountability, changed behavior, and supportive conversations).",
     extendedNotes:
       "Commonly described as feeling close, understood, and emotionally connected. It tends to shift with responsiveness, conflict repair, and daily habits.",
-    examples: ["Feeling close after repair", "Drifting when routines disappear"],
+    examples: [],
     domain: "Relationship Dynamics & Intimacy",
     sensitivityLevel: "General",
     misinterpretations: [
