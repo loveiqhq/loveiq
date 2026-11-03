@@ -6,6 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { splitArticleForReader } from "@features/report/server/contentGating";
 import { buildSummary } from "@/data/report3-summary";
 import { buildInitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
@@ -45,7 +47,12 @@ describe("the tour-first payload names no archetype", () => {
   it.each(KNOWN_ARCHETYPES.map((name) => [name]))("%s", (name) => {
     const payload = payloadFor(name);
     const json = JSON.stringify(payload);
-    for (const other of KNOWN_ARCHETYPES) expect(json).not.toContain(other);
+    // In any letter case, and as a slug: a copy edit in either would still name the reader.
+    const lower = json.toLowerCase();
+    for (const other of KNOWN_ARCHETYPES) {
+      expect(lower).not.toContain(other.toLowerCase());
+      expect(lower).not.toContain(other.toLowerCase().replace(/ /g, "-"));
+    }
     expect(payload.primaryArchetype).toBe("");
     expect(payload.contentArchetype).toBe("");
     expect(payload.percentages).toEqual({});
@@ -62,6 +69,15 @@ describe("the tour-first payload names no archetype", () => {
     // The tour's stops 2–4 live in Typical Beliefs, which stays (locked) for every archetype.
     expect(payload.typicalBeliefs?.sunShadowTitle).toBe("Sun and Shadow Beliefs");
     expect(payload.typicalBeliefs?.practice.locked).toBe(true);
+    // The article closing the chapter goes as a locked reader's cut, never whole.
+    const article = REPORT_V4_LEARN_MORE.typical_beliefs;
+    expect(payload.typicalBeliefsArticle).toEqual({
+      article: splitArticleForReader(article!, true),
+      locked: true,
+    });
+    expect(JSON.stringify(splitArticleForReader(article!, true))).not.toEqual(
+      JSON.stringify(splitArticleForReader(article!, false))
+    );
     expect(payload.initialGate).toEqual(gate);
   });
 

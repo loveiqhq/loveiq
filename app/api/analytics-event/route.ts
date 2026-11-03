@@ -27,6 +27,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
+import { exitReasons, type ExitStage } from "@features/report/ui/gate/exit/exitContent";
 
 const ALLOWED_EVENTS = [
   // Original 8 — funnel + engagement timers
@@ -182,6 +183,29 @@ function clampExitNote(
   return { ...metadata, answer_text: metadata.answer_text.slice(0, EXIT_NOTE_MAX) };
 }
 
+/**
+ * The exit pages' fields AP-Analytics counts and shows (features/admin/server/ap/paygate-exits.ts)
+ * hold only what the pages send: a made-up stage, way out or place would be counted nowhere, and
+ * a made-up reason code would be shown on the admin page as a reason of its own.
+ */
+const EXIT_VIA = new Set(["back", "maybe_later", "chapters", "browser_back"]);
+const EXIT_PLACES = new Set(["card", "sticky"]);
+function exitFieldsValid(event: AllowedEvent, metadata: Record<string, unknown> = {}): boolean {
+  if (!event.startsWith("paygate_exit_")) return true;
+  const stage = metadata.stage;
+  if (stage !== "pre" && stage !== "full") return false;
+  switch (event) {
+    case "paygate_exit_reason":
+      return exitReasons(stage as ExitStage, 0).some((r) => r.code === metadata.reason);
+    case "paygate_exit_leave":
+      return EXIT_VIA.has(String(metadata.via));
+    case "paygate_exit_cta_click":
+      return EXIT_PLACES.has(String(metadata.place));
+    default:
+      return true;
+  }
+}
+
 const schema = z.object({
   event_type: z.enum(ALLOWED_EVENTS),
   // Required: events without a submission FK can't be surfaced in the admin
@@ -221,6 +245,10 @@ export async function POST(request: Request) {
       },
       "analytics-event: refused a body that does not parse"
     );
+    return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+  }
+  if (!exitFieldsValid(parsed.data.event_type, parsed.data.metadata)) {
+    logger.warn({ event: parsed.data.event_type }, "analytics-event: refused an exit page's field");
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 

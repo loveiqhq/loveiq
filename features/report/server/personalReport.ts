@@ -18,6 +18,7 @@ import {
   normalizeArchetypeName,
   type ArchetypeName,
 } from "@features/report/server/archetypeSlug";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 
@@ -66,7 +67,7 @@ interface PersonalReportRow {
 }
 
 function getSupabaseServiceConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

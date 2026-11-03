@@ -6,6 +6,7 @@ import {
   type ReportAccessPlan,
 } from "@features/report/server/access";
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export type { ReportAccessPlan } from "@features/report/server/access";
 
@@ -28,7 +29,7 @@ export function sharePlanLabel(
 const SUPABASE_TIMEOUT_MS = 8_000;
 
 function getSupabaseServiceConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

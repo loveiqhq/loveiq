@@ -1808,9 +1808,9 @@ describe("the guided tour", () => {
       tour: tourData,
       ...over,
     });
-  const audience = (p: ReturnType<typeof page>, key: "free" | "paid") =>
+  const audience = (p: ReturnType<typeof page>, key: "free" | "paid" | "gate") =>
     p.tour.audiences.find((a) => a.key === key)!;
-  const tileOf = (p: ReturnType<typeof page>, key: "free" | "paid", k: string) =>
+  const tileOf = (p: ReturnType<typeof page>, key: "free" | "paid" | "gate", k: string) =>
     audience(p, key).tiles.find((t) => t.key === k)!;
 
   it("whole shares add up to 100, and a share that is not nothing never reads 0%", () => {
@@ -1834,11 +1834,47 @@ describe("the guided tour", () => {
         }
   });
 
+  // Tour first (30.10): the tour before the EUR 1.99 gate is stored as `gate`, four stops with
+  // no Skip, and counted apart: read as free readers' tours it took their skips away.
+  it("counts the tour before the EUR 1.99 page apart from free readers'", () => {
+    const p = tourPage({
+      tour: {
+        ...tourData,
+        days: [...tourData.days, runDay("2026-10-26", "gate", { runs: 2, completed: 1, left: 1 })],
+        stops: [
+          ...tourData.stops,
+          at("gate", "chapter_menu", { reached: 2, next: 2, median_ms: 3_000, timed: 2 }),
+          at("gate", "show_all", { reached: 2, next: 1, exit: 1, median_ms: 3_000, timed: 2 }),
+          at("gate", "chapter_toggle", { reached: 1, next: 1, median_ms: 3_000, timed: 1 }),
+          at("gate", "try_this", { reached: 1, next: 1, median_ms: 3_000, timed: 1 }),
+        ],
+        placed: [...tourData.placed, { audience: "gate", runs: 2 }],
+      },
+    });
+    const gate = audience(p, "gate");
+    expect(gate.label).toBe("Before the €1.99 page · 4 stops");
+    expect(gate.stops.map((s) => s.id)).toEqual([
+      "chapter_menu",
+      "show_all",
+      "chapter_toggle",
+      "try_this",
+    ]);
+    expect(tileOf(p, "gate", "tour-started").value).toBe(1);
+    expect(tileOf(p, "gate", "tour-skipped").value).toBe(0);
+    // Its readers wrote no report session: no share of the report's openers.
+    expect(gate.share).toBeNull();
+    // Free readers' figures are their own.
+    expect(tileOf(p, "free", "tour-started").value).toBe(
+      tileOf(tourPage(), "free", "tour-started").value
+    );
+  });
+
   it("free readers' five stops and paid readers' four, in the tour's own words", () => {
     const p = tourPage();
     expect(p.tour.audiences.map((a) => a.label)).toEqual([
       "Free readers · 5 stops",
       "Paid readers · 4 stops",
+      "Before the €1.99 page · 4 stops",
     ]);
     expect(audience(p, "free").stops.map((s) => [s.n, s.name])).toEqual([
       [1, "Easily Navigate Your Report"],

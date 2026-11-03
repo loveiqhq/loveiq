@@ -70,6 +70,7 @@ import {
 } from "@features/pay-to-start/server/entitlement";
 import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -97,7 +98,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * and the report-ready email links there too.
  */
 async function createReportToken(submissionId: number): Promise<string | null> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return null;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -126,7 +127,7 @@ async function createReportToken(submissionId: number): Promise<string | null> {
 
 /** The submission's existing report link, or a new one if it never got one. */
 async function reportTokenFor(submissionId: number): Promise<string | null> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return null;
   try {
@@ -150,7 +151,7 @@ async function reportTokenFor(submissionId: number): Promise<string | null> {
  * sweeps any stragglers (e.g. session_id mismatch or pre-cleanup-deploy rows).
  */
 function scheduleDraftCleanup(sessionId: string, submissionId: number): void {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return;
   scheduleAfterResponse("survey-partial-cleanup", async () => {

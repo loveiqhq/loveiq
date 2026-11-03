@@ -977,11 +977,14 @@ export const trackPaygateExitCta = (params: {
 
 /**
  * Left an exit page: its back arrow (`back`), "Maybe later" (`maybe_later`: back to the EUR 1.99
- * page since 30.10, as the arrow), or "Back to my open chapters" (`chapters`).
+ * page since 30.10, as the arrow), "Back to my open chapters" (`chapters`), or the browser's or
+ * phone's own Back (`browser_back`, a swipe or Android's back, from 03.11).
  */
+export type PaygateExitLeaveVia = "back" | "maybe_later" | "chapters" | "browser_back";
+
 export const trackPaygateExitLeave = (params: {
   stage: PaygateExitStage;
-  via: "back" | "maybe_later" | "chapters";
+  via: PaygateExitLeaveVia;
 }) => {
   track("paygate_exit_leave", params);
   persistAnalyticsEvent("paygate_exit_leave", params);

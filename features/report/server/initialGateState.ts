@@ -3,6 +3,7 @@ import { isFeatureEnabled, readFeatureFlag } from "@shared/flags/system-flags";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * Pre-unlock (Notion "RFD > Pre-Unlock", Figma Report-3.0 1604:2328): the EUR 1.99 gate's
@@ -21,7 +22,7 @@ import logger from "@shared/observability/logger";
 const SUPABASE_TIMEOUT_MS = 5_000;
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };

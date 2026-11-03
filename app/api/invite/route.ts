@@ -14,6 +14,7 @@ import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const schema = z.object({
   recipientEmail: z.string().email().max(320),
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
 
   // 6. Send email via Resend + track in DB (after response)
   const resendKey = process.env.RESEND_API_KEY;
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!resendKey) {

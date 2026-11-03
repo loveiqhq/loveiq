@@ -375,6 +375,7 @@ jobs:
           #  - csp-report (browsers POST CSP violation reports automatically with no token/cookie; rate-limited + body-bounded instead)
           #  - slack/events (verified via the Slack v0 request signature; Slack is a server, so it has no CSRF cookie to send)
           #  - mcp (machine-to-machine JSON-RPC; auth is a static bearer token, and claude.ai calls it cross-origin with no cookie at all)
+          #  - short-links (machine to machine: Seedlane calls it from Postman or Claude with a static bearer token and no cookie)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
@@ -384,6 +385,7 @@ jobs:
               -not -path "*/csp-report/*" \
               -not -path "*/slack/events/*" \
               -not -path "*/mcp/*" \
+              -not -path "*/short-links/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT\|export.*DELETE\|export.*PATCH" "$file"; then
               # Accept any CSRF verifier helper from shared/http/csrf.ts:

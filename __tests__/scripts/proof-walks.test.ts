@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 const supabaseFetch = vi.hoisted(() => vi.fn());
 vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch }));
 
+import { REPORT_PURCHASE_PLANS } from "@features/checkout/server/reportPurchase";
 import { agrees } from "@features/ux-signals/logic/proof";
 import { SIGNALS, type UxEvent } from "@features/ux-signals/logic/signals";
 
@@ -95,6 +96,17 @@ describe("what a proof walk plants", () => {
       })
     );
     expect(seen.size).toBe(8);
+  });
+
+  it("buys only plans the paywall sells, never the retired core", () => {
+    // Every night from 7 Oct failed on a core walk: this planner kept PLANS after the
+    // nightly walks moved to ROTATION_PLANS, and Pricing 3.0 sells no core.
+    const sold = new Set<string>(REPORT_PURCHASE_PLANS.map((p) => p.plan));
+    for (let d = 0; d < 28; d++) {
+      for (const w of proofWalksFor(new Date(Date.UTC(2026, 9, 1 + d, 2, 41)))) {
+        expect(sold.has(w.plan), `${w.plan} on night ${d}`).toBe(true);
+      }
+    }
   });
 });
 

@@ -32,6 +32,7 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +42,7 @@ const SCAN_LIMIT = 200;
 const PAYWALL_BURST_THRESHOLD = 5;
 
 async function supabaseFetch(path: string, init?: RequestInit) {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("supabase_not_configured");
   return getBreaker("supabase").fire(() =>

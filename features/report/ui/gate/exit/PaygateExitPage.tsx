@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
-import { trackPaygateExitLeave, trackPaygateExitViewed } from "@features/analytics/client";
+import {
+  trackPaygateExitLeave,
+  trackPaygateExitViewed,
+  type PaygateExitLeaveVia,
+} from "@features/analytics/client";
 import {
   getTrustpilotConfig,
   isTrustpilotEnabled,
@@ -12,6 +16,7 @@ import { euros } from "../gateContent";
 import ExitReasons from "./ExitReasons";
 import {
   EXIT_COPY,
+  EXIT_LEAVE_PARAM,
   trustpilotLabel,
   type ExitStage,
   type InitialUnlockSource,
@@ -136,6 +141,9 @@ const ExitTrustpilot: FC = () => {
  * holder. Both make the case (the guarantee first), ask why ("Not today?"), and offer the same
  * unlock again, with a quiet way out at the foot and the bar on the page's foot.
  */
+/** A second press of a way out within this is the same press (PaygateExitPage's `once`). */
+const CLOSE_REPEAT_MS = 800;
+
 const PaygateExitPage: FC<PaygateExitPageProps> = ({
   stage,
   offer,
@@ -176,16 +184,63 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
 
   // The press is recorded where its checkout starts: the gate's, as `initial_gate_cta_click`
   // from the exit page (pre), and FullReportExit's own (full).
+  // An Unlock press leaves for checkout (a preview's, for the preview of what it buys), which is
+  // no Back; one whose checkout failed to open stays on the page.
+  const unlocking = useRef(false);
+  useEffect(() => {
+    // Its checkout failed to open (or is over): the reader is still here.
+    if (!checkout.busy || checkout.error) unlocking.current = false;
+  }, [checkout.busy, checkout.error]);
+  useEffect(() => {
+    // Back from checkout through the browser's page cache: here again, so a Back is a Back.
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) unlocking.current = false;
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
   const unlock = (place: ExitCtaPlace) => {
     if (checkout.busy) return;
+    unlocking.current = true;
     onUnlock(place);
   };
+  // How the reader left, once: the page's own ways out below, or the browser's or phone's Back
+  // (a swipe, Android's back), a phone's usual way out, which was not counted at all. Back takes
+  // `?leave=` off the address and the router drops the page before any listener of its own
+  // hears it (Chrome's router acts on the navigation itself, before popstate), so it is read as
+  // the page goes: gone with none of its ways out or Unlock pressed, and no `?leave=` left.
+  const left = useRef(false);
+  const recordLeave = (via: PaygateExitLeaveVia) => {
+    if (left.current) return;
+    left.current = true;
+    trackPaygateExitLeave({ stage, via });
+  };
+  useEffect(
+    () => () => {
+      if (left.current || unlocking.current) return;
+      if (new URLSearchParams(window.location.search).get(EXIT_LEAVE_PARAM) === stage) return;
+      left.current = true;
+      trackPaygateExitLeave({ stage, via: "browser_back" });
+    },
+    [stage]
+  );
+  // A way out pressed twice before the first has landed (two Escapes, a double Enter) would
+  // step back twice, off the report itself: a second press within the moment does nothing.
+  const closing = useRef(0);
+  const once = () => {
+    const now = performance.now();
+    if (closing.current && now - closing.current < CLOSE_REPEAT_MS) return false;
+    closing.current = now;
+    return true;
+  };
   const back = () => {
-    trackPaygateExitLeave({ stage, via: "back" });
+    if (!once()) return;
+    recordLeave("back");
     onBack();
   };
   const leave = () => {
-    trackPaygateExitLeave({ stage, via: full ? "chapters" : "maybe_later" });
+    if (!once()) return;
+    recordLeave(full ? "chapters" : "maybe_later");
     onLeave();
   };
 
@@ -206,6 +261,17 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
         data-stage={stage}
         role={full ? undefined : "main"}
         tabIndex={-1}
+        // The full report's page is a dialog: Escape closes it as its arrow does, as Escape
+        // closes the plans it opened from.
+        onKeyDown={
+          full
+            ? (event) => {
+                if (event.key !== "Escape") return;
+                event.preventDefault();
+                back();
+              }
+            : undefined
+        }
       >
         <header className="pge-header">
           <button

@@ -8,6 +8,7 @@ import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { isTablet } from "@shared/http/tablet";
 import logger from "@shared/observability/logger";
 import { getDeviceTypeFromUserAgent } from "@features/pricing/logic/reportPricing";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const eventSchema = z.object({
   sessionId: z.string().uuid(),
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
   }
 
   // 4. Supabase insert
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {
