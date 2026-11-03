@@ -359,51 +359,8 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Agency (Intentional Growth) does not mean ignoring culture or community, and it refers to the capacity to make deliberate, values-aligned choices in relationships and sexuality, including learning, boundary-setting, and behavior.",
       "Agency (Intentional Growth) is about the capacity to make deliberate, values-aligned choices in relationships and sexuality, including learning, boundary-setting, and behavior, and it doesn’t imply that agency replaces empathy and relational negotiation.",
     ],
-    relatedTerms: [
-      "Non-Harm Principles",
-      "Consent Frameworks",
-      "Reflective Prompts",
-      "Guided Self-Understanding",
-    ],
+    relatedTerms: ["Non-Harm Principles", "Consent Frameworks", "Guided Self-Understanding"],
     tags: ["consent-skills", "relationship-dynamics-intimacy", "practice-skill"],
-  },
-  {
-    id: 10,
-    term: "Anonymized Research Access",
-    slug: "anonymized-research-access",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "Access to research data where identifying details are removed so analysis can be done while reducing privacy risk for individuals.",
-    extendedNotes:
-      "In practice, “anonymized access” usually involves strong de-identification plus governance: data minimization, risk review, and rules for cross-border/EU-style privacy compliance (e.g., GDPR-aligned principles). Because true anonymity can be hard to guarantee, responsible programs pair technical controls with legal/ethical guardrails and ongoing monitoring.",
-    examples: [
-      "Researchers use a de-identified dataset to study relationship wellbeing trends",
-      "A platform shares aggregated survey outcomes with a university partner",
-      "A research portal only exposes anonymized outputs and blocks raw exports.",
-    ],
-    domain: "Data, Privacy & Measurement",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Anonymized means “zero risk”",
-      "Anonymized equals pseudonymized",
-      "Once anonymized, data can be shared freely anywhere",
-      "Anonymization removes the need for consent and governance.",
-    ],
-    reality: [
-      "Anonymized Research Access doesn’t automatically mean “zero risk”, and context still matters.",
-      "Anonymized Research Access isn’t a synonym for pseudonymized, and it points to access to research data where identifying details are removed so analysis can be done while reducing privacy risk for individuals.",
-      "More accurately, Anonymized Research Access refers to access to research data where identifying details are removed so analysis can be done while reducing privacy risk for individuals, and once anonymized, data can be shared freely anywhere doesn’t follow from that.",
-      "Anonymized Research Access should never override consent or comfort, and safety stays the priority.",
-    ],
-    relatedTerms: [
-      "Re-Identification Risk",
-      "Controlled Research Environments",
-      "Tiered Access Approach",
-      "Aggregation & Coarsening",
-      "Gates / Guardrails",
-    ],
-    tags: ["privacy-by-design", "data-privacy-measurement", "product-artifact"],
   },
   {
     id: 11,
@@ -1125,7 +1082,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     relatedTerms: [
       "Curiosity & Exploration Orientation",
       "Consent Frameworks",
-      "Reflective Prompts",
       "Arousal Style",
       "Ethical Containment",
     ],
@@ -1196,13 +1152,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Bias isn’t an all-the-time rule, and it can change with context and timing.",
       "Bias is about a systematic tendency that influences how information is collected, interpreted, or analyzed, often without conscious intent, and it doesn’t imply that only people, not systems, can be biased.",
     ],
-    relatedTerms: [
-      "Validity",
-      "Reliability",
-      "Privacy",
-      "Scores & Benchmarks",
-      "Privacy Constraints",
-    ],
+    relatedTerms: ["Validity", "Reliability", "Privacy", "Scores & Benchmarks"],
     tags: ["research", "data-privacy-measurement", "metric-measurement"],
   },
   {
@@ -1570,12 +1520,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Communication Style doesn’t automatically mean hiding, and context still matters.",
       "Persuasive communication can feel like always manipulation sometimes, but Communication Style refers to a dimension describing how someone naturally communicates needs, boundaries, and intimacy preferences (direct, expressive, reflective.",
     ],
-    relatedTerms: [
-      "Initiation & Communication Style",
-      "Signal Mismatch",
-      "Consent Frameworks",
-      "Reflective Prompts",
-    ],
+    relatedTerms: ["Initiation & Communication Style", "Signal Mismatch", "Consent Frameworks"],
     tags: [
       "cross-cultural",
       "couples-communication",
@@ -1659,7 +1604,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Conditional Initiation points to an initiation subtype where someone initiates only when specific conditions are met (privacy, time, mood, cleanliness, safety, low stress), so conditions are excuses is a misunderstanding.",
       "More accurately, Conditional Initiation refers to an initiation subtype where someone initiates only when specific conditions are met (privacy, time, mood, cleanliness, safety, low stress), and you should push past conditions to be spontaneous doesn’t follow from that.",
     ],
-    relatedTerms: ["State Optimization", "Energy Level", "Privacy Constraints", "Arousal Brake"],
+    relatedTerms: ["State Optimization", "Energy Level", "Arousal Brake"],
     tags: [
       "privacy",
       "relationship-planning",
@@ -1758,52 +1703,8 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Constellation of Archetypes is about a multi-archetype view showing that a person’s sexuality is often best described by a blend of patterns rather than a single label, and it doesn’t imply that multiple archetypes mean commitment problems.",
       "The blend can feel like permanent and cannot evolve sometimes, but Constellation of Archetypes refers to a multi-archetype view showing that a person’s sexuality is often best described by a blend of patterns rather than a single label.",
     ],
-    relatedTerms: [
-      "Interpretive Depth",
-      "Longitudinal Deltas",
-      "Sexual Intelligence",
-      "Growth Potentials",
-      "Progressive Precision",
-    ],
+    relatedTerms: ["Sexual Intelligence", "Psychometric Approximation"],
     tags: ["product-assessment", "framework-model"],
-  },
-  {
-    id: 47,
-    term: "Context-Sensitive Assessments",
-    slug: "context-sensitive-assessments",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition:
-      "Assessments that interpret answers differently based on relevant context such as relationship stage, cultural norms, stress level, health, or living situation.",
-    extendedNotes:
-      'Context sensitivity prevents misleading conclusions like treating low desire during burnout as "low attraction," or applying one culture\'s scripts to another. It often uses branching logic, localized examples, and clear caveats. Done well, it increases fairness and usefulness while keeping core safety standards (consent and non-harm) consistent.',
-    examples: [
-      "Adjusting interpretation for postpartum, long-distance, or high-stress periods",
-      "Offering culture-neutral alternatives for communication prompts",
-      "Flagging privacy constraints when living with family or roommates.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Context is an excuse to ignore patterns",
-      "Context-sensitive results can't be compared at all",
-      "Context is only about culture and not about life stage",
-      "Context eliminates personal responsibility for communication.",
-    ],
-    reality: [
-      "Context isn’t automatically an excuse to ignore patterns, and Context-Sensitive Assessments is about assessments that interpret answers differently based on relevant context such as relationship stage, cultural norms, stress level, health, or.",
-      "Context-Sensitive Assessments points to assessments that interpret answers differently based on relevant context such as relationship stage, cultural norms, stress level, health, or, so context-sensitive results can't be compared at all is a misunderstanding.",
-      "Context-Sensitive Assessments points to assessments that interpret answers differently based on relevant context such as relationship stage, cultural norms, stress level, health, or, so context is only about culture and not about life stage is a misunderstanding.",
-      "Context-Sensitive Assessments points to assessments that interpret answers differently based on relevant context such as relationship stage, cultural norms, stress level, health, or, so context eliminates personal responsibility for communication is a misunderstanding.",
-    ],
-    relatedTerms: [
-      "Progressive Precision",
-      "Interpretive Depth",
-      "Cultural Mismatch",
-      "Stress And Desire",
-      "Gates / Guardrails",
-    ],
-    tags: ["life-stage", "product-assessment", "framework-model"],
   },
   {
     id: 48,
@@ -1878,43 +1779,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "desire-arousal",
       "pattern-dynamic",
     ],
-  },
-  {
-    id: 50,
-    term: "Controlled Research Environments",
-    slug: "controlled-research-environments",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "Secure settings where researchers can analyze sensitive data under strict access controls, monitoring, and limits on exporting results.",
-    extendedNotes:
-      "Controlled environments can include secure enclaves, vetted user access, logging, output checking, and “no raw export” rules. They help balance scientific value and privacy protection—especially for international collaborations where cross-border data handling is complex.",
-    examples: [
-      "A secure enclave that only allows aggregated outputs",
-      "Research access via VPN with audit logs",
-      "Output review before releasing tables that could reveal rare combinations.",
-    ],
-    domain: "Data, Privacy & Measurement",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Controlled environments are unnecessary if data is anonymized",
-      "If researchers are trustworthy, controls aren’t needed",
-      "Controls make research impossible",
-      "Any controlled environment is automatically compliant everywhere.",
-    ],
-    reality: [
-      "Controlled environments are unnecessary if data isn’t always anonymized, and Controlled Research Environments is about secure settings where researchers can analyze sensitive data under strict access controls, monitoring, and limits on exporting results.",
-      "More accurately, Controlled Research Environments refers to secure settings where researchers can analyze sensitive data under strict access controls, monitoring, and limits on exporting results, and if researchers are trustworthy, controls aren’t needed doesn’t follow from that.",
-      "Controlled Research Environments points to secure settings where researchers can analyze sensitive data under strict access controls, monitoring, and limits on exporting results, so controls make research impossible is a misunderstanding.",
-      "Any controlled environment can feel like automatically compliant everywhere sometimes, but Controlled Research Environments refers to secure settings where researchers can analyze sensitive data under strict access controls, monitoring, and limits on exporting results.",
-    ],
-    relatedTerms: [
-      "Tiered Access Approach",
-      "Anonymized Research Access",
-      "Gates / Guardrails",
-      "Re-Identification Risk",
-    ],
-    tags: ["privacy-controls", "data-privacy-measurement", "product-artifact"],
   },
   {
     id: 51,
@@ -2034,7 +1898,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Importance of Sexuality",
       "State-Based Reward",
       "Event-Based Reward",
-      "Reflective Prompts",
     ],
     tags: ["global-relationships", "pleasure-sexual-wellbeing", "framework-model"],
   },
@@ -2235,7 +2098,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     relatedTerms: [
       "High Curiosity Orientation",
       "Learning- and Mastery-Driven Curiosity",
-      "Progressive Precision",
       "Consent Frameworks",
     ],
     tags: [
@@ -2246,41 +2108,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "fantasy-kink-exploration",
       "metric-measurement",
     ],
-  },
-  {
-    id: 59,
-    term: "Deep Survey",
-    slug: "deep-survey",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "A comprehensive set of questions designed to explore sexual preferences, patterns, and relational tendencies.",
-    extendedNotes:
-      "The Deep Survey prioritizes nuance and reflection over speed, allowing for more complex and emotionally rich responses. It is typically used when depth of understanding is more important than quick engagement.",
-    examples: [
-      "Answering questions about desire, boundaries, communication, and intimacy across different contexts",
-      "reflecting on patterns rather than isolated experiences.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "There are right or wrong answers",
-      "answers should reflect ideal behavior rather than reality",
-      "results define fixed traits.",
-    ],
-    reality: [
-      "Deep Survey is about a comprehensive set of questions designed to explore sexual preferences, patterns, and relational tendencies, and it doesn’t imply that there are right or wrong answers.",
-      "Deep Survey describes a comprehensive set of questions designed to explore sexual preferences, patterns, and relational tendencies, so it doesn’t mean that answers should reflect ideal behavior rather than reality.",
-      "More accurately, Deep Survey refers to a comprehensive set of questions designed to explore sexual preferences, patterns, and relational tendencies, and results define fixed traits doesn’t follow from that.",
-    ],
-    relatedTerms: [
-      "Sexual Intelligence",
-      "Growth Report — Your Intimacy Journey",
-      "Soft Survey",
-      "Micro Quiz",
-      "Reflective Prompts",
-    ],
-    tags: ["patterns", "product-assessment", "product-artifact"],
   },
   {
     id: 60,
@@ -2686,12 +2513,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Direct Identifiers should never override consent or comfort, and safety stays the priority.",
       "More accurately, Direct Identifiers refers to data fields that can identify a person on their own, such as full name, exact email address, phone number, or government-issued ID, and direct identifiers are safe if stored internally doesn’t follow from that.",
     ],
-    relatedTerms: [
-      "Quasi-Identifiers",
-      "Re-Identification Risk",
-      "Tiered Access Approach",
-      "Ethical Constraints",
-    ],
+    relatedTerms: ["Quasi-Identifiers", "Re-Identification Risk", "Ethical Constraints"],
     tags: ["privacy-controls", "data-privacy-measurement", "data-research-method"],
   },
   {
@@ -3527,7 +3349,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
     relatedTerms: [
       "Non-Harm Principles",
-      "Gates / Guardrails",
       "Consent Frameworks",
       "Anonymization",
       "Ethical Containment",
@@ -3803,13 +3624,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Experimenting can feel like unsafe in committed relationships sometimes, but Expanding / Experimenting refers to a stage where someone actively broadens their intimacy range—trying new activities, dynamics, or communication skills with consent and aftercare.",
       "Consent and comfort come first, and Expanding / Experimenting only makes sense when those are respected.",
     ],
-    relatedTerms: [
-      "Roleplay Boundaries",
-      "Aftercare",
-      "Consent",
-      "Targeted Boosts",
-      "Presence vs Performance",
-    ],
+    relatedTerms: ["Roleplay Boundaries", "Aftercare", "Consent", "Presence vs Performance"],
     tags: ["sexual-growth", "intimacy-experiments", "fantasy-kink-exploration", "state-experience"],
   },
   {
@@ -4592,74 +4407,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
   },
   {
-    id: 120,
-    term: "Growth Potentials",
-    slug: "growth-potentials",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition:
-      "Language for the most promising areas where small changes can meaningfully improve intimacy, communication, and satisfaction.",
-    extendedNotes:
-      "Growth potentials highlight leverage points (e.g., reduce pressure, add privacy, improve initiation clarity) rather than framing people as broken. This is most effective when paired with structured action → integration, realistic pacing, and culturally appropriate options (private, low-intensity steps). Clear, non-shaming language supports global usability.",
-    examples: [
-      "“Add a weekly check-in”",
-      "“Create a decompression ritual before initiation”",
-      "“Practice a simple consent phrase”",
-      "“Shift from outcome goals to process pleasure.”",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Growth means something is wrong with you",
-      "Growth requires big dramatic change",
-      "Growth potential guarantees results",
-      "Growth replaces consent and communication.",
-    ],
-    reality: [
-      "Growth Potentials does not mean something is wrong with you, and it refers to language for the most promising areas where small changes can meaningfully improve intimacy, communication, and satisfaction.",
-      "More accurately, Growth Potentials refers to language for the most promising areas where small changes can meaningfully improve intimacy, communication, and satisfaction, and growth requires big dramatic change doesn’t follow from that.",
-      "Growth Potentials doesn’t guarantee outcomes like that, and it mainly describes language for the most promising areas where small changes can meaningfully improve intimacy, communication, and satisfaction.",
-      "Consent and comfort come first, and Growth Potentials only makes sense when those are respected.",
-    ],
-    relatedTerms: [
-      "Structured Action → Integration Sequence",
-      "Reflective Prompts",
-      "Longitudinal Check-ins",
-      "State Optimization",
-    ],
-    tags: ["couples-tools", "product-assessment", "framework-model"],
-  },
-  {
-    id: 121,
-    term: "Growth Report",
-    slug: "growth-report",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "A personalized report that summarizes key patterns, strengths, and growth areas identified through your survey responses.",
-    extendedNotes:
-      "The Growth Report highlights recurring themes, changes, and patterns over time rather than isolated data points. It is intended to support self-awareness and ongoing development, not evaluation or judgment.",
-    examples: [
-      "Seeing themes in communication style across relationships",
-      "identifying recurring dynamics around desire or boundaries",
-      "noticing areas where growth is possible.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "The report defines permanent traits",
-      "growth areas indicate failure",
-      "the report predicts future relationship outcomes.",
-    ],
-    reality: [
-      "Growth Report is about a personalized report that summarizes key patterns, strengths, and growth areas identified through your survey responses, and it doesn’t imply that the report defines permanent traits.",
-      "Not experiencing Growth Report in a moment doesn’t mean something is wrong, and it can shift with context.",
-      "Growth Report points to a personalized report that summarizes key patterns, strengths, and growth areas identified through your survey responses, so the report predicts future relationship outcomes is a misunderstanding.",
-    ],
-    relatedTerms: ["Deep Survey", "Sexual Intelligence", "Match IQ"],
-    tags: ["product-assessment", "product-artifact"],
-  },
-  {
     id: 122,
     term: "Guided Self-Understanding",
     slug: "guided-self-understanding",
@@ -4689,7 +4436,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Consent and comfort come first, and Guided Self-Understanding only makes sense when those are respected.",
     ],
     relatedTerms: [
-      "Reflective Prompts",
       "Arousal Map",
       "Consent Frameworks",
       "Longitudinal Check-ins",
@@ -5456,7 +5202,7 @@ export const glossaryTerms: GlossaryTerm[] = [
     definition:
       "A curiosity subtype where exploration is motivated by skill-building—understanding bodies, communication, technique, and “getting better” through practice.",
     extendedNotes:
-      "This subtype often prefers structured learning, feedback, and gradual progress. It pairs well with progressive precision and action → integration sequences. Reports should encourage presence so mastery doesn’t become performance pressure.",
+      "This subtype often prefers structured learning, feedback, and gradual progress. Staying present matters, so mastery doesn’t turn into performance pressure.",
     examples: [
       "Enjoys learning anatomy and pleasure skills",
       "Uses check-ins to improve communication",
@@ -5476,12 +5222,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Learning- and Mastery-Driven Curiosity points to a curiosity subtype where exploration is motivated by skill-building—understanding bodies, communication, technique, and “getting better”, so learning should override partner preferences is a misunderstanding.",
       "Consent and comfort come first, and Learning- and Mastery-Driven Curiosity only makes sense when those are respected.",
     ],
-    relatedTerms: [
-      "Skill- and Knowledge-Based Confidence",
-      "Progressive Precision",
-      "Presence vs Performance",
-      "Reflective Prompts",
-    ],
+    relatedTerms: ["Skill- and Knowledge-Based Confidence", "Presence vs Performance"],
     tags: ["pleasure-skills", "sex-education", "pleasure-sexual-wellbeing", "trait-disposition"],
   },
   {
@@ -5587,7 +5328,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Likert-Scale Items isn’t an all-the-time rule, and it can change with context and timing.",
       "Likert-Scale Items describes survey questions that ask respondents to choose from ordered options (for example, from “Strongly disagree” to “Strongly agree”) to measure, so it doesn’t mean that likert items eliminate social desirability bias.",
     ],
-    relatedTerms: ["Deep Survey", "Soft Survey", "Validity", "Reliability", "Bias"],
+    relatedTerms: ["Validity", "Reliability", "Bias"],
     tags: ["measurement", "cross-cultural-research", "product-assessment", "metric-measurement"],
   },
   {
@@ -5695,51 +5436,8 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Longitudinal Check-ins is about repeat check-ins over time that track changes in desire, wellbeing, communication, or relationship satisfaction rather than relying on a single, and it doesn’t imply that check-ins automatically fix problems.",
       "More accurately, Longitudinal Check-ins refers to repeat check-ins over time that track changes in desire, wellbeing, communication, or relationship satisfaction rather than relying on a single, and trends are meaningless because people change doesn’t follow from that.",
     ],
-    relatedTerms: [
-      "Feedback Loops",
-      "Relationship Satisfaction",
-      "Stress And Desire",
-      "Progressive Precision",
-      "Context-Sensitive Assessments",
-    ],
+    relatedTerms: ["Feedback Loops", "Relationship Satisfaction", "Stress And Desire"],
     tags: ["couples-tools", "wellbeing-trends", "relationship-dynamics-intimacy", "practice-skill"],
-  },
-  {
-    id: 149,
-    term: "Longitudinal Deltas",
-    slug: "longitudinal-deltas",
-    type: "Metric & Measurement",
-    category: "frameworks",
-    definition:
-      "Quantified changes in a person’s scores or dimensions over time (the “delta” between check-ins).",
-    extendedNotes:
-      "Deltas help distinguish temporary states (stress season, life change) from stable traits. In global products, deltas should be interpreted with context (life stage, health, relationship events) and communicated carefully so users don’t treat normal fluctuation as failure.",
-    examples: [
-      "Change in “sexual confidence” from last month",
-      "Shifts in arousal brakes during a high-stress period",
-      "Improvement in communication comfort after repeated check-ins.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Deltas prove the relationship is improving or failing",
-      "Any negative delta is bad",
-      "Deltas are comparable across users without context",
-      "Deltas remove the need for conversation.",
-    ],
-    reality: [
-      "Deltas prove the relationship isn’t always improving or failing, and Longitudinal Deltas is about quantified changes in a person’s scores or dimensions over time (the “delta” between check-ins).",
-      "Any negative delta can feel like bad sometimes, but Longitudinal Deltas refers to quantified changes in a person’s scores or dimensions over time (the “delta” between check-ins).",
-      "More accurately, Longitudinal Deltas refers to quantified changes in a person’s scores or dimensions over time (the “delta” between check-ins), and deltas are comparable across users without context doesn’t follow from that.",
-      "Longitudinal Deltas describes quantified changes in a person’s scores or dimensions over time (the “delta” between check-ins), so it doesn’t mean that deltas remove the need for conversation.",
-    ],
-    relatedTerms: [
-      "Longitudinal Check-ins",
-      "Context-Sensitive Assessments",
-      "Interpretive Depth",
-      "Feedback Loops",
-    ],
-    tags: ["context-aware", "wellbeing-trends", "product-assessment", "metric-measurement"],
   },
   {
     id: 150,
@@ -5814,65 +5512,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
     relatedTerms: ["Risk Orientation", "Routine Comfort", "Consent Frameworks"],
     tags: ["relationship-dynamics-intimacy", "trait-disposition"],
-  },
-  {
-    id: 152,
-    term: "Match IQ",
-    slug: "match-iq",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "A summary indicator that reflects how well two people’s patterns align across key relational and sexual dimensions.",
-    extendedNotes:
-      "Match IQ reflects multidimensional alignment rather than surface-level similarity. It is meant to guide understanding of compatibility strengths and tensions, not to rank or score people.",
-    examples: [
-      "High alignment in communication but differences in desire patterns",
-      "moderate overall alignment with strong emotional compatibility.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Higher Match IQ guarantees relationship success",
-      "lower Match IQ means incompatibility",
-      "Match IQ measures attraction or chemistry alone.",
-    ],
-    reality: [
-      "Match IQ can influence experiences, but it doesn’t guarantee that outcome.",
-      "Match IQ isn’t defined by incompatibility, and it’s about a summary indicator that reflects how well two people’s patterns align across key relational and sexual dimensions.",
-      "Match IQ is about a summary indicator that reflects how well two people’s patterns align across key relational and sexual dimensions, and it doesn’t imply that match iq measures attraction or chemistry alone.",
-    ],
-    relatedTerms: ["Sexual Intelligence", "Intimacy", "Communication"],
-    tags: ["assessment", "product-assessment", "product-artifact"],
-  },
-  {
-    id: 153,
-    term: "Micro Quiz",
-    slug: "micro-quiz",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "A short set of focused questions designed to explore a specific topic or dimension.",
-    extendedNotes:
-      "Micro Quizzes are designed for quick engagement while still providing meaningful insight. They trade depth for accessibility and are often used as entry points rather than comprehensive assessments.",
-    examples: [
-      "A brief quiz on communication preferences",
-      "a short check-in on current emotional state",
-      "targeted questions about boundaries or desire.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Micro Quizzes provide complete assessments",
-      "answers should reflect ideal behavior",
-      "results are directly comparable to deep survey results.",
-    ],
-    reality: [
-      "Micro Quiz describes a short set of focused questions designed to explore a specific topic or dimension, so it doesn’t mean that micro quizzes provide complete assessments.",
-      "Micro Quiz describes a short set of focused questions designed to explore a specific topic or dimension, so it doesn’t mean that answers should reflect ideal behavior.",
-      "Micro Quiz describes a short set of focused questions designed to explore a specific topic or dimension, so it doesn’t mean that results are directly comparable to deep survey results.",
-    ],
-    relatedTerms: ["Deep Survey", "Growth Report", "Sexual Intelligence"],
-    tags: ["context", "product-assessment", "product-artifact"],
   },
   {
     id: 154,
@@ -6222,13 +5861,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Consent matters more than any goal or label, and Non-Harm Principles is secondary to that.",
       "Non-harm isn’t always only relevant for clinical therapy, and Non-Harm Principles is about safety-first principles that guide advice and product behavior toward reducing risk, preventing coercion, and supporting user wellbeing.",
     ],
-    relatedTerms: [
-      "Ethical Constraints",
-      "Gates / Guardrails",
-      "Consent",
-      "Emotional Safety",
-      "Aftercare",
-    ],
+    relatedTerms: ["Ethical Constraints", "Consent", "Emotional Safety", "Aftercare"],
     tags: ["wellbeing", "consent-safety", "consent-boundaries", "expectation-norm"],
   },
   {
@@ -6349,12 +5982,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Opt-In Consent can influence experiences, but it doesn’t guarantee that outcome.",
       "Opt-In Consent describes a consent approach where users actively choose to participate (or share data) rather than being included by default, so it doesn’t mean that opt-in is only a legal requirement, not an ethical practice.",
     ],
-    relatedTerms: [
-      "Consent Frameworks",
-      "Ethical Constraints",
-      "Tiered Access Approach",
-      "Non-Harm Principles",
-    ],
+    relatedTerms: ["Consent Frameworks", "Ethical Constraints", "Non-Harm Principles"],
     tags: ["consent-boundaries", "expectation-norm"],
   },
   {
@@ -6661,44 +6289,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "consent-boundaries",
       "pattern-dynamic",
     ],
-  },
-  {
-    id: 174,
-    term: "Pattern Libraries (by Modality)",
-    slug: "pattern-libraries-by-modality",
-    type: "Product Artifact",
-    category: "sensitive",
-    definition:
-      "A structured collection of relationship and sexuality patterns, exercises, and prompts organized by modalities such as sensory, emotional, communication, fantasy, and novelty.",
-    extendedNotes:
-      "Pattern libraries turn abstract concepts into practical options users can try. Organizing by modality supports personalization: people can explore what works for their arousal style, values, and comfort level. For global use, libraries should include culturally flexible language and multiple paths (e.g., verbal vs nonverbal communication) without stereotyping.",
-    examples: [
-      'A "sensory" library of touch and pacing experiments',
-      'A "communication" library of consent check-ins and repair scripts',
-      'A "fantasy" library of safe sharing prompts and boundaries.',
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "Sensitive",
-    misinterpretations: [
-      "Pattern libraries are stereotypes about people",
-      "If a pattern is suggested, you should do it",
-      "Libraries replace consent and negotiation",
-      "The same patterns work in every culture and relationship.",
-    ],
-    reality: [
-      "Pattern Libraries (by Modality) points to a structured collection of relationship and sexuality patterns, exercises, and prompts organized by modalities such as sensory, emotional, so pattern libraries are stereotypes about people is a misunderstanding.",
-      "Pattern Libraries (by Modality) points to a structured collection of relationship and sexuality patterns, exercises, and prompts organized by modalities such as sensory, emotional, so if a pattern is suggested, you should do it is a misunderstanding.",
-      "Pattern Libraries (by Modality) should never override consent or comfort, and safety stays the priority.",
-      "More accurately, Pattern Libraries (by Modality) refers to a structured collection of relationship and sexuality patterns, exercises, and prompts organized by modalities such as sensory, emotional, and the same patterns work in every culture and relationship doesn’t follow from that.",
-    ],
-    relatedTerms: [
-      "Core Modalities",
-      "Reflective Prompts",
-      "Consent Frameworks",
-      "Arousal Style",
-      "Ethical Constraints",
-    ],
-    tags: ["product-assessment", "product-artifact"],
   },
   {
     id: 175,
@@ -7209,7 +6799,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Ethical Constraints",
       "State Optimization",
       "Spiritual Sexuality",
-      "Reflective Prompts",
     ],
     tags: ["mindfulness", "global-culture", "relationship-dynamics-intimacy", "framework-model"],
   },
@@ -7335,44 +6924,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
   },
   {
-    id: 191,
-    term: "Progressive Precision",
-    slug: "progressive-precision",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition:
-      "An assessment approach that starts with broad, low-friction questions and gradually increases specificity as trust, clarity, and context build.",
-    extendedNotes:
-      "Progressive precision reduces overwhelm and improves accuracy by letting users begin with simple signals, then drilling down only where it matters. It is especially useful across cultures and languages, where people may need more time to interpret terms or feel safe answering sensitive topics. The method often pairs with interpretive depth to explain why follow-up questions are being asked.",
-    examples: [
-      "Starting with a short onboarding survey, then offering optional deep-dive modules",
-      "Asking follow-up questions only when a dimension score is ambiguous",
-      "Using gentle language first, then more specific examples as the user opts in.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "More questions always means better truth",
-      "Progressive precision is the same as being vague",
-      "Precision means you can predict relationship outcomes",
-      "Users must answer everything for results to be useful.",
-    ],
-    reality: [
-      "Progressive Precision does not mean better truth, and it refers to an assessment approach that starts with broad, low-friction questions and gradually increases specificity as trust, clarity, and context build.",
-      "Progressive Precision differs from being vague, and it refers to an assessment approach that starts with broad, low-friction questions and gradually increases specificity as trust, clarity, and context build.",
-      "Progressive Precision does not mean you can predict relationship outcomes, and it refers to an assessment approach that starts with broad, low-friction questions and gradually increases specificity as trust, clarity, and context build.",
-      "Progressive Precision points to an assessment approach that starts with broad, low-friction questions and gradually increases specificity as trust, clarity, and context build, so users must answer everything for results to be useful is a misunderstanding.",
-    ],
-    relatedTerms: [
-      "Soft Survey",
-      "Deep Survey",
-      "Context-Sensitive Assessments",
-      "Interpretive Depth",
-      "Longitudinal Check-ins",
-    ],
-    tags: ["product-assessment", "framework-model"],
-  },
-  {
     id: 192,
     term: "Pseudonymization",
     slug: "pseudonymization",
@@ -7475,12 +7026,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Psychometric Approximation refers to a measurement approach where report scores estimate complex traits from survey answers—useful, but never perfectly precise, and scores can be treated as diagnoses doesn’t follow from that.",
       "Psychometric Approximation is about a measurement approach where report scores estimate complex traits from survey answers—useful, but never perfectly precise, and it doesn’t imply that measurement error only happens when users lie.",
     ],
-    relatedTerms: [
-      "Validity",
-      "Reliability",
-      "Context-Sensitive Assessments",
-      "Interpretive Depth",
-    ],
+    relatedTerms: ["Validity", "Reliability"],
     tags: ["data-privacy-measurement", "data-research-method"],
   },
   {
@@ -7900,7 +7446,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Reliability doesn’t automatically mean results never change, and context still matters.",
       "Reliability describes the degree to which a measurement or assessment produces consistent results under similar conditions, so it doesn’t mean that reliability and validity mean the same thing.",
     ],
-    relatedTerms: ["Validity", "Bias", "Scores & Benchmarks", "Privacy Constraints", "Privacy"],
+    relatedTerms: ["Validity", "Bias", "Scores & Benchmarks", "Privacy"],
     tags: ["measurement", "research", "data-privacy-measurement", "metric-measurement"],
   },
   {
@@ -7945,38 +7491,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "emotional-attachment-patterns",
       "state-experience",
     ],
-  },
-  {
-    id: 207,
-    term: "Research-Grade Dataset",
-    slug: "research-grade-dataset",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "A curated dataset prepared for high-quality analysis, typically with documentation, validation checks, and clear definitions for variables and scales.",
-    extendedNotes:
-      "Research-grade datasets emphasize consistency, provenance, and interpretability: codebooks, versioning, missing-data rules, and validation of psychometric measures. For global deployments, “research-grade” also means translation QA, cultural calibration, and bias review so metrics remain comparable across regions and languages.",
-    examples: [
-      "A dataset with a codebook and validated scale scoring",
-      "Versioned releases that track changes in survey items",
-      "A multilingual dataset with documented translation and measurement notes.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Research-grade means error-free",
-      "Bigger datasets are automatically better",
-      "Research-grade can ignore privacy because it’s for science",
-      "A dataset is research-grade without documentation.",
-    ],
-    reality: [
-      "Research-Grade Dataset does not mean error-free, and it refers to a curated dataset prepared for high-quality analysis, typically with documentation, validation checks, and clear definitions for variables and.",
-      "Research-Grade Dataset describes a curated dataset prepared for high-quality analysis, typically with documentation, validation checks, and clear definitions for variables and, so it doesn’t mean that bigger datasets are automatically better.",
-      "Research-Grade Dataset points to a curated dataset prepared for high-quality analysis, typically with documentation, validation checks, and clear definitions for variables and, so research-grade can ignore privacy because it’s for science is a misunderstanding.",
-      "A dataset isn’t always research-grade without documentation, and Research-Grade Dataset is about a curated dataset prepared for high-quality analysis, typically with documentation, validation checks, and clear definitions for variables and.",
-    ],
-    relatedTerms: ["Validity", "Reliability", "Micro Quiz", "Longitudinal Deltas", "Growth Report"],
-    tags: ["measurement", "cross-cultural-research", "product-assessment", "product-artifact"],
   },
   {
     id: 208,
@@ -8491,7 +8005,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Scores & Benchmarks refers to numerical results that summarize dimensions (scores) and compare them to reference ranges or typical patterns (benchmarks), and benchmarks apply equally across all cultures and languages doesn’t follow from that.",
       "Scores & Benchmarks is about numerical results that summarize dimensions (scores) and compare them to reference ranges or typical patterns (benchmarks), and it doesn’t imply that a single score captures the full truth.",
     ],
-    relatedTerms: ["Interpretive Depth", "Validity", "Reliability"],
+    relatedTerms: ["Validity", "Reliability"],
     tags: ["data-privacy-measurement", "metric-measurement"],
   },
   {
@@ -9233,7 +8747,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Repairing / Reconnecting",
       "Awakening / Exploring",
       "Grounded / Integrated",
-      "Longitudinal Deltas",
     ],
     tags: ["context-aware", "relationship-dynamics-intimacy", "framework-model"],
   },
@@ -9372,7 +8885,7 @@ export const glossaryTerms: GlossaryTerm[] = [
     definition:
       "A confidence pattern where sexual self-assurance comes from learning (anatomy, communication, consent skills) and applying knowledge with curiosity and care.",
     extendedNotes:
-      "This pattern tends to improve with education and feedback and pairs well with progressive precision and structured action → integration. The growth edge is staying present: knowledge should support, not replace, embodied connection.",
+      "This pattern tends to improve with education and feedback. The growth edge is staying present: knowledge should support, not replace, embodied connection.",
     examples: [
       "Learns turn-ons/turn-offs through discussion",
       "Uses check-ins and aftercare",
@@ -9394,7 +8907,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
     relatedTerms: [
       "Guided Self-Understanding",
-      "Progressive Precision",
       "Structured Action → Integration Sequence",
       "Consent Frameworks",
     ],
@@ -9886,7 +9398,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     relatedTerms: [
       "Longitudinal Check-ins",
       "Feedback Loops",
-      "Reflective Prompts",
       "Embodied Integration",
       "State Optimization",
     ],
@@ -9953,12 +9464,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Supportive & Adaptive refers to a communication style focused on reassurance, flexibility, and adjusting to a partner’s needs, often prioritizing harmony and emotional safety, and supportive partners should accept any request doesn’t follow from that.",
       "Supportive & Adaptive should never override consent or comfort, and safety stays the priority.",
     ],
-    relatedTerms: [
-      "Repairing / Reconnecting",
-      "Emotional Safety",
-      "Boundaries",
-      "Reflective Prompts",
-    ],
+    relatedTerms: ["Repairing / Reconnecting", "Emotional Safety", "Boundaries"],
     tags: ["emotional-safety", "reassurance", "emotional-attachment-patterns", "trait-disposition"],
   },
   {
@@ -9990,12 +9496,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Suppression of Rare Combinations refers to a privacy method that removes or masks data records/fields that become identifying due to rare attribute combinations, and suppression alone solves privacy doesn’t follow from that.",
       "Suppression of Rare Combinations describes a privacy method that removes or masks data records/fields that become identifying due to rare attribute combinations, so it doesn’t mean that suppression makes findings invalid automatically.",
     ],
-    relatedTerms: [
-      "Aggregation & Coarsening",
-      "Quasi-Identifiers",
-      "Re-Identification Risk",
-      "Controlled Research Environments",
-    ],
+    relatedTerms: ["Aggregation & Coarsening", "Quasi-Identifiers", "Re-Identification Risk"],
     tags: ["data-privacy-measurement", "data-research-method"],
   },
   {
@@ -10068,38 +9569,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
   },
   {
-    id: 263,
-    term: "Targeted Boosts",
-    slug: "targeted-boosts",
-    type: "Data & Research Method",
-    category: "frameworks",
-    definition:
-      "Rule-based adjustments that slightly increase (or decrease) scores for specific dimensions to reflect user priorities, context, or safety considerations.",
-    extendedNotes:
-      "Boosts can support personalization—for example, emphasizing compatibility on communication style for people who value directness. They should be bounded and auditable to avoid hidden manipulation. In international products, boosts may also be used to support local cultural calibration while preserving core consent and safety standards.",
-    examples: [
-      "Boosting matches with similar initiation style for users who report high importance of communication",
-      "Reducing scores when a key boundary preference conflicts",
-      "Increasing weight on relationship form preference in regions where exclusivity norms differ.",
-    ],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Boosts are the same as cheating the model",
-      "Boosts should override user consent preferences",
-      "Boosts guarantee better outcomes",
-      "Boosts remove the need for validity testing.",
-    ],
-    reality: [
-      "Targeted Boosts is about rule-based adjustments that slightly increase (or decrease) scores for specific dimensions to reflect user priorities, context, or safety, and it doesn’t imply that boosts are the same as cheating the model.",
-      "Targeted Boosts should never override consent or comfort, and safety stays the priority.",
-      "Targeted Boosts doesn’t guarantee outcomes like that, and it mainly describes rule-based adjustments that slightly increase (or decrease) scores for specific dimensions to reflect user priorities, context, or safety.",
-      "Targeted Boosts describes rule-based adjustments that slightly increase (or decrease) scores for specific dimensions to reflect user priorities, context, or safety, so it doesn’t mean that boosts remove the need for validity testing.",
-    ],
-    relatedTerms: ["Gates / Guardrails", "Bias", "Validity", "Reliability"],
-    tags: ["safety", "product-assessment", "data-research-method"],
-  },
-  {
     id: 264,
     term: "Touch Preferences",
     slug: "touch-preferences",
@@ -10167,7 +9636,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
     relatedTerms: [
       "Consent Frameworks",
-      "Reflective Prompts",
       "Sexual Confidence",
       "Signal Mismatch",
       "Systemic Gap in Sexual Education",
@@ -10556,7 +10024,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Validity does not mean results never change, and it refers to the degree to which an assessment measures what it is intended to measure.",
       "More accurately, Validity refers to the degree to which an assessment measures what it is intended to measure, and validity and reliability are the same doesn’t follow from that.",
     ],
-    relatedTerms: ["Reliability", "Bias", "Privacy Constraints", "Privacy", "Scores & Benchmarks"],
+    relatedTerms: ["Reliability", "Bias", "Privacy", "Scores & Benchmarks"],
     tags: ["measurement", "research", "data-privacy-measurement", "metric-measurement"],
   },
   {
@@ -10701,7 +10169,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Aggregation & Coarsening refers to privacy techniques that summarize data (aggregation) or reduce precision (coarsening) to lower re-identification risk, and numbers capture the whole truth doesn’t follow from that.",
       "More accurately, Aggregation & Coarsening refers to privacy techniques that summarize data (aggregation) or reduce precision (coarsening) to lower re-identification risk, and privacy and safety are optional doesn’t follow from that.",
     ],
-    relatedTerms: ["Re-Identification Risk", "Privacy Constraints", "Anonymization", "Privacy"],
+    relatedTerms: ["Re-Identification Risk", "Anonymization", "Privacy"],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
   },
   {
@@ -10729,13 +10197,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Anonymization does not mean impossible to identify, and it refers to techniques that remove or obscure identifying details so individuals can’t be easily linked to sensitive data.",
       "Privacy doesn’t matter if data can feel like ‘helpful’ sometimes, but Anonymization refers to techniques that remove or obscure identifying details so individuals can’t be easily linked to sensitive data.",
     ],
-    relatedTerms: [
-      "Re-Identification Risk",
-      "Privacy Constraints",
-      "Aggregation & Coarsening",
-      "Tiered Access Approach",
-      "Anonymized Research Access",
-    ],
+    relatedTerms: ["Re-Identification Risk", "Aggregation & Coarsening"],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
   },
   {
@@ -10890,7 +10352,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     relatedTerms: [
       "Typical Beliefs",
       "Social Software",
-      "Interpretive Depth",
       "Identity & Orientation",
       "Physical Touch Comfort",
     ],
@@ -10993,7 +10454,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Compatibility Dynamics refers to how two partners’ needs, styles, and contexts interact—creating ease, friction, or growth opportunities, and needs shouldn’t change doesn’t follow from that.",
     ],
     relatedTerms: [
-      "Interpretive Depth",
       "Physical Touch Comfort",
       "Identity & Orientation",
       "Sexual Stage",
@@ -11140,65 +10600,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     tags: ["ethics", "consent-boundaries", "framework-model"],
   },
   {
-    id: 300,
-    term: "Gates / Guardrails",
-    slug: "gates-guardrails",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition:
-      "Constraints and checks designed to prevent harmful outputs or unsafe behavior (e.g., consent-first rules, privacy limits).",
-    extendedNotes:
-      "You might notice it as deciding what information is shared and how it’s protected. It often improves when sensitivity of the topic, audience, and consent.",
-    examples: [],
-    domain: "Data, Privacy & Measurement",
-    sensitivityLevel: "General",
-    misinterpretations: ["Numbers capture the whole truth", "Privacy and safety are optional"],
-    reality: [
-      "Gates / Guardrails describes constraints and checks designed to prevent harmful outputs or unsafe behavior (e.g., consent-first rules, privacy limits), so it doesn’t mean that numbers capture the whole truth.",
-      "Gates / Guardrails describes constraints and checks designed to prevent harmful outputs or unsafe behavior (e.g., consent-first rules, privacy limits), so it doesn’t mean that privacy and safety are optional.",
-    ],
-    relatedTerms: [
-      "Privacy Constraints",
-      "Tiered Access Approach",
-      "Re-Identification Risk",
-      "Aggregation & Coarsening",
-      "Privacy",
-    ],
-    tags: ["privacy", "data-privacy-measurement", "framework-model"],
-  },
-  {
-    id: 301,
-    term: "Growth Report — Your Intimacy Journey",
-    slug: "growth-report-your-intimacy-journey",
-    type: "State & Experience",
-    category: "desire",
-    definition:
-      "A user-facing summary that reflects patterns over time and suggests growth areas, based on completed reflections or check-ins.",
-    extendedNotes:
-      "Commonly described as feeling close, understood, and emotionally connected. It tends to shift with responsiveness, conflict repair, and daily habits.",
-    examples: [],
-    domain: "Relationship Dynamics & Intimacy",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "A healthy relationship has no friction",
-      "If it’s meant to be, it stays easy",
-      "Needs shouldn’t change",
-    ],
-    reality: [
-      "Growth Report — Your Intimacy Journey is about a user-facing summary that reflects patterns over time and suggests growth areas, based on completed reflections or check-ins, and it doesn’t imply that a healthy relationship has no friction.",
-      "Growth Report — Your Intimacy Journey is about a user-facing summary that reflects patterns over time and suggests growth areas, based on completed reflections or check-ins, and it doesn’t imply that if it’s meant to be, it stays easy.",
-      "More accurately, Growth Report — Your Intimacy Journey refers to a user-facing summary that reflects patterns over time and suggests growth areas, based on completed reflections or check-ins, and needs shouldn’t change doesn’t follow from that.",
-    ],
-    relatedTerms: [
-      "Relationship Stability",
-      "Trust Building",
-      "Longitudinal Check-ins",
-      "Feedback Loops",
-      "Being Chosen",
-    ],
-    tags: ["intimacy", "relationship-dynamics-intimacy", "state-experience"],
-  },
-  {
     id: 302,
     term: "Identity & Orientation",
     slug: "identity-orientation",
@@ -11221,13 +10622,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Identity & Orientation describes an umbrella for how someone experiences identity and attraction (e.g., gender identity, sexual orientation, romantic orientation), so it doesn’t mean that if it’s meant to be, it stays easy.",
       "More accurately, Identity & Orientation refers to an umbrella for how someone experiences identity and attraction (e.g., gender identity, sexual orientation, romantic orientation), and needs shouldn’t change doesn’t follow from that.",
     ],
-    relatedTerms: [
-      "Monogamy",
-      "Physical Touch Comfort",
-      "Open Relationship",
-      "Interpretive Depth",
-      "Sexual Stage",
-    ],
+    relatedTerms: ["Monogamy", "Physical Touch Comfort", "Open Relationship", "Sexual Stage"],
     tags: ["relationship-dynamics-intimacy", "framework-model"],
   },
   {
@@ -11297,35 +10692,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     tags: ["initiation-style", "sexual-communication-initiation", "practice-skill"],
   },
   {
-    id: 305,
-    term: "Interpretive Depth",
-    slug: "interpretive-depth",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition: "A glossary entry for Interpretive Depth.",
-    extendedNotes:
-      "In everyday relationships, this can look like feeling close, understood, and emotionally connected. Context like responsiveness, conflict repair, and daily habits changes how it feels.",
-    examples: [],
-    domain: "Relationship Dynamics & Intimacy",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "A healthy relationship has no friction",
-      "If it’s meant to be, it stays easy",
-    ],
-    reality: [
-      "More accurately, Interpretive Depth refers to a glossary entry for Interpretive Depth, and a healthy relationship has no friction doesn’t follow from that.",
-      "More accurately, Interpretive Depth refers to a glossary entry for Interpretive Depth, and if it’s meant to be, it stays easy doesn’t follow from that.",
-    ],
-    relatedTerms: [
-      "Identity & Orientation",
-      "Privacy Constraints",
-      "Jealousy Management",
-      "Compatibility Dynamics",
-      "Commitment Scripts",
-    ],
-    tags: ["relationship-dynamics-intimacy", "framework-model"],
-  },
-  {
     id: 306,
     term: "Intimacy",
     slug: "intimacy",
@@ -11385,7 +10751,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Jealousy Management isn’t the same as control, and it focuses on skills and agreements that reduce jealousy escalation and build security (e.g., reassurance, boundaries, repair).",
     ],
     relatedTerms: [
-      "Interpretive Depth",
       "Sexual Stage",
       "Identity & Orientation",
       "Compatibility Dynamics",
@@ -11513,43 +10878,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Privacy points to practices and expectations about what personal or sexual information is shared, with whom, and under what conditions, so one metric fits everyone is a misunderstanding.",
       "More accurately, Privacy refers to practices and expectations about what personal or sexual information is shared, with whom, and under what conditions, and it can’t change doesn’t follow from that.",
     ],
-    relatedTerms: [
-      "Privacy Constraints",
-      "Re-Identification Risk",
-      "Aggregation & Coarsening",
-      "Tiered Access Approach",
-    ],
-    tags: ["privacy", "data-privacy-measurement", "framework-model"],
-  },
-  {
-    id: 314,
-    term: "Privacy Constraints",
-    slug: "privacy-constraints",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition: "A glossary entry for Privacy Constraints.",
-    extendedNotes:
-      "In everyday relationships, this can look like deciding what information is shared and how it’s protected. Context like sensitivity of the topic, audience, and consent changes how it feels.",
-    examples: [],
-    domain: "Data, Privacy & Measurement",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Numbers capture the whole truth",
-      "Privacy and safety are optional",
-      "One metric fits everyone",
-    ],
-    reality: [
-      "Privacy Constraints describes a glossary entry for Privacy Constraints, so it doesn’t mean that numbers capture the whole truth.",
-      "Privacy Constraints is about a glossary entry for Privacy Constraints, and it doesn’t imply that privacy and safety are optional.",
-      "Privacy Constraints describes a glossary entry for Privacy Constraints, so it doesn’t mean that one metric fits everyone.",
-    ],
-    relatedTerms: [
-      "Re-Identification Risk",
-      "Aggregation & Coarsening",
-      "Gates / Guardrails",
-      "Privacy",
-      "Anonymization",
-    ],
+    relatedTerms: ["Re-Identification Risk", "Aggregation & Coarsening"],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
   },
   {
@@ -11575,44 +10904,8 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Re-Identification Risk refers to the possibility that supposedly de-identified data could still be linked back to an individual, and privacy and safety are optional doesn’t follow from that.",
       "Re-Identification Risk points to the possibility that supposedly de-identified data could still be linked back to an individual, so one metric fits everyone is a misunderstanding.",
     ],
-    relatedTerms: [
-      "Aggregation & Coarsening",
-      "Anonymization",
-      "Privacy Constraints",
-      "Privacy",
-      "Anonymized Research Access",
-    ],
+    relatedTerms: ["Aggregation & Coarsening", "Anonymization", "Privacy"],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
-  },
-  {
-    id: 317,
-    term: "Reflective Prompts",
-    slug: "reflective-prompts",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "Guided questions that help someone reflect on patterns, needs, and preferences to build insight and better communication.",
-    extendedNotes:
-      "Commonly described as tone, timing, and clarity in conversations. It tends to shift with stress, conflict, and how safe it feels to be honest.",
-    examples: [],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "There’s only one ‘right’ way to feel this",
-      "If it’s present once, it’s always true",
-    ],
-    reality: [
-      "Reflective Prompts describes guided questions that help someone reflect on patterns, needs, and preferences to build insight and better communication, so it doesn’t mean that there’s only one ‘right’ way to feel this.",
-      "Reflective Prompts isn’t an all-the-time rule, and it can change with context and timing.",
-    ],
-    relatedTerms: [
-      "Deep Survey",
-      "Pattern Libraries (by Modality)",
-      "Soft Survey",
-      "Match IQ",
-      "Micro Quiz",
-    ],
-    tags: ["product-assessment", "product-artifact"],
   },
   {
     id: 318,
@@ -11860,62 +11153,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Opt-In Consent",
     ],
     tags: ["consent", "consent-boundaries", "framework-model"],
-  },
-  {
-    id: 326,
-    term: "Soft Survey",
-    slug: "soft-survey",
-    type: "Product Artifact",
-    category: "frameworks",
-    definition:
-      "A short, low-pressure set of questions designed to gather preferences or context without feeling clinical or invasive.",
-    extendedNotes:
-      "Often shows up as a recognizable pattern in thoughts, feelings, or behavior. It’s shaped by context, communication, and personal history.",
-    examples: [],
-    domain: "Product & Assessment",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "There’s only one ‘right’ way to feel this",
-      "If it’s present once, it’s always true",
-    ],
-    reality: [
-      "Soft Survey describes a short, low-pressure set of questions designed to gather preferences or context without feeling clinical or invasive, so it doesn’t mean that there’s only one ‘right’ way to feel this.",
-      "Soft Survey can fluctuate, so “always” or “never” claims don’t hold up.",
-    ],
-    relatedTerms: [
-      "Deep Survey",
-      "Micro Quiz",
-      "Reflective Prompts",
-      "Progressive Precision",
-      "Growth Report",
-    ],
-    tags: ["product-assessment", "product-artifact"],
-  },
-  {
-    id: 329,
-    term: "Tiered Access Approach",
-    slug: "tiered-access-approach",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition:
-      "A privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent.",
-    extendedNotes:
-      "Often shows up as deciding what information is shared and how it’s protected. It’s shaped by sensitivity of the topic, audience, and consent.",
-    examples: [],
-    domain: "Data, Privacy & Measurement",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "Numbers capture the whole truth",
-      "Privacy and safety are optional",
-      "One metric fits everyone",
-    ],
-    reality: [
-      "Tiered Access Approach points to a privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent, so numbers capture the whole truth is a misunderstanding.",
-      "More accurately, Tiered Access Approach refers to a privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent, and privacy and safety are optional doesn’t follow from that.",
-      "Tiered Access Approach describes a privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent, so it doesn’t mean that one metric fits everyone.",
-    ],
-    relatedTerms: ["Anonymization", "Privacy Constraints", "Privacy", "Anonymized Research Access"],
-    tags: ["privacy", "data-privacy-measurement", "framework-model"],
   },
   {
     id: 330,

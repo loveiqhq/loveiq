@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { getAllSlugs, glossaryTerms, resolveRelatedTerms } from "@/data/glossary-data";
 import redirectsConfig from "@features/glossary/glossary-redirects.constants.js";
 
-const { GLOSSARY_MERGED } = redirectsConfig;
-// Old URLs the redirect tests request on purpose; they must stay dead.
-const RETIRED = new Set(Object.keys(GLOSSARY_MERGED));
+const { GLOSSARY_MERGED, GLOSSARY_REMOVED } = redirectsConfig;
+// Old URLs the redirect and 404 tests request on purpose; they must stay dead.
+const RETIRED = new Set([...Object.keys(GLOSSARY_MERGED), ...GLOSSARY_REMOVED]);
 
 // data/glossary-data.ts is edited by hand since the CSV generator was retired
 // (3 Nov 2026). These checks stop a hand edit from breaking links: related-term
@@ -48,6 +48,16 @@ describe("glossary data integrity", () => {
       expect(live.has(from), `${from} should have no page`).toBe(false);
       expect(live.has(to), `${to} should be live`).toBe(true);
     }
+  });
+
+  it("keeps removed terms removed, and never also redirects them", () => {
+    expect(GLOSSARY_REMOVED.filter((slug) => live.has(slug))).toEqual([]);
+    expect(GLOSSARY_REMOVED.filter((slug) => slug in GLOSSARY_MERGED)).toEqual([]);
+  });
+
+  it("has no placeholder definitions", () => {
+    const placeholders = glossaryTerms.filter((t) => /^a glossary entry for\b/i.test(t.definition));
+    expect(placeholders.map((t) => t.slug)).toEqual([]);
   });
 
   it("resolves every related-term name to a live term", () => {
