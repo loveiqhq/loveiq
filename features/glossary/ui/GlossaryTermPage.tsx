@@ -392,26 +392,6 @@ const GlossaryTermPage: FC<GlossaryTermPageProps> = ({ term, relatedTermsWithLin
                     </div>
                   </div>
                 )}
-
-                {/* Inside LoveIQ Card */}
-                <div className="space-y-4 rounded-2xl border border-black/10 bg-[rgba(167,139,250,0.1)] p-6">
-                  <h3 className="font-serif text-sm font-semibold uppercase tracking-[1.4px] text-[#6D28D9]">
-                    Inside LoveIQ
-                  </h3>
-                  <p className="text-sm font-light leading-[1.625] text-gray-600">
-                    We identify patterns related to {term.term} by analyzing responses in our
-                    assessment modules, helping you understand your unique relationship dynamics.
-                  </p>
-                  <div className="space-y-2">
-                    <div className="h-1 overflow-hidden rounded-full bg-black/10">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#fe6839] via-[#a78bfa] to-[#e9d5ff]"
-                        style={{ width: "66%" }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500">Sample visualization of a gap metric.</p>
-                  </div>
-                </div>
               </div>
             </div>
 
