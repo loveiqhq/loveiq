@@ -1,3 +1,13 @@
+// ─── Retired (3 Nov 2026) ──────────────────────────────────────────────────────
+// data/glossary-source.csv was never committed (*.csv is gitignored), and this
+// script cannot read today's glossary-data.ts back: it would reset ids, change
+// slugs and categories, and drop resolveRelatedTerms. Edit data/glossary-data.ts
+// directly; __tests__/app/glossary-integrity.test.ts checks the result.
+console.error(
+  "update-glossary.js is retired: edit data/glossary-data.ts directly (see features/glossary/AGENT_README.md)."
+);
+process.exit(1);
+
 const fs = require("fs");
 const path = require("path");
 const { parse } = require("csv-parse/sync");

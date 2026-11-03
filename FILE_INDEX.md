@@ -161,13 +161,12 @@
 
 ## Glossary
 
-| Task                | Files                                                                    |
-| ------------------- | ------------------------------------------------------------------------ |
-| Glossary data       | `data/glossary-data.ts` (auto-generated from `data/glossary-source.csv`) |
-| Regenerate glossary | `node scripts/update-glossary.js`                                        |
-| Glossary index page | `features/glossary/ui/GlossaryPage.tsx`                                  |
-| Glossary term page  | `features/glossary/ui/GlossaryTermPage.tsx`                              |
-| Glossary navigation | shared white nav `features/landing/ui/white/WNavSection.tsx`             |
+| Task                | Files                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Glossary data       | `data/glossary-data.ts` (edited directly; checked by `__tests__/app/glossary-integrity.test.ts`) |
+| Glossary index page | `features/glossary/ui/GlossaryPage.tsx`                                                          |
+| Glossary term page  | `features/glossary/ui/GlossaryTermPage.tsx`                                                      |
+| Glossary navigation | shared white nav `features/landing/ui/white/WNavSection.tsx`                                     |
 
 ## Database
 

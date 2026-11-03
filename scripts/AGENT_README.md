@@ -11,7 +11,7 @@ One-off Node.js / Python scripts for data generation and database tooling. Not p
 
 | Script                                 | Purpose                                                                           |
 | -------------------------------------- | --------------------------------------------------------------------------------- |
-| `update-glossary.js`                   | Regenerate `data/glossary-data.ts` from `data/glossary-source.csv`                |
+| `update-glossary.js`                   | Retired: exits with a message. Edit `data/glossary-data.ts` directly              |
 | `update-survey.js`                     | Regenerate `data/survey-data.ts` from `data/survey-source.csv`                    |
 | `update-scoring-config.js`             | Regenerate `data/scoring-config.ts` from `data/scoring-config/*.csv`              |
 | `extract-scoring-xlsm.py`              | Extract scoring CSVs from the source `.xlsm` workbook (`npm run scoring:extract`) |
