@@ -10185,7 +10185,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     examples: [
       "Removing names and contact details from notes",
       "Summarizing responses so individuals can’t be singled out",
-      "Summarizing responses so individuals can’t be singled out",
     ],
     domain: "Data, Privacy & Measurement",
     sensitivityLevel: "General",
