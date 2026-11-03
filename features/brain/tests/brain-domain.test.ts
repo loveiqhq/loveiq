@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { glossaryTerms } from "@/data/glossary-data";
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 
 describe("domain vocabulary — terms, questions and how a score is built", () => {
@@ -9,7 +10,9 @@ describe("domain vocabulary — terms, questions and how a score is built", () =
     // Measured before this existed: 2 glossary chunks against 323 defined terms, 1 survey
     // chunk against 58 questions. The brain could write in our register and still be
     // guessing at what the words meant.
-    expect(of("glossary").length).toBeGreaterThan(300);
+    // At least one chunk per glossary term, whatever the count (299 since the 3 Nov 2026
+    // clean-up); a long entry can split into two.
+    expect(of("glossary").length).toBeGreaterThanOrEqual(glossaryTerms.length);
     expect(of("survey").length).toBeGreaterThanOrEqual(10);
     expect(of("scoring").length).toBeGreaterThan(0);
   });
@@ -18,7 +21,7 @@ describe("domain vocabulary — terms, questions and how a score is built", () =
     // Pooling them would answer "what is responsive desire" with whichever neighbour
     // ranked highest.
     const terms = new Set(of("glossary").map((r) => String(r.meta.term)));
-    expect(terms.size).toBeGreaterThan(300);
+    expect(terms.size).toBe(glossaryTerms.length);
     for (const r of of("glossary").slice(0, 20)) {
       expect(r.title).toMatch(/^What we mean by "/);
     }

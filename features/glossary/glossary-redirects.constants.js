@@ -23,6 +23,36 @@ const GLOSSARY_MERGED = {
   "desire-mismatch": "desire-discrepancy",
 };
 
+/**
+ * Terms removed with no replacement (3 Nov 2026): features LoveIQ doesn't have, and two
+ * entries whose definition was a placeholder. They answer 404, which search engines
+ * treat like 410 and drop. A redirect would be wrong here: sending a removed page to an
+ * unrelated one (say, the index) gets treated as a "soft 404" anyway.
+ */
+const GLOSSARY_REMOVED = [
+  "deep-survey",
+  "soft-survey",
+  "micro-quiz",
+  "match-iq",
+  "growth-report",
+  "growth-report-your-intimacy-journey",
+  "growth-potentials",
+  "longitudinal-deltas",
+  "targeted-boosts",
+  "progressive-precision",
+  "reflective-prompts",
+  "pattern-libraries-by-modality",
+  "research-grade-dataset",
+  "context-sensitive-assessments",
+  "anonymized-research-access",
+  "controlled-research-environments",
+  "tiered-access-approach",
+  "gates-guardrails",
+  // Placeholder definitions ("A glossary entry for …"):
+  "interpretive-depth",
+  "privacy-constraints",
+];
+
 /** The redirect rules next.config.js serves for GLOSSARY_MERGED. */
 function glossaryRedirects() {
   return Object.entries(GLOSSARY_MERGED).map(([from, to]) => ({
@@ -32,4 +62,4 @@ function glossaryRedirects() {
   }));
 }
 
-module.exports = { GLOSSARY_MERGED, glossaryRedirects };
+module.exports = { GLOSSARY_MERGED, GLOSSARY_REMOVED, glossaryRedirects };
