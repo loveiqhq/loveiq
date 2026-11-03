@@ -27,6 +27,7 @@ vi.mock("@shared/ui/trustpilot/config", () => ({
 import PaygateExitPage, {
   type PaygateExitPageProps,
 } from "@features/report/ui/gate/exit/PaygateExitPage";
+import { openExit } from "@features/report/ui/gate/exit/exitHistory";
 import { GATE_COPY } from "@features/report/ui/gate/gateContent";
 import { PAYMENT_MARKS } from "@features/report/ui/paymentMarks";
 
@@ -278,6 +279,46 @@ describe("what the exit pages record and do", () => {
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
 
+  // The phone's usual way out (a swipe, Android's back) closes the page through its history
+  // entry and was counted nowhere: AP read those readers as having neither unlocked nor left.
+  it("records the browser's or phone's own Back as a way out, once", () => {
+    window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
+    render(<PaygateExitPage {...PRE} />);
+    window.history.replaceState(null, "", "/report/rpt_x");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(mockLeave.mock.calls).toEqual([[{ stage: "pre", via: "browser_back" }]]);
+  });
+
+  it("does not take a Back that leaves the page open for a way out", () => {
+    window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
+    render(<PaygateExitPage {...PRE} />);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(mockLeave).not.toHaveBeenCalled();
+  });
+
+  it("counts a button's way out once, not again as the Back it makes", () => {
+    window.history.replaceState(null, "", "/report/rpt_x?leave=pre");
+    render(<PaygateExitPage {...PRE} />);
+    fireEvent.click(screen.getByRole("button", { name: "Maybe later" }));
+    window.history.replaceState(null, "", "/report/rpt_x");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(mockLeave.mock.calls).toEqual([[{ stage: "pre", via: "maybe_later" }]]);
+  });
+
+  it("closes the full report's dialog on Escape, as its arrow does", () => {
+    render(<PaygateExitPage {...FULL} />);
+    fireEvent.keyDown(document.querySelector(".pge-page")!, { key: "Escape" });
+    expect(mockLeave).toHaveBeenCalledWith({ stage: "full", via: "back" });
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Escape alone on the EUR 1.99 gate's page, which is a page, not a dialog", () => {
+    render(<PaygateExitPage {...PRE} />);
+    fireEvent.keyDown(document.querySelector(".pge-page")!, { key: "Escape" });
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
   it("hands each Unlock press to its checkout, with where it was pressed", () => {
     render(<PaygateExitPage {...PRE} />);
     fireEvent.click(within(offerCard()).getByRole("button", { name: GATE_COPY.card.cta }));
@@ -324,5 +365,18 @@ describe("focus", () => {
     unmount();
     expect(document.activeElement).toBe(opener);
     opener.remove();
+  });
+});
+
+// A double tap on "Not ready to unlock yet" (or a slow phone's second tap) pushed two entries,
+// so the first "Maybe later" seemed to do nothing.
+describe("the exit page's history entry", () => {
+  it("is pushed once, however often the page is asked for", () => {
+    window.history.replaceState(null, "", "/report/rpt_x");
+    const before = window.history.length;
+    openExit("pre");
+    openExit("pre");
+    expect(window.history.length).toBe(before + 1);
+    expect(window.location.search).toBe("?leave=pre");
   });
 });

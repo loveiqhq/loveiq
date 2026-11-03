@@ -24,8 +24,13 @@ export function exitUrl(stage: ExitStage | null, href: string = window.location.
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-/** Opens an exit page on an entry of its own. */
+/**
+ * Opens an exit page on an entry of its own, once: a second tap before the page has drawn
+ * (a double tap, a slow phone) would push a second entry, and the first "Maybe later" would
+ * then seem to do nothing.
+ */
 export function openExit(stage: ExitStage): void {
+  if (window.history.state?.[EXIT_STATE_KEY] === stage) return;
   window.history.pushState({ [EXIT_STATE_KEY]: stage }, "", exitUrl(stage));
 }
 

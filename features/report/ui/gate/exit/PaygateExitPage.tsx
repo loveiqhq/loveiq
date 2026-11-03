@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
-import { trackPaygateExitLeave, trackPaygateExitViewed } from "@features/analytics/client";
+import {
+  trackPaygateExitLeave,
+  trackPaygateExitViewed,
+  type PaygateExitLeaveVia,
+} from "@features/analytics/client";
 import {
   getTrustpilotConfig,
   isTrustpilotEnabled,
@@ -12,6 +16,7 @@ import { euros } from "../gateContent";
 import ExitReasons from "./ExitReasons";
 import {
   EXIT_COPY,
+  EXIT_LEAVE_PARAM,
   trustpilotLabel,
   type ExitStage,
   type InitialUnlockSource,
@@ -180,12 +185,31 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
     if (checkout.busy) return;
     onUnlock(place);
   };
+  // How the reader left, once: the page's own ways out below, or the browser's or phone's Back
+  // (a swipe, Android's back), which closes the page through its history entry and was not
+  // counted at all, though it is a phone's usual way out.
+  const left = useRef(false);
+  const recordLeave = (via: PaygateExitLeaveVia) => {
+    if (left.current) return;
+    left.current = true;
+    trackPaygateExitLeave({ stage, via });
+  };
+  useEffect(() => {
+    const onPop = () => {
+      if (left.current) return;
+      if (new URLSearchParams(window.location.search).get(EXIT_LEAVE_PARAM) === stage) return;
+      left.current = true;
+      trackPaygateExitLeave({ stage, via: "browser_back" });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [stage]);
   const back = () => {
-    trackPaygateExitLeave({ stage, via: "back" });
+    recordLeave("back");
     onBack();
   };
   const leave = () => {
-    trackPaygateExitLeave({ stage, via: full ? "chapters" : "maybe_later" });
+    recordLeave(full ? "chapters" : "maybe_later");
     onLeave();
   };
 
@@ -206,6 +230,17 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
         data-stage={stage}
         role={full ? undefined : "main"}
         tabIndex={-1}
+        // The full report's page is a dialog: Escape closes it as its arrow does, as Escape
+        // closes the plans it opened from.
+        onKeyDown={
+          full
+            ? (event) => {
+                if (event.key !== "Escape") return;
+                event.preventDefault();
+                back();
+              }
+            : undefined
+        }
       >
         <header className="pge-header">
           <button
