@@ -1207,8 +1207,8 @@ export const glossaryTerms: GlossaryTerm[] = [
   },
   {
     id: 32,
-    term: "Biochemical Reward Dynamics",
-    slug: "biochemical-reward-dynamics",
+    term: "Biochemical Reward System Dynamics",
+    slug: "biochemical-reward-system-dynamics",
     type: "Framework & Model",
     category: "frameworks",
     definition:
@@ -2534,43 +2534,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
   },
   {
-    id: 67,
-    term: "Desire Mismatch",
-    slug: "desire-mismatch",
-    type: "Pattern & Dynamic",
-    category: "sensitive",
-    definition:
-      "Desire Mismatch refers to a difference between partners in levels, timing, or expression of sexual or intimate desire within a relationship.",
-    extendedNotes:
-      "Desire Mismatch describes a relational difference rather than a problem or deficiency in either person. It is closely related to Desire Fluctuation and Sexual Needs, as desire naturally varies across people and contexts. Within a relationship assessment platform, desire mismatch is identified through recurring patterns of misalignment rather than isolated moments. The concept helps explain compatibility dynamics by separating difference in desire from attraction, care, or relationship quality.",
-    examples: [
-      "One partner desires intimacy more frequently than the other",
-      "Desire peaks at different times for each partner",
-      "A relationship report highlights ongoing differences in desire expression",
-    ],
-    domain: "Relationship Dynamics & Intimacy",
-    sensitivityLevel: "Sensitive",
-    misinterpretations: [
-      "Desire mismatch means lack of attraction",
-      "Desire mismatch indicates relationship failure",
-      "Desire mismatch should not exist in healthy relationships",
-    ],
-    reality: [
-      "Desire Mismatch isn’t defined by lack of attraction, and it’s about a difference between partners in levels, timing, or expression of sexual or intimate desire within a relationship.",
-      "A missing experience of Desire Mismatch isn’t proof you’re broken, and it often reflects conditions and stress.",
-      "Desire Mismatch describes a difference between partners in levels, timing, or expression of sexual or intimate desire within a relationship, so it doesn’t mean that desire mismatch should not exist in healthy relationships.",
-    ],
-    relatedTerms: ["Desire Fluctuation", "Sexual Needs", "Mismatch Tolerance", "Sexual Desire"],
-    tags: [
-      "self-awareness",
-      "compatibility-dynamics",
-      "relationship-insights",
-      "relationship-dynamics",
-      "relationship-dynamics-intimacy",
-      "pattern-dynamic",
-    ],
-  },
-  {
     id: 68,
     term: "Desire Shutdown",
     slug: "desire-shutdown",
@@ -3058,7 +3021,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Embodied Integration",
       "Attentional Focus",
       "Presence vs Performance",
-      "Autonomic Nervous System",
+      "Autonomic Nervous System (ANS)",
     ],
     tags: [
       "global-wellbeing",
@@ -3690,7 +3653,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Evolutionary Hardware describes the built-in biological systems shaped by evolution—such as hormones, reward circuits, and threat detection—that influence desire, attraction, so it doesn’t mean that culture has no influence on attraction.",
     ],
     relatedTerms: [
-      "Biochemical Reward Dynamics",
+      "Biochemical Reward System Dynamics",
       "Archaic Algorithms",
       "Autonomic Nervous System (ANS)",
       "Desire",
@@ -4577,7 +4540,12 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Genital can influence experiences, but it doesn’t guarantee that outcome.",
       "More accurately, Genital refers to genital (physiological) arousal signals such as erection, lubrication, swelling, sensitivity, and changes in genital blood flow, and genital signals are fully controllable by willpower doesn’t follow from that.",
     ],
-    relatedTerms: ["Subjective", "Arousal Non-Concordance", "Autonomic Nervous System", "Cortisol"],
+    relatedTerms: [
+      "Subjective",
+      "Arousal Non-Concordance",
+      "Autonomic Nervous System (ANS)",
+      "Cortisol",
+    ],
     tags: ["consent-first", "desire-arousal", "signal-cue"],
   },
   {
@@ -5652,7 +5620,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Limbic System can look different across cultures and life stages, even if the basic idea stays similar.",
     ],
     relatedTerms: [
-      "Biochemical Reward Dynamics",
+      "Biochemical Reward System Dynamics",
       "Attachment Style",
       "Arousal Accelerator",
       "Arousal Brake",
@@ -6217,7 +6185,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Neurochemical “Big Three” (dopamine / oxytocin-vasopressin / endogenous opioids) refers to a shorthand for three neurochemical systems often linked to sexual motivation and reward (dopamine), bonding and attachment, and neurochemicals determine compatibility without communication doesn’t follow from that.",
     ],
     relatedTerms: [
-      "Biochemical Reward Dynamics",
+      "Biochemical Reward System Dynamics",
       "Limbic System",
       "Attachment Style",
       "Desire",
@@ -10241,7 +10209,13 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Trust and Safety Insecurity refers to a fear that people aren’t reliable or safe, and more surveillance creates more safety doesn’t follow from that.",
       "Trust and Safety Insecurity isn’t an all-the-time rule, and it can change with context and timing.",
     ],
-    relatedTerms: ["Core Insecurities", "Trust Repair", "Boundaries", "Consent Frameworks", "DADT"],
+    relatedTerms: [
+      "Core Insecurities",
+      "Trust Repair",
+      "Boundaries",
+      "Consent Frameworks",
+      "Don’t-Ask-Don’t-Tell (DADT)",
+    ],
     tags: [
       "relationship-security",
       "jealousy",
@@ -10727,13 +10701,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Aggregation & Coarsening refers to privacy techniques that summarize data (aggregation) or reduce precision (coarsening) to lower re-identification risk, and numbers capture the whole truth doesn’t follow from that.",
       "More accurately, Aggregation & Coarsening refers to privacy techniques that summarize data (aggregation) or reduce precision (coarsening) to lower re-identification risk, and privacy and safety are optional doesn’t follow from that.",
     ],
-    relatedTerms: [
-      "Re-Identification Risk",
-      "Privacy Constraints",
-      "Anonymization",
-      "Privacy",
-      "DADT",
-    ],
+    relatedTerms: ["Re-Identification Risk", "Privacy Constraints", "Anonymization", "Privacy"],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
   },
   {
@@ -10769,33 +10737,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Anonymized Research Access",
     ],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
-  },
-  {
-    id: 282,
-    term: "Autonomic Nervous System",
-    slug: "autonomic-nervous-system",
-    type: "Framework & Model",
-    category: "sensitive",
-    definition:
-      "The body system that regulates activation and relaxation (fight/flight/freeze vs. rest/digest), shaping arousal, comfort, and stress responses.",
-    extendedNotes:
-      "You might notice it as interest rising or fading based on context and cues. It often improves when sleep, stress, novelty, and emotional safety.",
-    examples: ["Feeling turned on after emotional closeness"],
-    domain: "Desire & Arousal",
-    sensitivityLevel: "Sensitive",
-    misinterpretations: ["Arousal should be constant", "If it fades, something is wrong"],
-    reality: [
-      "More accurately, Autonomic Nervous System refers to the body system that regulates activation and relaxation (fight/flight/freeze vs, and arousal should be constant doesn’t follow from that.",
-      "If it fades, something can feel like wrong sometimes, but Autonomic Nervous System refers to the body system that regulates activation and relaxation (fight/flight/freeze vs.",
-    ],
-    relatedTerms: [
-      "Autonomic Nervous System (ANS)",
-      "Hardware–Software Framework",
-      "Biochemical Reward System Dynamics",
-      "Sexual Excitation System (SES)",
-      "Sexual Readiness",
-    ],
-    tags: ["autonomic-nervous-system", "desire-arousal", "framework-model"],
   },
   {
     id: 283,
@@ -10886,38 +10827,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Grounded / Integrated",
     ],
     tags: ["being-seen", "relationship-dynamics-intimacy", "state-experience"],
-  },
-  {
-    id: 286,
-    term: "Biochemical Reward System Dynamics",
-    slug: "biochemical-reward-system-dynamics",
-    type: "Framework & Model",
-    category: "sensitive",
-    definition:
-      "How reward and bonding systems (e.g., dopamine, oxytocin) interact with stress and context to shape desire, attachment, and pleasure.",
-    extendedNotes:
-      "Commonly described as interest rising or fading based on context and cues. It tends to shift with sleep, stress, novelty, and emotional safety.",
-    examples: [],
-    domain: "Desire & Arousal",
-    sensitivityLevel: "Sensitive",
-    misinterpretations: [
-      "Arousal should be constant",
-      "If it fades, something is wrong",
-      "Desire is purely physical",
-    ],
-    reality: [
-      "Biochemical Reward System Dynamics is about how reward and bonding systems (e.g., dopamine, oxytocin) interact with stress and context to shape desire, attachment, and pleasure, and it doesn’t imply that arousal should be constant.",
-      "If it fades, something isn’t automatically wrong, and Biochemical Reward System Dynamics is about how reward and bonding systems (e.g., dopamine, oxytocin) interact with stress and context to shape desire, attachment, and pleasure.",
-      "Desire can feel like purely physical sometimes, but Biochemical Reward System Dynamics refers to how reward and bonding systems (e.g., dopamine, oxytocin) interact with stress and context to shape desire, attachment, and pleasure.",
-    ],
-    relatedTerms: [
-      "Biochemical Reward Dynamics",
-      "Neurochemical “Big Three” (dopamine / oxytocin-vasopressin / endogenous opioids)",
-      "Sexual Architecture",
-      "Evolutionary Hardware",
-      "Base Code (Evolutionary Ethology)",
-    ],
-    tags: ["desire-arousal", "framework-model"],
   },
   {
     id: 287,
@@ -11126,44 +11035,6 @@ export const glossaryTerms: GlossaryTerm[] = [
       "Ethics",
     ],
     tags: ["consent", "consent-awareness", "consent-boundaries", "framework-model"],
-  },
-  {
-    id: 294,
-    term: "DADT",
-    slug: "dadt",
-    type: "Framework & Model",
-    category: "frameworks",
-    definition:
-      "‘Don’t Ask, Don’t Tell’—an agreement style where certain details (often about outside partners) are intentionally not shared to reduce distress.",
-    extendedNotes:
-      "Commonly described as deciding what information is shared and how it’s protected. It tends to shift with sensitivity of the topic, audience, and consent. Also called a “don’t ask, don’t tell” agreement.",
-    examples: [
-      "A couple agrees not to share details about outside dates",
-      "A partner asks only for health-related updates, not personal stories",
-      "A partner asks only for health-related updates, not personal stories",
-    ],
-    domain: "Data, Privacy & Measurement",
-    sensitivityLevel: "General",
-    misinterpretations: [
-      "DADT means no rules",
-      "Avoiding details always prevents jealousy",
-      "It works for everyone",
-      "It can’t change",
-    ],
-    reality: [
-      "DADT does not mean no rules, and it refers to ‘Don’t Ask, Don’t Tell’—an agreement style where certain details (often about outside partners) are intentionally not shared to reduce distress.",
-      "Jealousy is a stress signal, not proof of love, and it often points to insecurity or fear.",
-      "More accurately, DADT refers to ‘Don’t Ask, Don’t Tell’—an agreement style where certain details (often about outside partners) are intentionally not shared to reduce distress, and it works for everyone doesn’t follow from that.",
-      "More accurately, DADT refers to ‘Don’t Ask, Don’t Tell’—an agreement style where certain details (often about outside partners) are intentionally not shared to reduce distress, and it can’t change doesn’t follow from that.",
-    ],
-    relatedTerms: [
-      "Don’t-Ask-Don’t-Tell (DADT)",
-      "Tiered Access Approach",
-      "Privacy",
-      "Aggregation & Coarsening",
-      "Privacy Constraints",
-    ],
-    tags: ["dadt", "data-privacy-measurement", "framework-model"],
   },
   {
     id: 296,
@@ -11644,7 +11515,6 @@ export const glossaryTerms: GlossaryTerm[] = [
     ],
     relatedTerms: [
       "Privacy Constraints",
-      "DADT",
       "Re-Identification Risk",
       "Aggregation & Coarsening",
       "Tiered Access Approach",
@@ -12044,13 +11914,7 @@ export const glossaryTerms: GlossaryTerm[] = [
       "More accurately, Tiered Access Approach refers to a privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent, and privacy and safety are optional doesn’t follow from that.",
       "Tiered Access Approach describes a privacy approach where more sensitive details are hidden by default and only shared when needed, with explicit consent, so it doesn’t mean that one metric fits everyone.",
     ],
-    relatedTerms: [
-      "Anonymization",
-      "DADT",
-      "Privacy Constraints",
-      "Privacy",
-      "Anonymized Research Access",
-    ],
+    relatedTerms: ["Anonymization", "Privacy Constraints", "Privacy", "Anonymized Research Access"],
     tags: ["privacy", "data-privacy-measurement", "framework-model"],
   },
   {
