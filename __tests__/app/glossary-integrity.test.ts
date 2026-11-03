@@ -75,6 +75,26 @@ describe("glossary data integrity", () => {
     expect(live.has("abandonment-insecurity")).toBe(true);
   });
 
+  // Until 3 Nov 2026, 33 later-added terms showed only copied filler: lines prefixed
+  // "Example:" / "Another example:" and texts pasted onto up to 12 unrelated terms
+  // ("Feeling close after repair"). A few genuine examples fit up to three related
+  // terms (e.g. "Needing time alone after conflict"), so the cap is above that.
+  it("shows no placeholder or mass-copied examples", () => {
+    const prefixed = glossaryTerms.filter((t) =>
+      t.examples.some((e) => /^(another\s+)?example:/i.test(e))
+    );
+    expect(prefixed.map((t) => t.slug)).toEqual([]);
+
+    const usedBy = new Map<string, string[]>();
+    for (const t of glossaryTerms) {
+      for (const example of new Set(t.examples.map((e) => e.trim().toLowerCase()))) {
+        usedBy.set(example, [...(usedBy.get(example) ?? []), t.slug]);
+      }
+    }
+    const massCopied = [...usedBy].filter(([, slugs]) => slugs.length > 3);
+    expect(massCopied).toEqual([]);
+  });
+
   // The full data is ~690 KB. A client component importing it (statically or with
   // import()) ships it to every visitor; the index used to do exactly that, which is
   // also why its server HTML had no term links. Type-only imports are fine.
