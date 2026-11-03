@@ -2,6 +2,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { getAllSlugs, glossaryTerms, resolveRelatedTerms } from "@/data/glossary-data";
+import redirectsConfig from "@features/glossary/glossary-redirects.constants.js";
+
+const { GLOSSARY_MERGED } = redirectsConfig;
+// Old URLs the redirect tests request on purpose; they must stay dead.
+const RETIRED = new Set(Object.keys(GLOSSARY_MERGED));
 
 // data/glossary-data.ts is edited by hand since the CSV generator was retired
 // (3 Nov 2026). These checks stop a hand edit from breaking links: related-term
@@ -38,6 +43,13 @@ describe("glossary data integrity", () => {
     expect(live.size).toBe(glossaryTerms.length);
   });
 
+  it("redirects every merged duplicate to a live term, never to another redirect", () => {
+    for (const [from, to] of Object.entries(GLOSSARY_MERGED)) {
+      expect(live.has(from), `${from} should have no page`).toBe(false);
+      expect(live.has(to), `${to} should be live`).toBe(true);
+    }
+  });
+
   it("resolves every related-term name to a live term", () => {
     const unresolved = glossaryTerms.flatMap((t) =>
       resolveRelatedTerms(t.relatedTerms)
@@ -65,7 +77,7 @@ describe("glossary data integrity", () => {
     const dead = SOURCE_DIRS.flatMap((dir) => sourceFiles(path.join(root, dir))).flatMap((file) =>
       [...readFileSync(file, "utf8").matchAll(TERM_URL)]
         .map((match) => match[1]!)
-        .filter((slug) => !live.has(slug))
+        .filter((slug) => !live.has(slug) && !RETIRED.has(slug))
         .map((slug) => `${path.relative(root, file)}: /glossary/${slug}`)
     );
     expect(dead).toEqual([]);

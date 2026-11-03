@@ -70,6 +70,8 @@ const nextConfig = {
         destination: "/admin/ap",
         permanent: false,
       },
+      // Merged duplicate glossary terms → the kept term (features/glossary/glossary-redirects.constants.js).
+      ...require("./features/glossary/glossary-redirects.constants.js").glossaryRedirects(),
     ];
   },
   /**
