@@ -406,8 +406,11 @@ FROM (
          uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 50) AS reached_50,
          uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 75) AS reached_75,
          uniqExactIf(person_id, event = 'hero_video_complete') AS finished,
-         -- the film's own: the muted loop the page used to have sent 'preview' errors, no tap's
-         uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full') AS failed_start
+         -- the film's own: the muted loop the page used to have sent 'preview' errors, no tap's;
+         -- and only people whose film never started (a tap again that played is a start)
+         uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full'
+           AND person_id NOT IN (SELECT person_id FROM events WHERE event = 'hero_video_play'
+             AND ${PH_RANGE})) AS failed_start
   FROM events
   WHERE event IN ('cta_seen', 'hero_video_tap', 'hero_video_play', 'hero_video_progress',
                   'hero_video_complete', 'hero_video_error')
@@ -986,7 +989,7 @@ export const fields: FieldRegistry = {
     stat: "Share",
     per: "per person PostHog recorded",
     formula: {
-      num: "People with a start that failed (hero_video_error, the film's)",
+      num: "People with a start that failed (hero_video_error, the film's) and no film that started (hero_video_play)",
       den: "People who saw the video",
       mult: "× 100",
     },

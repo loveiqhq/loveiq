@@ -87,8 +87,11 @@ export interface ExitPageRow {
   pressed: { card: number; sticky: number; any: number };
   /** Readers who paid within 24 hours of their first view: the EUR 1.99 (pre), the full report (full). */
   paidAfter: number;
-  /** How readers left it: "Maybe later", the back arrow, "Back to my open chapters". */
-  left: { maybeLater: number; back: number; chapters: number };
+  /**
+   * How readers left it: "Maybe later", the back arrow, "Back to my open chapters", and the
+   * browser's or phone's own Back (recorded from 3 Nov 2026).
+   */
+  left: { maybeLater: number; back: number; chapters: number; browserBack: number };
   /** The newest sentences, masked as Unlock feedback's are. */
   words: Array<{ day: string; reason: string | null; text: string }>;
 }
@@ -143,16 +146,21 @@ export function buildPaygateExits(input: {
       maybeLater: new Set<number>(),
       back: new Set<number>(),
       chapters: new Set<number>(),
+      browserBack: new Set<number>(),
     };
     const notes: ExitEventRow[] = [];
 
     for (const r of rows) {
       const sid = r.survey_submission_id;
+      if (r.event_type === "paygate_exit_viewed") {
+        views += 1;
+        if (!firstView.has(sid)) firstView.set(sid, r.event_time);
+        continue;
+      }
+      // Every step after it is of the readers who reached the page (its view), as the SQL
+      // beside the section counts them, so no step can read more than 100% of "Reached".
+      if (!firstView.has(sid)) continue;
       switch (r.event_type) {
-        case "paygate_exit_viewed":
-          views += 1;
-          if (!firstView.has(sid)) firstView.set(sid, r.event_time);
-          break;
         case "paygate_exit_reason":
           if (r.reason) latestReason.set(sid, r.reason);
           break;
@@ -171,6 +179,7 @@ export function buildPaygateExits(input: {
           if (r.via === "maybe_later") left.maybeLater.add(sid);
           else if (r.via === "chapters") left.chapters.add(sid);
           else if (r.via === "back") left.back.add(sid);
+          else if (r.via === "browser_back") left.browserBack.add(sid);
           break;
       }
     }
@@ -225,6 +234,7 @@ export function buildPaygateExits(input: {
         maybeLater: left.maybeLater.size,
         back: left.back.size,
         chapters: left.chapters.size,
+        browserBack: left.browserBack.size,
       },
       words,
     };

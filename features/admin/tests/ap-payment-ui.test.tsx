@@ -331,7 +331,7 @@ const payload: PaymentPayload = {
         ],
         pressed: { card: 4, sticky: 3, any: 6 },
         paidAfter: 5,
-        left: { maybeLater: 12, back: 9, chapters: 0 },
+        left: { maybeLater: 12, back: 9, chapters: 0, browserBack: 4 },
         words: [{ day: "2026-10-29", reason: "other", text: "I wanted a sample chapter first." }],
       },
       {
@@ -344,7 +344,7 @@ const payload: PaymentPayload = {
         reasons: [],
         pressed: { card: 0, sticky: 0, any: 0 },
         paidAfter: 0,
-        left: { maybeLater: 0, back: 2, chapters: 5 },
+        left: { maybeLater: 0, back: 2, chapters: 5, browserBack: 1 },
         words: [],
       },
     ],
@@ -488,8 +488,8 @@ describe("the Payment page as drawn", () => {
     const card = region("Paygate exits");
     const table = within(card).getByRole("table", { name: "Paygate exits" });
     expect(texts(rows(table))).toEqual([
-      "After the €1.99 page“Not ready” on the €1.99 page4052 views1845% · 3 wrote6card 4 · bar 3513%12Maybe later · back arrow 9",
-      "After the full report's plans“Not ready” on the plans, €1.99 holders900% · 0 wrote0card 0 · bar 000%5to the chapters · back arrow 2",
+      "After the €1.99 page“Not ready” on the €1.99 page4052 views1845% · 3 wrote6card 4 · bar 3513%12Maybe later · back arrow 9 · browser Back 4",
+      "After the full report's plans“Not ready” on the plans, €1.99 holders900% · 0 wrote0card 0 · bar 000%5to the chapters · back arrow 2 · browser Back 1",
     ]);
     expect(within(card).getByText("I want to see some of it before I pay")).toBeTruthy();
     expect(within(card).getByText("56%")).toBeTruthy();
@@ -745,7 +745,7 @@ describe("the Payment page as drawn", () => {
     expect(section("Who pays · Country").rows).toHaveLength(14);
     expect(section("Paygate exits").rows[0]).toEqual({
       label: "After the €1.99 page",
-      values: [40, 52, 18, 3, 6, 5, 12, 0, 9],
+      values: [40, 52, 18, 3, 6, 5, 12, 0, 9, 4],
     });
     expect(
       section("Paygate exits · why not today").rows.map((r) => [r.label, r.values[0], r.values[1]])

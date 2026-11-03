@@ -623,7 +623,9 @@ select seen.stage,
        count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
                                           and ev.via = 'chapters')) as back_to_chapters,
        count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.via = 'back')) as back_arrow
+                                          and ev.via = 'back')) as back_arrow,
+       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
+                                          and ev.via = 'browser_back')) as browser_back
   from seen
  group by seen.stage;`;
 
@@ -1510,11 +1512,11 @@ select price as best_price,
   },
   "payment.exit-left": {
     label: "Left",
-    what: "How readers left the exit page: “Maybe later” back to the €1.99 page (pre), “Back to my open chapters” (full), and under it the page's back arrow.",
+    what: "How readers left the exit page: “Maybe later” back to the €1.99 page (pre), “Back to my open chapters” (full), and under it the page's back arrow and the browser's or phone's own Back.",
     stat: "Count",
     per: "per person and page",
     formula: { num: "Readers with a paygate_exit_leave of that kind" },
-    caveat: `${EXIT_RULE} The phone's or browser's own Back is not recorded: it closes the page as the arrow does. “Maybe later” and the arrow both lead back to the €1.99 page, so neither is a departure from the report.`,
+    caveat: `${EXIT_RULE} The phone's or browser's own Back (a swipe, Android's back) is recorded from 3 Nov 2026; before, it was not. It closes the page as the arrow does. “Maybe later”, the arrow and Back all lead back to the €1.99 page (pre), so none is a departure from the report.`,
     tables: EXIT_TABLES,
     query: { lang: "SQL", text: EXITS_Q },
     related: ["payment.exit-reached"],

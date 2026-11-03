@@ -653,7 +653,7 @@ export interface HeroVideo {
   reached: [number, number, number];
   /** Watched it to the end (hero_video_complete). */
   finished: number;
-  /** Tapped play and the film never started (hero_video_error, the film's own). */
+  /** Tapped play and the film never started (hero_video_error, the film's own, and no play). */
   failed: number;
 }
 
@@ -674,8 +674,12 @@ export async function fetchHeroVideo(from: string, to: string): Promise<PostHogR
            uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 75) AS p75,
            uniqExactIf(person_id, event = 'hero_video_complete') AS finished,
            -- The muted loop's own errors (video 'preview', a loop the page no longer has) were
-           -- no tap's: only the film's count as a start that failed.
-           uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full') AS failed
+           -- no tap's: only the film's count as a start that failed, and only for people whose
+           -- film never started in the range (a tap again that played is a start).
+           uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full'
+             AND person_id NOT IN (SELECT person_id FROM events
+               WHERE event = 'hero_video_play' AND properties.$host = '${HOST}'
+                 AND timestamp >= ${at(since)} AND timestamp < ${at(until)})) AS failed
     FROM events
     WHERE event IN ('cta_seen', 'hero_video_tap', 'hero_video_play', 'hero_video_progress',
                     'hero_video_complete', 'hero_video_error')
