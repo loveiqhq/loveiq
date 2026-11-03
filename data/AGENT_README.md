@@ -7,22 +7,20 @@ Static data assets (large generated TypeScript files and their source CSVs) cons
 - **Auto-generated files must NOT be hand-edited.** Regenerate from their CSV sources using the scripts below:
 
 ```bash
-node scripts/update-glossary.js          # glossary-source.csv -> glossary-data.ts
 node scripts/update-survey.js            # survey-source.csv -> survey-data.ts
 node scripts/update-scoring-config.js    # scoring-config/*.csv -> scoring-config.ts
 ```
 
-- `countries.ts` is the only hand-maintained file in this directory.
+- `countries.ts` and `glossary-data.ts` are hand-maintained. The glossary's CSV source was never committed and `scripts/update-glossary.js` is retired, so edit `glossary-data.ts` directly; `__tests__/app/glossary-integrity.test.ts` checks slugs, related-term links and hard-coded term URLs.
 - `scoring-config/` contains the CSV source files for the scoring engine. To add or modify scoring rules, edit the CSVs and regenerate.
 
 ## File Manifest
 
-| File                  | Purpose                                | Regenerate With                         |
-| --------------------- | -------------------------------------- | --------------------------------------- |
-| `glossary-data.ts`    | Auto-generated glossary terms (~688KB) | `node scripts/update-glossary.js`       |
-| `glossary-source.csv` | Source CSV for glossary                | — (hand-edit, then regenerate)          |
-| `survey-data.ts`      | Survey questions and structure         | `node scripts/update-survey.js`         |
-| `survey-source.csv`   | Source CSV for survey questions        | — (hand-edit, then regenerate)          |
-| `countries.ts`        | Country list for survey forms          | — (hand-maintained)                     |
-| `scoring-config.ts`   | Compiled scoring config                | `node scripts/update-scoring-config.js` |
-| `scoring-config/`     | 12 source CSVs for archetype scoring   | — (hand-edit, then regenerate)          |
+| File                | Purpose                              | Regenerate With                         |
+| ------------------- | ------------------------------------ | --------------------------------------- |
+| `glossary-data.ts`  | Glossary terms (~690KB)              | — (hand-maintained)                     |
+| `survey-data.ts`    | Survey questions and structure       | `node scripts/update-survey.js`         |
+| `survey-source.csv` | Source CSV for survey questions      | — (hand-edit, then regenerate)          |
+| `countries.ts`      | Country list for survey forms        | — (hand-maintained)                     |
+| `scoring-config.ts` | Compiled scoring config              | `node scripts/update-scoring-config.js` |
+| `scoring-config/`   | 12 source CSVs for archetype scoring | — (hand-edit, then regenerate)          |

@@ -1,5 +1,6 @@
-// Auto-generated from data/glossary-source.csv
-// Do not edit manually
+// Glossary terms. Edit this file directly: the CSV source and its generator
+// (scripts/update-glossary.js) are retired. __tests__/app/glossary-integrity.test.ts
+// checks slugs, related-term links and hard-coded term URLs after every edit.
 
 export interface GlossaryTerm {
   id: number;
