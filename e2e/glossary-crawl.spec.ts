@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import path from "node:path";
 import { test, expect } from "@playwright/test";
 import { getAllSlugs } from "@/data/glossary-data";
 import redirectsConfig from "@features/glossary/glossary-redirects.constants.js";
@@ -163,4 +165,17 @@ test.describe("Glossary — links in from live pages", () => {
       expect(linked.filter((slug) => !live.has(slug!))).toEqual([]);
     });
   }
+});
+
+test.describe("Glossary — recrawl signals", () => {
+  test("the IndexNow key file is served as plain text", async ({ request }) => {
+    const keyFile = readdirSync(path.join(process.cwd(), "public")).find((f) =>
+      /^[0-9a-f]{32}\.txt$/.test(f)
+    );
+    expect(keyFile).toBeTruthy();
+    const response = await request.get(`/${keyFile}`);
+    await expect(response).toBeOK();
+    expect(response.headers()["content-type"]).toMatch(/^text\/plain/);
+    expect((await response.text()).trim()).toBe(keyFile!.replace(/\.txt$/, ""));
+  });
 });
