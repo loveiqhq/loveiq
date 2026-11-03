@@ -144,3 +144,23 @@ test.describe("Glossary — removed terms", () => {
     for (const slug of GLOSSARY_REMOVED) expect(xml).not.toContain(`/glossary/${slug}<`);
   });
 });
+
+test.describe("Glossary — links in from live pages", () => {
+  const BOT_UA =
+    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)";
+  const live = new Set(getAllSlugs());
+
+  // The home page (the variant crawlers get) and the Trust Zone link straight to term
+  // pages, so the terms are a click from the site's strongest pages, not only the index.
+  for (const [path, minimum] of [
+    ["/", 7],
+    ["/trust-zone", 3],
+  ] as const) {
+    test(`${path} links to live glossary terms`, async ({ request }) => {
+      const html = await (await request.get(path, { headers: { "user-agent": BOT_UA } })).text();
+      const linked = [...termLinks(html)];
+      expect(linked.length).toBeGreaterThanOrEqual(minimum);
+      expect(linked.filter((slug) => !live.has(slug!))).toEqual([]);
+    });
+  }
+});
