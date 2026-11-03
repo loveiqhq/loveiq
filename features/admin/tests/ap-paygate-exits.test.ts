@@ -133,17 +133,58 @@ describe("AP Payment · Paygate exits", () => {
     expect(out.pages[0]!.paidAfter).toBe(0);
   });
 
-  it("tells the ways out apart", () => {
+  it("tells the ways out apart, the browser's own Back included", () => {
     const out = build(
-      [sub(1), sub(2), sub(3)],
+      [sub(1), sub(2), sub(3), sub(4)],
       [
+        row(1, "paygate_exit_viewed", 0, { stage: "pre" }),
         row(1, "paygate_exit_leave", 1, { stage: "pre", via: "maybe_later" }),
+        row(2, "paygate_exit_viewed", 0, { stage: "pre" }),
         row(2, "paygate_exit_leave", 1, { stage: "pre", via: "back" }),
+        row(3, "paygate_exit_viewed", 0, { stage: "full" }),
         row(3, "paygate_exit_leave", 1, { stage: "full", via: "chapters" }),
+        row(4, "paygate_exit_viewed", 0, { stage: "pre" }),
+        row(4, "paygate_exit_leave", 1, { stage: "pre", via: "browser_back" }),
       ]
     );
-    expect(out.pages[0]!.left).toEqual({ maybeLater: 1, back: 1, chapters: 0 });
-    expect(out.pages[1]!.left).toEqual({ maybeLater: 0, back: 0, chapters: 1 });
+    expect(out.pages[0]!.left).toEqual({ maybeLater: 1, back: 1, chapters: 0, browserBack: 1 });
+    expect(out.pages[1]!.left).toEqual({ maybeLater: 0, back: 0, chapters: 1, browserBack: 0 });
+  });
+
+  // As the SQL beside the section counts them: every step is of the readers who reached the
+  // page, so none can read more than 100% of "Reached" when a view is not stored.
+  it("counts every step only for readers who reached the page", () => {
+    const out = build(
+      [sub(1), sub(2)],
+      [
+        row(1, "paygate_exit_viewed", 0, { stage: "pre" }),
+        row(1, "paygate_exit_reason", 1, { stage: "pre", reason: "later" }),
+        row(2, "paygate_exit_reason", 1, { stage: "pre", reason: "see_first" }),
+        row(2, "paygate_exit_note", 2, { stage: "pre", note: "no view stored" }),
+        row(2, "initial_gate_cta_click", 3, { place: "exit_card" }),
+        row(2, "paygate_exit_leave", 4, { stage: "pre", via: "maybe_later" }),
+      ]
+    );
+    const pre = out.pages[0]!;
+    expect(pre).toMatchObject({ reached: 1, answered: 1, wrote: 0 });
+    expect(pre.pressed.any).toBe(0);
+    expect(pre.left.maybeLater).toBe(0);
+    expect(pre.words).toEqual([]);
+  });
+
+  // Beacons arrive in no fixed order: on staging (03.11) a reason was stored a moment before
+  // the view it followed. The reader reached the page; their answer counts.
+  it("counts a reader's steps whatever order their events were stored in", () => {
+    const out = build(
+      [sub(1)],
+      [
+        row(1, "paygate_exit_reason", 0, { stage: "pre", reason: "later" }),
+        row(1, "paygate_exit_viewed", 1, { stage: "pre" }),
+        row(1, "paygate_exit_leave", 2, { stage: "pre", via: "browser_back" }),
+      ]
+    );
+    expect(out.pages[0]).toMatchObject({ reached: 1, answered: 1 });
+    expect(out.pages[0]!.left.browserBack).toBe(1);
   });
 
   it("leaves out readers the page's people do not include (the team, our tests, the filters)", () => {
@@ -152,9 +193,12 @@ describe("AP Payment · Paygate exits", () => {
   });
 
   it("shows the ten newest sentences, newest first", () => {
-    const rows = Array.from({ length: 12 }, (_, i) =>
-      row(1, "paygate_exit_note", i, { stage: "full", note: `note ${i}` })
-    );
+    const rows = [
+      row(1, "paygate_exit_viewed", 0, { stage: "full" }),
+      ...Array.from({ length: 12 }, (_, i) =>
+        row(1, "paygate_exit_note", i + 1, { stage: "full", note: `note ${i}` })
+      ),
+    ];
     const words = build([sub(1)], rows).pages[1]!.words;
     expect(words).toHaveLength(10);
     expect(words[0]!.text).toBe("note 11");

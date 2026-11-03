@@ -38,6 +38,7 @@ import {
 } from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -380,7 +381,7 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
      * "could not check" must never read as "checked and fine", least of all here.
      */
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseUrl = supabaseRestUrl() ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (!anonKey || !supabaseUrl) {
       unread.push("corpus readable by a browser key");
     } else {

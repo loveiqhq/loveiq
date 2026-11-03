@@ -822,7 +822,7 @@ function TourSection({ data }: { data: ReportPayload }) {
       <SectionHead
         id="h-tour"
         title="Guided tour"
-        description="Runs once when a reader first opens the report. Free readers get 5 stops, paid readers 4. Readers move with Next and Back, and can skip at any stop."
+        description="Runs once when a reader first opens the report. Free readers get 5 stops, paid readers 4, and readers the €1.99 page stops get 4 before it, which they can't skip. Readers move with Next and Back, and can otherwise skip at any stop."
         align="end"
         right={
           <Pills

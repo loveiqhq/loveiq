@@ -26,4 +26,17 @@ describe("the official payment logos (Figma 11482:1487)", () => {
       expect(svg, logo).not.toMatch(/<script|<image|<foreignObject|\son[a-z]+=|href="http/i);
     }
   });
+
+  // The plan picker's row is 272px wide on a 320px phone (measured 03.11, the narrowest of the
+  // four pay screens): with 8px gaps the six took about 276px and Mastercard sat alone under
+  // the rest.
+  it("fits the six on one row in the plan picker's 272px on a 320px phone", () => {
+    const width = (logo: string) =>
+      Number(css.match(new RegExp(`\\.pay-logos__mark--${logo} \\{[^}]*width: ([\\d.]+)px`))?.[1]);
+    const marks = PAYMENT_MARKS.reduce((sum, { logo }) => sum + width(logo), 0);
+    const narrow = css.match(/@media \(max-width: 359px\) \{[^}]*column-gap: (\d+)px/)?.[1];
+    expect(marks).toBeGreaterThan(200);
+    expect(narrow).toBeDefined();
+    expect(marks + (PAYMENT_MARKS.length - 1) * Number(narrow)).toBeLessThanOrEqual(272 - 4);
+  });
 });

@@ -30,6 +30,7 @@ import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +59,7 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 async function countRows(table: string): Promise<number | null> {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 

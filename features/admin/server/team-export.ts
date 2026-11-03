@@ -128,6 +128,9 @@ const PERSONAL_IN: Record<string, string[]> = {
   // An unlock-feedback answer's own words and chips, masked like the admin's view of them, and
   // the hash of the link that opens the reader's /why page.
   unlock_feedback: ["note", "chips", "link_hash"],
+  // Seedlane's own notes on a short link, keyed as it likes: they can name the person a DM
+  // went to, and their keys are not ours to list.
+  short_link: ["meta"],
 };
 /**
  * Keys inside JSON values that hold a credential, an address, a name or an answer, written

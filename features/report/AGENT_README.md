@@ -173,7 +173,8 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   top three (`V4IdentityVeil`, `V4TopThreeSection veiled`), locks every chapter but Part I's
   two and Typical Beliefs (the menu says so too), sells nothing (no plans, sticky bar, paywall
   ping or `report_viewed`; a lock leads to the gate) and runs the tour's first four stops (no
-  lock stop; `audience: free`), which can't be skipped (Mark, 01.11): no "Skip Tour", Escape
+  lock stop; `audience: gate`, since 03.11, AP's "Before the €1.99 page"), which can't be
+  skipped (Mark, 01.11): no "Skip Tour", Escape
   ends nothing, and Back steps back a stop, nothing on the first (`V4GuidedTour`
   `skippable={false}`; `useCloseOnBack`'s `rearmKey` takes the Back catch again), so these runs
   end `completed` or `left`, never `skipped`. As the tour ends (`useGuidedTour` `over`), or at once where it

@@ -661,9 +661,13 @@ describe("PostHog's landing readers", () => {
       "uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 50) AS p50",
       "uniqExactIf(person_id, event = 'hero_video_progress' AND properties.percent = 75) AS p75",
       "uniqExactIf(person_id, event = 'hero_video_complete') AS finished",
-      "uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full') AS failed",
     ])
       expect(q).toContain(step);
+    // A failed start only for people whose film never started in the range: one who tapped
+    // again and saw it play started it (the label: "whose film never started").
+    expect(q).toContain(
+      "uniqExactIf(person_id, event = 'hero_video_error' AND properties.video = 'full' AND person_id NOT IN (SELECT person_id FROM events WHERE event = 'hero_video_play' AND properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-13 22:00:00', 'UTC') AND timestamp < toDateTime('2026-10-28 23:00:00', 'UTC'))) AS failed"
+    );
     // The live site, from the start of Berlin's 14 Oct to the end of the 28th (the clocks went
     // back on the 25th).
     expect(q).toContain("properties.$host = 'www.loveiq.org'");

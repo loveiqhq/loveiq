@@ -123,9 +123,13 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   their archetype, percentages and Core Archetype card left out (server and page), then the gate;
   `initial_gate_seen_at` is stamped when the page meets the gate (`gate=now`), so a reader who
   leaves during the tour gets no E07 and is not in "Saw the €1.99 page" until they come back.
-  The tour's runs before the gate are stored with `audience: free` (AP's tour table), and since
-  01.11 can't be skipped (no Skip, Escape ends nothing, Back steps back a stop), so they end
-  completed or left, never skipped. Preview: `/report?preview=1&v4=1&gate=tour`.
+  The tour's runs before the gate are stored with `audience: gate` (since 03.11; AP's tour table
+  shows them as "Before the €1.99 page", apart from free readers' tours), and since 01.11 can't
+  be skipped (no Skip, Escape ends nothing, Back steps back a stop), so they end completed or
+  left, never skipped. While the tour's report is up, history restores no scroll (Safari put the
+  gate back 2,446px down after a Back during the tour), and its 12-second wait for a tour that
+  hasn't started counts only while the page can be seen. Preview:
+  `/report?preview=1&v4=1&gate=tour`.
 - "Not ready to unlock yet" opens the gate's exit page (28.10, `?leave=pre`,
   `features/report/ui/gate/exit`), which makes the case again and asks why. Its "Maybe later"
   and its top-left arrow both go back to the gate (Marcus, 30.10: "we loop them back to the

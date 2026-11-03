@@ -1516,7 +1516,7 @@ function Exits({ d }: { d: PaymentPayload }) {
                 },
                 {
                   v: fmt("count", p.stage === "pre" ? p.left.maybeLater : p.left.chapters),
-                  sub: `${p.stage === "pre" ? "Maybe later" : "to the chapters"} · back arrow ${fmt("count", p.left.back)}`,
+                  sub: `${p.stage === "pre" ? "Maybe later" : "to the chapters"} · back arrow ${fmt("count", p.left.back)} · browser Back ${fmt("count", p.left.browserBack)}`,
                 },
               ],
             }))}
@@ -1695,6 +1695,7 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
           col("Maybe later", "count"),
           col("Back to the chapters", "count"),
           col("Back arrow", "count"),
+          col("Browser Back", "count"),
         ],
         rows: d.exits.pages.map((p) => ({
           label: p.name,
@@ -1708,6 +1709,7 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
             p.left.maybeLater,
             p.left.chapters,
             p.left.back,
+            p.left.browserBack,
           ],
         })),
       },

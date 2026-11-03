@@ -433,6 +433,39 @@ describe("POST /api/analytics-event — the paygate's exit pages (28.10)", () =>
     expect(inserted().metadata.answer_text).toHaveLength(500);
     expect(inserted().metadata.length).toBe(600);
   });
+
+  // AP-Analytics counts these fields and shows a reason code as its label: only what the pages
+  // send is stored, so a made-up code never shows up on the admin page as a reason.
+  it.each([
+    ["a made-up reason", "paygate_exit_reason", { stage: "pre", reason: "<b>hi</b>", position: 1 }],
+    [
+      "the full page's reason on the gate's",
+      "paygate_exit_reason",
+      { stage: "pre", reason: "low_value" },
+    ],
+    ["a made-up stage", "paygate_exit_viewed", { stage: "landing" }],
+    ["no stage", "paygate_exit_viewed", {}],
+    ["a made-up way out", "paygate_exit_leave", { stage: "pre", via: "teleport" }],
+    ["a made-up place", "paygate_exit_cta_click", { stage: "full", place: "banner" }],
+  ])("refuses %s", async (_name, event_type, metadata) => {
+    const res = await POST(makeRequest({ event_type, submission_id: 42, metadata }));
+    expect(res.status).toBe(400);
+    expect(mockSupabaseFetch.mock.calls.some(([url]) => url === "/rest/v1/analytics_event")).toBe(
+      false
+    );
+  });
+
+  it.each([
+    ["the full page's reason", "paygate_exit_reason", { stage: "full", reason: "low_value" }],
+    ["the browser's Back", "paygate_exit_leave", { stage: "pre", via: "browser_back" }],
+    ["each way out", "paygate_exit_leave", { stage: "full", via: "chapters" }],
+    ["a press on the bar", "paygate_exit_cta_click", { stage: "full", place: "sticky" }],
+    ["a view", "paygate_exit_viewed", { stage: "pre" }],
+  ])("stores %s", async (_name, event_type, metadata) => {
+    const res = await POST(makeRequest({ event_type, submission_id: 42, metadata }));
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({ event_type, metadata });
+  });
 });
 
 /**

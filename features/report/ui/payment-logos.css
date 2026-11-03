@@ -13,10 +13,12 @@
   list-style: none;
 }
 
-/* The narrowest phones: closer together, so the six still make one row (about 276px). */
+/* The narrowest phones: closer together, so the six still make one row (about 266px): the
+ * plan picker's row is 272px wide on a 320px phone, and 8px gaps (about 276px) put Mastercard on
+ * a line of its own there. */
 @media (max-width: 359px) {
   .pay-logos {
-    column-gap: 8px;
+    column-gap: 6px;
   }
 }
 

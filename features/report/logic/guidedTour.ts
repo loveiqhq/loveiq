@@ -33,9 +33,11 @@ export type TourSkipSource = "skip_button" | "escape" | "browser_back";
 export type TourReplaySource = "drawer" | "sidebar";
 /**
  * Whose tour it is, from whether it has the unlock stop: a stop whose control is missing is
- * dropped, so the number of stops alone cannot tell a free reader from a paid one.
+ * dropped, so the number of stops alone cannot tell a free reader from a paid one. `gate`: the
+ * tour before the EUR 1.99 gate (tour first, 30.10), four stops that can't be skipped, counted
+ * apart so it never reads as a free reader's tour (whose Skip it doesn't have).
  */
-export type TourAudience = "free" | "paid";
+export type TourAudience = "free" | "paid" | "gate";
 
 /**
  * One stop a run reached, as its stored end carries it (tour_completed, tour_skipped,
