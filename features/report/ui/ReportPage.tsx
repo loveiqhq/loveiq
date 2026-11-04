@@ -92,6 +92,7 @@ import PreUnlockExit from "./gate/exit/PreUnlockExit";
 import { EXIT_LEAVE_PARAM, isExitStage } from "./gate/exit/exitContent";
 import { previewPaidHref } from "./previewCheckout";
 import { closeExit, dropExitParam, openExit } from "./gate/exit/exitHistory";
+import { useGateBack } from "./gate/useGateBack";
 import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
@@ -3189,16 +3190,18 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!tourFirst) return;
     if (!isV4 || leaveParam === "pre" || tour.over) meetGate();
   }, [isV4, leaveParam, meetGate, tour.over, tourFirst]);
-  // Safari puts back the scroll a history entry was left at when the tour's Back catch steps
-  // off it, after the gate has opened at its top: a reader who pressed Back during the tour
-  // met the gate 2,446px down on an iPhone (the rearmed catch had saved that stop's place).
-  // While the tour-first report is up, history restores no scroll; the mode comes back once
-  // the step-off has landed, so the exit page's Back still finds the gate where it was.
-  // "auto", the browser's own, is what it goes back to: a remount (React's development double
-  // mount, a refetch) would otherwise read the "manual" set here as the mode to restore, and
-  // a pending restore from the run before is dropped so it can't land mid-tour.
+  // Safari puts back the scroll a history entry was left at once a Back lands on it. A reader
+  // who pressed Back during the tour met the gate 2,446px down on an iPhone (the rearmed catch
+  // had saved that stop's place), and the gate's own Back catch (gate/useGateBack.ts) would
+  // throw a reader far down the gate to its top. So from the tour-first report through the gate
+  // and its exit page, history restores no scroll, with no restore in between (Eman, 04.11);
+  // the exit page puts the gate back where it was itself (PreUnlockExit). "auto", the browser's
+  // own, is what it goes back to once neither is up: a remount (React's development double
+  // mount, a refetch) would otherwise read the "manual" set here as the mode to restore, and a
+  // pending restore from the run before is dropped so it can't land mid-tour.
+  const holdHistoryScroll = tourFirst || (status === "gated" && Boolean(gate));
   useEffect(() => {
-    if (!tourFirst) return;
+    if (!holdHistoryScroll) return;
     window.clearTimeout(tourFirstScrollRestore);
     window.history.scrollRestoration = "manual";
     return () => {
@@ -3206,7 +3209,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         window.history.scrollRestoration = "auto";
       }, 0);
     };
-  }, [tourFirst]);
+  }, [holdHistoryScroll]);
+  // The browser's and the phone's own Back on the EUR 1.99 page opens its exit page, as "Not
+  // ready to unlock yet" does; never off the report (gate/useGateBack.ts).
+  useGateBack(status === "gated" && Boolean(gate) && !preExitOpen);
   useEffect(() => {
     if (!tourFirst || tour.running || tour.over) return;
     const onScroll = () => {

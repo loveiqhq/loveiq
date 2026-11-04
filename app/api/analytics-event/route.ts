@@ -82,10 +82,12 @@ const ALLOWED_EVENTS = [
   "tour_skipped",
   "tour_left",
   "tour_replayed",
-  // The EUR 1.99 pre-unlock gate: seen, its two buttons, its way out
+  // The EUR 1.99 pre-unlock gate: seen, its two buttons, its way out, and the browser's or
+  // phone's own Back on it
   "initial_gate_viewed",
   "initial_gate_cta_click",
   "initial_gate_back",
+  "initial_gate_browser_back",
   // The paygate's exit pages (pre: the gate's way out; full: the full report's, after the
   // EUR 1.99): seen, the reason tapped, a sentence written, Unlock pressed, and left
   "paygate_exit_viewed",
@@ -136,6 +138,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "initial_gate_viewed":
     case "initial_gate_cta_click":
     case "initial_gate_back":
+    case "initial_gate_browser_back":
     case "paygate_exit_viewed":
     case "paygate_exit_reason":
     case "paygate_exit_note":

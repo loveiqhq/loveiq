@@ -46,12 +46,14 @@ function shieldTaps(): void {
 /**
  * Opens an exit page on an entry of its own, once: a second tap before the page has drawn
  * (a double tap, a slow phone) would push a second entry, and the first "Maybe later" would
- * then seem to do nothing.
+ * then seem to do nothing. Returns whether it opened one: not when the page is already on that
+ * entry (that second tap, or a Forward press onto it, which the gate's Back catch also hears).
  */
-export function openExit(stage: ExitStage): void {
-  if (window.history.state?.[EXIT_STATE_KEY] === stage) return;
+export function openExit(stage: ExitStage): boolean {
+  if (window.history.state?.[EXIT_STATE_KEY] === stage) return false;
   window.history.pushState({ [EXIT_STATE_KEY]: stage }, "", exitUrl(stage));
   shieldTaps();
+  return true;
 }
 
 /**

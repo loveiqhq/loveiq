@@ -87,6 +87,9 @@ vi.mock("@features/analytics/client", () => ({
   trackInitialGateViewed: vi.fn(),
   trackInitialGateCta: vi.fn(),
   trackInitialGateBack: vi.fn(),
+  trackInitialGateBrowserBack: vi.fn(),
+  trackPaygateExitViewed: vi.fn(),
+  trackPaygateExitLeave: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
@@ -172,6 +175,7 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_DESIGNED_CHAPTER_IDS } from "@/data/report3-archetype-page";
 import { REPORT_V4_NAV_IDS } from "@features/report/ui/v3/reportV3Nav";
 import { splitArticleForReader } from "@features/report/server/contentGating";
+import { __resetOverlayHistoryForTests, isOnOverlayEntry } from "@shared/ui/overlay-history";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
 // only via the email-return escape hatch (from=email / utm_source=email) or the
@@ -444,6 +448,10 @@ describe("ReportPage", () => {
     // unstubAllGlobals, jsdom has none, and the test fails with a ReferenceError
     // depending on timing (seen once in CI on 2026-10-06).
     cleanup();
+    // The pricing modal's and the EUR 1.99 gate's Back catch leave their same-URL entry in
+    // jsdom's history: forget it here, so no release's history.back() lands in the next test.
+    __resetOverlayHistoryForTests();
+    if (isOnOverlayEntry()) window.history.replaceState(null, "");
     vi.unstubAllGlobals();
     mockScrollTo.mockReset();
     document.documentElement.style.overflow = "";
@@ -3336,6 +3344,79 @@ describe("ReportPage", () => {
       expect(container.querySelector(".report-page")).toBeNull();
       expect(mockTrackReportViewed).not.toHaveBeenCalled();
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const gated = () => ({
+      data: null,
+      status: "gated",
+      error: null,
+      challenge: null,
+      gate: GATE,
+      retry: vi.fn(),
+    });
+
+    // Eman, 04.11 (card "€1.99 page: replace the browser Back with Marcus's exit page"): the
+    // page's own Back opens its exit page, as "Not ready to unlock yet" does. It used to leave
+    // for /survey's "already finished", whose "Open my report" came straight back here.
+    it("answers the browser's Back with its exit page, and records it", async () => {
+      const before = `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(null, "", "/report/rpt_abcdefghij0123456789");
+      mockSearchParams.mockImplementation(() => new URLSearchParams(""));
+      mockUseReportData.mockReturnValue(gated());
+      try {
+        render(<ReportPage />);
+        expect(isOnOverlayEntry(), "the Back catch's entry").toBe(true);
+        const landed = new Promise<void>((resolve) =>
+          window.addEventListener("popstate", () => resolve(), { once: true })
+        );
+        act(() => window.history.back());
+        await landed;
+        expect(window.location.search).toBe("?leave=pre");
+        expect(analytics.trackInitialGateBrowserBack).toHaveBeenCalledWith({ to: "exit_page" });
+      } finally {
+        window.history.replaceState(null, "", before);
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    });
+
+    it("takes no Back catch while its exit page is up", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("leave=pre"));
+      mockUseReportData.mockReturnValue(gated());
+      try {
+        render(<ReportPage />);
+        expect(isOnOverlayEntry()).toBe(false);
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    });
+
+    // Safari puts back the scroll an entry was left at once a Back lands on it. From the tour
+    // before the gate through the gate and its exit page, history restores none, with no
+    // restore in between; the browser's own mode comes back once the gate is gone.
+    it("keeps no scroll in history from the tour through the gate, and gives the mode back after", async () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        viewMode: "owner",
+        submissionId: 55,
+        initialGate: GATE,
+      });
+      mockUseReportData.mockReturnValue({ ...response, meetInitialGate: vi.fn() });
+      window.history.scrollRestoration = "auto";
+      try {
+        const { rerender, unmount } = render(<ReportPage />);
+        expect(window.history.scrollRestoration).toBe("manual");
+
+        mockUseReportData.mockReturnValue(gated());
+        rerender(<ReportPage />);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(window.history.scrollRestoration, "no restore between tour and gate").toBe("manual");
+
+        unmount();
+        await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
     });
 
     // Tour first (30.10): the report the tour runs over before the gate is veiled and nothing

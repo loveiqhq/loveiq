@@ -126,6 +126,34 @@ describe("landing A/B — the arm reaches the analytics", () => {
     });
   });
 
+  // The page's own Back on the gate (a desktop's Back, an iPhone's swipe, Android's back) opens
+  // its exit page, as "Not ready to unlock yet" does: an event of its own, stored beside that
+  // press, and no mark, since the reader stays on the report.
+  it("stores the gate's browser Back as its own event, and marks no way here", async () => {
+    vi.resetModules();
+    sessionStorage.clear();
+    document.cookie = "__csrf=test-csrf; path=/";
+    (window as unknown as { __loveiqReportSubmissionId: number }).__loveiqReportSubmissionId = 55;
+    vi.stubGlobal("navigator", { ...navigator, sendBeacon: undefined });
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: { body?: string }) => {
+        bodies.push(JSON.parse(init?.body ?? "{}"));
+        return { ok: true, json: async () => ({}) } as Response;
+      })
+    );
+    const { trackInitialGateBrowserBack } = await import("@features/analytics/client");
+    trackInitialGateBrowserBack({ to: "exit_page" });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      event_type: "initial_gate_browser_back",
+      submission_id: 55,
+      metadata: { to: "exit_page" },
+    });
+    expect(sessionStorage.getItem("liq_left_initial_gate")).toBeNull();
+  });
+
   it("stamps the arm from the cookie onto a durable event, earlier rounds' arms included", async () => {
     for (const arm of ["white_card", "white_video", "white", "white_prev"] as const) {
       vi.resetModules();

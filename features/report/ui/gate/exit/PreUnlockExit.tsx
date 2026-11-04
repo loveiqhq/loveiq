@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import { useExitCloseRequest } from "../useGateBack";
 import { useInitialUnlockCheckout } from "../useInitialUnlockCheckout";
 import PaygateExitPage, { type ExitCtaPlace } from "./PaygateExitPage";
 
@@ -38,6 +39,11 @@ export default function PreUnlockExit({
     reportToken,
     preview,
   });
+
+  // Android's back here is a close request, answered with the arrow's way back to the gate, so a
+  // reader who met the gate without a tap isn't carried past it (gate/useGateBack.ts). Counted
+  // as the page goes, as a phone's Back always was (`browser_back`).
+  useExitCloseRequest(true, onBack);
 
   // The link sat at the top of the gate; the exit page opens at its own top too, and going back
   // (the arrow or "Maybe later") finds the gate where the reader left it.
