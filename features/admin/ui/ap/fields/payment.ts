@@ -691,7 +691,7 @@ const EXIT_EVENTS_TABLE: FieldTable = {
 };
 const EXIT_TABLES = [EXIT_EVENTS_TABLE, SUBMISSION, STAFF];
 const EXIT_RULE =
-  "The two pages “Not ready to unlock yet” opens: pre after the €1.99 page (whose browser's Back opens it too, from November 2026), full after the full report's plans for a €1.99 holder (E07's gift readers included). Each reader once a line, per page. Recorded from 28 Oct 2026.";
+  "The two pages “Not ready to unlock yet” opens: pre after the €1.99 page (whose browser's Back opens it too, from 5 Nov 2026), full after the full report's plans for a €1.99 holder (E07's gift readers included). Each reader once a line, per page. Recorded from 28 Oct 2026.";
 
 export const fields: FieldRegistry = {
   // ---- the tiles
