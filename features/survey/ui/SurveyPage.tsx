@@ -8,6 +8,7 @@ import {
   useRef,
   type FC,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import Image from "next/image";
@@ -447,6 +448,20 @@ const slides: Slide[] = [
 /*  Screen 0 — Light intro                                             */
 /* ------------------------------------------------------------------ */
 /**
+ * "Open my report" on AlreadyFinishedScreen: a plain click opens the report in this entry's
+ * place. A new tab (a modifier or a middle click) is left to the browser.
+ */
+function openReportInPlace(event: ReactMouseEvent<HTMLAnchorElement>): void {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+  const href = event.currentTarget.getAttribute("href");
+  if (!href) return;
+  event.preventDefault();
+  window.location.replace(href);
+}
+
+/**
  * What a reader sees on /survey when THIS TAB has already finished it.
  *
  * Submission clears the answers and the step key, and `loadInitialStep()` reads
@@ -458,6 +473,10 @@ const slides: Slide[] = [
  *
  * Deliberately a screen and not a redirect: bouncing Back straight to the
  * report traps the reader, who then cannot leave at all.
+ *
+ * "Open my report" takes this screen's place in the history (openReportInPlace). Pushed on top,
+ * the report's Back found this screen again, whose button led back to the report: the EUR 1.99
+ * page's Back loop (04.11).
  */
 const AlreadyFinishedScreen: FC<{
   token: string;
@@ -497,6 +516,7 @@ const AlreadyFinishedScreen: FC<{
 
       <a
         href={`/report/${token}`}
+        onClick={openReportInPlace}
         className="focus-visible-ring mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px]"
         style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
       >
@@ -1432,11 +1452,13 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
       } catch {
         /* ignore */
       }
-      window.location.href = clearAnswers
-        ? reportUrlAfterSurvey(reportToken)
-        : journey
-          ? journey.returnPath
-          : "/";
+      // The finished run's report takes the survey's place. On top of it, Back from the report
+      // found the survey's "You've already finished", whose button led straight back: the EUR
+      // 1.99 page's Back loop (04.11). The survey's older entries stay (iPhone Safari keeps
+      // them); the report's own Back catch answers those (features/report/ui/gate/useGateBack.ts).
+      // The way out keeps its entry, so Back from there returns to the questions.
+      if (clearAnswers) window.location.replace(reportUrlAfterSurvey(reportToken));
+      else window.location.href = journey ? journey.returnPath : "/";
     },
     [journey]
   );
