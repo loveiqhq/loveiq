@@ -139,7 +139,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             className={`h-[48px] w-full max-w-full bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none forced-colors:border-b-[1.454px] sm:w-[523.5px] ${
               error
                 ? "shadow-[inset_0_-1.454px_0_0_#ef4444]"
-                : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(254,104,57,0.4)]"
+                : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(107,91,149,0.4)]"
             }`}
           />
           <div className={`flex items-center gap-1.5${error ? " mt-2" : ""}`} aria-live="polite">
@@ -180,8 +180,8 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
                 error
                   ? "border-[#ef4444]"
                   : white
-                    ? "border-black/[0.08] focus:border-[rgba(254,104,57,0.45)]"
-                    : "border-white/10 focus:border-[rgba(254,104,57,0.45)]"
+                    ? "border-black/[0.08] focus:border-[rgba(107,91,149,0.45)]"
+                    : "border-white/10 focus:border-[rgba(167,139,250,0.45)]"
               }`}
             />
           ) : (
@@ -199,7 +199,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
               className={`${inputBase} ${
                 error
                   ? "border-[#ef4444]"
-                  : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
+                  : "border-[rgba(107,91,149,0.2)] focus:border-[rgba(107,91,149,0.4)]"
               }`}
               style={
                 white
@@ -257,7 +257,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             className={`${inputBase} ${
               confirmInvalid
                 ? "border-[#ef4444]"
-                : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
+                : "border-[rgba(107,91,149,0.2)] focus:border-[rgba(107,91,149,0.4)]"
             }`}
             style={{
               ["--autofill-bg" as string]: "#0a0510",
