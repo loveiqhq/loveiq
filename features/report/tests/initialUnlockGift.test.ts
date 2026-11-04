@@ -13,6 +13,7 @@ vi.mock("@shared/observability/logger", () => ({
 
 import { grantGiftedInitialUnlock } from "@features/report/server/initialUnlockGift";
 import { initialUnlockGiftEmail } from "@features/report/server/emails/initial-unlock-gift";
+import { initialUnlockSourceOf } from "@features/report/server/personalReport";
 
 const json = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as Response;
@@ -103,6 +104,30 @@ describe("grantGiftedInitialUnlock", () => {
  * three words: it goes out on day 1 (Marcus, 27.10), so "Yesterday" when the survey was that
  * recent and no day otherwise, never the frame's "A few days ago".
  */
+/**
+ * How a reader holds the initial unlock, which the full report's exit page words the EUR 10 by
+ * (28.10): "You earned it with your €1.99 unlock" is not true of E07's gift.
+ */
+describe("initialUnlockSourceOf", () => {
+  const gift = { metadata: { plan: "initial", gifted: "e07", unlockSource: "e07_gift" } };
+  const bought = { metadata: { plan: "initial", checkoutSessionId: "cs_1" } };
+  const full = { metadata: { plan: "full_report" } };
+
+  it("is the gift when E07's EUR 0 row is all there is", () => {
+    expect(initialUnlockSourceOf([gift, full])).toBe("gift");
+  });
+
+  it("is paid when the reader bought it, gift or no gift", () => {
+    expect(initialUnlockSourceOf([bought])).toBe("paid");
+    expect(initialUnlockSourceOf([gift, bought])).toBe("paid");
+  });
+
+  it("is nothing without an initial unlock", () => {
+    expect(initialUnlockSourceOf([])).toBeNull();
+    expect(initialUnlockSourceOf([full, { metadata: null }])).toBeNull();
+  });
+});
+
 describe("initialUnlockGiftEmail", () => {
   const REPORT_URL = "https://www.loveiq.org/report/rpt_ABCDEFGHIJKLMNOPQRST?from=email";
   const email = initialUnlockGiftEmail({

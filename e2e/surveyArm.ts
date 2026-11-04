@@ -5,10 +5,6 @@ import {
   assignQuestionOrderArm,
   type QuestionOrderArm,
 } from "../shared/experiments/questionOrderArm";
-import {
-  assignEmailQuestionArm,
-  type EmailQuestionArm,
-} from "../shared/experiments/emailQuestionArm";
 
 /**
  * Pin a survey session id so the C13 arm — and therefore the question order — is chosen
@@ -30,19 +26,14 @@ import {
  * benefit: `orderedOptions` is seeded from the same id, so the randomised option orders
  * become reproducible too.
  *
- * THE EMAIL QUESTION TEST draws its arm from the same id (`emailQuestionArm.ts`), so a
- * fixture pins both. The walks that reach the email question assert today's title, so
- * the two C13 fixtures stay in the email test's control arm; a third opens its
- * anonymous arm. `?email=` is dead here for the same reason `?order=` is.
+ * THE EMAIL QUESTION TEST drew its arm from the same id until it ended on 4 Nov 2026
+ * (`emailQuestionArm.ts`). Every run is asked the anonymous version now, whatever its id,
+ * so the fixtures pin only the order. (Both drew the email test's control arm, which is
+ * what the walks that reach the email question once asserted.)
  */
-const SESSION_FIXTURES: ReadonlyArray<{
-  order: QuestionOrderArm;
-  email: EmailQuestionArm;
-  sessionId: string;
-}> = [
-  { order: "control", email: "control", sessionId: "00000000-0000-4000-8000-000000000007" },
-  { order: "variant", email: "control", sessionId: "00000000-0000-4000-8000-000000000001" },
-  { order: "control", email: "anonymous", sessionId: "00000000-0000-4000-8000-000000000000" },
+const SESSION_FIXTURES: ReadonlyArray<{ order: QuestionOrderArm; sessionId: string }> = [
+  { order: "control", sessionId: "00000000-0000-4000-8000-000000000007" },
+  { order: "variant", sessionId: "00000000-0000-4000-8000-000000000001" },
 ];
 
 /**
@@ -51,16 +42,13 @@ const SESSION_FIXTURES: ReadonlyArray<{
  * rather than silently running both "arms" against the same order — the failure mode
  * where a test keeps passing while measuring nothing.
  */
-for (const { order, email, sessionId } of SESSION_FIXTURES) {
-  const actual = {
-    order: assignQuestionOrderArm(sessionId),
-    email: assignEmailQuestionArm(sessionId),
-  };
-  if (actual.order !== order || actual.email !== email) {
+for (const { order, sessionId } of SESSION_FIXTURES) {
+  const actual = assignQuestionOrderArm(sessionId);
+  if (actual !== order) {
     throw new Error(
-      `e2e/surveyArm.ts: the session fixture for order "${order}", email "${email}" now ` +
-        `buckets as order "${actual.order}", email "${actual.email}". Pick a new uuid for ` +
-        "it — the survey specs are asserting the wrong screens until you do."
+      `e2e/surveyArm.ts: the session fixture for order "${order}" now buckets as ` +
+        `"${actual}". Pick a new uuid for it — the survey specs are asserting the wrong ` +
+        "screens until you do."
     );
   }
 }
@@ -68,18 +56,12 @@ for (const { order, email, sessionId } of SESSION_FIXTURES) {
 /**
  * Seed the session id before any page script runs, so the engine reads it on first render
  * instead of minting one. Returns the id, which specs need to recompute the expected
- * option order. The email question shows today's version unless `email` asks otherwise.
+ * option order.
  */
-export async function pinSurveySession(
-  page: Page,
-  arm: QuestionOrderArm,
-  email: EmailQuestionArm = "control"
-): Promise<string> {
-  const fixture = SESSION_FIXTURES.find((f) => f.order === arm && f.email === email);
+export async function pinSurveySession(page: Page, arm: QuestionOrderArm): Promise<string> {
+  const fixture = SESSION_FIXTURES.find((f) => f.order === arm);
   if (!fixture) {
-    throw new Error(
-      `e2e/surveyArm.ts: no session fixture for order "${arm}", email "${email}". Add one.`
-    );
+    throw new Error(`e2e/surveyArm.ts: no session fixture for order "${arm}". Add one.`);
   }
   const { sessionId } = fixture;
   await page.addInitScript(

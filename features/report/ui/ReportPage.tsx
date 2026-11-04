@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -51,6 +52,7 @@ import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
 import V4CoreArchetypeHeading from "./v3/V4CoreArchetypeHeading";
+import V4IdentityVeil from "./v3/V4IdentityVeil";
 import V4PartHeading from "./v3/V4PartHeading";
 import V4SummaryChapter from "./v3/V4SummaryChapter";
 import V4TopThreeSection from "./v3/V4TopThreeSection";
@@ -85,6 +87,12 @@ import SectionFeedback from "./SectionFeedback";
 import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import InitialUnlockGate from "./gate/InitialUnlockGate";
+import FullReportExit from "./gate/exit/FullReportExit";
+import PreUnlockExit from "./gate/exit/PreUnlockExit";
+import { EXIT_LEAVE_PARAM, isExitStage } from "./gate/exit/exitContent";
+import { previewPaidHref } from "./previewCheckout";
+import { closeExit, dropExitParam, openExit } from "./gate/exit/exitHistory";
+import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportPricingSessionId,
@@ -211,6 +219,13 @@ interface SnapshotAnswers {
 const subscribeNoop = () => () => {};
 /** Our own probes and persona walks carry this cookie; the guided tour never starts on its own for them. */
 const readProbeCookie = () => isProbeRequest(document.cookie);
+
+/** Tour first, then the EUR 1.99 gate: a reader this far down before the tour starts is reading. */
+const TOUR_FIRST_SCROLL_PX = 100;
+/** …and this long without a start (an unanswered cookie question holds it) is long enough. */
+const TOUR_FIRST_WAIT_MS = 12_000;
+/** The pending return of history's scroll restoration after the tour-first report (ReportPage). */
+let tourFirstScrollRestore = 0;
 
 // Report 2.0 part dividers (Figma 8427:794 / 1440 / 1751 / 2554) — the big
 // centered "PART N" heading that opens each part.
@@ -446,6 +461,12 @@ interface ReportPageProps {
 interface ReportExperienceProps {
   /** `?v3=1` — render the mobile-first V3 chrome instead of V1. */
   isV3: boolean;
+  /**
+   * Toured before the EUR 1.99 gate (sync 30.10): who the reader is stays for the gate, so
+   * the Core Archetype card and Summary are veiled and every chapter but the tour's (and Part
+   * I's welcome) is drawn locked; a lock leads to the gate.
+   */
+  veilIdentity?: boolean;
   /** `?v4=1` — V2's report with the Report 3.0 components swapped in. */
   isV4: boolean;
   accessPlan: ReportAccessPlan;
@@ -468,6 +489,11 @@ interface ReportExperienceProps {
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
+  /**
+   * The plan picker's "Not ready to unlock yet", in place of its ×: a EUR 1.99 holder's way
+   * to the full report's exit page (gate/exit). Only when the picker sells their own report.
+   */
+  onPricingNotReady?: () => void;
   onCloseShareModal: () => void;
   onOpenShareModal: () => void;
   onOpenPricingModal: (archetype?: string | null) => void;
@@ -589,6 +615,17 @@ interface ReportExperienceProps {
  * the source .docx and would lose the edit on the next run.
  */
 const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
+
+/**
+ * Toured before the EUR 1.99 gate, only these chapters open: Part I's welcome, which names no
+ * one, and Typical Beliefs, where the tour's stops are (its words cleared of the archetype's
+ * name on the server). Everything else is locked, and its lock leads to the gate.
+ */
+const TOUR_FIRST_OPEN_CHAPTER_IDS: ReadonlySet<string> = new Set([
+  "introduction",
+  "what_shaped_this_report",
+  "typical_beliefs",
+]);
 /** The nav's Core Archetype row: its card and the Summary behind INITIAL_UNLOCK_SECTION_ID. */
 const CORE_ARCHETYPE_NAV_ID = "core_archetype";
 
@@ -603,6 +640,7 @@ const WithActiveSection: FC<{
 
 const ReportExperience: FC<ReportExperienceProps> = ({
   isV3,
+  veilIdentity = false,
   isV4,
   accessPlan,
   initialUnlock,
@@ -617,6 +655,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
+  onPricingNotReady,
   onCloseShareModal,
   onOpenShareModal,
   onOpenPricingModal,
@@ -790,9 +829,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowInvite(true);
   }, [shouldAutoOpenInvite]);
-  // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only.
+  // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only,
+  // and not the veiled report the tour runs over before the EUR 1.99 gate (nothing read there).
   useChapterStats({
-    enabled: isV4 && viewMode === "owner",
+    enabled: isV4 && viewMode === "owner" && !veilIdentity,
     chapters: navIds,
     active: activeSection,
     archetype: viewArchetype || null,
@@ -1011,6 +1051,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     const parts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
     for (const part of parts) {
       for (const item of part.items) {
+        // Toured before the EUR 1.99 gate: the menu the tour opens on says what the page
+        // draws. Part I's welcome in full, Typical Beliefs partly open, the rest locked.
+        if (veilIdentity) {
+          access.set(
+            item.id,
+            item.id === "typical_beliefs"
+              ? "unlocked"
+              : TOUR_FIRST_OPEN_CHAPTER_IDS.has(item.id)
+                ? "free"
+                : "locked"
+          );
+          continue;
+        }
         // The Core Archetype: the server half-locks its card and its Summary (`locked` on
         // each) until the EUR 1.99, or a plan, opens them. Partly open until then and IN FULL
         // after, as the pre-report map draws it (Eman, 27.10). A report without that copy
@@ -1058,6 +1111,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     initialGateOpen,
     archetypeCard,
     summaryChapter,
+    veilIdentity,
   ]);
   // The whole report is this reader's (sync 23.10): the navs drop every chip and padlock
   // and set each title bold. navAccessById keeps its tiers, which the chapter locks read.
@@ -1173,13 +1227,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   active_section_id: activeSectionId,
                 });
               }}
-              onReferFriend={() => {
-                trackReferFriendOpened({ source: "drawer" });
-                setShowInvite(true);
-              }}
+              onReferFriend={
+                veilIdentity
+                  ? undefined
+                  : () => {
+                      trackReferFriendOpened({ source: "drawer" });
+                      setShowInvite(true);
+                    }
+              }
               onSectionClick={handleSectionClick}
               onShareClick={
-                viewMode === "owner"
+                // Toured before the gate there is nothing to share yet, and no token to share with.
+                viewMode === "owner" && !veilIdentity
                   ? () => {
                       trackReportShareOpened({ source: "drawer" });
                       onOpenShareModal();
@@ -1208,13 +1267,17 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   activeSectionId={activeSectionId}
                   accessById={navAccessById}
                   fullyUnlocked={navFullyUnlocked}
-                  onReferFriend={() => {
-                    trackReferFriendOpened({ source: "sidebar" });
-                    setShowInvite(true);
-                  }}
+                  onReferFriend={
+                    veilIdentity
+                      ? undefined
+                      : () => {
+                          trackReferFriendOpened({ source: "sidebar" });
+                          setShowInvite(true);
+                        }
+                  }
                   onSectionClick={handleSectionClick}
                   onShareClick={
-                    viewMode === "owner"
+                    viewMode === "owner" && !veilIdentity
                       ? () => {
                           trackReportShareOpened({ source: "sidebar" });
                           onOpenShareModal();
@@ -1322,7 +1385,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                            * payload since the slimmed report half-locks it, so for
                            * the moment an archetype switch is refetching it draws
                            * nothing rather than another archetype's card. */}
-                          {isV4 && archetypeCard ? (
+                          {veilIdentity ? (
+                            <V4IdentityVeil />
+                          ) : isV4 && archetypeCard ? (
                             viewArchetype === contentArchetype ? (
                               <>
                                 {/* 1:576 — "Core Archetype" + its lede, which the
@@ -1352,7 +1417,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             />
                           )}
                         </ReportSection>
-                        {isV4 && summaryChapter ? (
+                        {veilIdentity ? null : isV4 && summaryChapter ? (
                           /* 1:736 — V4's Summary Chapter IN PLACE OF V2's "What
                            * this means for you", never beside it: both are titled
                            * "Summary of the <archetype>", so rendering the two
@@ -2495,6 +2560,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     <V4TopThreeSection
                       percentages={percentages}
                       feedback={renderFeedback("core_archetype", REPORT_V4_TOP_THREE_HEADING)}
+                      veiled={veilIdentity}
                     />
                   ) : isV3 && section.id === "core_archetype" ? (
                     <V3TopThree percentages={percentages} />
@@ -2673,6 +2739,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         targetArchetype={pricingTargetArchetype}
         primaryArchetype={primaryArchetype}
         variant={pricingVariant}
+        onNotReady={
+          onPricingNotReady &&
+          pricingVariant !== "recipient" &&
+          (pricingTargetArchetype === null || pricingTargetArchetype === primaryArchetype)
+            ? onPricingNotReady
+            : undefined
+        }
       />
       {/* The owner's even with no token, which a ?preview=1 page never has: sharing then
        * says on Send that nothing went, where the sidebar used to show a dead button. */}
@@ -2704,8 +2777,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // that gate's. The designed chapters keep their own gates.
   const v4ChapterLock = {
     isLocked: (id: string) =>
-      !REPORT_V4_DESIGNED_CHAPTER_IDS.has(id) && navAccessById.get(id) === "locked",
+      veilIdentity
+        ? !TOUR_FIRST_OPEN_CHAPTER_IDS.has(id)
+        : !REPORT_V4_DESIGNED_CHAPTER_IDS.has(id) && navAccessById.get(id) === "locked",
     unlock: (id: string) => {
+      if (veilIdentity) {
+        onOpenPricingModal();
+        return;
+      }
       const item = REPORT_V3_NAV_PARTS.flatMap((part) => part.items).find((i) => i.id === id);
       const section = resolvedSections.find((s) => s.id === (item?.gateId ?? id));
       if (section) unlockSection(section, id);
@@ -2828,20 +2907,26 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     });
   }, [promoFromUrl, sessionId, token]);
 
-  const { data, status, error, challenge, gate, retry } = useReportData({
+  // `?preview=1` renders the report from the repository's own copy, with no database behind
+  // it — see app/api/report/preview/route.ts. It 404s on production, and /api/report is
+  // untouched either way. Nothing can be bought in it (previewCheckout.ts).
+  const isPreview = searchParams.get("preview") === "1";
+  const { data, status, error, challenge, gate, retry, meetInitialGate } = useReportData({
     token,
     sessionId: token ? null : sessionId,
     pricingSessionIdOverride: pricingSessionIdFromUrl,
     // Raw slug on purpose — the server validates it against the archetypes this
     // reader has actually paid for and resolves the report copy for that one.
     archetypeSlug: searchParams.get("archetype"),
-    // `?preview=1` renders the report from the repository's own copy, with no
-    // database behind it — see app/api/report/preview/route.ts. It 404s on
-    // production, and /api/report is untouched either way.
-    preview: searchParams.get("preview") === "1",
+    preview: isPreview,
     previewPlan: searchParams.get("plan"),
-    // `?preview=1&gate=1`: the EUR 1.99 pre-unlock gate, as a reader it stops meets it.
-    previewGate: searchParams.get("preview") === "1" && searchParams.get("gate") === "1",
+    // `?preview=1&gate=1`: the EUR 1.99 pre-unlock gate, as a reader it stops meets it;
+    // `gate=tour`: its first open since 30.10, the report under the tour, then the gate.
+    previewGate:
+      isPreview &&
+      (searchParams.get("gate") === "tour" ? "tour" : searchParams.get("gate") === "1"),
+    // `&gift=1` with `?plan=initial`: the EUR 1.99 unlock as E07's gift, for its wording.
+    previewGift: isPreview && searchParams.get("gift") === "1",
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,
@@ -2931,6 +3016,35 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const pricingQuotes = data?.pricingQuotes ?? null;
 
   /**
+   * The paygate's exit pages (gate/exit; Marcus's "Paygate exit pages", 28.10), on this URL as
+   * `?leave=pre` / `?leave=full` on an entry of their own (gate/exit/exitHistory.ts):
+   *   - pre: in place of the EUR 1.99 gate, opened by its "Not ready to unlock yet";
+   *   - full: a layer over the report for a EUR 1.99 holder, whose full-report quote carries
+   *     the EUR 10 (creditKind "initial"), opened by the plan picker's "Not ready to unlock yet".
+   * Anywhere else the parameter means nothing, and it is dropped once the report has answered.
+   */
+  const leaveParam = searchParams.get(EXIT_LEAVE_PARAM);
+  const fullReportQuote = pricingQuotes?.full_report ?? null;
+  const canLeaveFull = viewMode === "owner" && fullReportQuote?.creditKind === "initial";
+  const preExitOpen = leaveParam === "pre" && status === "gated" && Boolean(gate);
+  const fullExitOpen = leaveParam === "full" && status === "success" && canLeaveFull;
+  // Read by beginCheckout: Stripe's return from the full exit page goes back to the chapter the
+  // plans were opened from, as from the plans themselves.
+  const fullExitOpenRef = useRef(false);
+  useEffect(() => {
+    fullExitOpenRef.current = fullExitOpen;
+  }, [fullExitOpen]);
+  useEffect(() => {
+    if (!isExitStage(leaveParam)) return;
+    if (status === "loading") return;
+    if (leaveParam === "pre" ? preExitOpen : fullExitOpen) return;
+    // A report that arrived to be toured first meets its gate at once with `?leave=pre`, and
+    // the exit page opens over it then.
+    if (leaveParam === "pre" && data?.initialGate) return;
+    dropExitParam();
+  }, [data?.initialGate, fullExitOpen, leaveParam, preExitOpen, status]);
+
+  /**
    * Tell the server the reader reached the paywall.
    *
    * This POST used to arm the urgency window as well. What is left is the reason it
@@ -2943,6 +3057,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const paywallReachedRef = useRef(false);
   const notifyPaywallReached = useCallback(() => {
     if (paywallReachedRef.current) return;
+    // Before the EUR 1.99 gate nothing is sold, and the gate is its own paywall.
+    if (data?.initialGate) return;
     // A recipient reaching a lock is not the owner reaching the paywall (and the route
     // takes only the owner's token).
     if (isSharedView) return;
@@ -2957,7 +3073,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     }).catch(() => {
       // Best-effort: a missed ping costs one funnel step, never the reader's session.
     });
-  }, [isSharedView, resolvedReportToken, sessionId]);
+  }, [data?.initialGate, isSharedView, resolvedReportToken, sessionId]);
 
   const apiUnlocked = data?.unlockedArchetypes;
   const primaryArchetypeFromData = data?.primaryArchetype;
@@ -2990,6 +3106,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
     if (!data) return;
+    // Toured before the EUR 1.99 gate: not a report open (the gate stands for one, as
+    // initial_gate_seen_at does), but the tour's events still need the submission.
+    if (data.initialGate) {
+      setReportSubmissionContext(data.submissionId ?? null);
+      return;
+    }
     reportViewedFiredRef.current = true;
     // Persisted events need a submission to count against. A recipient's visit is not the
     // owner's, so it publishes none and theirs stay out of the owner's numbers.
@@ -3002,7 +3124,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   }, [data, viewedReportPlan, viewArchetype, isV4]);
 
   useReportEngagementTimers({
-    reportType: data ? (viewedReportPlan ?? "locked") : null,
+    reportType: data && !data.initialGate ? (viewedReportPlan ?? "locked") : null,
     archetype: viewArchetype || null,
   });
 
@@ -3025,9 +3147,91 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       (viewArchetype || data?.primaryArchetype) ===
         (data?.contentArchetype ?? data?.primaryArchetype),
     autoStart: !isProbe && !arrivedFromCheckout,
-    blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
+    blocked: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null || fullExitOpen,
     submissionId: data?.submissionId ?? null,
   });
+
+  /**
+   * Tour first, then the EUR 1.99 gate (sync 30.10; Marcus's card "Lets first do the tour >
+   * Then open the pre paygate"). A gated report's first open arrives as the report under the
+   * tour with who the reader is left out (server/tourFirstReport.ts) and the gate's payload
+   * beside it (`data.initialGate`). The gate takes the report's place as soon as the tour is
+   * over, or at once where it will not run here: not the V4 page, `?leave=pre` (the exit page
+   * opens over the gate), a probe, a return with `?anchor`, a tour seen before. Waiting for it
+   * has limits: a reader who scrolls before it starts, or ~12 s without a start (the cookie
+   * question can hold it), meets the gate too. Until then nothing is sold: every way to the
+   * plans leads to the gate instead.
+   */
+  const tourFirst = status === "success" && Boolean(data?.initialGate);
+  // The gate opens at its own top, wherever the tour's last stop left the page.
+  const meetGate = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    meetInitialGate();
+  }, [meetInitialGate]);
+  useEffect(() => {
+    if (!tourFirst) return;
+    if (!isV4 || leaveParam === "pre" || tour.over) meetGate();
+  }, [isV4, leaveParam, meetGate, tour.over, tourFirst]);
+  // Safari puts back the scroll a history entry was left at when the tour's Back catch steps
+  // off it, after the gate has opened at its top: a reader who pressed Back during the tour
+  // met the gate 2,446px down on an iPhone (the rearmed catch had saved that stop's place).
+  // While the tour-first report is up, history restores no scroll; the mode comes back once
+  // the step-off has landed, so the exit page's Back still finds the gate where it was.
+  // "auto", the browser's own, is what it goes back to: a remount (React's development double
+  // mount, a refetch) would otherwise read the "manual" set here as the mode to restore, and
+  // a pending restore from the run before is dropped so it can't land mid-tour.
+  useEffect(() => {
+    if (!tourFirst) return;
+    window.clearTimeout(tourFirstScrollRestore);
+    window.history.scrollRestoration = "manual";
+    return () => {
+      tourFirstScrollRestore = window.setTimeout(() => {
+        window.history.scrollRestoration = "auto";
+      }, 0);
+    };
+  }, [tourFirst]);
+  useEffect(() => {
+    if (!tourFirst || tour.running || tour.over) return;
+    const onScroll = () => {
+      if (window.scrollY > TOUR_FIRST_SCROLL_PX) meetGate();
+    };
+    // The wait counts only while the page can be seen. The tour waits for a hidden tab, so a
+    // report opened in a background tab met the gate unseen after 12 s, stamped as seen (E07's
+    // clock, AP's "Saw the €1.99 page"), and never got its tour.
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer =
+        document.visibilityState === "hidden" ? 0 : window.setTimeout(meetGate, TOUR_FIRST_WAIT_MS);
+    };
+    arm();
+    document.addEventListener("visibilitychange", arm);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", arm);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [meetGate, tour.over, tour.running, tourFirst]);
+  useEffect(() => {
+    if (!tourFirst || !isPricingModalOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is sold before the gate: the gate is the way to unlock
+    setIsPricingModalOpen(false);
+    meetGate();
+  }, [isPricingModalOpen, meetGate, tourFirst]);
+
+  useLayoutEffect(() => {
+    if (!fullExitOpen) return;
+    // The reader has just said "not ready": for the rest of this visit no pop-up, ladder or
+    // offer link opens the plans by itself (a reload of ?leave=full included).
+    autoOpenedPricingRef.current = true;
+    autoOpenedOfferRef.current = true;
+    plansOfferedRef.current = true;
+    if (scrollTeaserTimerRef.current) {
+      clearTimeout(scrollTeaserTimerRef.current);
+      scrollTeaserTimerRef.current = null;
+    }
+  }, [fullExitOpen]);
 
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
@@ -3051,6 +3255,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!isOfferLink) return;
     if (autoOpenedOfferRef.current) return;
     if (!data) return;
+    // Before the EUR 1.99 gate an offer link opens nothing: the gate comes first.
+    if (data.initialGate) return;
     // One-shot: once data has resolved for this offer-link visit, consume the
     // ref so a later cohort/access flip can't double-open the modal.
     autoOpenedOfferRef.current = true;
@@ -3146,6 +3352,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!data) return;
     if (hasPurchased) return;
     if (viewMode === "shared") return;
+    // Before the EUR 1.99 gate there are no plans to offer: the gate follows the tour.
+    if (data.initialGate) return;
     const submissionId = data.submissionId;
 
     // Open the plans pop-up once the reader REACHES "Attachment Style" (MO,
@@ -3436,6 +3644,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     }
     const quote = pricingQuotes?.[plan];
     trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
+    // A preview has no report to buy for: the plan's own preview opens instead, as its
+    // buyer would come back to it (previewCheckout.ts), and nothing reaches Stripe. Counted
+    // above all the same, as every press of this door is; previews never run on production.
+    if (isPreview) {
+      setCheckoutHandoff({ status: "redirecting", message: null });
+      window.location.assign(previewPaidHref(plan));
+      return;
+    }
     // Essentials + Full Report are per-archetype; All Reports is a global
     // unlock so it stays archetype-less.
     const archetypeForCheckout = plan === "all_reports" ? null : (archetype ?? null);
@@ -3449,12 +3665,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // purchase looked like it had not worked (production, 2026-10-06). Its top instead.
     const opensAnotherReport =
       Boolean(archetypeForCheckout) && archetypeForCheckout !== viewArchetype;
-    // From the pay screen, the spot it was opened from; from a button that buys
-    // straight away (V1's archetype list), here.
+    // From the pay screen, or the full report's exit page it led to, the spot the pay screen
+    // was opened from; from a button that buys straight away (V1's archetype list), here.
     const anchor = opensAnotherReport
       ? null
       : serializeUnlockAnchor(
-          isPricingModalOpenRef.current
+          isPricingModalOpenRef.current || fullExitOpenRef.current
             ? unlockAnchorRef.current
             : captureUnlockAnchor(recentTapTarget(lastTapRef.current))
         );
@@ -3520,6 +3736,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingVariant("default");
   }, []);
 
+  /**
+   * The plan picker's "Not ready to unlock yet", a EUR 1.99 holder's: the picker closes, and
+   * the full report's exit page opens on its own entry once the picker's has come off the
+   * stack (as a chapter link waits), so no dead entry is left behind it.
+   */
+  const openFullExit = useCallback(() => {
+    closePricingModal();
+    afterOverlayEntryGone(() => openExit("full"));
+  }, [closePricingModal]);
+
   // Paid or not, every reader shares with up to two people (planAccess.ts).
   const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
@@ -3571,14 +3797,28 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   // The EUR 1.99 pre-unlock gate: the API sent no report, only what the gate shows.
   if (status === "gated" && gate) {
+    // Its exit page in its place, the gate kept underneath: it keeps the submission bound for
+    // the events, and Back finds it as it was, its hero not replayed or its view counted twice.
     return (
       <>
         {v4ThemeColor}
-        <InitialUnlockGate
-          gate={gate}
-          reportToken={token ?? null}
-          reportSessionId={token ? null : sessionId}
-        />
+        <div hidden={preExitOpen}>
+          <InitialUnlockGate
+            gate={gate}
+            reportToken={token ?? null}
+            reportSessionId={token ? null : sessionId}
+            preview={isPreview}
+          />
+        </div>
+        {preExitOpen ? (
+          <PreUnlockExit
+            gate={gate}
+            reportToken={token ?? null}
+            reportSessionId={token ? null : sessionId}
+            preview={isPreview}
+            onBack={closeExit}
+          />
+        ) : null}
       </>
     );
   }
@@ -3744,6 +3984,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
               isV3={isV3}
               isV4={isV4}
+              veilIdentity={tourFirst}
               submissionId={data.submissionId ?? null}
               devParam={devParam}
               accessPlan={data.accessPlan}
@@ -3754,10 +3995,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               isPricingModalOpen={isPricingModalOpen}
               isShareModalOpen={isShareModalOpen}
               isTourRunning={tour.running}
-              onReplayTour={tour.available ? tour.replay : undefined}
+              onReplayTour={tour.available && !tourFirst ? tour.replay : undefined}
               matchScore={matchScore}
               onBeginCheckout={beginCheckout}
               onClosePricingModal={closePricingModal}
+              onPricingNotReady={isV4 && canLeaveFull ? openFullExit : undefined}
               onCloseShareModal={closeShareModal}
               onOpenShareModal={openShareModal}
               onOpenPricingModal={openPricingModal}
@@ -3915,7 +4157,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         <V4GuidedTour
           key={tour.run.id}
           trigger={tour.run.trigger}
-          includeUnlock={viewedReportPlan === null}
+          // Before the EUR 1.99 gate: no lock stop ("unlock them all" is not what the EUR 1.99
+          // sells; Fatih, 30.10), stored as its own audience, `gate`, for AP's tour table.
+          includeUnlock={viewedReportPlan === null && !tourFirst}
+          audience={tourFirst ? "gate" : undefined}
+          // Before the gate it can't be skipped: the gate comes after every stop (Mark, 01.11).
+          skippable={!tourFirst}
           onDone={tour.done}
         />
       )}
@@ -3928,15 +4175,27 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           straight away: on 09.10 its tap went to Stripe for the single report
           (Marcus: "should link first to the selection of the plans"). */}
       {viewMode === "owner" &&
+        !tourFirst &&
         !ownsFullReportFor(data.accessPlan, data.archetypeTiers, effectiveViewArchetype) && (
           <ReportStickyUnlockBar
             quote={pricingQuotes?.full_report ?? null}
             onUnlock={() => openPricingModal(effectiveViewArchetype)}
-            hidden={isPricingModalOpen || isShareModalOpen || tour.running}
+            hidden={isPricingModalOpen || isShareModalOpen || tour.running || fullExitOpen}
             archetype={effectiveViewArchetype}
             v4={isV4}
           />
         )}
+      {fullExitOpen && fullReportQuote ? (
+        <FullReportExit
+          quote={fullReportQuote}
+          unlockSource={data.initialUnlockSource ?? null}
+          busy={checkoutHandoff?.status === "redirecting"}
+          // Back from Stripe lands where the plan picker was opened, not on the layer's button.
+          onUnlock={() => beginCheckout("full_report", primaryArchetype)}
+          onBack={closeExit}
+          seed={String(data.submissionId ?? "preview")}
+        />
+      ) : null}
     </>
   );
 };

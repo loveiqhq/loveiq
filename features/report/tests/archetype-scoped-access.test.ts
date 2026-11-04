@@ -176,6 +176,20 @@ describe("the initial unlock", () => {
     expect(res.initialUnlock).toBe(true);
   });
 
+  // The full report's exit page (28.10) words the EUR 10 by it.
+  it("says whether it was bought or is only E07's gift", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "initial" }));
+    expect((await getReportAccessPlanForSubmission(42, row(), OWN)).initialUnlockSource).toBe(
+      "paid"
+    );
+    mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "initial", gifted: "e07" }));
+    expect((await getReportAccessPlanForSubmission(42, row(), OWN)).initialUnlockSource).toBe(
+      "gift"
+    );
+    mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "full_report" }));
+    expect((await getReportAccessPlanForSubmission(42, row(), OWN)).initialUnlockSource).toBeNull();
+  });
+
   it("is false without one, and only a succeeded payment counts", async () => {
     mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "full_report" }));
     const res = await getReportAccessPlanForSubmission(42, row(), OWN);

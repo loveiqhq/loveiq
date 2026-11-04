@@ -276,6 +276,19 @@ export const THINK_SECONDS: Record<string, number> = {
  *    looked, and a paywall that opens by itself locks the page a moment later; a reading
  *    taken between steps missed both on 2026-10-01 (it said 75 where the site said 100).
  */
+/**
+ * The locked chapters' unlock offers: exactly the elements the report sends
+ * cta_seen { cta: "locked_chapter" } for (useCtaSeen). That is the default report's card
+ * button, and Report 3.0's premium card (not its summary gate, which sends "summary_gate"),
+ * lock tile and chapter lock. Report 3.0 replaced the first on 6 Oct, and watching only it
+ * left "CTA visibility" with no truth on any walk after that.
+ */
+export const LOCKED_CHAPTER_CTAS =
+  ".report-premium-overlay__cta, .rv4-premium:not(.rv4-premium--summary) .rv4-premium__cta, .rv4-lockbadge, .rv4-chapter__lock";
+/** The report has locked chapters: any card or lock those offers sit on. */
+export const LOCKED_CHAPTERS =
+  ".report-premium-overlay, .rv4-premium:not(.rv4-premium--summary), .rv4-lockbadge, .rv4-chapter__lock";
+
 export const PROOF_PAGE_SCRIPT = `
 window.__loveiqEventTap = function (name, params) {
   try { window.__walkHeard(Date.now(), name, JSON.stringify(params || {})); } catch (e) {}
@@ -289,7 +302,7 @@ window.__loveiqEventTap = function (name, params) {
     }, { threshold: 0.5 });
     var watched = new WeakSet();
     function scan() {
-      var els = document.querySelectorAll(".report-premium-overlay__cta");
+      var els = document.querySelectorAll(${JSON.stringify(LOCKED_CHAPTER_CTAS)});
       for (var i = 0; i < els.length; i++) {
         if (!watched.has(els[i])) { watched.add(els[i]); io.observe(els[i]); }
       }
@@ -831,17 +844,23 @@ async function main(argv: string[]): Promise<number> {
         note = await answerQuestion(page, q, answer);
         if (note) walk.missingOptions.push(`${q.qId}: ${note}`);
         if (plants?.formError && q.inputType === "email" && log.formErrors === 0) {
-          // Enter with a confirmation that does not match: the survey refuses it, once.
+          // Enter with an address the survey refuses, once. Where the question has a confirm
+          // box (a buyer who paid first), a confirmation that does not match; in the one
+          // field every other run has been asked since 4 Nov 2026, an address with no "@".
           const confirm = page.getByLabel("Confirm email address");
-          if (await confirm.isVisible().catch(() => false)) {
-            await confirm.fill(`x${String(answer)}`);
-            await confirm.press("Enter");
+          const hasConfirm = await confirm.isVisible().catch(() => false);
+          const field = hasConfirm ? confirm : page.getByLabel(q.question, { exact: true });
+          if (hasConfirm || (await field.isVisible().catch(() => false))) {
+            await field.fill(hasConfirm ? `x${String(answer)}` : String(answer).replace("@", ""));
+            await field.press("Enter");
             await page.waitForTimeout(700);
             log.formErrors += 1;
             planted.push(
-              "pressed Enter on the email question with a confirmation that does not match"
+              hasConfirm
+                ? "pressed Enter on the email question with a confirmation that does not match"
+                : "pressed Enter on the email question with an address that has no @"
             );
-            await confirm.fill(String(answer));
+            await field.fill(String(answer));
           }
         }
       } else {
@@ -1201,8 +1220,12 @@ async function main(argv: string[]): Promise<number> {
         .getByRole("button", { name: "Close pricing modal" })
         .filter({ visible: true });
       const close = async (way: Escape) => {
-        if (way === "close_button") await closeButton.first().click();
-        else if (way === "escape") await page.keyboard.press("Escape");
+        if (way === "close_button") {
+          // A EUR 1.99 holder's plans have "Not ready to unlock yet" where the × is (28.10),
+          // which opens the full report's exit page: a close is Escape for them.
+          if (await closeButton.count()) await closeButton.first().click();
+          else await page.keyboard.press("Escape");
+        } else if (way === "escape") await page.keyboard.press("Escape");
         else if (way === "browser_back") await page.goBack();
         else {
           // Beside the dialog, or above it where it fills the width.
@@ -1257,7 +1280,7 @@ async function main(argv: string[]): Promise<number> {
     };
     if (plants) {
       log.reportShown = true;
-      log.reportHasLockedCards = (await page.locator(".report-premium-overlay").count()) > 0;
+      log.reportHasLockedCards = (await page.locator(LOCKED_CHAPTERS).count()) > 0;
       log.reportScrollPct = await scrollPct(page);
       if (plants.quit === "report") {
         await page.waitForTimeout(8_000);
@@ -1325,11 +1348,12 @@ async function main(argv: string[]): Promise<number> {
       await page.waitForTimeout(2_500);
       if (await pricesOpen()) {
         mark("closed the plans the report opened by itself");
-        await page
+        const closeButton = page
           .getByRole("button", { name: "Close pricing modal" })
-          .filter({ visible: true })
-          .first()
-          .click({ timeout: 10_000 });
+          .filter({ visible: true });
+        // A EUR 1.99 holder's plans have "Not ready to unlock yet" in the ×'s place (28.10).
+        if (await closeButton.count()) await closeButton.first().click({ timeout: 10_000 });
+        else await page.keyboard.press("Escape");
         await page
           .locator(".report-pricing-modal.is-visible")
           .waitFor({ state: "hidden", timeout: 5_000 });

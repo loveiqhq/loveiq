@@ -261,12 +261,11 @@ describe("useSurveyTracking", () => {
     });
 
     expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-    expect(mockSendBeacon).toHaveBeenCalledWith("/api/survey-tracking", expect.any(Blob));
+    // The JSON string itself, never a Blob (Playwright's WebKit empties those under a route).
+    expect(mockSendBeacon).toHaveBeenCalledWith("/api/survey-tracking", expect.any(String));
 
-    // Verify the beacon blob contains an abandon event
-    const beaconBlob: Blob = mockSendBeacon.mock.calls[0][1];
-    const beaconText = await beaconBlob.text();
-    const beaconBody = JSON.parse(beaconText);
+    // Verify the beacon contains an abandon event
+    const beaconBody = JSON.parse(mockSendBeacon.mock.calls[0][1] as string);
     expect(beaconBody.events.at(-1).direction).toBe("abandon");
     expect(beaconBody.events.at(-1).qId).toBe("qVis");
   });
@@ -290,7 +289,7 @@ describe("useSurveyTracking", () => {
       await act(async () => {
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      const beacon = JSON.parse(await (mockSendBeacon.mock.calls[0][1] as Blob).text());
+      const beacon = JSON.parse(mockSendBeacon.mock.calls[0][1] as string);
       expect(beacon.touch).toBe(false);
     } finally {
       delete (navigator as { maxTouchPoints?: number }).maxTouchPoints;

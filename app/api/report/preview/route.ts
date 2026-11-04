@@ -23,6 +23,7 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
 import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import { buildInitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
 
 /**
  * A report with no reader behind it — for looking at the design on a laptop.
@@ -64,6 +65,9 @@ function isProduction(): boolean {
  * with only three, staging drew a repeat of the top-three card. The requested
  * archetype takes the top value, so it is the reader's own and never a tie.
  */
+/** The gate preview's survey time: the default of Marcus's canvas (Main, "Survey time"). */
+const PREVIEW_SURVEY_MINUTES = 14;
+
 const PREVIEW_LEADERS = ["Spark Seeker", "Explorer of Edges", "Emotional Voyeur"] as const;
 const PREVIEW_ORDER: readonly string[] = [
   ...PREVIEW_LEADERS,
@@ -86,10 +90,14 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
 
   // `?gate=1`: the EUR 1.99 gate as a gated owner meets it, its payload and nothing else
-  // (features/report/logic/initialUnlockGate.ts).
+  // (features/report/logic/initialUnlockGate.ts). Its survey time is the canvas's sample.
   if (url.searchParams.get("gate") === "1") {
     return NextResponse.json(
-      buildInitialUnlockGatePayload({ reportToken: null, submissionId: null }),
+      buildInitialUnlockGatePayload({
+        reportToken: null,
+        submissionId: null,
+        surveyMinutes: PREVIEW_SURVEY_MINUTES,
+      }),
       { headers: { "Cache-Control": "no-store" } }
     );
   }
@@ -101,6 +109,25 @@ export async function GET(request: Request) {
   const archetype =
     KNOWN_ARCHETYPES.find((a) => flatten(a) === flatten(requested)) ?? "Spark Seeker";
 
+  // `?gate=tour`: the gate's first open since 30.10, the report under the guided tour with
+  // who the reader is left out, then the gate (features/report/server/tourFirstReport.ts).
+  if (url.searchParams.get("gate") === "tour") {
+    return NextResponse.json(
+      buildTourFirstReportPayload({
+        submissionId: null,
+        userName: null,
+        reportDate: new Date().toISOString(),
+        archetype,
+        gate: buildInitialUnlockGatePayload({
+          reportToken: null,
+          submissionId: null,
+          surveyMinutes: PREVIEW_SURVEY_MINUTES,
+        }),
+      }),
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const planParam = url.searchParams.get("plan") ?? "";
   // As on the real route, V4's chapters go only to the V4 page (final review 26.09).
   const isV4Request = url.searchParams.get("v4") === "1";
@@ -108,6 +135,13 @@ export async function GET(request: Request) {
   // `?plan=initial`: the initial unlock (EUR 1.99), as its buyer sees the report: no plan,
   // the card and Summary in full, and the full report EUR 10 off on the pay screen.
   const initialUnlock = isInitialUnlockPlan(planParam);
+  // `&gift=1` with it: the same unlock as E07's gift, which the full report's exit page words
+  // differently ("It's yours toward your Full Report", not "You earned it with your €1.99").
+  const initialUnlockSource = initialUnlock
+    ? url.searchParams.get("gift") === "1"
+      ? ("gift" as const)
+      : ("paid" as const)
+    : null;
 
   // A paid preview owns its own archetype, exactly as a real purchase does.
   const unlockedArchetypes = accessPlan ? [archetype] : [];
@@ -169,6 +203,7 @@ export async function GET(request: Request) {
     snapshotAnswers: { currentSexualSatisfaction: 3, importanceOfSex: 5 },
     pricingQuotes: buildPreviewQuotes(new Date(), { initialCredit: initialUnlock }),
     initialUnlock,
+    initialUnlockSource,
     unlockedArchetypes,
     archetypeTiers,
 

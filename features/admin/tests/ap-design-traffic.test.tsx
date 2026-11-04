@@ -343,7 +343,8 @@ describe("the Traffic builder, as the design reads", () => {
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
       "Landing hero: Since 14 Oct 2026 · live",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",
-      "Email question: Since 9 Oct 2026 · live",
+      // Ended on 4 Nov 2026, written as the Payment page writes an ended test.
+      "Email question: 9 Oct – 3 Nov 2026 · ended",
     ]);
   });
 
@@ -466,6 +467,27 @@ describe("the Traffic page, as drawn", () => {
       "€617",
       "0.03×",
     ]);
+  });
+
+  it("calls an ended test's confidence final, never 'not yet'", () => {
+    const p = traffic();
+    const base = p.experiments.arms.find((a) => a.test === "Email question" && !a.control)!;
+    const arm = (over: Partial<typeof base>) => ({ ...base, lift: 0.058, chance: 0.9, ...over });
+    view.payload = {
+      ...p,
+      experiments: {
+        ...p.experiments,
+        arms: [
+          p.experiments.arms.find((a) => a.test === "Email question" && a.control)!,
+          arm({ confidence: 0.8, ended: true }),
+          arm({ test: "Landing hero", arm: "Presenter video", confidence: 0.8, ended: false }),
+        ],
+      },
+    };
+    render(<ApTraffic />);
+    const card = within(document.getElementById("experiments")!);
+    expect(card.getAllByText("ended below 95%")).toHaveLength(1);
+    expect(card.getAllByText("not yet")).toHaveLength(1);
   });
 
   it("describes the scorecard as the design does", () => {

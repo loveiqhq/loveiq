@@ -37,6 +37,7 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { sweepPayToStart, type PayToStartSweepSummary } from "@features/pay-to-start/server/sweep";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ interface StuckPayment {
 }
 
 async function supabaseFetch(path: string, init?: RequestInit) {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("supabase_not_configured");
 

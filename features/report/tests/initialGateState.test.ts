@@ -25,6 +25,7 @@ import {
   joinInitialGateCohort,
   readInitialGateCohortIds,
   readInitialGateState,
+  readSurveyQuestionTimes,
   stampInitialGateCohort,
   stampInitialGateSeen,
 } from "@features/report/server/initialGateState";
@@ -115,6 +116,31 @@ describe("readInitialGateState", () => {
   it("returns null when the report has no row", async () => {
     mockFetchWithTimeout.mockResolvedValue(reply([]));
     await expect(readInitialGateState(10)).resolves.toBeNull();
+  });
+});
+
+describe("readSurveyQuestionTimes", () => {
+  const SID = "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c";
+
+  it("reads each question's time for the survey's session, without the hidden tab's repeats", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      reply([{ time_spent_ms: 15_000 }, { time_spent_ms: 42_000 }, { time_spent_ms: null }])
+    );
+    expect(await readSurveyQuestionTimes(SID)).toEqual([15_000, 42_000]);
+    const [{ url }] = requests();
+    expect(url).toContain(`/rest/v1/survey_behavior_event?session_id=eq.${SID}`);
+    expect(url).toContain("direction=neq.abandon");
+    expect(url).toContain("select=time_spent_ms");
+  });
+
+  it("returns null when the read fails or throws, and asks nothing for a malformed session", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(reply({ message: "nope" }, 500));
+    expect(await readSurveyQuestionTimes(SID)).toBeNull();
+    mockFetchWithTimeout.mockRejectedValueOnce(new Error("timeout"));
+    expect(await readSurveyQuestionTimes(SID)).toBeNull();
+    mockFetchWithTimeout.mockClear();
+    expect(await readSurveyQuestionTimes("x&select=*")).toBeNull();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 });
 

@@ -219,8 +219,13 @@ export interface ReportTour {
   placed: Array<{ audience: TourAudience; runs: number }>;
 }
 
-const AUDIENCES: readonly TourAudience[] = ["free", "paid"];
-const isAudience = (v: unknown): v is TourAudience => v === "free" || v === "paid";
+const AUDIENCES: readonly TourAudience[] = ["free", "paid", "gate"];
+const isAudience = (v: unknown): v is TourAudience => v === "free" || v === "paid" || v === "gate";
+const AUDIENCE_NAME = new Map<TourAudience, string>([
+  ["free", "Free readers"],
+  ["paid", "Paid readers"],
+  ["gate", "Before the €1.99 page"],
+]);
 
 export async function fetchReportTour(from: string, to: string): Promise<ReportTour> {
   const res = await supabaseFetch("/rest/v1/rpc/ap_report_tour", {
@@ -1344,11 +1349,12 @@ export function buildReportPage(input: {
     const placed = tour?.placed.find((p) => p.audience === key)?.runs ?? 0;
     return {
       key,
-      label: `${key === "free" ? "Free" : "Paid"} readers · ${ids.length} stops`,
+      label: `${AUDIENCE_NAME.get(key)} · ${ids.length} stops`,
       // Over every reader who opened their report: a run's audience is known, an opener's isn't,
-      // so this tab's share is of all of them, free and paid together.
+      // so this tab's share is of all of them, free and paid together. Not before the gate: its
+      // readers are not openers (the tour's report writes no report session).
       share:
-        tour && tourOpeners > 0
+        key !== "gate" && tour && tourOpeners > 0
           ? `${fmt("pct", cur.readers / tourOpeners, 0)} of the ${n(tourOpeners)} ${
               tourOpeners === 1 ? "reader" : "readers"
             } who opened their report`

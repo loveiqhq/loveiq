@@ -89,8 +89,8 @@ export function usePartialSave(
         ...buildPayload(),
         _csrf: getCsrfToken(),
       };
-      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
-      navigator.sendBeacon("/api/survey-partial", blob);
+      // A string, not a Blob (features/analytics/client.ts persistAnalyticsEvent).
+      navigator.sendBeacon("/api/survey-partial", JSON.stringify(payload));
     };
 
     document.addEventListener("visibilitychange", handleAbandon);

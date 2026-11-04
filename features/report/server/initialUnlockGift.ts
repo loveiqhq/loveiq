@@ -7,6 +7,7 @@ import { isStaffEmail } from "@shared/env/staff-email";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * E07's gift (Pre-unlock; app/api/cron/initial-unlock-gift): the initial unlock given, not
@@ -18,7 +19,7 @@ import logger from "@shared/observability/logger";
 const SUPABASE_TIMEOUT_MS = 5_000;
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };

@@ -65,10 +65,12 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
 const mockGateEnabled = vi.fn();
 const mockReadGateState = vi.fn();
 const mockStampGateSeen = vi.fn();
+const mockReadQuestionTimes = vi.fn();
 vi.mock("@features/report/server/initialGateState", () => ({
   isInitialUnlockGateEnabled: (...args: unknown[]) =>
     mockGateEnabled(...args) ?? Promise.resolve(false),
   readInitialGateState: (...args: unknown[]) => mockReadGateState(...args),
+  readSurveyQuestionTimes: (...args: unknown[]) => mockReadQuestionTimes(...args),
   stampInitialGateSeen: (...args: unknown[]) => mockStampGateSeen(...args),
 }));
 const mockLivePayToStart = vi.fn();
@@ -1007,6 +1009,7 @@ describe("GET /api/report — the initial unlock", () => {
     accessPlan: null,
     anyPlan: null,
     initialUnlock,
+    initialUnlockSource: initialUnlock ? ("gift" as const) : null,
     archetypeTiers: {},
     personalReportId: 99,
     unlockedArchetypeColumn: [],
@@ -1031,6 +1034,8 @@ describe("GET /api/report — the initial unlock", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.initialUnlock).toBe(true);
+    // How the owner holds it, for the full report's exit page's wording.
+    expect(json.initialUnlockSource).toBe("gift");
     // No plan: the pay screens keep selling, and every chapter stays as a free reader has it.
     expect(json.accessPlan).toBeNull();
     expect(json.purchasedPlan).toBeNull();
@@ -1047,6 +1052,7 @@ describe("GET /api/report — the initial unlock", () => {
       await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
     ).json();
     expect(json.initialUnlock).toBe(false);
+    expect(json.initialUnlockSource).toBeNull();
     expect(json.archetypeCard.locked).toBe(true);
     expect(json.summaryChapter.locked).toBe(true);
   });
@@ -1100,6 +1106,9 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   const rows = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
   const ownerGet = () =>
     GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1`));
+  // The page asks for the gate itself as the tour ends (`gate=now`, tour first since 30.10).
+  const meetGet = () =>
+    GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1&gate=now`));
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -1130,7 +1139,7 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   });
 
   it("answers a gated owner with the gate alone: price, credit, guarantee, ids", async () => {
-    const res = await ownerGet();
+    const res = await meetGet();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       gate: "initial_unlock",
@@ -1141,7 +1150,47 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
       reportToken: OWNER_TOKEN,
       submissionId: 55,
       viewMode: "owner",
+      surveyMinutes: null,
     });
+  });
+
+  it("tells the gate the minutes the reader spent on the questions, not the survey's clock", async () => {
+    const SESSION = "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c";
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/report_access_token?token=eq.")) {
+        return rows([{ survey_submission_id: 55 }]);
+      }
+      if (url.includes("/rest/v1/survey_submission?")) {
+        expect(url).toContain("session_id");
+        // Left open overnight: the clock says 20 hours.
+        return rows([{ ...SUBMISSION, session_id: SESSION, duration_ms: 20 * 3_600_000 }]);
+      }
+      if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
+      return rows([]);
+    });
+    // 55 questions at 15 s and one put down for the night: 13 min 45 s + 2 min.
+    mockReadQuestionTimes.mockImplementation(async (sessionId: string) =>
+      sessionId === SESSION ? [...Array.from({ length: 55 }, () => 15_000), 20 * 3_600_000] : null
+    );
+    const res = await meetGet();
+    expect((await res.json()).surveyMinutes).toBe(16);
+    expect(mockReadQuestionTimes).toHaveBeenCalledWith(SESSION);
+  });
+
+  it("shows no minutes when the question times can't be read", async () => {
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/report_access_token?token=eq.")) {
+        return rows([{ survey_submission_id: 55 }]);
+      }
+      if (url.includes("/rest/v1/survey_submission?")) {
+        return rows([{ ...SUBMISSION, session_id: "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c" }]);
+      }
+      if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
+      return rows([]);
+    });
+    mockReadQuestionTimes.mockResolvedValue(null);
+    const res = await meetGet();
+    expect((await res.json()).surveyMinutes).toBeNull();
   });
 
   it("never lets the gate be cached", async () => {
@@ -1188,9 +1237,55 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   });
 
   it("stamps the gate's first view once, after the reply", async () => {
-    await ownerGet();
+    await meetGet();
     await flushAfterResponse();
     expect(mockStampGateSeen.mock.calls).toEqual([[99]]);
+  });
+
+  // Tour first, then the gate (sync 30.10): a first open is the report under the tour, with who
+  // the reader is left out (server/tourFirstReport.ts), and the gate's payload beside it.
+  it("answers a first open with the report to tour, the archetype left out, the gate beside it", async () => {
+    const res = await ownerGet();
+    const body = await res.json();
+    expect(body.initialGate).toEqual({
+      gate: "initial_unlock",
+      priceCents: 199,
+      currency: "EUR",
+      creditCents: 1000,
+      guaranteeDays: 14,
+      reportToken: OWNER_TOKEN,
+      submissionId: 55,
+      viewMode: "owner",
+      surveyMinutes: null,
+    });
+    expect(body.primaryArchetype).toBe("");
+    expect(body.percentages).toEqual({});
+    expect(body.typicalBeliefs?.sunShadowTitle).toBe("Sun and Shadow Beliefs");
+    expect(JSON.stringify(body)).not.toMatch(/Emotional Voyeur|Spark Seeker/);
+    expect(res.headers.get("Cache-Control")).toBe("no-store, no-cache, must-revalidate");
+    // Not seen yet: the gate is stamped when the page meets it.
+    await flushAfterResponse();
+    expect(mockStampGateSeen).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "a persona walk (the probe cookie)",
+      () =>
+        GET(
+          new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}&v4=1`, {
+            headers: { cookie: "loveiq_probe=1" },
+          })
+        ),
+    ],
+    [
+      "a page other than V4's",
+      () => GET(new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}`)),
+    ],
+  ])("meets %s with the gate at once", async (_label, get) => {
+    const body = await (await get()).json();
+    expect(body.gate).toBe("initial_unlock");
+    expect(body.initialGate).toBeUndefined();
   });
 
   it("leaves the first view's stamp alone when the reader comes back", async () => {

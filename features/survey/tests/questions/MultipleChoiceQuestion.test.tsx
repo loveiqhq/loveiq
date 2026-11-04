@@ -362,6 +362,11 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
     expect(header("Sleep & Body")).toHaveTextContent("1 selected");
     expect(header("Work, Purpose & Money")).toHaveTextContent("2 selected");
     expect(header("Mood & Energy")).not.toHaveTextContent(/selected/);
+
+    // Purple like the rest of the answers (Hana, 04.11), not the old orange ink.
+    const badge = within(header("Sleep & Body")).getByText("1 selected");
+    expect(badge.className).toContain("text-[#6b5b95]");
+    expect(badge.className).not.toContain("#c2410c");
   });
 
   it("appends picks in click order across categories", async () => {

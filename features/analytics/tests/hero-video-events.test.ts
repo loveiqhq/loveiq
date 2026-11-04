@@ -26,6 +26,15 @@ beforeEach(async () => {
  * one of these is already split by arm without repeating it.
  */
 describe("hero video events", () => {
+  it("counts a tap on play, a first watch's and a replay's apart", () => {
+    client.trackHeroVideoTap({ replay: false });
+    client.trackHeroVideoTap({ replay: true });
+    expect(ph.capture.mock.calls).toEqual([
+      ["hero_video_tap", { replay: false }],
+      ["hero_video_tap", { replay: true }],
+    ]);
+  });
+
   it("names a first watch and a replay apart", () => {
     client.trackHeroVideoPlay({ replay: false });
     client.trackHeroVideoPlay({ replay: true });
@@ -33,27 +42,39 @@ describe("hero video events", () => {
     expect(ph.capture).toHaveBeenNthCalledWith(2, "hero_video_play", { replay: true });
   });
 
-  it("sends each progress milestone as its own percent", () => {
-    for (const percent of [25, 50, 75] as const) client.trackHeroVideoProgress({ percent });
+  it("sends each progress milestone as its own percent, saying whether it is a replay's", () => {
+    for (const percent of [25, 50, 75] as const) {
+      client.trackHeroVideoProgress({ percent, replay: false });
+    }
+    client.trackHeroVideoProgress({ percent: 25, replay: true });
     expect(ph.capture.mock.calls).toEqual([
-      ["hero_video_progress", { percent: 25 }],
-      ["hero_video_progress", { percent: 50 }],
-      ["hero_video_progress", { percent: 75 }],
+      ["hero_video_progress", { percent: 25, replay: false }],
+      ["hero_video_progress", { percent: 50, replay: false }],
+      ["hero_video_progress", { percent: 75, replay: false }],
+      ["hero_video_progress", { percent: 25, replay: true }],
     ]);
   });
 
-  it("sends completion with no params", () => {
-    client.trackHeroVideoComplete();
-    // track() hands PostHog the params as given, as it does for report_viewed.
-    expect(ph.capture).toHaveBeenCalledWith("hero_video_complete", undefined);
+  it("sends a finish saying whether it is a replay's", () => {
+    client.trackHeroVideoComplete({ replay: false });
+    client.trackHeroVideoComplete({ replay: true });
+    expect(ph.capture.mock.calls).toEqual([
+      ["hero_video_complete", { replay: false }],
+      ["hero_video_complete", { replay: true }],
+    ]);
   });
 
-  it("names which video failed and why", () => {
+  it("names the failed start's reason", () => {
     client.trackHeroVideoError({ video: "full", reason: "media-error-2" });
-    client.trackHeroVideoError({ video: "preview", reason: "NotSupportedError" });
     expect(ph.capture.mock.calls).toEqual([
       ["hero_video_error", { video: "full", reason: "media-error-2" }],
-      ["hero_video_error", { video: "preview", reason: "NotSupportedError" }],
+    ]);
+  });
+
+  it("sends a start left behind as an error, by beacon, because the page is going", () => {
+    client.trackHeroVideoAbandoned();
+    expect(ph.capture.mock.calls).toEqual([
+      ["hero_video_error", { video: "full", reason: "abandoned" }, { transport: "sendBeacon" }],
     ]);
   });
 

@@ -280,8 +280,9 @@ describe("ApPayToStart", () => {
     expect(off.textContent).not.toContain("Off");
   });
 
-  // The €1.99 page's buttons and its way out (27 Oct): a line under the steps that split.
-  it("says under the gate's steps who left by Not ready and which button was pressed", () => {
+  // The €1.99 page's buttons and its way out (27 Oct; since 28 Oct "Not ready" opens the exit
+  // page, which has Unlock buttons of its own): a line under the steps that split.
+  it("says under the gate's steps who pressed Not ready and which button was pressed", () => {
     const live: PtsPayload = {
       ...payload,
       funnels: payload.funnels.map((f) =>
@@ -295,9 +296,12 @@ describe("ApPayToStart", () => {
                 s("Visits", 100),
                 {
                   ...s("Saw the €1.99 page", 40),
-                  detail: "6 left by “Not ready to unlock yet”",
+                  detail: "6 pressed “Not ready to unlock yet”",
                 },
-                { ...s("Pressed Unlock", 12), detail: "on the card 7 · on the bar 6" },
+                {
+                  ...s("Pressed Unlock", 12),
+                  detail: "on the card 7 · on the bar 6 · on the exit page 2",
+                },
                 s("Paid €1.99", 9, true),
               ],
             }
@@ -309,8 +313,10 @@ describe("ApPayToStart", () => {
     const items = within(card)
       .getAllByRole("listitem")
       .map((li) => li.textContent);
-    expect(items[1]).toBe("Saw the €1.99 page\u00a040 40.0%6 left by “Not ready to unlock yet”");
-    expect(items[2]).toBe("Pressed Unlock\u00a012 12.0%on the card 7 · on the bar 6");
+    expect(items[1]).toBe("Saw the €1.99 page\u00a040 40.0%6 pressed “Not ready to unlock yet”");
+    expect(items[2]).toBe(
+      "Pressed Unlock\u00a012 12.0%on the card 7 · on the bar 6 · on the exit page 2"
+    );
     // Every step, the new one too, says what it counts.
     expect(within(card).getAllByRole("button", { name: /about pressed unlock/i }).length).toBe(1);
   });

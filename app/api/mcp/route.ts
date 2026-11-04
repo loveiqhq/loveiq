@@ -2058,8 +2058,13 @@ export const TOOLS = [
       "the arms from then. A page view still does not mean it was seen: cta_seen with " +
       "properties.cta 'hero_video' or 'hero_card' is a visitor who had half of it on screen. " +
       "It is sent since 2026-10-12, so a visit before that has none, which is no data rather " +
-      "than 'not seen'. The video: hero_video_play (a play with sound, counted when frames " +
-      "start), hero_video_progress (properties.percent 25, 50, 75) and hero_video_complete. " +
+      "than 'not seen'. The video: hero_video_tap (a tap on play, the click-through; it " +
+      "exists only from the release that stopped the video's silent autoplaying loop, so " +
+      "before its first event count plays instead), hero_video_play (a play with sound, " +
+      "counted when frames start), hero_video_progress (properties.percent 25, 50, 75) and " +
+      "hero_video_complete, each with properties.replay for a second watch (progress and " +
+      "complete carry it from that release), and hero_video_error with properties.reason for " +
+      "a start that failed ('abandoned': the visitor left while it was starting). " +
       "Added 2026-10-13: landing_card_answer (a tap on question 1's card, properties.location " +
       "'hero' or 'footer', properties.value the point picked, 1 to 7), cta_click with properties.element " +
       "'question_card' (that card's Continue; without it, the button beside it), " +

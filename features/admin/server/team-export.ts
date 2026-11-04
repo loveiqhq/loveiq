@@ -128,6 +128,9 @@ const PERSONAL_IN: Record<string, string[]> = {
   // An unlock-feedback answer's own words and chips, masked like the admin's view of them, and
   // the hash of the link that opens the reader's /why page.
   unlock_feedback: ["note", "chips", "link_hash"],
+  // Seedlane's own notes on a short link, keyed as it likes: they can name the person a DM
+  // went to, and their keys are not ours to list.
+  short_link: ["meta"],
 };
 /**
  * Keys inside JSON values that hold a credential, an address, a name or an answer, written
@@ -223,6 +226,13 @@ const NOT_PERSONAL_KEYS = new Set([
   "payload_fingerprint",
   "metric_name",
 ]);
+/**
+ * Keys personal at one place only, by table.column.key path: `answer_text` elsewhere is a
+ * survey answer the copy keeps (its personal ones are masked by question). Here it is a
+ * reader's own sentence from a paygate exit page's "Something else" (paygate_exit_note,
+ * 28.10), masked as unlock_feedback.note is.
+ */
+const PERSONAL_PATHS = new Set(["analytics_event.metadata.answer_text"]);
 /**
  * Keys safe at one place only, by table.column.key path: a generic key such as `location`
  * stays checked everywhere else.
@@ -324,7 +334,13 @@ export function masker(key: Buffer = randomBytes(32)): Masker {
           if (k !== raw) return [k, v === null || v === undefined ? v : MASKED];
           const key = snakeKey(k);
           if (v === null || v === undefined) return [k, v];
-          if (PERSONAL_KEYS.has(key) || PERSONAL_COLUMNS.has(key)) return [k, MASKED];
+          if (
+            PERSONAL_KEYS.has(key) ||
+            PERSONAL_COLUMNS.has(key) ||
+            PERSONAL_PATHS.has(`${where}.${key}`)
+          ) {
+            return [k, MASKED];
+          }
           if (isEmailColumn(key)) {
             return [k, typeof v === "string" ? email(v) : json(v, `${where}.${key}`)];
           }

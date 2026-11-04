@@ -45,13 +45,13 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
       role={multi ? "checkbox" : "radio"}
       aria-checked={selected}
       onClick={onClick}
-      className={`relative flex min-h-[68px] w-full gap-[28px] rounded-[16px] border px-[21px] text-left font-sans transition-[background-color,border-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 ${
+      className={`relative flex min-h-[68px] w-full gap-[28px] rounded-[16px] border px-[21px] text-left font-sans transition-[background-color,border-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b5b95]/60 focus-visible:ring-offset-2 ${
         white ? "focus-visible:ring-offset-white" : "focus-visible:ring-offset-[#0a0510]"
       } ${hasDescription ? "items-start py-4" : "items-center py-px"} ${
         selected
           ? white
-            ? "border-[rgba(254,104,57,0.55)] bg-[rgba(254,104,57,0.08)] shadow-[0_0_20px_rgba(254,104,57,0.12)]"
-            : "border-[rgba(254,104,57,0.5)] bg-[rgba(254,104,57,0.1)] shadow-[0_0_20px_rgba(254,104,57,0.15)]"
+            ? "border-[rgba(107,91,149,0.7)] bg-[rgba(107,91,149,0.1)] shadow-[0_0_20px_rgba(107,91,149,0.16)]"
+            : "border-[rgba(167,139,250,0.5)] bg-[rgba(167,139,250,0.1)] shadow-[0_0_20px_rgba(167,139,250,0.15)]"
           : white
             ? "border-black/[0.08] bg-[#f5f6f8] hover:border-black/[0.14] hover:bg-[#eef0f4]"
             : "border-white/10 bg-white/[0.05] hover:border-white/15 hover:bg-white/[0.07]"
@@ -98,7 +98,7 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
           <span
             className={`flex h-6 w-6 items-center justify-center rounded-[8px] transition-[background-color,border-color,box-shadow] duration-200 ${
               selected
-                ? "bg-[#fe6839] text-white shadow-[0_0_10px_rgba(254,104,57,0.5)]"
+                ? "bg-[#6b5b95] text-white shadow-[0_0_10px_rgba(107,91,149,0.5)]"
                 : white
                   ? "h-5 w-5 rounded-[8px] border-2 border-black/20 bg-transparent text-transparent"
                   : "h-5 w-5 rounded-[8px] border-2 border-white/20 bg-transparent text-transparent"
@@ -110,7 +110,7 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
           <span
             className={`flex items-center justify-center rounded-full transition-[background-color,border-color,box-shadow] duration-200 ${
               selected
-                ? "h-6 w-6 border border-[#fe6839]/70 bg-[#fe6839] shadow-[0_0_10px_rgba(254,104,57,0.35)]"
+                ? "h-6 w-6 border border-[#6b5b95]/70 bg-[#6b5b95] shadow-[0_0_10px_rgba(107,91,149,0.35)]"
                 : white
                   ? "h-5 w-5 border-2 border-black/20 bg-transparent"
                   : "h-5 w-5 border-2 border-white/20 bg-transparent"

@@ -10,15 +10,14 @@ import { PtsNotice } from "./PtsNotice";
 import { PTS_OFFER_COPY } from "./payToStartContent";
 import { PtsOnePrice, PtsPriceCard } from "./PtsPricing";
 import "./payToStart.css";
-import {
-  PtsFindOut,
-  PtsHowItWorks,
-  PtsInsideReport,
-  PtsPersonalities,
-  PtsResearch,
-  PtsTestimonials,
-} from "./PtsSections";
+import WArchetypeCards from "@features/landing/ui/white/WArchetypeCards";
+import WFoundation from "@features/landing/ui/white/WFoundation";
+import WTestimonials from "@features/landing/ui/white/WTestimonials";
+import { PtsInsideReport, PtsSample } from "./PtsChapters";
+import { PtsGuarantee } from "./PtsGuarantee";
+import { PtsFindOut, PtsHowItWorks } from "./PtsSections";
 import { PtsStickyBar } from "./PtsStickyBar";
+import { PtsWhy } from "./PtsWhy";
 
 /**
  * The assessment page a visitor pays on before the survey (Figma Report-3.0 "Pay to start >
@@ -50,15 +49,26 @@ export const PayToStartLanding: FC<{ offer: PayToStartOfferId; priceCents: numbe
   const price = formatOfferPrice(priceCents);
   const copy = PTS_OFFER_COPY[offer];
   const card = <PtsPriceCard price={price} copy={copy.priceCard} />;
+  // Landing V2's order (Mark, final 30.10). The archetypes, the reviews and the research are the
+  // home page's own sections; the anchors around them are the ads' sitelinks (#personalities,
+  // #reviews), which they keep.
   const sections = (
     <>
-      <PtsFindOut />
-      <PtsInsideReport lead={copy.insideLead(price)} />
-      <PtsPersonalities />
       <PtsHowItWorks price={price} steps={copy.steps} />
-      <PtsTestimonials />
-      <PtsResearch />
+      <PtsFindOut />
+      <PtsInsideReport />
+      <PtsSample lead={copy.insideLead(price)} />
+      <div id="personalities" className="scroll-mt-16">
+        <WArchetypeCards />
+      </div>
+      <div id="reviews" className="scroll-mt-16">
+        <WTestimonials />
+      </div>
+      <WFoundation />
       {copy.onePrice && <PtsOnePrice price={price} />}
+      {/* "Why unlock your report?" sells the full report ("Read the full report", 17 chapters):
+          the full offer's page only, beside its One price band. */}
+      {copy.onePrice && <PtsWhy />}
       <PtsFaq items={copy.faqItems} />
     </>
   );
@@ -85,6 +95,7 @@ export const PayToStartLanding: FC<{ offer: PayToStartOfferId; priceCents: numbe
                 className="hidden xl:sticky xl:top-[88px] xl:block xl:w-[342px] xl:shrink-0"
               >
                 {card}
+                <PtsGuarantee />
               </aside>
             </div>
           ) : (

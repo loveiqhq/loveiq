@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import {
   finalizeReportSession,
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
+import type { InitialUnlockSource } from "@features/report/logic/initialUnlock";
 import {
   isInitialUnlockGatePayload,
   type InitialUnlockGatePayload,
@@ -47,6 +48,11 @@ export interface ReportData {
    * card and Summary come whole. Not a plan: `accessPlan`/`purchasedPlan` stay null for it.
    */
   initialUnlock?: boolean;
+  /**
+   * How the owner holds it: bought ("paid"), or only E07's gift. The full report's exit page
+   * words the EUR 10 by it. Absent on older responses and for a recipient.
+   */
+  initialUnlockSource?: InitialUnlockSource | null;
   /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
   userName: string | null;
   userEmail: string | null;
@@ -320,6 +326,12 @@ export interface ReportData {
    * `ConstellationSection`. A null value means that archetype has no motto copy.
    */
   constellationMottos: Record<string, string | null>;
+  /**
+   * Tour first, then the EUR 1.99 gate (sync 30.10): on a gated report's first open the API
+   * sends the report under the tour, with who the reader is left out, and the gate's payload
+   * here. The page meets the gate as the tour ends (`meetInitialGate`).
+   */
+  initialGate?: InitialUnlockGatePayload | null;
 }
 
 export interface ReportRequestError {
@@ -353,8 +365,13 @@ interface ReportIdentifier {
   preview?: boolean;
   /** `?plan=` in preview mode: which purchase to pretend the reader made. */
   previewPlan?: string | null;
-  /** `?gate=1` in preview mode: the EUR 1.99 gate, as a reader it stops meets it. */
-  previewGate?: boolean;
+  /**
+   * `?gate=1` in preview mode: the EUR 1.99 gate, as a reader it stops meets it; `"tour"`
+   * (`?gate=tour`): its first open since 30.10, the report under the tour, then the gate.
+   */
+  previewGate?: boolean | "tour";
+  /** `?gift=1` with `?plan=initial` in preview mode: the EUR 1.99 unlock as E07's gift. */
+  previewGift?: boolean;
   /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
@@ -401,6 +418,7 @@ export function useReportData(identifier: ReportIdentifier) {
     preview,
     previewPlan,
     previewGate,
+    previewGift,
     v4,
   } = identifier;
   // A preview needs no identifier: there is no reader to identify. Without this
@@ -462,7 +480,8 @@ export function useReportData(identifier: ReportIdentifier) {
               archetype: archetypeSlug ?? "",
               plan: previewPlan ?? "",
               ...(v4 ? { v4: "1" } : {}),
-              ...(previewGate ? { gate: "1" } : {}),
+              ...(previewGate ? { gate: previewGate === "tour" ? "tour" : "1" } : {}),
+              ...(previewGift ? { gift: "1" } : {}),
             }).toString()}`
           : `/api/report?${params.toString()}`;
 
@@ -561,10 +580,35 @@ export function useReportData(identifier: ReportIdentifier) {
     preview,
     previewPlan,
     previewGate,
+    previewGift,
     v4,
   ]);
 
   const retry = () => setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
+
+  /**
+   * The tour is over: the gate the report arrived with takes its place at once, and the API is
+   * told (`gate=now`), which stamps the gate as seen (E07's clock, AP's "saw the EUR 1.99
+   * page") and from then on answers with the gate alone. A preview has nothing to stamp.
+   */
+  const meetInitialGate = useCallback(() => {
+    setState((prev) => {
+      const gate = prev.data?.initialGate;
+      if (prev.status !== "success" || !gate) return prev;
+      return { ...prev, data: null, status: "gated", error: null, challenge: null, gate };
+    });
+    if (preview || !(sessionId || token)) return;
+    const params = new URLSearchParams(token ? { token } : { sessionId: sessionId ?? "" });
+    if (v4) params.set("v4", "1");
+    params.set("gate", "now");
+    void fetch(`/api/report?${params.toString()}`, {
+      headers: { "x-csrf-token": getCsrfToken() },
+      cache: "no-store",
+    }).catch(() => {
+      // Unstamped, the next open shows the tour's report again; the tour, seen, then steps
+      // straight aside for the gate.
+    });
+  }, [preview, sessionId, token, v4]);
 
   if (!hasIdentifier) {
     return {
@@ -574,6 +618,7 @@ export function useReportData(identifier: ReportIdentifier) {
       challenge: null,
       gate: null,
       retry,
+      meetInitialGate,
     };
   }
 
@@ -585,6 +630,7 @@ export function useReportData(identifier: ReportIdentifier) {
       challenge: null,
       gate: null,
       retry,
+      meetInitialGate,
     };
   }
 
@@ -595,5 +641,6 @@ export function useReportData(identifier: ReportIdentifier) {
     challenge: state.challenge,
     gate: state.gate,
     retry,
+    meetInitialGate,
   };
 }

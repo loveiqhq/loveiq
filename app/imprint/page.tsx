@@ -40,10 +40,7 @@ export default function ImprintPage() {
 
             <p>Commercial Register: HRB 282986 B</p>
 
-            {/* P-15: VAT ID still pending from accounting. TMG §5 requires this once
-                the entity is VAT-registered; replace "TBD" with the issued
-                "DEnnnnnnnnn" identifier and remove this comment. */}
-            <p>VAT Identification Number pursuant to §27a UStG: TBD</p>
+            <p>VAT Identification Number pursuant to §27a UStG: DE465199902</p>
 
             <p>Managing Director: Marcus Börner</p>
 

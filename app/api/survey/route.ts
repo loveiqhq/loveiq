@@ -7,8 +7,8 @@ import {
   QUESTION_ORDER_ARM_KEY,
 } from "@shared/experiments/questionOrderArm";
 import {
-  assignEmailQuestionArm,
   EMAIL_QUESTION_ARM_KEY,
+  EMAIL_QUESTION_WINNER,
 } from "@shared/experiments/emailQuestionArm";
 import {
   checkRateLimit,
@@ -70,6 +70,7 @@ import {
 } from "@features/pay-to-start/server/entitlement";
 import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -97,7 +98,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * and the report-ready email links there too.
  */
 async function createReportToken(submissionId: number): Promise<string | null> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return null;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -126,7 +127,7 @@ async function createReportToken(submissionId: number): Promise<string | null> {
 
 /** The submission's existing report link, or a new one if it never got one. */
 async function reportTokenFor(submissionId: number): Promise<string | null> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return null;
   try {
@@ -150,7 +151,7 @@ async function reportTokenFor(submissionId: number): Promise<string | null> {
  * sweeps any stragglers (e.g. session_id mismatch or pre-cleanup-deploy rows).
  */
 function scheduleDraftCleanup(sessionId: string, submissionId: number): void {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return;
   scheduleAfterResponse("survey-partial-cleanup", async () => {
@@ -555,17 +556,19 @@ export async function POST(request: Request) {
    */
   mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, QUESTION_ORDER_ARM_KEY, questionOrderArm);
   /**
-   * The email question test's arm (`emailQuestionArm.ts`), by the same rules and from
-   * the same session id the browser drew it from, so the stamp is the version this
-   * respondent was shown (a staging preview with `?email=` excepted). It joins after
-   * C13's, so a tracker near the limit gives this one up first.
+   * The email question's version (`emailQuestionArm.ts`), by the same rules, so the stamp
+   * is the version this respondent was shown (a staging preview with `?email=` excepted).
+   * During its test (8 Oct to 4 Nov 2026) that was the arm drawn from the session id; since
+   * then every free run is shown the anonymous one. It joins after C13's, so a tracker near
+   * the limit gives this one up first.
    */
   mergedUtmTracker = mergeTrackerArm(
     mergedUtmTracker,
     EMAIL_QUESTION_ARM_KEY,
     // A buyer who paid before the survey is in no survey test: the browser showed them
-    // today's question (SurveyEngine's payToStart), so no arm is stamped.
-    sessionId && !prepaidToken ? assignEmailQuestionArm(sessionId) : null
+    // today's question (SurveyEngine's payToStart), so nothing is stamped. Nor without a
+    // session id: our survey always sends one, so we can't say what such a caller saw.
+    sessionId && !prepaidToken ? EMAIL_QUESTION_WINNER : null
   );
 
   if (website) {
