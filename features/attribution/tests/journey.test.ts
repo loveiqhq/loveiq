@@ -7,6 +7,7 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
+import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 // The grant's own constant: journey.ts keeps a copy (an import would be circular), and a
 // renamed source would otherwise read every feedback grant as a "€0 code".
@@ -382,6 +383,32 @@ describe("buildSubmissionJourney", () => {
       route({});
       await buildSubmissionJourney(1296);
       expect(queryFor("/payment?")).toContain("payment_date_time,currency,metadata");
+    });
+
+    // None of the four buyers on production on 5 Nov carried a tracker: pay to start is read
+    // off its own payment row, also after a later purchase on the report took the quote.
+    it.each([
+      ["before anything else was bought", []],
+      ["after a full report bought on the report", [QUOTE_PURCHASED]],
+    ])("knows a buyer with no tracker paid to start, %s", async (_when, quotes) => {
+      route({
+        sub: [{ ...SUBMISSION, utm_tracker: null }],
+        quotes,
+        payments: [
+          { ...PAID_BEFORE, amount: 0, metadata: { journey: "pay_to_start", offer: "full" } },
+        ],
+      });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.payToStart).toBe(true);
+      expect(journey?.payToStartOffer).toBe("full");
+      const section = buildJourneyMessage(journey!, {
+        kind: "survey_completed",
+        questionCount: 61,
+      }).blocks.find((b) => b.type === "section") as { text: { text: string } };
+      expect(section.text.text).toContain("Funnel: *Pay to start · €29.99*  |  *Free* (€0 code)");
+      expect(section.text.text).toContain(
+        "Landing page design: *Pay to start (/sexual-archetype)*"
+      );
     });
 
     it("reads a June row with no offer as the full offer, as every other reader does", async () => {

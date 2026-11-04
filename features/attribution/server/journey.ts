@@ -613,6 +613,7 @@ export async function buildSubmissionJourney(
     ? null
     : (payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY) ?? null);
   const purchasedAt = purchased?.purchased_at ?? payToStartPayment?.payment_date_time ?? null;
+  const ptsOffer = payToStartOfferOf(payments);
 
   // The ledger, not the quote: the EUR 1.99 unlock has no quote, and a later full report
   // adds a second payment the quote's price does not show.
@@ -707,8 +708,13 @@ export async function buildSubmissionJourney(
       payments.length > 0 && !payments.some((p) => (toNumber(p.amount) ?? 0) > 0 && !p.is_test),
     quoteCount: quotes.length,
     recordingSessionId: sub.posthog_session_id?.trim() || null,
-    ...(payToStartPayment || isPayToStartTracker(sub.utm_tracker) ? { payToStart: true } : {}),
-    ...payToStartOfferOf(payments),
+    // Pay to start by its own records, its payment row, whatever the tracker says: none of
+    // the four buyers on production on 5 Nov carried a tracker. The tracker's label still
+    // marks a buyer whose payment has not settled into a row yet.
+    ...(ptsOffer.payToStartOffer || isPayToStartTracker(sub.utm_tracker)
+      ? { payToStart: true }
+      : {}),
+    ...ptsOffer,
     gateCohort: stampedAtSubmit(sub.created_date_time, reports[0]?.initial_gate_cohort_at),
     paid,
     freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
