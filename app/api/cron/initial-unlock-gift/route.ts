@@ -35,6 +35,8 @@ import { assignInitialGiftArm } from "@shared/experiments/initialGiftArm";
 import { suppressionState } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -322,10 +324,17 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
     ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, UNSUBSCRIBE_CAMPAIGNS.initialGift)
     : undefined;
   const surveyAt = Date.parse(candidate.survey_submission?.created_date_time ?? "");
+  // The gift is on the report now: its #incoming-surveys message says so ("Free (€1.99
+  // unlock gifted)") rather than waiting for the reader's next visit to redraw it.
+  scheduleAfterResponse("journey-gift-refresh", () =>
+    refreshJourneyDetail(candidate.survey_submission_id)
+  );
   const tpl = initialUnlockGiftEmail({
     answeredYesterday: Date.now() - surveyAt < ANSWERED_YESTERDAY_MS,
     firstName: user?.first_name?.trim() || null,
-    reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
+    // Tagged like the 72h email's, so a return through it is named on the Slack message
+    // (the report page's email_return) and in GA4 and PostHog as the campaign it is.
+    reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email&utm_source=email&utm_medium=nurture&utm_campaign=${STAGE}`,
     siteUrl: ctx.siteUrl,
     unsubscribeUrl,
   });

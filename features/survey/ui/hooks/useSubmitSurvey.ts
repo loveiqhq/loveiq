@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import posthog from "posthog-js";
 import { surveyQuestions } from "@/data/survey-data";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { getLandingPath } from "@shared/url/utm";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
@@ -206,6 +207,7 @@ export function useSubmitSurvey() {
       // Read once: two calls could straddle a PostHog session rollover.
       const replaySessionId = posthogSessionId();
       const optionOrder = buildOptionOrder(payload.answers, payload.sessionId);
+      const landingPath = getLandingPath();
 
       try {
         const res = await fetch("/api/survey", {
@@ -224,6 +226,7 @@ export function useSubmitSurvey() {
             ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
             ...(replaySessionId ? { posthogSessionId: replaySessionId } : {}),
             ...(Object.keys(optionOrder).length > 0 ? { optionOrder } : {}),
+            ...(landingPath ? { landingPath } : {}),
           }),
           ...(controller ? { signal: controller.signal } : {}),
         });

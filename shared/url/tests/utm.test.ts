@@ -2,9 +2,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   captureUtmFromUrl,
+  getLandingPath,
   getStoredUtm,
   GLOBAL_UTM_KEY,
+  LANDING_PATH_KEY,
   LEGACY_UTM_KEY,
+  rememberLandingPath,
   withoutTrackingParams,
 } from "@shared/url/utm";
 
@@ -318,6 +321,48 @@ describe("captureUtmFromUrl — Meta's click id and the referring site", () => {
       visit("", referrer);
       expect(captureUtmFromUrl(), referrer).toBeNull();
     }
+  });
+});
+
+describe("rememberLandingPath — the first page this browser opened", () => {
+  let store: Record<string, string>;
+
+  beforeEach(() => {
+    store = {};
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) => store[key] ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        store[key] = value;
+      }),
+      removeItem: vi.fn(),
+    });
+  });
+
+  function open(pathname: string, search = "") {
+    Object.defineProperty(window, "location", {
+      value: { pathname, search, href: `https://www.loveiq.org${pathname}${search}` },
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  it("keeps the first page, its path only, whatever is opened after it", () => {
+    open("/glossary/sapiosexual", "?utm_source=chatgpt.com");
+    rememberLandingPath();
+    open("/survey");
+    rememberLandingPath();
+    expect(getLandingPath()).toBe("/glossary/sapiosexual");
+    expect(store[LANDING_PATH_KEY]).toBe("/glossary/sapiosexual");
+  });
+
+  it("answers null before any page was kept, and when storage is blocked", () => {
+    expect(getLandingPath()).toBeNull();
+    vi.mocked(localStorage.getItem).mockImplementation(() => {
+      throw new Error("SecurityError");
+    });
+    open("/");
+    expect(() => rememberLandingPath()).not.toThrow();
+    expect(getLandingPath()).toBeNull();
   });
 });
 

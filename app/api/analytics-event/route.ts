@@ -93,6 +93,8 @@ const ALLOWED_EVENTS = [
   "paygate_exit_note",
   "paygate_exit_cta_click",
   "paygate_exit_leave",
+  // The report opened from an email's link: a return, for the Slack journey message
+  "email_return",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -123,6 +125,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "tour_skipped":
     case "tour_left":
     case "tour_replayed":
+    case "email_return":
       return "report";
     case "paywall_view":
     case "paywall_initiated":
@@ -206,6 +209,17 @@ function exitFieldsValid(event: AllowedEvent, metadata: Record<string, unknown> 
   }
 }
 
+/**
+ * An email return's campaign is printed on the Slack journey message by name, so only what
+ * our emails' links carry is stored: a utm-shaped token, or none.
+ */
+function emailReturnValid(event: AllowedEvent, metadata: Record<string, unknown> = {}): boolean {
+  if (event !== "email_return") return true;
+  const campaign = metadata.campaign;
+  if (campaign === null || campaign === undefined) return true;
+  return typeof campaign === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(campaign);
+}
+
 const schema = z.object({
   event_type: z.enum(ALLOWED_EVENTS),
   // Required: events without a submission FK can't be surfaced in the admin
@@ -249,8 +263,11 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
-  if (!exitFieldsValid(parsed.data.event_type, parsed.data.metadata)) {
-    logger.warn({ event: parsed.data.event_type }, "analytics-event: refused an exit page's field");
+  if (
+    !exitFieldsValid(parsed.data.event_type, parsed.data.metadata) ||
+    !emailReturnValid(parsed.data.event_type, parsed.data.metadata)
+  ) {
+    logger.warn({ event: parsed.data.event_type }, "analytics-event: refused a field");
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
@@ -388,7 +405,10 @@ export async function POST(request: Request) {
      * could drive `chat.update` past its Tier 3 budget against guessed
      * sequential ids.
      */
-    const isMilestone = DWELL_MILESTONES.has(event_type);
+    // An email return keeps a slot of its own too: it lands with the open's burst
+    // (report_viewed and friends), whose shared slot would otherwise swallow the one
+    // refresh that names it.
+    const isMilestone = DWELL_MILESTONES.has(event_type) || event_type === "email_return";
     const fresh = await checkRateLimit(
       isMilestone ? `${submission_id}:${event_type}` : String(submission_id),
       isMilestone

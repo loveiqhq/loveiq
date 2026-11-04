@@ -8,6 +8,9 @@ vi.mock("@features/admin/server/supabase", () => ({
 
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
+// The grant's own constant: journey.ts keeps a copy (an import would be circular), and a
+// renamed source would otherwise read every feedback grant as a "€0 code".
+import { UNLOCK_FEEDBACK_SOURCE } from "@features/unlock-feedback/server/grant";
 
 function ok(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response;
@@ -52,11 +55,15 @@ function route(handlers: {
   events?: unknown;
   reportSessions?: unknown;
   payments?: unknown;
+  reports?: unknown;
+  returns?: unknown;
 }) {
   mockSupabaseFetch.mockImplementation(async (path: string) => {
     if (path.includes("/survey_submission?")) return ok(handlers.sub ?? [SUBMISSION]);
     if (path.includes("/report_price_quote?")) return ok(handlers.quotes ?? []);
+    if (path.includes("event_type=eq.email_return")) return ok(handlers.returns ?? []);
     if (path.includes("/analytics_event?")) return ok(handlers.events ?? []);
+    if (path.includes("/personal_report?")) return ok(handlers.reports ?? []);
     if (path.includes("/report_session?")) return ok(handlers.reportSessions ?? []);
     if (path.includes("/payment?")) return ok(handlers.payments ?? []);
     throw new Error(`unexpected path: ${path}`);
@@ -86,13 +93,14 @@ describe("buildSubmissionJourney", () => {
     });
   });
 
-  it("fetches its five sources concurrently, not sequentially", async () => {
+  it("fetches its seven sources concurrently, not sequentially", async () => {
     route({ quotes: [QUOTE_PURCHASED] });
     await buildSubmissionJourney(1296);
     // One call per source, issued in one Promise.all wave. report_session is
     // the server-side proof that the report was opened; payment says whether
-    // any money changed hands.
-    expect(mockSupabaseFetch).toHaveBeenCalledTimes(5);
+    // any money changed hands; personal_report holds the EUR 1.99 gate's
+    // cohort stamp, and the email returns are analytics rows of their own.
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(7);
   });
 
   it("masks the email and never exposes the raw address", async () => {
@@ -371,6 +379,116 @@ describe("buildSubmissionJourney", () => {
       route({});
       await buildSubmissionJourney(1296);
       expect(queryFor("/payment?")).toContain("payment_date_time,currency,metadata");
+    });
+
+    it("names the page's own price, whatever a code took off it", async () => {
+      route({
+        payments: [
+          {
+            ...PAID_BEFORE,
+            amount: 0,
+            metadata: { journey: "pay_to_start", offer: "pre", listPrice: "1.99" },
+          },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.payToStartPrice).toBe(1.99);
+    });
+
+    it("reads a June row with no offer as the full offer at its default price", async () => {
+      route({ payments: [PAID_BEFORE] });
+      expect((await buildSubmissionJourney(1296))?.payToStartPrice).toBe(29.99);
+    });
+
+    it("has no page price for anyone who did not pay before the survey", async () => {
+      route({ payments: [{ ...PAID_BEFORE, metadata: { plan: "initial" } }] });
+      expect(await buildSubmissionJourney(1296)).not.toHaveProperty("payToStartPrice");
+    });
+  });
+
+  /**
+   * The #incoming-surveys rework (sync 3/4 Nov): the funnel, Free or Paid with the price
+   * actually paid, and the email links a reader came back through.
+   */
+  describe("funnel, money and returns", () => {
+    const pay = (amount: number | string, metadata: Record<string, unknown> = {}, over = {}) => ({
+      amount,
+      is_test: false,
+      payment_date_time: "2026-11-02T10:00:00.000Z",
+      currency: "eur",
+      metadata,
+      ...over,
+    });
+
+    it("knows the report was stamped into the EUR 1.99 gate's cohort", async () => {
+      route({ reports: [{ initial_gate_cohort_at: "2026-11-02T09:00:00.000Z" }] });
+      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(true);
+      expect(queryFor("/personal_report?")).toContain(
+        "survey_submission_id=eq.1296&select=initial_gate_cohort_at"
+      );
+
+      route({ reports: [{ initial_gate_cohort_at: null }] });
+      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
+      route({});
+      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
+    });
+
+    it("lists every payment that took money, oldest first, and none that did not", async () => {
+      route({
+        payments: [
+          pay("1.99", { plan: "initial", unlockSource: "report_gate" }),
+          pay(19.99, { plan: "full_report" }, { payment_date_time: "2026-11-03T10:00:00.000Z" }),
+          pay(29.99, {}, { is_test: true }),
+          pay(0, { gifted: "e07" }),
+        ],
+      });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.paid).toEqual([
+        { amount: 1.99, currency: "EUR" },
+        { amount: 19.99, currency: "EUR" },
+      ]);
+      // Paid is the answer; the EUR 0 rows are no reason to say Free.
+      expect(journey?.freeUnlocks).toEqual([]);
+      expect(queryFor("/payment?")).toContain("&order=payment_date_time.asc");
+    });
+
+    it.each([
+      ["E07's gift", pay(0, { plan: "initial", gifted: "e07" }), "gift"],
+      ["the unlock-feedback grant", pay(0, { source: UNLOCK_FEEDBACK_SOURCE }), "feedback"],
+      ["a 100% code", pay(0, { plan: "initial", unlockSource: "report_gate" }), "code"],
+      ["the team's own purchase", pay(29.99, {}, { is_test: true }), "test"],
+    ])("says what a free unlock was: %s", async (_label, payment, kind) => {
+      route({ payments: [payment] });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.paid).toEqual([]);
+      expect(journey?.freeUnlocks).toEqual([kind]);
+    });
+
+    it("has nothing to say about money before any payment", async () => {
+      route({});
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.paid).toEqual([]);
+      expect(journey?.freeUnlocks).toEqual([]);
+    });
+
+    it("collects the email returns, the feedback answer's among them, in time order", async () => {
+      route({
+        returns: [
+          { event_time: "2026-11-03T08:00:00.000Z", metadata: { campaign: "72h_no_unlock" } },
+          { event_time: "2026-11-05T08:00:00.000Z", metadata: { campaign: 42 } },
+        ],
+        payments: [
+          pay(0, { source: UNLOCK_FEEDBACK_SOURCE }, { payment_date_time: "2026-11-04T08:00:00Z" }),
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.emailReturns).toEqual([
+        { campaign: "72h_no_unlock", at: "2026-11-03T08:00:00.000Z" },
+        { campaign: "unlock_feedback", at: "2026-11-04T08:00:00Z" },
+        // A campaign that is no string is no name: an untagged email link.
+        { campaign: null, at: "2026-11-05T08:00:00.000Z" },
+      ]);
+      expect(queryFor("event_type=eq.email_return")).toContain(
+        "survey_submission_id=eq.1296&event_type=eq.email_return&select=event_time,metadata"
+      );
     });
   });
 

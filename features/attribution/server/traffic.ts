@@ -7,6 +7,9 @@
  * a second, subtly different copy.
  */
 
+/** The tracker's key for the first page the browser opened, stamped by /api/survey. */
+export const LANDING_PATH_TRACKER_KEY = "landing_path";
+
 // Paid-traffic media identifiers (utm_medium). Anything here, or any utm_campaign
 // at all, classifies the visit as a paid acquisition.
 const PAID_UTM_MEDIA = new Set(["cpc", "ppc", "paid", "paid_social", "ads", "display"]);
@@ -26,6 +29,12 @@ export type TrafficInfo = {
   keyword: string | null;
   matchType: string | null;
   network: string | null;
+  /**
+   * The first page this browser opened on the site (`landing_path`, stamped by
+   * /api/survey from shared/url/utm.ts's first-touch record), e.g. a glossary term.
+   * Absent before 2026-11-05 and on any survey sent without it.
+   */
+  landingPath?: string | null;
 };
 
 // Classify the visitor's acquisition channel from the survey_submission.utm_tracker
@@ -59,8 +68,11 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
     }
   }
 
-  const source = str(parsed.utm_source);
+  // With no utm_source, the referring site is the source: an organic search or a social
+  // app's link was "Direct" in Slack while its referrer_host sat in the tracker unread.
+  const source = str(parsed.utm_source) ?? str(parsed.referrer_host);
   const medium = str(parsed.utm_medium);
+  const landingPath = str(parsed.landing_path); // LANDING_PATH_TRACKER_KEY
   const campaign = str(parsed.utm_campaign);
 
   let bucket: TrafficInfo["bucket"];
@@ -90,6 +102,7 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
     keyword: str(parsed.utm_term),
     matchType: str(parsed.matchtype),
     network: str(parsed.network),
+    ...(landingPath ? { landingPath } : {}),
   };
 }
 

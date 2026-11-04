@@ -1,6 +1,31 @@
 import { describe, expect, it } from "vitest";
 
-import { readStampedArms } from "@features/attribution/server/traffic";
+import {
+  classifyTraffic,
+  LANDING_PATH_TRACKER_KEY,
+  readStampedArms,
+} from "@features/attribution/server/traffic";
+
+describe("classifyTraffic — where they came from", () => {
+  it("takes the referring site as the source when no campaign tag names one", () => {
+    // An organic search: 10 of the last 30 days' surveys read "Direct" with this unread.
+    const organic = classifyTraffic(JSON.stringify({ referrer_host: "www.google.com" }));
+    expect(organic).toMatchObject({ bucket: "Organic", source: "www.google.com" });
+  });
+
+  it("keeps a tagged source over the referrer", () => {
+    const tagged = classifyTraffic(
+      JSON.stringify({ utm_source: "chatgpt.com", referrer_host: "chatgpt.com.example" })
+    );
+    expect(tagged.source).toBe("chatgpt.com");
+  });
+
+  it("reads the first page the survey route stamps", () => {
+    const tracker = JSON.stringify({ [LANDING_PATH_TRACKER_KEY]: "/glossary/sapiosexual" });
+    expect(classifyTraffic(tracker).landingPath).toBe("/glossary/sapiosexual");
+    expect(classifyTraffic(JSON.stringify({ utm_source: "x" }))).not.toHaveProperty("landingPath");
+  });
+});
 
 describe("readStampedArms", () => {
   it("reads both arms stamped at submit time", () => {

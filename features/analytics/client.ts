@@ -124,6 +124,8 @@ const PERSISTED_EVENTS = new Set([
   "paygate_exit_note",
   "paygate_exit_cta_click",
   "paygate_exit_leave",
+  // The report opened from an email's link (from=email / utm_source=email): a return
+  "email_return",
 ]);
 
 /**
@@ -922,6 +924,25 @@ export const markLeftInitialGate = () => {
  * until 28.10, the gate's exit page (`exit_page`) since. Persisted, so a later payment can be
  * set against it.
  */
+/**
+ * The report opened from one of our emails' links: `from=email`, which every report link we
+ * mail carries, or `utm_source=email`. `campaign` names the email when its link says
+ * (`utm_campaign`: the 72h email's stage, E07's `initial_gift`), null when it does not (the
+ * report-ready, purchase and invite emails). Persisted: the #incoming-surveys message reads
+ * it as "Came back by email".
+ */
+export const emailReturnOf = (params: {
+  get(name: string): string | null;
+}): { campaign: string | null } | null =>
+  params.get("from") === "email" || params.get("utm_source") === "email"
+    ? { campaign: params.get("utm_campaign") || null }
+    : null;
+
+export const trackEmailReturn = (params: { campaign: string | null }) => {
+  track("email_return", params);
+  persistAnalyticsEvent("email_return", params);
+};
+
 export const trackInitialGateBack = (params: { to: string }) => {
   track("initial_gate_back", params);
   persistAnalyticsEvent("initial_gate_back", params);

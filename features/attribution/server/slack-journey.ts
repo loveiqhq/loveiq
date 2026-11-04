@@ -18,7 +18,10 @@ import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   isReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import type { SubmissionJourney } from "@features/attribution/server/journey";
+import type { FreeUnlock, SubmissionJourney } from "@features/attribution/server/journey";
+import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
+import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
+import { REPORTING_TIME_ZONE } from "@shared/time/reporting-day";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { describeQuestionCount } from "@features/survey/server/utils";
 import {
@@ -317,6 +320,99 @@ function formatReportDwell(ms: number | null | undefined): string {
   return formatDuration(ms) ?? "—";
 }
 
+/** "€1.99", "€30"; another currency as "USD 9.99". */
+function priceText(amount: number, currency = "EUR"): string {
+  return currency === "EUR"
+    ? formatOfferPrice(Math.round(amount * 100))
+    : `${escapeSlack(currency)} ${amount.toFixed(2)}`;
+}
+
+function freeUnlockText(kind: FreeUnlock): string {
+  switch (kind) {
+    case "gift":
+      return `${formatOfferPrice(INITIAL_UNLOCK_PRICE_CENTS)} unlock gifted`;
+    case "feedback":
+      return "full report for feedback";
+    case "test":
+      return "team test";
+    case "code":
+      return "€0 code";
+  }
+}
+
+/**
+ * The funnel and what it took: "Funnel: *Pay to unlock €1.99*  |  *Paid €1.99*".
+ *
+ * One set of names (sync 3 Nov: "pay to start" and "pay to unlock"). PAY TO START paid
+ * before the survey, named by its page's price (/sexual-archetype €29.99, /initial
+ * €1.99); one whose payment has not settled yet has no price to name. PAY TO UNLOCK took
+ * the free survey: "€1.99" while the gate's cohort stamp puts the EUR 1.99 page before
+ * the report, bare when the report's own paywall is the first offer (the gate off).
+ *
+ * Free or Paid comes off the payment ledger, every payment that took money, so it moves
+ * when they buy again (a EUR 1.99 unlock, then the full report). A EUR 0 unlock reads
+ * Free and says what it was.
+ */
+function funnelLine(journey: SubmissionJourney): string {
+  // The tracker's pay-to-start label with no payment yet and no gate stamp: the claim is
+  // still settling (an unused token that bought nothing joins the gate's cohort instead).
+  const pending =
+    Boolean(journey.payToStart) && journey.payToStartPrice === undefined && !journey.gateCohort;
+  const funnel =
+    journey.payToStartPrice !== undefined
+      ? `Pay to start ${priceText(journey.payToStartPrice)}`
+      : journey.gateCohort
+        ? `Pay to unlock ${formatOfferPrice(INITIAL_UNLOCK_PRICE_CENTS)}`
+        : pending
+          ? "Pay to start"
+          : "Pay to unlock";
+
+  const paid = journey.paid ?? [];
+  const free = (journey.freeUnlocks ?? []).map(freeUnlockText);
+  const money =
+    paid.length > 0
+      ? `*Paid ${paid.map((p) => priceText(p.amount, p.currency)).join(" + ")}*`
+      : pending
+        ? "*Payment pending*"
+        : free.length > 0
+          ? `*Free* (${free.join(", ")})`
+          : "*Free*";
+  return `Funnel: *${funnel}*  |  ${money}`;
+}
+
+/** The email a return link came from, by the link's utm_campaign. */
+function emailName(campaign: string | null): string {
+  switch (campaign) {
+    case null:
+      return "email link";
+    case "72h_no_unlock":
+      return "72h email";
+    case "initial_gift":
+      return "gift email (E07)";
+    case "unlock_feedback":
+      return "unlock feedback email";
+    case "chapter_nudge":
+      return "chapter email";
+    default:
+      return escapeSlack(campaign);
+  }
+}
+
+/** "Came back by email: *72h email* 5 Nov, *gift email (E07)* 6 Nov": each email once, first return. */
+function emailReturnsLine(journey: SubmissionJourney): string | null {
+  const first = new Map<string | null, string>();
+  for (const r of journey.emailReturns ?? [])
+    if (!first.has(r.campaign)) first.set(r.campaign, r.at);
+  if (first.size === 0) return null;
+  const day = (at: string) =>
+    new Date(at).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: REPORTING_TIME_ZONE,
+    });
+  return `Came back by email: ${[...first].map(([c, at]) => `*${emailName(c)}* ${day(at)}`).join(", ")}`;
+}
+
 /**
  * Bold the arm's NAME and leave its parenthetical description plain, so
  * "Landing Page V1 (First Design)" renders as "*Landing Page V1* (First
@@ -378,6 +474,9 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   const title = `${journey.internal ? INTERNAL_TAG : ""}Survey submission ${bold(`#${journey.submissionId}`)}`;
   const lines: string[] = [
     journey.emailMasked ? `${title} ${codeSpan(journey.emailMasked)}` : title,
+    // Second, as the line the channel is read for (sync 4 Nov: "paid or free, and where
+    // it came from").
+    funnelLine(journey),
   ];
 
   /**
@@ -410,6 +509,11 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
     `Came from: ${bold(escapeSlack(traffic.head || "Not recorded"))}` +
       `${traffic.detail ? ` — ${traffic.detail}` : ""}`
   );
+  // The first page this browser opened (a glossary term, say): a path, so a code span,
+  // where its `*` and `_` stay literal. Omitted when the survey did not carry it.
+  if (journey.traffic.landingPath) {
+    lines.push(`First page: ${codeSpan(journey.traffic.landingPath)}`);
+  }
 
   if (journey.device) lines.push(`Device: ${bold(escapeSlack(journey.device))}`);
 
@@ -436,6 +540,9 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   if (journey.country) {
     lines.push(`Country (self-reported): ${bold(escapeSlack(journey.country))}`);
   }
+
+  const returned = emailReturnsLine(journey);
+  if (returned) lines.push(returned);
 
   /**
    * The rail goes last, and `clampBlock` truncates a section from the END at

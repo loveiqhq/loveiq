@@ -37,6 +37,10 @@ vi.mock("next/headers", () => ({
     get: (name: string) => (name === "uf_t" && state.cookie ? { value: state.cookie } : undefined),
   }),
 }));
+const mockRefreshJourneyDetail = vi.fn();
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
+}));
 
 const { createFakeDb, READER } = await import("./fakeDb");
 const { GET: open } = await import("@/app/api/unlock-feedback/open/route");
@@ -207,6 +211,8 @@ describe("POST /api/unlock-feedback/answer", () => {
       answer_loads: 2,
     });
     expect(state.db.grants()).toHaveLength(1);
+    // The #incoming-surveys message names the return and the free report, on the first answer.
+    expect(mockRefreshJourneyDetail.mock.calls).toEqual([[READER.submissionId]]);
   });
 
   it("two posts at the same instant: one first answer, one grant, both counted", async () => {

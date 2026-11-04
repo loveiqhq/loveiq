@@ -203,3 +203,64 @@ describe("POST /api/survey — the landing arm on the submission", () => {
     expect(trackerOnPayload()).toBeNull();
   });
 });
+
+/**
+ * The first page the browser opened, for the Slack journey's "First page" (a glossary term,
+ * say). Attribution the session id cannot give back, so unlike the arms it may start a tracker.
+ */
+describe("POST /api/survey — the first page on the submission", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockVerifyCsrf.mockResolvedValue(true);
+    mockCheckRateLimit.mockResolvedValue({
+      allowed: true,
+      remaining: 2,
+      resetAt: new Date(Date.now() + 60_000),
+    });
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    mockComputeSurveyScoring.mockReturnValue(null);
+    mockEnsureSubmissionScored.mockResolvedValue({ primaryArchetype: "Spark Seeker" });
+    mockEnsurePersonalReportForSubmission.mockResolvedValue({ id: 10 });
+    mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 123, isExisting: false });
+    mockAfter.mockImplementation(() => undefined);
+    mockCookieGet.mockReturnValue(undefined);
+  });
+
+  it("starts a tracker for a visitor who carried nothing else", async () => {
+    const res = await POST(makeRequest({ ...validBody(), landingPath: "/glossary/sapiosexual" }));
+    expect(res.status).toBe(200);
+    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/sapiosexual" });
+  });
+
+  it("joins the campaign tags, and replaces a first page the tracker claims", async () => {
+    const res = await POST(
+      makeRequest({
+        ...validBody(),
+        utmTracker: JSON.stringify({ utm_source: "chatgpt.com", landing_path: "/claimed" }),
+        landingPath: "/glossary/sapiosexual",
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(trackerOnPayload()).toEqual({
+      utm_source: "chatgpt.com",
+      ...C13,
+      ...EMAIL,
+      landing_path: "/glossary/sapiosexual",
+    });
+  });
+
+  it("keeps a report's token out of the database", async () => {
+    await POST(makeRequest({ ...validBody(), landingPath: "/report/rpt_ABCDEFGHIJKLMNOPQRST" }));
+    expect(trackerOnPayload()).toEqual({ landing_path: "/report/<redacted>" });
+  });
+
+  it.each(["https://evil.example/x", "/glossary?q=1", "glossary", "/a b"])(
+    "drops %s rather than refusing the survey",
+    async (landingPath) => {
+      const res = await POST(makeRequest({ ...validBody(), landingPath }));
+      expect(res.status).toBe(200);
+      expect(trackerOnPayload()).toBeNull();
+    }
+  );
+});
