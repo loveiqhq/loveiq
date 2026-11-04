@@ -101,8 +101,10 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     // Why a body was refused, never the body (it carries a visitor's ids): the persona walks'
     // iPhone runs have met a 400 here on every walk since 2026-10-19, and nothing said why.
-    // An empty or unreadable body (`body: null`) points at the browser's beacon, a named
-    // field at the caller. A warning: the logger mirrors only errors to Slack.
+    // An empty or unreadable body (`body: null`) points at the browser's beacon (the walks'
+    // was Playwright's WebKit emptying Blob beacons under a request route; the senders send
+    // strings since 04.11), a named field at the caller. A warning: the logger mirrors only
+    // errors to Slack.
     logger.warn(
       {
         body: body === null ? null : typeof body,

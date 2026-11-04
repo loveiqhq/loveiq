@@ -20,8 +20,9 @@ async function recordAnalytics(page: Page) {
     w.__analytics = [];
     const send = navigator.sendBeacon.bind(navigator);
     navigator.sendBeacon = (url, data) => {
-      if (String(url).endsWith("/api/analytics-event") && data instanceof Blob) {
-        void data.text().then((text) => w.__analytics.push(text));
+      // The page sends its JSON as a string (features/analytics/client.ts).
+      if (String(url).endsWith("/api/analytics-event") && typeof data === "string") {
+        w.__analytics.push(data);
       }
       return send(url, data);
     };

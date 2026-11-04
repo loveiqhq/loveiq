@@ -236,8 +236,10 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     // Why a body was refused, never the body (it carries a visitor's ids): the persona walks'
     // iPhone runs have met a 400 here on every walk since 2026-10-19, and nothing said why.
-    // An empty or unreadable body (`body: null`) points at the browser's beacon, a named
-    // field at the caller. A warning: the logger mirrors only errors to Slack.
+    // An empty or unreadable body (`body: null`) points at the browser's beacon (the walks'
+    // was Playwright's WebKit emptying Blob beacons under a request route; the senders send
+    // strings since 04.11), a named field at the caller. A warning: the logger mirrors only
+    // errors to Slack.
     logger.warn(
       {
         body: body === null ? null : typeof body,
@@ -285,60 +287,67 @@ export async function POST(request: Request) {
   }
   void parsed.data._csrf;
 
-  // FK guard: ensure the submission exists. analytics_event has a real FK to
-  // survey_submission and inserts with a bogus id would 409 noisily.
-  const lookup = await supabaseFetch(
-    `/rest/v1/survey_submission?id=eq.${submission_id}&select=id&limit=1`
-  );
-  if (!lookup.ok) {
-    return new NextResponse(null, { status: 204 });
-  }
-  const rows = (await lookup.json()) as Array<{ id: number }>;
-  if (rows.length === 0) {
-    // Unknown submission id — silently drop. Don't tell the client whether
-    // it exists.
-    return new NextResponse(null, { status: 204 });
-  }
-
-  const insertRes = await supabaseFetch("/rest/v1/analytics_event", {
-    method: "POST",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      event_type,
-      entity_type: entityTypeFor(event_type),
-      // entity_id is NOT NULL bigint — pair it with the submission id so
-      // entity_type:entity_id has consistent meaning across rows.
-      entity_id: submission_id,
-      survey_submission_id: submission_id,
-      // A report token is the auth on a report, so it must not persist here.
-      // Applied at the INSERT rather than at the parse, because this is the
-      // only point that sees exactly what is about to be written — and the
-      // PostHog event, which we decided to keep intact, has already been sent
-      // from the client by now. See shared/format/redact-report-token.ts.
-      metadata: redactReportTokensDeep(clampExitNote(event_type, metadata ?? {})),
-      ...(typeof duration_ms === "number" ? { duration_ms } : {}),
-    }),
-  });
-
-  if (!insertRes.ok) {
-    // warn-not-error: best-effort event capture, route already returns 204
-    // regardless. Capture response body for diagnosis (PostgREST surfaces
-    // code/message/details on 4xx).
-    let respBody = "";
-    try {
-      if (typeof insertRes.clone === "function") {
-        respBody = await insertRes.clone().text();
-      } else if (typeof insertRes.text === "function") {
-        respBody = await insertRes.text();
-      }
-    } catch {
-      // Best-effort capture only.
-    }
-    logger.warn(
-      { status: insertRes.status, event_type, respBody: respBody.slice(0, 500) },
-      "analytics_event insert non-2xx"
+  // Best effort, as every answer below is a 204: a timeout, an open breaker or an unreadable
+  // reply loses this one event, and is no reason to answer a beacon with a 500.
+  try {
+    // FK guard: ensure the submission exists. analytics_event has a real FK to
+    // survey_submission and inserts with a bogus id would 409 noisily.
+    const lookup = await supabaseFetch(
+      `/rest/v1/survey_submission?id=eq.${submission_id}&select=id&limit=1`
     );
-    // Don't leak details — return 204 so the client doesn't retry endlessly.
+    if (!lookup.ok) {
+      return new NextResponse(null, { status: 204 });
+    }
+    const rows = (await lookup.json()) as Array<{ id: number }>;
+    if (rows.length === 0) {
+      // Unknown submission id — silently drop. Don't tell the client whether
+      // it exists.
+      return new NextResponse(null, { status: 204 });
+    }
+
+    const insertRes = await supabaseFetch("/rest/v1/analytics_event", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        event_type,
+        entity_type: entityTypeFor(event_type),
+        // entity_id is NOT NULL bigint — pair it with the submission id so
+        // entity_type:entity_id has consistent meaning across rows.
+        entity_id: submission_id,
+        survey_submission_id: submission_id,
+        // A report token is the auth on a report, so it must not persist here.
+        // Applied at the INSERT rather than at the parse, because this is the
+        // only point that sees exactly what is about to be written — and the
+        // PostHog event, which we decided to keep intact, has already been sent
+        // from the client by now. See shared/format/redact-report-token.ts.
+        metadata: redactReportTokensDeep(clampExitNote(event_type, metadata ?? {})),
+        ...(typeof duration_ms === "number" ? { duration_ms } : {}),
+      }),
+    });
+
+    if (!insertRes.ok) {
+      // warn-not-error: best-effort event capture, route already returns 204
+      // regardless. Capture response body for diagnosis (PostgREST surfaces
+      // code/message/details on 4xx).
+      let respBody = "";
+      try {
+        if (typeof insertRes.clone === "function") {
+          respBody = await insertRes.clone().text();
+        } else if (typeof insertRes.text === "function") {
+          respBody = await insertRes.text();
+        }
+      } catch {
+        // Best-effort capture only.
+      }
+      logger.warn(
+        { status: insertRes.status, event_type, respBody: respBody.slice(0, 500) },
+        "analytics_event insert non-2xx"
+      );
+      // Don't leak details — return 204 so the client doesn't retry endlessly.
+      return new NextResponse(null, { status: 204 });
+    }
+  } catch (err) {
+    logger.warn({ err, event_type }, "analytics-event: the database could not be reached");
     return new NextResponse(null, { status: 204 });
   }
 

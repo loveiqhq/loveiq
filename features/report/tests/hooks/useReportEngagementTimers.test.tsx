@@ -252,26 +252,12 @@ describe("useReportEngagementTimers — session close beacon", () => {
     sent = [];
     Object.defineProperty(navigator, "sendBeacon", {
       configurable: true,
-      value: (url: string, blob: Blob) => {
-        // jsdom's Blob.text() is async; read the buffered text synchronously
-        // through the constructor argument instead.
-        sent.push({ url, body: (blob as Blob & { __text?: string }).__text ?? "" });
+      // The body is the JSON string itself (a Blob is emptied by Playwright's WebKit).
+      value: (url: string, body: string) => {
+        sent.push({ url, body });
         return true;
       },
     });
-    // Capture the payload at construction — Blob.text() cannot be awaited inside
-    // a synchronous unload handler, and that is the whole point of a beacon.
-    const RealBlob = globalThis.Blob;
-    vi.stubGlobal(
-      "Blob",
-      class extends RealBlob {
-        __text: string;
-        constructor(parts: BlobPart[], options?: BlobPropertyBag) {
-          super(parts, options);
-          this.__text = parts.map(String).join("");
-        }
-      }
-    );
     window.__loveiqReportSubmissionId = 2113;
   });
 

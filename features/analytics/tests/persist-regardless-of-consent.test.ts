@@ -117,16 +117,17 @@ describe("first-party events are written whatever the banner says", () => {
     priceShown();
 
     expect(beacon).toHaveBeenCalledTimes(1);
-    const [url, blob] = beacon.mock.calls[0]!;
+    const [url, body] = beacon.mock.calls[0]!;
     expect(url).toBe("/api/analytics-event");
-    expect(blob).toBeInstanceOf(Blob);
+    // A string, never a Blob: Playwright's WebKit empties a Blob beacon under a route.
+    expect(typeof body).toBe("string");
   });
 
   it("carries the submission id and a CSRF token in the body", async () => {
     declineConsent();
     (window as unknown as Record<string, unknown>).__loveiqReportSubmissionId = 1296;
     priceShown();
-    const body = JSON.parse(await (beacon.mock.calls[0]![1] as Blob).text()) as {
+    const body = JSON.parse(beacon.mock.calls[0]![1] as string) as {
       submission_id: number;
       event_type: string;
       _csrf: string;
@@ -251,7 +252,7 @@ describe("reading per chapter stays in our own table", () => {
     });
 
     expect(beacon).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(await (beacon.mock.calls[0]![1] as Blob).text()) as {
+    const body = JSON.parse(beacon.mock.calls[0]![1] as string) as {
       event_type: string;
       metadata: Record<string, unknown>;
     };
