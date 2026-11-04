@@ -58,7 +58,7 @@ function makeRequest(body: unknown) {
   });
 }
 
-/** The email test's arm for validBody()'s session (written out, so a re-split fails). */
+/** The email question's version: anonymous for every free run since its test ended. */
 const EMAIL = { contact_question_arm: "anonymous" };
 
 function validBody() {
@@ -158,19 +158,20 @@ describe("POST /api/survey-partial", () => {
 
   /**
    * The draft is the only row someone who stops at the email question leaves behind,
-   * so the email test's arm goes on it too: derived from the session id, never taken
-   * from the body, and only onto a tracker that exists. Literal arms, so a change to
-   * the hash or the salt fails here.
+   * so the email question's version goes on it too: never taken from the body, and only
+   * onto a tracker that exists. Since its test ended (4 Nov 2026) every free run is shown,
+   * and stamped, the anonymous one, whichever arm its session id drew during the test.
    */
   it.each([
-    { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
-    { sessionId: "00000000-0000-4000-8000-000000000000", arm: "anonymous" },
-  ] as const)("stamps the email question the respondent saw ($arm)", async ({ sessionId, arm }) => {
+    // Drew control during the test, then anonymous.
+    "00000000-0000-4000-8000-000000000007",
+    "00000000-0000-4000-8000-000000000000",
+  ])("stamps the anonymous version on every free run (%s)", async (sessionId) => {
     await POST(
       makeRequest({ ...validBody(), sessionId, utmTracker: JSON.stringify({ utm_source: "x" }) })
     );
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
-    expect(JSON.parse(row.utm_tracker).contact_question_arm).toBe(arm);
+    expect(JSON.parse(row.utm_tracker).contact_question_arm).toBe("anonymous");
   });
 
   it("never creates a tracker just for the email question's arm", async () => {
@@ -180,18 +181,18 @@ describe("POST /api/survey-partial", () => {
     expect(row.utm_tracker).toBeNull();
   });
 
-  it("replaces an email arm the body claims with the derived one", async () => {
+  it("replaces an email version the body claims with the one shown", async () => {
     await POST(
       makeRequest({
         ...validBody(),
         sessionId: "00000000-0000-4000-8000-000000000007",
-        utmTracker: JSON.stringify({ utm_source: "x", contact_question_arm: "anonymous" }),
+        utmTracker: JSON.stringify({ utm_source: "x", contact_question_arm: "control" }),
       })
     );
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
     expect(JSON.parse(row.utm_tracker)).toEqual({
       utm_source: "x",
-      contact_question_arm: "control",
+      contact_question_arm: "anonymous",
     });
   });
 

@@ -1,6 +1,9 @@
 /**
  * The email question test: today's question against Marcus's "anonymous" redesign
- * (Figma IdxyUUVvJSYRTpI9CYRtJI 11600:15119). A 50/50 split.
+ * (Figma IdxyUUVvJSYRTpI9CYRtJI 11600:15119). A 50/50 split from EMAIL_QUESTION_TEST_START
+ * to EMAIL_QUESTION_TEST_END; since then every free survey run is asked the anonymous
+ * version (EMAIL_QUESTION_WINNER). What follows describes the test while it ran, which is
+ * how its readouts still recompute each run's arm.
  *
  * WHY. The email question loses about 12% of the people who reach it, the most of any
  * question, and most of them leave without typing anything (Eman, 07.10). At the
@@ -32,6 +35,24 @@ export type EmailQuestionArm = "control" | "anonymous";
 /** The experiment's name in analytics and its salt. */
 export const EMAIL_QUESTION_EXPERIMENT = "survey-email-anonymous";
 
+/** The test's start: production deployment ready for #539 (11:12 Berlin). */
+export const EMAIL_QUESTION_TEST_START = "2026-10-08T09:12:46Z";
+
+/**
+ * The test's end. The team called it for the anonymous version (LoveIQ Sync, 2 Nov 2026:
+ * 91% against 86% of the runs that reached the question went on to finish) and agreed on
+ * 4 Nov to give it to everyone. Set just before that release merged, never after the
+ * moment it went live: a run begun from here on is outside every readout of the test,
+ * because its arm, recomputed from the session id, is no longer what it was shown.
+ */
+export const EMAIL_QUESTION_TEST_END = "2026-11-04T15:00:00Z";
+
+/**
+ * The version every free survey run is asked since the test ended. A buyer who paid
+ * before the survey (pay to start) still gets today's question: see SurveyEngine.
+ */
+export const EMAIL_QUESTION_WINNER = "anonymous" satisfies EmailQuestionArm;
+
 /**
  * The arm's key in `utm_tracker` (`survey_submission`, `survey_partial_save`), and its
  * name on PostHog and GA4. Not "email_question_arm": the admin's UTM filter matches any
@@ -58,8 +79,10 @@ export function resolveEmailQuestionOverride(
 }
 
 /**
- * This session's arm. Pure, deterministic and total: the same session id always
- * returns the same arm, and an absent one always returns control.
+ * The arm this session drew while the test ran. Pure, deterministic and total: the same
+ * session id always returns the same arm, and an absent one always returns control.
+ * Only for readouts of runs begun between EMAIL_QUESTION_TEST_START and _END: since the
+ * end nobody is shown it.
  */
 export function assignEmailQuestionArm(sessionId: string | null | undefined): EmailQuestionArm {
   if (!sessionId?.trim()) return "control";

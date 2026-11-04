@@ -3,6 +3,9 @@ import {
   assignEmailQuestionArm,
   EMAIL_QUESTION_ARM_KEY,
   EMAIL_QUESTION_EXPERIMENT,
+  EMAIL_QUESTION_TEST_END,
+  EMAIL_QUESTION_TEST_START,
+  EMAIL_QUESTION_WINNER,
   isEmailQuestionArm,
   resolveEmailQuestionOverride,
 } from "@shared/experiments/emailQuestionArm";
@@ -87,6 +90,18 @@ describe("resolveEmailQuestionOverride", () => {
     for (const junk of [null, undefined, "", "variant", "ANONYMOUS"]) {
       expect(resolveEmailQuestionOverride(junk)).toBeNull();
     }
+  });
+});
+
+describe("the test's window and its outcome", () => {
+  it("ran from #539's release to the switch, and kept the anonymous version", () => {
+    expect(Date.parse(EMAIL_QUESTION_TEST_START)).toBe(Date.parse("2026-10-08T09:12:46Z"));
+    // On the day the team agreed to give it to everyone (4 Nov 2026), Berlin time.
+    const end = Date.parse(EMAIL_QUESTION_TEST_END);
+    expect(end).toBeGreaterThanOrEqual(Date.parse("2026-11-03T23:00:00Z"));
+    expect(end).toBeLessThan(Date.parse("2026-11-04T23:00:00Z"));
+    expect(EMAIL_QUESTION_WINNER).toBe("anonymous");
+    expect(isEmailQuestionArm(EMAIL_QUESTION_WINNER)).toBe(true);
   });
 });
 

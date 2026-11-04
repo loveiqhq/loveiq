@@ -7,8 +7,8 @@ import {
   QUESTION_ORDER_ARM_KEY,
 } from "@shared/experiments/questionOrderArm";
 import {
-  assignEmailQuestionArm,
   EMAIL_QUESTION_ARM_KEY,
+  EMAIL_QUESTION_WINNER,
 } from "@shared/experiments/emailQuestionArm";
 import {
   checkRateLimit,
@@ -556,17 +556,19 @@ export async function POST(request: Request) {
    */
   mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, QUESTION_ORDER_ARM_KEY, questionOrderArm);
   /**
-   * The email question test's arm (`emailQuestionArm.ts`), by the same rules and from
-   * the same session id the browser drew it from, so the stamp is the version this
-   * respondent was shown (a staging preview with `?email=` excepted). It joins after
-   * C13's, so a tracker near the limit gives this one up first.
+   * The email question's version (`emailQuestionArm.ts`), by the same rules, so the stamp
+   * is the version this respondent was shown (a staging preview with `?email=` excepted).
+   * During its test (8 Oct to 4 Nov 2026) that was the arm drawn from the session id; since
+   * then every free run is shown the anonymous one. It joins after C13's, so a tracker near
+   * the limit gives this one up first.
    */
   mergedUtmTracker = mergeTrackerArm(
     mergedUtmTracker,
     EMAIL_QUESTION_ARM_KEY,
     // A buyer who paid before the survey is in no survey test: the browser showed them
-    // today's question (SurveyEngine's payToStart), so no arm is stamped.
-    sessionId && !prepaidToken ? assignEmailQuestionArm(sessionId) : null
+    // today's question (SurveyEngine's payToStart), so nothing is stamped. Nor without a
+    // session id: our survey always sends one, so we can't say what such a caller saw.
+    sessionId && !prepaidToken ? EMAIL_QUESTION_WINNER : null
   );
 
   if (website) {
