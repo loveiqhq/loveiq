@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { AdsResult } from "@features/admin/server/ap/ads";
 import type { StartFact } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
-import { buildTraffic } from "@features/admin/server/ap/traffic";
+import { addDays } from "@features/admin/server/ap/days";
+import { buildTraffic, EMAIL_TEST_LAST_DAY } from "@features/admin/server/ap/traffic";
+import { fields } from "@features/admin/ui/ap/fields/traffic";
+import { EMAIL_QUESTION_TEST_END } from "@shared/experiments/emailQuestionArm";
+import { reportingDay } from "@shared/time/reporting-day";
 
 import { factsFixture, sub } from "./ap-fixtures";
 
@@ -288,6 +292,74 @@ describe("Traffic page builder", () => {
     });
     const a3 = p.experiments.arms.find((a) => a.test === "Pricing 3.0" && a.control)!;
     expect(a3).toMatchObject({ submissions: 2, paymentCvr: 0.5, revPerSub: 14.995 });
+  });
+
+  it("reads the email question test only up to its last day, and says it ended", () => {
+    // A range across the end (1 to 5 Nov 2026). From 4 Nov every free run is asked, and
+    // stamped, the anonymous version, so those days must not count for that arm.
+    const today = "2026-11-06";
+    const at = { today, now: new Date("2026-11-06T10:00:00Z") };
+    const st = (day: string, cq: string, finished: boolean, n: number) =>
+      start({ day, cq, email: true, finished, n });
+    const p = traffic({
+      ...at,
+      filters: parseFilters({ period: "custom", from: "2026-11-01", to: "2026-11-05" }, today),
+      facts: factsFixture({
+        from: "2026-11-01",
+        to: "2026-11-05",
+        asOf: today,
+        starts: [
+          st("2026-11-02", "control", true, 8),
+          st("2026-11-02", "control", false, 2),
+          st("2026-11-03", "anonymous", true, 9),
+          st("2026-11-03", "anonymous", false, 1),
+          st("2026-11-04", "anonymous", false, 50),
+          st("2026-11-05", "anonymous", true, 40),
+        ],
+        subs: [
+          sub({ id: 1, day: "2026-11-03", at: "2026-11-03T10:00:00Z", cq: "anonymous" }),
+          sub({ id: 2, day: "2026-11-05", at: "2026-11-05T10:00:00Z", cq: "anonymous" }),
+        ],
+      }),
+    });
+    const email = p.experiments.arms.filter((a) => a.test === "Email question");
+    expect(email.map((a) => [a.arm, a.metric, a.submissions])).toEqual([
+      ["Previous question", "Finished after the email question (8 of 10)", 0],
+      ["Anonymous email", "Finished after the email question (9 of 10)", 1],
+    ]);
+    expect(email[0]!.note).toBe("9 Oct – 3 Nov 2026 · ended");
+    // Its confidence is final; the running tests' isn't.
+    expect(email.map((a) => a.ended)).toEqual([true, true]);
+    expect(
+      p.experiments.arms.filter((a) => a.test !== "Email question").map((a) => a.ended)
+    ).toEqual([undefined, undefined, undefined, undefined]);
+    // A range wholly after the end has nothing to read, and says why.
+    const after = traffic({
+      ...at,
+      filters: parseFilters({ period: "custom", from: "2026-11-04", to: "2026-11-05" }, today),
+      facts: factsFixture({ from: "2026-11-04", to: "2026-11-05", asOf: today }),
+    });
+    const anonymous = after.experiments.arms.find(
+      (a) => a.test === "Email question" && !a.control
+    )!;
+    expect(anonymous).toMatchObject({
+      submissions: null,
+      lift: null,
+      why: "Ended on 4 Nov 2026: everyone gets the anonymous email now",
+    });
+  });
+
+  it("ends the email test on the last whole day before the switch, here and in its query", () => {
+    expect(EMAIL_TEST_LAST_DAY).toBe(addDays(reportingDay(new Date(EMAIL_QUESTION_TEST_END)), -1));
+    for (const key of ["traffic.expSubmissions", "traffic.lift"]) {
+      const text = fields[key]!.query.text;
+      for (const arm of ["'control', true", "'anonymous', false"]) {
+        expect(text).toContain(
+          `('Email question', ${arm}, DATE '2026-10-09', DATE '${EMAIL_TEST_LAST_DAY}')`
+        );
+      }
+      expect(text).toContain("coalesce(last_day, :to::date)) AS to_day");
+    }
   });
 
   it("says exactly why survey starts are blank", () => {

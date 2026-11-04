@@ -538,6 +538,29 @@ describe("journey dwell refresh", () => {
     expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["the lookup throws (a timeout, an open breaker)", "survey_submission"],
+    ["the insert throws", "analytics_event"],
+  ])("answers 204, not a 500, when %s, and says so in the logs", async (_case, table) => {
+    const { default: logger } = await import("@shared/observability/logger");
+    mockSupabaseFetch.mockImplementation((url: string) => {
+      if (url.includes(`/rest/v1/${table}`)) return Promise.reject(new Error("timeout"));
+      if (url.includes("/rest/v1/survey_submission?id=eq.2013")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: 2013 }]) });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    const res = await POST(
+      makeRequest({ event_type: "report_engagement_5min", submission_id: 2013 })
+    );
+    expect(res.status).toBe(204);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: "report_engagement_5min" }),
+      "analytics-event: the database could not be reached"
+    );
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+  });
+
   /**
    * The milestones fire once per PAGE LOAD, not once per submission — the
    * client's dedupe set is rebuilt on every mount, and production already has a

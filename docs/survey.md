@@ -167,47 +167,53 @@ until then they were orange.
 To read the answers, use the admin CSV export, which has one column per qId. The company brain
 masks `answer_text`, per the decision of 2026-09-09.
 
-### The email question test
+### The email question
 
-The email question loses more of the people who reach it than any other question, about
-12%, and most of them leave without typing anything (LoveIQ Sync, 2026-10-07). Marcus's
-redesign, Figma `IdxyUUVvJSYRTpI9CYRtJI` node `11600:15119`, runs against today's question
-as a 50/50 test named `survey-email-anonymous`:
+The email question lost more of the people who reached it than any other question, about
+12%, and most of them left without typing anything (LoveIQ Sync, 2026-10-07). Marcus's
+redesign, Figma `IdxyUUVvJSYRTpI9CYRtJI` node `11600:15119`, ran against the question of the
+time as a 50/50 test named `survey-email-anonymous` (registry #7), and won: of the runs that
+reached it, 91% went on to finish against 86% (+5.2%, 82% confidence, called on judgement in
+the LoveIQ Sync of 2026-11-02). Since **2026-11-04** every free survey run is asked the
+anonymous version:
 
-|             | `control` (today)                         | `anonymous`                                                      |
+|             | `control` (pay to start only)             | `anonymous` (everyone else)                                      |
 | ----------- | ----------------------------------------- | ---------------------------------------------------------------- |
 | Title       | What is your email?                       | What’s your email? Feel free to use an anonymous one.            |
 | Guide       | "Use an inbox you actually check…"        | The same opening, then the case for an anonymous or private one. |
 | Field       | The address, then "Confirm email address" | One underline field, no confirm box                              |
 | Placeholder | `your@email.com`                          | `e.g. nickname@example.com`                                      |
 
-Both arms keep the purple instruction and the Why row, and both refuse an address the server
-would refuse (`isValidSurveyEmail`).
+Both keep the purple instruction and the Why row, and both refuse an address the server would
+refuse (`isValidSurveyEmail`).
 
-- **The arm** is a pure function of the survey session id, salted with the test's name so it
-  splits independently of C13 ([`emailQuestionArm.ts`](../shared/experiments/emailQuestionArm.ts)).
-  No session id means control, but in a browser there always is one: where storage is blocked,
-  each page load makes its own, so those people are drawn afresh on every load.
-  `?email=control` or `?email=anonymous` previews an arm on dev and staging, never on
-  production.
+- **Who gets which.** A buyer who paid before the survey (pay to start) keeps `control`: "feel
+  free to use an anonymous one" would part the survey's address from the one they paid with,
+  and the purchase's continue link opens a report only under that one. Everyone else gets
+  `anonymous` (`EMAIL_QUESTION_WINNER` in
+  [`emailQuestionArm.ts`](../shared/experiments/emailQuestionArm.ts)). `?email=control` or
+  `?email=anonymous` previews either on dev and staging, never on production.
 - **The copy** lives in [`anonymousEmail.ts`](../features/survey/anonymousEmail.ts), not in
-  `survey-data.ts`, so ending the test is one deletion. `OpenResponseQuestion` draws the field
-  when it is given `emailArm="anonymous"`.
+  `survey-data.ts`. `OpenResponseQuestion` draws the single field when it is given
+  `emailArm="anonymous"`.
 - **What is recorded.** The first time the email question shows on a page load,
-  `experiment_exposure` fires (`surface: "survey_email_question"`) and the arm goes onto
-  PostHog and GA4 as `contact_question_arm`. A reload on or after the email question sends it
-  again, so count people, not events. Both go to PostHog and GA4 only: there is no submission
-  yet to attach a stored event to. The server stamps the same key into `utm_tracker` on every
-  partial save and submission ([API](api.md#post-apisurvey-partial)). The key leaves out the
-  word "email" on purpose: the admin's UTM filter matches any part of the tracker, and
+  `experiment_exposure` fires (`surface: "survey_email_question"`) and the version goes onto
+  PostHog and GA4 as `contact_question_arm`, now `anonymous` for every free run. A reload on or
+  after the email question sends it again, so count people, not events. The server stamps the
+  same key into `utm_tracker` on every partial save and submission
+  ([API](api.md#post-apisurvey-partial)); a pay-to-start run gets no stamp. The key leaves out
+  the word "email" on purpose: the admin's UTM filter matches any part of the tracker, and
   "email" is a UTM source our own links carry.
-- **Reading it.** Per arm, the sessions that reached the email question against those that
-  went on to submit. Always filter by the production start date: the arm is defined for every
-  session ever recorded, including all the ones that only ever saw today's question.
+- **Reading the test.** It ran from **2026-10-08 09:12:46 UTC** (#539) to
+  **`EMAIL_QUESTION_TEST_END`** (2026-11-04). Per arm, the runs that reached the email question
+  against those that went on to submit, for runs begun inside that window only. While it ran,
+  a run's arm was a pure function of its session id, which the readouts recompute for every
+  session ever recorded, so a run begun before the start or after the end must be left out:
+  before, everyone saw the old question; after, everyone sees the anonymous one and is stamped
+  so. AP-Analytics' Traffic card reads 9 Oct to 3 Nov, the whole days in between.
 - **On the KPI page.** _Survey Drop-off Rate per Question %_ in Notion shows, every morning, the
-  drop-off at the email question per version, from the same start (`kpi-dropoff`).
-- **Status.** On production since **2026-10-08 09:12 UTC** (11:12 Berlin, #539), on staging
-  since 2026-10-07. Every readout starts there; a run begun before it is outside the test.
+  drop-off at the email question per version over the test's window, marked ended
+  (`kpi-dropoff`).
 
 ### Measuring CTA click-through by urgency band
 

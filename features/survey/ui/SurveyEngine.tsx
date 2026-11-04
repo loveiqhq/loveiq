@@ -32,13 +32,12 @@ import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
 import {
-  assignEmailQuestionArm,
   EMAIL_QUESTION_EXPERIMENT,
+  EMAIL_QUESTION_WINNER,
   resolveEmailQuestionOverride,
   type EmailQuestionArm,
 } from "@shared/experiments/emailQuestionArm";
 import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
-import { getSessionId } from "./hooks/surveySession";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -69,7 +68,7 @@ interface SurveyEngineProps {
   onStartOver?: () => void;
   /**
    * A buyer who paid before the survey (pay to start): in no survey test. Their email
-   * question stays today's: the anonymous arm's "feel free to use an anonymous one" would
+   * question stays today's: the anonymous version's "feel free to use an anonymous one" would
    * part the survey's address from the one they paid with, and the purchase's continue
    * link opens a report only under that one.
    */
@@ -191,20 +190,19 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerFloating, setFooterFloating] = useState(false);
 
-  // The email question test: today's question against Marcus's anonymous redesign
-  // (Figma 11600:15119). Drawn from the session id with its own salt, so the split is
-  // independent of C13's. Unlike C13's arm it is not kept in the draft: it moves no
-  // question, so a resumed run skips nothing whichever arm it draws, and a run begun
-  // before the test launched is outside every readout by its start date.
-  // `?email=control|anonymous` previews either arm on dev and staging, never on
-  // production.
+  // The email question. Its test (Marcus's anonymous redesign, Figma 11600:15119, against
+  // today's question) ended on 4 Nov 2026 in the redesign's favour, so every run is asked
+  // the anonymous version now. It moves no question, so a run resumed from a draft begun
+  // during the test skips nothing whichever version it saw before. A buyer who paid before
+  // the survey keeps today's question (see `payToStart`). `?email=control|anonymous`
+  // previews either version on dev and staging, never on production.
   const [emailArm] = useState<EmailQuestionArm>(() => {
     if (payToStart) return "control";
     const devParam =
       typeof window === "undefined"
         ? null
         : new URLSearchParams(window.location.search).get("email");
-    return resolveEmailQuestionOverride(devParam) ?? assignEmailQuestionArm(getSessionId());
+    return resolveEmailQuestionOverride(devParam) ?? EMAIL_QUESTION_WINNER;
   });
 
   // Questions answered before the survey opened (the landing-page card) are
@@ -256,8 +254,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     setSurveyVariant(surveyVariant);
   }, [surveyVariant]);
 
-  // The email test's exposure, the per-arm denominator: once, the first time the email
-  // question is on screen, which is also when the arm goes onto PostHog and GA4.
+  // The email test's exposure, its per-arm denominator: once, the first time the email
+  // question is on screen, which is also when the version goes onto PostHog and GA4. Still
+  // sent since the test ended, with the version shown (`anonymous` for every free run), so
+  // nothing analytics collects stops; readouts of the test end at EMAIL_QUESTION_TEST_END.
   const emailExposureFired = useRef(false);
   const onEmailQuestion = question?.qId === EMAIL_QID;
   useEffect(() => {

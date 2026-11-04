@@ -65,10 +65,12 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
 const mockGateEnabled = vi.fn();
 const mockReadGateState = vi.fn();
 const mockStampGateSeen = vi.fn();
+const mockReadQuestionTimes = vi.fn();
 vi.mock("@features/report/server/initialGateState", () => ({
   isInitialUnlockGateEnabled: (...args: unknown[]) =>
     mockGateEnabled(...args) ?? Promise.resolve(false),
   readInitialGateState: (...args: unknown[]) => mockReadGateState(...args),
+  readSurveyQuestionTimes: (...args: unknown[]) => mockReadQuestionTimes(...args),
   stampInitialGateSeen: (...args: unknown[]) => mockStampGateSeen(...args),
 }));
 const mockLivePayToStart = vi.fn();
@@ -1152,20 +1154,43 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     });
   });
 
-  it("tells the gate the minutes the reader spent on the survey, from the survey's own clock", async () => {
+  it("tells the gate the minutes the reader spent on the questions, not the survey's clock", async () => {
+    const SESSION = "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c";
     mockFetchWithTimeout.mockImplementation(async (url: string) => {
       if (url.includes("/rest/v1/report_access_token?token=eq.")) {
         return rows([{ survey_submission_id: 55 }]);
       }
       if (url.includes("/rest/v1/survey_submission?")) {
-        expect(url).toContain("duration_ms");
-        return rows([{ ...SUBMISSION, duration_ms: 13 * 60_000 + 40_000 }]);
+        expect(url).toContain("session_id");
+        // Left open overnight: the clock says 20 hours.
+        return rows([{ ...SUBMISSION, session_id: SESSION, duration_ms: 20 * 3_600_000 }]);
       }
       if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
       return rows([]);
     });
+    // 55 questions at 15 s and one put down for the night: 13 min 45 s + 2 min.
+    mockReadQuestionTimes.mockImplementation(async (sessionId: string) =>
+      sessionId === SESSION ? [...Array.from({ length: 55 }, () => 15_000), 20 * 3_600_000] : null
+    );
     const res = await meetGet();
-    expect((await res.json()).surveyMinutes).toBe(14);
+    expect((await res.json()).surveyMinutes).toBe(16);
+    expect(mockReadQuestionTimes).toHaveBeenCalledWith(SESSION);
+  });
+
+  it("shows no minutes when the question times can't be read", async () => {
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/report_access_token?token=eq.")) {
+        return rows([{ survey_submission_id: 55 }]);
+      }
+      if (url.includes("/rest/v1/survey_submission?")) {
+        return rows([{ ...SUBMISSION, session_id: "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c" }]);
+      }
+      if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
+      return rows([]);
+    });
+    mockReadQuestionTimes.mockResolvedValue(null);
+    const res = await meetGet();
+    expect((await res.json()).surveyMinutes).toBeNull();
   });
 
   it("never lets the gate be cached", async () => {

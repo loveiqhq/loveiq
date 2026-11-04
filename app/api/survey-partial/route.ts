@@ -14,8 +14,8 @@ import {
   readPrepaidToken,
 } from "@features/pay-to-start/logic/journey";
 import {
-  assignEmailQuestionArm,
   EMAIL_QUESTION_ARM_KEY,
+  EMAIL_QUESTION_WINNER,
 } from "@shared/experiments/emailQuestionArm";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import { markEntitlementSurveyStarted } from "@features/pay-to-start/server/entitlement";
@@ -107,9 +107,10 @@ export async function POST(request: Request) {
      * mid-funnel cannot be split by experiment at all — which is exactly what
      * "Midway Progress has no source" turned out to mean.
      *
-     * The email question test's arm joins it, derived from the session id: someone who
-     * stops at the email question leaves only this row. `mergeTrackerArm` never creates
-     * a tracker for it, so the session id stays the record and the stamp a convenience.
+     * The email question's version joins it: someone who stops at the email question
+     * leaves only this row. During its test (8 Oct to 4 Nov 2026) that was the arm drawn
+     * from the session id; since then it is the anonymous version every free run is
+     * shown. `mergeTrackerArm` never creates a tracker for it.
      */
     utm_tracker: mergeTrackerArm(
       // A visitor who paid before the survey: no landing arm, the server's journey label
@@ -120,8 +121,9 @@ export async function POST(request: Request) {
         prepaidToken ? PAY_TO_START_JOURNEY : null
       ),
       EMAIL_QUESTION_ARM_KEY,
-      // As the submit: a buyer who paid before the survey is in no survey test.
-      prepaidToken ? null : assignEmailQuestionArm(parsed.data.sessionId)
+      // As the submit: a buyer who paid before the survey is shown today's question and
+      // was in no survey test, so nothing is stamped.
+      prepaidToken ? null : EMAIL_QUESTION_WINNER
     ),
     client_ip: ip,
     saved_at: new Date().toISOString(),

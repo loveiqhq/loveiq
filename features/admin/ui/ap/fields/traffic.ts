@@ -343,20 +343,22 @@ const BLENDED =
 const WEEK = "date_trunc(:grain, DAY)::date";
 
 /**
- * The running tests the page reads, each arm in its window: from the test's first whole day (or
- * the range's), to the range's end or yesterday.
+ * The tests the page reads, each arm in its window: from the test's first whole day (or the
+ * range's), to the range's end or yesterday, or the test's last whole day once it ended (the
+ * email question on 4 Nov 2026: from then every free run is asked, and stamped, anonymous).
  */
-const EXP = `tests (test, arm, control, first_day) AS (VALUES
-  ('Landing hero', 'white_card', true, DATE '2026-10-14'),
-  ('Landing hero', 'white_video', false, DATE '2026-10-14'),
-  ('Pricing 3.0', 'A3', true, DATE '2026-10-08'),
-  ('Pricing 3.0', 'B3', false, DATE '2026-10-08'),
-  ('Email question', 'control', true, DATE '2026-10-09'),
-  ('Email question', 'anonymous', false, DATE '2026-10-09')
+const EXP = `tests (test, arm, control, first_day, last_day) AS (VALUES
+  ('Landing hero', 'white_card', true, DATE '2026-10-14', NULL::date),
+  ('Landing hero', 'white_video', false, DATE '2026-10-14', NULL),
+  ('Pricing 3.0', 'A3', true, DATE '2026-10-08', NULL),
+  ('Pricing 3.0', 'B3', false, DATE '2026-10-08', NULL),
+  ('Email question', 'control', true, DATE '2026-10-09', DATE '2026-11-03'),
+  ('Email question', 'anonymous', false, DATE '2026-10-09', DATE '2026-11-03')
 ),
 win AS (
   SELECT *, greatest(:from::date, first_day) AS from_day,
-         least(:to::date, (now() AT TIME ZONE 'Europe/Berlin')::date - 1) AS to_day
+         least(:to::date, (now() AT TIME ZONE 'Europe/Berlin')::date - 1,
+               coalesce(last_day, :to::date)) AS to_day
     FROM tests
 ),
 price_arm AS (

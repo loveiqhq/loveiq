@@ -137,6 +137,33 @@ export async function readInitialGateCohortIds(
   }
 }
 
+/**
+ * The time spent on each question of a survey, as its tracking kept it (survey_behavior_event,
+ * one row per question left; a hidden tab's "abandon" rows only repeat the time so far), for
+ * the exit page's minutes (surveyActiveMs). Null when it can't be read: the page then shows no
+ * number rather than a wrong one.
+ */
+export async function readSurveyQuestionTimes(sessionId: string): Promise<number[] | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return null;
+  try {
+    const response = await serviceFetch(
+      `/rest/v1/survey_behavior_event?session_id=eq.${sessionId}&direction=neq.abandon&select=time_spent_ms&limit=1000`
+    );
+    if (!response.ok) {
+      logger.warn({ status: response.status }, "pre-unlock: survey question times read failed");
+      return null;
+    }
+    const rows = (await response.json()) as Array<{ time_spent_ms?: unknown }>;
+    if (!Array.isArray(rows)) return null;
+    return rows
+      .map((row) => row.time_spent_ms)
+      .filter((ms): ms is number => typeof ms === "number" && Number.isFinite(ms));
+  } catch (err) {
+    logger.warn({ err }, "pre-unlock: survey question times read failed");
+    return null;
+  }
+}
+
 /** The first stamp lands and later ones match nothing (`is.null`). Never throws. */
 /** Whether the stamp is there now (written, or kept from before); false when the write failed. */
 async function stampOnce(
