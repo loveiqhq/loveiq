@@ -191,6 +191,7 @@ const STAGE: Record<string, string> = {
   initial_gate_viewed: "gate",
   initial_gate_cta_click: "gate",
   initial_gate_back: "gate",
+  initial_gate_browser_back: "gate",
   // The paygate's exit pages (28.10): the €1.99 page's is the gate's, the full report's the
   // paywall's, by the event's own `stage` (stageOf).
   paygate_exit_viewed: "paywall",
