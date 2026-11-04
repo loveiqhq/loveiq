@@ -382,16 +382,17 @@ describe("buildSubmissionJourney", () => {
     });
 
     it("names the page's own price, whatever a code took off it", async () => {
+      // The full offer's price is a setting (PAY_TO_START_PRICE_CENTS): the page's, not the default.
       route({
         payments: [
           {
             ...PAID_BEFORE,
             amount: 0,
-            metadata: { journey: "pay_to_start", offer: "pre", listPrice: "1.99" },
+            metadata: { journey: "pay_to_start", offer: "full", listPrice: "24.99" },
           },
         ],
       });
-      expect((await buildSubmissionJourney(1296))?.payToStartPrice).toBe(1.99);
+      expect((await buildSubmissionJourney(1296))?.payToStartPrice).toBe(24.99);
     });
 
     it("reads a June row with no offer as the full offer at its default price", async () => {
