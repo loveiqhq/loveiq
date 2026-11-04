@@ -140,10 +140,10 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
             className={`rounded-[16px] border transition-[border-color,background-color,box-shadow] duration-200 ${
               white
                 ? highlighted
-                  ? "border-[rgba(254,104,57,0.35)] bg-white shadow-[0_0_20px_rgba(254,104,57,0.08)]"
+                  ? "border-[rgba(107,91,149,0.35)] bg-white shadow-[0_0_20px_rgba(107,91,149,0.08)]"
                   : "border-black/[0.08] bg-white"
                 : highlighted
-                  ? "border-[rgba(254,104,57,0.4)] bg-white/[0.05]"
+                  ? "border-[rgba(167,139,250,0.4)] bg-white/[0.05]"
                   : "border-white/10 bg-white/[0.03]"
             }`}
           >
@@ -153,7 +153,7 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
               aria-controls={panelId}
               onClick={() => setOpenLabel(isOpen ? null : group.label)}
               onKeyDown={containActivationKeys}
-              className={`flex min-h-[52px] w-full items-center gap-3 rounded-[16px] px-[21px] text-left font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 ${
+              className={`flex min-h-[52px] w-full items-center gap-3 rounded-[16px] px-[21px] text-left font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b5b95]/60 focus-visible:ring-offset-2 ${
                 white ? "focus-visible:ring-offset-white" : "focus-visible:ring-offset-[#0a0510]"
               }`}
             >
@@ -168,8 +168,8 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-[3px] text-[12px] font-semibold leading-[16px] ${
                     white
-                      ? "bg-[rgba(254,104,57,0.12)] text-[#c2410c]"
-                      : "bg-[rgba(254,104,57,0.18)] text-[#ffb59f]"
+                      ? "bg-[rgba(107,91,149,0.12)] text-[#6b5b95]"
+                      : "bg-[rgba(167,139,250,0.18)] text-[#c4b5fd]"
                   }`}
                 >
                   {picked} selected

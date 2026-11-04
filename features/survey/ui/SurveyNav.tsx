@@ -52,7 +52,7 @@ const SurveyNav: FC<SurveyNavProps> = ({
       type="button"
       onClick={onPrevious}
       disabled={!canGoBack}
-      className="flex shrink-0 items-center gap-[6.4px] rounded-full border border-[rgba(22,16,33,0.09)] px-[17.6px] py-[8.6px] font-sans text-[14px] font-semibold leading-5 text-[#4a4458] transition-[background-color,opacity] hover:bg-[rgba(22,16,33,0.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-[0.32] max-[390px]:px-3"
+      className="flex shrink-0 items-center gap-[6.4px] rounded-full border border-[rgba(22,16,33,0.09)] px-[17.6px] py-[8.6px] font-sans text-[14px] font-semibold leading-5 text-[#4a4458] transition-[background-color,opacity] hover:bg-[rgba(22,16,33,0.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b5b95]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-[0.32] max-[390px]:px-3"
     >
       <Chevron d="m15 18-6-6 6-6" />
       <span className="max-[360px]:sr-only">Previous</span>

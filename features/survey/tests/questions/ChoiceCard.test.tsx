@@ -33,4 +33,19 @@ describe("ChoiceCard", () => {
     render(<ChoiceCard label="Multiple" selected={true} onClick={vi.fn()} multi />);
     expect(screen.getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
   });
+
+  it("selects in the rating scale's purple, never the call-to-action orange", () => {
+    // Hana, 04.11: the cards take the 1–7 scale's #6b5b95. Orange stays for the Next
+    // button and the progress bar.
+    for (const multi of [false, true]) {
+      for (const selected of [false, true]) {
+        const { container, unmount } = render(
+          <ChoiceCard label="Option" selected={selected} onClick={vi.fn()} multi={multi} />
+        );
+        expect(container.innerHTML).not.toMatch(/fe6839|254,\s*104,\s*57/i);
+        if (selected) expect(container.innerHTML).toContain("bg-[#6b5b95]");
+        unmount();
+      }
+    }
+  });
 });

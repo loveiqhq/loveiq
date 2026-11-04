@@ -152,6 +152,18 @@ guide, as the answer instruction (Figma 11303:174), so editing it changes what t
 reads, not only how the question behaves. The 1-7 scales carry "Select how true this statement
 is for you." (10004, the comfort scale: "Select how comfortable you are with this.").
 
+**Answers select in the scale's purple.** On a question screen every answer interaction uses the
+1-7 scale's `#6b5b95`:
+
+- the picked choice card (border, fill, radio dot or checkbox);
+- the categories question's open or picked groups and their "N selected" badge;
+- the typing line of "Other…" and of the open-text answers;
+- the focus rings on the options, Previous and Pause.
+
+Orange is kept for the Next button and the progress bar. The team agreed purple as the survey's
+clickable color on 2026-11-02, and Hana asked on 2026-11-04 for the choice cards to follow it;
+until then they were orange.
+
 To read the answers, use the admin CSV export, which has one column per qId. The company brain
 masks `answer_text`, per the decision of 2026-09-09.
 
