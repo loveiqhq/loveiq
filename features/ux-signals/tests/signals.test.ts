@@ -508,7 +508,12 @@ describe("the EUR 1.99 gate", () => {
   });
 
   it("fetches the gate's own events for real visits", () => {
-    for (const e of ["initial_gate_viewed", "initial_gate_cta_click", "initial_gate_back"]) {
+    for (const e of [
+      "initial_gate_viewed",
+      "initial_gate_cta_click",
+      "initial_gate_back",
+      "initial_gate_browser_back",
+    ]) {
       expect(SIGNAL_EVENTS, e).toContain(e);
     }
     expect(SIGNAL_PROPS).toContain("plan");

@@ -289,6 +289,13 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       entity_type: "report",
       metadata: { source: "drawer" },
     },
+    // The EUR 1.99 page's own Back, which opens its exit page as "Not ready to unlock yet"
+    // (initial_gate_back) does: the paywall's, beside that press.
+    {
+      event_type: "initial_gate_browser_back",
+      entity_type: "paywall",
+      metadata: { to: "exit_page" },
+    },
   ];
 
   it.each(cases)(

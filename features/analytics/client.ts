@@ -113,10 +113,12 @@ const PERSISTED_EVENTS = new Set([
   "tour_skipped",
   "tour_left",
   "tour_replayed",
-  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, its two buttons, its way out
+  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, its two buttons, its way out,
+  // and the browser's or phone's own Back on it
   "initial_gate_viewed",
   "initial_gate_cta_click",
   "initial_gate_back",
+  "initial_gate_browser_back",
   // The paygate's exit pages (features/report/ui/gate/exit): seen, the reason, the sentence,
   // Unlock pressed, and left
   "paygate_exit_viewed",
@@ -921,6 +923,18 @@ export const trackInitialGateBack = (params: { to: string }) => {
   track("initial_gate_back", params);
   persistAnalyticsEvent("initial_gate_back", params);
   if (params.to === "/") markLeftInitialGate();
+};
+
+/**
+ * The browser's or phone's own Back on the EUR 1.99 gate (a desktop's Back, an iPhone's swipe,
+ * Android's back), from 04.11. It opens the gate's exit page, as "Not ready to unlock yet" does
+ * (gate/useGateBack.ts), so `to` is "exit_page". Its own event, beside that press
+ * (`initial_gate_back`), so AP can count both ways out. Once a page. Persisted. The reader stays
+ * on the report, so nothing is marked for the landing page.
+ */
+export const trackInitialGateBrowserBack = (params: { to: string }) => {
+  track("initial_gate_browser_back", params);
+  persistAnalyticsEvent("initial_gate_browser_back", params);
 };
 
 /**
