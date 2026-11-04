@@ -25,7 +25,11 @@ import {
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
-import { assignEmailQuestionArm } from "@shared/experiments/emailQuestionArm";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_TEST_END,
+  EMAIL_QUESTION_TEST_START,
+} from "@shared/experiments/emailQuestionArm";
 import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
@@ -80,14 +84,15 @@ const DEVICE_SEGMENT: Record<NonNullable<DropoffRun["device"]>, Segment> = {
 /**
  * The survey tests the page splits by (experiment registry #4 and #7). Both arms are a
  * pure function of the session id, which gives an arm to every session ever recorded, so
- * only runs begun after the launch count. When a test ends, set `end`: runs begun after
- * it saw one version and are no longer split.
+ * only runs begun after the launch count. When a test ends, set `end` and `outcome`: runs
+ * begun after it saw one version and are no longer split.
  */
 export const SURVEY_TESTS = [
   {
     name: "Opening order test",
     launch: Date.parse("2026-10-06T18:18:00Z"),
     end: null as number | null,
+    outcome: null as string | null,
     segmentOf: (sessionId: string): Segment =>
       assignQuestionOrderArm(sessionId) === "variant"
         ? "Opening order: new"
@@ -95,8 +100,9 @@ export const SURVEY_TESTS = [
   },
   {
     name: "Email question test",
-    launch: Date.parse("2026-10-08T09:12:46Z"),
-    end: null as number | null,
+    launch: Date.parse(EMAIL_QUESTION_TEST_START),
+    end: Date.parse(EMAIL_QUESTION_TEST_END) as number | null,
+    outcome: "the team chose the anonymous one, which everyone gets now" as string | null,
     segmentOf: (sessionId: string): Segment =>
       assignEmailQuestionArm(sessionId) === "anonymous"
         ? "Email question: anonymous"
@@ -369,6 +375,10 @@ export interface TestReadout {
   name: string;
   /** "8 Oct". */
   since: string;
+  /** Its last day once it ended ("4 Nov"); null while it runs. */
+  until: string | null;
+  /** What came of it once it ended, after "Ended:"; null while it runs. */
+  outcome: string | null;
   /** What "left" means for this test, after the rate: "at the email question". */
   measure: string;
   arms: [TestArmReadout, TestArmReadout];
@@ -386,12 +396,12 @@ function addDays(day: string, n: number): string {
 }
 
 function readout(
-  name: string,
-  launch: number,
+  test: (typeof SURVEY_TESTS)[number],
   measure: string,
   arms: [TestArmReadout, TestArmReadout],
   today: string
 ): TestReadout {
+  const { name, launch, end, outcome } = test;
   const [control, variant] = arms;
   const base = control.people >= 50 && control.left > 0 ? control.left / control.people : null;
   const needed = base === null ? null : peoplePerArm(base, base * (2 / 3));
@@ -399,8 +409,9 @@ function readout(
   // From the launch minute, not its day: a test launched in the evening has not had a day.
   const daysRun = Math.max(0.5, (reportingDayStart(today).getTime() - launch) / 86_400_000);
   const pace = fewest / daysRun;
+  // An ended test gains nobody, so it has no day to reach the size by.
   const enoughBy =
-    needed !== null && fewest < needed && pace > 0
+    end === null && needed !== null && fewest < needed && pace > 0
       ? addDays(today, Math.ceil((needed - fewest) / pace))
       : null;
   const clearDifference =
@@ -410,6 +421,8 @@ function readout(
   return {
     name,
     since: shortDate(reportingDay(new Date(launch))),
+    until: end === null ? null : shortDate(reportingDay(new Date(end))),
+    outcome: end === null ? null : outcome,
     measure,
     arms,
     needed,
@@ -445,7 +458,7 @@ export function readSurveyTests(runs: DropoffRun[], today: string): TestReadout[
     { label: "the new order", people: 0, left: 0 },
   ];
   const emailArms: [TestArmReadout, TestArmReadout] = [
-    { label: "the current question", people: 0, left: 0 },
+    { label: "the previous question", people: 0, left: 0 },
     { label: "the anonymous one", people: 0, left: 0 },
   ];
   for (const run of runs) {
@@ -462,14 +475,8 @@ export function readSurveyTests(runs: DropoffRun[], today: string): TestReadout[
     }
   }
   return [
-    readout(email.name, email.launch, "at the email question", emailArms, today),
-    readout(
-      order.name,
-      order.launch,
-      `within the first ${OPENING_LENGTH} questions`,
-      orderArms,
-      today
-    ),
+    readout(email, "at the email question", emailArms, today),
+    readout(order, `within the first ${OPENING_LENGTH} questions`, orderArms, today),
   ];
 }
 
@@ -589,15 +596,23 @@ export function buildHeadline(input: {
   for (const t of input.tests) {
     const [a, b] = t.arms;
     const status =
-      t.clearDifference === true
-        ? "A clear difference, not chance."
-        : t.clearDifference === false
-          ? "No clear difference."
-          : t.needed === null
-            ? "Too early to call: too few people yet to size it."
-            : `Too early to call: telling a third fewer leaving apart from chance takes about ${t.needed} people per version${t.enoughBy ? `, around ${shortDate(t.enoughBy)} at this pace` : ""}.`;
+      t.until !== null
+        ? `Ended${t.outcome ? `: ${t.outcome}` : ""}.`
+        : t.clearDifference === true
+          ? "A clear difference, not chance."
+          : t.clearDifference === false
+            ? "No clear difference."
+            : t.needed === null
+              ? "Too early to call: too few people yet to size it."
+              : `Too early to call: telling a third fewer leaving apart from chance takes about ${t.needed} people per version${t.enoughBy ? `, around ${shortDate(t.enoughBy)} at this pace` : ""}.`;
     lines.push([
-      { text: `${t.name}, since ${t.since}: `, bold: true },
+      {
+        text:
+          t.until !== null
+            ? `${t.name}, ${t.since} to ${t.until}: `
+            : `${t.name}, since ${t.since}: `,
+        bold: true,
+      },
       {
         text: `${pct(a.left, a.people)} left ${t.measure} with ${a.label} (${a.left} of ${a.people}), ${pct(b.left, b.people)} with ${b.label} (${b.left} of ${b.people}). ${status}`,
       },

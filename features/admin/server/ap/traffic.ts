@@ -250,6 +250,8 @@ export interface ExperimentArm {
   confidence: number | null;
   /** Why lift, chance and confidence are blank, when they are. */
   why: string | null;
+  /** The test is over: its confidence is final, never "not yet". */
+  ended?: boolean;
 }
 
 export interface AudienceDim {
@@ -1797,8 +1799,14 @@ function prettyKey(k: string): string {
 // ---------------------------------------------------------------------------------------------
 // Experiments
 
-/** The registry's running tests our records can read, from their first whole Berlin day. */
+/** The registry's tests our records can read, from their first whole Berlin day. */
 const EMAIL_TEST_START_DAY = "2026-10-09";
+/**
+ * The email question test's last whole Berlin day: it ended on 4 Nov 2026
+ * (EMAIL_QUESTION_TEST_END), when every free run began to be asked, and stamped with, the
+ * anonymous version, so a later day's stamps no longer say which arm a run was dealt.
+ */
+export const EMAIL_TEST_LAST_DAY = "2026-11-03";
 
 const BERLIN_TIME = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/Berlin",
@@ -1818,9 +1826,11 @@ function buildExperiments(
 ): { arms: ExperimentArm[]; note: string } {
   const arms: ExperimentArm[] = [];
   const last = addDays(today, -1);
-  const win = (start: string) => {
+  /** From the test's first whole day and the range's, to its last (when it ended) and the range's. */
+  const win = (start: string, end: string = last) => {
     const from = facts.from > start ? facts.from : start;
-    const to = facts.to < last ? facts.to : last;
+    const lastDay = end < last ? end : last;
+    const to = facts.to < lastDay ? facts.to : lastDay;
     return from > to ? null : { from, to };
   };
   // A survey bought before it was taken (pay to start, its A3 pin included, a 100% code's EUR 0
@@ -1920,16 +1930,18 @@ function buildExperiments(
     }
   }
 
-  // #7 · the email question: of the runs that reached it, the share that finished.
+  // #7 · the email question: of the runs that reached it, the share that finished. Ended:
+  // since 4 Nov 2026 everyone is asked the anonymous version.
   {
-    const w = win(EMAIL_TEST_START_DAY);
+    const w = win(EMAIL_TEST_START_DAY, EMAIL_TEST_LAST_DAY);
     const test = "Email question";
-    const note = liveSince(EMAIL_TEST_START_DAY);
+    // As the Payment page writes an ended test ("May – Aug 2026 · ended").
+    const note = `${rangeLabel(EMAIL_TEST_START_DAY, EMAIL_TEST_LAST_DAY)} · ended`;
     const startsWhy = w ? startsBlocked(scope, w.from, facts.asOf) : null;
     const ok = w !== null && startsSplit(w.from, today) && !startsWhy;
     const rows = (
       [
-        ["control", "Today's question"],
+        ["control", "Previous question"],
         ["anonymous", "Anonymous email"],
       ] as const
     ).map(([arm, name]) => {
@@ -1956,7 +1968,9 @@ function buildExperiments(
           chance: null,
           confidence: null,
           why: !w
-            ? "Not running in this range"
+            ? facts.from > EMAIL_TEST_LAST_DAY
+              ? "Ended on 4 Nov 2026: everyone gets the anonymous email now"
+              : "Not running in this range"
             : (startsWhy ?? "Starts per arm are kept only 30 days"),
         };
     for (const [i, r] of rows.entries()) {
@@ -1975,13 +1989,14 @@ function buildExperiments(
           ? `Finished after the email question (${r.finished} of ${r.reached})`
           : "Finished after the email question",
         ...(i === 0 ? { lift: null, chance: null, confidence: null, why: null } : t),
+        ended: true,
       });
     }
   }
 
   return {
     arms,
-    note: "The registry's running tests whose arms our records keep. The survey's opening order (#4) and the pay pop-up (#3) aren't here: their arms are worked out from an id, not recorded on visits or starts. Pricing and the email question have no visitors: their arms are set at the report and in the survey.",
+    note: "The registry's tests whose arms our records keep, while they run and once they've ended. The survey's opening order (#4) and the pay pop-up (#3) aren't here: their arms are worked out from an id, not recorded on visits or starts. Pricing and the email question have no visitors: their arms are set at the report and in the survey.",
   };
 }
 

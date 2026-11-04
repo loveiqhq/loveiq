@@ -28,7 +28,7 @@ export interface Plants {
   backsAt: number;
   /** Tap the disabled Next once, before answering this question (counted from 1); 0 for none. */
   deadNextAt: number;
-  /** Press Enter on the email question with a confirmation that does not match. */
+  /** Press Enter on the email question with an address it refuses (or a confirmation that does not match). */
   formError: boolean;
   /** Questions (counted from 1) to pause on for a long time. */
   hesitateAt: number[];

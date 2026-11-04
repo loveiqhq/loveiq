@@ -844,17 +844,23 @@ async function main(argv: string[]): Promise<number> {
         note = await answerQuestion(page, q, answer);
         if (note) walk.missingOptions.push(`${q.qId}: ${note}`);
         if (plants?.formError && q.inputType === "email" && log.formErrors === 0) {
-          // Enter with a confirmation that does not match: the survey refuses it, once.
+          // Enter with an address the survey refuses, once. Where the question has a confirm
+          // box (a buyer who paid first), a confirmation that does not match; in the one
+          // field every other run has been asked since 4 Nov 2026, an address with no "@".
           const confirm = page.getByLabel("Confirm email address");
-          if (await confirm.isVisible().catch(() => false)) {
-            await confirm.fill(`x${String(answer)}`);
-            await confirm.press("Enter");
+          const hasConfirm = await confirm.isVisible().catch(() => false);
+          const field = hasConfirm ? confirm : page.getByLabel(q.question, { exact: true });
+          if (hasConfirm || (await field.isVisible().catch(() => false))) {
+            await field.fill(hasConfirm ? `x${String(answer)}` : String(answer).replace("@", ""));
+            await field.press("Enter");
             await page.waitForTimeout(700);
             log.formErrors += 1;
             planted.push(
-              "pressed Enter on the email question with a confirmation that does not match"
+              hasConfirm
+                ? "pressed Enter on the email question with a confirmation that does not match"
+                : "pressed Enter on the email question with an address that has no @"
             );
-            await confirm.fill(String(answer));
+            await field.fill(String(answer));
           }
         }
       } else {

@@ -192,11 +192,11 @@ Submits a completed survey and schedules downstream scoring/notification work af
 **A/B stamps on `utmTracker`.** The server may add fields to the JSON object before
 storing it on `survey_submission.utm_tracker`:
 
-| Key                    | Values                   | Source                                                                            |
-| ---------------------- | ------------------------ | --------------------------------------------------------------------------------- |
-| `landing_variant`      | the landing arm          | The sticky landing cookie, when present.                                          |
-| `question_order_arm`   | `control` \| `variant`   | Derived server-side from `sessionId` (C13 opening-order test).                    |
-| `contact_question_arm` | `control` \| `anonymous` | Derived server-side from `sessionId` (the email question test, `docs/survey.md`). |
+| Key                    | Values                   | Source                                                                                                                                                                 |
+| ---------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `landing_variant`      | the landing arm          | The sticky landing cookie, when present.                                                                                                                               |
+| `question_order_arm`   | `control` \| `variant`   | Derived server-side from `sessionId` (C13 opening-order test).                                                                                                         |
+| `contact_question_arm` | `control` \| `anonymous` | The email question's version (`docs/survey.md`): `anonymous` for every run but pay to start's since 2026-11-04; during its test, derived server-side from `sessionId`. |
 
 All three are additive and none is read from the request body, so a client cannot
 misreport its arm. Two rules matter for anyone querying this column:
@@ -215,9 +215,11 @@ record: each is a pure function of `survey_submission.session_id`, so an unstamp
 respondent's arm is recomputed rather than read. One exception: a draft begun before C13
 launched keeps the control order when it is resumed (`resolveDraftQuestionOrderArm`), so its
 `question_order_arm` stamp can say `variant`. Such a session started before the launch, and C13
-readouts count only sessions started after it. `contact_question_arm` is the email question
-test's key, named without "email" because the admin's UTM filter matches any part of the
-tracker, in any case, and `utm_source=email` is common.
+readouts count only sessions started after it. `contact_question_arm` followed the session id
+only during the email question test (2026-10-08 to 2026-11-04): since then every run but pay
+to start's is stamped `anonymous`, so recompute it only for sessions begun inside that window.
+It is the email question's key, named without "email" because the admin's UTM filter matches
+any part of the tracker, in any case, and `utm_source=email` is common.
 
 **`durationMs` is clamped by the client.** `startedAt` is restored from the browser's
 saved draft, so a respondent who begins the survey, leaves, and returns days later would
@@ -287,7 +289,7 @@ Autosaves partial survey progress using an upsert keyed by `sessionId`.
 `contact_question_arm` stamps as [`POST /api/survey`](#post-apisurvey), under the same rules:
 never a tracker created for a stamp, never an arm taken from the body, within 1000
 characters. Someone who stops at the email question leaves only this row, so this is where
-the email question test sees who left.
+the email question test saw who left.
 
 **Pay to start's "Started survey".** When the browser holds a paid pay-to-start purchase, the
 first saved draft stamps `prepaid_report_access.survey_started_at` (once, on a paid row only,

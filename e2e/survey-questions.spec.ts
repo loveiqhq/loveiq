@@ -4,6 +4,8 @@ import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { optionGroupsFor } from "../features/survey/optionGroups";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
 import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
+import { applyEmailQuestionArm } from "../features/survey/anonymousEmail";
+import { EMAIL_QUESTION_WINNER } from "../shared/experiments/emailQuestionArm";
 import { instantScroll } from "./fixtures/instant-scroll";
 import { pinSurveySession } from "./surveyArm";
 import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
@@ -34,9 +36,10 @@ import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
  */
 const ARM = "control" as const;
 
-const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM).filter(
-  (q) => !isHidden(q.qId)
-);
+// The email question as every free run is asked it since its test ended (4 Nov 2026).
+const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM)
+  .filter((q) => !isHidden(q.qId))
+  .map((q) => applyEmailQuestionArm(q, EMAIL_QUESTION_WINNER));
 
 /**
  * The caps the work order specifies, written out rather than read from `maxSelections`.
