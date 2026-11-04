@@ -328,6 +328,11 @@ describe("Traffic page builder", () => {
       ["Anonymous email", "Finished after the email question (9 of 10)", 1],
     ]);
     expect(email[0]!.note).toBe("9 Oct – 3 Nov 2026 · ended");
+    // Its confidence is final; the running tests' isn't.
+    expect(email.map((a) => a.ended)).toEqual([true, true]);
+    expect(
+      p.experiments.arms.filter((a) => a.test !== "Email question").map((a) => a.ended)
+    ).toEqual([undefined, undefined, undefined, undefined]);
     // A range wholly after the end has nothing to read, and says why.
     const after = traffic({
       ...at,
