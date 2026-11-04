@@ -140,7 +140,7 @@
   "overrides": {
     "esbuild": "^0.28.1",
     "glob": "^10.5.0",
-    "minimatch": ">=10.2.1",
+    "minimatch": "^11.0.4",
     "nanoid": "^3.3.18",
     "postcss": "$postcss",
     "uuid": ">=11.0.0",
@@ -151,6 +151,6 @@
     "sharp": ">=0.35.3",
     "brace-expansion": "^5.0.12",
     "linkify-it": ">=5.0.2",
-    "smol-toml": ">=1.8.0"
+    "smol-toml": ">=1.9.0"
   }
 }

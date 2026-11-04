@@ -18,6 +18,7 @@ import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPr
 import {
   isInitialUnlockGateEnabled,
   readInitialGateState,
+  readSurveyQuestionTimes,
   stampInitialGateSeen,
 } from "@features/report/server/initialGateState";
 import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
@@ -25,6 +26,7 @@ import { buildTourFirstReportPayload } from "@features/report/server/tourFirstRe
 import {
   buildInitialUnlockGatePayload,
   needsInitialUnlockGate,
+  surveyActiveMs,
   surveyMinutesFromDuration,
 } from "@features/report/logic/initialUnlockGate";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
@@ -97,8 +99,8 @@ interface SubmissionRow {
   app_user: SubmissionUser | SubmissionUser[] | null;
   utm_tracker: string | null;
   user_id: number | null;
-  /** The survey's own clock, start to submit: the EUR 1.99 exit page's minutes. */
-  duration_ms?: number | null;
+  /** The survey's tracking session: its question times are the EUR 1.99 exit page's minutes. */
+  session_id?: string | null;
 }
 
 interface SnapshotAnswers {
@@ -267,10 +269,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Report not found." }, { status: 404 });
       }
 
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,utm_tracker,created_date_time,duration_ms,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,utm_tracker,created_date_time,session_id,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     } else {
       const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,duration_ms,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,session_id,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     }
 
     const submissionRes = await getBreaker("supabase").fire(() =>
@@ -555,7 +557,11 @@ export async function GET(request: Request) {
         const gatePayload = buildInitialUnlockGatePayload({
           reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
           submissionId: submission.id,
-          surveyMinutes: surveyMinutesFromDuration(submission.duration_ms),
+          surveyMinutes: surveyMinutesFromDuration(
+            surveyActiveMs(
+              submission.session_id ? await readSurveyQuestionTimes(submission.session_id) : null
+            )
+          ),
         });
         // Tour first (sync 30.10): a reader who has never met the gate gets their report under
         // the guided tour first, with who they are left out (tourFirstReport.ts), and the

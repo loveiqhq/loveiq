@@ -142,9 +142,9 @@ export function useReportEngagementTimers({
       const now = Date.now();
       if (now - lastSentAt < SESSION_END_THROTTLE_MS) return;
       lastSentAt = now;
+      // A string, not a Blob (features/analytics/client.ts persistAnalyticsEvent).
       const payload = JSON.stringify({ submission_id: submissionId, _csrf: getCsrfToken() });
-      const blob = new Blob([payload], { type: "application/json" });
-      navigator.sendBeacon?.("/api/report-session-end", blob);
+      navigator.sendBeacon?.("/api/report-session-end", payload);
     };
 
     const onVisibilityChange = () => {

@@ -238,9 +238,9 @@ describe("unlock_click is one canonical event across every unlock surface", () =
   it("is not written to analytics_event — the granular events already are", async () => {
     // Persisting it too would put two rows on the same click and double the step in
     // the internal funnel that the digest's leak scoring reads.
-    const beacons: Blob[] = [];
+    const beacons: string[] = [];
     Object.defineProperty(navigator, "sendBeacon", {
-      value: (_url: string, body: Blob) => {
+      value: (_url: string, body: string) => {
         beacons.push(body);
         return true;
       },
@@ -251,9 +251,7 @@ describe("unlock_click is one canonical event across every unlock surface", () =
 
     client.trackPaywallInitiated({ source: "lock_click" });
 
-    const types = await Promise.all(
-      beacons.map(async (b) => (JSON.parse(await b.text()) as { event_type: string }).event_type)
-    );
+    const types = beacons.map((b) => (JSON.parse(b) as { event_type: string }).event_type);
     // The click DID persist — under its granular name, exactly once.
     expect(types).toEqual(["paywall_initiated"]);
     expect(types).not.toContain("unlock_click");
