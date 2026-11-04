@@ -1,10 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockFetchAllRows = vi.fn();
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: vi.fn(),
+  fetchAllRows: (...args: unknown[]) => mockFetchAllRows(...args),
+  countRows: vi.fn(),
+  POSTGREST_MAX_ROWS: 1000,
+}));
+
 import type { SubFact } from "@features/admin/server/ap/facts";
 import {
   buildPaygateExits,
   EXITS_FROM,
+  readGateSeen,
+  readPaygateExitRows,
   type ExitEventRow,
 } from "@features/admin/server/ap/paygate-exits";
+import { FIELDS } from "@features/admin/ui/ap/fields";
 
 const T0 = "2026-10-28T12:00:00.000Z";
 const at = (minutes: number) => new Date(Date.parse(T0) + minutes * 60_000).toISOString();
@@ -31,8 +43,12 @@ const row = (
   ...extra,
 });
 
-const build = (subs: SubFact[], rows: ExitEventRow[] | null, blocked: string | null = null) =>
-  buildPaygateExits({ subs, rows, blocked, to: "2026-10-31" });
+const build = (
+  subs: SubFact[],
+  rows: ExitEventRow[] | null,
+  blocked: string | null = null,
+  gateSeen: ReadonlySet<number> | null = null
+) => buildPaygateExits({ subs, rows, gateSeen, blocked, to: "2026-10-31" });
 
 describe("AP Payment · Paygate exits", () => {
   it("says why it is blank: a filter, a range before the pages, a failed read", () => {
@@ -40,9 +56,9 @@ describe("AP Payment · Paygate exits", () => {
       why: "The filters hide the people.",
       pages: [],
     });
-    expect(buildPaygateExits({ subs: [], rows: [], blocked: null, to: "2026-10-27" }).why).toMatch(
-      /from 28 Oct 2026/
-    );
+    expect(
+      buildPaygateExits({ subs: [], rows: [], gateSeen: null, blocked: null, to: "2026-10-27" }).why
+    ).toMatch(/from 28 Oct 2026/);
     expect(build([], null).why).toMatch(/could not be read/);
     expect(EXITS_FROM).toBe("2026-10-28");
   });
@@ -203,5 +219,110 @@ describe("AP Payment · Paygate exits", () => {
     expect(words).toHaveLength(10);
     expect(words[0]!.text).toBe("note 11");
     expect(words.at(-1)!.text).toBe("note 2");
+  });
+
+  // The card "count every way out": since #700 the €1.99 page's own Back opens its exit page too.
+  it("tells how readers reached the €1.99 page's exit page, of those who saw the €1.99 page", () => {
+    const pre = { stage: "pre" };
+    const out = build(
+      [1, 2, 3, 4, 5, 6, 7].map((id) => sub(id)),
+      [
+        // 1 by "Not ready", 2 by the browser's Back, 3 both ways (on two page loads).
+        row(1, "initial_gate_back", 0),
+        row(1, "paygate_exit_viewed", 0, pre),
+        row(2, "initial_gate_browser_back", 0),
+        row(2, "paygate_exit_viewed", 0, pre),
+        row(3, "initial_gate_back", 0),
+        row(3, "paygate_exit_viewed", 0, pre),
+        row(3, "initial_gate_browser_back", 9),
+        row(3, "paygate_exit_viewed", 9, pre),
+        // 4 pressed Back but no view of the page was stored: not among those who reached it.
+        row(4, "initial_gate_browser_back", 0),
+        // 5 reached it with neither stored (a Forward, a reload).
+        row(5, "paygate_exit_viewed", 0, pre),
+        // 6 reached only the full report's page.
+        row(6, "paygate_exit_viewed", 0, { stage: "full" }),
+        // Not the page's people.
+        row(99, "initial_gate_back", 0),
+        row(99, "paygate_exit_viewed", 0, pre),
+      ],
+      null,
+      // Saw the €1.99 page: 1–5 and 7 of the page's people; 99 is not one of them.
+      new Set([1, 2, 3, 4, 5, 7, 99])
+    );
+    const [preRow, fullRow] = out.pages;
+    // The page's own figures are as before.
+    expect(preRow).toMatchObject({ reached: 4, views: 5 });
+    expect(preRow!.came).toEqual({ notReady: 2, browserBack: 2, sawGate: 6 });
+    expect(fullRow!.came).toBeNull();
+  });
+
+  it("keeps how readers came, without what it is a share of, when the viewers can't be read", () => {
+    const out = build(
+      [sub(1)],
+      [row(1, "initial_gate_back", 0), row(1, "paygate_exit_viewed", 1, { stage: "pre" })]
+    );
+    expect(out.pages[0]!.came).toEqual({ notReady: 1, browserBack: 0, sawGate: null });
+    expect(build([sub(1)], [], null, new Set()).pages[0]!.came).toEqual({
+      notReady: 0,
+      browserBack: 0,
+      sawGate: 0,
+    });
+  });
+});
+
+describe("AP Payment · Paygate exits: the reads", () => {
+  // A block: a function beforeEach returns is run as its teardown, and mockReset returns the mock.
+  beforeEach(() => {
+    mockFetchAllRows.mockReset();
+  });
+  const paths = () => mockFetchAllRows.mock.calls.map(([p]) => String(p));
+
+  it("reads what opened the gate's exit page, only where it led there, and refuses a part read", async () => {
+    mockFetchAllRows.mockImplementation(async (path: string) =>
+      path.includes("initial_gate_browser_back")
+        ? [{ survey_submission_id: 1, event_type: "initial_gate_browser_back" }]
+        : []
+    );
+    const rows = await readPaygateExitRows("2026-11-01");
+    expect(rows).toEqual([{ survey_submission_id: 1, event_type: "initial_gate_browser_back" }]);
+    const ways = paths().find((p) => p.includes("initial_gate_browser_back"))!;
+    expect(ways).toContain("event_type=in.(initial_gate_back,initial_gate_browser_back)");
+    // "Not ready" led to the landing page before the exit page: no way in.
+    expect(ways).toContain("&metadata->>to=eq.exit_page&");
+    // From the range's first Berlin day (or the pages' own).
+    expect(ways).toContain(`event_time=gte.${encodeURIComponent("2026-10-31T23:00:00.000Z")}`);
+
+    mockFetchAllRows.mockImplementation(async (path: string) =>
+      path.includes("initial_gate_browser_back") ? null : []
+    );
+    expect(await readPaygateExitRows("2026-11-01")).toBeNull();
+  });
+
+  it("reads who saw the €1.99 page from the range's first day, null when it can't", async () => {
+    mockFetchAllRows.mockResolvedValueOnce([
+      { survey_submission_id: 4 },
+      { survey_submission_id: 7 },
+    ]);
+    expect(await readGateSeen("2026-10-20")).toEqual(new Set([4, 7]));
+    expect(paths()[0]).toBe(
+      "/rest/v1/personal_report?initial_gate_seen_at=gte." +
+        encodeURIComponent("2026-10-19T22:00:00.000Z") +
+        "&select=survey_submission_id&order=id.asc"
+    );
+    mockFetchAllRows.mockResolvedValueOnce(null);
+    expect(await readGateSeen("2026-10-20")).toBeNull();
+  });
+
+  // As on every AP number: its info card's query counts it as the page does.
+  it("shows the queries behind the new counts", () => {
+    const came = FIELDS["payment.exit-came"]!.query.text;
+    expect(came).toContain("a.event_type in ('initial_gate_back', 'initial_gate_browser_back')");
+    expect(came).toContain("and a.metadata->>'to' = 'exit_page'");
+    expect(came).toContain("where pr.initial_gate_seen_at is not null");
+    expect(came).toContain("not exists (select 1 from ap_team_user t where t.id = s.user_id)");
+    expect(FIELDS["pts.step-gate"]!.query.text).toContain(
+      "AND a.event_type = 'initial_gate_browser_back')) AS pressed_browser_back"
+    );
   });
 });

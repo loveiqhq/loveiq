@@ -474,6 +474,8 @@ export function buildPayment(input: {
   gateOn?: boolean | null;
   /** The exit pages' events (readPaygateExitRows); null when they couldn't be read. */
   exitRows?: ExitEventRow[] | null;
+  /** The surveys whose report saw the EUR 1.99 page (readGateSeen); null when unreadable. */
+  gateSeen?: ReadonlySet<number> | null;
 }): PaymentPayload {
   const { facts, filters: f, today, now, uplift } = input;
   const scope: Scope = assessmentScope(f);
@@ -1189,7 +1191,13 @@ export function buildPayment(input: {
       },
     },
     elasticity,
-    exits: buildPaygateExits({ subs, rows: input.exitRows ?? null, blocked: tablet, to: facts.to }),
+    exits: buildPaygateExits({
+      subs,
+      rows: input.exitRows ?? null,
+      gateSeen: input.gateSeen ?? null,
+      blocked: tablet,
+      to: facts.to,
+    }),
   };
 }
 
