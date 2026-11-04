@@ -356,6 +356,8 @@ function freeUnlockText(kind: FreeUnlock): string {
 function funnelLine(journey: SubmissionJourney): string {
   // The tracker's pay-to-start label with no payment yet and no gate stamp: the claim is
   // still settling (an unused token that bought nothing joins the gate's cohort instead).
+  // ponytail: a refunded pay-to-start purchase reads the same; the ledger query reads only
+  // succeeded rows, and refunds of these are rare.
   const pending =
     Boolean(journey.payToStart) && journey.payToStartPrice === undefined && !journey.gateCohort;
   const funnel =

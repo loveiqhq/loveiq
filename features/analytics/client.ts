@@ -933,10 +933,13 @@ export const markLeftInitialGate = () => {
  */
 export const emailReturnOf = (params: {
   get(name: string): string | null;
-}): { campaign: string | null } | null =>
-  params.get("from") === "email" || params.get("utm_source") === "email"
-    ? { campaign: params.get("utm_campaign") || null }
-    : null;
+}): { campaign: string | null } | null => {
+  if (params.get("from") !== "email" && params.get("utm_source") !== "email") return null;
+  const campaign = params.get("utm_campaign");
+  // The route stores only a utm-shaped campaign: any other is sent as none, so the
+  // return is still counted (an untagged email link) rather than refused.
+  return { campaign: campaign && /^[A-Za-z0-9_.-]{1,64}$/.test(campaign) ? campaign : null };
+};
 
 export const trackEmailReturn = (params: { campaign: string | null }) => {
   track("email_return", params);

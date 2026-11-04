@@ -37,6 +37,11 @@ describe("emailReturnOf", () => {
     expect(of("invite=1&from=email&utm_campaign=")).toEqual({ campaign: null });
   });
 
+  it("still counts a return whose campaign the route would refuse, as an untagged one", () => {
+    expect(of("from=email&utm_campaign=%3Cb%3Espring%3C%2Fb%3E")).toEqual({ campaign: null });
+    expect(of(`from=email&utm_campaign=${"x".repeat(65)}`)).toEqual({ campaign: null });
+  });
+
   it("is no return without an email link", () => {
     expect(of("")).toBeNull();
     expect(of("utm_source=google&utm_campaign=spring")).toBeNull();
