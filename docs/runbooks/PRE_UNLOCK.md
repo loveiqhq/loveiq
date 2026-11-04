@@ -137,6 +137,21 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   27.10, when the event came to mean this link, shown to every reader; before, a back arrow
   shown only to readers who came from the survey. The sticky bar is always on screen since then too, so
   `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".
+- The browser's or phone's own Back on the gate opens the same exit page (04.11,
+  `features/report/ui/gate/useGateBack.ts`). Before, after the survey it went to /survey's
+  "You've already finished", whose "Open my report" came straight back: a loop. The gate holds a
+  same-URL history entry (a desktop's Back, an iPhone's swipe) and a CloseWatcher (Android's back);
+  the exit page answers Android's back with its own way back to the gate. So Back goes between the
+  gate and its exit page and stays on the report (one limit below); Escape does nothing on either.
+  It is stored once a page as `initial_gate_browser_back` (`to: "exit_page"`), beside
+  `initial_gate_back`, and only for a Back that opened the exit page. An exit-page view
+  (`paygate_exit_viewed`, `stage: pre`) can now follow either one.
+  - Limit: Chrome's back button skips entries a page added before any tap, so on a desktop a gate
+    met without one (a reload, a later visit, a scroll before the tour started) still lets the
+    toolbar's Back leave. Phones are covered.
+  - The survey now opens the report in its own place (`location.replace`), as does "Open my
+    report" on "already finished", so what's left of the loop is finite.
+  - Previews: `/report?preview=1&v4=1&gate=tour` and `&gate=1`, then Back.
 - E07's holdout: compare full-report purchases after day 1 between `initial_gift_arm` = `gift`
   and `holdout`, staff left out. The gift's EUR 0 rows are never revenue. Since E07 moved to
   day 1 (Marcus, 27.10), a gifted reader can't buy the EUR 1.99 after their first day: read
