@@ -45,7 +45,7 @@ export const EMAIL_QUESTION_TEST_START = "2026-10-08T09:12:46Z";
  * moment it went live: a run begun from here on is outside every readout of the test,
  * because its arm, recomputed from the session id, is no longer what it was shown.
  */
-export const EMAIL_QUESTION_TEST_END = "2026-11-04T15:00:00Z";
+export const EMAIL_QUESTION_TEST_END = "2026-11-04T18:00:00Z";
 
 /**
  * The version every free survey run is asked since the test ended. A buyer who paid

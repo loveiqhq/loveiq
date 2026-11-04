@@ -250,6 +250,8 @@ export interface ExperimentArm {
   confidence: number | null;
   /** Why lift, chance and confidence are blank, when they are. */
   why: string | null;
+  /** The test is over: its confidence is final, never "not yet". */
+  ended?: boolean;
 }
 
 export interface AudienceDim {
@@ -1987,6 +1989,7 @@ function buildExperiments(
           ? `Finished after the email question (${r.finished} of ${r.reached})`
           : "Finished after the email question",
         ...(i === 0 ? { lift: null, chance: null, confidence: null, why: null } : t),
+        ended: true,
       });
     }
   }

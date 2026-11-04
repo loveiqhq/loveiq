@@ -469,6 +469,27 @@ describe("the Traffic page, as drawn", () => {
     ]);
   });
 
+  it("calls an ended test's confidence final, never 'not yet'", () => {
+    const p = traffic();
+    const base = p.experiments.arms.find((a) => a.test === "Email question" && !a.control)!;
+    const arm = (over: Partial<typeof base>) => ({ ...base, lift: 0.058, chance: 0.9, ...over });
+    view.payload = {
+      ...p,
+      experiments: {
+        ...p.experiments,
+        arms: [
+          p.experiments.arms.find((a) => a.test === "Email question" && a.control)!,
+          arm({ confidence: 0.8, ended: true }),
+          arm({ test: "Landing hero", arm: "Presenter video", confidence: 0.8, ended: false }),
+        ],
+      },
+    };
+    render(<ApTraffic />);
+    const card = within(document.getElementById("experiments")!);
+    expect(card.getAllByText("ended below 95%")).toHaveLength(1);
+    expect(card.getAllByText("not yet")).toHaveLength(1);
+  });
+
   it("describes the scorecard as the design does", () => {
     page();
     expect(
