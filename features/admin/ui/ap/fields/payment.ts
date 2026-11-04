@@ -642,6 +642,34 @@ select stage, reason, count(*) as readers,
  group by stage, reason
  order by stage, readers desc;`;
 
+const EXIT_CAME_Q = `${EXITS_EVENTS}
+-- How the EUR 1.99 page's exit page (pre) was reached: by "Not ready to unlock yet"
+-- (initial_gate_back) or by the browser's own Back on the EUR 1.99 page (initial_gate_browser_back),
+-- each when it opened the exit page (to = exit_page), of the readers who reached it, as shares of
+-- the finishers who saw the EUR 1.99 page (their report's initial_gate_seen_at). A reader who
+-- came both ways counts on both lines.
+, ways as (
+  select a.survey_submission_id as sid, a.event_type
+    from analytics_event a join fin on fin.id = a.survey_submission_id
+   where a.event_type in ('initial_gate_back', 'initial_gate_browser_back')
+     and a.metadata->>'to' = 'exit_page'
+), came as (
+  select count(*) filter (where exists (select 1 from ways w where w.sid = seen.sid
+                                          and w.event_type = 'initial_gate_back')) as by_not_ready,
+         count(*) filter (where exists (select 1 from ways w where w.sid = seen.sid
+                                          and w.event_type = 'initial_gate_browser_back')) as by_browser_back
+    from seen
+   where seen.stage = 'pre'
+), saw as (
+  select count(*) as n
+    from fin join personal_report pr on pr.survey_submission_id = fin.id
+   where pr.initial_gate_seen_at is not null
+)
+select saw.n as saw_the_page, came.by_not_ready, came.by_browser_back,
+       round(100.0 * came.by_not_ready / nullif(saw.n, 0), 1) as by_not_ready_pct,
+       round(100.0 * came.by_browser_back / nullif(saw.n, 0), 1) as by_browser_back_pct
+  from saw, came;`;
+
 const EXIT_WORDS_Q = `-- The exit pages' "Something else" sentences, newest first (the page masks email addresses,
 -- report links and phone numbers before it shows them; this query does not).
 select a.event_time, a.metadata->>'stage' as stage, a.metadata->>'answer_text' as words
@@ -663,7 +691,7 @@ const EXIT_EVENTS_TABLE: FieldTable = {
 };
 const EXIT_TABLES = [EXIT_EVENTS_TABLE, SUBMISSION, STAFF];
 const EXIT_RULE =
-  "The two pages “Not ready to unlock yet” opens: pre after the €1.99 page, full after the full report's plans for a €1.99 holder (E07's gift readers included). Each reader once a line, per page. Recorded from 28 Oct 2026.";
+  "The two pages “Not ready to unlock yet” opens: pre after the €1.99 page (whose browser's Back opens it too, from November 2026), full after the full report's plans for a €1.99 holder (E07's gift readers included). Each reader once a line, per page. Recorded from 28 Oct 2026.";
 
 export const fields: FieldRegistry = {
   // ---- the tiles
@@ -1467,7 +1495,41 @@ select price as best_price,
     caveat: `${EXIT_RULE} ${LEFT_OUT}`,
     tables: EXIT_TABLES,
     query: { lang: "SQL", text: EXITS_Q },
-    related: ["payment.exit-answered", "payment.exit-pressed", "payment.exit-paid"],
+    related: [
+      "payment.exit-came",
+      "payment.exit-answered",
+      "payment.exit-pressed",
+      "payment.exit-paid",
+    ],
+  },
+  "payment.exit-came": {
+    label: "How they reached it",
+    what: "Of the readers who reached the €1.99 page's exit page, who came by pressing “Not ready to unlock yet” and who by pressing the browser's or phone's own Back on the €1.99 page, each as a share of the readers who saw the €1.99 page.",
+    stat: "Share",
+    per: "per person",
+    formula: {
+      num: "Readers who reached the exit page with a press of that kind that opened it (initial_gate_back or initial_gate_browser_back, to exit_page)",
+      den: "The range's finishers who saw the €1.99 page (their report's initial_gate_seen_at)",
+      mult: "× 100",
+    },
+    caveat: `${EXIT_RULE} A reader who came both ways is on both lines, and one whose press was not stored, or who came back to the page with Forward or a reload, on neither, so the two need not add up to Reached. The browser's Back opens the exit page, and is stored once a page load, only since November 2026: before, it left the report unrecorded, so a range from before counts fewer by Back. A “Not ready” from before the exit page (it led to the landing page) is no way in. Saw the €1.99 page counts the page's first view on the server, as Pay to start's step of that name does. ${LEFT_OUT}`,
+    tables: [
+      {
+        ...EXIT_EVENTS_TABLE,
+        columns:
+          "survey_submission_id, event_type (paygate_exit_viewed; initial_gate_back, initial_gate_browser_back), metadata (stage, to)",
+      },
+      {
+        ...REPORT,
+        columns: "survey_submission_id, initial_gate_seen_at",
+        filters:
+          "None of its own: whether the finisher's report saw the €1.99 page, its first view stamped by the server (so far).",
+      },
+      SUBMISSION,
+      STAFF,
+    ],
+    query: { lang: "SQL", text: EXIT_CAME_Q },
+    related: ["payment.exit-reached", "payment.exit-left", "pts.step-gate"],
   },
   "payment.exit-answered": {
     label: "Answered why",

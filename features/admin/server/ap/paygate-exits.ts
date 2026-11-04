@@ -14,6 +14,11 @@ import { maskNote } from "./unlock-feedback";
  * page's people: its filters, the team and our tests left out). A reason is each reader's
  * latest; "paid after" counts a payment within 24 hours of the reader's first view of the page,
  * because E07's gift (the day after the gate, experiment #9) muddies anything later.
+ *
+ * Since the EUR 1.99 page's own Back opens `pre` too (#700, card "count every way out"), `pre`
+ * says how its readers came: by "Not ready to unlock yet" or by that Back, each a share of the
+ * readers who saw the EUR 1.99 page (its report's initial_gate_seen_at, as Pay to start's "Saw
+ * the €1.99 page" counts them).
  */
 
 /** The pages' first day: no row is older. */
@@ -41,15 +46,18 @@ const SELECT =
   "place:metadata->>place,via:metadata->>via,note:metadata->>answer_text";
 
 /**
- * The pages' events since the range's first day (or the pages' own): the exit events, and the
+ * The pages' events since the range's first day (or the pages' own): the exit events, the
  * EUR 1.99 page's Unlock presses made on its exit page (`initial_gate_cta_click`, place
- * `exit_card` / `exit_sticky`). Null when either read fails: a partial read is never counted.
+ * `exit_card` / `exit_sticky`), and what opened that exit page from the EUR 1.99 page ("Not
+ * ready to unlock yet", `initial_gate_back`, and the browser's own Back,
+ * `initial_gate_browser_back`, each `to: "exit_page"`; a "Not ready" from before the exit page
+ * led to the landing page, `to: "/"`). Null when any read fails: a partial read is never counted.
  */
 export async function readPaygateExitRows(from: string): Promise<ExitEventRow[] | null> {
   const since = encodeURIComponent(
     reportingDayStart(from > EXITS_FROM ? from : EXITS_FROM).toISOString()
   );
-  const [exits, presses] = await Promise.all([
+  const [exits, presses, ways] = await Promise.all([
     fetchAllRows<ExitEventRow>(
       "/rest/v1/analytics_event?event_type=in.(paygate_exit_viewed,paygate_exit_reason," +
         "paygate_exit_note,paygate_exit_cta_click,paygate_exit_leave)" +
@@ -59,9 +67,27 @@ export async function readPaygateExitRows(from: string): Promise<ExitEventRow[] 
       "/rest/v1/analytics_event?event_type=eq.initial_gate_cta_click" +
         `&metadata->>place=in.(exit_card,exit_sticky)&event_time=gte.${since}&select=${SELECT}&order=id.asc`
     ),
+    fetchAllRows<ExitEventRow>(
+      "/rest/v1/analytics_event?event_type=in.(initial_gate_back,initial_gate_browser_back)" +
+        `&metadata->>to=eq.exit_page&event_time=gte.${since}&select=${SELECT}&order=id.asc`
+    ),
   ]);
-  if (!exits || !presses) return null;
-  return [...exits, ...presses];
+  if (!exits || !presses || !ways) return null;
+  return [...exits, ...presses, ...ways];
+}
+
+/**
+ * The surveys whose report saw the EUR 1.99 page (initial_gate_seen_at, its first view), from
+ * the range's first day: a finisher of the range saw it after finishing. What `pre`'s ways in
+ * are shares of. Null when unreadable.
+ */
+export async function readGateSeen(from: string): Promise<Set<number> | null> {
+  const rows = await fetchAllRows<{ survey_submission_id: number }>(
+    "/rest/v1/personal_report?initial_gate_seen_at=gte." +
+      encodeURIComponent(reportingDayStart(from).toISOString()) +
+      "&select=survey_submission_id&order=id.asc"
+  );
+  return rows ? new Set(rows.map((r) => r.survey_submission_id)) : null;
 }
 
 export interface ExitReasonCount {
@@ -78,6 +104,13 @@ export interface ExitPageRow {
   /** Readers who saw the page, each once, and the views. */
   reached: number;
   views: number;
+  /**
+   * Pre only (null on full): of those who reached the page, who came by "Not ready to unlock yet"
+   * and who by the browser's or phone's own Back on the EUR 1.99 page (stored once the page's
+   * Back opens it, #700), each once; one who came both ways is on both. `sawGate`: the range's
+   * finishers who saw the EUR 1.99 page, what both are shares of; null when unreadable.
+   */
+  came: { notReady: number; browserBack: number; sawGate: number | null } | null;
   /** Readers who tapped a reason, and who wrote a sentence. */
   answered: number;
   wrote: number;
@@ -107,9 +140,16 @@ const STAGES: ReadonlyArray<{ stage: ExitStage; name: string; plans: ReadonlySet
   { stage: "full", name: "After the full report's plans", plans: FULL_PLANS },
 ];
 
-/** A row's page: the gate's exit-page presses carry a place, not a stage. */
+/** The EUR 1.99 page's own events: the ones read here all belong to its exit page, pre. */
+const GATE_EVENTS: ReadonlySet<string> = new Set([
+  "initial_gate_cta_click",
+  "initial_gate_back",
+  "initial_gate_browser_back",
+]);
+
+/** A row's page: the gate's own events carry no stage. */
 function stageOf(row: ExitEventRow): ExitStage | null {
-  if (row.event_type === "initial_gate_cta_click") return "pre";
+  if (GATE_EVENTS.has(row.event_type)) return "pre";
   return row.stage === "pre" || row.stage === "full" ? row.stage : null;
 }
 
@@ -118,6 +158,8 @@ const epoch = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
 export function buildPaygateExits(input: {
   subs: SubFact[];
   rows: ExitEventRow[] | null;
+  /** The surveys whose report saw the EUR 1.99 page (readGateSeen), or null when unreadable. */
+  gateSeen: ReadonlySet<number> | null;
   /** peopleBlocked's reason under these filters, or null. */
   blocked: string | null;
   /** The range's last day. */
@@ -131,6 +173,8 @@ export function buildPaygateExits(input: {
 
   const subsById = new Map(input.subs.map((s) => [s.id, s]));
   const mine = input.rows.filter((r) => subsById.has(r.survey_submission_id));
+  const seen = input.gateSeen;
+  const sawGate = seen ? input.subs.filter((s) => seen.has(s.id)).length : null;
 
   const pages = STAGES.map(({ stage, name, plans }): ExitPageRow => {
     const rows = mine
@@ -148,6 +192,7 @@ export function buildPaygateExits(input: {
       chapters: new Set<number>(),
       browserBack: new Set<number>(),
     };
+    const came = { notReady: new Set<number>(), browserBack: new Set<number>() };
     const notes: ExitEventRow[] = [];
 
     for (const r of rows) {
@@ -182,6 +227,12 @@ export function buildPaygateExits(input: {
           else if (r.via === "chapters") left.chapters.add(sid);
           else if (r.via === "back") left.back.add(sid);
           else if (r.via === "browser_back") left.browserBack.add(sid);
+          break;
+        case "initial_gate_back":
+          came.notReady.add(sid);
+          break;
+        case "initial_gate_browser_back":
+          came.browserBack.add(sid);
           break;
       }
     }
@@ -223,6 +274,10 @@ export function buildPaygateExits(input: {
       name,
       reached: firstView.size,
       views,
+      came:
+        stage === "pre"
+          ? { notReady: came.notReady.size, browserBack: came.browserBack.size, sawGate }
+          : null,
       answered,
       wrote: wrote.size,
       reasons,

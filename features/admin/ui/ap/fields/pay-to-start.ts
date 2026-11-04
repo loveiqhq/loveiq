@@ -39,10 +39,10 @@ const T_GATE_EVENTS: FieldTable = {
   source: "production",
   table: "analytics_event",
   columns:
-    "survey_submission_id, event_type ('initial_gate_cta_click', 'initial_gate_back'), metadata->>'place' ('card', 'sticky', and from 28 Oct 2026 'exit_card', 'exit_sticky')",
+    "survey_submission_id, event_type ('initial_gate_cta_click', 'initial_gate_back', 'initial_gate_browser_back'), metadata->>'place' ('card', 'sticky', and from 28 Oct 2026 'exit_card', 'exit_sticky')",
   filters: `Period: through the finishers it belongs to (their survey's day). ${NOT_SPLIT}`,
   watch:
-    "One row a press on the report's €1.99 page, written by the page. “Not ready to unlock yet” (initial_gate_back) is stored from 27 Oct 2026; from 28 Oct 2026 it opens the page's exit page, whose Unlock presses are the 'exit_' places.",
+    "One row a press on the report's €1.99 page, written by the page. “Not ready to unlock yet” (initial_gate_back) is stored from 27 Oct 2026; from 28 Oct 2026 it opens the page's exit page, whose Unlock presses are the 'exit_' places. The browser's or phone's own Back on the page opens that exit page too, and is stored (initial_gate_browser_back, once a page load) from November 2026; before, it left the report unrecorded.",
 };
 const T_PREPAID: FieldTable = {
   source: "production",
@@ -297,13 +297,19 @@ SELECT (SELECT count(*) FROM starts, b
        - (SELECT n FROM buyer_starts) AS survey_started;
 `;
 
-/** The €1.99 page's funnel: who of its finishers saw the page. */
+/** The €1.99 page's funnel: who of its finishers saw the page, and the line under it. */
 const GATE_SEEN =
   FC_FREE +
   `
 -- The report's own EUR 1.99 page, while it is switched on: its finishers (the cohort stamped at
--- their survey's submit), and those whose view of the page was recorded.
-SELECT count(*) AS finished, count(*) FILTER (WHERE pr.initial_gate_seen_at IS NOT NULL) AS saw_the_page
+-- their survey's submit), and those whose view of the page was recorded. The line under it,
+-- from the page's own events: who pressed "Not ready to unlock yet" (stored since 27 Oct 2026)
+-- and who the browser's or phone's own Back on it (from November 2026), each once.
+SELECT count(*) AS finished, count(*) FILTER (WHERE pr.initial_gate_seen_at IS NOT NULL) AS saw_the_page,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM analytics_event a WHERE a.survey_submission_id = f.id
+                                        AND a.event_type = 'initial_gate_back')) AS pressed_not_ready,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM analytics_event a WHERE a.survey_submission_id = f.id
+                                        AND a.event_type = 'initial_gate_browser_back')) AS pressed_browser_back
   FROM free f JOIN personal_report pr ON pr.survey_submission_id = f.id
  WHERE f.gate;
 `;
@@ -698,9 +704,10 @@ export const fields: FieldRegistry = {
     per: "per finished survey",
     formula: { num: "Finishers in the €1.99 page's cohort whose view of the page was recorded" },
     caveat:
-      "Only while the report's €1.99 page is switched on: its cohort is stamped when the survey is submitted. Blank while it is off. The line under it: who pressed “Not ready to unlock yet” (stored since 27 Oct 2026; Pressed Unlock's card has the query). From 28 Oct 2026 that opens the page's exit page, where readers can still unlock, so it no longer means they left.",
+      "Only while the report's €1.99 page is switched on: its cohort is stamped when the survey is submitted. Blank while it is off. The line under it: who pressed “Not ready to unlock yet” (stored since 27 Oct 2026) and who pressed the browser's or phone's own Back on the page (stored from November 2026), each reader once a side. From 28 Oct 2026 “Not ready” opens the page's exit page, where readers can still unlock, so it no longer means they left; the browser's Back opens the same page since it is stored (before, it left the report unrecorded).",
     tables: [
       { ...REPORTS, columns: "survey_submission_id, initial_gate_cohort_at, initial_gate_seen_at" },
+      T_GATE_EVENTS,
       T_SUBS,
     ],
     query: SQL(GATE_SEEN),

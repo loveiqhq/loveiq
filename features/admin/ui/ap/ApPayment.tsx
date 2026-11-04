@@ -14,6 +14,7 @@ import type {
   SegmentRow,
   SegmentTable,
 } from "@features/admin/server/ap/payment";
+import type { ExitPageRow } from "@features/admin/server/ap/paygate-exits";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { reportingDay } from "@shared/time/reporting-day";
 
@@ -88,6 +89,12 @@ const MULT_INFO: Record<string, { k: string }> = {
 /** Groups under this many finishers are left out of these segments, as drawn. */
 const SMALL_GROUP = 15;
 const SMALL_LEFT_OUT: ReadonlySet<string> = new Set(["relationship", "country"]);
+
+/** What opened the €1.99 page's exit page (ExitPageRow.came), as its lines and the CSV name them. */
+const WAYS_IN = [
+  { key: "notReady", label: "Pressed “Not ready to unlock yet”" },
+  { key: "browserBack", label: "Pressed the browser's Back" },
+] as const;
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 /** "five" for 5, as the design writes the model's points; figures from ten. */
@@ -1455,11 +1462,57 @@ function ElasticityModel({
   );
 }
 
+/** A line of a ranked list: its label, a bar for its share, the count and the share. */
+function ShareRow({ label, n, share }: { label: string; n: number; share: number | null }) {
+  return (
+    <div
+      className="grid items-center gap-3"
+      style={{ gridTemplateColumns: "minmax(0, 2.4fr) minmax(0, 1fr) 40px 44px" }}
+    >
+      <span className="text-[13px] text-ap-ink">{label}</span>
+      <Bar pct={share} />
+      <span className="text-right text-[13px] font-bold tabular-nums text-ap-ink">
+        {fmt("count", n)}
+      </span>
+      <span className="text-right text-xs font-bold tabular-nums text-ap-muted">
+        {fmt("pct", share, 0)}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * How readers reached the €1.99 page's exit page (card "count every way out"): by "Not ready to
+ * unlock yet", or by the browser's own Back on the €1.99 page, which opens it too since #700. Each
+ * a share of the readers who saw the €1.99 page.
+ */
+function WaysIn({ name, came }: { name: string; came: NonNullable<ExitPageRow["came"]> }) {
+  return (
+    <>
+      <SubHead title={`How they reached it · ${name}`} info="payment.exit-came">
+        {came.sawGate === null
+          ? "Who saw the €1.99 page could not be read just now."
+          : came.sawGate > 0
+            ? `Of the ${fmt("count", came.sawGate)} readers who saw the €1.99 page. One who came both ways is on both lines.`
+            : "Nobody saw the €1.99 page in this range."}
+      </SubHead>
+      {WAYS_IN.map((w) => (
+        <ShareRow
+          key={w.key}
+          label={w.label}
+          n={came[w.key]}
+          share={ratio(came[w.key], came.sawGate)}
+        />
+      ))}
+    </>
+  );
+}
+
 /**
  * The paygate's exit pages (Marcus's "Paygate exit pages", 28.10; Marcus: "add it to the payment
- * report"): the two pages "Not ready to unlock yet" opens. Who reached each, why not today (each
- * reader's latest reason), who pressed Unlock there, who paid within a day, how they left, and
- * their own words, masked.
+ * report"): the two pages "Not ready to unlock yet" opens (and, on the €1.99 page, the browser's
+ * Back). Who reached each, how (the €1.99 page's), why not today (each reader's latest reason),
+ * who pressed Unlock there, who paid within a day, how they left, and their own words, masked.
  */
 function Exits({ d }: { d: PaymentPayload }) {
   const { why, pages } = d.exits;
@@ -1468,7 +1521,7 @@ function Exits({ d }: { d: PaymentPayload }) {
       <SectionHead
         id="h-exits"
         title="Paygate exits"
-        description="The two pages “Not ready to unlock yet” opens: after the €1.99 page, and, for a €1.99 holder, after the full report's plans. Each makes the case again and asks why not today. Recorded from 28 Oct 2026, for the range's finishers."
+        description="The two pages “Not ready to unlock yet” opens: after the €1.99 page, where the browser's Back opens it too, and, for a €1.99 holder, after the full report's plans. Each makes the case again and asks why not today. Recorded from 28 Oct 2026, for the range's finishers."
       />
       {why ? (
         <Why>{why}</Why>
@@ -1493,7 +1546,7 @@ function Exits({ d }: { d: PaymentPayload }) {
                   v: p.name,
                   sub:
                     p.stage === "pre"
-                      ? "“Not ready” on the €1.99 page"
+                      ? "“Not ready” or Back on the €1.99 page"
                       : "“Not ready” on the plans, €1.99 holders",
                   left: true,
                   weight: "bold",
@@ -1523,26 +1576,14 @@ function Exits({ d }: { d: PaymentPayload }) {
           />
           {pages.map((p) => (
             <div key={p.stage} className="flex flex-col gap-3">
+              {p.came ? <WaysIn name={p.name} came={p.came} /> : null}
               <SubHead title={`Why not today · ${p.name}`} info="payment.exit-reasons">
                 {p.answered
                   ? `Each reader's latest answer, of the ${fmt("count", p.answered)} who answered.`
                   : "Nobody has answered on this page in this range."}
               </SubHead>
               {p.reasons.map((r) => (
-                <div
-                  key={r.code}
-                  className="grid items-center gap-3"
-                  style={{ gridTemplateColumns: "minmax(0, 2.4fr) minmax(0, 1fr) 40px 44px" }}
-                >
-                  <span className="text-[13px] text-ap-ink">{r.label}</span>
-                  <Bar pct={r.share} />
-                  <span className="text-right text-[13px] font-bold tabular-nums text-ap-ink">
-                    {fmt("count", r.n)}
-                  </span>
-                  <span className="text-right text-xs font-bold tabular-nums text-ap-muted">
-                    {fmt("pct", r.share, 0)}
-                  </span>
-                </div>
+                <ShareRow key={r.code} label={r.label} n={r.n} share={r.share} />
               ))}
               {p.words.length ? (
                 <>
@@ -1712,6 +1753,28 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
             p.left.browserBack,
           ],
         })),
+      },
+    },
+    {
+      name: "Paygate exits · how they reached it",
+      table: {
+        columns: [
+          col("Way in", "text"),
+          col("Page", "text"),
+          col("Readers", "count"),
+          col("Share of those who saw the €1.99 page", "pct"),
+        ],
+        rows: d.exits.pages.flatMap((p) => {
+          const came = p.came;
+          if (!came) return [];
+          return [
+            { label: "Saw the €1.99 page", values: [p.name, came.sawGate, null] },
+            ...WAYS_IN.map((w) => ({
+              label: w.label,
+              values: [p.name, came[w.key], ratio(came[w.key], came.sawGate)],
+            })),
+          ];
+        }),
       },
     },
     {
