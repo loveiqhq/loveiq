@@ -343,7 +343,8 @@ describe("the Traffic builder, as the design reads", () => {
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
       "Landing hero: Since 14 Oct 2026 · live",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",
-      "Email question: Since 9 Oct 2026 · live",
+      // Ended on 4 Nov 2026, written as the Payment page writes an ended test.
+      "Email question: 9 Oct – 3 Nov 2026 · ended",
     ]);
   });
 

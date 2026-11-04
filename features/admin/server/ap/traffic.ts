@@ -1933,7 +1933,8 @@ function buildExperiments(
   {
     const w = win(EMAIL_TEST_START_DAY, EMAIL_TEST_LAST_DAY);
     const test = "Email question";
-    const note = `${rangeLabel(EMAIL_TEST_START_DAY, EMAIL_TEST_LAST_DAY)} · ended, everyone gets the anonymous email since 4 Nov`;
+    // As the Payment page writes an ended test ("May – Aug 2026 · ended").
+    const note = `${rangeLabel(EMAIL_TEST_START_DAY, EMAIL_TEST_LAST_DAY)} · ended`;
     const startsWhy = w ? startsBlocked(scope, w.from, facts.asOf) : null;
     const ok = w !== null && startsSplit(w.from, today) && !startsWhy;
     const rows = (

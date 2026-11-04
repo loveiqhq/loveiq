@@ -327,9 +327,7 @@ describe("Traffic page builder", () => {
       ["Previous question", "Finished after the email question (8 of 10)", 0],
       ["Anonymous email", "Finished after the email question (9 of 10)", 1],
     ]);
-    expect(email[0]!.note).toBe(
-      "9 Oct – 3 Nov 2026 · ended, everyone gets the anonymous email since 4 Nov"
-    );
+    expect(email[0]!.note).toBe("9 Oct – 3 Nov 2026 · ended");
     // A range wholly after the end has nothing to read, and says why.
     const after = traffic({
       ...at,
