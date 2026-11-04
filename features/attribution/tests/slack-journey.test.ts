@@ -866,25 +866,51 @@ describe("funnel, money, first page and returns", () => {
     expect(lines({}).some((l) => l.startsWith("First page"))).toBe(false);
   });
 
-  it("names each email they came back through once, at its first return, a Berlin day", () => {
-    const rendered = lines({
-      emailReturns: [
-        // 23:30 UTC on 4 Nov is already 5 Nov in Berlin.
-        { campaign: "72h_no_unlock", at: "2026-11-04T23:30:00.000Z" },
-        { campaign: "initial_gift", at: "2026-11-06T09:00:00.000Z" },
-        { campaign: "72h_no_unlock", at: "2026-11-07T09:00:00.000Z" },
-        { campaign: null, at: "2026-11-08T09:00:00.000Z" },
-        { campaign: "unlock_feedback", at: "2026-11-08T10:00:00.000Z" },
-        { campaign: "<b>spring</b>", at: "2026-11-09T10:00:00.000Z" },
-      ],
-    });
-    expect(rendered.find((l) => l.startsWith("Came back"))).toBe(
-      "Came back by email: *72h email* 5 Nov, *gift email (E07)* 6 Nov, *email link* 8 Nov, " +
-        "*unlock feedback email* 8 Nov, *&lt;b&gt;spring&lt;/b&gt;* 9 Nov"
-    );
-    // Just above the rail.
-    expect(rendered.at(-2)).toMatch(/^Came back by email:/);
+  it("names each of our emails once, at its first return, a Berlin day", () => {
+    // Pinned off Berlin, so the day below is Berlin's only because the code asks for it,
+    // whatever time zone the machine running this is in.
+    const tz = process.env.TZ;
+    process.env.TZ = "UTC";
+    try {
+      const rendered = lines({
+        emailReturns: [
+          // 23:30 UTC on 4 Nov is already 5 Nov in Berlin.
+          { campaign: "72h_no_unlock", at: "2026-11-04T23:30:00.000Z" },
+          { campaign: "initial_gift", at: "2026-11-06T09:00:00.000Z" },
+          { campaign: "72h_no_unlock", at: "2026-11-07T09:00:00.000Z" },
+          { campaign: "report_ready", at: "2026-11-07T10:00:00.000Z" },
+          { campaign: "receipt", at: "2026-11-07T11:00:00.000Z" },
+          // Both reminders are one email to the reader.
+          { campaign: "invite_reminder_1", at: "2026-11-07T12:00:00.000Z" },
+          { campaign: "invite_reminder_2", at: "2026-11-08T12:00:00.000Z" },
+          { campaign: null, at: "2026-11-08T09:00:00.000Z" },
+          { campaign: "unlock_feedback", at: "2026-11-08T10:00:00.000Z" },
+          { campaign: "pay_to_start", at: "2026-11-08T11:00:00.000Z" },
+        ],
+      });
+      expect(rendered.find((l) => l.startsWith("Came back"))).toBe(
+        "Came back by email: *72h email* 5 Nov, *gift email (E07)* 6 Nov, " +
+          "*report-ready email* 7 Nov, *receipt email* 7 Nov, *invite reminder* 7 Nov, " +
+          "*email link* 8 Nov, *unlock feedback email* 8 Nov, *pay-to-start email* 8 Nov"
+      );
+      // Just above the rail.
+      expect(rendered.at(-2)).toMatch(/^Came back by email:/);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
   });
+
+  // email_return comes from the browser: a made-up campaign is never printed.
+  it.each(["<b>spring</b>", "Your report was refunded", "x".repeat(64), "constructor"])(
+    "reads a campaign that is none of our emails (%s) as an untagged email link",
+    (campaign) => {
+      const line = lines({ emailReturns: [{ campaign, at: "2026-11-08T10:00:00.000Z" }] }).find(
+        (l) => l.startsWith("Came back")
+      );
+      expect(line).toBe("Came back by email: *email link* 8 Nov");
+    }
+  );
 
   it("says nothing about returns for a reader who never came back", () => {
     expect(lines({ emailReturns: [] }).some((l) => l.startsWith("Came back"))).toBe(false);

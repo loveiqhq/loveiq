@@ -22,6 +22,7 @@ import type { FreeUnlock, SubmissionJourney } from "@features/attribution/server
 import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
 import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
 import { REPORTING_TIME_ZONE } from "@shared/time/reporting-day";
+import { EMAIL_LINKS } from "@shared/emails/email-link";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { describeQuestionCount } from "@features/survey/server/utils";
 import {
@@ -387,29 +388,35 @@ function funnelLine(journey: SubmissionJourney): string {
   return `Funnel: *${funnelName(journey)}*  |  ${money}`;
 }
 
-/** The email a return link came from, by the link's utm_campaign. */
-function emailName(campaign: string | null): string {
-  switch (campaign) {
-    case null:
-      return "email link";
-    case "72h_no_unlock":
-      return "72h email";
-    case "initial_gift":
-      return "gift email (E07)";
-    case "unlock_feedback":
-      return "unlock feedback email";
-    case "chapter_nudge":
-      return "chapter email";
-    default:
-      return escapeSlack(campaign);
-  }
-}
+/**
+ * Our emails by their links' utm_campaign: only these are named. `email_return` is posted by
+ * the browser, so a made-up campaign reads as any untagged link does, "email link".
+ */
+const EMAIL_NAMES = new Map<string, string>([
+  [EMAIL_LINKS.reportReady.campaign, "report-ready email"],
+  [EMAIL_LINKS.receipt.campaign, "receipt email"],
+  [EMAIL_LINKS.payToStart.campaign, "pay-to-start email"],
+  [EMAIL_LINKS.inviteReminder1.campaign, "invite reminder"],
+  [EMAIL_LINKS.inviteReminder2.campaign, "invite reminder"],
+  [EMAIL_LINKS.surveyPaused.campaign, "survey-paused email"],
+  [EMAIL_LINKS.unlockFeedback.campaign, "unlock feedback email"],
+  [EMAIL_LINKS.initialGift.campaign, "gift email (E07)"],
+  [EMAIL_LINKS.reportShare.campaign, "share email"],
+  // The two that tag their own links with their stage.
+  ["72h_no_unlock", "72h email"],
+  ["chapter_nudge", "chapter email"],
+]);
+
+const emailName = (campaign: string | null) =>
+  (campaign !== null && EMAIL_NAMES.get(campaign)) || "email link";
 
 /** "Came back by email: *72h email* 5 Nov, *gift email (E07)* 6 Nov": each email once, first return. */
 function emailReturnsLine(journey: SubmissionJourney): string | null {
-  const first = new Map<string | null, string>();
-  for (const r of journey.emailReturns ?? [])
-    if (!first.has(r.campaign)) first.set(r.campaign, r.at);
+  const first = new Map<string, string>();
+  for (const r of journey.emailReturns ?? []) {
+    const name = emailName(r.campaign);
+    if (!first.has(name)) first.set(name, r.at);
+  }
   if (first.size === 0) return null;
   const day = (at: string) =>
     new Date(at).toLocaleDateString("en-GB", {
@@ -417,7 +424,7 @@ function emailReturnsLine(journey: SubmissionJourney): string | null {
       month: "short",
       timeZone: REPORTING_TIME_ZONE,
     });
-  return `Came back by email: ${[...first].map(([c, at]) => `*${emailName(c)}* ${day(at)}`).join(", ")}`;
+  return `Came back by email: ${[...first].map(([name, at]) => `*${name}* ${day(at)}`).join(", ")}`;
 }
 
 /**

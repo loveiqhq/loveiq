@@ -424,6 +424,9 @@ function payToStartOfferOf(payments: PaymentRow[]): { payToStartOffer?: "full" |
  */
 export const GATE_STAMPED_AT_SUBMIT_MS = 60 * 60_000;
 
+/** A visit this long after the first is a return: AP's `first_t + INTERVAL 30 MINUTE`. */
+export const EMAIL_RETURN_AFTER_MS = 30 * 60_000;
+
 function stampedAtSubmit(submittedAt: string | null, stampedAt: string | null | undefined) {
   if (!submittedAt || !stampedAt) return false;
   const gap = Date.parse(stampedAt) - Date.parse(submittedAt);
@@ -617,6 +620,16 @@ export async function buildSubmissionJourney(
     amount: toNumber(p.amount) ?? 0,
     currency: (p.currency ?? "EUR").toUpperCase(),
   }));
+  // A return is a visit more than half an hour after the reader's first one, AP-Analytics'
+  // rule for report returns (fetchReportReturns, features/admin/server/ap/posthog.ts). Every
+  // report link we mail carries from=email, so a first open from the report-ready email is
+  // an email arrival, and no return. The first visit is the earliest open or report-page
+  // event, the gate's and the email_return itself among them.
+  const firstSeen = [reportViewedAt, events[0]?.event_time ?? null]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => Date.parse(v))
+    .filter(Number.isFinite);
+  const returnsFrom = firstSeen.length > 0 ? Math.min(...firstSeen) + EMAIL_RETURN_AFTER_MS : -1;
   const backByEmail = [
     ...returns.map((r) => ({
       campaign: typeof r.metadata?.campaign === "string" ? r.metadata.campaign : null,
@@ -626,7 +639,9 @@ export async function buildSubmissionJourney(
     ...payments
       .filter((p) => p.metadata?.source === UNLOCK_FEEDBACK_SOURCE && p.payment_date_time)
       .map((p) => ({ campaign: UNLOCK_FEEDBACK_SOURCE, at: p.payment_date_time! })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+  ]
+    .filter((r) => Date.parse(r.at) > returnsFrom)
+    .sort((a, b) => a.at.localeCompare(b.at));
 
   return {
     submissionId,

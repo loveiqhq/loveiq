@@ -469,6 +469,40 @@ describe("buildSubmissionJourney", () => {
       expect(journey?.freeUnlocks).toEqual([]);
     });
 
+    /**
+     * AP-Analytics' rule for a return (fetchReportReturns): a visit more than 30 minutes after
+     * the reader's first. Every report link we mail carries from=email, so the report-ready
+     * email's first open is an email arrival and no return (8% of first opens in 30 days).
+     */
+    it.each([
+      ["the first open itself, from the report-ready email", "2026-08-24T10:30:00.000Z", false],
+      ["a click within the half hour", "2026-08-24T10:59:59.000Z", false],
+      ["exactly half an hour later", "2026-08-24T11:00:00.000Z", false],
+      ["a visit after the half hour", "2026-08-24T11:00:01.000Z", true],
+    ])("counts as a return only after the first visit: %s", async (_label, at, counted) => {
+      route({
+        reportSessions: [{ started_at: "2026-08-24T10:30:00.000Z", ended_at: null }],
+        returns: [{ event_time: at, metadata: { campaign: "report_ready" } }],
+      });
+      expect((await buildSubmissionJourney(1296))?.emailReturns).toEqual(
+        counted ? [{ campaign: "report_ready", at }] : []
+      );
+    });
+
+    it("takes the first visit from any report-page event, the EUR 1.99 page's too", async () => {
+      // A gated reader writes no report_session; their first visit is the gate's own event.
+      route({
+        events: [{ event_type: "initial_gate_viewed", event_time: "2026-08-24T10:20:00.000Z" }],
+        returns: [
+          { event_time: "2026-08-24T10:20:01.000Z", metadata: { campaign: "report_ready" } },
+          { event_time: "2026-08-25T08:00:00.000Z", metadata: { campaign: "initial_gift" } },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.emailReturns).toEqual([
+        { campaign: "initial_gift", at: "2026-08-25T08:00:00.000Z" },
+      ]);
+    });
+
     it("collects the email returns, the feedback answer's among them, in time order", async () => {
       route({
         returns: [
