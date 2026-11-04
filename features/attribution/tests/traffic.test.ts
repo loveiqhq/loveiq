@@ -7,17 +7,28 @@ import {
 } from "@features/attribution/server/traffic";
 
 describe("classifyTraffic — where they came from", () => {
-  it("takes the referring site as the source when no campaign tag names one", () => {
-    // An organic search: 10 of the last 30 days' surveys read "Direct" with this unread.
-    const organic = classifyTraffic(JSON.stringify({ referrer_host: "www.google.com" }));
-    expect(organic).toMatchObject({ bucket: "Organic", source: "www.google.com" });
+  // AP-Analytics' channel (classifySource): an untagged visit by its referring site. 10 of the
+  // last 30 days' surveys read "Direct" with an organic search's referrer unread.
+  it.each([
+    [{ referrer_host: "www.google.com" }, "organic_search"],
+    [{ referrer_host: "l.instagram.com" }, "social"],
+    [{ referrer_host: "com.twitter.android" }, "social"],
+    [{ referrer_host: "example.org" }, "referral"],
+    [{ referrer_host: "chatgpt.com" }, "ai"],
+    [{ utm_source: "chatgpt.com" }, "ai"],
+    [{ utm_source: "email", utm_medium: "nurture", utm_campaign: "survey_paused" }, "email"],
+    [{ utm_source: "google", utm_medium: "cpc", gclid: "x" }, "google_ads"],
+    [{}, "direct"],
+  ])("reads %j as AP's %s", (tracker, channel) => {
+    expect(classifyTraffic(JSON.stringify(tracker)).channel).toBe(channel);
   });
 
-  it("keeps a tagged source over the referrer", () => {
+  it("keeps the referring site for the line, and the tags as the source", () => {
     const tagged = classifyTraffic(
-      JSON.stringify({ utm_source: "chatgpt.com", referrer_host: "chatgpt.com.example" })
+      JSON.stringify({ utm_source: "chatgpt.com", referrer_host: "chatgpt.com" })
     );
-    expect(tagged.source).toBe("chatgpt.com");
+    expect(tagged).toMatchObject({ source: "chatgpt.com", referrerHost: "chatgpt.com" });
+    expect(classifyTraffic(JSON.stringify({ referrer_host: "www.google.com" })).source).toBeNull();
   });
 
   it("reads the first page the survey route stamps", () => {

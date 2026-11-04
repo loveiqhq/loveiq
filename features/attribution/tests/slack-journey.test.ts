@@ -11,6 +11,7 @@ import {
   STAMPED_AT_SUBMIT_MS,
 } from "@features/admin/server/ap/pay-to-start";
 import type { SlackBlock } from "@shared/observability/slack";
+import { EMAIL_LINKS } from "@shared/emails/email-link";
 import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 /**
@@ -862,6 +863,47 @@ describe("funnel, money, first page and returns", () => {
     expect(rendered[from + 1]).toBe("First page: `/glossary/*bold*_termx`");
   });
 
+  // AP-Analytics' channel names (classifySource, the Traffic page's source filter), so the
+  // line and the dashboard read alike; the referring site is the detail of an untagged visit.
+  it.each<[string, Partial<SubmissionJourney["traffic"]>, string]>([
+    [
+      "an organic search",
+      { channel: "organic_search", referrerHost: "www.google.com" },
+      "Came from: *Organic search* — www.google.com",
+    ],
+    [
+      "a social app's link",
+      { channel: "social", referrerHost: "l.instagram.com" },
+      "Came from: *Social* — l.instagram.com",
+    ],
+    [
+      "an AI assistant",
+      { channel: "ai", source: "chatgpt.com" },
+      "Came from: *AI assistants* — chatgpt.com",
+    ],
+    [
+      "one of our emails",
+      { channel: "email", source: "email", medium: "nurture", campaign: "survey_paused" },
+      "Came from: *Email* — email / nurture / survey_paused",
+    ],
+    ["no trace at all", { channel: "direct" }, "Came from: *Direct / untagged*"],
+  ])("names %s as AP does", (_label, traffic, expected) => {
+    const rendered = lines({
+      traffic: {
+        bucket: "Direct",
+        source: null,
+        medium: null,
+        campaign: null,
+        isGoogleAds: false,
+        keyword: null,
+        matchType: null,
+        network: null,
+        ...traffic,
+      },
+    });
+    expect(rendered.find((l) => l.startsWith("Came from:"))).toBe(expected);
+  });
+
   it("leaves the first page out when the survey did not carry one", () => {
     expect(lines({}).some((l) => l.startsWith("First page"))).toBe(false);
   });
@@ -899,6 +941,15 @@ describe("funnel, money, first page and returns", () => {
       if (tz === undefined) delete process.env.TZ;
       else process.env.TZ = tz;
     }
+  });
+
+  // A new email in shared/emails/email-link.ts must get a name here, or its returns read
+  // as an untagged "email link".
+  it.each(Object.values(EMAIL_LINKS).map((l) => l.campaign))("names %s", (campaign) => {
+    const line = lines({ emailReturns: [{ campaign, at: "2026-11-08T10:00:00.000Z" }] }).find((l) =>
+      l.startsWith("Came back")
+    );
+    expect(line).not.toContain("*email link*");
   });
 
   // email_return comes from the browser: a made-up campaign is never printed.

@@ -23,6 +23,7 @@ import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
 import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
 import { REPORTING_TIME_ZONE } from "@shared/time/reporting-day";
 import { EMAIL_LINKS } from "@shared/emails/email-link";
+import { SOURCES } from "@features/admin/server/ap/filters";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { describeQuestionCount } from "@features/survey/server/utils";
 import {
@@ -147,8 +148,17 @@ function trafficParts(journey: SubmissionJourney): { head: string; detail: strin
   }
 
   const parts = [source, medium, campaign].filter(Boolean).map((p) => esc(p!));
-  return { head: bucket, detail: parts.length > 0 ? parts.join(" / ") : null };
+  const { channel, referrerHost } = journey.traffic;
+  return {
+    // AP-Analytics' name for the channel (its source filter's), so the line and the dashboard
+    // agree; the old bucket only for a journey assembled without one.
+    head: (channel && CHANNEL_NAMES.get(channel)) || bucket,
+    detail: parts.length > 0 ? parts.join(" / ") : referrerHost ? esc(referrerHost) : null,
+  };
 }
+
+/** AP-Analytics' source names (SOURCES in features/admin/server/ap/filters.ts). */
+const CHANNEL_NAMES = new Map<string, string>(SOURCES.map((s) => [s.value, s.label]));
 
 /**
  * The flat form — still what the purchase message renders.

@@ -170,6 +170,9 @@ describe("buildSubmissionJourney", () => {
       keyword: null,
       matchType: null,
       network: null,
+      // AP-Analytics' channel: google + cpc with no click id is still Google Ads there.
+      channel: "google_ads",
+      referrerHost: null,
     });
   });
 

@@ -7,6 +7,9 @@
  * a second, subtly different copy.
  */
 
+import { classifySource, type SourceClass } from "@features/admin/server/ap/facts";
+import { taggedOf } from "@features/admin/server/ap/pay-to-start";
+
 /** The tracker's key for the first page the browser opened, stamped by /api/survey. */
 export const LANDING_PATH_TRACKER_KEY = "landing_path";
 
@@ -29,6 +32,10 @@ export type TrafficInfo = {
   keyword: string | null;
   matchType: string | null;
   network: string | null;
+  /** AP-Analytics' channel (classifySource), as its Traffic page counts the visit. */
+  channel?: SourceClass;
+  /** The referring site's host, which the channel reads only on an untagged visit. */
+  referrerHost?: string | null;
   /**
    * The first page this browser opened on the site (`landing_path`, stamped by
    * /api/survey from shared/url/utm.ts's first-touch record), e.g. a glossary term.
@@ -68,9 +75,7 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
     }
   }
 
-  // With no utm_source, the referring site is the source: an organic search or a social
-  // app's link was "Direct" in Slack while its referrer_host sat in the tracker unread.
-  const source = str(parsed.utm_source) ?? str(parsed.referrer_host);
+  const source = str(parsed.utm_source);
   const medium = str(parsed.utm_medium);
   const landingPath = str(parsed.landing_path); // LANDING_PATH_TRACKER_KEY
   const campaign = str(parsed.utm_campaign);
@@ -103,6 +108,12 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
     matchType: str(parsed.matchtype),
     network: str(parsed.network),
     ...(landingPath ? { landingPath } : {}),
+    // AP-Analytics' own reading of where they came from, so the Slack line and the dashboard
+    // agree: an organic search, an AI assistant, an email, a social app or another site,
+    // from the tags or, for an untagged visit, the referring site (an organic Google visit
+    // read "Direct" before, its referrer_host unread).
+    channel: classifySource(taggedOf(utmTracker)),
+    referrerHost: str(parsed.referrer_host),
   };
 }
 

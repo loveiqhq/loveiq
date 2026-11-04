@@ -919,17 +919,10 @@ export const markLeftInitialGate = () => {
 };
 
 /**
- * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
- * the same event name so the series runs on). `to` is where it leads: the landing page ("/")
- * until 28.10, the gate's exit page (`exit_page`) since. Persisted, so a later payment can be
- * set against it.
- */
-/**
  * The report opened from one of our emails' links: `from=email`, which every report link we
- * mail carries, or `utm_source=email`. `campaign` names the email when its link says
- * (`utm_campaign`: the 72h email's stage, E07's `initial_gift`), null when it does not (the
- * report-ready, purchase and invite emails). Persisted: the #incoming-surveys message reads
- * it as "Came back by email".
+ * mail carries, or `utm_source=email`. `campaign` is the link's `utm_campaign`, which every
+ * customer email sets (shared/emails/email-link.ts, the 72h email's stage), null for a link
+ * without one. Persisted: the #incoming-surveys message names it under "Came back by email".
  */
 export const emailReturnOf = (params: {
   get(name: string): string | null;
@@ -946,6 +939,12 @@ export const trackEmailReturn = (params: { campaign: string | null }) => {
   persistAnalyticsEvent("email_return", params);
 };
 
+/**
+ * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
+ * the same event name so the series runs on). `to` is where it leads: the landing page ("/")
+ * until 28.10, the gate's exit page (`exit_page`) since. Persisted, so a later payment can be
+ * set against it.
+ */
 export const trackInitialGateBack = (params: { to: string }) => {
   track("initial_gate_back", params);
   persistAnalyticsEvent("initial_gate_back", params);
