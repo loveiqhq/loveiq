@@ -19,7 +19,7 @@ import {
   isReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
 import type { FreeUnlock, SubmissionJourney } from "@features/attribution/server/journey";
-import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
+import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
 import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
 import { REPORTING_TIME_ZONE } from "@shared/time/reporting-day";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
@@ -320,17 +320,20 @@ function formatReportDwell(ms: number | null | undefined): string {
   return formatDuration(ms) ?? "—";
 }
 
-/** "€1.99", "€30"; another currency as "USD 9.99". */
+/** AP-Analytics' euros (features/admin/server/ap/pay-to-start.ts): "€29.99", "€1.99", "€30.00". */
+const euros = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+
+/** "€1.99"; another currency as "USD 9.99". */
 function priceText(amount: number, currency = "EUR"): string {
   return currency === "EUR"
-    ? formatOfferPrice(Math.round(amount * 100))
+    ? euros(Math.round(amount * 100))
     : `${escapeSlack(currency)} ${amount.toFixed(2)}`;
 }
 
 function freeUnlockText(kind: FreeUnlock): string {
   switch (kind) {
     case "gift":
-      return `${formatOfferPrice(INITIAL_UNLOCK_PRICE_CENTS)} unlock gifted`;
+      return `${euros(INITIAL_UNLOCK_PRICE_CENTS)} unlock gifted`;
     case "feedback":
       return "full report for feedback";
     case "test":
@@ -341,13 +344,24 @@ function freeUnlockText(kind: FreeUnlock): string {
 }
 
 /**
- * The funnel and what it took: "Funnel: *Pay to unlock €1.99*  |  *Paid €1.99*".
- *
- * One set of names (sync 3 Nov: "pay to start" and "pay to unlock"). PAY TO START paid
- * before the survey, named by its page's price (/sexual-archetype €29.99, /initial
- * €1.99); one whose payment has not settled yet has no price to name. PAY TO UNLOCK took
- * the free survey: "€1.99" while the gate's cohort stamp puts the EUR 1.99 page before
- * the report, bare when the report's own paywall is the first offer (the gate off).
+ * The funnel by AP-Analytics' own names (Eman, 5 Nov: the Slack message and the dashboard
+ * say the same words), built as `buildPayToStart` builds them; slack-journey.test.ts holds
+ * the two equal. A survey a pay-to-start payment claimed is "Pay to start · €29.99" or
+ * "· €1.99" by the page it was bought on, at the offer's price now. A free survey is "€1.99
+ * after the survey" when its submit stamped it into the gate's cohort, else "Pay after the
+ * report".
+ */
+function funnelName(journey: SubmissionJourney): string {
+  if (journey.payToStartOffer) {
+    return `Pay to start · ${euros(getPayToStartOffer(journey.payToStartOffer).priceCents)}`;
+  }
+  return journey.gateCohort
+    ? `${euros(INITIAL_UNLOCK_PRICE_CENTS)} after the survey`
+    : "Pay after the report";
+}
+
+/**
+ * The funnel and what it took: "Funnel: *€1.99 after the survey*  |  *Paid €1.99*".
  *
  * Free or Paid comes off the payment ledger, every payment that took money, so it moves
  * when they buy again (a EUR 1.99 unlock, then the full report). A EUR 0 unlock reads
@@ -356,19 +370,10 @@ function freeUnlockText(kind: FreeUnlock): string {
 function funnelLine(journey: SubmissionJourney): string {
   // The tracker's pay-to-start label with no payment yet and no gate stamp: the claim is
   // still settling (an unused token that bought nothing joins the gate's cohort instead).
-  // ponytail: a refunded pay-to-start purchase reads the same; the ledger query reads only
-  // succeeded rows, and refunds of these are rare.
-  const pending =
-    Boolean(journey.payToStart) && journey.payToStartPrice === undefined && !journey.gateCohort;
-  const funnel =
-    journey.payToStartPrice !== undefined
-      ? `Pay to start ${priceText(journey.payToStartPrice)}`
-      : journey.gateCohort
-        ? `Pay to unlock ${formatOfferPrice(INITIAL_UNLOCK_PRICE_CENTS)}`
-        : pending
-          ? "Pay to start"
-          : "Pay to unlock";
-
+  // Until a payment claims it, AP counts the survey as pay after the report, and so does
+  // the funnel here. ponytail: a refunded pay-to-start purchase reads the same; the ledger
+  // query reads only succeeded rows, and refunds of these are rare.
+  const pending = Boolean(journey.payToStart) && !journey.payToStartOffer && !journey.gateCohort;
   const paid = journey.paid ?? [];
   const free = (journey.freeUnlocks ?? []).map(freeUnlockText);
   const money =
@@ -379,7 +384,7 @@ function funnelLine(journey: SubmissionJourney): string {
         : free.length > 0
           ? `*Free* (${free.join(", ")})`
           : "*Free*";
-  return `Funnel: *${funnel}*  |  ${money}`;
+  return `Funnel: *${funnelName(journey)}*  |  ${money}`;
 }
 
 /** The email a return link came from, by the link's utm_campaign. */

@@ -381,28 +381,14 @@ describe("buildSubmissionJourney", () => {
       expect(queryFor("/payment?")).toContain("payment_date_time,currency,metadata");
     });
 
-    it("names the page's own price, whatever a code took off it", async () => {
-      // The full offer's price is a setting (PAY_TO_START_PRICE_CENTS): the page's, not the default.
-      route({
-        payments: [
-          {
-            ...PAID_BEFORE,
-            amount: 0,
-            metadata: { journey: "pay_to_start", offer: "full", listPrice: "24.99" },
-          },
-        ],
-      });
-      expect((await buildSubmissionJourney(1296))?.payToStartPrice).toBe(24.99);
-    });
-
-    it("reads a June row with no offer as the full offer at its default price", async () => {
+    it("reads a June row with no offer as the full offer, as every other reader does", async () => {
       route({ payments: [PAID_BEFORE] });
-      expect((await buildSubmissionJourney(1296))?.payToStartPrice).toBe(29.99);
+      expect((await buildSubmissionJourney(1296))?.payToStartOffer).toBe("full");
     });
 
-    it("has no page price for anyone who did not pay before the survey", async () => {
+    it("names no offer for a survey no pay-to-start payment claimed", async () => {
       route({ payments: [{ ...PAID_BEFORE, metadata: { plan: "initial" } }] });
-      expect(await buildSubmissionJourney(1296)).not.toHaveProperty("payToStartPrice");
+      expect(await buildSubmissionJourney(1296)).not.toHaveProperty("payToStartOffer");
     });
   });
 
@@ -420,15 +406,27 @@ describe("buildSubmissionJourney", () => {
       ...over,
     });
 
-    it("knows the report was stamped into the EUR 1.99 gate's cohort", async () => {
-      route({ reports: [{ initial_gate_cohort_at: "2026-11-02T09:00:00.000Z" }] });
-      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(true);
+    // The survey was submitted at 10:12:00 (SUBMISSION.created_date_time).
+    it.each([
+      ["by its own submit", "2026-08-24T10:12:01.000Z", true],
+      ["a moment before the row's own time", "2026-08-24T10:11:30.000Z", true],
+      ["within the hour", "2026-08-24T11:11:59.000Z", true],
+      // AP: the old-user campaign stamps reports long after their survey, and those
+      // readers came in through pay after the report.
+      ["an hour later", "2026-08-24T11:12:00.000Z", false],
+      ["months later", "2026-11-02T09:00:00.000Z", false],
+      ["before the survey", "2026-08-24T10:10:00.000Z", false],
+    ])("counts the EUR 1.99 gate's cohort stamped %s as AP does", async (_when, at, inCohort) => {
+      route({ reports: [{ initial_gate_cohort_at: at }] });
+      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(inCohort);
+    });
+
+    it("asks for the cohort stamp, and reads none as no cohort", async () => {
+      route({ reports: [{ initial_gate_cohort_at: null }] });
+      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
       expect(queryFor("/personal_report?")).toContain(
         "survey_submission_id=eq.1296&select=initial_gate_cohort_at"
       );
-
-      route({ reports: [{ initial_gate_cohort_at: null }] });
-      expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
       route({});
       expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
     });

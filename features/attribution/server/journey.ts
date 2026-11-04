@@ -123,14 +123,17 @@ export interface SubmissionJourney {
    * quote, and the purchase comes from its payment row. Absent means no.
    */
   payToStart?: boolean;
-  /** Which page they paid on, from that payment: "pre" is /sexual-archetype/initial. */
-  payToStartOffer?: "full" | "pre";
-  /** That page's price (the payment's `listPrice`), whatever a code took off. Set only for a buyer. */
-  payToStartPrice?: number;
   /**
-   * Stamped into the EUR 1.99 gate's cohort when the survey was submitted
-   * (`personal_report.initial_gate_cohort_at`): a free survey whose report waits behind
-   * the EUR 1.99 page. Written before the survey replies, so it is there at post time.
+   * Which page they paid on, from that payment ("pre" is /sexual-archetype/initial; a row
+   * from before the offers reads as the full one). Set only when a pay-to-start payment
+   * claimed the survey: what makes it pay to start's in AP-Analytics too.
+   */
+  payToStartOffer?: "full" | "pre";
+  /**
+   * Stamped into the EUR 1.99 gate's cohort by the survey's own submit
+   * (`personal_report.initial_gate_cohort_at` within GATE_STAMPED_AT_SUBMIT_MS of it): a free
+   * survey whose report waits behind the EUR 1.99 page. Written before the survey replies,
+   * so it is there at post time.
    */
   gateCohort?: boolean;
   /** The money taken, one entry per succeeded payment above EUR 0 that is no test, oldest first. */
@@ -193,7 +196,6 @@ interface PaymentRow {
     journey?: unknown;
     plan?: unknown;
     offer?: unknown;
-    listPrice?: unknown;
     gifted?: unknown;
     source?: unknown;
   } | null;
@@ -405,22 +407,27 @@ export function measureReportDwellMs(
 }
 
 /**
- * The page a pay-to-start buyer paid on and its price, from that payment, even after a
- * later upgrade. A row from before the offers (June) has neither and reads as the full
- * offer at its default price, as `offerDefinitionOf` reads it everywhere else.
+ * The page a pay-to-start buyer paid on, from that payment, even after a later upgrade. A
+ * row from before the offers (June) names none and reads as the full offer, as
+ * `offerDefinitionOf` reads it everywhere else.
  */
-function payToStartOfferOf(payments: PaymentRow[]): {
-  payToStartOffer?: "full" | "pre";
-  payToStartPrice?: number;
-} {
+function payToStartOfferOf(payments: PaymentRow[]): { payToStartOffer?: "full" | "pre" } {
   const meta = payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY)?.metadata;
-  if (!meta) return {};
-  const offer = meta.offer === "full" || meta.offer === "pre" ? meta.offer : null;
-  const listed = typeof meta.listPrice === "string" ? toNumber(meta.listPrice) : null;
-  return {
-    ...(offer ? { payToStartOffer: offer } : {}),
-    payToStartPrice: listed ?? offerDefinitionOf(meta.offer).defaultPriceCents / 100,
-  };
+  return meta ? { payToStartOffer: offerDefinitionOf(meta.offer).id } : {};
+}
+
+/**
+ * AP-Analytics' rule for the EUR 1.99 page's funnel (STAMPED_AT_SUBMIT_MS in
+ * features/admin/server/ap/pay-to-start.ts, held equal by slack-journey.test.ts): a cohort
+ * stamp made by the survey's own submit, within the hour. The old-user campaign stamps
+ * reports long after their survey; those readers came in through pay after the report.
+ */
+export const GATE_STAMPED_AT_SUBMIT_MS = 60 * 60_000;
+
+function stampedAtSubmit(submittedAt: string | null, stampedAt: string | null | undefined) {
+  if (!submittedAt || !stampedAt) return false;
+  const gap = Date.parse(stampedAt) - Date.parse(submittedAt);
+  return gap >= -60_000 && gap < GATE_STAMPED_AT_SUBMIT_MS;
 }
 
 /** Money changed hands: not a test, and above EUR 0. The ledger's rule (`noMoneyTaken`). */
@@ -687,7 +694,7 @@ export async function buildSubmissionJourney(
     recordingSessionId: sub.posthog_session_id?.trim() || null,
     ...(payToStartPayment || isPayToStartTracker(sub.utm_tracker) ? { payToStart: true } : {}),
     ...payToStartOfferOf(payments),
-    gateCohort: Boolean(reports[0]?.initial_gate_cohort_at),
+    gateCohort: stampedAtSubmit(sub.created_date_time, reports[0]?.initial_gate_cohort_at),
     paid,
     freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
     emailReturns: backByEmail,

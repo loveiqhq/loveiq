@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildJourneyMessage, formatDuration } from "@features/attribution/server/slack-journey";
-import type { SubmissionJourney } from "@features/attribution/server/journey";
+import {
+  GATE_STAMPED_AT_SUBMIT_MS,
+  type SubmissionJourney,
+} from "@features/attribution/server/journey";
+import {
+  buildPayToStart,
+  payToStartPrices,
+  STAMPED_AT_SUBMIT_MS,
+} from "@features/admin/server/ap/pay-to-start";
 import type { SlackBlock } from "@shared/observability/slack";
 import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
@@ -176,7 +184,7 @@ describe("the compact incoming-survey layout", () => {
     expect(soleSection(message.blocks).split("\n")).toEqual([
       "Survey submission *#1756* `a***@gmail.com`",
       // The funnel and the money, second (sync 4 Nov); a free survey with no gate stamp.
-      "Funnel: *Pay to unlock*  |  *Free*",
+      "Funnel: *Pay after the report*  |  *Free*",
       "Survey time: *18 min*  |  Report time: *5 min*",
       "Came from: *Paid* — google / cpc",
       "Device: *iOS*",
@@ -727,17 +735,17 @@ describe("funnel, money, first page and returns", () => {
     [
       "a free survey behind the EUR 1.99 page",
       { gateCohort: true },
-      "Funnel: *Pay to unlock €1.99*  |  *Free*",
+      "Funnel: *€1.99 after the survey*  |  *Free*",
     ],
     [
       "a free survey with the gate off",
       { gateCohort: false },
-      "Funnel: *Pay to unlock*  |  *Free*",
+      "Funnel: *Pay after the report*  |  *Free*",
     ],
     [
       "the EUR 1.99 page, paid",
       { gateCohort: true, paid: [{ amount: 1.99, currency: "EUR" }] },
-      "Funnel: *Pay to unlock €1.99*  |  *Paid €1.99*",
+      "Funnel: *€1.99 after the survey*  |  *Paid €1.99*",
     ],
     [
       "the EUR 1.99 page, then the full report",
@@ -748,55 +756,90 @@ describe("funnel, money, first page and returns", () => {
           { amount: 19.99, currency: "EUR" },
         ],
       },
-      "Funnel: *Pay to unlock €1.99*  |  *Paid €1.99 + €19.99*",
+      "Funnel: *€1.99 after the survey*  |  *Paid €1.99 + €19.99*",
     ],
     [
       "pay to start, the full report",
-      {
-        payToStart: true,
-        payToStartOffer: "full",
-        payToStartPrice: 29.99,
-        paid: [{ amount: 29.99, currency: "EUR" }],
-      },
-      "Funnel: *Pay to start €29.99*  |  *Paid €29.99*",
+      { payToStart: true, payToStartOffer: "full", paid: [{ amount: 29.99, currency: "EUR" }] },
+      "Funnel: *Pay to start · €29.99*  |  *Paid €29.99*",
     ],
     [
       "pay to start at EUR 1.99, with a 100% code",
-      { payToStart: true, payToStartPrice: 1.99, paid: [], freeUnlocks: ["code"] },
-      "Funnel: *Pay to start €1.99*  |  *Free* (€0 code)",
+      { payToStart: true, payToStartOffer: "pre", paid: [], freeUnlocks: ["code"] },
+      "Funnel: *Pay to start · €1.99*  |  *Free* (€0 code)",
+    ],
+    [
+      "a whole-euro payment, in AP's own format",
+      { paid: [{ amount: 30, currency: "EUR" }] },
+      "Funnel: *Pay after the report*  |  *Paid €30.00*",
     ],
     [
       "E07's gift",
       { gateCohort: true, freeUnlocks: ["gift"] },
-      "Funnel: *Pay to unlock €1.99*  |  *Free* (€1.99 unlock gifted)",
+      "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted)",
     ],
     [
       "a gift and the feedback grant",
       { gateCohort: true, freeUnlocks: ["gift", "feedback"] },
-      "Funnel: *Pay to unlock €1.99*  |  *Free* (€1.99 unlock gifted, full report for feedback)",
+      "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted, full report for feedback)",
     ],
     [
+      // AP counts it pay after the report until a payment claims the survey.
       "a pay-to-start payment still settling",
       { payToStart: true },
-      "Funnel: *Pay to start*  |  *Payment pending*",
+      "Funnel: *Pay after the report*  |  *Payment pending*",
     ],
     [
       // An unused pay-to-start cookie that bought nothing joins the gate's cohort.
       "a pay-to-start label on a survey the gate stamped",
       { payToStart: true, gateCohort: true },
-      "Funnel: *Pay to unlock €1.99*  |  *Free*",
+      "Funnel: *€1.99 after the survey*  |  *Free*",
     ],
     [
       "a payment in another currency",
       { paid: [{ amount: 9.5, currency: "USD" }] },
-      "Funnel: *Pay to unlock*  |  *Paid USD 9.50*",
+      "Funnel: *Pay after the report*  |  *Paid USD 9.50*",
     ],
   ])("%s", (_label, over, expected) => {
     expect(funnel(over)).toBe(expected);
   });
 
   it("puts the funnel second, under the title", () => {
-    expect(lines({ gateCohort: true })[1]).toBe("Funnel: *Pay to unlock €1.99*  |  *Free*");
+    expect(lines({ gateCohort: true })[1]).toBe("Funnel: *€1.99 after the survey*  |  *Free*");
+  });
+
+  /**
+   * AP-Analytics' names, from AP's own builder (Eman, 5 Nov: one set of words). A renamed
+   * funnel on the dashboard fails here until Slack says the same, and the other way round.
+   */
+  it("names every funnel exactly as AP-Analytics does", () => {
+    const ap = buildPayToStart({
+      facts: { visits: [], starts: [], subs: [] },
+      entitlements: [],
+      ptsVisits: [],
+      boughtFirst: new Set(),
+      boughtFirstStarts: {},
+      ourClaims: new Set(),
+      openedSubmissions: new Set(),
+      laterPays: new Map(),
+      gateMembers: [],
+      gateOn: true,
+      ads: { ok: true, value: [] },
+      from: "2026-11-02",
+      to: "2026-11-08",
+      today: "2026-11-09",
+      prices: payToStartPrices(),
+    });
+    const apName = (key: string) => ap.funnels.find((f) => f.key === key)?.label;
+    const slackName = (over: Partial<SubmissionJourney>) =>
+      /^Funnel: \*(.+?)\*  \|/.exec(funnel(over) ?? "")?.[1];
+
+    expect(slackName({})).toBe(apName("after"));
+    expect(slackName({ gateCohort: true })).toBe(apName("gate"));
+    expect(slackName({ payToStart: true, payToStartOffer: "full" })).toBe(apName("full"));
+    expect(slackName({ payToStart: true, payToStartOffer: "pre" })).toBe(apName("pre"));
+    // And the window that decides the EUR 1.99 page's funnel is AP's.
+    expect(GATE_STAMPED_AT_SUBMIT_MS).toBe(STAMPED_AT_SUBMIT_MS);
   });
 
   it("puts the first page under where they came from, as a literal path", () => {
