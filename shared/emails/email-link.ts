@@ -21,6 +21,12 @@ export const EMAIL_LINKS = {
 
 export type EmailLink = (typeof EMAIL_LINKS)[keyof typeof EMAIL_LINKS];
 
+/**
+ * The day every customer email's links were first tagged (the release of #704), which
+ * AP-Analytics names where its numbers shift with it. Correct it if that release moves.
+ */
+export const EMAIL_LINKS_TAGGED_FROM = "6 Nov 2026";
+
 /** The link with its email's tags, after whatever it already carries (`from=email`, `invite=1`). */
 export function tagEmailLink(url: string, link: EmailLink): string {
   const tagged = new URL(url);

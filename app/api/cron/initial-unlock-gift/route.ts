@@ -44,6 +44,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 export const maxDuration = 60;
 
@@ -332,9 +333,10 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
   const tpl = initialUnlockGiftEmail({
     answeredYesterday: Date.now() - surveyAt < ANSWERED_YESTERDAY_MS,
     firstName: user?.first_name?.trim() || null,
-    // Tagged like the 72h email's, so a return through it is named on the Slack message
-    // (the report page's email_return) and in GA4 and PostHog as the campaign it is.
-    reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email&utm_source=email&utm_medium=nurture&utm_campaign=${STAGE}`,
+    reportUrl: tagEmailLink(
+      `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
+      EMAIL_LINKS.initialGift
+    ),
     siteUrl: ctx.siteUrl,
     unsubscribeUrl,
   });

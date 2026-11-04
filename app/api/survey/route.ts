@@ -21,6 +21,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
 import { redactReportToken } from "@shared/format/redact-report-token";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 import { isProbeRequest } from "@shared/http/probe-cookie";
 import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
 import { LANDING_PATH_TRACKER_KEY } from "@features/attribution/server/traffic";
@@ -838,9 +839,12 @@ export async function POST(request: Request) {
       // email. resolveReportPaywallCohort() softens on `from=email`; the nurture
       // + chapter-nudge links already carry it. `from=email` is the paywall-only
       // signal (no utm_source), so first-view channel attribution is unchanged.
-      const reportUrl = reportToken
-        ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
-        : `${siteUrl}/report?from=email`;
+      const reportUrl = tagEmailLink(
+        reportToken
+          ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
+          : `${siteUrl}/report?from=email`,
+        EMAIL_LINKS.reportReady
+      );
 
       // An unlocked pay-to-start report's email is a purchase email: its unsubscribes are
       // counted with the purchase emails', as fulfillment's are.
