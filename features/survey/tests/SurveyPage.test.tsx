@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +52,9 @@ vi.mock("@features/survey/ui/SurveyEngine", () => ({
     <div data-testid="survey-engine">
       <button onClick={onExit}>Exit Survey</button>
       <button onClick={onComplete}>Complete Survey</button>
+      <button onClick={() => (onComplete as (token: string) => void)("rpt_done0123456789abcd")}>
+        Complete With Its Report
+      </button>
       {onStartOver && <button onClick={onStartOver}>Start Over</button>}
     </div>
   ),
@@ -119,6 +122,26 @@ describe("SurveyPage", () => {
 
       const cta = await screen.findByRole("link", { name: /open my report/i });
       expect(cta).toHaveAttribute("href", "/report/rpt_abc123");
+    });
+
+    // The EUR 1.99 page's Back loop (04.11): Back from the report landed here, and this button
+    // went on top of it to the report again, round and round. It takes this screen's place now,
+    // so the next Back goes further back. A new tab (a modifier or middle click) still opens one.
+    it("opens the report in this screen's place", async () => {
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      const nav = captureNavigation();
+      try {
+        render(<SurveyPage />);
+        const cta = await screen.findByRole("link", { name: /open my report/i });
+        fireEvent.click(cta, { button: 0, ctrlKey: true });
+        expect(nav.replaced, "a new tab is the browser's").toEqual([]);
+
+        await userEvent.click(cta);
+        expect(nav.replaced).toEqual(["/report/rpt_abc123"]);
+        expect(nav.navigated).toEqual([]);
+      } finally {
+        nav.restore();
+      }
     });
 
     it("can still choose to start a new one", async () => {
@@ -466,9 +489,11 @@ describe("SurveyPage", () => {
     }
   });
 
+  /** Where the page sends the reader: `navigated` adds a history entry, `replaced` takes this one's place. */
   function captureNavigation() {
     const original = Object.getOwnPropertyDescriptor(window, "location");
     const navigated: string[] = [];
+    const replaced: string[] = [];
     Object.defineProperty(window, "location", {
       configurable: true,
       value: {
@@ -478,10 +503,14 @@ describe("SurveyPage", () => {
         set href(value: string) {
           navigated.push(value);
         },
+        replace(value: string) {
+          replaced.push(value);
+        },
       },
     });
     return {
       navigated,
+      replaced,
       restore: () => original && Object.defineProperty(window, "location", original),
     };
   }
@@ -515,7 +544,28 @@ describe("SurveyPage", () => {
       render(<SurveyPage />);
       await userEvent.click(await screen.findByRole("button", { name: /complete survey/i }));
 
-      expect(nav.navigated).toEqual(["/report"]);
+      expect(nav.replaced).toEqual(["/report"]);
+    } finally {
+      nav.restore();
+    }
+  });
+
+  // Regression, 04.11 (the EUR 1.99 page's Back loop): the report opened on top of the survey,
+  // so Back from it found the survey's "You've already finished", whose button led straight
+  // back. It takes the survey's place now. Older survey entries stay (iPhone Safari keeps them),
+  // which the report's own Back catch answers (gate/useGateBack.ts).
+  it("opens the finished run's report in the survey's place", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: /complete with its report/i })
+      );
+
+      expect(nav.replaced).toEqual(["/report/rpt_done0123456789abcd"]);
+      expect(nav.navigated).toEqual([]);
     } finally {
       nav.restore();
     }
