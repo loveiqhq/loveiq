@@ -50,9 +50,11 @@ function useEscapeStaysPut(active: boolean): void {
  *   ReportPage holds that mode while the gate is up and gives it back afterwards.
  * - It is recorded once a page, as "Not ready" is: `initial_gate_browser_back`.
  *
- * Its ceiling is useCloseOnBack's: Chrome's back BUTTON skips an entry a page added before the
- * reader interacted with it. So on a desktop, a gate met without a tap still lets the toolbar's
- * Back leave. A phone has its CloseWatcher, and an iPhone's swipe takes the entry.
+ * Its ceiling is useCloseOnBack's: Chrome's back BUTTON skips an entry a page added without a
+ * tap, and the entries this catch adds after a Back are added without one. So on a desktop, two
+ * Backs in a row with no tap between them still leave (the first opens the exit page), and a gate
+ * met without any tap lets the first Back leave. A phone has its CloseWatcher, and an iPhone's
+ * swipe takes the entry.
  */
 export function useGateBack(onScreen: boolean): void {
   // Before useCloseOnBack's entry goes on: its layout effect runs after this one.

@@ -203,6 +203,11 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
     pages (`ReportPage`'s hold).
   - Stored once a page as `initial_gate_browser_back`, only for a Back that opened the exit page
     (`openExit` says whether it did; a Forward press onto it is no Back).
+  - Desktop limit: Chrome's toolbar Back skips entries a page added without a tap, and the
+    catch's entries after a Back are added without one, so two Backs with no tap between them
+    still leave (`docs/runbooks/PRE_UNLOCK.md`). Paying replaces the catch's entry with Stripe
+    (`useInitialUnlockCheckout`, as the pricing modal does), so Back from Stripe meets no
+    duplicate report.
 - **The exit pages (28.10).** Marcus's "Paygate exit pages" canvas, in `ui/gate/exit/`: one page
   (`PaygateExitPage`), two stages, each on the report's URL as `?leave=pre` / `?leave=full` on a
   history entry of its own (`exit/exitHistory.ts`, a native `pushState`: no refetch, no jump to

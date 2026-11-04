@@ -146,9 +146,14 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   It is stored once a page as `initial_gate_browser_back` (`to: "exit_page"`), beside
   `initial_gate_back`, and only for a Back that opened the exit page. An exit-page view
   (`paygate_exit_viewed`, `stage: pre`) can now follow either one.
-  - Limit: Chrome's back button skips entries a page added before any tap, so on a desktop a gate
-    met without one (a reload, a later visit, a scroll before the tour started) still lets the
-    toolbar's Back leave. Phones are covered.
+  - Limit (desktop Chrome and Edge): the toolbar's Back skips history entries a page added
+    without a tap, and every entry the catch adds after a Back is added without one. So two Backs
+    in a row with no tap between them still leave: the first opens the exit page, the second goes
+    to what lies under the report (for a reader straight from the survey, /survey's "already
+    finished"). A gate met without any tap (a reload, a later visit, a scroll before the tour
+    started) lets the first Back leave. Any tap re-arms it. Measured 4 Nov with the real toolbar
+    Back (`chrome.tabs.goBack`); the e2e's `page.goBack()` does not apply Chrome's skip. Phones are
+    covered: Android by the CloseWatcher, the iPhone's swipe by the entry.
   - The survey now opens the report in its own place (`location.replace`), as does "Open my
     report" on "already finished", so what's left of the loop is finite.
   - Previews: `/report?preview=1&v4=1&gate=tour` and `&gate=1`, then Back.
