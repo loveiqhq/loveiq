@@ -21,6 +21,8 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
 import { redactReportToken } from "@shared/format/redact-report-token";
+import { isProbeRequest } from "@shared/http/probe-cookie";
+import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
 import { LANDING_PATH_TRACKER_KEY } from "@features/attribution/server/traffic";
 import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
@@ -590,9 +592,13 @@ export async function POST(request: Request) {
    * came straight to a glossary term from an AI chat carries no campaign, no referrer and
    * no landing cookie, and their first page is the whole answer to "where from". AP reads
    * the tracker's keys, so a tracker holding only this classifies as a null one does.
-   * A report's address holds its token, which must not reach the database.
+   * A report's address holds its token, which must not reach the database. A crawler or
+   * our own probes start none: proxy.ts's filter for a visit, the same regex and cookie.
    */
-  if (landingPath) {
+  const notVisitor =
+    BOT_UA_REGEX.test(request.headers.get("user-agent") || "") ||
+    isProbeRequest(request.headers.get("cookie"));
+  if (landingPath && !notVisitor) {
     mergedUtmTracker = mergeTrackerArm(
       mergedUtmTracker ?? "{}",
       LANDING_PATH_TRACKER_KEY,

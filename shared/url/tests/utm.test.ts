@@ -355,6 +355,12 @@ describe("rememberLandingPath — the first page this browser opened", () => {
     expect(store[LANDING_PATH_KEY]).toBe("/glossary/sapiosexual");
   });
 
+  it("never keeps a report's token, when a report was the first page", () => {
+    open("/report/rpt_ABCDEFGHIJKLMNOPQRST");
+    rememberLandingPath();
+    expect(getLandingPath()).toBe("/report/<redacted>");
+  });
+
   it("answers null before any page was kept, and when storage is blocked", () => {
     expect(getLandingPath()).toBeNull();
     vi.mocked(localStorage.getItem).mockImplementation(() => {

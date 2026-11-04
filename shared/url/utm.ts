@@ -19,6 +19,8 @@
  * (`referrer_host`), which tell a Meta click and organic search apart from direct.
  */
 
+import { redactReportToken } from "@shared/format/redact-report-token";
+
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
 
 /** Google Ads click identifiers appended by auto-tagging (gbraid/wbraid are iOS). */
@@ -117,7 +119,11 @@ export function rememberLandingPath(): void {
   if (typeof window === "undefined") return;
   try {
     if (!localStorage.getItem(LANDING_PATH_KEY)) {
-      localStorage.setItem(LANDING_PATH_KEY, window.location.pathname.slice(0, 200));
+      // A report's address holds its token: never kept, here or on the server.
+      localStorage.setItem(
+        LANDING_PATH_KEY,
+        redactReportToken(window.location.pathname).slice(0, 200)
+      );
     }
   } catch {
     // Storage blocked: the survey goes without it.
