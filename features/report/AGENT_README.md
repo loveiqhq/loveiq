@@ -187,6 +187,22 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
   page on the same URL (`?leave=pre`, below). Until 28.10 it led to the landing page (sync 26.10,
   Marcus: "there is no such thing as back"). It still counts as `initial_gate_back`, now with
   `to: "exit_page"` (`GATE_NOT_READY_TO`, `ui/gate/gateContent.ts`).
+- **The browser's own Back (04.11).** On the gate, it opens the same exit page
+  (`ui/gate/useGateBack.ts`, wired in `ReportPage` while the gate is on screen). After the survey
+  it used to go back to /survey's "already finished", whose "Open my report" led straight back.
+  - The gate is caught as an overlay is (`useCloseOnBack`): a same-URL entry for a desktop's Back
+    and an iPhone's swipe, heard by `shared/ui/overlay-history.ts`'s popstate listener, and a
+    CloseWatcher for Android's back, held by `useCloseOnBack`. Neither lives in a component the
+    Back unmounts.
+  - overlay-history takes over an entry this load of the page pushed, so after "Not ready" →
+    "Maybe later" the next Back is caught at once. It never takes one an earlier load pushed
+    (a reload, a return from another page).
+  - `PreUnlockExit` answers Android's back on the exit page with `closeExit` (`useExitCloseRequest`),
+    a script's `history.back()` that Chrome's back button can't skip past.
+  - Escape does nothing on either page. History restores no scroll from the tour through both
+    pages (`ReportPage`'s hold).
+  - Stored once a page as `initial_gate_browser_back`, only for a Back that opened the exit page
+    (`openExit` says whether it did; a Forward press onto it is no Back).
 - **The exit pages (28.10).** Marcus's "Paygate exit pages" canvas, in `ui/gate/exit/`: one page
   (`PaygateExitPage`), two stages, each on the report's URL as `?leave=pre` / `?leave=full` on a
   history entry of its own (`exit/exitHistory.ts`, a native `pushState`: no refetch, no jump to
