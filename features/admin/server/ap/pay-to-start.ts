@@ -400,7 +400,7 @@ function counts(e: EntitlementRow): e is EntitlementRow & { offer: PtsOffer } {
  * stamps reports long after their survey (PRE_UNLOCK.md): those readers came in through
  * pay after the report, and stay in it.
  */
-const STAMPED_AT_SUBMIT_MS = 60 * 60_000;
+export const STAMPED_AT_SUBMIT_MS = 60 * 60_000;
 
 /**
  * The gate's share of each day's free landing: the share of that day's finished free surveys

@@ -35,6 +35,8 @@ import { assignInitialGiftArm } from "@shared/experiments/initialGiftArm";
 import { suppressionState } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -42,6 +44,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 export const maxDuration = 60;
 
@@ -322,10 +325,18 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
     ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, UNSUBSCRIBE_CAMPAIGNS.initialGift)
     : undefined;
   const surveyAt = Date.parse(candidate.survey_submission?.created_date_time ?? "");
+  // The gift is on the report now: its #incoming-surveys message says so ("Free (€1.99
+  // unlock gifted)") rather than waiting for the reader's next visit to redraw it.
+  scheduleAfterResponse("journey-gift-refresh", () =>
+    refreshJourneyDetail(candidate.survey_submission_id)
+  );
   const tpl = initialUnlockGiftEmail({
     answeredYesterday: Date.now() - surveyAt < ANSWERED_YESTERDAY_MS,
     firstName: user?.first_name?.trim() || null,
-    reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
+    reportUrl: tagEmailLink(
+      `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
+      EMAIL_LINKS.initialGift
+    ),
     siteUrl: ctx.siteUrl,
     unsubscribeUrl,
   });

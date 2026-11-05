@@ -1125,7 +1125,9 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const all = rendered(slackCalls[0]!.body);
-      expect(all).toContain("Referral");
+      // AP-Analytics' channel for a link tagged utm_medium=email (classifySource): the line
+      // and the dashboard name it alike, and the tags below still say it was a referral.
+      expect(all).toContain("Email — referral / email / survey_invite");
       // utm values travel literally: Slack has no backslash escape, so the old
       // "survey\_invite" put a visible backslash in front of the whole team.
       expect(all).toContain("referral / email / survey_invite");
@@ -1440,6 +1442,8 @@ describe("classifyTraffic", () => {
         keyword: null,
         matchType: null,
         network: null,
+        channel: "direct",
+        referrerHost: null,
       });
     }
   });
@@ -1490,6 +1494,8 @@ describe("classifyTraffic", () => {
       keyword: null,
       matchType: null,
       network: null,
+      channel: "direct",
+      referrerHost: null,
     });
   });
 
@@ -1503,6 +1509,8 @@ describe("classifyTraffic", () => {
       keyword: null,
       matchType: null,
       network: null,
+      channel: "direct",
+      referrerHost: null,
     });
   });
 

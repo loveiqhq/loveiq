@@ -1,4 +1,6 @@
 import { isTablet } from "@shared/http/tablet";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
 import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/fulfillment";
 import { getReportReturnHref } from "@features/checkout/server/reportPurchase";
 import { getDeviceTypeFromUserAgent } from "@features/pricing/logic/reportPricing";
@@ -137,6 +139,11 @@ export async function recordAnswer({
         updated_at: now,
       });
     }
+  }
+  // They came back through the email: its #incoming-surveys message names the return and
+  // the free full report (the grant's payment row) now, once.
+  if (first) {
+    scheduleAfterResponse("journey-feedback-refresh", () => refreshJourneyDetail(submissionId));
   }
 
   return {

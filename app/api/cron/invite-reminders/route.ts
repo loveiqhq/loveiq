@@ -33,6 +33,7 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -269,7 +270,10 @@ export async function GET(request: Request) {
         logger.warn({ paymentId: row.id }, "invite-reminders: no report link for a buyer");
         continue;
       }
-      const inviteCtaUrl = `${siteUrl}/report/${encodeURIComponent(reportToken)}?invite=1&from=email`;
+      const inviteCtaUrl = tagEmailLink(
+        `${siteUrl}/report/${encodeURIComponent(reportToken)}?invite=1&from=email`,
+        reminder === 1 ? EMAIL_LINKS.inviteReminder1 : EMAIL_LINKS.inviteReminder2
+      );
 
       // After the link, never before: checkCooldown sets the year-long key as it checks,
       // so a lookup that failed after it cost the buyer their reminder for a year.

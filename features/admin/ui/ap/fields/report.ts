@@ -2,6 +2,7 @@ import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 import { RETIRED_NAMES } from "@features/admin/ui/ap/retired-chapters";
 
 import type { FieldDef, FieldRegistry, FieldTable } from "./types";
+import { EMAIL_LINKS_TAGGED_FROM } from "@shared/emails/email-link";
 
 /** The live report's chapters in its own order (its nav), as the page places them. */
 const LIVE_ORDER = WIZARD_DRAWER.flatMap((p) => p.rows.map((r) => r.id));
@@ -585,7 +586,8 @@ const READ_TIME_RULES =
 const WIZARD_SHARE =
   "Continue, Skip intro and Exit share the slide's readers out between them, so they add up to 100%; Back is counted on its own.";
 const POSTHOG_RETURNS =
-  "PostHog sees only part of the visitors and starts on 23 Aug 2026: a range from before reads —. A return visit is a report visit starting 30 minutes or more after the person's first one. All traffic: the source, device, tier and visitor filters don't apply. The team's own people (the PostHog visits of their finished surveys) are left out.";
+  "PostHog sees only part of the visitors and starts on 23 Aug 2026: a range from before reads —. A return visit is a report visit starting 30 minutes or more after the person's first one. All traffic: the source, device, tier and visitor filters don't apply. The team's own people (the PostHog visits of their finished surveys) are left out." +
+  ` From ${EMAIL_LINKS_TAGGED_FROM} every email's links name the email (utm_campaign), so returns through the report-ready, receipt and invite emails move from "Report or invite email" to "Email campaign": a change of label, not of readers.`;
 
 const opened: FieldDef = {
   label: "Reports opened",

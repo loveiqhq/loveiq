@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildJourneyMessage, formatDuration } from "@features/attribution/server/slack-journey";
-import type { SubmissionJourney } from "@features/attribution/server/journey";
+import {
+  GATE_STAMPED_AT_SUBMIT_MS,
+  type SubmissionJourney,
+} from "@features/attribution/server/journey";
+import {
+  buildPayToStart,
+  payToStartPrices,
+  STAMPED_AT_SUBMIT_MS,
+} from "@features/admin/server/ap/pay-to-start";
 import type { SlackBlock } from "@shared/observability/slack";
+import { EMAIL_LINKS } from "@shared/emails/email-link";
 import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 /**
@@ -175,6 +184,8 @@ describe("the compact incoming-survey layout", () => {
 
     expect(soleSection(message.blocks).split("\n")).toEqual([
       "Survey submission *#1756* `a***@gmail.com`",
+      // The funnel and the money, second (sync 4 Nov); a free survey with no gate stamp.
+      "Funnel: *Pay after the report*  |  *Free*",
       "Survey time: *18 min*  |  Report time: *5 min*",
       "Came from: *Paid* — google / cpc",
       "Device: *iOS*",
@@ -703,6 +714,257 @@ describe("pay to start — paid before the survey", () => {
   it("leaves everyone else's landing line as it was", () => {
     const message = buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: 58 });
     expect(JSON.stringify(message.blocks)).not.toContain("Pay to start");
+  });
+});
+
+/**
+ * The #incoming-surveys rework (syncs 29 Oct, 3 and 4 Nov): the funnel by one set of names,
+ * Free or Paid with the price paid, the first page, and the emails a reader came back through.
+ */
+describe("funnel, money, first page and returns", () => {
+  const lines = (over: Partial<SubmissionJourney>) =>
+    (
+      (
+        buildJourneyMessage(journey(over), { kind: "survey_completed", questionCount: 58 })
+          .blocks as Array<{ type: string; text?: { text?: string } }>
+      ).find((b) => b.type === "section")?.text?.text ?? ""
+    ).split("\n");
+  const funnel = (over: Partial<SubmissionJourney>) =>
+    lines(over).find((l) => l.startsWith("Funnel:"));
+
+  it.each<[string, Partial<SubmissionJourney>, string]>([
+    [
+      "a free survey behind the EUR 1.99 page",
+      { gateCohort: true },
+      "Funnel: *€1.99 after the survey*  |  *Free*",
+    ],
+    [
+      "a free survey with the gate off",
+      { gateCohort: false },
+      "Funnel: *Pay after the report*  |  *Free*",
+    ],
+    [
+      "the EUR 1.99 page, paid",
+      { gateCohort: true, paid: [{ amount: 1.99, currency: "EUR" }] },
+      "Funnel: *€1.99 after the survey*  |  *Paid €1.99*",
+    ],
+    [
+      "the EUR 1.99 page, then the full report",
+      {
+        gateCohort: true,
+        paid: [
+          { amount: 1.99, currency: "EUR" },
+          { amount: 19.99, currency: "EUR" },
+        ],
+      },
+      "Funnel: *€1.99 after the survey*  |  *Paid €1.99 + €19.99*",
+    ],
+    [
+      "pay to start, the full report",
+      { payToStart: true, payToStartOffer: "full", paid: [{ amount: 29.99, currency: "EUR" }] },
+      "Funnel: *Pay to start · €29.99*  |  *Paid €29.99*",
+    ],
+    [
+      "pay to start at EUR 1.99, with a 100% code",
+      { payToStart: true, payToStartOffer: "pre", paid: [], freeUnlocks: ["code"] },
+      "Funnel: *Pay to start · €1.99*  |  *Free* (€0 code)",
+    ],
+    [
+      "a whole-euro payment, in AP's own format",
+      { paid: [{ amount: 30, currency: "EUR" }] },
+      "Funnel: *Pay after the report*  |  *Paid €30.00*",
+    ],
+    [
+      "E07's gift",
+      { gateCohort: true, freeUnlocks: ["gift"] },
+      "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted)",
+    ],
+    [
+      "a gift and the feedback grant",
+      { gateCohort: true, freeUnlocks: ["gift", "feedback"] },
+      "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted, full report for feedback)",
+    ],
+    [
+      // AP counts it pay after the report until a payment claims the survey.
+      "a pay-to-start payment still settling",
+      { payToStart: true },
+      "Funnel: *Pay after the report*  |  *Payment pending*",
+    ],
+    [
+      // An unused pay-to-start cookie that bought nothing joins the gate's cohort.
+      "a pay-to-start label on a survey the gate stamped",
+      { payToStart: true, gateCohort: true },
+      "Funnel: *€1.99 after the survey*  |  *Free*",
+    ],
+    [
+      "a payment in another currency",
+      { paid: [{ amount: 9.5, currency: "USD" }] },
+      "Funnel: *Pay after the report*  |  *Paid USD 9.50*",
+    ],
+  ])("%s", (_label, over, expected) => {
+    expect(funnel(over)).toBe(expected);
+  });
+
+  it("puts the funnel second, under the title", () => {
+    expect(lines({ gateCohort: true })[1]).toBe("Funnel: *€1.99 after the survey*  |  *Free*");
+  });
+
+  /**
+   * AP-Analytics' names, from AP's own builder (Eman, 5 Nov: one set of words). A renamed
+   * funnel on the dashboard fails here until Slack says the same, and the other way round.
+   */
+  it("names every funnel exactly as AP-Analytics does", () => {
+    const ap = buildPayToStart({
+      facts: { visits: [], starts: [], subs: [] },
+      entitlements: [],
+      ptsVisits: [],
+      boughtFirst: new Set(),
+      boughtFirstStarts: {},
+      ourClaims: new Set(),
+      openedSubmissions: new Set(),
+      laterPays: new Map(),
+      gateMembers: [],
+      gateOn: true,
+      ads: { ok: true, value: [] },
+      from: "2026-11-02",
+      to: "2026-11-08",
+      today: "2026-11-09",
+      prices: payToStartPrices(),
+    });
+    const apName = (key: string) => ap.funnels.find((f) => f.key === key)?.label;
+    const slackName = (over: Partial<SubmissionJourney>) =>
+      /^Funnel: \*(.+?)\*  \|/.exec(funnel(over) ?? "")?.[1];
+
+    expect(slackName({})).toBe(apName("after"));
+    expect(slackName({ gateCohort: true })).toBe(apName("gate"));
+    expect(slackName({ payToStart: true, payToStartOffer: "full" })).toBe(apName("full"));
+    expect(slackName({ payToStart: true, payToStartOffer: "pre" })).toBe(apName("pre"));
+    // And the window that decides the EUR 1.99 page's funnel is AP's.
+    expect(GATE_STAMPED_AT_SUBMIT_MS).toBe(STAMPED_AT_SUBMIT_MS);
+  });
+
+  it("puts the first page under where they came from, as a literal path", () => {
+    const rendered = lines({
+      traffic: {
+        bucket: "Organic",
+        source: "chatgpt.com",
+        medium: null,
+        campaign: null,
+        isGoogleAds: false,
+        keyword: null,
+        matchType: null,
+        network: null,
+        landingPath: "/glossary/*bold*_term`x",
+      },
+    });
+    const from = rendered.findIndex((l) => l.startsWith("Came from:"));
+    expect(rendered[from]).toBe("Came from: *Organic* — chatgpt.com");
+    // A code span: the path's * and _ stay literal, and a backtick cannot close it early.
+    expect(rendered[from + 1]).toBe("First page: `/glossary/*bold*_termx`");
+  });
+
+  // AP-Analytics' channel names (classifySource, the Traffic page's source filter), so the
+  // line and the dashboard read alike; the referring site is the detail of an untagged visit.
+  it.each<[string, Partial<SubmissionJourney["traffic"]>, string]>([
+    [
+      "an organic search",
+      { channel: "organic_search", referrerHost: "www.google.com" },
+      "Came from: *Organic search* — www.google.com",
+    ],
+    [
+      "a social app's link",
+      { channel: "social", referrerHost: "l.instagram.com" },
+      "Came from: *Social* — l.instagram.com",
+    ],
+    [
+      "an AI assistant",
+      { channel: "ai", source: "chatgpt.com" },
+      "Came from: *AI assistants* — chatgpt.com",
+    ],
+    [
+      "one of our emails",
+      { channel: "email", source: "email", medium: "nurture", campaign: "survey_paused" },
+      "Came from: *Email* — email / nurture / survey_paused",
+    ],
+    ["no trace at all", { channel: "direct" }, "Came from: *Direct / untagged*"],
+  ])("names %s as AP does", (_label, traffic, expected) => {
+    const rendered = lines({
+      traffic: {
+        bucket: "Direct",
+        source: null,
+        medium: null,
+        campaign: null,
+        isGoogleAds: false,
+        keyword: null,
+        matchType: null,
+        network: null,
+        ...traffic,
+      },
+    });
+    expect(rendered.find((l) => l.startsWith("Came from:"))).toBe(expected);
+  });
+
+  it("leaves the first page out when the survey did not carry one", () => {
+    expect(lines({}).some((l) => l.startsWith("First page"))).toBe(false);
+  });
+
+  it("names each of our emails once, at its first return, a Berlin day", () => {
+    // Pinned off Berlin, so the day below is Berlin's only because the code asks for it,
+    // whatever time zone the machine running this is in.
+    const tz = process.env.TZ;
+    process.env.TZ = "UTC";
+    try {
+      const rendered = lines({
+        emailReturns: [
+          // 23:30 UTC on 4 Nov is already 5 Nov in Berlin.
+          { campaign: "72h_no_unlock", at: "2026-11-04T23:30:00.000Z" },
+          { campaign: "initial_gift", at: "2026-11-06T09:00:00.000Z" },
+          { campaign: "72h_no_unlock", at: "2026-11-07T09:00:00.000Z" },
+          { campaign: "report_ready", at: "2026-11-07T10:00:00.000Z" },
+          { campaign: "receipt", at: "2026-11-07T11:00:00.000Z" },
+          // Both reminders are one email to the reader.
+          { campaign: "invite_reminder_1", at: "2026-11-07T12:00:00.000Z" },
+          { campaign: "invite_reminder_2", at: "2026-11-08T12:00:00.000Z" },
+          { campaign: null, at: "2026-11-08T09:00:00.000Z" },
+          { campaign: "unlock_feedback", at: "2026-11-08T10:00:00.000Z" },
+          { campaign: "pay_to_start", at: "2026-11-08T11:00:00.000Z" },
+        ],
+      });
+      expect(rendered.find((l) => l.startsWith("Came back"))).toBe(
+        "Came back by email: *72h email* 5 Nov, *gift email (E07)* 6 Nov, " +
+          "*report-ready email* 7 Nov, *receipt email* 7 Nov, *invite reminder* 7 Nov, " +
+          "*email link* 8 Nov, *unlock feedback email* 8 Nov, *pay-to-start email* 8 Nov"
+      );
+      // Just above the rail.
+      expect(rendered.at(-2)).toMatch(/^Came back by email:/);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+  });
+
+  // A new email in shared/emails/email-link.ts must get a name here, or its returns read
+  // as an untagged "email link".
+  it.each(Object.values(EMAIL_LINKS).map((l) => l.campaign))("names %s", (campaign) => {
+    const line = lines({ emailReturns: [{ campaign, at: "2026-11-08T10:00:00.000Z" }] }).find((l) =>
+      l.startsWith("Came back")
+    );
+    expect(line).not.toContain("*email link*");
+  });
+
+  // email_return comes from the browser: a made-up campaign is never printed.
+  it.each(["<b>spring</b>", "Your report was refunded", "x".repeat(64), "constructor"])(
+    "reads a campaign that is none of our emails (%s) as an untagged email link",
+    (campaign) => {
+      const line = lines({ emailReturns: [{ campaign, at: "2026-11-08T10:00:00.000Z" }] }).find(
+        (l) => l.startsWith("Came back")
+      );
+      expect(line).toBe("Came back by email: *email link* 8 Nov");
+    }
+  );
+
+  it("says nothing about returns for a reader who never came back", () => {
+    expect(lines({ emailReturns: [] }).some((l) => l.startsWith("Came back"))).toBe(false);
   });
 });
 

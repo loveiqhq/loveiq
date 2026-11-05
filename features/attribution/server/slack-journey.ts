@@ -18,7 +18,12 @@ import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   isReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import type { SubmissionJourney } from "@features/attribution/server/journey";
+import type { FreeUnlock, SubmissionJourney } from "@features/attribution/server/journey";
+import { getPayToStartOffer } from "@features/pay-to-start/server/offer";
+import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
+import { REPORTING_TIME_ZONE } from "@shared/time/reporting-day";
+import { EMAIL_LINKS } from "@shared/emails/email-link";
+import { SOURCES } from "@features/admin/server/ap/filters";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { describeQuestionCount } from "@features/survey/server/utils";
 import {
@@ -143,8 +148,17 @@ function trafficParts(journey: SubmissionJourney): { head: string; detail: strin
   }
 
   const parts = [source, medium, campaign].filter(Boolean).map((p) => esc(p!));
-  return { head: bucket, detail: parts.length > 0 ? parts.join(" / ") : null };
+  const { channel, referrerHost } = journey.traffic;
+  return {
+    // AP-Analytics' name for the channel (its source filter's), so the line and the dashboard
+    // agree; the old bucket only for a journey assembled without one.
+    head: (channel && CHANNEL_NAMES.get(channel)) || bucket,
+    detail: parts.length > 0 ? parts.join(" / ") : referrerHost ? esc(referrerHost) : null,
+  };
 }
+
+/** AP-Analytics' source names (SOURCES in features/admin/server/ap/filters.ts). */
+const CHANNEL_NAMES = new Map<string, string>(SOURCES.map((s) => [s.value, s.label]));
 
 /**
  * The flat form — still what the purchase message renders.
@@ -317,6 +331,112 @@ function formatReportDwell(ms: number | null | undefined): string {
   return formatDuration(ms) ?? "—";
 }
 
+/** AP-Analytics' euros (features/admin/server/ap/pay-to-start.ts): "€29.99", "€1.99", "€30.00". */
+const euros = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+
+/** "€1.99"; another currency as "USD 9.99". */
+function priceText(amount: number, currency = "EUR"): string {
+  return currency === "EUR"
+    ? euros(Math.round(amount * 100))
+    : `${escapeSlack(currency)} ${amount.toFixed(2)}`;
+}
+
+function freeUnlockText(kind: FreeUnlock): string {
+  switch (kind) {
+    case "gift":
+      return `${euros(INITIAL_UNLOCK_PRICE_CENTS)} unlock gifted`;
+    case "feedback":
+      return "full report for feedback";
+    case "test":
+      return "team test";
+    case "code":
+      return "€0 code";
+  }
+}
+
+/**
+ * The funnel by AP-Analytics' own names (Eman, 5 Nov: the Slack message and the dashboard
+ * say the same words), built as `buildPayToStart` builds them; slack-journey.test.ts holds
+ * the two equal. A survey a pay-to-start payment claimed is "Pay to start · €29.99" or
+ * "· €1.99" by the page it was bought on, at the offer's price now. A free survey is "€1.99
+ * after the survey" when its submit stamped it into the gate's cohort, else "Pay after the
+ * report".
+ */
+function funnelName(journey: SubmissionJourney): string {
+  if (journey.payToStartOffer) {
+    return `Pay to start · ${euros(getPayToStartOffer(journey.payToStartOffer).priceCents)}`;
+  }
+  return journey.gateCohort
+    ? `${euros(INITIAL_UNLOCK_PRICE_CENTS)} after the survey`
+    : "Pay after the report";
+}
+
+/**
+ * The funnel and what it took: "Funnel: *€1.99 after the survey*  |  *Paid €1.99*".
+ *
+ * Free or Paid comes off the payment ledger, every payment that took money, so it moves
+ * when they buy again (a EUR 1.99 unlock, then the full report). A EUR 0 unlock reads
+ * Free and says what it was.
+ */
+function funnelLine(journey: SubmissionJourney): string {
+  // The tracker's pay-to-start label with no payment yet and no gate stamp: the claim is
+  // still settling (an unused token that bought nothing joins the gate's cohort instead).
+  // Until a payment claims it, AP counts the survey as pay after the report, and so does
+  // the funnel here. ponytail: a refunded pay-to-start purchase reads the same; the ledger
+  // query reads only succeeded rows, and refunds of these are rare.
+  const pending = Boolean(journey.payToStart) && !journey.payToStartOffer && !journey.gateCohort;
+  const paid = journey.paid ?? [];
+  const free = (journey.freeUnlocks ?? []).map(freeUnlockText);
+  const money =
+    paid.length > 0
+      ? `*Paid ${paid.map((p) => priceText(p.amount, p.currency)).join(" + ")}*`
+      : pending
+        ? "*Payment pending*"
+        : free.length > 0
+          ? `*Free* (${free.join(", ")})`
+          : "*Free*";
+  return `Funnel: *${funnelName(journey)}*  |  ${money}`;
+}
+
+/**
+ * Our emails by their links' utm_campaign: only these are named. `email_return` is posted by
+ * the browser, so a made-up campaign reads as any untagged link does, "email link".
+ */
+const EMAIL_NAMES = new Map<string, string>([
+  [EMAIL_LINKS.reportReady.campaign, "report-ready email"],
+  [EMAIL_LINKS.receipt.campaign, "receipt email"],
+  [EMAIL_LINKS.payToStart.campaign, "pay-to-start email"],
+  [EMAIL_LINKS.inviteReminder1.campaign, "invite reminder"],
+  [EMAIL_LINKS.inviteReminder2.campaign, "invite reminder"],
+  [EMAIL_LINKS.surveyPaused.campaign, "survey-paused email"],
+  [EMAIL_LINKS.unlockFeedback.campaign, "unlock feedback email"],
+  [EMAIL_LINKS.initialGift.campaign, "gift email (E07)"],
+  [EMAIL_LINKS.reportShare.campaign, "share email"],
+  // The two that tag their own links with their stage.
+  ["72h_no_unlock", "72h email"],
+  ["chapter_nudge", "chapter email"],
+]);
+
+const emailName = (campaign: string | null) =>
+  (campaign !== null && EMAIL_NAMES.get(campaign)) || "email link";
+
+/** "Came back by email: *72h email* 5 Nov, *gift email (E07)* 6 Nov": each email once, first return. */
+function emailReturnsLine(journey: SubmissionJourney): string | null {
+  const first = new Map<string, string>();
+  for (const r of journey.emailReturns ?? []) {
+    const name = emailName(r.campaign);
+    if (!first.has(name)) first.set(name, r.at);
+  }
+  if (first.size === 0) return null;
+  const day = (at: string) =>
+    new Date(at).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: REPORTING_TIME_ZONE,
+    });
+  return `Came back by email: ${[...first].map(([name, at]) => `*${name}* ${day(at)}`).join(", ")}`;
+}
+
 /**
  * Bold the arm's NAME and leave its parenthetical description plain, so
  * "Landing Page V1 (First Design)" renders as "*Landing Page V1* (First
@@ -378,6 +498,9 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   const title = `${journey.internal ? INTERNAL_TAG : ""}Survey submission ${bold(`#${journey.submissionId}`)}`;
   const lines: string[] = [
     journey.emailMasked ? `${title} ${codeSpan(journey.emailMasked)}` : title,
+    // Second, as the line the channel is read for (sync 4 Nov: "paid or free, and where
+    // it came from").
+    funnelLine(journey),
   ];
 
   /**
@@ -410,6 +533,11 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
     `Came from: ${bold(escapeSlack(traffic.head || "Not recorded"))}` +
       `${traffic.detail ? ` — ${traffic.detail}` : ""}`
   );
+  // The first page this browser opened (a glossary term, say): a path, so a code span,
+  // where its `*` and `_` stay literal. Omitted when the survey did not carry it.
+  if (journey.traffic.landingPath) {
+    lines.push(`First page: ${codeSpan(journey.traffic.landingPath)}`);
+  }
 
   if (journey.device) lines.push(`Device: ${bold(escapeSlack(journey.device))}`);
 
@@ -436,6 +564,9 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   if (journey.country) {
     lines.push(`Country (self-reported): ${bold(escapeSlack(journey.country))}`);
   }
+
+  const returned = emailReturnsLine(journey);
+  if (returned) lines.push(returned);
 
   /**
    * The rail goes last, and `clampBlock` truncates a section from the END at

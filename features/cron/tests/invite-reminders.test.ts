@@ -170,6 +170,11 @@ describe("GET /api/cron/invite-reminders", () => {
     const html = mockResendSend.mock.calls[0]![0].html as string;
     expect(html).toContain("/report/rpt_AbCdEfGhIjKlMnOpQrSt?invite=1&amp;from=email");
     expect(html).not.toMatch(/\/report\?invite=1/);
+    // Tagged with the reminder it is, so a return through it is named.
+    const reminder = body.reminder1Sent === 1 ? 1 : 2;
+    expect(html).toContain(
+      `?invite=1&amp;from=email&amp;utm_source=email&amp;utm_medium=nurture&amp;utm_campaign=invite_reminder_${reminder}`
+    );
   });
 
   it("reads only full-report and All 14 payments, so EUR 1.99 rows never take the 200 slots", async () => {

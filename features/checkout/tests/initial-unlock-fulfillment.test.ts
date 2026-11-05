@@ -261,6 +261,10 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     expect(sent.to).toBe("alice@example.com");
     expect(sent.subject).toBe("Your Core Archetype is unlocked");
     expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
+    // The receipt's link back carries its email (shared/emails/email-link.ts).
+    expect(sent.html).toContain(
+      `/report/${TOKEN}?from=email&amp;utm_source=email&amp;utm_medium=purchase&amp;utm_campaign=receipt`
+    );
     expect(sent).not.toHaveProperty("tags");
     expect(sent.headers["List-Unsubscribe"]).toContain("src=initial_unlocked");
   });

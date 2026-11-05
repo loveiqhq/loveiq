@@ -25,6 +25,7 @@ import {
   listActiveSharesForReport,
   resolveOwnerFromAccessToken,
 } from "@features/report/server/shareAccess";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 const postSchema = z.object({
   ownerToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX),
@@ -166,7 +167,7 @@ export async function POST(request: Request) {
 
   // Fire-and-forget email — never blocks the response or rolls back the DB row.
   const siteUrl = getEmailSiteUrl();
-  const shareUrl = `${siteUrl}/report/${row.share_token}`;
+  const shareUrl = tagEmailLink(`${siteUrl}/report/${row.share_token}`, EMAIL_LINKS.reportShare);
   const resend = getResend();
   if (resend) {
     // 3-way A/B/C copy test:

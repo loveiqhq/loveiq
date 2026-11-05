@@ -31,6 +31,7 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -156,7 +157,7 @@ export async function GET(request: Request) {
   process.once("SIGTERM", onSigterm);
 
   const siteUrl = getEmailSiteUrl();
-  const resumeUrl = `${siteUrl}/survey`;
+  const resumeUrl = tagEmailLink(`${siteUrl}/survey`, EMAIL_LINKS.surveyPaused);
 
   const summary = {
     candidates: 0,

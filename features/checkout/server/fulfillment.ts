@@ -110,6 +110,7 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
 import { journeyFromPurchase } from "@features/attribution/server/journey";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { classifyTraffic } from "@features/attribution/server/traffic";
 
@@ -277,9 +278,12 @@ async function sendPurchaseEmail({
   // are already paid, so the arm is moot for them, but the tag keeps all of our
   // report links uniform. buildArchetypeReportUrl appends `&archetype=` safely
   // because the `?` is already present.
-  const reportUrl = reportToken
-    ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
-    : `${siteUrl}/report?from=email`;
+  const reportUrl = tagEmailLink(
+    reportToken
+      ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
+      : `${siteUrl}/report?from=email`,
+    EMAIL_LINKS.receipt
+  );
 
   // Purchase confirmations are transactional — they ship regardless of
   // marketing preferences. The unsubscribe link still flows through for

@@ -272,6 +272,17 @@ describe("refreshJourneyMessage", () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
+  it("redraws on a second payment, so the Paid line takes it in", async () => {
+    // The EUR 1.99 unlock already put the rail at Paid; the full report bought after it
+    // must still reach "Paid €1.99 + €19.99".
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("paid"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyAt({ purchasedAt: "x" }));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+    mockSupabaseFetch.mockResolvedValue(json([], true, 204));
+    await refreshJourneyMessage(1756, "paid");
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
   it("advances from a null stored state", async () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow(null));
     mockBuildSubmissionJourney.mockResolvedValue(journeyAt({}));

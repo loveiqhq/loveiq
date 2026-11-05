@@ -72,7 +72,12 @@ const mockTrackPaywallView = vi.fn();
 const mockTrackPaywallInitiated = vi.fn();
 const mockTrackBeginCheckout = vi.fn();
 const mockTrackPriceShown = vi.fn();
+const mockEmailReturnOf = vi.fn((_params: unknown): { campaign: string | null } | null => null);
+const mockTrackEmailReturn = vi.fn();
 vi.mock("@features/analytics/client", () => ({
+  // A return through one of our emails' links (the #incoming-surveys message's).
+  emailReturnOf: (params: unknown) => mockEmailReturnOf(params),
+  trackEmailReturn: (...args: unknown[]) => mockTrackEmailReturn(...args),
   trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
   trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
   trackPaywallInitiated: (...args: unknown[]) => mockTrackPaywallInitiated(...args),
@@ -606,6 +611,39 @@ describe("ReportPage", () => {
     await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
     // ?v2=1 here: an older layout sends none.
     expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur", null);
+  });
+
+  describe("a return through an email link", () => {
+    beforeEach(() => mockEmailReturnOf.mockReturnValue(null));
+
+    const opened = (data: Record<string, unknown> = {}) => {
+      const base = buildSuccessResponse();
+      mockUseReportData.mockReturnValue({
+        ...base,
+        data: { ...base.data, submissionId: 2698, ...data },
+      });
+    };
+
+    it("is reported for the owner, once a page load, with the link's campaign", async () => {
+      mockEmailReturnOf.mockReturnValue({ campaign: "initial_gift" });
+      opened();
+      const { rerender } = render(<ReportPage />);
+      await waitFor(() => expect(mockTrackEmailReturn).toHaveBeenCalledTimes(1));
+      expect(mockTrackEmailReturn).toHaveBeenCalledWith({ campaign: "initial_gift" });
+      rerender(<ReportPage />);
+      expect(mockTrackEmailReturn).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["a visit no email brought", null, "owner"],
+      ["a shared view", { campaign: "initial_gift" }, "shared"],
+    ])("is not reported for %s", async (_label, arrival, viewMode) => {
+      mockEmailReturnOf.mockReturnValue(arrival);
+      opened({ viewMode });
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+      expect(mockTrackEmailReturn).not.toHaveBeenCalled();
+    });
   });
 
   it("tags report_viewed with the slimmed layout on a V4 page (16.10)", async () => {
