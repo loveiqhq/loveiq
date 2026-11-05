@@ -1849,7 +1849,15 @@ function Experiments({ experiments }: { experiments: TrafficPayload["experiments
                 <Cell
                   bold
                   text={conf === null ? EMPTY : `${(conf * 100).toFixed(0)}%`}
-                  sub={conf === null ? x.why : conf >= 0.95 ? "credible" : "not yet"}
+                  sub={
+                    conf === null
+                      ? x.why
+                      : conf >= 0.95
+                        ? "credible"
+                        : x.ended
+                          ? "ended below 95%"
+                          : "not yet"
+                  }
                   shade={conf === null ? PLAIN : conf >= 0.95 ? GOOD : conf >= 0.8 ? PLAIN : BAD}
                 />
               </div>

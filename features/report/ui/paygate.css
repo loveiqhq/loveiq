@@ -476,53 +476,8 @@
   text-align: center;
 }
 
-.rpg__payments-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 8px 14px;
-}
-
-.rpg__mark {
-  display: block;
-  flex: 0 0 auto;
-  background-position: center bottom;
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-
-/* Sizes are 973:591's own. Apple Pay is the artwork's glyphs at the frame's text size. */
-.rpg__mark--apple-pay {
-  width: 28px;
-  height: 12px;
-  background-image: url("/report/paygate/mark-apple-pay.svg");
-}
-.rpg__mark--visa {
-  width: 39.38px;
-  height: 12.72px;
-  background-image: url("/report/paygate/mark-visa.svg");
-}
-.rpg__mark--google-pay {
-  width: 30.79px;
-  height: 12px;
-  background-image: url("/report/paygate/mark-google-pay.svg");
-}
-.rpg__mark--klarna {
-  width: 35.64px;
-  height: 15px;
-  background-image: url("/report/paygate/mark-klarna.svg");
-}
-.rpg__mark--amex {
-  width: 35.93px;
-  height: 13.13px;
-  background-image: url("/report/paygate/mark-amex.svg");
-}
-.rpg__mark--mastercard {
-  width: 22px;
-  height: 17.11px;
-  background-image: url("/report/paygate/mark-mastercard.svg");
-}
+/* The row of logos under the label is PaymentLogos (payment-logos.css), shared with the
+ * EUR 1.99 page and both exit pages. */
 
 /* ── Why unlock your Report? (842:656) ──────────────────────────────────── */
 .rpg__why {
@@ -900,4 +855,43 @@
   width: min(100%, 360px);
   margin: 28px auto 0;
   text-decoration: none;
+}
+
+/* A EUR 1.99 holder's way out (Marcus's "Paygate exit pages", 28.10): the EUR 1.99 page's
+ * "Not ready to unlock yet" (initial-unlock-gate.css .iug-header__back), where the × sits for
+ * everyone else but on the left, on a light pill so it reads over the plans scrolling under
+ * it. It opens the full report's exit page. */
+.report-pricing-modal__not-ready {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #5f5a6e;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.report-pricing-modal__not-ready:focus-visible {
+  outline: 2px solid var(--rpg-purple, #561dbd);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .report-pricing-modal__not-ready:hover {
+    background: #f4f1f8;
+  }
 }

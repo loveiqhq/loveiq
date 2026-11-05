@@ -81,7 +81,11 @@ describe("usePartialSave", () => {
     });
     document.dispatchEvent(new Event("visibilitychange"));
 
-    expect(mockSendBeacon).toHaveBeenCalledWith("/api/survey-partial", expect.any(Blob));
+    // The JSON string itself, never a Blob (Playwright's WebKit empties those under a route).
+    expect(mockSendBeacon).toHaveBeenCalledWith("/api/survey-partial", expect.any(String));
+    expect(JSON.parse(mockSendBeacon.mock.calls[0][1] as string)).toMatchObject({
+      answers: { "00000": "alice@test.com" },
+    });
   });
 
   it("saves nothing more once the run is submitted, by fetch or by beacon", () => {

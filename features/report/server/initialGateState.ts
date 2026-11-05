@@ -3,6 +3,7 @@ import { isFeatureEnabled, readFeatureFlag } from "@shared/flags/system-flags";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * Pre-unlock (Notion "RFD > Pre-Unlock", Figma Report-3.0 1604:2328): the EUR 1.99 gate's
@@ -21,7 +22,7 @@ import logger from "@shared/observability/logger";
 const SUPABASE_TIMEOUT_MS = 5_000;
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };
@@ -132,6 +133,33 @@ export async function readInitialGateCohortIds(
     return new Set(rows.map((row) => row.id).filter(isRowId));
   } catch (err) {
     logger.warn({ err }, "pre-unlock: cohort read failed");
+    return null;
+  }
+}
+
+/**
+ * The time spent on each question of a survey, as its tracking kept it (survey_behavior_event,
+ * one row per question left; a hidden tab's "abandon" rows only repeat the time so far), for
+ * the exit page's minutes (surveyActiveMs). Null when it can't be read: the page then shows no
+ * number rather than a wrong one.
+ */
+export async function readSurveyQuestionTimes(sessionId: string): Promise<number[] | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return null;
+  try {
+    const response = await serviceFetch(
+      `/rest/v1/survey_behavior_event?session_id=eq.${sessionId}&direction=neq.abandon&select=time_spent_ms&limit=1000`
+    );
+    if (!response.ok) {
+      logger.warn({ status: response.status }, "pre-unlock: survey question times read failed");
+      return null;
+    }
+    const rows = (await response.json()) as Array<{ time_spent_ms?: unknown }>;
+    if (!Array.isArray(rows)) return null;
+    return rows
+      .map((row) => row.time_spent_ms)
+      .filter((ms): ms is number => typeof ms === "number" && Number.isFinite(ms));
+  } catch (err) {
+    logger.warn({ err }, "pre-unlock: survey question times read failed");
     return null;
   }
 }

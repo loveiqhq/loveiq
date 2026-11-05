@@ -97,10 +97,12 @@ export interface GateMember {
   seenAt: string | null;
   /**
    * What the reader did on the €1.99 page, from its own events (analytics_event): pressed
-   * "Unlock now" on the card or on the bar, or left by "Not ready to unlock yet" (stored since
-   * 27 Oct 2026). Absent: none of them.
+   * "Unlock now" on the card or on the bar, pressed "Not ready to unlock yet" (stored since
+   * 27 Oct 2026), or, on the exit page that opens since 28.10, pressed Unlock there
+   * (`exit_card` / `exit_sticky`); and pressed the browser's or phone's own Back on it, which
+   * opens that exit page too (`initial_gate_browser_back`, stored since #700). Absent: none of them.
    */
-  taps?: { card: boolean; bar: boolean; notReady: boolean };
+  taps?: { card: boolean; bar: boolean; notReady: boolean; exit?: boolean; browserBack?: boolean };
   /**
    * E07's draw, a day after the page for a reader still unpaid (live from 28 Oct 2026): the
    * Core Archetype gifted, or held out. Absent: not drawn (paid, never saw the page, too soon).
@@ -662,15 +664,20 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
               label: `Saw the ${euros(input.prices.gate)} page`,
               n: subs.filter((s) => seenAt.get(s.id)).length,
               pays: false,
-              detail: `${subs.filter((s) => tapsOf.get(s.id)?.notReady).length} left by “Not ready to unlock yet”`,
+              // Since 28.10 "Not ready to unlock yet" opens the exit page, where readers can still
+              // unlock: pressing it no longer means they left. The browser's Back opens it too
+              // (#700).
+              detail: `${subs.filter((s) => tapsOf.get(s.id)?.notReady).length} pressed “Not ready to unlock yet” · ${subs.filter((s) => tapsOf.get(s.id)?.browserBack).length} pressed the browser's Back`,
             },
             // Its two buttons (sync 23.10: the bar is there from the first paint). A reader who
             // pressed both counts once here, and on both lines under it.
             {
               label: "Pressed Unlock",
-              n: subs.filter((s) => tapsOf.get(s.id)?.card || tapsOf.get(s.id)?.bar).length,
+              n: subs.filter(
+                (s) => tapsOf.get(s.id)?.card || tapsOf.get(s.id)?.bar || tapsOf.get(s.id)?.exit
+              ).length,
               pays: false,
-              detail: `on the card ${subs.filter((s) => tapsOf.get(s.id)?.card).length} · on the bar ${subs.filter((s) => tapsOf.get(s.id)?.bar).length}`,
+              detail: `on the card ${subs.filter((s) => tapsOf.get(s.id)?.card).length} · on the bar ${subs.filter((s) => tapsOf.get(s.id)?.bar).length} · on the exit page ${subs.filter((s) => tapsOf.get(s.id)?.exit).length}`,
             },
             {
               label: `Paid ${euros(input.prices.gate)}`,
@@ -1157,8 +1164,10 @@ export async function fetchPayToStartRecords(
     }
   }
 
-  // The €1.99 page's buttons and its way out, one row a press: pressed "Unlock now" on the card
-  // or the bar, or left by "Not ready to unlock yet" (stored since 27 Oct 2026).
+  // The €1.99 page's buttons and its ways out, one row a press: pressed "Unlock now" on the card
+  // or the bar, pressed "Not ready to unlock yet" (stored since 27 Oct 2026), Unlock on the exit
+  // page that opens since 28.10 (`exit_card` / `exit_sticky`), or the browser's own Back, which
+  // opens that exit page too (stored once a page since #700).
   const taps = new Map<number, NonNullable<GateMember["taps"]>>();
   for (const ids of chunks(cohort.map((c) => c.survey_submission_id))) {
     const rows = await must<{
@@ -1167,13 +1176,21 @@ export async function fetchPayToStartRecords(
       place: string | null;
     }>(
       `/rest/v1/analytics_event?survey_submission_id=in.(${ids.join(",")})` +
-        "&event_type=in.(initial_gate_cta_click,initial_gate_back)" +
+        "&event_type=in.(initial_gate_cta_click,initial_gate_back,initial_gate_browser_back)" +
         "&select=survey_submission_id,event_type,place:metadata->>place&order=id.asc",
       "analytics_event"
     );
     for (const r of rows) {
-      const t = taps.get(r.survey_submission_id) ?? { card: false, bar: false, notReady: false };
+      const t = taps.get(r.survey_submission_id) ?? {
+        card: false,
+        bar: false,
+        notReady: false,
+        exit: false,
+        browserBack: false,
+      };
       if (r.event_type === "initial_gate_back") t.notReady = true;
+      else if (r.event_type === "initial_gate_browser_back") t.browserBack = true;
+      else if (r.place?.startsWith("exit_")) t.exit = true;
       else if (r.place === "sticky") t.bar = true;
       else t.card = true;
       taps.set(r.survey_submission_id, t);

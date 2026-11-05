@@ -8,6 +8,7 @@ import {
   type ScoringResult,
 } from "@features/scoring/logic";
 import type { SurveyAnswers } from "./types";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const SUPABASE_TIMEOUT_MS = 8000;
 /** The submit writes every answer, so it gets longer than a lookup; the browser waits 30 s. */
@@ -97,7 +98,7 @@ export interface SubmitSurveyOnceResult {
 }
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

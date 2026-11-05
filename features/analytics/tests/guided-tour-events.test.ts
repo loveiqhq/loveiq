@@ -42,8 +42,8 @@ const sent = (name: string) =>
 const stored = async () =>
   Promise.all(
     beacon.mock.calls.map(
-      async ([, blob]) =>
-        JSON.parse(await (blob as Blob).text()) as {
+      async ([, body]) =>
+        JSON.parse(body as string) as {
           event_type: string;
           submission_id: number;
           metadata: Record<string, unknown>;

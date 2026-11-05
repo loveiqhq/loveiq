@@ -17,6 +17,8 @@ export interface InitialUnlockGateProps {
   gate: InitialUnlockGatePayload;
   reportToken: string | null;
   reportSessionId: string | null;
+  /** `?preview=1`: nothing to buy, so its buttons open the report's preview after the EUR 1.99. */
+  preview?: boolean;
 }
 
 /**
@@ -31,11 +33,21 @@ export default function InitialUnlockGate({
   gate,
   reportToken,
   reportSessionId,
+  preview = false,
 }: InitialUnlockGateProps) {
+  // The page takes the focus as it opens, unless something holds it: it may have just replaced
+  // the report the guided tour ran over (tour first), whose bubble had it, and a screen reader
+  // then hears the page change rather than nothing.
+  const mainRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body) mainRef.current?.focus({ preventScroll: true });
+  }, []);
   const { start, state } = useInitialUnlockCheckout({
     priceCents: gate.priceCents,
     reportSessionId,
     reportToken,
+    preview,
   });
 
   // The submission is bound while the gate is on screen, and let go when it goes: "Not ready
@@ -57,7 +69,7 @@ export default function InitialUnlockGate({
   // The shell is the page's ground (the status pages' wash on a desktop); the frame is the column.
   return (
     <div className="iug-shell">
-      <main className="iug-page">
+      <main ref={mainRef} className="iug-page" tabIndex={-1}>
         <ScrollAnimator />
         <GateHero />
         <section className="iug-pricing" aria-label="Your Core Archetype">

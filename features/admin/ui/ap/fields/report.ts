@@ -617,7 +617,8 @@ SELECT count(*) FILTER (WHERE EXISTS (${exists})) AS ${num},
 /**
  * The guided tour as ap_report_tour reads it: the auto-started runs of the range's finishers
  * (the team's left out), each end (completed, skipped, left the page) placed on the stops it
- * reached when every stop it names is known. 'free' readers have 5 stops, 'paid' 4.
+ * reached when every stop it names is known. 'free' readers have 5 stops, 'paid' 4, and 'gate',
+ * the tour before the EUR 1.99 page (from 3 Nov 2026), 4 that can't be skipped.
  */
 const TOUR = `WITH b AS (
   SELECT (:from::date::timestamp AT TIME ZONE 'Europe/Berlin') AS since_ts,
@@ -634,7 +635,7 @@ ev AS (
          CASE WHEN jsonb_typeof(a.metadata->'stops') = 'array' THEN a.metadata->'stops' ELSE '[]'::jsonb END AS stops
     FROM analytics_event a
    WHERE a.event_type IN ('tour_started', 'tour_completed', 'tour_skipped', 'tour_left')
-     AND a.metadata->>'trigger' = 'auto' AND a.metadata->>'audience' IN ('free', 'paid')
+     AND a.metadata->>'trigger' = 'auto' AND a.metadata->>'audience' IN ('free', 'paid', 'gate')
      AND a.survey_submission_id IN (SELECT id FROM subs)
 ),
 by_reader AS (
@@ -697,7 +698,7 @@ const TOUR_EVENTS: FieldTable = {
   filters: "Period (the finisher's survey day); the tour that started on its own (trigger auto).",
 };
 const TOUR_CAVEAT =
-  "Recorded from 23 Oct 2026. All traffic: the tour's records carry no funnel, source, device, tier or visitor, so the filters don't narrow it. Pick Free or Paid readers above: each has its own figures.";
+  "Recorded from 23 Oct 2026. All traffic: the tour's records carry no funnel, source, device, tier or visitor, so the filters don't narrow it. Pick Free readers, Paid readers or Before the €1.99 page above: each has its own figures. Before the €1.99 page (from 3 Nov 2026) is the tour a reader the €1.99 page stops gets first: four stops, no Skip, so its runs end completed or left.";
 
 const tourField = (
   label: string,

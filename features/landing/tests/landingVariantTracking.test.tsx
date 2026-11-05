@@ -84,6 +84,24 @@ describe("landing A/B — the arm reaches the analytics", () => {
     expect(view).toHaveBeenCalledTimes(1);
   });
 
+  // Since 28.10 the gate's way out opens its exit page on the report, which marks no one; since
+  // 30.10 that page's "Maybe later" goes back to the gate too. A reader marked on the way here
+  // is still left out.
+  it("leaves out a reader marked as sent here by the gate, not one still on the report", async () => {
+    sessionStorage.clear();
+    const analytics = await import("@features/analytics/client");
+    vi.spyOn(analytics, "setLandingVariant").mockImplementation(() => {});
+    vi.spyOn(analytics, "trackExperimentExposure").mockImplementation(() => {});
+    const view = vi.spyOn(analytics, "trackLandingPageView").mockImplementation(() => {});
+    const { default: LandingPageTracker } = await import("@features/landing/ui/LandingPageTracker");
+
+    analytics.trackInitialGateBack({ to: "exit_page" });
+    expect(sessionStorage.getItem("liq_left_initial_gate")).toBeNull();
+    analytics.markLeftInitialGate();
+    render(<LandingPageTracker variant="white_card" />);
+    expect(view).not.toHaveBeenCalled();
+  });
+
   it("stores the gate's way out against the report's submission", async () => {
     vi.resetModules();
     sessionStorage.clear();
@@ -106,6 +124,34 @@ describe("landing A/B — the arm reaches the analytics", () => {
       submission_id: 55,
       metadata: { to: "/" },
     });
+  });
+
+  // The page's own Back on the gate (a desktop's Back, an iPhone's swipe, Android's back) opens
+  // its exit page, as "Not ready to unlock yet" does: an event of its own, stored beside that
+  // press, and no mark, since the reader stays on the report.
+  it("stores the gate's browser Back as its own event, and marks no way here", async () => {
+    vi.resetModules();
+    sessionStorage.clear();
+    document.cookie = "__csrf=test-csrf; path=/";
+    (window as unknown as { __loveiqReportSubmissionId: number }).__loveiqReportSubmissionId = 55;
+    vi.stubGlobal("navigator", { ...navigator, sendBeacon: undefined });
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: { body?: string }) => {
+        bodies.push(JSON.parse(init?.body ?? "{}"));
+        return { ok: true, json: async () => ({}) } as Response;
+      })
+    );
+    const { trackInitialGateBrowserBack } = await import("@features/analytics/client");
+    trackInitialGateBrowserBack({ to: "exit_page" });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      event_type: "initial_gate_browser_back",
+      submission_id: 55,
+      metadata: { to: "exit_page" },
+    });
+    expect(sessionStorage.getItem("liq_left_initial_gate")).toBeNull();
   });
 
   it("stamps the arm from the cookie onto a durable event, earlier rounds' arms included", async () => {

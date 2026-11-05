@@ -289,6 +289,13 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       entity_type: "report",
       metadata: { source: "drawer" },
     },
+    // The EUR 1.99 page's own Back, which opens its exit page as "Not ready to unlock yet"
+    // (initial_gate_back) does: the paywall's, beside that press.
+    {
+      event_type: "initial_gate_browser_back",
+      entity_type: "paywall",
+      metadata: { to: "exit_page" },
+    },
   ];
 
   it.each(cases)(
@@ -394,6 +401,80 @@ describe("POST /api/analytics-event — reading per chapter and Skip Intro (14.1
   });
 });
 
+describe("POST /api/analytics-event — the paygate's exit pages (28.10)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  const inserted = () => {
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    return JSON.parse(String(insert?.[1]?.body));
+  };
+
+  it("stores a reason against the reader's survey, as the paywall's", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "paygate_exit_reason",
+        submission_id: 42,
+        metadata: { stage: "pre", reason: "see_first", position: 2, changed: false, order: "a,b" },
+      })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "paygate_exit_reason",
+      entity_type: "paywall",
+      metadata: { stage: "pre", reason: "see_first", position: 2 },
+    });
+  });
+
+  it("keeps a reader's sentence to the page's 500 characters, whatever a client sends", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "paygate_exit_note",
+        submission_id: 42,
+        metadata: { stage: "full", length: 600, answer_text: "x".repeat(600) },
+      })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted().metadata.answer_text).toHaveLength(500);
+    expect(inserted().metadata.length).toBe(600);
+  });
+
+  // AP-Analytics counts these fields and shows a reason code as its label: only what the pages
+  // send is stored, so a made-up code never shows up on the admin page as a reason.
+  it.each([
+    ["a made-up reason", "paygate_exit_reason", { stage: "pre", reason: "<b>hi</b>", position: 1 }],
+    [
+      "the full page's reason on the gate's",
+      "paygate_exit_reason",
+      { stage: "pre", reason: "low_value" },
+    ],
+    ["a made-up stage", "paygate_exit_viewed", { stage: "landing" }],
+    ["no stage", "paygate_exit_viewed", {}],
+    ["a made-up way out", "paygate_exit_leave", { stage: "pre", via: "teleport" }],
+    ["a made-up place", "paygate_exit_cta_click", { stage: "full", place: "banner" }],
+  ])("refuses %s", async (_name, event_type, metadata) => {
+    const res = await POST(makeRequest({ event_type, submission_id: 42, metadata }));
+    expect(res.status).toBe(400);
+    expect(mockSupabaseFetch.mock.calls.some(([url]) => url === "/rest/v1/analytics_event")).toBe(
+      false
+    );
+  });
+
+  it.each([
+    ["the full page's reason", "paygate_exit_reason", { stage: "full", reason: "low_value" }],
+    ["the browser's Back", "paygate_exit_leave", { stage: "pre", via: "browser_back" }],
+    ["each way out", "paygate_exit_leave", { stage: "full", via: "chapters" }],
+    ["a press on the bar", "paygate_exit_cta_click", { stage: "full", place: "sticky" }],
+    ["a view", "paygate_exit_viewed", { stage: "pre" }],
+  ])("stores %s", async (_name, event_type, metadata) => {
+    const res = await POST(makeRequest({ event_type, submission_id: 42, metadata }));
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({ event_type, metadata });
+  });
+});
+
 /**
  * The wiring between a dwell milestone and the Slack "Report time" line.
  *
@@ -454,6 +535,29 @@ describe("journey dwell refresh", () => {
       makeRequest({ event_type: "report_engagement_5min", submission_id: 2013 })
     );
     expect(res.status).toBe(204);
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the lookup throws (a timeout, an open breaker)", "survey_submission"],
+    ["the insert throws", "analytics_event"],
+  ])("answers 204, not a 500, when %s, and says so in the logs", async (_case, table) => {
+    const { default: logger } = await import("@shared/observability/logger");
+    mockSupabaseFetch.mockImplementation((url: string) => {
+      if (url.includes(`/rest/v1/${table}`)) return Promise.reject(new Error("timeout"));
+      if (url.includes("/rest/v1/survey_submission?id=eq.2013")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: 2013 }]) });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    const res = await POST(
+      makeRequest({ event_type: "report_engagement_5min", submission_id: 2013 })
+    );
+    expect(res.status).toBe(204);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: "report_engagement_5min" }),
+      "analytics-event: the database could not be reached"
+    );
     expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
   });
 

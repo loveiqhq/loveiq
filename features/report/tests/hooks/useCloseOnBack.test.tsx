@@ -167,10 +167,81 @@ describe("useCloseOnBack — the shared history entry (all of it without CloseWa
     expect(close).not.toHaveBeenCalled();
   });
 
+  // The guided tour before the EUR 1.99 gate answers Back with a stop back and stays (01.11).
+  it("takes a fresh entry when its rearm key changes, so the next back is caught too", async () => {
+    const close = vi.fn();
+    const { rerender } = renderHook(({ key }) => useCloseOnBack(true, close, key), {
+      initialProps: { key: 0 },
+    });
+    expect(onEntry()).toBe(true);
+
+    let done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(onEntry()).toBe(false);
+
+    rerender({ key: 1 });
+    await settle();
+    expect(onEntry()).toBe(true);
+
+    done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
   it("does nothing while closed", () => {
     const before = window.history.length;
     renderHook(() => useCloseOnBack(false, vi.fn()));
     expect(window.history.length).toBe(before);
+  });
+
+  // The EUR 1.99 page's Back catch (gate/useGateBack.ts): "Not ready to unlock yet" opens its
+  // exit page on an entry over the catch's, and Back off the exit page lands on that entry again,
+  // which nothing holds by then. A second entry pushed on top made the reader's first Back land on
+  // the first one, which reads as ours, and close nothing.
+  it("takes over its own entry when Back off a page opened over it lands there", async () => {
+    const close = vi.fn();
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close), {
+      initialProps: { open: true },
+    });
+    // A page opened over the entry, on an entry of its own, and the overlay gone under it.
+    window.history.pushState({ page: "over" }, "", "?leave=pre");
+    rerender({ open: false });
+    await settle();
+    let done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(onEntry(), "back on our entry").toBe(true);
+
+    rerender({ open: true });
+    await settle();
+    done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(1);
+    window.history.replaceState(null, "", "/");
+  });
+
+  // One an earlier load of the page pushed (it was reloaded on it, or came back to it from
+  // another page) is not taken over: the page under it may not be this document, so closing back
+  // onto it could load the page again. A fresh entry goes on instead, and the reader's Back onto
+  // the old one counts as leaving ours, so it still closes on the first press.
+  it("leaves an entry an earlier page load pushed, and closes on the first Back onto it", async () => {
+    window.history.pushState(
+      { [OVERLAY_ENTRY_KEY]: true, __loveiqOverlayLoad: "an-earlier-load" },
+      ""
+    );
+    const before = window.history.length;
+    const close = vi.fn();
+    renderHook(() => useCloseOnBack(true, close));
+    expect(window.history.length, "an entry of its own").toBe(before + 1);
+
+    const done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
 

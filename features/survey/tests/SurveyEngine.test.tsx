@@ -1396,11 +1396,11 @@ describe("SurveyEngine once the survey is over", () => {
 });
 
 /**
- * The email question test (`emailQuestionArm.ts`): today's question against Marcus's
- * anonymous redesign, Figma 11600:15119. The arm is drawn once from the session id, and
- * `?email=` previews either one off production.
+ * The email question (`emailQuestionArm.ts`): Marcus's anonymous redesign, Figma 11600:15119,
+ * won its test against the question before it and is asked of every free run since 4 Nov
+ * 2026. A buyer who paid first keeps the old one; `?email=` previews either off production.
  */
-describe("SurveyEngine — the email question test", () => {
+describe("SurveyEngine — the email question", () => {
   const ANONYMOUS_TITLE = "What’s your email? Feel free to use an anonymous one.";
   const emailStep = () => {
     mockQuestions = [
@@ -1497,19 +1497,22 @@ describe("SurveyEngine — the email question test", () => {
     expect(screen.getByTestId("survey-nav-next")).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("draws the arm from the session id when no preview applies", () => {
-    // On production `?email=` is ignored; this session id hashes to the anonymous arm.
+  it("asks every run the anonymous version when no preview applies", () => {
+    // On production `?email=` is ignored, and this session id drew the control arm while the
+    // test ran: the test is over, so it gets the anonymous version all the same.
     emailStep();
     mockNonProd = false;
     preview("control");
-    window.sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000000");
+    window.sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000007");
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.getByTestId("open-response")).toHaveAttribute("data-email-arm", "anonymous");
+    const question = screen.getByTestId("open-response");
+    expect(question).toHaveAttribute("data-email-arm", "anonymous");
+    expect(question).toHaveTextContent(ANONYMOUS_TITLE);
   });
 
   it("keeps a buyer who paid before the survey on today's question, outside the test", () => {
-    // This session id hashes to the anonymous arm: a buyer still gets the control copy (and
-    // so the address they paid with), and no exposure counts them into the test.
+    // Everyone else gets the anonymous version: a buyer still gets the control copy (and so
+    // the address they paid with), and no exposure counts them in.
     emailStep();
     mockNonProd = false;
     window.sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000000");

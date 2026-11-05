@@ -69,7 +69,16 @@ type CloseWatcherConstructor = new () => CloseWatcherLike;
  * (startReportCheckout), because the report is served no-store and a leftover
  * duplicate would cost an extra back press after an abandoned checkout.
  */
-export function useCloseOnBack(open: boolean, close: () => void): void {
+export function useCloseOnBack(
+  open: boolean,
+  close: () => void,
+  /**
+   * Changed by an overlay that answers Back without closing (the guided tour before the EUR 1.99
+   * gate steps back a stop, 01.11): its entry is gone and a closed CloseWatcher never fires
+   * again, so both are taken again, and the next Back is caught too. Omitted, nothing changes.
+   */
+  rearmKey?: number
+): void {
   const closeRef = useRef(close);
   useEffect(() => {
     closeRef.current = close;
@@ -98,5 +107,5 @@ export function useCloseOnBack(open: boolean, close: () => void): void {
       watcher.destroy();
       release();
     };
-  }, [open]);
+  }, [open, rearmKey]);
 }

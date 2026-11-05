@@ -840,14 +840,14 @@ describe("POST /api/survey", () => {
     });
   });
 
-  describe("email question arm stamping on utm_tracker", () => {
+  describe("email question version stamping on utm_tracker", () => {
     /**
-     * Literal arms, as C13's fixtures above: a change to the hash or the salt must fail
-     * here, because it would re-split everyone in the middle of the test.
+     * Since its test ended (4 Nov 2026) every free run is shown, and stamped, the
+     * anonymous version, whichever arm its session id drew during the test.
      */
-    const EMAIL_ARM_FIXTURES = [
-      { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
-      { sessionId: "00000000-0000-4000-8000-000000000000", arm: "anonymous" },
+    const SESSIONS = [
+      "00000000-0000-4000-8000-000000000007", // drew control during the test
+      "00000000-0000-4000-8000-000000000000", // drew anonymous
     ] as const;
 
     const rpcTracker = () => {
@@ -865,29 +865,37 @@ describe("POST /api/survey", () => {
       mockSupabaseRpcOk();
     });
 
-    it.each(EMAIL_ARM_FIXTURES)(
-      "stamps the email question the respondent saw ($arm)",
-      async ({ sessionId, arm }) => {
-        await POST(
-          makeRequest({
-            ...validBody(),
-            sessionId,
-            utmTracker: JSON.stringify({ utm_source: "google" }),
-          })
-        );
-        expect(JSON.parse(rpcTracker()).contact_question_arm).toBe(arm);
-      }
-    );
+    it.each(SESSIONS)("stamps the anonymous version on every free run (%s)", async (sessionId) => {
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId,
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).contact_question_arm).toBe("anonymous");
+    });
 
-    it("replaces an email arm the browser claims with the derived one", async () => {
+    it("stamps nothing without a session id: our survey always sends one", async () => {
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: null,
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker())).not.toHaveProperty("contact_question_arm");
+    });
+
+    it("replaces an email version the browser claims with the one shown", async () => {
       await POST(
         makeRequest({
           ...validBody(),
           sessionId: "00000000-0000-4000-8000-000000000007",
-          utmTracker: JSON.stringify({ utm_source: "google", contact_question_arm: "anonymous" }),
+          utmTracker: JSON.stringify({ utm_source: "google", contact_question_arm: "control" }),
         })
       );
-      expect(JSON.parse(rpcTracker()).contact_question_arm).toBe("control");
+      expect(JSON.parse(rpcTracker()).contact_question_arm).toBe("anonymous");
     });
 
     it("never creates a tracker just to hold it", async () => {

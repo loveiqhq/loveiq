@@ -27,7 +27,10 @@ import {
 import { askedQuestions, DROPOFF_FLOOR, dropoffWeeks } from "@features/admin/server/dropoff-weekly";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
-import { assignEmailQuestionArm } from "@shared/experiments/emailQuestionArm";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_TEST_END,
+} from "@shared/experiments/emailQuestionArm";
 import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import { surveyQuestions } from "@/data/survey-data";
 
@@ -184,6 +187,18 @@ describe("segmentsOf", () => {
     ]);
     expect(segmentsOf(run({ sessionId: id, startedAt: ORDER_TEST!.launch }))).toContain(
       "Opening order: new"
+    );
+    // The email test ended: a run begun from its end saw the anonymous version, whatever
+    // its session id drew, so it is in neither of its segments. One begun just before is.
+    expect(EMAIL_TEST!.end).toBe(Date.parse(EMAIL_QUESTION_TEST_END));
+    const control = sessionWith("variant", "control");
+    expect(segmentsOf(run({ sessionId: control, startedAt: EMAIL_TEST!.end! }))).toEqual([
+      "All traffic",
+      "Google Ads",
+      "Opening order: new",
+    ]);
+    expect(segmentsOf(run({ sessionId: control, startedAt: EMAIL_TEST!.end! - 1 }))).toContain(
+      "Email question: current"
     );
     const other = sessionWith("control", "control");
     expect(segmentsOf(run({ sessionId: other }))).toEqual([
@@ -373,60 +388,89 @@ describe("readSurveyTests", () => {
       run({ sessionId: variant, leftAt: lateInVariantOnly }),
       // Before both launches: in neither test.
       run({ sessionId: variant, startedAt: BEFORE_BOTH, reached: [EMAIL_QID], leftAt: EMAIL_QID }),
+      // After the email test ended: in the opening order test only.
+      run({
+        sessionId: control,
+        startedAt: EMAIL_TEST!.end!,
+        reached: [EMAIL_QID],
+        leftAt: EMAIL_QID,
+      }),
     ];
-    const [email, order] = readSurveyTests(runs, "2026-10-12");
+    const [email, order] = readSurveyTests(runs, "2026-11-05");
     expect(email!.arms).toEqual([
-      { label: "the current question", people: 2, left: 1 },
+      { label: "the previous question", people: 2, left: 1 },
       { label: "the anonymous one", people: 1, left: 0 },
     ]);
     expect(order!.arms).toEqual([
-      { label: "the current order", people: 3, left: 1 },
+      { label: "the current order", people: 4, left: 1 },
       { label: "the new order", people: 2, left: 0 },
     ]);
     expect(email!.since).toBe("8 Oct");
     expect(order!.since).toBe("6 Oct");
     expect(email!.needed).toBeNull(); // too few in control to size it
+    // Ended, and says so; the opening order test runs on.
+    expect([email!.until, email!.outcome]).toEqual([
+      "4 Nov",
+      "the team chose the anonymous one, which everyone gets now",
+    ]);
+    expect([order!.until, order!.outcome]).toEqual([null, null]);
   });
 
-  it("paces a test from its launch minute, not from the start of that day", () => {
-    // The email test launched 8 Oct at 09:12 UTC; to 12 Oct 00:00 Berlin is 3.37 days, not 4.
+  it("gives an ended test no day to reach its size by, however short of it", () => {
     const many = (sessionId: string, n: number, left: number) =>
       Array.from({ length: n }, (_, i) =>
         run({ sessionId, reached: [EMAIL_QID], leftAt: i < left ? EMAIL_QID : null })
       );
     const t = readSurveyTests(
-      [...many(control, 337, 40), ...many(variant, 337, 30)],
-      "2026-10-12"
+      [...many(control, 100, 12), ...many(variant, 100, 6)],
+      "2026-11-05"
     )[0]!;
-    const elapsed = (Date.parse("2026-10-11T22:00:00Z") - EMAIL_TEST!.launch) / 86_400_000;
+    expect(t.needed).toBeGreaterThan(100);
+    expect(t.enoughBy).toBeNull();
+  });
+
+  /** The opening order test runs on: n runs of one order, the first `left` leaving in its opening. */
+  const openingRuns = (sessionId: string, n: number, left: number) => {
+    const order = assignQuestionOrderArm(sessionId);
+    const first = orderAskedQuestions(surveyQuestions, order).find(
+      (q) => q.qId && !HIDDEN_QIDS.has(q.qId)
+    )!.qId;
+    return Array.from({ length: n }, (_, i) => run({ sessionId, leftAt: i < left ? first : null }));
+  };
+
+  it("paces a test from its launch minute, not from the start of that day", () => {
+    // The opening order test launched 6 Oct at 18:18 UTC; to 12 Oct 00:00 Berlin is 5.16
+    // days, not 6.
+    const t = readSurveyTests(
+      [...openingRuns(control, 337, 40), ...openingRuns(variant, 337, 30)],
+      "2026-10-12"
+    )[1]!;
+    const elapsed = (Date.parse("2026-10-11T22:00:00Z") - ORDER_TEST!.launch) / 86_400_000;
     const days =
       (Date.parse(`${t.enoughBy}T12:00:00Z`) - Date.parse("2026-10-12T12:00:00Z")) / 86_400_000;
     expect(days).toBe(Math.ceil((t.needed! - 337) / (337 / elapsed)));
     // Counting the launch day whole would have said later.
-    expect(days).toBeLessThan(Math.ceil((t.needed! - 337) / (337 / 4)));
+    expect(days).toBeLessThan(Math.ceil((t.needed! - 337) / (337 / 6)));
   });
 
   it("sizes the test and says when it can be called, then calls it", () => {
-    const many = (sessionId: string, n: number, left: number) =>
-      Array.from({ length: n }, (_, i) =>
-        run({ sessionId, reached: [EMAIL_QID], leftAt: i < left ? EMAIL_QID : null })
-      );
+    const many = openingRuns;
     const early = readSurveyTests(
       [...many(control, 100, 12), ...many(variant, 100, 6)],
       "2026-10-12"
-    )[0]!;
+    )[1]!;
     expect(early.needed).toBeGreaterThan(100);
     expect(early.enoughBy).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(early.clearDifference).toBeNull();
     const done = readSurveyTests(
       [...many(control, 1000, 120), ...many(variant, 1000, 60)],
       "2026-10-12"
-    )[0]!;
+    )[1]!;
     expect(done.clearDifference).toBe(true);
     const flat = readSurveyTests(
       [...many(control, 1000, 120), ...many(variant, 1000, 118)],
       "2026-10-12"
-    )[0]!;
+    )[1]!;
     expect(flat.clearDifference).toBe(false);
   });
 });
@@ -514,6 +558,8 @@ describe("buildHeadline", () => {
     const base = {
       name: "Email question test",
       since: "8 Oct",
+      until: null,
+      outcome: null,
       measure: "at the email question",
       arms: [
         { label: "the current question", people: 90, left: 9 },
@@ -549,6 +595,30 @@ describe("buildHeadline", () => {
       })
     );
     expect(called).toContain("A clear difference, not chance.");
+    const ended = text(
+      buildHeadline({
+        rows,
+        weeks,
+        tallies,
+        tests: [
+          {
+            ...base,
+            until: "4 Nov",
+            outcome: "the team chose the anonymous one, which everyone gets now",
+            needed: 880,
+            enoughBy: null,
+            clearDifference: null,
+          },
+        ],
+        today: "2026-11-05",
+        marker: "m",
+      })
+    );
+    expect(ended).toContain(
+      "Email question test, 8 Oct to 4 Nov: 10.0% left at the email question with the current question (9 of 90), 6.8% with the anonymous one (6 of 88). Ended: the team chose the anonymous one, which everyone gets now."
+    );
+    expect(ended).not.toContain("Too early to call");
+    expect(ended).not.toContain("since 8 Oct");
   });
 
   it("names at most a handful of worse-than-usual questions and counts the rest", () => {

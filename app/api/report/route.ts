@@ -18,12 +18,16 @@ import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPr
 import {
   isInitialUnlockGateEnabled,
   readInitialGateState,
+  readSurveyQuestionTimes,
   stampInitialGateSeen,
 } from "@features/report/server/initialGateState";
 import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
+import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
 import {
   buildInitialUnlockGatePayload,
   needsInitialUnlockGate,
+  surveyActiveMs,
+  surveyMinutesFromDuration,
 } from "@features/report/logic/initialUnlockGate";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
@@ -55,6 +59,7 @@ import {
 } from "@features/report/server/shareAccess";
 import { maskEmail, verifyCookieForShare } from "@features/report/server/shareVerify";
 import { fromArchetypeSlug, KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
@@ -94,6 +99,8 @@ interface SubmissionRow {
   app_user: SubmissionUser | SubmissionUser[] | null;
   utm_tracker: string | null;
   user_id: number | null;
+  /** The survey's tracking session: its question times are the EUR 1.99 exit page's minutes. */
+  session_id?: string | null;
 }
 
 interface SnapshotAnswers {
@@ -176,7 +183,7 @@ export async function GET(request: Request) {
   }
 
   // 4. Supabase config
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
@@ -262,10 +269,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Report not found." }, { status: 404 });
       }
 
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,utm_tracker,created_date_time,session_id,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     } else {
       const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,session_id,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     }
 
     const submissionRes = await getBreaker("supabase").fire(() =>
@@ -387,6 +394,8 @@ export async function GET(request: Request) {
     // The initial unlock (EUR 1.99, features/report/logic/initialUnlock.ts): opens the
     // reader's own archetype card and Summary below; not a plan, so pay screens keep selling.
     let initialUnlock = false;
+    // How it is held, paid or E07's gift: the full report's exit page words the EUR 10 by it.
+    let initialUnlockSource: "paid" | "gift" | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -436,6 +445,7 @@ export async function GET(request: Request) {
       accessPlan = access.accessPlan;
       purchasedPlan = access.anyPlan;
       initialUnlock = access.initialUnlock;
+      initialUnlockSource = access.initialUnlockSource;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
       personalReportId = access.personalReportId;
@@ -544,16 +554,44 @@ export async function GET(request: Request) {
           accessLookupFailed: !accessLookupOk,
         })
       ) {
+        const gatePayload = buildInitialUnlockGatePayload({
+          reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
+          submissionId: submission.id,
+          surveyMinutes: surveyMinutesFromDuration(
+            surveyActiveMs(
+              submission.session_id ? await readSurveyQuestionTimes(submission.session_id) : null
+            )
+          ),
+        });
+        // Tour first (sync 30.10): a reader who has never met the gate gets their report under
+        // the guided tour first, with who they are left out (tourFirstReport.ts), and the
+        // gate's payload beside it; the page meets the gate as the tour ends, and asks with
+        // `gate=now`, which lands below and stamps it seen. V4 only (the tour's page); never a
+        // persona walk's (the probe cookie), which goes straight to the gate as it always has.
+        if (
+          isV4Request &&
+          url.searchParams.get("gate") !== "now" &&
+          !gateState?.seenAt &&
+          !isProbeRequest(request.headers.get("cookie"))
+        ) {
+          const tourFirst = NextResponse.json(
+            buildTourFirstReportPayload({
+              submissionId: submission.id,
+              userName: getSubmissionUserName(submission),
+              reportDate: submission.created_date_time,
+              archetype: scoring.v5_primary_archetype || scoring.primary_archetype,
+              gate: gatePayload,
+            })
+          );
+          tourFirst.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+          tourFirst.headers.set("Pragma", "no-cache");
+          return tourFirst;
+        }
         if (personalReportId && !gateState?.seenAt) {
           const seenReportId = personalReportId;
           scheduleAfterResponse("initial-gate-seen", () => stampInitialGateSeen(seenReportId));
         }
-        const gated = NextResponse.json(
-          buildInitialUnlockGatePayload({
-            reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
-            submissionId: submission.id,
-          })
-        );
+        const gated = NextResponse.json(gatePayload);
         gated.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
         gated.headers.set("Pragma", "no-cache");
         return gated;
@@ -1158,6 +1196,8 @@ export async function GET(request: Request) {
         // A recipient never pays, so they get null and every auto-open stays off for them.
         purchasedPlan: isShareAccess ? null : purchasedPlan,
         initialUnlock,
+        // The owner's alone: a recipient is never offered the full report's exit page.
+        initialUnlockSource: isShareAccess ? null : initialUnlockSource,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

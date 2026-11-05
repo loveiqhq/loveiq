@@ -10,6 +10,7 @@ import {
   sessionQuery,
   type VerificationStat,
 } from "./review";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * DOES THE DAILY DIGEST TELL THE TRUTH?
@@ -337,7 +338,7 @@ async function surveyObservation(
 export async function gatherDigestFacts(): Promise<
   { facts: DigestFacts } | { missing: string } | null
 > {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key || !process.env.POSTHOG_API_KEY) return null;
   const env = { url, key };

@@ -23,6 +23,15 @@
  */
 export const OVERLAY_ENTRY_KEY = "__loveiqOverlay";
 
+/**
+ * Which load of the page pushed the entry. After a reload, or a return to the page from another
+ * one, the page can sit on an entry an earlier load pushed, and the entry under it may not be
+ * this document: such an entry is never taken over (closing back onto it could load the page
+ * again), and Back landing on it counts as leaving ours.
+ */
+const OVERLAY_LOAD_KEY = "__loveiqOverlayLoad";
+const LOAD_ID = Math.random().toString(36).slice(2);
+
 interface Owner {
   close: () => void;
 }
@@ -38,8 +47,14 @@ let afterPop: Array<() => void> = [];
 let listening = false;
 
 function push() {
-  window.history.pushState({ [OVERLAY_ENTRY_KEY]: true }, "");
+  window.history.pushState({ [OVERLAY_ENTRY_KEY]: true, [OVERLAY_LOAD_KEY]: LOAD_ID }, "");
   entryOnTop = true;
+}
+
+/** The entry on top is one this load of the page pushed. */
+function isOnOwnEntry(): boolean {
+  const state = window.history.state as Record<string, unknown> | null;
+  return Boolean(state?.[OVERLAY_ENTRY_KEY]) && state?.[OVERLAY_LOAD_KEY] === LOAD_ID;
 }
 
 function pop() {
@@ -59,8 +74,9 @@ function onPopState() {
     if (owners.length > 0 && !entryOnTop) push();
     return;
   }
-  if (!entryOnTop || window.history.state?.[OVERLAY_ENTRY_KEY]) return;
-  // The reader pressed back: the entry is gone. Close the innermost overlay.
+  if (!entryOnTop || isOnOwnEntry()) return;
+  // The reader pressed back: the entry is gone (an earlier load's entry beneath it is not ours to
+  // stay on). Close the innermost overlay.
   //
   // Deliberately NOT re-pushed for any overlay still open behind it. The close
   // lands a render later, so at that moment the closing overlay still looks
@@ -83,7 +99,15 @@ export function acquireOverlayEntry(close: () => void): () => void {
   }
   const owner: Owner = { close };
   owners.push(owner);
-  if (!entryOnTop && !popping) push();
+  if (!entryOnTop && !popping) {
+    // Already on one this load pushed, which nothing holds: Back off a page opened over it (the
+    // EUR 1.99 page's exit page opens over its Back catch, gate/useGateBack.ts), or Forward onto
+    // it. It is a same-URL duplicate of the page beneath, so it is taken over. A second one
+    // pushed on top left the reader's first Back a dead press: it landed on this one, which
+    // onPopState reads as still ours, and nothing closed. An earlier load's is not taken.
+    if (isOnOwnEntry()) entryOnTop = true;
+    else push();
+  }
   return () => {
     const at = owners.indexOf(owner);
     if (at !== -1) owners.splice(at, 1);
@@ -92,7 +116,7 @@ export function acquireOverlayEntry(close: () => void): () => void {
       if (owners.length > 0 || !entryOnTop || popping) return;
       // Only while it is still on top. After a navigation the top entry belongs
       // to the new page, and going back from there would undo the navigation.
-      if (window.history.state?.[OVERLAY_ENTRY_KEY]) pop();
+      if (isOnOwnEntry()) pop();
       else entryOnTop = false;
     });
   };

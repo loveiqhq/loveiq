@@ -106,17 +106,61 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
 - The behaviour checks (`features/ux-signals`) know the gate (27.10): its checkout, return and
   unlock (plan `initial`) are never the report's paywall or payment, and a visit that went no
   further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
-- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar)
-  and, under "Saw the €1.99 page", who left by "Not ready to unlock yet", from the page's own
-  events (`initial_gate_cta_click` with its `place`, `initial_gate_back`, stored since 27.10).
+- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar,
+  and since 28.10 on the gate's exit page: `place` `exit_card` / `exit_sticky`) and, under "Saw
+  the €1.99 page", who pressed "Not ready to unlock yet" and who pressed the browser's own Back
+  there, from the page's own events (`initial_gate_cta_click` with its `place`,
+  `initial_gate_back`, stored since 27.10, and `initial_gate_browser_back`, stored once the
+  page's Back opens the exit page). Since 28.10 "Not ready" opens the exit page, where readers
+  can still unlock, so it no longer means they left.
+- AP-Analytics, Payment, "Paygate exits" (28.10): for both exit pages, who reached each, why
+  not today (each reader's latest reason), who wrote a sentence, pressed Unlock there, paid
+  within 24 hours, and how they left, from the pages' own `paygate_exit_*` events. Their
+  sentences are shown masked. For the gate's own exit page, "How they reached it": who came by
+  "Not ready to unlock yet" and who by the browser's Back (`initial_gate_back` /
+  `initial_gate_browser_back` with `to: "exit_page"`), each a share of the readers who saw the
+  €1.99 page (`initial_gate_seen_at`).
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).
-- "Not ready to unlock yet" leads to the landing page, which does not count that reader as a
-  landing visit or give them a landing arm (the exit is `initial_gate_back`). Since 27.10
-  the event means this link, shown to every reader; before, a back arrow shown only to
-  readers who came from the survey. The sticky bar is always on screen since then too, so
+- Tour first (30.10): a gated reader's first open shows their report under the guided tour, with
+  their archetype, percentages and Core Archetype card left out (server and page), then the gate;
+  `initial_gate_seen_at` is stamped when the page meets the gate (`gate=now`), so a reader who
+  leaves during the tour gets no E07 and is not in "Saw the €1.99 page" until they come back.
+  The tour's runs before the gate are stored with `audience: gate` (since 03.11; AP's tour table
+  shows them as "Before the €1.99 page", apart from free readers' tours), and since 01.11 can't
+  be skipped (no Skip, Escape ends nothing, Back steps back a stop), so they end completed or
+  left, never skipped. While the tour's report is up, history restores no scroll (Safari put the
+  gate back 2,446px down after a Back during the tour), and its 12-second wait for a tour that
+  hasn't started counts only while the page can be seen. Preview:
+  `/report?preview=1&v4=1&gate=tour`.
+- "Not ready to unlock yet" opens the gate's exit page (28.10, `?leave=pre`,
+  `features/report/ui/gate/exit`), which makes the case again and asks why. Its "Maybe later"
+  and its top-left arrow both go back to the gate (Marcus, 30.10: "we loop them back to the
+  paygate"); nothing on the loop leads off the report. `initial_gate_back` is the press: `to: "exit_page"` since 28.10, `"/"` from
+  27.10, when the event came to mean this link, shown to every reader; before, a back arrow
+  shown only to readers who came from the survey. The sticky bar is always on screen since then too, so
   `initial_gate_cta_click` `place: sticky` no longer means "scrolled past the card".
+- The browser's or phone's own Back on the gate opens the same exit page (04.11,
+  `features/report/ui/gate/useGateBack.ts`). Before, after the survey it went to /survey's
+  "You've already finished", whose "Open my report" came straight back: a loop. The gate holds a
+  same-URL history entry (a desktop's Back, an iPhone's swipe) and a CloseWatcher (Android's back);
+  the exit page answers Android's back with its own way back to the gate. So Back goes between the
+  gate and its exit page and stays on the report (one limit below); Escape does nothing on either.
+  It is stored once a page as `initial_gate_browser_back` (`to: "exit_page"`), beside
+  `initial_gate_back`, and only for a Back that opened the exit page. An exit-page view
+  (`paygate_exit_viewed`, `stage: pre`) can now follow either one.
+  - Limit (desktop Chrome and Edge): the toolbar's Back skips history entries a page added
+    without a tap, and every entry the catch adds after a Back is added without one. So two Backs
+    in a row with no tap between them still leave: the first opens the exit page, the second goes
+    to what lies under the report (for a reader straight from the survey, /survey's "already
+    finished"). A gate met without any tap (a reload, a later visit, a scroll before the tour
+    started) lets the first Back leave. Any tap re-arms it. Measured 4 Nov with the real toolbar
+    Back (`chrome.tabs.goBack`); the e2e's `page.goBack()` does not apply Chrome's skip. Phones are
+    covered: Android by the CloseWatcher, the iPhone's swipe by the entry.
+  - The survey now opens the report in its own place (`location.replace`), as does "Open my
+    report" on "already finished", so what's left of the loop is finite.
+  - Previews: `/report?preview=1&v4=1&gate=tour` and `&gate=1`, then Back.
 - E07's holdout: compare full-report purchases after day 1 between `initial_gift_arm` = `gift`
   and `holdout`, staff left out. The gift's EUR 0 rows are never revenue. Since E07 moved to
   day 1 (Marcus, 27.10), a gifted reader can't buy the EUR 1.99 after their first day: read

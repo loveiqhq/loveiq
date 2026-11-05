@@ -87,8 +87,8 @@ export function useSurveyTracking(
           _csrf: getCsrfToken(),
           touch: hasTouch(),
         });
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon("/api/survey-tracking", blob);
+        // A string, not a Blob (features/analytics/client.ts persistAnalyticsEvent).
+        navigator.sendBeacon("/api/survey-tracking", payload);
       }
     };
 

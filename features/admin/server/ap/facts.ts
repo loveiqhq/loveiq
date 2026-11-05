@@ -61,7 +61,10 @@ export interface StartFact extends Tagged, AdTags {
   arm: string | null;
   device: string | null;
   finished: boolean;
-  /** The email test's arm (contact_question_arm), stamped from 8 Oct 2026. */
+  /**
+   * The email question's version (contact_question_arm), stamped from 8 Oct 2026: the test's
+   * arm until it ended on 4 Nov 2026, `anonymous` for every free run since.
+   */
   cq: string | null;
   /** The run reached the email question (a step on it, an email answer, or it finished). */
   email: boolean;
@@ -140,7 +143,7 @@ export interface SubFact extends Tagged, AdTags {
   visitorNew?: boolean | null;
   /** Google Ads' network: "g" Search, "x" Performance Max (cross-network). */
   net: string | null;
-  /** The email test's arm (contact_question_arm). */
+  /** The email question's version (contact_question_arm): the test's arm until 4 Nov 2026. */
   cq: string | null;
   /** The report's archetype (scoring_result). */
   archetype: string | null;

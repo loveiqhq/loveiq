@@ -113,10 +113,19 @@ const PERSISTED_EVENTS = new Set([
   "tour_skipped",
   "tour_left",
   "tour_replayed",
-  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, its two buttons, its way out
+  // The EUR 1.99 pre-unlock gate (features/report/ui/gate): seen, its two buttons, its way out,
+  // and the browser's or phone's own Back on it
   "initial_gate_viewed",
   "initial_gate_cta_click",
   "initial_gate_back",
+  "initial_gate_browser_back",
+  // The paygate's exit pages (features/report/ui/gate/exit): seen, the reason, the sentence,
+  // Unlock pressed, and left
+  "paygate_exit_viewed",
+  "paygate_exit_reason",
+  "paygate_exit_note",
+  "paygate_exit_cta_click",
+  "paygate_exit_leave",
 ]);
 
 /**
@@ -221,10 +230,15 @@ const persistAnalyticsEvent = (
   // Prefer sendBeacon when available — it survives page navigations. Beacon
   // can't set custom headers, so we encode CSRF in the body too; the route
   // accepts either header- or body-supplied tokens.
+  //
+  // The JSON goes as a string (text/plain), never a Blob: Playwright's WebKit
+  // empties a Blob beacon sent as the page hides whenever a request route is
+  // set, which every persona walk and many e2e specs do (400 "refused a body
+  // that does not parse" on every walk since 19.10). Real Safari, Chrome and
+  // Firefox deliver both alike (measured 04.11); the routes read `request.json()`,
+  // which ignores the content type.
   if (navigator.sendBeacon) {
-    const beaconBody = JSON.stringify({ ...headerBody, _csrf: csrf });
-    const blob = new Blob([beaconBody], { type: "application/json" });
-    if (navigator.sendBeacon(url, blob)) return;
+    if (navigator.sendBeacon(url, JSON.stringify({ ...headerBody, _csrf: csrf }))) return;
   }
 
   fetch(url, {
@@ -552,9 +566,9 @@ export const pingFunnelEvent = (event: string) => {
   const url = "/api/funnel-event";
   const payload = JSON.stringify({ event, visitor_id: visitorId, _csrf: csrf });
   // Beacon survives the page navigation to Stripe; header-CSRF fallback otherwise.
+  // A string, not a Blob, as persistAnalyticsEvent's.
   if (navigator.sendBeacon) {
-    const blob = new Blob([payload], { type: "application/json" });
-    if (navigator.sendBeacon(url, blob)) return;
+    if (navigator.sendBeacon(url, payload)) return;
   }
   fetch(url, {
     method: "POST",
@@ -875,30 +889,124 @@ export const trackInitialGateViewed = (params: { submission_id: number | null })
   persistAnalyticsEvent("initial_gate_viewed", params);
 };
 
-/** One of the gate's two buttons: the price card's, or the sticky bar's. */
-export const trackInitialGateCta = (params: { place: "card" | "sticky" }) => {
+/**
+ * One of the EUR 1.99 buttons: the gate's price card or sticky bar, or (from 28.10) the same
+ * two on the gate's exit page, `exit_card` / `exit_sticky`, so AP's "Pressed Unlock" keeps
+ * every press and can tell where it came from.
+ */
+export type InitialGateCtaPlace = "card" | "sticky" | "exit_card" | "exit_sticky";
+
+export const trackInitialGateCta = (params: { place: InitialGateCtaPlace }) => {
   track("initial_gate_cta_click", params);
   persistAnalyticsEvent("initial_gate_cta_click", params);
 };
 
-/** Set by the gate's way out, read once by the landing page (consumeLeftInitialGate). */
+/** Set by a way out of the gate, read once by the landing page (consumeLeftInitialGate). */
 const LEFT_INITIAL_GATE_KEY = "liq_left_initial_gate";
 
 /**
- * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
- * the same event name so the series runs on). `to` is where it leads: until 27.10 the event
- * was the arrow, shown only to a reader who came from the survey, one page back. Persisted,
- * so a later payment can be set against it.
+ * A reader the EUR 1.99 gate stopped is on their way to the landing page: the gate's own way
+ * out did this until 28.10 (on staging, its exit page's "Maybe later" from 28.10 to 30.10). Since
+ * 30.10 nothing on the gate's loop leads there, so nothing calls this; the landing page still
+ * neither counts a visit nor registers a landing arm for a reader it finds marked.
  */
-export const trackInitialGateBack = (params: { to: string }) => {
-  track("initial_gate_back", params);
-  persistAnalyticsEvent("initial_gate_back", params);
-  if (params.to !== "/") return;
+export const markLeftInitialGate = () => {
   try {
     window.sessionStorage.setItem(LEFT_INITIAL_GATE_KEY, "1");
   } catch {
     // Storage blocked: the landing page then counts this reader as a visit, as before.
   }
+};
+
+/**
+ * The gate's way out, "Not ready to unlock yet" (sync 26.10; the back arrow before it, under
+ * the same event name so the series runs on). `to` is where it leads: the landing page ("/")
+ * until 28.10, the gate's exit page (`exit_page`) since. Persisted, so a later payment can be
+ * set against it.
+ */
+export const trackInitialGateBack = (params: { to: string }) => {
+  track("initial_gate_back", params);
+  persistAnalyticsEvent("initial_gate_back", params);
+  if (params.to === "/") markLeftInitialGate();
+};
+
+/**
+ * The browser's or phone's own Back on the EUR 1.99 gate (a desktop's Back, an iPhone's swipe,
+ * Android's back), from 04.11. It opens the gate's exit page, as "Not ready to unlock yet" does
+ * (gate/useGateBack.ts), so `to` is "exit_page". Its own event, beside that press
+ * (`initial_gate_back`), so AP can count both ways out. Once a page. Persisted. The reader stays
+ * on the report, so nothing is marked for the landing page.
+ */
+export const trackInitialGateBrowserBack = (params: { to: string }) => {
+  track("initial_gate_browser_back", params);
+  persistAnalyticsEvent("initial_gate_browser_back", params);
+};
+
+/**
+ * The paygate's exit pages (features/report/ui/gate/exit; Marcus's "Paygate exit pages",
+ * 28.10): `pre` opens from the EUR 1.99 gate's "Not ready to unlock yet", `full` from the plan
+ * picker's for a EUR 1.99 holder. All persisted: AP's Payment page reads them.
+ */
+export type PaygateExitStage = "pre" | "full";
+
+export const trackPaygateExitViewed = (params: { stage: PaygateExitStage }) => {
+  track("paygate_exit_viewed", params);
+  persistAnalyticsEvent("paygate_exit_viewed", params);
+};
+
+/**
+ * A reason tapped: its code, its place in the order this reader was shown (1-based), and
+ * whether it replaced an earlier tap on the same page. The order itself (codes, comma-joined)
+ * is stored and goes to PostHog, not to GA4, which cuts a parameter at 100 characters.
+ */
+export const trackPaygateExitReason = (params: {
+  stage: PaygateExitStage;
+  reason: string;
+  position: number;
+  order: ReadonlyArray<string>;
+  changed: boolean;
+}) => {
+  const { order, ...rest } = params;
+  const shown = order.join(",");
+  track("paygate_exit_reason", rest, { order: shown });
+  persistAnalyticsEvent("paygate_exit_reason", { ...rest, order: shown });
+};
+
+/**
+ * "Something else", in the reader's own words. The words go to our own table only, under
+ * `answer_text`, which the team export and Jarvis mask: PostHog and GA4 get the length.
+ */
+export const trackPaygateExitNote = (params: { stage: PaygateExitStage; text: string }) => {
+  track("paygate_exit_note", { stage: params.stage, length: params.text.length });
+  persistAnalyticsEvent("paygate_exit_note", {
+    stage: params.stage,
+    length: params.text.length,
+    answer_text: params.text,
+  });
+};
+
+/** Unlock pressed on an exit page: the offer card's button or the sticky bar's. */
+export const trackPaygateExitCta = (params: {
+  stage: PaygateExitStage;
+  place: "card" | "sticky";
+}) => {
+  track("paygate_exit_cta_click", params);
+  persistAnalyticsEvent("paygate_exit_cta_click", params);
+};
+
+/**
+ * Left an exit page: its back arrow (`back`), "Maybe later" (`maybe_later`: back to the EUR 1.99
+ * page since 30.10, as the arrow), "Back to my open chapters" (`chapters`), or the browser's or
+ * phone's own Back (`browser_back`, a swipe or Android's back, from 03.11).
+ */
+export type PaygateExitLeaveVia = "back" | "maybe_later" | "chapters" | "browser_back";
+
+export const trackPaygateExitLeave = (params: {
+  stage: PaygateExitStage;
+  via: PaygateExitLeaveVia;
+}) => {
+  track("paygate_exit_leave", params);
+  persistAnalyticsEvent("paygate_exit_leave", params);
 };
 
 /**
@@ -1098,7 +1206,12 @@ export const trackReportChapterMenuOpened = (params: {
   persistAnalyticsEvent("report_chapter_menu_opened", payload);
 };
 
-export type PaywallDismissSource = "backdrop" | "close_button" | "escape" | "browser_back";
+/**
+ * How the plan picker was closed. `not_ready`: its "Not ready to unlock yet", which a EUR 1.99
+ * holder gets in place of the × (28.10), and which opens the full report's exit page.
+ */
+export type PaywallDismissSource =
+  "backdrop" | "close_button" | "escape" | "browser_back" | "not_ready";
 
 export const trackPaywallDismissed = (params: {
   source: PaywallDismissSource;
@@ -1452,25 +1565,38 @@ export const trackFaqExpanded = (params: { question_index: number; question_text
 /**
  * The landing hero video (arm `white_video` of the landing A/B). The arm is not a
  * param: it rides on every event as the `landing_variant` super-property, so these
- * say only what the video did. A play is counted when frames start, not at the tap,
- * so a start that fails is an error below rather than a play; `replay` separates a
- * second watch from a first.
+ * say only what the video did. A tap on play is counted at once (`hero_video_tap`, the
+ * click-through, since 29.10); a play when frames start, so a start that fails is an
+ * error below rather than a play. `replay` separates a second watch from a first.
  */
+export const trackHeroVideoTap = (params: { replay: boolean }) => track("hero_video_tap", params);
+
 export const trackHeroVideoPlay = (params: { replay: boolean }) => track("hero_video_play", params);
 
 /**
- * A video that would not play: the full one after a tap (`reason` is the rejected
- * play()'s error name, `media-error-<code>`, `paused-before-playing` or `timeout`),
- * or the silent loop failing for a reason other than a blocked autoplay. Without it a
- * broken file or codec reads in PostHog as visitors not tapping.
+ * A film that would not start after a tap: `reason` is the rejected play()'s error name,
+ * `media-error-<code>`, `paused-before-playing`, `timeout`, or `abandoned` (below).
+ * Without it a broken file or codec reads in PostHog as visitors not tapping. `video` is
+ * always `full` since the silent loop went (29.10), kept so old and new events read alike.
  */
-export const trackHeroVideoError = (params: { video: "full" | "preview"; reason: string }) =>
+export const trackHeroVideoError = (params: { video: "full"; reason: string }) =>
   track("hero_video_error", params);
 
-export const trackHeroVideoProgress = (params: { percent: 25 | 50 | 75 }) =>
+/**
+ * A start still waiting for its first frame when the visitor left: the error above with
+ * reason `abandoned`. A beacon, because it is sent as the page goes, after PostHog has
+ * emptied its own queue.
+ */
+export const trackHeroVideoAbandoned = () =>
+  track("hero_video_error", { video: "full", reason: "abandoned" }, undefined, {
+    transport: "sendBeacon",
+  });
+
+export const trackHeroVideoProgress = (params: { percent: 25 | 50 | 75; replay: boolean }) =>
   track("hero_video_progress", params);
 
-export const trackHeroVideoComplete = () => track("hero_video_complete");
+export const trackHeroVideoComplete = (params: { replay: boolean }) =>
+  track("hero_video_complete", params);
 
 export const trackHeroVideoPaused = (params: { current_time_sec: number }) =>
   track("hero_video_paused", params);

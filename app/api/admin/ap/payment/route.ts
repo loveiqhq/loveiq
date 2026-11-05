@@ -9,6 +9,11 @@ import {
   fitMonths,
   type UpliftFlag,
 } from "@features/admin/server/ap/payment";
+import {
+  EXITS_FROM,
+  readGateSeen,
+  readPaygateExitRows,
+} from "@features/admin/server/ap/paygate-exits";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { readInitialUnlockGateSwitch } from "@features/report/server/initialGateState";
@@ -55,7 +60,7 @@ export async function GET(request: Request) {
   const fit = peopleBlocked(filters, CHECKOUT_FROM) ? null : fitMonths(filters.to);
 
   try {
-    const [facts, uplift, fitFacts, gateOn] = await Promise.all([
+    const [facts, uplift, fitFacts, gateOn, exitRows, gateSeen] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       upliftFlag(),
       fit && fit.from < filters.from ? fetchFactsFor(fit.from, fit.to, filters) : null,
@@ -65,9 +70,24 @@ export async function GET(request: Request) {
         logger.warn({ err }, "AP payment: the EUR 1.99 gate's switch could not be read");
         return null;
       }),
+      // The paygate's exit pages, none before 28 Oct 2026: their section says so when this
+      // fails, and the page still loads.
+      filters.to < EXITS_FROM
+        ? null
+        : readPaygateExitRows(filters.from).catch((err: unknown) => {
+            logger.warn({ err }, "AP payment: the exit pages' events could not be read");
+            return null;
+          }),
+      // Who saw the EUR 1.99 page: what the exit page's ways in are shares of (blank without).
+      filters.to < EXITS_FROM
+        ? null
+        : readGateSeen(filters.from).catch((err: unknown) => {
+            logger.warn({ err }, "AP payment: the EUR 1.99 page's viewers could not be read");
+            return null;
+          }),
     ]);
     return NextResponse.json(
-      buildPayment({ facts, filters, today, now, uplift, fitFacts, gateOn }),
+      buildPayment({ facts, filters, today, now, uplift, fitFacts, gateOn, exitRows, gateSeen }),
       {
         headers: NO_STORE,
       }

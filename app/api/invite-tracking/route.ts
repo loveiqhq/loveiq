@@ -5,6 +5,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const schema = z.object({
   method: z.enum([
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   // 4. Supabase insert
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {

@@ -82,6 +82,9 @@ vi.mock("@features/analytics/client", () => ({
   trackInitialGateViewed: vi.fn(),
   trackInitialGateCta: vi.fn(),
   trackInitialGateBack: vi.fn(),
+  trackInitialGateBrowserBack: vi.fn(),
+  trackPaygateExitViewed: vi.fn(),
+  trackPaygateExitLeave: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
@@ -167,6 +170,7 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_DESIGNED_CHAPTER_IDS } from "@/data/report3-archetype-page";
 import { REPORT_V4_NAV_IDS } from "@features/report/ui/v3/reportV3Nav";
 import { splitArticleForReader } from "@features/report/server/contentGating";
+import { __resetOverlayHistoryForTests, isOnOverlayEntry } from "@shared/ui/overlay-history";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
 // only via the email-return escape hatch (from=email / utm_source=email) or the
@@ -439,6 +443,10 @@ describe("ReportPage", () => {
     // unstubAllGlobals, jsdom has none, and the test fails with a ReferenceError
     // depending on timing (seen once in CI on 2026-10-06).
     cleanup();
+    // The pricing modal's and the EUR 1.99 gate's Back catch leave their same-URL entry in
+    // jsdom's history: forget it here, so no release's history.back() lands in the next test.
+    __resetOverlayHistoryForTests();
+    if (isOnOverlayEntry()) window.history.replaceState(null, "");
     vi.unstubAllGlobals();
     mockScrollTo.mockReset();
     document.documentElement.style.overflow = "";
@@ -1218,6 +1226,40 @@ describe("ReportPage", () => {
         plan: "full_report",
         archetype: "Emotional Voyeur",
       });
+    });
+
+    it("on a preview, opens the plan's own preview: no checkout for the browser's last survey", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=0&preview=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const realLocation = window.location;
+      const assign = vi.fn();
+      const url = new URL("https://staging.loveiq.org/report?v4=0&preview=1&leave=full");
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: {
+          href: url.href,
+          origin: url.origin,
+          pathname: url.pathname,
+          search: url.search,
+          hash: url.hash,
+          assign,
+          replace: vi.fn(),
+          reload: vi.fn(),
+        },
+      });
+      try {
+        render(<ReportPage />);
+        await user.click(
+          screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+        );
+        expect(assign).toHaveBeenCalledWith("/report?v4=0&preview=1&plan=full_report");
+        expect(mockStartReportCheckout).not.toHaveBeenCalled();
+        // Every press of the one door to Stripe is counted (unlock-funnel-events.test.ts).
+        expect(mockTrackBeginCheckout).toHaveBeenCalledTimes(1);
+      } finally {
+        Object.defineProperty(window, "location", { configurable: true, value: realLocation });
+      }
     });
 
     it("keeps ?v2=1 when the reader opens another archetype", async () => {
@@ -3264,6 +3306,116 @@ describe("ReportPage", () => {
       expect(container.querySelector(".report-page")).toBeNull();
       expect(mockTrackReportViewed).not.toHaveBeenCalled();
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const gated = () => ({
+      data: null,
+      status: "gated",
+      error: null,
+      challenge: null,
+      gate: GATE,
+      retry: vi.fn(),
+    });
+
+    // Eman, 04.11 (card "€1.99 page: replace the browser Back with Marcus's exit page"): the
+    // page's own Back opens its exit page, as "Not ready to unlock yet" does. It used to leave
+    // for /survey's "already finished", whose "Open my report" came straight back here.
+    it("answers the browser's Back with its exit page, and records it", async () => {
+      const before = `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(null, "", "/report/rpt_abcdefghij0123456789");
+      mockSearchParams.mockImplementation(() => new URLSearchParams(""));
+      mockUseReportData.mockReturnValue(gated());
+      try {
+        render(<ReportPage />);
+        expect(isOnOverlayEntry(), "the Back catch's entry").toBe(true);
+        const landed = new Promise<void>((resolve) =>
+          window.addEventListener("popstate", () => resolve(), { once: true })
+        );
+        act(() => window.history.back());
+        await landed;
+        expect(window.location.search).toBe("?leave=pre");
+        expect(analytics.trackInitialGateBrowserBack).toHaveBeenCalledWith({ to: "exit_page" });
+      } finally {
+        window.history.replaceState(null, "", before);
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    });
+
+    it("takes no Back catch while its exit page is up", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("leave=pre"));
+      mockUseReportData.mockReturnValue(gated());
+      try {
+        render(<ReportPage />);
+        expect(isOnOverlayEntry()).toBe(false);
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    });
+
+    // Safari puts back the scroll an entry was left at once a Back lands on it. From the tour
+    // before the gate through the gate and its exit page, history restores none, with no
+    // restore in between; the browser's own mode comes back once the gate is gone.
+    it("keeps no scroll in history from the tour through the gate, and gives the mode back after", async () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        viewMode: "owner",
+        submissionId: 55,
+        initialGate: GATE,
+      });
+      mockUseReportData.mockReturnValue({ ...response, meetInitialGate: vi.fn() });
+      window.history.scrollRestoration = "auto";
+      try {
+        const { rerender, unmount } = render(<ReportPage />);
+        expect(window.history.scrollRestoration).toBe("manual");
+
+        mockUseReportData.mockReturnValue(gated());
+        rerender(<ReportPage />);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(window.history.scrollRestoration, "no restore between tour and gate").toBe("manual");
+
+        unmount();
+        await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    });
+
+    // Tour first (30.10): the report the tour runs over before the gate is veiled and nothing
+    // is read there, so no chapter reading is saved; and while it is up, history restores no
+    // scroll (Safari put the gate back 2,446px down after a Back during the tour).
+    it("saves no chapter reading under the tour before the gate, and keeps no scroll in history", async () => {
+      chapterStats.enabled.length = 0;
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        viewMode: "owner",
+        submissionId: 55,
+        initialGate: GATE,
+      });
+      mockUseReportData.mockReturnValue({ ...response, meetInitialGate: vi.fn() });
+      window.history.scrollRestoration = "auto";
+      try {
+        const { unmount } = render(<ReportPage />);
+        expect(chapterStats.enabled.length).toBeGreaterThan(0);
+        expect(chapterStats.enabled.every((on) => on === false)).toBe(true);
+        expect(window.history.scrollRestoration).toBe("manual");
+        unmount();
+        await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
+
+        // Mounted again at once (React's development double mount, a refetch): the first
+        // run's pending restore must not land while the tour-first report is up again.
+        window.history.scrollRestoration = "auto";
+        const first = render(<ReportPage />);
+        first.unmount();
+        const again = render(<ReportPage />);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(window.history.scrollRestoration).toBe("manual");
+        again.unmount();
+        await waitFor(() => expect(window.history.scrollRestoration).toBe("auto"));
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
     });
 
     it("opens a report just bought for EUR 1.99 at its top, and drops ?unlocked=", async () => {

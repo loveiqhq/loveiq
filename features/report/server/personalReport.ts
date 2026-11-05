@@ -7,13 +7,18 @@ import {
   type ReportAccessPlan,
 } from "@features/report/server/access";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
-import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
+import {
+  isInitialUnlockPlan,
+  type InitialUnlockSource,
+} from "@features/report/logic/initialUnlock";
+import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
 import {
   KNOWN_ARCHETYPES,
   isArchetypeName,
   normalizeArchetypeName,
   type ArchetypeName,
 } from "@features/report/server/archetypeSlug";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 
@@ -62,7 +67,7 @@ interface PersonalReportRow {
 }
 
 function getSupabaseServiceConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {
@@ -367,6 +372,22 @@ export function revokeArchetypeTiers(
 }
 
 /**
+ * Paid when any initial-unlock payment of theirs is not E07's gift (its EUR 0 row says
+ * `metadata.gifted`), the gift when that row is all there is, null without one. The full
+ * report's exit page words the EUR 10 by it: "You earned it with your €1.99 unlock" is not
+ * true of a gift.
+ */
+export function initialUnlockSourceOf(
+  payments: ReadonlyArray<{ metadata: Record<string, unknown> | null }>
+): InitialUnlockSource | null {
+  const initial = payments.filter((payment) => isInitialUnlockPlan(payment.metadata?.plan));
+  if (initial.length === 0) return null;
+  return initial.some((payment) => payment.metadata?.gifted !== INITIAL_UNLOCK_GIFT)
+    ? "paid"
+    : "gift";
+}
+
+/**
  * Whether THIS checkout session's payment is recorded (fulfillment stamps the session id
  * on the payment row as metadata.checkoutSessionId). The checkout return page waits on
  * this, not on "does the reader hold any plan": a returning buyer already holds one from
@@ -415,6 +436,8 @@ export async function getReportAccessPlanForSubmission(
    * it opens the reader's own card and Summary, and the pay screens keep selling.
    */
   initialUnlock: boolean;
+  /** How the initial unlock is held: paid, or only E07's gift (initialUnlockSourceOf). */
+  initialUnlockSource: InitialUnlockSource | null;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
@@ -429,6 +452,7 @@ export async function getReportAccessPlanForSubmission(
       accessPlan: null,
       anyPlan: null,
       initialUnlock: false,
+      initialUnlockSource: null,
       archetypeTiers: {},
       personalReportId: null,
       unlockedArchetypeColumn: [],
@@ -484,6 +508,7 @@ export async function getReportAccessPlanForSubmission(
       )
     ),
     initialUnlock: payments.some((payment) => isInitialUnlockPlan(payment.metadata?.plan)),
+    initialUnlockSource: initialUnlockSourceOf(payments),
     archetypeTiers: sanitizeArchetypeTierMap(personalReport.archetype_tiers ?? {}),
     personalReportId: personalReport.id,
     unlockedArchetypeColumn: columnValues,

@@ -73,14 +73,55 @@ export interface InitialUnlockGatePayload {
   reportToken: string | null;
   submissionId: number | null;
   viewMode: "owner";
+  /**
+   * The minutes the reader spent on the survey's questions, for the exit page's "You invested
+   * 14 minutes into your answers" (Marcus's canvas, 29.10); null when it would not be true of
+   * them (surveyActiveMs, surveyMinutesFromDuration). Absent from a payload older than it.
+   */
+  surveyMinutes?: number | null;
+}
+
+/** Below this a run is a skim, above it the survey was left open: neither is time "invested". */
+const SURVEY_MINUTES_MIN = 3;
+const SURVEY_MINUTES_MAX = 90;
+
+/** A question open longer than this was put down, not answered: it counts up to here. */
+const QUESTION_ACTIVE_MAX_MS = 120_000;
+
+/**
+ * The time a reader spent on the questions: each question's time as the survey's tracking kept
+ * it (survey_behavior_event.time_spent_ms, one row per question left), a pause cut to
+ * QUESTION_ACTIVE_MAX_MS. Not the survey's clock (survey_submission.duration_ms, start to
+ * submit): that counts every pause, and 9% of finishers in October would have read 30–90
+ * minutes for a survey that took them about 15. Null with no rows: nothing to count.
+ */
+export function surveyActiveMs(questionMs: readonly number[] | null | undefined): number | null {
+  if (!questionMs?.length) return null;
+  return questionMs.reduce(
+    (sum, ms) =>
+      sum + (Number.isFinite(ms) ? Math.min(Math.max(ms, 0), QUESTION_ACTIVE_MAX_MS) : 0),
+    0
+  );
+}
+
+/**
+ * A survey time in whole minutes, or null when it says nothing a reader would recognise as
+ * the time they put in.
+ */
+export function surveyMinutesFromDuration(durationMs: number | null | undefined): number | null {
+  if (typeof durationMs !== "number" || !Number.isFinite(durationMs)) return null;
+  const minutes = Math.round(durationMs / 60_000);
+  return minutes >= SURVEY_MINUTES_MIN && minutes <= SURVEY_MINUTES_MAX ? minutes : null;
 }
 
 export function buildInitialUnlockGatePayload({
   reportToken,
   submissionId,
+  surveyMinutes = null,
 }: {
   reportToken: string | null;
   submissionId: number | null;
+  surveyMinutes?: number | null;
 }): InitialUnlockGatePayload {
   return {
     gate: "initial_unlock",
@@ -91,6 +132,7 @@ export function buildInitialUnlockGatePayload({
     reportToken,
     submissionId,
     viewMode: "owner",
+    surveyMinutes,
   };
 }
 

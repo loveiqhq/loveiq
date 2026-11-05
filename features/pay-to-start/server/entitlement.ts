@@ -8,6 +8,7 @@ import {
   PREPAID_TOKEN_REGEX,
 } from "@features/pay-to-start/logic/journey";
 import type { PayToStartOfferId } from "@features/pay-to-start/logic/offer";
+import { supabaseRestUrl } from "@shared/env/supabase-urls";
 
 /**
  * The pay-to-start entitlement: one `prepaid_report_access` row per checkout, from the
@@ -115,7 +116,7 @@ const SELECT = [
 const SUPABASE_TIMEOUT_MS = 5_000;
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseRestUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) throw new Error("supabase_not_configured");
   return { url, serviceRoleKey };

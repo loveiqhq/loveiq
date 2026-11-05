@@ -5,6 +5,12 @@
    (paygate.css), whose tokens this page shares; what differs is here, under .iug-page.
    ════════════════════════════════════════════════════════════════════════ */
 
+/* A container the page focuses as it replaces the tour's report: no ring. */
+.iug-page:focus,
+.iug-page:focus-visible {
+  outline: none;
+}
+
 .iug-page {
   --iug-gradient: linear-gradient(105.76deg, #ff6a3a 0%, #cf5afb 52%, #7d88ff 100%);
   position: relative;

@@ -3,6 +3,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
 import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionOrder";
+import { applyEmailQuestionArm } from "../features/survey/anonymousEmail";
+import { EMAIL_QUESTION_WINNER } from "../shared/experiments/emailQuestionArm";
 import { instantScroll } from "./fixtures/instant-scroll";
 import { pinSurveySession } from "./surveyArm";
 import { openFirstCategory } from "./surveyGroups";
@@ -40,9 +42,10 @@ import { openFirstCategory } from "./surveyGroups";
  */
 const ARM = "control" as const;
 
-const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM).filter(
-  (q) => !isHidden(q.qId)
-);
+// The email question as every free run is asked it since its test ended (4 Nov 2026).
+const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM)
+  .filter((q) => !isHidden(q.qId))
+  .map((q) => applyEmailQuestionArm(q, EMAIL_QUESTION_WINNER));
 const LAST = ASKED[ASKED.length - 1]!;
 
 /**

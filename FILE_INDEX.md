@@ -171,12 +171,13 @@
 
 ## Database
 
-| Task                         | Files                                      |
-| ---------------------------- | ------------------------------------------ |
-| Supabase migrations          | `supabase/migrations/*.sql`                |
-| Supabase middleware client   | `shared/auth/supabase-middleware.ts`       |
-| Supabase admin server client | `features/admin/server/supabase-server.ts` |
-| Supabase admin REST helper   | `features/admin/server/supabase.ts`        |
+| Task                               | Files                                      |
+| ---------------------------------- | ------------------------------------------ |
+| Supabase migrations                | `supabase/migrations/*.sql`                |
+| Supabase middleware client         | `shared/auth/supabase-middleware.ts`       |
+| Supabase admin server client       | `features/admin/server/supabase-server.ts` |
+| Supabase admin REST helper         | `features/admin/server/supabase.ts`        |
+| Restore the database from a backup | `docs/runbooks/DISASTER_RECOVERY.md` (§1)  |
 
 ## Company Brain
 
@@ -215,18 +216,19 @@
 
 ## CI/CD & Infrastructure
 
-| Task                              | Files                                     |
-| --------------------------------- | ----------------------------------------- |
-| CI pipeline (build + lint + test) | `.github/workflows/ci.yml`                |
-| Security scanning                 | `.github/workflows/security.yml`          |
-| CodeQL analysis                   | `.github/workflows/codeql.yml`            |
-| Health monitoring                 | `.github/workflows/health-monitor.yml`    |
-| Lighthouse CI                     | `.github/workflows/lighthouse.yml`        |
-| Load testing                      | `.github/workflows/load-test.yml`         |
-| Release workflow                  | `.github/workflows/release.yml`           |
-| Documentation truth validation    | `.github/workflows/docs-truth.yml`        |
-| Commit Slack notifications        | `.github/workflows/slack-commits.yml`     |
-| Visual regression testing         | `.github/workflows/visual-regression.yml` |
+| Task                                      | Files                                                           |
+| ----------------------------------------- | --------------------------------------------------------------- |
+| CI pipeline (build + lint + test)         | `.github/workflows/ci.yml`                                      |
+| Security scanning                         | `.github/workflows/security.yml`                                |
+| CodeQL analysis                           | `.github/workflows/codeql.yml`                                  |
+| Health monitoring                         | `.github/workflows/health-monitor.yml`                          |
+| Lighthouse CI                             | `.github/workflows/lighthouse.yml`                              |
+| Load testing                              | `.github/workflows/load-test.yml`                               |
+| Release workflow                          | `.github/workflows/release.yml`                                 |
+| Documentation truth validation            | `.github/workflows/docs-truth.yml`                              |
+| Commit Slack notifications                | `.github/workflows/slack-commits.yml`                           |
+| Visual regression testing                 | `.github/workflows/visual-regression.yml`                       |
+| Weekly database backup (outside Supabase) | `.github/workflows/db-backup.yml`, `scripts/db-backup/blob.mjs` |
 
 ## Miscellaneous
 

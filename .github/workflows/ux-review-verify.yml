@@ -58,7 +58,9 @@ jobs:
   verify:
     name: Reproduce findings against production
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 55, not 25: on a slow runner mirror, installing Playwright's system packages alone
+    # ran past 25 minutes (12 cancelled runs, 22-27 Oct). Still ends before the next :41 start.
+    timeout-minutes: 55
     steps:
       - run: echo "START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

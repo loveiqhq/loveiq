@@ -326,7 +326,7 @@ const SurveyControls: FC<SurveyControlsProps> = ({ onPause, autoAdvance, onToggl
         <button
           type="button"
           onClick={onPause}
-          className="flex items-center gap-1.5 rounded-full border border-black/[0.12] px-4 py-1.5 font-sans text-[13px] font-medium text-[#6b6678] transition hover:border-black/20 hover:text-[#161021] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          className="flex items-center gap-1.5 rounded-full border border-black/[0.12] px-4 py-1.5 font-sans text-[13px] font-medium text-[#6b6678] transition hover:border-black/20 hover:text-[#161021] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b5b95]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
         >
           <PauseIcon />
           Pause
