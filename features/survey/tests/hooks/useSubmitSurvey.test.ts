@@ -287,8 +287,8 @@ describe("useSubmitSurvey", () => {
       });
       return JSON.parse((findSurveyCall(mockFetch)?.[1] as RequestInit).body as string);
     };
-    localStorage.setItem(LANDING_PATH_KEY, "/glossary/sapiosexual");
-    expect((await send()).landingPath).toBe("/glossary/sapiosexual");
+    localStorage.setItem(LANDING_PATH_KEY, "/glossary/demisexuality");
+    expect((await send()).landingPath).toBe("/glossary/demisexuality");
     localStorage.removeItem(LANDING_PATH_KEY);
     expect(await send()).not.toHaveProperty("landingPath");
   });

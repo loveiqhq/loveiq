@@ -228,9 +228,9 @@ describe("POST /api/survey — the first page on the submission", () => {
   });
 
   it("starts a tracker for a visitor who carried nothing else", async () => {
-    const res = await POST(makeRequest({ ...validBody(), landingPath: "/glossary/sapiosexual" }));
+    const res = await POST(makeRequest({ ...validBody(), landingPath: "/glossary/demisexuality" }));
     expect(res.status).toBe(200);
-    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/sapiosexual" });
+    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/demisexuality" });
   });
 
   it("joins the campaign tags, and replaces a first page the tracker claims", async () => {
@@ -238,7 +238,7 @@ describe("POST /api/survey — the first page on the submission", () => {
       makeRequest({
         ...validBody(),
         utmTracker: JSON.stringify({ utm_source: "chatgpt.com", landing_path: "/claimed" }),
-        landingPath: "/glossary/sapiosexual",
+        landingPath: "/glossary/demisexuality",
       })
     );
     expect(res.status).toBe(200);
@@ -246,7 +246,7 @@ describe("POST /api/survey — the first page on the submission", () => {
       utm_source: "chatgpt.com",
       ...C13,
       ...EMAIL,
-      landing_path: "/glossary/sapiosexual",
+      landing_path: "/glossary/demisexuality",
     });
   });
 
@@ -265,7 +265,7 @@ describe("POST /api/survey — the first page on the submission", () => {
     ["our own probe", { cookie: "loveiq_probe=1" }],
   ])("starts no tracker for %s", async (_label, headers) => {
     const res = await POST(
-      makeRequest({ ...validBody(), landingPath: "/glossary/sapiosexual" }, headers)
+      makeRequest({ ...validBody(), landingPath: "/glossary/demisexuality" }, headers)
     );
     expect(res.status).toBe(200);
     expect(trackerOnPayload()).toBeNull();
@@ -274,14 +274,14 @@ describe("POST /api/survey — the first page on the submission", () => {
   it("stamps a person's browser as before", async () => {
     await POST(
       makeRequest(
-        { ...validBody(), landingPath: "/glossary/sapiosexual" },
+        { ...validBody(), landingPath: "/glossary/demisexuality" },
         {
           "user-agent":
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
         }
       )
     );
-    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/sapiosexual" });
+    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/demisexuality" });
   });
 
   it.each(["https://evil.example/x", "/glossary?q=1", "glossary", "/a b"])(

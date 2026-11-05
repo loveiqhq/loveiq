@@ -106,7 +106,7 @@ export function withoutTrackingParams(path: string): string {
 }
 
 /**
- * The first page this browser opened on the site, e.g. `/glossary/sapiosexual`: where a
+ * The first page this browser opened on the site, e.g. `/glossary/demisexuality`: where a
  * visitor came in, which the campaign tags above cannot say for an untagged visit (an AI
  * chat's link, a typed address). Kept apart from the tracker and never overwritten, so it
  * stays the first touch whatever campaign comes later; /api/survey stamps it on the
