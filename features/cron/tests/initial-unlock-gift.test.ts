@@ -33,6 +33,10 @@ vi.mock("@shared/observability/slack", () => ({
 vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: (...args: unknown[]) => mockIsProdCronHost(...args),
 }));
+const mockRefreshJourneyDetail = vi.fn();
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
+}));
 
 import { GET } from "@/app/api/cron/initial-unlock-gift/route";
 import { __resetSystemFlagsCacheForTests } from "@shared/flags/system-flags";
@@ -271,10 +275,16 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
     expect(sent.html).toContain("Yesterday you answered some very personal questions.");
     expect(`${sent.text}${sent.html}`).not.toMatch(/few days ago/i);
     expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
+    // Tagged, so a return through it is named on the Slack journey message ("gift email (E07)").
+    expect(sent.text).toContain(
+      `/report/${TOKEN}?from=email&utm_source=email&utm_medium=nurture&utm_campaign=initial_gift`
+    );
     expect(sent.tags).toEqual([
       { name: "stage", value: "initial_gift" },
       { name: "sub", value: String(GIFT_ID + 1000) },
     ]);
+    // The survey's #incoming-surveys message says the unlock was gifted now.
+    expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(GIFT_ID + 1000);
   });
 
   it.each([
@@ -339,6 +349,7 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
     expect(calls.armWrites.map((w) => w.body)).toEqual([{ initial_gift_arm: "holdout" }]);
     expect(calls.grants).toHaveLength(0);
     expect(mockResendSend).not.toHaveBeenCalled();
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
   });
 
   it.each([

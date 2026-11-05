@@ -192,15 +192,18 @@ describe("GET /api/stripe/pay-to-start/status", () => {
 });
 
 describe("GET /sexual-archetype/continue", () => {
+  // The confirmation email's link: every way on carries its tags (shared/emails/email-link.ts).
+  const TAGS = "utm_source=email&utm_medium=purchase&utm_campaign=pay_to_start";
+
   function open(t: string) {
-    return getContinue(new Request(`${ORIGIN}/sexual-archetype/continue?t=${t}`));
+    return getContinue(new Request(`${ORIGIN}/sexual-archetype/continue?t=${t}&${TAGS}`));
   }
 
   it("sets the cookie and goes to the survey for a paid, unused entitlement", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row());
     const response = await open(TOKEN);
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/survey`);
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/survey?${TAGS}`);
     expect(response.headers.get("set-cookie")).toContain(`__liq_pp=${TOKEN}`);
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
@@ -213,7 +216,7 @@ describe("GET /sexual-archetype/continue", () => {
       userEmail: " Buyer@Example.com ",
     } as never);
     const response = await open(TOKEN);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/report/rpt_x?from=email`);
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/report/rpt_x?from=email&${TAGS}`);
     expect(response.headers.get("set-cookie")).toBeNull();
     expect(resolveSubmissionAccessContext).toHaveBeenCalledWith({ submissionId: 42 });
   });
@@ -226,7 +229,9 @@ describe("GET /sexual-archetype/continue", () => {
       userEmail: "someone-else@example.com",
     } as never);
     const response = await open(TOKEN);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/sexual-archetype?continue=used`);
+    expect(response.headers.get("location")).toBe(
+      `${ORIGIN}/sexual-archetype?continue=used&${TAGS}`
+    );
     expect(response.headers.get("location")).not.toContain("rpt_");
     expect(response.headers.get("set-cookie")).toBeNull();
 
@@ -235,37 +240,37 @@ describe("GET /sexual-archetype/continue", () => {
       row({ consumed_submission_id: 42, customer_email: null })
     );
     expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype?continue=used`
+      `${ORIGIN}/sexual-archetype?continue=used&${TAGS}`
     );
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ consumed_submission_id: 42 }));
     vi.mocked(resolveSubmissionAccessContext).mockRejectedValue(new Error("db down"));
     expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype?continue=used`
+      `${ORIGIN}/sexual-archetype?continue=used&${TAGS}`
     );
   });
 
   it("explains a refunded, unknown or malformed link on the landing page", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ status: "refunded" }));
     expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype?continue=refunded`
+      `${ORIGIN}/sexual-archetype?continue=refunded&${TAGS}`
     );
     vi.mocked(findEntitlementByToken).mockResolvedValue(null);
     expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype?continue=invalid`
+      `${ORIGIN}/sexual-archetype?continue=invalid&${TAGS}`
     );
     expect((await open("rpp_short")).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype?continue=invalid`
+      `${ORIGIN}/sexual-archetype?continue=invalid&${TAGS}`
     );
   });
 
   it("explains a problem with the initial report's link on its own page", async () => {
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ offer: "pre", status: "refunded" }));
     expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype/initial?continue=refunded`
+      `${ORIGIN}/sexual-archetype/initial?continue=refunded&${TAGS}`
     );
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ offer: "pre", status: "pending" }));
     expect((await open(TOKEN)).headers.get("location")).toBe(
-      `${ORIGIN}/sexual-archetype/initial?continue=unpaid`
+      `${ORIGIN}/sexual-archetype/initial?continue=unpaid&${TAGS}`
     );
   });
 
@@ -274,7 +279,9 @@ describe("GET /sexual-archetype/continue", () => {
     // ours, and setting its cookie would plant that checkout in someone else's browser.
     vi.mocked(findEntitlementByToken).mockResolvedValue(row({ status: "pending" }));
     const response = await open(TOKEN);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/sexual-archetype?continue=unpaid`);
+    expect(response.headers.get("location")).toBe(
+      `${ORIGIN}/sexual-archetype?continue=unpaid&${TAGS}`
+    );
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 });

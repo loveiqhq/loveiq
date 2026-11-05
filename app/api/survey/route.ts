@@ -20,6 +20,11 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
+import { redactReportToken } from "@shared/format/redact-report-token";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
+import { isProbeRequest } from "@shared/http/probe-cookie";
+import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
+import { LANDING_PATH_TRACKER_KEY } from "@features/attribution/server/traffic";
 import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
@@ -309,6 +314,17 @@ const surveySchema = z.object({
     .optional()
     .nullable()
     .catch(null),
+  /**
+   * The first page this browser opened (shared/url/utm.ts), for the Slack journey's "First
+   * page" (a glossary term, say). A bare path; anything else is dropped, never refused.
+   */
+  landingPath: z
+    .string()
+    .max(200)
+    .regex(/^\/[^\s?#]*$/)
+    .optional()
+    .nullable()
+    .catch(null),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -472,6 +488,7 @@ export async function POST(request: Request) {
     sessionId,
     posthogSessionId,
     optionOrder,
+    landingPath,
     website,
   } = parsed.data;
   // A blank optional answer (16019, 16020 typed into and cleared) is no answer. Dropped
@@ -570,6 +587,25 @@ export async function POST(request: Request) {
     // session id: our survey always sends one, so we can't say what such a caller saw.
     sessionId && !prepaidToken ? EMAIL_QUESTION_WINNER : null
   );
+  /**
+   * The first page this browser opened. Unlike the arms above it is attribution, which
+   * the session id cannot give back, so it may start a tracker of its own: a visitor who
+   * came straight to a glossary term from an AI chat carries no campaign, no referrer and
+   * no landing cookie, and their first page is the whole answer to "where from". AP reads
+   * the tracker's keys, so a tracker holding only this classifies as a null one does.
+   * A report's address holds its token, which must not reach the database. A crawler or
+   * our own probes start none: proxy.ts's filter for a visit, the same regex and cookie.
+   */
+  const notVisitor =
+    BOT_UA_REGEX.test(request.headers.get("user-agent") || "") ||
+    isProbeRequest(request.headers.get("cookie"));
+  if (landingPath && !notVisitor) {
+    mergedUtmTracker = mergeTrackerArm(
+      mergedUtmTracker ?? "{}",
+      LANDING_PATH_TRACKER_KEY,
+      redactReportToken(landingPath).slice(0, 100)
+    );
+  }
 
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget
@@ -803,9 +839,12 @@ export async function POST(request: Request) {
       // email. resolveReportPaywallCohort() softens on `from=email`; the nurture
       // + chapter-nudge links already carry it. `from=email` is the paywall-only
       // signal (no utm_source), so first-view channel attribution is unchanged.
-      const reportUrl = reportToken
-        ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
-        : `${siteUrl}/report?from=email`;
+      const reportUrl = tagEmailLink(
+        reportToken
+          ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
+          : `${siteUrl}/report?from=email`,
+        EMAIL_LINKS.reportReady
+      );
 
       // An unlocked pay-to-start report's email is a purchase email: its unsubscribes are
       // counted with the purchase emails', as fulfillment's are.

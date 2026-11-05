@@ -37,6 +37,10 @@ vi.mock("next/headers", () => ({
     get: (name: string) => (name === "uf_t" && state.cookie ? { value: state.cookie } : undefined),
   }),
 }));
+const mockRefreshJourneyDetail = vi.fn();
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
+}));
 
 const { createFakeDb, READER } = await import("./fakeDb");
 const { GET: open } = await import("@/app/api/unlock-feedback/open/route");
@@ -75,6 +79,8 @@ afterEach(() => {
 });
 
 describe("GET /api/unlock-feedback/open (the email's link)", () => {
+  // Tagged as our other emails' links are (shared/emails/email-link.ts).
+  const TAGS = "utm_source=email&utm_medium=nurture&utm_campaign=unlock_feedback";
   const link = (query: string) =>
     new NextRequest(`http://localhost:3000/api/unlock-feedback/open?${query}`);
 
@@ -82,7 +88,7 @@ describe("GET /api/unlock-feedback/open (the email's link)", () => {
     const res = await open(link(`r=too_expensive&t=${READER.linkToken}`));
 
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("http://localhost:3000/why?r=too_expensive");
+    expect(res.headers.get("location")).toBe(`http://localhost:3000/why?r=too_expensive&${TAGS}`);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toContain(`uf_t=${READER.linkToken}`);
@@ -107,7 +113,7 @@ describe("GET /api/unlock-feedback/open (the email's link)", () => {
 
   it("a token of the wrong shape: /why with its reason, and no cookie left", async () => {
     const res = await open(link("r=privacy&t=short"));
-    expect(res.headers.get("location")).toBe("http://localhost:3000/why?r=privacy");
+    expect(res.headers.get("location")).toBe(`http://localhost:3000/why?r=privacy&${TAGS}`);
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("uf_t=;");
     expect(cookie).toContain("Max-Age=0");
@@ -115,7 +121,7 @@ describe("GET /api/unlock-feedback/open (the email's link)", () => {
 
   it("an unknown reason: /why on its own, no cookie", async () => {
     const res = await open(link(`r=nope&t=${READER.linkToken}`));
-    expect(res.headers.get("location")).toBe("http://localhost:3000/why");
+    expect(res.headers.get("location")).toBe(`http://localhost:3000/why?${TAGS}`);
     expect(res.headers.get("set-cookie")).not.toContain(READER.linkToken);
   });
 
@@ -207,6 +213,8 @@ describe("POST /api/unlock-feedback/answer", () => {
       answer_loads: 2,
     });
     expect(state.db.grants()).toHaveLength(1);
+    // The #incoming-surveys message names the return and the free report, on the first answer.
+    expect(mockRefreshJourneyDetail.mock.calls).toEqual([[READER.submissionId]]);
   });
 
   it("two posts at the same instant: one first answer, one grant, both counted", async () => {

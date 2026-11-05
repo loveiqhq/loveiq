@@ -249,6 +249,10 @@ describe("GET /api/cron/survey-paused", () => {
     expect(mockResendSend).toHaveBeenCalledTimes(1);
     // Confirm the address routed to Resend matches the email in the candidate answers.
     expect(mockResendSend.mock.calls[0]![0].to).toBe("user@example.com");
+    // Its link back carries its email (shared/emails/email-link.ts).
+    expect(mockResendSend.mock.calls[0]![0].text).toContain(
+      "/survey?utm_source=email&utm_medium=nurture&utm_campaign=survey_paused"
+    );
   });
 
   // The cooldown mock above answers the same for every key. These two need the real

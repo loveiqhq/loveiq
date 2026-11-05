@@ -96,10 +96,10 @@ vi.mock("@features/report/server/personalReport", () => ({
 
 import { POST } from "@/app/api/survey/route";
 
-function makeRequest(body: Record<string, unknown>) {
+function makeRequest(body: Record<string, unknown>, headers: Record<string, string> = {}) {
   return new Request("https://www.loveiq.org/api/survey", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -202,4 +202,94 @@ describe("POST /api/survey — the landing arm on the submission", () => {
     expect(res.status).toBe(200);
     expect(trackerOnPayload()).toBeNull();
   });
+});
+
+/**
+ * The first page the browser opened, for the Slack journey's "First page" (a glossary term,
+ * say). Attribution the session id cannot give back, so unlike the arms it may start a tracker.
+ */
+describe("POST /api/survey — the first page on the submission", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockVerifyCsrf.mockResolvedValue(true);
+    mockCheckRateLimit.mockResolvedValue({
+      allowed: true,
+      remaining: 2,
+      resetAt: new Date(Date.now() + 60_000),
+    });
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    mockComputeSurveyScoring.mockReturnValue(null);
+    mockEnsureSubmissionScored.mockResolvedValue({ primaryArchetype: "Spark Seeker" });
+    mockEnsurePersonalReportForSubmission.mockResolvedValue({ id: 10 });
+    mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 123, isExisting: false });
+    mockAfter.mockImplementation(() => undefined);
+    mockCookieGet.mockReturnValue(undefined);
+  });
+
+  it("starts a tracker for a visitor who carried nothing else", async () => {
+    const res = await POST(makeRequest({ ...validBody(), landingPath: "/glossary/sapiosexual" }));
+    expect(res.status).toBe(200);
+    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/sapiosexual" });
+  });
+
+  it("joins the campaign tags, and replaces a first page the tracker claims", async () => {
+    const res = await POST(
+      makeRequest({
+        ...validBody(),
+        utmTracker: JSON.stringify({ utm_source: "chatgpt.com", landing_path: "/claimed" }),
+        landingPath: "/glossary/sapiosexual",
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(trackerOnPayload()).toEqual({
+      utm_source: "chatgpt.com",
+      ...C13,
+      ...EMAIL,
+      landing_path: "/glossary/sapiosexual",
+    });
+  });
+
+  it("keeps a report's token out of the database", async () => {
+    await POST(makeRequest({ ...validBody(), landingPath: "/report/rpt_ABCDEFGHIJKLMNOPQRST" }));
+    expect(trackerOnPayload()).toEqual({ landing_path: "/report/<redacted>" });
+  });
+
+  // proxy.ts's filter for a visit: a crawler's user agent, or our own probes' cookie.
+  it.each([
+    [
+      "a crawler",
+      { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" },
+    ],
+    ["an AI fetcher", { "user-agent": "Mozilla/5.0 AppleWebKit/537.36 (compatible; GPTBot/1.2)" }],
+    ["our own probe", { cookie: "loveiq_probe=1" }],
+  ])("starts no tracker for %s", async (_label, headers) => {
+    const res = await POST(
+      makeRequest({ ...validBody(), landingPath: "/glossary/sapiosexual" }, headers)
+    );
+    expect(res.status).toBe(200);
+    expect(trackerOnPayload()).toBeNull();
+  });
+
+  it("stamps a person's browser as before", async () => {
+    await POST(
+      makeRequest(
+        { ...validBody(), landingPath: "/glossary/sapiosexual" },
+        {
+          "user-agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+        }
+      )
+    );
+    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/sapiosexual" });
+  });
+
+  it.each(["https://evil.example/x", "/glossary?q=1", "glossary", "/a b"])(
+    "drops %s rather than refusing the survey",
+    async (landingPath) => {
+      const res = await POST(makeRequest({ ...validBody(), landingPath }));
+      expect(res.status).toBe(200);
+      expect(trackerOnPayload()).toBeNull();
+    }
+  );
 });

@@ -476,6 +476,63 @@ describe("POST /api/analytics-event — the paygate's exit pages (28.10)", () =>
 });
 
 /**
+ * A return through one of our emails' links, for the Slack journey's "Came back by email".
+ * The campaign is printed there by name, so only what our links carry is stored.
+ */
+describe("POST /api/analytics-event — email returns", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  const inserted = () => {
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    return insert ? JSON.parse(String(insert[1]?.body)) : null;
+  };
+
+  it.each([
+    ["the 72h email's", { campaign: "72h_no_unlock" }],
+    ["E07's", { campaign: "initial_gift", landing_variant: "white_card" }],
+    ["an untagged link's", { campaign: null }],
+  ])("stores %s against the report", async (_label, metadata) => {
+    const res = await POST(
+      makeRequest({ event_type: "email_return", submission_id: 42, metadata })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "email_return",
+      entity_type: "report",
+      metadata,
+    });
+  });
+
+  it.each([
+    ["markup", "<b>x</b>"],
+    ["a sentence", "come back now"],
+    ["a number", 42],
+    ["something long", "x".repeat(65)],
+  ])("refuses a campaign that is %s", async (_label, campaign) => {
+    const res = await POST(
+      makeRequest({ event_type: "email_return", submission_id: 42, metadata: { campaign } })
+    );
+    expect(res.status).toBe(400);
+    expect(inserted()).toBeNull();
+  });
+
+  it("refreshes the Slack message in a slot of its own, which the open's burst cannot take", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    await POST(
+      makeRequest({ event_type: "email_return", submission_id: 42, metadata: { campaign: null } })
+    );
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "42:email_return",
+      expect.objectContaining({ bucket: "journey-dwell-refresh", limit: 1 })
+    );
+    expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(42);
+  });
+});
+
+/**
  * The wiring between a dwell milestone and the Slack "Report time" line.
  *
  * Deleting this block from the route used to break no test at all, so the one

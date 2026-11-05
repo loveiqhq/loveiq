@@ -13,6 +13,7 @@ vi.mock("posthog-js", () => ({ default: ph }));
 import { sentMomentsAgo, useSubmitSurvey } from "@features/survey/ui/hooks/useSubmitSurvey";
 import { PENDING_COMPLETION_KEY } from "@features/survey/ui/hooks/surveyStorage";
 import { PAID_WIZARD_KEY } from "@features/survey/ui/hooks/surveySession";
+import { LANDING_PATH_KEY } from "@shared/url/utm";
 
 // --- Helpers ---
 
@@ -273,6 +274,23 @@ describe("useSubmitSurvey", () => {
     // real endpoint answers with a 400. It passed anyway, because the hook test mocks
     // fetch and never runs the schema.
     expect(body.durationMs).toBeLessThanOrEqual(86_400_000);
+  });
+
+  // The first page this browser opened, for the Slack message's "First page" (shared/url/utm).
+  it("sends the first page this browser opened, and nothing when none was kept", async () => {
+    const send = async () => {
+      const mockFetch = mockFetchOk();
+      globalThis.fetch = mockFetch;
+      const { result } = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await result.current.submit(makeAnswers(), "2026-11-04T10:00:00.000Z");
+      });
+      return JSON.parse((findSurveyCall(mockFetch)?.[1] as RequestInit).body as string);
+    };
+    localStorage.setItem(LANDING_PATH_KEY, "/glossary/sapiosexual");
+    expect((await send()).landingPath).toBe("/glossary/sapiosexual");
+    localStorage.removeItem(LANDING_PATH_KEY);
+    expect(await send()).not.toHaveProperty("landingPath");
   });
 
   /**

@@ -7,6 +7,7 @@
 import { inHogql, OWN_HOST } from "@features/admin/server/ap/referrers";
 
 import type { FieldRegistry, FieldTable } from "./types";
+import { EMAIL_LINKS_TAGGED_FROM } from "@shared/emails/email-link";
 
 // ---------------------------------------------------------------------------------------------
 // The queries' shared parts. :from and :to are the range's first and last Berlin days.
@@ -531,7 +532,8 @@ export const fields: FieldRegistry = {
     per: "per visitor (one per browser per day)",
     formula: ratio("Visitors − Direct visitors", "Visitors (the visit log)", "× 100"),
     caveat:
-      "Direct is an estimate: the visit log keeps only the link's tag, so its untagged visits are split by the sources of the untagged visits PostHog recorded (only a small part of them). A paid click that loses its tags lands in Direct. Blank under any filter, and for a range starting before 23 Aug 2026, when PostHog starts. Buyers are tied to a source by their own finished survey's link tags (recorded from 19 Jul 2026): the Performance table by channel shows who paid from each.",
+      "Direct is an estimate: the visit log keeps only the link's tag, so its untagged visits are split by the sources of the untagged visits PostHog recorded (only a small part of them). A paid click that loses its tags lands in Direct. Blank under any filter, and for a range starting before 23 Aug 2026, when PostHog starts. Buyers are tied to a source by their own finished survey's link tags (recorded from 19 Jul 2026): the Performance table by channel shows who paid from each." +
+      ` From ${EMAIL_LINKS_TAGGED_FROM} every email's links carry utm tags: a reader coming back through one is an Email visitor from then on, not Direct, and a survey or pay-to-start purchase that follows such a click is credited to Email. More visitors have a source from that day; the visitors are the same.`,
     tables: [
       T.visits(),
       T.posthog("$session_id, $current_url (utm tags, click ids), $referring_domain, timestamp"),

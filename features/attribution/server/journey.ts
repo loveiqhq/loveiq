@@ -24,6 +24,18 @@ import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { classifyTraffic, readStampedArms, type TrafficInfo } from "./traffic";
 import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
+import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
+import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
+
+/**
+ * `payment.metadata.source` on the free full report an unlock-feedback answer grants
+ * (UNLOCK_FEEDBACK_SOURCE in features/unlock-feedback/server/grant.ts, which imports
+ * fulfillment, which imports this file; journey.test.ts holds the two equal).
+ */
+const UNLOCK_FEEDBACK_SOURCE = "unlock_feedback";
+
+/** A EUR 0 (or test) unlock: E07's gift, the feedback grant, a 100% code, or the team's own. */
+export type FreeUnlock = "gift" | "feedback" | "code" | "test";
 
 export interface JourneyArms {
   /** Raw stored values — "white" | "white_prev" | "control" | null etc. Label via labels.ts. */
@@ -111,8 +123,30 @@ export interface SubmissionJourney {
    * quote, and the purchase comes from its payment row. Absent means no.
    */
   payToStart?: boolean;
-  /** Which page they paid on, from that payment: "pre" is /sexual-archetype/initial. */
+  /**
+   * Which page they paid on, from that payment ("pre" is /sexual-archetype/initial; a row
+   * from before the offers reads as the full one). Set only when a pay-to-start payment
+   * claimed the survey: what makes it pay to start's in AP-Analytics too.
+   */
   payToStartOffer?: "full" | "pre";
+  /**
+   * Stamped into the EUR 1.99 gate's cohort by the survey's own submit
+   * (`personal_report.initial_gate_cohort_at` within GATE_STAMPED_AT_SUBMIT_MS of it): a free
+   * survey whose report waits behind the EUR 1.99 page. Written before the survey replies,
+   * so it is there at post time.
+   */
+  gateCohort?: boolean;
+  /** The money taken, one entry per succeeded payment above EUR 0 that is no test, oldest first. */
+  paid?: Array<{ amount: number; currency: string }>;
+  /** The EUR 0 unlocks on the report, when nothing was paid, each kind once. */
+  freeUnlocks?: FreeUnlock[];
+  /**
+   * The email links they came back through, oldest first: the link's `utm_campaign`, null
+   * for a link that carries only `from=email` (the report-ready, purchase and invite emails).
+   * `email_return` events from the report page, plus the unlock-feedback answer, whose page
+   * is not the report.
+   */
+  emailReturns?: Array<{ campaign: string | null; at: string }>;
   /**
    * PostHog `$session_id` captured at submit, or null. Null is the ordinary case for
    * anything submitted before 2026-08-27, and for a visitor whose replay never ran
@@ -158,7 +192,19 @@ interface PaymentRow {
   is_test: boolean | null;
   payment_date_time: string | null;
   currency: string | null;
-  metadata: { journey?: unknown; plan?: unknown; offer?: unknown } | null;
+  metadata: {
+    journey?: unknown;
+    plan?: unknown;
+    offer?: unknown;
+    gifted?: unknown;
+    source?: unknown;
+  } | null;
+}
+
+/** A report-page arrival from an email link (`email_return`, written by the report page). */
+interface EmailReturnRow {
+  event_time: string;
+  metadata: { campaign?: unknown } | null;
 }
 
 interface AnalyticsRow {
@@ -360,12 +406,43 @@ export function measureReportDwellMs(
   return dwell >= MIN_MEASURABLE_DWELL_MS ? dwell : null;
 }
 
-/** The page a pay-to-start buyer paid on, from that payment, even after a later upgrade. */
-function payToStartOfferOf(
-  payments: Array<{ metadata: { journey?: unknown; offer?: unknown } | null }>
-): { payToStartOffer?: "full" | "pre" } {
-  const offer = payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY)?.metadata?.offer;
-  return offer === "full" || offer === "pre" ? { payToStartOffer: offer } : {};
+/**
+ * The page a pay-to-start buyer paid on, from that payment, even after a later upgrade. A
+ * row from before the offers (June) names none and reads as the full offer, as
+ * `offerDefinitionOf` reads it everywhere else.
+ */
+function payToStartOfferOf(payments: PaymentRow[]): { payToStartOffer?: "full" | "pre" } {
+  const meta = payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY)?.metadata;
+  return meta ? { payToStartOffer: offerDefinitionOf(meta.offer).id } : {};
+}
+
+/**
+ * AP-Analytics' rule for the EUR 1.99 page's funnel (STAMPED_AT_SUBMIT_MS in
+ * features/admin/server/ap/pay-to-start.ts, held equal by slack-journey.test.ts): a cohort
+ * stamp made by the survey's own submit, within the hour. The old-user campaign stamps
+ * reports long after their survey; those readers came in through pay after the report.
+ */
+export const GATE_STAMPED_AT_SUBMIT_MS = 60 * 60_000;
+
+/** A visit this long after the first is a return: AP's `first_t + INTERVAL 30 MINUTE`. */
+export const EMAIL_RETURN_AFTER_MS = 30 * 60_000;
+
+function stampedAtSubmit(submittedAt: string | null, stampedAt: string | null | undefined) {
+  if (!submittedAt || !stampedAt) return false;
+  const gap = Date.parse(stampedAt) - Date.parse(submittedAt);
+  return gap >= -60_000 && gap < GATE_STAMPED_AT_SUBMIT_MS;
+}
+
+/** Money changed hands: not a test, and above EUR 0. The ledger's rule (`noMoneyTaken`). */
+function tookMoney(p: PaymentRow): boolean {
+  return !p.is_test && (toNumber(p.amount) ?? 0) > 0;
+}
+
+function freeUnlockOf(p: PaymentRow): FreeUnlock {
+  if (p.is_test) return "test";
+  if (p.metadata?.gifted === INITIAL_UNLOCK_GIFT) return "gift";
+  if (p.metadata?.source === UNLOCK_FEEDBACK_SOURCE) return "feedback";
+  return "code";
 }
 
 async function fetchJson<T>(path: string, what: string): Promise<T[]> {
@@ -394,7 +471,7 @@ export async function buildSubmissionJourney(
 ): Promise<SubmissionJourney | null> {
   // Wave 1: everything keyed directly off the submission id, concurrently. The
   // existing admin timeline route does 13 of these sequentially; don't copy that.
-  const [subs, quotes, eventsDesc, reportSessions, payments] = await Promise.all([
+  const [subs, quotes, eventsDesc, reportSessions, payments, reports, returns] = await Promise.all([
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
@@ -470,8 +547,21 @@ export async function buildSubmissionJourney(
     fetchJson<PaymentRow>(
       `/rest/v1/payment?select=amount,is_test,payment_date_time,currency,metadata,` +
         `personal_report!fk_payment_personal_report!inner(survey_submission_id)` +
-        `&personal_report.survey_submission_id=eq.${submissionId}&status=eq.succeeded`,
+        `&personal_report.survey_submission_id=eq.${submissionId}&status=eq.succeeded` +
+        `&order=payment_date_time.asc`,
       "payment"
+    ),
+    // The EUR 1.99 gate's cohort stamp, its own query as initialGateState.ts reads it.
+    fetchJson<{ initial_gate_cohort_at: string | null }>(
+      `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}` +
+        `&select=initial_gate_cohort_at&limit=1`,
+      "personal_report"
+    ),
+    // Its own query, for the metadata the events query above leaves out of its 500 rows.
+    fetchJson<EmailReturnRow>(
+      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
+        `&event_type=eq.email_return&select=event_time,metadata&order=event_time.asc&limit=50`,
+      "email_return"
     ),
   ]);
 
@@ -523,6 +613,36 @@ export async function buildSubmissionJourney(
     ? null
     : (payments.find((p) => p.metadata?.journey === PAY_TO_START_JOURNEY) ?? null);
   const purchasedAt = purchased?.purchased_at ?? payToStartPayment?.payment_date_time ?? null;
+  const ptsOffer = payToStartOfferOf(payments);
+
+  // The ledger, not the quote: the EUR 1.99 unlock has no quote, and a later full report
+  // adds a second payment the quote's price does not show.
+  const paid = payments.filter(tookMoney).map((p) => ({
+    amount: toNumber(p.amount) ?? 0,
+    currency: (p.currency ?? "EUR").toUpperCase(),
+  }));
+  // A return is a visit more than half an hour after the reader's first one, AP-Analytics'
+  // rule for report returns (fetchReportReturns, features/admin/server/ap/posthog.ts). Every
+  // report link we mail carries from=email, so a first open from the report-ready email is
+  // an email arrival, and no return. The first visit is the earliest open or report-page
+  // event, the gate's and the email_return itself among them.
+  const firstSeen = [reportViewedAt, events[0]?.event_time ?? null]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => Date.parse(v))
+    .filter(Number.isFinite);
+  const returnsFrom = firstSeen.length > 0 ? Math.min(...firstSeen) + EMAIL_RETURN_AFTER_MS : -1;
+  const backByEmail = [
+    ...returns.map((r) => ({
+      campaign: typeof r.metadata?.campaign === "string" ? r.metadata.campaign : null,
+      at: r.event_time,
+    })),
+    // The answer's grant: its page is /why, not the report, so it sends no email_return.
+    ...payments
+      .filter((p) => p.metadata?.source === UNLOCK_FEEDBACK_SOURCE && p.payment_date_time)
+      .map((p) => ({ campaign: UNLOCK_FEEDBACK_SOURCE, at: p.payment_date_time! })),
+  ]
+    .filter((r) => Date.parse(r.at) > returnsFrom)
+    .sort((a, b) => a.at.localeCompare(b.at));
 
   return {
     submissionId,
@@ -588,8 +708,17 @@ export async function buildSubmissionJourney(
       payments.length > 0 && !payments.some((p) => (toNumber(p.amount) ?? 0) > 0 && !p.is_test),
     quoteCount: quotes.length,
     recordingSessionId: sub.posthog_session_id?.trim() || null,
-    ...(payToStartPayment || isPayToStartTracker(sub.utm_tracker) ? { payToStart: true } : {}),
-    ...payToStartOfferOf(payments),
+    // Pay to start by its own records, its payment row, whatever the tracker says: none of
+    // the four buyers on production on 5 Nov carried a tracker. The tracker's label still
+    // marks a buyer whose payment has not settled into a row yet.
+    ...(ptsOffer.payToStartOffer || isPayToStartTracker(sub.utm_tracker)
+      ? { payToStart: true }
+      : {}),
+    ...ptsOffer,
+    gateCohort: stampedAtSubmit(sub.created_date_time, reports[0]?.initial_gate_cohort_at),
+    paid,
+    freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
+    emailReturns: backByEmail,
   };
 }
 

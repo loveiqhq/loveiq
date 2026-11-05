@@ -126,6 +126,8 @@ const PERSISTED_EVENTS = new Set([
   "paygate_exit_note",
   "paygate_exit_cta_click",
   "paygate_exit_leave",
+  // The report opened from an email's link (from=email / utm_source=email): a return
+  "email_return",
 ]);
 
 /**
@@ -916,6 +918,27 @@ export const markLeftInitialGate = () => {
   } catch {
     // Storage blocked: the landing page then counts this reader as a visit, as before.
   }
+};
+
+/**
+ * The report opened from one of our emails' links: `from=email`, which every report link we
+ * mail carries, or `utm_source=email`. `campaign` is the link's `utm_campaign`, which every
+ * customer email sets (shared/emails/email-link.ts, the 72h email's stage), null for a link
+ * without one. Persisted: the #incoming-surveys message names it under "Came back by email".
+ */
+export const emailReturnOf = (params: {
+  get(name: string): string | null;
+}): { campaign: string | null } | null => {
+  if (params.get("from") !== "email" && params.get("utm_source") !== "email") return null;
+  const campaign = params.get("utm_campaign");
+  // The route stores only a utm-shaped campaign: any other is sent as none, so the
+  // return is still counted (an untagged email link) rather than refused.
+  return { campaign: campaign && /^[A-Za-z0-9_.-]{1,64}$/.test(campaign) ? campaign : null };
+};
+
+export const trackEmailReturn = (params: { campaign: string | null }) => {
+  track("email_return", params);
+  persistAnalyticsEvent("email_return", params);
 };
 
 /**

@@ -180,7 +180,9 @@ import {
   toArchetypeSlug,
 } from "@features/report/server/archetypeSlug";
 import {
+  emailReturnOf,
   setReportSubmissionContext,
+  trackEmailReturn,
   trackLockedCardPriceShown,
   trackLockedChaptersShown,
   trackBeginCheckout,
@@ -3123,6 +3125,21 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       isV4 ? REPORT_LAYOUT_V4_SLIM : null
     );
   }, [data, viewedReportPlan, viewArchetype, isV4]);
+
+  // Came back through one of our emails' links: once a page load, for the owner only, the
+  // EUR 1.99 gate's reader too (they came back as much as a reader of the report did).
+  const emailReturnFiredRef = useRef(false);
+  useEffect(() => {
+    if (emailReturnFiredRef.current || isPreview) return;
+    const submissionId =
+      gate?.submissionId ?? (data?.viewMode === "shared" ? null : (data?.submissionId ?? null));
+    if (!submissionId) return;
+    emailReturnFiredRef.current = true;
+    const arrival = emailReturnOf(searchParams);
+    if (!arrival) return;
+    setReportSubmissionContext(submissionId);
+    trackEmailReturn(arrival);
+  }, [data, gate, isPreview, searchParams]);
 
   useReportEngagementTimers({
     reportType: data && !data.initialGate ? (viewedReportPlan ?? "locked") : null,

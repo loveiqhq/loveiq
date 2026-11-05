@@ -13,6 +13,7 @@ import { sanitizeUtmSource } from "@shared/url/utm";
 import { safeAdminNext } from "@shared/url/admin-next";
 import { reportingDay } from "@shared/time/reporting-day";
 import { isProbeRequest } from "@shared/http/probe-cookie";
+import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
 import {
   PAY_TO_START_JOURNEY,
   PAY_TO_START_RETURN_PATH,
@@ -104,9 +105,8 @@ const CSRF_TOKEN_LENGTH = 32;
 
 // Crawlers are pinned to arm A's page ("white") and never given a landing cookie (see
 // the cookie-mint block): the index keeps one canonical landing, and no crawler visit is
-// counted in either arm of the test.
-const LANDING_BOT_UA_REGEX =
-  /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
+// counted in either arm of the test. The regex is shared with /api/survey.
+const LANDING_BOT_UA_REGEX = BOT_UA_REGEX;
 
 /**
  * Landing variant for a `/` request. **Round 3: a 50/50 split between "white_card"
