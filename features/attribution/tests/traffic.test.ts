@@ -32,8 +32,8 @@ describe("classifyTraffic — where they came from", () => {
   });
 
   it("reads the first page the survey route stamps", () => {
-    const tracker = JSON.stringify({ [LANDING_PATH_TRACKER_KEY]: "/glossary/sapiosexual" });
-    expect(classifyTraffic(tracker).landingPath).toBe("/glossary/sapiosexual");
+    const tracker = JSON.stringify({ [LANDING_PATH_TRACKER_KEY]: "/glossary/demisexuality" });
+    expect(classifyTraffic(tracker).landingPath).toBe("/glossary/demisexuality");
     expect(classifyTraffic(JSON.stringify({ utm_source: "x" }))).not.toHaveProperty("landingPath");
   });
 });

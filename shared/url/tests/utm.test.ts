@@ -347,12 +347,12 @@ describe("rememberLandingPath — the first page this browser opened", () => {
   }
 
   it("keeps the first page, its path only, whatever is opened after it", () => {
-    open("/glossary/sapiosexual", "?utm_source=chatgpt.com");
+    open("/glossary/demisexuality", "?utm_source=chatgpt.com");
     rememberLandingPath();
     open("/survey");
     rememberLandingPath();
-    expect(getLandingPath()).toBe("/glossary/sapiosexual");
-    expect(store[LANDING_PATH_KEY]).toBe("/glossary/sapiosexual");
+    expect(getLandingPath()).toBe("/glossary/demisexuality");
+    expect(store[LANDING_PATH_KEY]).toBe("/glossary/demisexuality");
   });
 
   it("never keeps a report's token, when a report was the first page", () => {

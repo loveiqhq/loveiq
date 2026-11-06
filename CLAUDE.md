@@ -136,8 +136,7 @@ loveiq-web/
 │   ├── emails/                 # ab-variant, shared HTML shell, suppression, unsubscribe-token
 │   └── ui/                     # branding/, GtmScript, HydrationMarker, NonceProvider, SmoothScroll, UtmCapture, WebVitals
 ├── data/
-│   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
-│   ├── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
+│   ├── glossary-data.ts        # Glossary terms (~690KB), edited directly (the CSV generator is retired)
 │   ├── survey-data.ts          # Survey questions and structure
 │   ├── survey-source.csv       # Source CSV for survey questions
 │   ├── countries.ts            # Country list for survey forms
@@ -145,7 +144,7 @@ loveiq-web/
 │   ├── scoring-config/         # Source CSVs for archetype scoring (12 files)
 │   ├── product-kpis.ts         # Report section KPI data (static/sample) + Question/Chapter KPI interfaces (live from Supabase)
 │   └── product-kpis/           # Source CSV for report sections (1 file; questions/chapters now live)
-├── scripts/                    # Build/data scripts (update-glossary.js, update-survey.js, etc.)
+├── scripts/                    # Build/data scripts (update-survey.js, update-scoring-config.js, etc.)
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
 ├── .github/workflows/

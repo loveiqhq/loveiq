@@ -7,6 +7,11 @@ import { useEffect } from "react";
 import WNavSection from "@features/landing/ui/white/WNavSection";
 import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
+// Inline links from privacy terms to their glossary pages: the text keeps its colour and
+// weight, with an underline so the link is visible without relying on colour alone.
+const termLink =
+  "rounded-sm underline decoration-[#fe6839]/50 underline-offset-4 transition-colors hover:decoration-[#fe6839] focus-visible-ring";
+
 const Pill = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
   <span
     className={`inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#fe6839] ${className}`}
@@ -377,8 +382,11 @@ const SecuritySection = () => (
         </p>
         <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-gray-600 md:text-[18px]">
           We use industry-standard encryption for data in transit and at rest. Identifying
-          information is separated from response data wherever possible, and exposure is minimized
-          by design rather than policy alone.
+          information is{" "}
+          <Link href="/glossary/pseudonymization" prefetch={false} className={termLink}>
+            separated from response data
+          </Link>{" "}
+          wherever possible, and exposure is minimized by design rather than policy alone.
         </p>
       </div>
     </div>
@@ -700,7 +708,15 @@ const ResearchSection = () => (
         <p className="reveal-on-scroll stagger-2 text-base md:text-[18px] leading-[26px] md:leading-[29.25px]">
           <span className="font-light text-gray-600">For scientific progress, </span>
           <span className="font-bold text-gray-900">
-            we may use fully anonymized, non-personal, and non-reidentifiable data{" "}
+            we may use{" "}
+            <Link href="/glossary/anonymization" prefetch={false} className={termLink}>
+              fully anonymized
+            </Link>
+            , non-personal, and{" "}
+            <Link href="/glossary/re-identification-risk" prefetch={false} className={termLink}>
+              non-reidentifiable
+            </Link>{" "}
+            data{" "}
           </span>
           <span className="font-light text-gray-600">for research purposes.</span>
         </p>

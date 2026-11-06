@@ -1,0 +1,41 @@
+/*
+ * The "View details →" hint under each term on /glossary, revealed on hover or focus.
+ *
+ * Drawn here instead of as a span + SVG inside every link: with ~300 links that markup
+ * was about 180 KB of the page's HTML and ~1,300 DOM nodes, and it put "View details"
+ * into every link's text for crawlers and screen readers. The look and motion are the
+ * old ones: 10px bold uppercase in #C2410C, the same arrow icon, 300ms reveal.
+ */
+.glossary-term-link::after {
+  content: "View details";
+  /* Decorative: the alternative-text form keeps it out of the link's accessible name. */
+  content: "View details" / "";
+  display: block;
+  width: fit-content;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding-right: 16px;
+  color: #c2410c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 20px;
+  text-transform: uppercase;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C2410C' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3Cpath d='m12 5 7 7-7 7'/%3E%3C/svg%3E")
+    no-repeat right center / 12px 12px;
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glossary-term-link:hover::after,
+.glossary-term-link:focus::after {
+  margin-top: 4px;
+  max-height: 20px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glossary-term-link::after {
+    transition: none;
+  }
+}

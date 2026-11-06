@@ -173,7 +173,7 @@ Submits a completed survey and schedules downstream scoring/notification work af
   "utmTracker": "{\"utm_source\":\"referral\"}",
   "sessionId": "11111111-1111-1111-1111-111111111111",
   "optionOrder": { "16001": ["Option B", "Option A", "Option C"] },
-  "landingPath": "/glossary/sapiosexual",
+  "landingPath": "/glossary/demisexuality",
   "website": ""
 }
 ```
