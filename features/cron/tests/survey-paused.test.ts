@@ -4,6 +4,11 @@ const mockFetchWithTimeout = vi.fn();
 const mockCheckCooldown = vi.fn();
 const mockIsEmailSuppressed = vi.fn();
 const mockResendSend = vi.fn();
+// The email journeys (features/email-journeys): R1's switch, its record and the buyer's draft.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
+const mockClaimSend = vi.fn(async (_spec: unknown): Promise<number | null> => 1);
+const mockSettleClaim = vi.fn(async (_id: number, _result: unknown) => undefined);
+const mockIsPurchaseDraft = vi.fn(async (_sessionId: string) => false);
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: Parameters<typeof mockFetchWithTimeout>) =>
@@ -31,6 +36,18 @@ vi.mock("resend", () => ({
   Resend: class {
     emails = { send: mockResendSend };
   },
+}));
+
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
+vi.mock("@features/email-journeys/server/send", () => ({
+  claimSend: (spec: unknown) => mockClaimSend(spec),
+  settleClaim: (id: number, result: unknown) => mockSettleClaim(id, result),
+}));
+vi.mock("@features/email-journeys/server/journeys", () => ({
+  isPurchaseDraft: (sessionId: string) => mockIsPurchaseDraft(sessionId),
 }));
 
 // Bypass the prod-cron-host gate in unit tests.
@@ -303,5 +320,99 @@ describe("GET /api/cron/survey-paused", () => {
     const body = await (await GET(makeRequest("test-cron-secret"))).json();
     expect(body.skippedCooldown).toBe(1);
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  // ─── The email journeys: R1's record, its switch and the buyer's draft ─────────
+
+  it("records R1 before it goes and settles the record as sent", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValue({ data: { id: "re_1" }, error: null });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect((await res.json()).sent).toBe(1);
+    expect(mockClaimSend).toHaveBeenCalledWith({
+      emailKey: "survey_paused",
+      target: "session:sess-abc",
+    });
+    expect(mockClaimSend.mock.invocationCallOrder[0]).toBeLessThan(
+      mockResendSend.mock.invocationCallOrder[0]!
+    );
+    expect(mockSettleClaim).toHaveBeenCalledWith(1, { sent: true, resendId: "re_1" });
+  });
+
+  it("does not send a draft already recorded as emailed", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockClaimSend.mockResolvedValueOnce(null);
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(0);
+    expect(body.skippedCooldown).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("frees the record when Resend refuses the email (a 4xx), keeps it as failed otherwise", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: "validation_error", message: "bad", statusCode: 422 },
+    });
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockSettleClaim).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sent: false, refused: true })
+    );
+    mockResendSend.mockRejectedValueOnce(new Error("Resend timeout"));
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockSettleClaim).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sent: false, refused: false })
+    );
+  });
+
+  it("still sends today's R1 when the record can't be written (the cooldown guards it, as before)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockClaimSend.mockRejectedValueOnce(new Error("journey_claim_failed:500"));
+    mockResendSend.mockResolvedValue({ data: { id: "re_2" }, error: null });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(1);
+    expect(mockSettleClaim).not.toHaveBeenCalled();
+  });
+
+  it("sends the redesigned R1, one email with its stage tag, when its switch is on", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "r1");
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValue({ data: { id: "re_3" }, error: null });
+    await GET(makeRequest("test-cron-secret"));
+    const payload = mockResendSend.mock.calls[0]?.[0] as {
+      subject: string;
+      html: string;
+      tags: unknown;
+    };
+    // The draft answered two asked questions (its email and first name): 2 of 62.
+    expect(payload.subject).toBe(
+      `First, you’re ${Math.round((2 / 62) * 100)}% through your LoveIQ test`
+    );
+    expect(payload.html).toContain("2 of 62 questions");
+    expect(payload.html).toContain("Or paste this link into your browser");
+    expect(payload.tags).toEqual([{ name: "stage", value: "survey_paused" }]);
+    mockSwitchOn.mockImplementation(async () => false);
+  });
+
+  it("leaves a pay-to-start buyer's draft to the buyer's own reminders", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockIsPurchaseDraft.mockResolvedValueOnce(true);
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.skippedPrepaid).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+    expect(mockIsPurchaseDraft).toHaveBeenCalledWith("sess-abc");
   });
 });

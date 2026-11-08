@@ -33,6 +33,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "unlock-feedback": 3 * 3_600_000,
   // Hourly at :47: E07, the EUR 1.99 gate's day-1 gift. Three hours is two missed ticks.
   "initial-unlock-gift": 3 * 3_600_000,
+  // Hourly at :56: the email journeys' new emails (features/email-journeys). Every switch off
+  // still records a run, so silence means the job stopped, not that it had nothing to send.
+  "email-journeys": 3 * 3_600_000,
   "invite-reminders": 26 * 3_600_000,
   "payment-fulfillment-sweep": 2 * 3_600_000,
   "security-storm-detector": 3_600_000,

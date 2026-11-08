@@ -120,6 +120,16 @@ export const UNSUBSCRIBE_CAMPAIGNS = {
   postCallCoupon: "post_call_coupon",
   testLink: "test_link",
   unlockFeedback: "unlock_feedback",
+  // The email journeys' new emails (features/email-journeys).
+  whatPriceOpens: "what_199_opens",
+  giftUnopened: "gift_unopened",
+  surveyPaused2: "survey_paused_2",
+  backIntoReport: "back_into_report",
+  ptsSurveyWaiting: "pts_survey_waiting",
+  ptsFifteenMinutes: "pts_fifteen_minutes",
+  ptsLastReminder: "pts_last_reminder",
+  ptsSurveyPaused: "pts_survey_paused",
+  ptsSurveyPaused2: "pts_survey_paused_2",
 } as const;
 
 /**
@@ -140,6 +150,15 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   [UNSUBSCRIBE_CAMPAIGNS.postCallCoupon]: "Post-call 100% coupon",
   [UNSUBSCRIBE_CAMPAIGNS.testLink]: "Test link (landing email capture)",
   [UNSUBSCRIBE_CAMPAIGNS.unlockFeedback]: "Unlock feedback (why didn't you unlock?)",
+  [UNSUBSCRIBE_CAMPAIGNS.whatPriceOpens]: "I2 · What EUR 1.99 opens",
+  [UNSUBSCRIBE_CAMPAIGNS.giftUnopened]: "I4 · Gift still unopened",
+  [UNSUBSCRIBE_CAMPAIGNS.surveyPaused2]: "R2 · Survey still saved (second reminder)",
+  [UNSUBSCRIBE_CAMPAIGNS.backIntoReport]: "C2 · Back into your report",
+  [UNSUBSCRIBE_CAMPAIGNS.ptsSurveyWaiting]: "S3 · Pay to start: survey waiting",
+  [UNSUBSCRIBE_CAMPAIGNS.ptsFifteenMinutes]: "S4 · Pay to start: fifteen minutes",
+  [UNSUBSCRIBE_CAMPAIGNS.ptsLastReminder]: "S5 · Pay to start: last reminder",
+  [UNSUBSCRIBE_CAMPAIGNS.ptsSurveyPaused]: "R1 · Pay to start: survey paused",
+  [UNSUBSCRIBE_CAMPAIGNS.ptsSurveyPaused2]: "R2 · Pay to start: survey still saved",
   // Nurture-sequence stages
   "6h_no_view": "Nurture 6h (report ready)",
   "6h_no_unlock": "Nurture 6h (unlock nudge)",

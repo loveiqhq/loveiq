@@ -19,6 +19,10 @@
       "schedule": "47 * * * *"
     },
     {
+      "path": "/api/cron/email-journeys",
+      "schedule": "56 * * * *"
+    },
+    {
       "path": "/api/cron/invite-reminders",
       "schedule": "0 10 * * *"
     },
@@ -152,6 +156,9 @@
       "maxDuration": 60
     },
     "app/api/cron/initial-unlock-gift/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/email-journeys/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/invite-reminders/route.ts": {

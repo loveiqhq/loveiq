@@ -17,6 +17,16 @@ export const EMAIL_LINKS = {
   unlockFeedback: { medium: "nurture", campaign: "unlock_feedback" },
   initialGift: { medium: "nurture", campaign: "initial_gift" },
   reportShare: { medium: "share", campaign: "report_share" },
+  // The email journeys' new emails (features/email-journeys, phase 1).
+  whatPriceOpens: { medium: "nurture", campaign: "what_199_opens" },
+  giftUnopened: { medium: "nurture", campaign: "gift_unopened" },
+  surveyPaused2: { medium: "nurture", campaign: "survey_paused_2" },
+  backIntoReport: { medium: "nurture", campaign: "back_into_report" },
+  ptsSurveyWaiting: { medium: "nurture", campaign: "pts_survey_waiting" },
+  ptsFifteenMinutes: { medium: "nurture", campaign: "pts_fifteen_minutes" },
+  ptsLastReminder: { medium: "nurture", campaign: "pts_last_reminder" },
+  ptsSurveyPaused: { medium: "nurture", campaign: "pts_survey_paused" },
+  ptsSurveyPaused2: { medium: "nurture", campaign: "pts_survey_paused_2" },
 } as const;
 
 export type EmailLink = (typeof EMAIL_LINKS)[keyof typeof EMAIL_LINKS];

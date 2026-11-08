@@ -13,6 +13,12 @@ import { reportEssentialsEmail } from "@features/report/server/emails/report-ess
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
+import {
+  coreUnlockedEmail,
+  fullUnlockedEmail,
+  withShareOpen,
+} from "@features/email-journeys/emails/purchase";
+import { EMAIL_STAGES, isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
 import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
 import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
@@ -314,8 +320,24 @@ async function sendPurchaseEmail({
    * one-armed test in the results with a 100% share and no comparison, which
    * reads as a winner.
    */
+  /**
+   * The reworked emails (features/email-journeys), each behind its switch: U1 for the EUR 1.99
+   * unlock, C1 for a full report bought for the reader's own archetype (one bought from another
+   * archetype's tile keeps today's email, which names it). With the switch on: one email, no
+   * A/B, and the `stage` and `sub` tags that keep its delivery, opens and clicks per reader.
+   */
+  const redesign = isInitialUnlockPlan(plan)
+    ? (await isEmailSwitchOn("u1"))
+      ? EMAIL_STAGES.u1
+      : null
+    : plan === "full_report" &&
+        (await isEmailSwitchOn("c1")) &&
+        (!unlockedArchetype ||
+          unlockedArchetype === (await lookupPrimaryArchetypeForSubmission(submissionId)))
+      ? EMAIL_STAGES.c1
+      : null;
   const purchaseExperiment =
-    plan === "essentials" || plan === "core" || isInitialUnlockPlan(plan)
+    redesign || plan === "essentials" || plan === "core" || isInitialUnlockPlan(plan)
       ? null
       : `purchase-${plan}`;
   const variant = purchaseExperiment ? pickEmailVariant(recipient.email, purchaseExperiment) : "a";
@@ -331,43 +353,69 @@ async function sendPurchaseEmail({
       ? null
       : (unlockedArchetype ?? null);
 
-  const tpl = isInitialUnlockPlan(plan)
-    ? initialUnlockEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
-    : plan === "all_reports"
-      ? variant === "b"
-        ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
-        : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
-      : plan === "core"
-        ? reportCoreEmail({
+  const tpl =
+    redesign === EMAIL_STAGES.u1
+      ? coreUnlockedEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
+      : redesign === EMAIL_STAGES.c1
+        ? fullUnlockedEmail({
             firstName: recipient.firstName,
             reportUrl,
+            shareUrl: withShareOpen(reportUrl),
             siteUrl,
-            archetypes: coreArchetypes,
             unsubscribeUrl,
           })
-        : plan === "essentials"
-          ? reportEssentialsEmail({
+        : isInitialUnlockPlan(plan)
+          ? initialUnlockEmail({
               firstName: recipient.firstName,
               reportUrl,
               siteUrl,
-              unlockedArchetype: unlockedArchetype ?? null,
               unsubscribeUrl,
             })
-          : variant === "b"
-            ? reportFullBEmail({
-                firstName: recipient.firstName,
-                reportUrl,
-                siteUrl,
-                unlockedArchetype: unlockedArchetype ?? null,
-                unsubscribeUrl,
-              })
-            : reportFullEmail({
-                firstName: recipient.firstName,
-                reportUrl,
-                siteUrl,
-                unlockedArchetype: fullReportArchetypeA,
-                unsubscribeUrl,
-              });
+          : plan === "all_reports"
+            ? variant === "b"
+              ? reportAllBEmail({
+                  firstName: recipient.firstName,
+                  reportUrl,
+                  siteUrl,
+                  unsubscribeUrl,
+                })
+              : reportAllEmail({
+                  firstName: recipient.firstName,
+                  reportUrl,
+                  siteUrl,
+                  unsubscribeUrl,
+                })
+            : plan === "core"
+              ? reportCoreEmail({
+                  firstName: recipient.firstName,
+                  reportUrl,
+                  siteUrl,
+                  archetypes: coreArchetypes,
+                  unsubscribeUrl,
+                })
+              : plan === "essentials"
+                ? reportEssentialsEmail({
+                    firstName: recipient.firstName,
+                    reportUrl,
+                    siteUrl,
+                    unlockedArchetype: unlockedArchetype ?? null,
+                    unsubscribeUrl,
+                  })
+                : variant === "b"
+                  ? reportFullBEmail({
+                      firstName: recipient.firstName,
+                      reportUrl,
+                      siteUrl,
+                      unlockedArchetype: unlockedArchetype ?? null,
+                      unsubscribeUrl,
+                    })
+                  : reportFullEmail({
+                      firstName: recipient.firstName,
+                      reportUrl,
+                      siteUrl,
+                      unlockedArchetype: fullReportArchetypeA,
+                      unsubscribeUrl,
+                    });
 
   try {
     const { error } = await Promise.race([
@@ -379,7 +427,16 @@ async function sendPurchaseEmail({
         html: tpl.html,
         text: tpl.text,
         // Echoed back on every Resend webhook, which is how the A/B result is read.
-        ...(purchaseExperiment ? { tags: emailExperimentTags(purchaseExperiment, variant) } : {}),
+        ...(redesign
+          ? {
+              tags: [
+                { name: "stage", value: redesign },
+                { name: "sub", value: String(submissionId) },
+              ],
+            }
+          : purchaseExperiment
+            ? { tags: emailExperimentTags(purchaseExperiment, variant) }
+            : {}),
         headers: {
           "X-LoveIQ-Variant": variant,
           ...(unsubscribeUrl && {

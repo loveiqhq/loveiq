@@ -180,10 +180,12 @@ export async function POST(request: Request) {
   }
 
   // A buyer who paid before the survey: its first saved answer stamps the purchase, the only
-  // link an unfinished survey has to it (AP-Analytics' "Started survey"). Once; after the reply.
+  // link an unfinished survey has to it (AP-Analytics' "Started survey"), and the draft is
+  // linked to it, so the buyer's survey reminders can read it. After the reply.
   if (prepaidToken) {
+    const sessionId = parsed.data.sessionId;
     scheduleAfterResponse("pay-to-start-survey-started", () =>
-      markEntitlementSurveyStarted(prepaidToken)
+      markEntitlementSurveyStarted(prepaidToken, sessionId)
     );
   }
 
