@@ -442,27 +442,40 @@ describe("the email journeys over eight days", () => {
   it("isolates failures: one reader's failed query, or one email's, never stops the rest", async () => {
     for (const k of ["i2", "i4"]) switches.add(k);
     clock = T0 + 25 * H;
-    // The payer's payment lookup fails; I2's query itself fails for the run after.
+    // The first reader's payment lookup fails; the reader after them still gets theirs.
+    db.personal_report!.find((r) => r.id === 1)!.initial_gate_cohort_at = iso(T0 + 21 * H);
+    db.personal_report!.push(
+      reader(8, "gated2@example.com", { initial_gate_cohort_at: iso(T0 + 21 * H) })
+    );
+    db.report_access_token!.push({
+      survey_submission_id: 1008,
+      token: "rpt_8",
+      revoked_at: null,
+      expires_at: null,
+    });
     const realFetch = fakeFetchImpl.current;
     fakeFetchImpl.current = async (path, opts) => {
-      if (path.includes("/rest/v1/payment?personal_report_id=eq.2&")) throw new Error("timeout");
+      if (path.includes("/rest/v1/payment?personal_report_id=eq.1&")) throw new Error("timeout");
       return realFetch(path, opts);
     };
-    db.personal_report!.find((r) => r.id === 1)!.initial_gate_cohort_at = iso(T0 + 21 * H);
-    db.personal_report!.find((r) => r.id === 2)!.initial_gate_cohort_at = iso(T0 + 20 * H);
-    const run = await runJourneys({ resend, nowMs: clock, outOfTime: () => false });
-    expect(run.failed).toBe(1);
-    expect(sentTo("gated@example.com")).toHaveLength(1);
-    expect(sentTo("gifted@example.com")).toHaveLength(1);
-    fakeFetchImpl.current = async (path, opts) => {
-      if (path.startsWith("/rest/v1/personal_report?initial_gate_cohort_at"))
-        throw new Error("boom");
-      return realFetch(path, opts);
-    };
-    const next = await runJourneys({ resend, nowMs: clock + H, outOfTime: () => false });
-    expect(next.stages.what_199_opens).toMatchObject({ failed: 1 });
-    expect(next.stages.gift_unopened).not.toBe("off");
-    fakeFetchImpl.current = realFetch;
+    try {
+      const run = await runJourneys({ resend, nowMs: clock, outOfTime: () => false });
+      expect(run.stages.what_199_opens).toMatchObject({ failed: 1, sent: 1 });
+      expect(sentTo("gated@example.com")).toEqual([]);
+      expect(sentTo("gated2@example.com")).toHaveLength(1);
+      expect(sentTo("gifted@example.com")).toHaveLength(1);
+      // The run after: I2's own query fails; I4 still runs.
+      fakeFetchImpl.current = async (path, opts) => {
+        if (path.startsWith("/rest/v1/personal_report?initial_gate_cohort_at"))
+          throw new Error("boom");
+        return realFetch(path, opts);
+      };
+      const next = await runJourneys({ resend, nowMs: clock + H, outOfTime: () => false });
+      expect(next.stages.what_199_opens).toMatchObject({ failed: 1, sent: 0 });
+      expect(next.stages.gift_unopened).toMatchObject({ failed: 0 });
+    } finally {
+      fakeFetchImpl.current = realFetch;
+    }
   });
 
   it("stops at the time budget without sending past it", async () => {
