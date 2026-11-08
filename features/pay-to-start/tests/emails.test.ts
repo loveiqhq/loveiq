@@ -11,6 +11,13 @@ vi.mock("resend", () => ({
   },
 }));
 
+// S2's switch (features/email-journeys): off unless a test turns it on.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
+
 import {
   buildContinueUrl,
   payToStartConfirmationEmail,
@@ -151,6 +158,66 @@ describe("the confirmation email", () => {
       expect(String(payload.html)).toContain(
         `https://staging.loveiq.org/sexual-archetype/continue?t=${TOKEN}`
       );
+    });
+
+    it.each([
+      ["pre", "Payment received. Your survey is ready when you are"],
+      ["full", "Payment received. Your full report is waiting for you."],
+    ] as const)(
+      "sends the redesigned S2 (%s) when its switch is on, tagged with its stage",
+      async (offer, subject) => {
+        mockSwitchOn.mockImplementation(async (key: string) => key === "s2");
+        try {
+          mockSend.mockResolvedValue({ error: null });
+          await sendPayToStartConfirmationEmail({
+            amountText: offer === "pre" ? "€1.99" : "€29.99",
+            email: "buyer@example.com",
+            entitlementId: 7,
+            offer,
+            origin: "https://www.loveiq.org",
+            productName: "LoveIQ",
+            token: TOKEN,
+          });
+          const payload = mockSend.mock.calls[0]?.[0] as {
+            subject: string;
+            html: string;
+            tags: unknown;
+          };
+          expect(payload.subject).toBe(subject);
+          expect(payload.html).toContain(
+            `https://www.loveiq.org/sexual-archetype/continue?t=${TOKEN}`
+          );
+          expect(payload.html).toContain("Or paste this link into your browser");
+          expect(payload.tags).toEqual([
+            { name: "stage", value: "pts_payment_received" },
+            { name: "journey", value: "pay_to_start" },
+            { name: "offer", value: offer },
+            { name: "email", value: "pts_confirmation" },
+          ]);
+        } finally {
+          mockSwitchOn.mockImplementation(async () => false);
+        }
+      }
+    );
+
+    it("keeps today's email for a survey finished before the payment settled, switch or not", async () => {
+      mockSwitchOn.mockImplementation(async () => true);
+      try {
+        mockSend.mockResolvedValue({ error: null });
+        await sendPayToStartConfirmationEmail({
+          amountText: "€29.99",
+          email: "buyer@example.com",
+          entitlementId: 7,
+          origin: null,
+          productName: "LoveIQ",
+          token: TOKEN,
+          variant: "report",
+        });
+        const payload = mockSend.mock.calls[0]?.[0] as { subject: string };
+        expect(payload.subject).toBe("Payment received: your report is unlocked");
+      } finally {
+        mockSwitchOn.mockImplementation(async () => false);
+      }
     });
 
     it("never throws, whatever Resend does", async () => {

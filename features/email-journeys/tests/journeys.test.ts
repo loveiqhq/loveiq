@@ -173,8 +173,11 @@ function seed(): void {
     reader(3, "gifted@example.com", { initial_gift_arm: "gift", initial_gift_sent_at: iso(T0) }),
     // I4: gifted at T0, opens at T0 + 5 h: no I4.
     reader(4, "opener@example.com", { initial_gift_arm: "gift", initial_gift_sent_at: iso(T0) }),
-    // I4: the holdout never gets it.
-    reader(5, "holdout@example.com", { initial_gift_arm: "holdout", initial_gift_sent_at: null }),
+    // I4: the holdout never gets it, whatever else its row says.
+    reader(5, "holdout@example.com", {
+      initial_gift_arm: "holdout",
+      initial_gift_sent_at: iso(T0),
+    }),
     // C2's buyer's report.
     reader(6, "buyer@example.com"),
     // I2: suppressed, never emailed.
@@ -296,10 +299,11 @@ function world(at: number): void {
     db.prepaid_report_access!.find((p) => p.id === 502)!.survey_started_at = iso(at);
 }
 
-async function runDays(days: number): Promise<void> {
+async function runDays(days: number, atHour?: (hour: number) => void): Promise<void> {
   for (let at = T0; at <= T0 + days * 24 * H; at += H) {
     clock = at;
     world(at);
+    atHour?.((at - T0) / H);
     await runJourneys({ resend, nowMs: at, outOfTime: () => false });
   }
 }
@@ -400,6 +404,36 @@ describe("the email journeys over eight days", () => {
       runJourneys({ resend, nowMs: clock, outOfTime: () => false }),
     ]);
     expect(sentTo("buyer@example.com")).toHaveLength(1);
+  });
+
+  it("starts nobody mid-ladder: S4, S5 and the buyer's R2 go only after the email before them", async () => {
+    // The switches come on at hour 50: past S3's and R1's windows, inside S4's and R2's.
+    await runDays(8, (hour) => {
+      if (hour === 50) for (const k of ["s3s5", "ptsReminders"]) switches.add(k);
+    });
+    expect(sentTo("never@example.com")).toEqual([]);
+    expect(sentTo("paused-buyer@example.com")).toEqual([]);
+  });
+
+  it("stops at the time budget between two readers, and the next run carries on", async () => {
+    switches.add("i2");
+    db.personal_report!.push(reader(8, "gated2@example.com", { initial_gate_cohort_at: iso(T0) }));
+    db.report_access_token!.push({
+      survey_submission_id: 1008,
+      token: "rpt_8",
+      revoked_at: null,
+      expires_at: null,
+    });
+    clock = T0 + 4 * H;
+    let checks = 0;
+    // The run's own check, then the first reader's: the budget is gone before the second.
+    const run = await runJourneys({ resend, nowMs: clock, outOfTime: () => ++checks > 2 });
+    expect(run.stoppedEarly).toBe(true);
+    expect(sends).toHaveLength(1);
+    await runJourneys({ resend, nowMs: clock + H, outOfTime: () => false });
+    // The second reader gets theirs on the next run; the first is never sent twice.
+    expect(sentTo("gated@example.com")).toHaveLength(1);
+    expect(sentTo("gated2@example.com")).toHaveLength(1);
   });
 
   it("stops at the time budget without sending past it", async () => {

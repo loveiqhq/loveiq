@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS public.email_journey_send (
   CONSTRAINT email_journey_send_once UNIQUE (email_key, target)
 );
 
+-- migration-lint: ignore -- these indexes are on the table created just above, in this same
+-- transaction: it is empty, so a plain CREATE INDEX locks nothing anyone reads, and CONCURRENTLY
+-- cannot run inside a transaction block at all.
 CREATE INDEX IF NOT EXISTS email_journey_send_submission_idx
   ON public.email_journey_send (survey_submission_id)
   WHERE survey_submission_id IS NOT NULL;
