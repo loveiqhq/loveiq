@@ -37,12 +37,14 @@ export interface SendSpec {
   tags?: Array<{ name: string; value: string }>;
 }
 
+/** `retry`: Resend asked to slow down (429) and sent nothing: the claim is freed for the next run. */
 export type SendResult =
-  { sent: true; resendId: string | null } | { sent: false; refused: boolean; reason: string };
+  { sent: true; resendId: string | null } | { sent: false; retry: boolean; reason: string };
 
 /**
- * One Resend call. `refused` is Resend turning the email down (a 4xx): nothing went. A 5xx, a
- * timeout or no answer may have sent it.
+ * One Resend call. A 429 (too many requests) sent nothing and is worth another try. Any other
+ * refusal (a bad address) would be refused again, and a 5xx, a timeout or no answer may have
+ * sent it: those claims are kept as failed, never retried.
  */
 export async function sendKitEmail(resend: Resend, spec: SendSpec): Promise<SendResult> {
   const tags = [
@@ -85,13 +87,13 @@ export async function sendKitEmail(resend: Resend, spec: SendSpec): Promise<Send
     const status = (error as { statusCode?: number | null }).statusCode;
     return {
       sent: false,
-      refused: typeof status === "number" && status >= 400 && status < 500,
+      retry: status === 429,
       reason: `${error.name}: ${error.message}`.slice(0, 200),
     };
   } catch (err) {
     return {
       sent: false,
-      refused: false,
+      retry: false,
       reason: (err instanceof Error ? err.message : String(err)).slice(0, 200),
     };
   } finally {
@@ -127,7 +129,7 @@ export async function claimSend(spec: ClaimSpec): Promise<number | null> {
   return row ? row.id : null;
 }
 
-/** After the send: sent with Resend's id, failed (kept, never retried), or released (a 4xx). */
+/** After the send: sent with Resend's id, failed (kept, never retried), or released (a 429). */
 export async function settleClaim(id: number, result: SendResult): Promise<void> {
   try {
     if (result.sent) {
@@ -140,7 +142,7 @@ export async function settleClaim(id: number, result: SendResult): Promise<void>
           sent_at: new Date().toISOString(),
         }),
       });
-    } else if (result.refused) {
+    } else if (result.retry) {
       await supabaseFetch(`/rest/v1/email_journey_send?id=eq.${id}`, {
         method: "DELETE",
         headers: { Prefer: "return=minimal" },
@@ -167,7 +169,7 @@ export async function wasSent(emailKey: string, target: string): Promise<boolean
   return ((await res.json()) as unknown[]).length > 0;
 }
 
-export type ClaimAndSendOutcome = "sent" | "already" | "refused" | "failed";
+export type ClaimAndSendOutcome = "sent" | "already" | "retry" | "failed";
 
 /** Claim, send, settle: exactly once per email and target. */
 export async function claimAndSend(
@@ -184,5 +186,5 @@ export async function claimAndSend(
     { emailKey: claim.emailKey, target: claim.target, reason: result.reason },
     "email-journeys: send failed"
   );
-  return result.refused ? "refused" : "failed";
+  return result.retry ? "retry" : "failed";
 }

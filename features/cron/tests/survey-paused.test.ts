@@ -68,6 +68,9 @@ function makeRequest(token?: string): Request {
 describe("GET /api/cron/survey-paused", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps implementations: reset the switches and the draft link each test.
+    mockSwitchOn.mockImplementation(async () => false);
+    mockIsPurchaseDraft.mockImplementation(async () => false);
     process.env = {
       ...ORIGINAL_ENV,
       CRON_SECRET: "test-cron-secret",
@@ -352,10 +355,19 @@ describe("GET /api/cron/survey-paused", () => {
     expect(mockResendSend).not.toHaveBeenCalled();
   });
 
-  it("frees the record when Resend refuses the email (a 4xx), keeps it as failed otherwise", async () => {
+  it("frees the record when Resend rate-limits (429), keeps it as failed otherwise", async () => {
     mockSupabaseSequence();
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "slow", statusCode: 429 },
+    });
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockSettleClaim).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sent: false, retry: true })
+    );
     mockResendSend.mockResolvedValueOnce({
       data: null,
       error: { name: "validation_error", message: "bad", statusCode: 422 },
@@ -363,13 +375,13 @@ describe("GET /api/cron/survey-paused", () => {
     await GET(makeRequest("test-cron-secret"));
     expect(mockSettleClaim).toHaveBeenLastCalledWith(
       1,
-      expect.objectContaining({ sent: false, refused: true })
+      expect.objectContaining({ sent: false, retry: false })
     );
     mockResendSend.mockRejectedValueOnce(new Error("Resend timeout"));
     await GET(makeRequest("test-cron-secret"));
     expect(mockSettleClaim).toHaveBeenLastCalledWith(
       1,
-      expect.objectContaining({ sent: false, refused: false })
+      expect.objectContaining({ sent: false, retry: false })
     );
   });
 
@@ -403,10 +415,10 @@ describe("GET /api/cron/survey-paused", () => {
     expect(payload.html).toContain("2 of 62 questions");
     expect(payload.html).toContain("Or paste this link into your browser");
     expect(payload.tags).toEqual([{ name: "stage", value: "survey_paused" }]);
-    mockSwitchOn.mockImplementation(async () => false);
   });
 
   it("sends today's R1 when the draft's purchase link can't be read (as before the link existed)", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "ptsReminders");
     mockSupabaseSequence();
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
@@ -417,7 +429,19 @@ describe("GET /api/cron/survey-paused", () => {
     expect((await res.json()).sent).toBe(1);
   });
 
-  it("leaves a pay-to-start buyer's draft to the buyer's own reminders", async () => {
+  it("with pay to start's reminders off, a buyer's linked draft is treated as today (the link unread)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockIsPurchaseDraft.mockResolvedValue(true);
+    mockResendSend.mockResolvedValue({ data: { id: "re_5" }, error: null });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(1);
+    expect(mockIsPurchaseDraft).not.toHaveBeenCalled();
+  });
+
+  it("leaves a pay-to-start buyer's draft to the buyer's own reminders once those are on", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "ptsReminders");
     mockSupabaseSequence();
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockIsPurchaseDraft.mockResolvedValueOnce(true);

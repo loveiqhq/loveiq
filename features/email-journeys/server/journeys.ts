@@ -20,6 +20,7 @@
 import type { Resend } from "resend";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
+import { readInitialUnlockGateSwitch } from "@features/report/server/initialGateState";
 import {
   buildContinueUrl,
   resolveEmailOrigin,
@@ -140,6 +141,8 @@ interface ReaderRow {
   id: number;
   survey_submission_id: number;
   survey_submission?: {
+    user_id?: number | null;
+    created_date_time?: string | null;
     app_user?: {
       email?: string | null;
       first_name?: string | null;
@@ -149,7 +152,7 @@ interface ReaderRow {
 }
 
 const READER_SELECT =
-  "survey_submission!fk_personal_report_submission(app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))";
+  "survey_submission!fk_personal_report_submission(user_id,created_date_time,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))";
 
 function readerOf(row: ReaderRow): { email: string; firstName: string | null } | null {
   const user = row.survey_submission?.app_user;
@@ -162,6 +165,32 @@ function readerOf(row: ReaderRow): { email: string; firstName: string | null } |
 async function holdsAnything(personalReportId: number): Promise<boolean> {
   const rows = await getJson<unknown[]>(
     `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=in.(succeeded,refunded,disputed)&select=id&limit=1`
+  );
+  return rows.length > 0;
+}
+
+/** Whether this person paid for anything on any of their reports (a retake is no new buyer). */
+async function boughtBefore(userId: number | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const rows = await getJson<unknown[]>(
+    `/rest/v1/payment?user_id=eq.${userId}&status=in.(succeeded,refunded,disputed)&select=id&limit=1`
+  );
+  return rows.length > 0;
+}
+
+/** An address whose person froze their data (GDPR Art. 18): no email that sells or reminds. */
+async function isRestricted(email: string): Promise<boolean> {
+  const rows = await getJson<unknown[]>(
+    `/rest/v1/app_user?email=eq.${encodeURIComponent(email)}&processing_restricted_at=not.is.null&select=id&limit=1`
+  );
+  return rows.length > 0;
+}
+
+/** Whether this address finished a survey after a moment (in another browser, say). */
+async function finishedSince(email: string, sinceIso: string): Promise<boolean> {
+  const rows = await getJson<unknown[]>(
+    `/rest/v1/survey_submission?created_date_time=gt.${encodeURIComponent(sinceIso)}` +
+      `&select=id,app_user!fk_survey_submission_user!inner(email)&app_user.email=eq.${encodeURIComponent(email)}&limit=1`
   );
   return rows.length > 0;
 }
@@ -217,8 +246,14 @@ async function sendToReader(
 
 // ── I2 ───────────────────────────────────────────────────────────────────────────────────
 
+/** I2's survey must be this fresh: an old reader stamped into the cohort later is no new reader. */
+const I2_SURVEY_MAX_AGE_MS = 30 * HOUR;
+
 export async function runWhatPriceOpens(ctx: JourneyContext): Promise<StageCounts> {
   const counts = emptyCounts();
+  // The gate off, nobody meets the €1.99 step, so I2's offer would be untrue (an unreadable
+  // switch is no answer either).
+  if ((await readInitialUnlockGateSwitch()) !== true) return counts;
   const rows = await getJson<Array<ReaderRow & { initial_gift_arm: string | null }>>(
     `/rest/v1/personal_report?initial_gate_cohort_at=lte.${iso(ctx.nowMs - 3 * HOUR)}` +
       `&initial_gate_cohort_at=gt.${iso(ctx.nowMs - 24 * HOUR)}&initial_gift_arm=is.null` +
@@ -227,7 +262,13 @@ export async function runWhatPriceOpens(ctx: JourneyContext): Promise<StageCount
   counts.candidates = rows.length;
   await eachCandidate(ctx, counts, rows, async (row) => {
     const reader = readerOf(row);
-    if (!reader || (await holdsAnything(row.id))) {
+    const surveyAt = Date.parse(row.survey_submission?.created_date_time ?? "");
+    if (
+      !reader ||
+      !(ctx.nowMs - surveyAt <= I2_SURVEY_MAX_AGE_MS) ||
+      (await holdsAnything(row.id)) ||
+      (await boughtBefore(row.survey_submission?.user_id))
+    ) {
       counts.skipped++;
       return;
     }
@@ -304,10 +345,14 @@ async function isSubmitted(sessionId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/** A draft a pay-to-start purchase claims (its survey_session_id): pay to start's reminders. */
+/**
+ * A draft a live pay-to-start purchase claims (its survey_session_id, paid and not yet used):
+ * pay to start's own reminders cover it. A refunded or used purchase claims nothing.
+ */
 export async function isPurchaseDraft(sessionId: string): Promise<boolean> {
   const rows = await getJson<unknown[]>(
-    `/rest/v1/prepaid_report_access?survey_session_id=eq.${encodeURIComponent(sessionId)}&select=id&limit=1`
+    `/rest/v1/prepaid_report_access?survey_session_id=eq.${encodeURIComponent(sessionId)}` +
+      `&status=eq.succeeded&consumed_submission_id=is.null&select=id&limit=1`
   );
   return rows.length > 0;
 }
@@ -324,7 +369,7 @@ export async function runSurveyStillSaved(ctx: JourneyContext): Promise<StageCou
   const counts = emptyCounts();
   const rows = await getJson<DraftRow[]>(
     `/rest/v1/survey_partial_save?saved_at=lte.${iso(ctx.nowMs - 48 * HOUR)}&saved_at=gt.${iso(ctx.nowMs - 72 * HOUR)}` +
-      `&select=session_id,answers,saved_at&order=saved_at.asc&limit=${CANDIDATE_LIMIT}`
+      `&select=session_id,answers,saved_at&order=saved_at.asc&limit=${3 * CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
   const resumeUrl = tagEmailLink(`${getEmailSiteUrl()}/survey`, EMAIL_LINKS.surveyPaused2);
@@ -335,8 +380,10 @@ export async function runSurveyStillSaved(ctx: JourneyContext): Promise<StageCou
       !email ||
       !(await wasSent(EMAIL_STAGES.r1, target)) ||
       (await isSubmitted(row.session_id)) ||
+      (await finishedSince(email, row.saved_at)) ||
       (await isPurchaseDraft(row.session_id)) ||
       (await hasUnusedPurchase(email)) ||
+      (await isRestricted(email)) ||
       !(await mayEmail(email))
     ) {
       counts.skipped++;
@@ -367,6 +414,7 @@ export async function runSurveyStillSaved(ctx: JourneyContext): Promise<StageCou
 interface PaymentRow {
   id: number;
   personal_report_id: number | null;
+  metadata?: { plan?: string | null; archetype?: string | null } | null;
   app_user?: {
     email?: string | null;
     first_name?: string | null;
@@ -374,12 +422,28 @@ interface PaymentRow {
   } | null;
 }
 
+/**
+ * A full report bought from another archetype's tile: C2's picks are the reader's own report's
+ * chapters, so it is not for them (as C1 keeps today's email for them).
+ */
+async function boughtForAnotherArchetype(row: PaymentRow, submissionId: number): Promise<boolean> {
+  const bought = row.metadata?.archetype?.trim();
+  if (row.metadata?.plan !== "full_report" || !bought) return false;
+  const [score] = await getJson<
+    Array<{ primary_archetype: string | null; v5_primary_archetype: string | null }>
+  >(
+    `/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=primary_archetype,v5_primary_archetype&limit=1`
+  );
+  const primary = score?.v5_primary_archetype ?? score?.primary_archetype ?? null;
+  return primary !== null && primary !== bought;
+}
+
 export async function runBackIntoReport(ctx: JourneyContext): Promise<StageCounts> {
   const counts = emptyCounts();
   const rows = await getJson<PaymentRow[]>(
     `/rest/v1/payment?status=eq.succeeded&metadata->>plan=in.(full_report,all_reports)` +
       `&payment_date_time=lte.${iso(ctx.nowMs - 24 * HOUR)}&payment_date_time=gt.${iso(ctx.nowMs - 48 * HOUR)}` +
-      `&select=id,personal_report_id,app_user!fk_payment_user(email,first_name,processing_restricted_at)` +
+      `&select=id,personal_report_id,metadata,app_user!fk_payment_user(email,first_name,processing_restricted_at)` +
       `&order=payment_date_time.asc&limit=${CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
@@ -392,7 +456,7 @@ export async function runBackIntoReport(ctx: JourneyContext): Promise<StageCount
     const [report] = await getJson<Array<{ survey_submission_id: number }>>(
       `/rest/v1/personal_report?id=eq.${row.personal_report_id}&select=survey_submission_id&limit=1`
     );
-    if (!report) {
+    if (!report || (await boughtForAnotherArchetype(row, report.survey_submission_id))) {
       counts.skipped++;
       return;
     }
@@ -434,7 +498,7 @@ async function sendToBuyer(
 ): Promise<void> {
   const email = row.customer_email?.trim().toLowerCase();
   const offer = paidOffer(row);
-  if (!email || !offer || !(await mayEmail(email))) {
+  if (!email || !offer || (await isRestricted(email)) || !(await mayEmail(email))) {
     counts.skipped++;
     return;
   }
@@ -527,7 +591,8 @@ export async function runPaidSurveyReminders(ctx: JourneyContext): Promise<Stage
   const rows = await getJson<PurchaseRow[]>(
     `/rest/v1/prepaid_report_access?${PAID_UNUSED}&survey_started_at=not.is.null&survey_session_id=not.is.null` +
       `&survey_started_at=gt.${iso(ctx.nowMs - 30 * 24 * HOUR)}` +
-      `&select=${PURCHASE_SELECT}&order=paid_at.asc&limit=${CANDIDATE_LIMIT}`
+      // Newest first: a buyer stuck for weeks never crowds out one who paused an hour ago.
+      `&select=${PURCHASE_SELECT}&order=survey_started_at.desc&limit=${CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
   await eachCandidate(ctx, counts, rows, async (row) => {

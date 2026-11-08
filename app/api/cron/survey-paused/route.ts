@@ -175,6 +175,9 @@ export async function GET(request: Request) {
   };
   // R1 redesigned (features/email-journeys), behind its switch: one email, no A/B.
   const redesign = await isEmailSwitchOn("r1");
+  // A buyer's linked draft is left to pay to start's own reminders only once they are on;
+  // until then the draft is treated as today.
+  const buyersRemindedElsewhere = await isEmailSwitchOn("ptsReminders");
 
   try {
     const candidates = await fetchCandidates();
@@ -207,7 +210,7 @@ export async function GET(request: Request) {
       // An unreadable link reads as no link: today's R1 goes, as it did before the link existed.
       if (
         (await hasUnusedPrepaidPurchase(email)) ||
-        (await isPurchaseDraft(row.session_id).catch(() => false))
+        (buyersRemindedElsewhere && (await isPurchaseDraft(row.session_id).catch(() => false)))
       ) {
         summary.skippedPrepaid++;
         continue;
@@ -304,7 +307,7 @@ export async function GET(request: Request) {
             const status = (error as { statusCode?: number | null }).statusCode;
             await settleClaim(claimId, {
               sent: false,
-              refused: typeof status === "number" && status >= 400 && status < 500,
+              retry: status === 429,
               reason: String((error as { message?: string }).message ?? "send failed"),
             });
           }
@@ -316,7 +319,7 @@ export async function GET(request: Request) {
       } catch (err) {
         summary.errors++;
         if (claimId !== null) {
-          await settleClaim(claimId, { sent: false, refused: false, reason: "send threw" });
+          await settleClaim(claimId, { sent: false, retry: false, reason: "send threw" });
         }
         // Same rationale: one timed-out send shouldn't ping ops. Whole-cron
         // failures still alert via the outer cron-level catch.

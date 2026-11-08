@@ -18,10 +18,14 @@ const sends: Array<{
 }> = [];
 let clock = 0;
 const refuseOnce = new Set<string>();
+const badAddress = new Set<string>();
 
 function field(row: Row, key: string): unknown {
   const json = /^(\w+)->>(\w+)$/.exec(key);
   if (json) return (row[json[1]!] as Row | null | undefined)?.[json[2]!] ?? null;
+  // An embedded resource's filter (`app_user.email=eq.…`, with `!inner` in the select).
+  if (key.includes("."))
+    return key.split(".").reduce<unknown>((v, k) => (v as Row | null)?.[k], row);
   return row[key];
 }
 
@@ -62,6 +66,7 @@ function select(table: string, params: URLSearchParams): Row[] {
   return out.slice(0, limit);
 }
 
+let reads = 0;
 async function fakeFetch(
   path: string,
   opts: { method?: string; body?: string } = {}
@@ -71,7 +76,10 @@ async function fakeFetch(
   const method = opts.method ?? "GET";
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-  if (method === "GET") return json(select(table, url.searchParams));
+  if (method === "GET") {
+    reads++;
+    return json(select(table, url.searchParams));
+  }
   if (table !== "email_journey_send") throw new Error(`fake db: ${method} ${table}`);
   if (method === "POST") {
     const row = JSON.parse(opts.body!) as Row;
@@ -116,6 +124,10 @@ vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
   isEmailSwitchOn: async (key: string) => switches.has(key),
 }));
+const gate = { on: true as boolean | null };
+vi.mock("@features/report/server/initialGateState", () => ({
+  readInitialUnlockGateSwitch: async () => gate.on,
+}));
 const suppressed = new Set<string>();
 vi.mock("@shared/emails/suppression", () => ({
   suppressionState: async (email: string) => (suppressed.has(email) ? "suppressed" : "clear"),
@@ -135,7 +147,13 @@ const resend = {
           refuseOnce.delete(key);
           return {
             data: null,
-            error: { name: "validation_error", message: "refused", statusCode: 422 },
+            error: { name: "rate_limit_exceeded", message: "slow down", statusCode: 429 },
+          };
+        }
+        if (badAddress.has(p.to)) {
+          return {
+            data: null,
+            error: { name: "validation_error", message: "invalid to", statusCode: 422 },
           };
         }
         sends.push({ at: clock, to: p.to, subject: p.subject, tags: p.tags });
@@ -156,7 +174,11 @@ function reader(id: number, email: string, extra: Row = {}): Row {
     initial_gate_cohort_at: null,
     initial_gift_arm: null,
     initial_gift_sent_at: null,
-    survey_submission: { app_user: { email, first_name: "Alex", processing_restricted_at: null } },
+    survey_submission: {
+      user_id: 500 + id,
+      created_date_time: (extra.initial_gate_cohort_at as string | undefined) ?? iso(T0),
+      app_user: { email, first_name: "Alex", processing_restricted_at: null },
+    },
     ...extra,
   };
 }
@@ -166,6 +188,7 @@ function seed(): void {
   sends.length = 0;
   nextId = 1;
   refuseOnce.clear();
+  badAddress.clear();
   suppressed.clear();
   db.personal_report = [
     // I2: gated at T0, never pays.
@@ -203,6 +226,10 @@ function seed(): void {
     },
   ];
   db.report_session = [];
+  db.app_user = [];
+  db.scoring_result = [];
+  gate.on = true;
+  reads = 0;
   db.survey_submission = [];
   db.survey_partial_save = [
     // R2: draft saved at T0 with R1 sent; never finished.
@@ -322,9 +349,10 @@ describe("the email journeys over eight days", () => {
     seed();
   });
 
-  it("sends nothing at all while every switch is off", async () => {
+  it("sends nothing at all while every switch is off, and reads nothing either", async () => {
     await runDays(8);
     expect(sends).toEqual([]);
+    expect(reads).toBe(0);
     expect(db.email_journey_send).toHaveLength(1); // only the seeded R1
   });
 
@@ -390,13 +418,109 @@ describe("the email journeys over eight days", () => {
     );
   });
 
-  it("frees a claim Resend refused (a 4xx) and sends it on the next run, once", async () => {
+  it("frees a claim Resend rate-limited (429) and sends it on the next run, once", async () => {
     switches.add("i2");
     refuseOnce.add("gated@example.com|what_199_opens");
     await runDays(1);
     const got = sentTo("gated@example.com");
     expect(got).toHaveLength(1);
     expect((got[0]!.at - T0) / H).toBe(4); // refused at 3 h, sent at 4 h
+  });
+
+  it("never retries an address Resend refused outright (422): one try, kept as failed", async () => {
+    switches.add("i2");
+    badAddress.add("gated@example.com");
+    await runDays(1);
+    expect(sentTo("gated@example.com")).toEqual([]);
+    const claim = db.email_journey_send!.find((r) => r.email_key === "what_199_opens");
+    expect(claim?.status).toBe("failed");
+    const calls = (resend as { emails: { send: ReturnType<typeof vi.fn> } }).emails.send.mock.calls;
+    expect(calls.filter((c) => (c[0] as { to: string }).to === "gated@example.com")).toHaveLength(
+      1
+    );
+  });
+
+  it("I2 waits for the gate: its switch off, or unreadable, sells nobody the €1.99", async () => {
+    switches.add("i2");
+    gate.on = false;
+    await runDays(1);
+    gate.on = null;
+    await runDays(1);
+    expect(sends).toEqual([]);
+  });
+
+  it("I2 leaves out an old reader stamped into the cohort, and a person who bought before", async () => {
+    switches.add("i2");
+    const gated = db.personal_report!.find((r) => r.id === 1)!;
+    (gated.survey_submission as Row).created_date_time = iso(T0 - 8 * 24 * H);
+    db.personal_report!.push(reader(8, "retake@example.com", { initial_gate_cohort_at: iso(T0) }));
+    db.report_access_token!.push({
+      survey_submission_id: 1008,
+      token: "rpt_8",
+      revoked_at: null,
+      expires_at: null,
+    });
+    db.payment!.push({
+      id: 92,
+      personal_report_id: 77,
+      user_id: 508,
+      status: "succeeded",
+      metadata: { plan: "initial" },
+    });
+    await runDays(1);
+    expect(sentTo("gated@example.com")).toEqual([]);
+    expect(sentTo("retake@example.com")).toEqual([]);
+  });
+
+  it("R2 never tells someone who finished in another browser to finish their survey", async () => {
+    switches.add("r2");
+    db.survey_submission!.push({
+      id: 3001,
+      session_id: "99999999-9999-4999-8999-999999999999",
+      created_date_time: iso(T0 + 2 * H),
+      app_user: { email: "paused@example.com" },
+    });
+    await runDays(4);
+    expect(sentTo("paused@example.com")).toEqual([]);
+  });
+
+  it("emails nobody whose data is frozen (GDPR Art. 18), on the draft and pay-to-start paths", async () => {
+    for (const k of ["r2", "s3s5", "ptsReminders"]) switches.add(k);
+    for (const email of ["paused@example.com", "never@example.com", "paused-buyer@example.com"]) {
+      db.app_user!.push({ id: email.length, email, processing_restricted_at: iso(T0) });
+    }
+    await runDays(5);
+    expect(sentTo("paused@example.com")).toEqual([]);
+    expect(sentTo("never@example.com")).toEqual([]);
+    expect(sentTo("paused-buyer@example.com")).toEqual([]);
+    // Not frozen: their S3 still goes.
+    expect(sentTo("starter@example.com")).toHaveLength(1);
+  });
+
+  it("C2 is not for a full report bought from another archetype's tile", async () => {
+    const primary = {
+      survey_submission_id: 1006,
+      primary_archetype: "Loyal Ritualist",
+      v5_primary_archetype: "Loyal Ritualist",
+    };
+    switches.add("c2");
+    db.payment!.find((p) => p.id === 90)!.metadata = {
+      plan: "full_report",
+      archetype: "Spark Seeker",
+    };
+    db.scoring_result!.push(primary);
+    await runDays(2);
+    expect(sentTo("buyer@example.com")).toEqual([]);
+    // Bought for their own archetype: C2 goes.
+    seed();
+    switches.add("c2");
+    db.payment!.find((p) => p.id === 90)!.metadata = {
+      plan: "full_report",
+      archetype: "Loyal Ritualist",
+    };
+    db.scoring_result!.push(primary);
+    await runDays(2);
+    expect(sentTo("buyer@example.com")).toHaveLength(1);
   });
 
   it("never sends a claim already taken: a second instance of the same run sends nothing", async () => {
