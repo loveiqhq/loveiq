@@ -406,6 +406,17 @@ describe("GET /api/cron/survey-paused", () => {
     mockSwitchOn.mockImplementation(async () => false);
   });
 
+  it("sends today's R1 when the draft's purchase link can't be read (as before the link existed)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockIsPurchaseDraft.mockRejectedValueOnce(new Error("journeys_query_failed:500"));
+    mockResendSend.mockResolvedValue({ data: { id: "re_4" }, error: null });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).sent).toBe(1);
+  });
+
   it("leaves a pay-to-start buyer's draft to the buyer's own reminders", async () => {
     mockSupabaseSequence();
     mockIsEmailSuppressed.mockResolvedValue(false);

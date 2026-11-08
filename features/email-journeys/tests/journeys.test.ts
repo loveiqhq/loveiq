@@ -106,8 +106,11 @@ async function fakeFetch(
 }
 
 const switches = new Set<string>();
+type FetchImpl = (path: string, opts?: { method?: string; body?: string }) => Promise<Response>;
+const fakeFetchImpl: { current: FetchImpl } = { current: (path, opts) => fakeFetch(path, opts) };
 vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: (path: string, opts?: { method?: string; body?: string }) => fakeFetch(path, opts),
+  supabaseFetch: (path: string, opts?: { method?: string; body?: string }) =>
+    fakeFetchImpl.current(path, opts),
 }));
 vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
@@ -434,6 +437,32 @@ describe("the email journeys over eight days", () => {
     // The second reader gets theirs on the next run; the first is never sent twice.
     expect(sentTo("gated@example.com")).toHaveLength(1);
     expect(sentTo("gated2@example.com")).toHaveLength(1);
+  });
+
+  it("isolates failures: one reader's failed query, or one email's, never stops the rest", async () => {
+    for (const k of ["i2", "i4"]) switches.add(k);
+    clock = T0 + 25 * H;
+    // The payer's payment lookup fails; I2's query itself fails for the run after.
+    const realFetch = fakeFetchImpl.current;
+    fakeFetchImpl.current = async (path, opts) => {
+      if (path.includes("/rest/v1/payment?personal_report_id=eq.2&")) throw new Error("timeout");
+      return realFetch(path, opts);
+    };
+    db.personal_report!.find((r) => r.id === 1)!.initial_gate_cohort_at = iso(T0 + 21 * H);
+    db.personal_report!.find((r) => r.id === 2)!.initial_gate_cohort_at = iso(T0 + 20 * H);
+    const run = await runJourneys({ resend, nowMs: clock, outOfTime: () => false });
+    expect(run.failed).toBe(1);
+    expect(sentTo("gated@example.com")).toHaveLength(1);
+    expect(sentTo("gifted@example.com")).toHaveLength(1);
+    fakeFetchImpl.current = async (path, opts) => {
+      if (path.startsWith("/rest/v1/personal_report?initial_gate_cohort_at"))
+        throw new Error("boom");
+      return realFetch(path, opts);
+    };
+    const next = await runJourneys({ resend, nowMs: clock + H, outOfTime: () => false });
+    expect(next.stages.what_199_opens).toMatchObject({ failed: 1 });
+    expect(next.stages.gift_unopened).not.toBe("off");
+    fakeFetchImpl.current = realFetch;
   });
 
   it("stops at the time budget without sending past it", async () => {

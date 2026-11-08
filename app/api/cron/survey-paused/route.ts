@@ -204,7 +204,11 @@ export async function GET(request: Request) {
 
       // A pay-to-start buyer's draft is theirs: their reminders go to the address they paid
       // with, with their continue link (the email journeys' job), never to this one.
-      if ((await hasUnusedPrepaidPurchase(email)) || (await isPurchaseDraft(row.session_id))) {
+      // An unreadable link reads as no link: today's R1 goes, as it did before the link existed.
+      if (
+        (await hasUnusedPrepaidPurchase(email)) ||
+        (await isPurchaseDraft(row.session_id).catch(() => false))
+      ) {
         summary.skippedPrepaid++;
         continue;
       }

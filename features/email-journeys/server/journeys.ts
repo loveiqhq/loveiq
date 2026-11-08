@@ -44,6 +44,7 @@ import {
 } from "../emails/survey-reminders";
 import type { KitEmail } from "../emails/kit";
 import { EMAIL_STAGES, isEmailSwitchOn, type EmailSwitch } from "../logic/catalog";
+import logger from "@shared/observability/logger";
 import { claimAndSend, wasSent, type ClaimAndSendOutcome } from "./send";
 
 const HOUR = 3_600_000;
@@ -101,6 +102,28 @@ function unsubscribe(email: string, campaign: string): string | undefined {
 /** Only an address the suppression list clears (an unreadable list is no answer: skip). */
 async function mayEmail(email: string): Promise<boolean> {
   return (await suppressionState(email)) === "clear";
+}
+
+/**
+ * Each candidate on its own: a query or send that throws for one reader is counted as failed
+ * and logged, and the run goes on to the next (a claim taken before the throw stays taken, so
+ * that reader is never emailed twice). The budget is checked before each one.
+ */
+async function eachCandidate<T>(
+  ctx: JourneyContext,
+  counts: StageCounts,
+  rows: T[],
+  handle: (row: T) => Promise<void>
+): Promise<void> {
+  for (const row of rows) {
+    if (ctx.outOfTime()) return;
+    try {
+      await handle(row);
+    } catch (err) {
+      counts.failed++;
+      logger.warn({ err }, "email-journeys: a candidate failed");
+    }
+  }
 }
 
 function emptyCounts(): StageCounts {
@@ -202,12 +225,11 @@ export async function runWhatPriceOpens(ctx: JourneyContext): Promise<StageCount
       `&select=id,survey_submission_id,initial_gift_arm,${READER_SELECT}&order=initial_gate_cohort_at.asc&limit=${CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
-  for (const row of rows) {
-    if (ctx.outOfTime()) break;
+  await eachCandidate(ctx, counts, rows, async (row) => {
     const reader = readerOf(row);
     if (!reader || (await holdsAnything(row.id))) {
       counts.skipped++;
-      continue;
+      return;
     }
     await sendToReader(ctx, counts, {
       stage: EMAIL_STAGES.i2,
@@ -216,7 +238,7 @@ export async function runWhatPriceOpens(ctx: JourneyContext): Promise<StageCount
       link: EMAIL_LINKS.whatPriceOpens,
       build: whatPriceOpensEmail,
     });
-  }
+  });
   return counts;
 }
 
@@ -246,8 +268,7 @@ export async function runGiftUnopened(ctx: JourneyContext): Promise<StageCounts>
       `&select=id,survey_submission_id,initial_gift_sent_at,${READER_SELECT}&order=initial_gift_sent_at.asc&limit=${CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
-  for (const row of rows) {
-    if (ctx.outOfTime()) break;
+  await eachCandidate(ctx, counts, rows, async (row) => {
     const reader = readerOf(row);
     if (
       !reader ||
@@ -255,7 +276,7 @@ export async function runGiftUnopened(ctx: JourneyContext): Promise<StageCounts>
       (await paidBesidesGift(row.id))
     ) {
       counts.skipped++;
-      continue;
+      return;
     }
     await sendToReader(ctx, counts, {
       stage: EMAIL_STAGES.i4,
@@ -264,7 +285,7 @@ export async function runGiftUnopened(ctx: JourneyContext): Promise<StageCounts>
       link: EMAIL_LINKS.giftUnopened,
       build: giftUnopenedEmail,
     });
-  }
+  });
   return counts;
 }
 
@@ -307,8 +328,7 @@ export async function runSurveyStillSaved(ctx: JourneyContext): Promise<StageCou
   );
   counts.candidates = rows.length;
   const resumeUrl = tagEmailLink(`${getEmailSiteUrl()}/survey`, EMAIL_LINKS.surveyPaused2);
-  for (const row of rows) {
-    if (ctx.outOfTime()) break;
+  await eachCandidate(ctx, counts, rows, async (row) => {
     const target = `session:${row.session_id}`;
     const { email, firstName } = getSurveyContactInfo((row.answers ?? {}) as SurveyAnswers);
     if (
@@ -320,7 +340,7 @@ export async function runSurveyStillSaved(ctx: JourneyContext): Promise<StageCou
       !(await mayEmail(email))
     ) {
       counts.skipped++;
-      continue;
+      return;
     }
     const unsubscribeUrl = unsubscribe(email, EMAIL_STAGES.r2);
     const tpl = surveyStillSavedEmail({
@@ -338,7 +358,7 @@ export async function runSurveyStillSaved(ctx: JourneyContext): Promise<StageCou
         { to: email, email: tpl, stage: EMAIL_STAGES.r2, unsubscribeUrl, nurture: true }
       )
     );
-  }
+  });
   return counts;
 }
 
@@ -363,19 +383,18 @@ export async function runBackIntoReport(ctx: JourneyContext): Promise<StageCount
       `&order=payment_date_time.asc&limit=${CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
-  for (const row of rows) {
-    if (ctx.outOfTime()) break;
+  await eachCandidate(ctx, counts, rows, async (row) => {
     const email = row.app_user?.email?.trim().toLowerCase();
     if (!email || row.app_user?.processing_restricted_at || !row.personal_report_id) {
       counts.skipped++;
-      continue;
+      return;
     }
     const [report] = await getJson<Array<{ survey_submission_id: number }>>(
       `/rest/v1/personal_report?id=eq.${row.personal_report_id}&select=survey_submission_id&limit=1`
     );
     if (!report) {
       counts.skipped++;
-      continue;
+      return;
     }
     await sendToReader(ctx, counts, {
       stage: EMAIL_STAGES.c2,
@@ -384,7 +403,7 @@ export async function runBackIntoReport(ctx: JourneyContext): Promise<StageCount
       link: EMAIL_LINKS.backIntoReport,
       build: backIntoReportEmail,
     });
-  }
+  });
   return counts;
 }
 
@@ -465,17 +484,17 @@ export async function runSurveyNotStarted(ctx: JourneyContext): Promise<StageCou
     },
   ] as const;
   for (const step of steps) {
+    if (ctx.outOfTime()) break;
     const rows = await getJson<PurchaseRow[]>(
       `/rest/v1/prepaid_report_access?${PAID_UNUSED}&survey_started_at=is.null` +
         `&paid_at=lte.${iso(ctx.nowMs - step.from * HOUR)}&paid_at=gt.${iso(ctx.nowMs - step.to * HOUR)}` +
         `&select=${PURCHASE_SELECT}&order=paid_at.asc&limit=${CANDIDATE_LIMIT}`
     );
     counts.candidates += rows.length;
-    for (const row of rows) {
-      if (ctx.outOfTime()) return counts;
+    await eachCandidate(ctx, counts, rows, async (row) => {
       if (step.after && !(await wasSent(step.after, `prepaid:${row.id}`))) {
         counts.skipped++;
-        continue;
+        return;
       }
       const siteUrl = getEmailSiteUrl();
       const days = (ctx.nowMs - Date.parse(row.paid_at)) / (24 * HOUR);
@@ -498,7 +517,7 @@ export async function runSurveyNotStarted(ctx: JourneyContext): Promise<StageCou
                   daysSincePayment: days,
                 })
       );
-    }
+    });
   }
   return counts;
 }
@@ -511,14 +530,13 @@ export async function runPaidSurveyReminders(ctx: JourneyContext): Promise<Stage
       `&select=${PURCHASE_SELECT}&order=paid_at.asc&limit=${CANDIDATE_LIMIT}`
   );
   counts.candidates = rows.length;
-  for (const row of rows) {
-    if (ctx.outOfTime()) break;
+  await eachCandidate(ctx, counts, rows, async (row) => {
     const [draft] = await getJson<DraftRow[]>(
       `/rest/v1/survey_partial_save?session_id=eq.${encodeURIComponent(row.survey_session_id!)}&select=session_id,answers,saved_at&limit=1`
     );
     if (!draft || (await isSubmitted(draft.session_id))) {
       counts.skipped++;
-      continue;
+      return;
     }
     const age = ctx.nowMs - Date.parse(draft.saved_at);
     const step =
@@ -533,7 +551,7 @@ export async function runPaidSurveyReminders(ctx: JourneyContext): Promise<Stage
           : null;
     if (!step || (step.after && !(await wasSent(step.after, `prepaid:${row.id}`)))) {
       counts.skipped++;
-      continue;
+      return;
     }
     const { firstName } = getSurveyContactInfo((draft.answers ?? {}) as SurveyAnswers);
     const answered = countAnsweredQuestions(draft.answers);
@@ -548,7 +566,7 @@ export async function runPaidSurveyReminders(ctx: JourneyContext): Promise<Stage
         paidOffer: offer,
       })
     );
-  }
+  });
   return counts;
 }
 
@@ -579,7 +597,11 @@ export async function runJourneys(ctx: JourneyContext): Promise<JourneyRun> {
       run.stages[stage.name] = "off";
       continue;
     }
-    const counts = await stage.run(ctx);
+    // One email's failure (its candidate query, say) never stops the others.
+    const counts = await stage.run(ctx).catch((err: unknown) => {
+      logger.error({ err, stage: stage.name }, `email-journeys: ${stage.name} failed`);
+      return { ...emptyCounts(), failed: 1 };
+    });
     run.stages[stage.name] = counts;
     run.sent += counts.sent;
     run.failed += counts.failed;
