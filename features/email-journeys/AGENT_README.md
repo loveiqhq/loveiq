@@ -34,21 +34,27 @@ approved: off, today's email goes out (or none, for a new one).
 
 ## Rules
 
-- **Claim before the send.** A row per email and target (`sub:`, `session:`, `prepaid:`), unique. A
-  Resend 4xx frees it for the next run; a timeout or 5xx marks it `failed` and it is never retried.
+- **Claim before the send.** A row per email and target (`sub:`, `session:`, `prepaid:`), unique.
+  Only a Resend rate limit (429) frees it for the next run; any other refusal, a timeout or a 5xx
+  marks it `failed`, never retried (a lost email beats a double one, or a bad address every hour).
 - **Every email stops when the reader converts**: a payment (any, a staff test one too), a started or
   finished survey, an opened report. Windows close: nobody gets an email days late.
 - **No archetype name in any email**: the €1.99 step sells it; the card is one blurred image.
 - **The I3 gift test (80/20) is untouched**: the holdout never gets I4, and I2 goes to both arms.
 - Each email's links carry `utm_campaign` = its stage (or its existing tag for a redesign), so
   #incoming-surveys names it under "Came back by email"; `stage` + `sub` tags keep its delivery,
-  opens and clicks in `email_message_event`.
+  opens and clicks in `email_message_event`. Pay to start's five (S3-S5, its R1/R2) have no
+  submission yet, so no `sub`: their sends are in `email_journey_send` (`prepaid:` target,
+  `resend_id`), their effect in `prepaid_report_access` (`survey_started_at`,
+  `consumed_submission_id`); their opens and clicks only in Resend.
 
 ## Before a switch goes on
 
 1. The trial send was approved (Mark, Eman).
 2. I2 and I4 sell to readers who never bought: the short legal check on marketing consent (the
    6 Nov review) comes first.
-3. Its KPI shows on AP-Analytics (the Emails page from Marcus's design).
+3. The 14-day "every cent back" line (I1, I2, U1, I3) agrees with section 5 of the terms (Fatih
+   flagged the clash on 5 Nov).
+4. Its KPI shows on AP-Analytics (the Emails page from Marcus's design).
 
 Tests: `tests/emails.test.ts` (every email), `tests/journeys.test.ts` (eight days, hour by hour).
