@@ -841,9 +841,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   useEffect(() => {
     if (autoOpenedShareRef.current || !shouldAutoOpenShare) return;
     autoOpenedShareRef.current = true;
+    // This child's effect runs before the parent's that publishes the submission (see the
+    // locked-card price above): publish it here, or the persisted share event is dropped.
+    if (submissionId) setReportSubmissionContext(submissionId);
     trackReportShareOpened({ source: "email" });
     onOpenShareModal();
-  }, [shouldAutoOpenShare, onOpenShareModal]);
+  }, [shouldAutoOpenShare, onOpenShareModal, submissionId]);
   // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only,
   // and not the veiled report the tour runs over before the EUR 1.99 gate (nothing read there).
   useChapterStats({
