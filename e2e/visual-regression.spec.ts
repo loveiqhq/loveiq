@@ -15,8 +15,8 @@ import { test, expect } from "@playwright/test";
 //   landing-page-white-video  last reviewed: 2026-10-13 — Linux baseline, `white_video` arm (round 3)
 //   about-page              last reviewed: 2026-08-23 — Linux baseline
 //   survey-intro            last reviewed: 2026-08-23 — Linux baseline
-//   glossary-page           last reviewed: 2026-08-23 — Linux baseline
-//   glossary-term-page      last reviewed: 2026-08-23 — Linux baseline
+//   glossary-page           last reviewed: 2026-11-08 — Linux baseline, glossary phase 0 (#706)
+//   glossary-term-page      last reviewed: 2026-11-08 — Linux baseline, glossary phase 0 (#706)
 //   admin-login             last reviewed: 2026-08-23 — Linux baseline
 //   nav-mobile-menu-open    last reviewed: 2026-10-13 — Linux baseline (Mobile Chrome), phone hero of #573
 //
