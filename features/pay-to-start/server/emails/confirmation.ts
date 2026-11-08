@@ -11,6 +11,8 @@ import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsub
 import logger from "@shared/observability/logger";
 import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 import type { PayToStartOfferId } from "@features/pay-to-start/logic/offer";
+import { paymentReceivedEmail } from "@features/email-journeys/emails/pay-to-start";
+import { EMAIL_STAGES, isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
 
 /**
  * The email a buyer gets the moment their payment is confirmed, before any survey.
@@ -243,15 +245,21 @@ export async function sendPayToStartConfirmationEmail({
   const unsubscribeUrl = unsubSecret
     ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.reportUnlocked)
     : undefined;
-  const tpl = payToStartConfirmationEmail({
-    amountText,
-    continueUrl: buildContinueUrl(linkOrigin, token),
-    offer,
-    productName,
-    siteUrl,
-    unsubscribeUrl,
-    variant,
-  });
+  const continueUrl = buildContinueUrl(linkOrigin, token);
+  // S2 redesigned (features/email-journeys), behind its switch, for a survey not yet taken;
+  // a survey finished before the payment settled keeps today's "your report is unlocked".
+  const redesign = variant === "survey" && (await isEmailSwitchOn("s2"));
+  const tpl = redesign
+    ? paymentReceivedEmail({ offer, continueUrl, siteUrl, unsubscribeUrl })
+    : payToStartConfirmationEmail({
+        amountText,
+        continueUrl,
+        offer,
+        productName,
+        siteUrl,
+        unsubscribeUrl,
+        variant,
+      });
 
   try {
     const { error } = await Promise.race([
@@ -263,6 +271,7 @@ export async function sendPayToStartConfirmationEmail({
         html: tpl.html,
         text: tpl.text,
         tags: [
+          ...(redesign ? [{ name: "stage", value: EMAIL_STAGES.s2 }] : []),
           { name: "journey", value: PAY_TO_START_JOURNEY },
           { name: "offer", value: offer },
           {

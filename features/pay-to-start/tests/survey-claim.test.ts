@@ -31,6 +31,12 @@ vi.mock("next/headers", () => ({
 vi.mock("@shared/flags/system-flags", () => ({
   isFeatureEnabled: vi.fn().mockResolvedValue(true),
 }));
+// The reworked emails' switches (features/email-journeys): off unless a test turns one on.
+const { mockSwitchOn } = vi.hoisted(() => ({ mockSwitchOn: vi.fn(async (_key: string) => false) }));
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
 vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 10 }),
 }));
@@ -159,10 +165,62 @@ describe("a survey submitted without the cookie", () => {
     const payload = mockEmailsSend.mock.calls[0]?.[0] as { tags: Array<{ name: string }> };
     expect(payload.tags.map((t) => t.name)).toEqual(["exp", "arm"]);
   });
+
+  it("sends a reader the gate will stop the redesigned I1 when its switch is on: one email, no A/B", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "i1");
+    try {
+      routeSupabase();
+      await submit();
+      await flushAfterResponse();
+      const payload = mockEmailsSend.mock.calls[0]?.[0] as {
+        subject: string;
+        html: string;
+        tags: Array<{ name: string; value: string }>;
+      };
+      expect(payload.subject).toBe("Alice, your Core Archetype is ready to open");
+      expect(payload.html).toContain("Or paste this link into your browser");
+      expect(payload.tags).toEqual([
+        { name: "stage", value: "report_ready" },
+        { name: "sub", value: "123" },
+      ]);
+    } finally {
+      mockSwitchOn.mockImplementation(async () => false);
+    }
+  });
 });
 
 describe("a survey submitted by a buyer who paid before it", () => {
   const cookie = `__Host-liq_pp=${TOKEN}`;
+
+  it.each([
+    ["full", "c1", "Alice, your full report is open. Here’s where to start", "full_unlocked"],
+    ["pre", "u1", "Alice, your Core Archetype was identified", "core_unlocked"],
+  ] as const)(
+    "sends a %s buyer the redesigned email when %s's switch is on, with its stage, reader and journey",
+    async (offer, key, subject, stage) => {
+      mockSwitchOn.mockImplementation(async (k: string) => k === key);
+      try {
+        routeSupabase();
+        vi.mocked(claimPayToStartForSubmission).mockResolvedValue({ ...unlocked, offer });
+        await submit({}, cookie);
+        await flushAfterResponse();
+        const payload = mockEmailsSend.mock.calls[0]?.[0] as {
+          subject: string;
+          html: string;
+          tags: Array<{ name: string; value: string }>;
+        };
+        expect(payload.subject).toBe(subject);
+        expect(payload.tags).toEqual([
+          { name: "stage", value: stage },
+          { name: "sub", value: "123" },
+          { name: "journey", value: "pay_to_start" },
+        ]);
+        if (offer === "full") expect(payload.html).toContain("share=1");
+      } finally {
+        mockSwitchOn.mockImplementation(async () => false);
+      }
+    }
+  );
 
   it("claims the entitlement for this submission and its new report link", async () => {
     routeSupabase();

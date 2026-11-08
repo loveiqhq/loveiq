@@ -1463,7 +1463,10 @@ export const trackStickyUnlockClicked = (params: {
   trackUnlockClick("sticky_bar", payload);
 };
 
-export const trackReportShareOpened = (params: { source: "sidebar" | "drawer" | "modal" }) => {
+/** `email`: the share window opened by the full-report email's "Share my report" (`?share=1`). */
+export const trackReportShareOpened = (params: {
+  source: "sidebar" | "drawer" | "modal" | "email";
+}) => {
   const payload = { source: params.source };
   track("report_share_opened", payload);
   persistAnalyticsEvent("report_share_opened", payload);

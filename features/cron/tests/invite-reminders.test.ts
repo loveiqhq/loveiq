@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockFetchWithTimeout = vi.fn();
 const mockResendSend = vi.fn();
+// C3 and C4's switch (features/email-journeys): off unless a test turns it on.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: Parameters<typeof mockFetchWithTimeout>) =>
@@ -28,6 +30,11 @@ vi.mock("resend", () => ({
   Resend: class {
     emails = { send: mockResendSend };
   },
+}));
+
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
 }));
 
 // Bypass the prod-cron-host gate in unit tests.
@@ -333,5 +340,80 @@ describe("GET /api/cron/invite-reminders", () => {
     const body = await res.json();
     expect(body.skippedAlreadyInvited).toBe(1);
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  // ─── C3 and C4 redesigned (features/email-journeys) ─────────────────────────────
+
+  describe("with C3 and C4's switch on", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const daysAgo = (d: number) => new Date(Date.now() - d * DAY).toISOString();
+    const withToken = (d: number) =>
+      paidRow({
+        payment_date_time: daysAgo(d),
+        personal_report_id: 77,
+        metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" },
+      });
+
+    beforeEach(() => {
+      mockSwitchOn.mockImplementation(async (key: string) => key === "c3c4");
+      mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    });
+    afterEach(() => {
+      mockSwitchOn.mockImplementation(async () => false);
+    });
+
+    it.each([
+      [3.2, 1],
+      [4.9, 1],
+      [5.1, 2],
+      [20.5, 2],
+    ])(
+      "day %s gets reminder %s, the new design, tagged with its stage and reader",
+      async (age, expected) => {
+        mockSupabaseSequence({ candidates: [withToken(age)] });
+        const body = await (await GET(makeRequest("test-cron-secret"))).json();
+        expect(expected === 1 ? body.reminder1Sent : body.reminder2Sent).toBe(1);
+        const payload = mockResendSend.mock.calls[0]![0] as {
+          subject: string;
+          html: string;
+          tags: unknown;
+        };
+        expect(payload.subject).toBe(
+          expected === 1 ? "Could this help a friend?" : "Why keep this to yourself?"
+        );
+        expect(payload.html).toContain(
+          expected === 1 ? "Yours stays private" : "One invite, their own report"
+        );
+        expect(payload.html).toContain(`utm_campaign=invite_reminder_${expected}`);
+        expect(payload.tags).toEqual([
+          { name: "stage", value: `invite_reminder_${expected}` },
+          { name: "sub", value: "555" },
+        ]);
+      }
+    );
+
+    it("sends nothing before day 3 or from day 21", async () => {
+      mockSupabaseSequence({ candidates: [withToken(2.5), withToken(21.5)] });
+      const body = await (await GET(makeRequest("test-cron-secret"))).json();
+      expect(body.reminder1Sent + body.reminder2Sent).toBe(0);
+      expect(body.skippedOutOfWindow).toBe(2);
+    });
+  });
+
+  it("keeps today's days (3 to 7, then 7 to 21) and emails while the switch is off", async () => {
+    mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    mockSupabaseSequence({
+      candidates: [
+        paidRow({
+          payment_date_time: new Date(Date.now() - 5.5 * 24 * 60 * 60 * 1000).toISOString(),
+          metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" },
+        }),
+      ],
+    });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.reminder1Sent).toBe(1);
+    const payload = mockResendSend.mock.calls[0]![0] as { html: string; tags?: unknown };
+    expect(payload.tags).toBeUndefined();
+    expect(payload.html).not.toContain("Yours stays private");
   });
 });

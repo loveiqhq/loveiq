@@ -33,6 +33,13 @@ import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
+import { reportReadyEmail } from "@features/email-journeys/emails/free-funnel";
+import {
+  coreUnlockedEmail,
+  fullUnlockedEmail,
+  withShareOpen,
+} from "@features/email-journeys/emails/purchase";
+import { EMAIL_STAGES, isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression";
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
@@ -867,37 +874,67 @@ export async function POST(request: Request) {
        * who came that way the survey email's A copy. None carries the A/B tags: these readers
        * are in neither test.
        */
-      const experiment = claim ? null : "survey-complete";
-      const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
       const unlockedInitial = claim?.outcome === "unlocked" && claim.offer === "pre";
+      const unlockedFull = claim?.outcome === "unlocked" && !unlockedInitial;
+      /**
+       * The reworked emails (features/email-journeys), each behind its switch: I1 for a reader
+       * the EUR 1.99 gate will stop (it names the price), U1 and C1 for a pay-to-start buyer
+       * whose report opened. With the switch on there is one email, not the A/B pair, and it
+       * carries the `stage` and `sub` tags, so its delivery, opens and clicks are kept per reader.
+       */
+      const redesign = unlockedInitial
+        ? (await isEmailSwitchOn("u1"))
+          ? EMAIL_STAGES.u1
+          : null
+        : unlockedFull
+          ? (await isEmailSwitchOn("c1"))
+            ? EMAIL_STAGES.c1
+            : null
+          : !claim && gated && (await isEmailSwitchOn("i1"))
+            ? EMAIL_STAGES.i1
+            : null;
+      const experiment = claim || redesign ? null : "survey-complete";
+      const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
+      const redesignParams = {
+        firstName: normalizedFirstName,
+        reportUrl,
+        siteUrl,
+        unsubscribeUrl,
+      };
       const tpl =
-        claim?.outcome === "unlocked"
-          ? unlockedInitial
-            ? initialUnlockEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              })
-            : reportFullEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              })
-          : variant === "b"
-            ? surveyCompleteBEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              })
-            : surveyCompleteEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              });
+        redesign === EMAIL_STAGES.u1
+          ? coreUnlockedEmail(redesignParams)
+          : redesign === EMAIL_STAGES.c1
+            ? fullUnlockedEmail({ ...redesignParams, shareUrl: withShareOpen(reportUrl) })
+            : redesign === EMAIL_STAGES.i1
+              ? reportReadyEmail(redesignParams)
+              : claim?.outcome === "unlocked"
+                ? unlockedInitial
+                  ? initialUnlockEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    })
+                  : reportFullEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    })
+                : variant === "b"
+                  ? surveyCompleteBEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    })
+                  : surveyCompleteEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    });
 
       try {
         const { error } = await Promise.race([
@@ -909,19 +946,25 @@ export async function POST(request: Request) {
             html: tpl.html,
             text: tpl.text,
             // Echoed back on every Resend webhook, which is how the A/B result is read.
-            tags: experiment
-              ? emailExperimentTags(experiment, variant)
-              : [
-                  { name: "journey", value: PAY_TO_START_JOURNEY },
-                  {
-                    name: "email",
-                    value: unlockedInitial
-                      ? "pts_initial_unlocked"
-                      : claim?.outcome === "unlocked"
-                        ? "pts_report_unlocked"
-                        : "pts_report_ready",
-                  },
-                ],
+            tags: redesign
+              ? [
+                  { name: "stage", value: redesign },
+                  { name: "sub", value: String(submissionId) },
+                  ...(claim ? [{ name: "journey", value: PAY_TO_START_JOURNEY }] : []),
+                ]
+              : experiment
+                ? emailExperimentTags(experiment, variant)
+                : [
+                    { name: "journey", value: PAY_TO_START_JOURNEY },
+                    {
+                      name: "email",
+                      value: unlockedInitial
+                        ? "pts_initial_unlocked"
+                        : claim?.outcome === "unlocked"
+                          ? "pts_report_unlocked"
+                          : "pts_report_ready",
+                    },
+                  ],
             headers: {
               "X-LoveIQ-Variant": variant,
               ...(unsubscribeUrl && {

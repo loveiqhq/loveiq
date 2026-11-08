@@ -43,6 +43,20 @@ const ALLOWED_KEYS = new Set([
   "unlock_feedback",
   "report_initial_unlock_gate",
   "initial_unlock_gift_email",
+  // The email journeys' switches: each sends email to customers when on.
+  "email_i1_v2",
+  "email_r1_v2",
+  "email_u1_v2",
+  "email_c1_v2",
+  "email_s2_v2",
+  "email_i3_v2",
+  "email_c3_c4_v2",
+  "email_i2",
+  "email_i4",
+  "email_r2",
+  "email_c2",
+  "email_s3_s5",
+  "email_pts_reminders",
 ]);
 
 export async function GET() {

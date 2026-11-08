@@ -832,6 +832,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowInvite(true);
   }, [shouldAutoOpenInvite]);
+  // Open the share window when the page is loaded with ?share=1: the full-report email's
+  // "Share my report" (C1, features/email-journeys). Its owner only, once, and not over the
+  // veiled report the tour runs before the EUR 1.99 gate (nothing to share there yet).
+  const shouldAutoOpenShare =
+    viewMode === "owner" && !veilIdentity && reportSearchParams.get("share") === "1";
+  const autoOpenedShareRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedShareRef.current || !shouldAutoOpenShare) return;
+    autoOpenedShareRef.current = true;
+    trackReportShareOpened({ source: "email" });
+    onOpenShareModal();
+  }, [shouldAutoOpenShare, onOpenShareModal]);
   // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only,
   // and not the veiled report the tour runs over before the EUR 1.99 gate (nothing read there).
   useChapterStats({
