@@ -43,7 +43,6 @@ type Data = EmailsPayload;
 
 const NOTE = "m-0 text-xs leading-relaxed text-ap-muted";
 const HEAD = "text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted";
-const PURPLE = "#795fc8";
 const ORANGE = "#c2650a";
 
 const pct1 = (v: number | null) => fmt("pct", v, 1);
