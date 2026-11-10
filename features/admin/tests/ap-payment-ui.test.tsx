@@ -312,6 +312,8 @@ const payload: PaymentPayload = {
         name: "After the €1.99 page",
         reached: 40,
         views: 52,
+        // Of the 160 who saw the €1.99 page: 32 came by "Not ready", 12 by the browser's Back.
+        came: { notReady: 32, browserBack: 12, sawGate: 160 },
         answered: 18,
         wrote: 3,
         reasons: [
@@ -339,6 +341,7 @@ const payload: PaymentPayload = {
         name: "After the full report's plans",
         reached: 9,
         views: 9,
+        came: null,
         answered: 0,
         wrote: 0,
         reasons: [],
@@ -383,6 +386,7 @@ describe("the Payment page as drawn", () => {
       "Checkout success",
       "Payment methods",
       "Paygate exits",
+      "How they reached it · After the €1.99 page",
       "Why not today · After the €1.99 page",
       "Their words",
       "Why not today · After the full report's plans",
@@ -488,7 +492,7 @@ describe("the Payment page as drawn", () => {
     const card = region("Paygate exits");
     const table = within(card).getByRole("table", { name: "Paygate exits" });
     expect(texts(rows(table))).toEqual([
-      "After the €1.99 page“Not ready” on the €1.99 page4052 views1845% · 3 wrote6card 4 · bar 3513%12Maybe later · back arrow 9 · browser Back 4",
+      "After the €1.99 page“Not ready” or Back on the €1.99 page4052 views1845% · 3 wrote6card 4 · bar 3513%12Maybe later · back arrow 9 · browser Back 4",
       "After the full report's plans“Not ready” on the plans, €1.99 holders900% · 0 wrote0card 0 · bar 000%5to the chapters · back arrow 2 · browser Back 1",
     ]);
     expect(within(card).getByText("I want to see some of it before I pay")).toBeTruthy();
@@ -496,6 +500,54 @@ describe("the Payment page as drawn", () => {
     expect(within(card).getByText("Nobody has answered on this page in this range.")).toBeTruthy();
     expect(within(card).getByText("I wanted a sample chapter first.")).toBeTruthy();
     expect(within(card).getByText(/2026-10-29 · Something else/)).toBeTruthy();
+  });
+
+  // The card "count every way out": what opened the €1.99 page's exit page, of those who saw it.
+  it("paygate exits: how readers reached the €1.99 page's exit page, as shares of who saw it", () => {
+    render(<ApPayment />);
+    const card = region("Paygate exits");
+    const heads = within(card).getAllByRole("heading", { level: 3 });
+    const head = heads.find((h) => h.textContent === "How they reached it · After the €1.99 page")!;
+    // Before the reasons, and only for the €1.99 page's: the full report's page has no way in.
+    expect(heads.indexOf(head)).toBe(0);
+    expect(heads.filter((h) => /^How they reached it/.test(h.textContent ?? ""))).toHaveLength(1);
+    expect(within(head).getByRole("button").getAttribute("aria-label")).toMatch(
+      /How they reached it/
+    );
+    expect(
+      within(card).getByText(
+        "Of the 160 readers who saw the €1.99 page. One who came both ways is on both lines."
+      )
+    ).toBeTruthy();
+    const line = (label: string) => within(card).getByText(label).parentElement!.textContent;
+    expect(line("Pressed “Not ready to unlock yet”")).toBe(
+      "Pressed “Not ready to unlock yet”3220%"
+    );
+    expect(line("Pressed the browser's Back")).toBe("Pressed the browser's Back128%");
+  });
+
+  it("paygate exits: the ways in without a share when who saw the €1.99 page is unknown or none", () => {
+    const withCame = (came: { notReady: number; browserBack: number; sawGate: number | null }) => ({
+      ...payload,
+      exits: {
+        ...payload.exits,
+        pages: payload.exits.pages.map((p) => (p.stage === "pre" ? { ...p, came } : p)),
+      },
+    });
+    view.payload = withCame({ notReady: 3, browserBack: 0, sawGate: null });
+    const { unmount } = render(<ApPayment />);
+    let card = region("Paygate exits");
+    expect(
+      within(card).getByText("Who saw the €1.99 page could not be read just now.")
+    ).toBeTruthy();
+    const line = (label: string) => within(card).getByText(label).parentElement!.textContent;
+    expect(line("Pressed “Not ready to unlock yet”")).toBe("Pressed “Not ready to unlock yet”3—");
+    unmount();
+    view.payload = withCame({ notReady: 0, browserBack: 0, sawGate: 0 });
+    render(<ApPayment />);
+    card = region("Paygate exits");
+    expect(within(card).getByText("Nobody saw the €1.99 page in this range.")).toBeTruthy();
+    expect(line("Pressed the browser's Back")).toBe("Pressed the browser's Back0—");
   });
 
   it("paygate exits: says why when it has nothing to show", () => {
@@ -736,6 +788,7 @@ describe("the Payment page as drawn", () => {
       "Checkout success",
       "Payment methods",
       "Paygate exits",
+      "Paygate exits · how they reached it",
       "Paygate exits · why not today",
       "Who pays · Country",
       "Pricing tests",
@@ -747,6 +800,12 @@ describe("the Payment page as drawn", () => {
       label: "After the €1.99 page",
       values: [40, 52, 18, 3, 6, 5, 12, 0, 9, 4],
     });
+    // The €1.99 page's only: what it is a share of, then each way in.
+    expect(section("Paygate exits · how they reached it").rows).toEqual([
+      { label: "Saw the €1.99 page", values: ["After the €1.99 page", 160, null] },
+      { label: "Pressed “Not ready to unlock yet”", values: ["After the €1.99 page", 32, 0.2] },
+      { label: "Pressed the browser's Back", values: ["After the €1.99 page", 12, 0.075] },
+    ]);
     expect(
       section("Paygate exits · why not today").rows.map((r) => [r.label, r.values[0], r.values[1]])
     ).toEqual([

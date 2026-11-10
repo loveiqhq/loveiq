@@ -108,14 +108,18 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
 - AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar,
   and since 28.10 on the gate's exit page: `place` `exit_card` / `exit_sticky`) and, under "Saw
-  the €1.99 page", who pressed "Not ready to unlock yet", from the page's own events
-  (`initial_gate_cta_click` with its `place`, `initial_gate_back`, stored since 27.10). Since
-  28.10 that press opens the exit page, where readers can still unlock, so it no longer means
-  they left.
+  the €1.99 page", who pressed "Not ready to unlock yet" and who pressed the browser's own Back
+  there, from the page's own events (`initial_gate_cta_click` with its `place`,
+  `initial_gate_back`, stored since 27.10, and `initial_gate_browser_back`, stored once the
+  page's Back opens the exit page). Since 28.10 "Not ready" opens the exit page, where readers
+  can still unlock, so it no longer means they left.
 - AP-Analytics, Payment, "Paygate exits" (28.10): for both exit pages, who reached each, why
   not today (each reader's latest reason), who wrote a sentence, pressed Unlock there, paid
   within 24 hours, and how they left, from the pages' own `paygate_exit_*` events. Their
-  sentences are shown masked.
+  sentences are shown masked. For the gate's own exit page, "How they reached it": who came by
+  "Not ready to unlock yet" and who by the browser's Back (`initial_gate_back` /
+  `initial_gate_browser_back` with `to: "exit_page"`), each a share of the readers who saw the
+  €1.99 page (`initial_gate_seen_at`).
 - A gate view is not a report open: it writes no `report_session` row and no Slack journey
   step. The gate's reach is `initial_gate_seen_at` (first view) and `initial_gate_viewed`
   (each view, behind the consent banner).
@@ -146,9 +150,14 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   It is stored once a page as `initial_gate_browser_back` (`to: "exit_page"`), beside
   `initial_gate_back`, and only for a Back that opened the exit page. An exit-page view
   (`paygate_exit_viewed`, `stage: pre`) can now follow either one.
-  - Limit: Chrome's back button skips entries a page added before any tap, so on a desktop a gate
-    met without one (a reload, a later visit, a scroll before the tour started) still lets the
-    toolbar's Back leave. Phones are covered.
+  - Limit (desktop Chrome and Edge): the toolbar's Back skips history entries a page added
+    without a tap, and every entry the catch adds after a Back is added without one. So two Backs
+    in a row with no tap between them still leave: the first opens the exit page, the second goes
+    to what lies under the report (for a reader straight from the survey, /survey's "already
+    finished"). A gate met without any tap (a reload, a later visit, a scroll before the tour
+    started) lets the first Back leave. Any tap re-arms it. Measured 4 Nov with the real toolbar
+    Back (`chrome.tabs.goBack`); the e2e's `page.goBack()` does not apply Chrome's skip. Phones are
+    covered: Android by the CloseWatcher, the iPhone's swipe by the entry.
   - The survey now opens the report in its own place (`location.replace`), as does "Open my
     report" on "already finished", so what's left of the loop is finite.
   - Previews: `/report?preview=1&v4=1&gate=tour` and `&gate=1`, then Back.

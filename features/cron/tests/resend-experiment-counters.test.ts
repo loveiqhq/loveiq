@@ -155,6 +155,28 @@ describe("resend webhook: per-arm experiment counters", () => {
     expect(counterCall()).toBeNull();
   });
 
+  it("counts no test send: staging mails Resend's test addresses through this same webhook", async () => {
+    const tagged = (to: string) => ({
+      type: "email.sent",
+      data: {
+        to: [to],
+        tags: [
+          { name: "exp", value: "survey-complete" },
+          { name: "arm", value: "a" },
+        ],
+      },
+    });
+    mockVerify.mockReturnValue(tagged(" Delivered@Resend.dev"));
+    await POST(request());
+    expect(counterCall(), "a resend.dev recipient is a test send").toBeNull();
+    for (const reader of ["reader@resend.dev.example.com", "reader@notresend.dev"]) {
+      mockFetch.mockClear();
+      mockVerify.mockReturnValue(tagged(reader));
+      await POST(request());
+      expect(counterCall(), `only the resend.dev domain itself, not ${reader}`).not.toBeNull();
+    }
+  });
+
   it("accepts tags as a plain object as well as an array", async () => {
     // Resend has shipped both shapes depending on the API version that created
     // the send; handling one silently records nothing the day they change it.
@@ -444,12 +466,47 @@ describe("resend webhook: each nurture email's own events", () => {
    * webhook keeps the email's delivery, opens and clicks by them (email_message_event): the
    * campaign table on the admin's Report page counts those.
    */
+  /**
+   * Production's backend: the reader lookup answers the submission's owner (as stored: case and
+   * spaces kept), or fails; the insert and the replay guard answer as asked.
+   */
+  const route = (
+    opts: {
+      owner?: string | null;
+      lookup?: number | "throw";
+      insert?: number | "throw";
+      claim?: number;
+    } = {}
+  ) =>
+    mockFetch.mockImplementation((url: string) => {
+      const u = String(url);
+      const fail = (status: number) =>
+        Promise.resolve({ ok: false, status, headers: new Headers() });
+      if (u.includes("/rest/v1/survey_submission?")) {
+        if (opts.lookup === "throw") return Promise.reject(new Error("down"));
+        if (opts.lookup) return fail(opts.lookup);
+        const owner = opts.owner === undefined ? "Reader@Example.com " : opts.owner;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => (owner === null ? [] : [{ app_user: { email: owner } }]),
+        });
+      }
+      if (u.endsWith("/rest/v1/email_message_event")) {
+        if (opts.insert === "throw") return Promise.reject(new Error("down"));
+        if (opts.insert) return fail(opts.insert);
+      }
+      if (u.includes("resend_webhook_event") && opts.claim) return fail(opts.claim);
+      return Promise.resolve({ ok: true, status: 201, headers: new Headers() });
+    });
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
-    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    route();
     mockAddToSuppression.mockResolvedValue(true);
   });
 
@@ -478,8 +535,8 @@ describe("resend webhook: each nurture email's own events", () => {
     return call ? (call[1] as { body: string; headers: Record<string, string> }) : null;
   };
 
-  it.each(["delivered", "opened", "clicked", "bounced"])(
-    "keeps a nurture email's %s by the tags its send carried",
+  it.each(["sent", "delivered", "opened", "clicked", "bounced", "complained"])(
+    "keeps an email's %s by the tags its send carried",
     async (kind) => {
       mockVerify.mockReturnValue(nurture(`email.${kind}`));
       expect((await POST(request())).status).toBe(200);
@@ -551,11 +608,87 @@ describe("resend webhook: each nurture email's own events", () => {
   it("keeps nothing without Resend's id for the email, or for an event it does not keep", async () => {
     mockVerify.mockReturnValue(nurture("email.opened", { email_id: undefined }));
     await POST(request());
-    mockVerify.mockReturnValue(nurture("email.complained"));
+    mockVerify.mockReturnValue(nurture("email.delivery_delayed"));
     await POST(request());
-    mockVerify.mockReturnValue(nurture("email.sent"));
+    mockVerify.mockReturnValue(nurture("email.failed"));
     await POST(request());
     expect(insert()).toBeNull();
+  });
+
+  it("keeps the A/B version the send carried as its variant", async () => {
+    mockVerify.mockReturnValue(
+      nurture(
+        "email.delivered",
+        {},
+        { stage: "report_ready", sub: "42", exp: "survey-complete", arm: "b" }
+      )
+    );
+    await POST(request());
+    expect(JSON.parse(insert()!.body)).toMatchObject({ stage: "report_ready", variant: "b" });
+  });
+
+  it.each([
+    ["a version outside Resend's characters", "b or 1"],
+    ["a version too long to be one", "a".repeat(17)],
+  ])("keeps the email but no variant for %s", async (_label, arm) => {
+    mockVerify.mockReturnValue(
+      nurture("email.delivered", {}, { stage: "report_ready", sub: "42", arm })
+    );
+    await POST(request());
+    const body = JSON.parse(insert()!.body) as Record<string, unknown>;
+    expect(body.stage).toBe("report_ready");
+    expect(body).not.toHaveProperty("variant");
+  });
+
+  /**
+   * Production's webhook gets staging's emails too (one Resend account), and staging's
+   * submission ids are real readers' ids on production: an event is kept only when the email
+   * went to that submission's own reader.
+   */
+  it.each([
+    ["someone else", "someone@example.com"],
+    ["no reader at all", null],
+  ])("keeps nothing when the email went to %s, not the submission's reader", async (_l, owner) => {
+    route({ owner });
+    mockVerify.mockReturnValue(nurture("email.opened"));
+    expect((await POST(request())).status).toBe(200);
+    expect(insert()).toBeNull();
+  });
+
+  it.each([500, "throw"] as const)(
+    "keeps nothing when the reader can't be looked up (%s), and says so",
+    async (lookup) => {
+      route({ lookup });
+      mockVerify.mockReturnValue(nurture("email.clicked"));
+      expect((await POST(request())).status).toBe(200);
+      expect(insert()).toBeNull();
+      expect(mockWarn.mock.calls.some((c) => String(c[1] ?? "").includes("reader lookup"))).toBe(
+        true
+      );
+    }
+  );
+
+  it("matches the reader's address whatever its case and spaces, by the submission alone", async () => {
+    route({ owner: "  READER@example.COM " });
+    mockVerify.mockReturnValue(nurture("email.opened", { to: [" Reader@Example.com"] }));
+    await POST(request());
+    expect(insert()).not.toBeNull();
+    const lookup = mockFetch.mock.calls.find((c) =>
+      String(c[0]).includes("/rest/v1/survey_submission?")
+    );
+    // The submission's id goes to the lookup, never the address.
+    expect(String(lookup![0])).toContain("id=eq.42");
+    expect(JSON.stringify(mockFetch.mock.calls)).not.toMatch(/reader@example\.com/i);
+  });
+
+  it("keeps no test send, without even looking the reader up", async () => {
+    route({ owner: "delivered@resend.dev" });
+    mockVerify.mockReturnValue(nurture("email.delivered", { to: ["delivered@resend.dev"] }));
+    expect((await POST(request())).status).toBe(200);
+    expect(insert()).toBeNull();
+    expect(
+      mockFetch.mock.calls.some((c) => String(c[0]).includes("/rest/v1/survey_submission?"))
+    ).toBe(false);
   });
 
   it("takes the time it arrived when the event carries no valid time", async () => {
@@ -573,11 +706,7 @@ describe("resend webhook: each nurture email's own events", () => {
   it("needs no certain claim: the key is what dedupes", async () => {
     mockVerify.mockReturnValue(nurture("email.opened"));
     // The replay guard fails open on a Supabase error…
-    mockFetch.mockImplementation((url: string) =>
-      String(url).includes("resend_webhook_event")
-        ? Promise.resolve({ ok: false, status: 500, headers: new Headers() })
-        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
-    );
+    route({ claim: 500 });
     expect((await POST(request())).status).toBe(200);
     // …and the event is still kept.
     expect(insert()).not.toBeNull();
@@ -585,11 +714,7 @@ describe("resend webhook: each nurture email's own events", () => {
 
   it("is best effort: a failed insert is logged and the webhook still answers 200", async () => {
     mockVerify.mockReturnValue(nurture("email.bounced"));
-    mockFetch.mockImplementation((url: string) =>
-      String(url).endsWith("/rest/v1/email_message_event")
-        ? Promise.resolve({ ok: false, status: 404, headers: new Headers() })
-        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
-    );
+    route({ insert: 404 });
     expect((await POST(request())).status).toBe(200);
     const warned = mockWarn.mock.calls.some((c) =>
       String(c[1] ?? "").includes("email message event non-ok")
@@ -598,11 +723,7 @@ describe("resend webhook: each nurture email's own events", () => {
     // The bounce is still suppressed: the point of the whole endpoint.
     expect(mockAddToSuppression).toHaveBeenCalled();
 
-    mockFetch.mockImplementation((url: string) =>
-      String(url).endsWith("/rest/v1/email_message_event")
-        ? Promise.reject(new Error("down"))
-        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
-    );
+    route({ insert: "throw" });
     expect((await POST(request())).status).toBe(200);
   });
 });

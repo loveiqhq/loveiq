@@ -31,6 +31,12 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
+import { surveyPausedEmail as surveyPausedV2Email } from "@features/email-journeys/emails/survey-reminders";
+import { EMAIL_STAGES, isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
+import { isPurchaseDraft } from "@features/email-journeys/server/journeys";
+import { claimSend, settleClaim } from "@features/email-journeys/server/send";
+import { countAnsweredQuestions } from "@features/survey/server/utils";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -156,7 +162,7 @@ export async function GET(request: Request) {
   process.once("SIGTERM", onSigterm);
 
   const siteUrl = getEmailSiteUrl();
-  const resumeUrl = `${siteUrl}/survey`;
+  const resumeUrl = tagEmailLink(`${siteUrl}/survey`, EMAIL_LINKS.surveyPaused);
 
   const summary = {
     candidates: 0,
@@ -167,6 +173,11 @@ export async function GET(request: Request) {
     skippedPrepaid: 0,
     errors: 0,
   };
+  // R1 redesigned (features/email-journeys), behind its switch: one email, no A/B.
+  const redesign = await isEmailSwitchOn("r1");
+  // A buyer's linked draft is left to pay to start's own reminders only once they are on;
+  // until then the draft is treated as today.
+  const buyersRemindedElsewhere = await isEmailSwitchOn("ptsReminders");
 
   try {
     const candidates = await fetchCandidates();
@@ -194,7 +205,13 @@ export async function GET(request: Request) {
         continue;
       }
 
-      if (await hasUnusedPrepaidPurchase(email)) {
+      // A pay-to-start buyer's draft is theirs: their reminders go to the address they paid
+      // with, with their continue link (the email journeys' job), never to this one.
+      // An unreadable link reads as no link: today's R1 goes, as it did before the link existed.
+      if (
+        (await hasUnusedPrepaidPurchase(email)) ||
+        (buyersRemindedElsewhere && (await isPurchaseDraft(row.session_id).catch(() => false)))
+      ) {
         summary.skippedPrepaid++;
         continue;
       }
@@ -216,15 +233,41 @@ export async function GET(request: Request) {
         ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.surveyPaused)
         : undefined;
 
-      const experiment = "survey-paused";
-      const variant = pickEmailVariant(email, experiment);
-      const tpl =
-        variant === "b"
+      /**
+       * Recorded in email_journey_send before it goes, whatever the switch: R2 goes only after
+       * an R1 (features/email-journeys). A draft already recorded there is not sent again; a
+       * claim that can't be written leaves today's cooldown as the only guard, as before.
+       */
+      let claimId: number | null = null;
+      try {
+        claimId = await claimSend({
+          emailKey: EMAIL_STAGES.r1,
+          target: `session:${row.session_id}`,
+        });
+        if (claimId === null) {
+          summary.skippedCooldown++;
+          continue;
+        }
+      } catch (err) {
+        logger.warn({ err, sessionId: row.session_id }, "survey-paused: R1 not recorded");
+      }
+
+      const experiment = redesign ? null : "survey-paused";
+      const variant = experiment ? pickEmailVariant(email, experiment) : "a";
+      const tpl = redesign
+        ? surveyPausedV2Email({
+            firstName,
+            answered: countAnsweredQuestions(row.answers),
+            resumeUrl,
+            siteUrl,
+            unsubscribeUrl,
+          })
+        : variant === "b"
           ? surveyPausedBEmail({ firstName, resumeUrl, siteUrl, unsubscribeUrl })
           : surveyPausedEmail({ firstName, resumeUrl, siteUrl, unsubscribeUrl });
 
       try {
-        const { error } = await Promise.race([
+        const { data, error } = await Promise.race([
           resend.emails.send({
             from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
             to: email,
@@ -232,8 +275,14 @@ export async function GET(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            // Echoed back on every Resend webhook, which is how the A/B result is read.
-            tags: emailExperimentTags(experiment, variant),
+            // Echoed back on every Resend webhook: `exp` and `arm` count the A/B test per day;
+            // `stage` names the email (no `sub`: no survey yet, so no events kept per reader).
+            tags: experiment
+              ? [
+                  ...emailExperimentTags(experiment, variant),
+                  { name: "stage", value: EMAIL_STAGES.r1 },
+                ]
+              : [{ name: "stage", value: EMAIL_STAGES.r1 }],
             headers: {
               "X-LoveIQ-Variant": variant,
               // P-06: dedicated list identity for per-list reputation in
@@ -257,11 +306,24 @@ export async function GET(request: Request) {
           // for a single send; the outer cron-level try/catch still escalates
           // a whole-cron failure as api_5xx.
           logger.warn({ error, sessionId: row.session_id, variant }, "Paused email send failed");
+          if (claimId !== null) {
+            const status = (error as { statusCode?: number | null }).statusCode;
+            await settleClaim(claimId, {
+              sent: false,
+              retry: status === 429,
+              reason: String((error as { message?: string }).message ?? "send failed"),
+            });
+          }
         } else {
           summary.sent++;
+          if (claimId !== null)
+            await settleClaim(claimId, { sent: true, resendId: data?.id ?? null });
         }
       } catch (err) {
         summary.errors++;
+        if (claimId !== null) {
+          await settleClaim(claimId, { sent: false, retry: false, reason: "send threw" });
+        }
         // Same rationale: one timed-out send shouldn't ping ops. Whole-cron
         // failures still alert via the outer cron-level catch.
         logger.warn({ err, sessionId: row.session_id, variant }, "Paused email error");

@@ -387,6 +387,10 @@ describe("POST /api/report/share", () => {
       { html?: string; text?: string } | undefined;
     expect(sentArg?.html).toContain(personalMessage);
     expect(sentArg?.text).toContain(personalMessage);
+    // The shared report's link carries its email (shared/emails/email-link.ts).
+    expect(sentArg?.text).toContain(
+      `/report/${VALID_SHARE_TOKEN}?utm_source=email&utm_medium=share&utm_campaign=report_share`
+    );
   });
 
   it("rejects personalMessage longer than 2000 chars (400)", async () => {

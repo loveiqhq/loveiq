@@ -99,9 +99,15 @@ export interface GateMember {
    * What the reader did on the €1.99 page, from its own events (analytics_event): pressed
    * "Unlock now" on the card or on the bar, pressed "Not ready to unlock yet" (stored since
    * 27 Oct 2026), or, on the exit page that opens since 28.10, pressed Unlock there
-   * (`exit_card` / `exit_sticky`). Absent: none of them.
+   * (`exit_card` / `exit_sticky`); and pressed the browser's or phone's own Back on it, which
+   * opens that exit page too (`initial_gate_browser_back`, stored since #700). Absent: none of them.
    */
-  taps?: { card: boolean; bar: boolean; notReady: boolean; exit?: boolean };
+  taps?: { card: boolean; bar: boolean; notReady: boolean; exit?: boolean; browserBack?: boolean };
+  /**
+   * E07's draw, a day after the page for a reader still unpaid (live from 28 Oct 2026): the
+   * Core Archetype gifted, or held out. Absent: not drawn (paid, never saw the page, too soon).
+   */
+  giftArm?: "gift" | "holdout";
 }
 
 /** A sale on a pay-to-start buyer's report after the purchase itself (an upgrade). */
@@ -399,7 +405,7 @@ function counts(e: EntitlementRow): e is EntitlementRow & { offer: PtsOffer } {
  * stamps reports long after their survey (PRE_UNLOCK.md): those readers came in through
  * pay after the report, and stay in it.
  */
-const STAMPED_AT_SUBMIT_MS = 60 * 60_000;
+export const STAMPED_AT_SUBMIT_MS = 60 * 60_000;
 
 /**
  * The gate's share of each day's free landing: the share of that day's finished free surveys
@@ -487,6 +493,15 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
   );
   const seenAt = new Map(input.gateMembers.map((g) => [g.sid, g.seenAt]));
   const tapsOf = new Map(input.gateMembers.map((g) => [g.sid, g.taps]));
+  const armOf = new Map(input.gateMembers.map((g) => [g.sid, g.giftArm]));
+  /** Who went on to buy the full report, by E07's draw: the gift's effect, read side by side. */
+  const giftSplit = (subs: SubFact[]) => {
+    const gift = subs.filter((s) => armOf.get(s.id) === "gift");
+    const held = subs.filter((s) => armOf.get(s.id) === "holdout");
+    if (gift.length + held.length === 0) return null;
+    const bought = (xs: SubFact[]) => xs.filter((s) => s.full).length;
+    return `E07 gift email: ${bought(gift)} of ${gift.length} gifted bought it · ${bought(held)} of ${held.length} held out`;
+  };
   const subsOf: Record<"after" | "gate", SubFact[]> = {
     after: free.filter((s) => !gateIds.has(s.id)),
     gate: free.filter((s) => gateIds.has(s.id)),
@@ -650,8 +665,9 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
               n: subs.filter((s) => seenAt.get(s.id)).length,
               pays: false,
               // Since 28.10 "Not ready to unlock yet" opens the exit page, where readers can still
-              // unlock: pressing it no longer means they left.
-              detail: `${subs.filter((s) => tapsOf.get(s.id)?.notReady).length} pressed “Not ready to unlock yet”`,
+              // unlock: pressing it no longer means they left. The browser's Back opens it too
+              // (#700).
+              detail: `${subs.filter((s) => tapsOf.get(s.id)?.notReady).length} pressed “Not ready to unlock yet” · ${subs.filter((s) => tapsOf.get(s.id)?.browserBack).length} pressed the browser's Back`,
             },
             // Its two buttons (sync 23.10: the bar is there from the first paint). A reader who
             // pressed both counts once here, and on both lines under it.
@@ -670,7 +686,12 @@ export function buildPayToStart(input: PtsInput): PtsPayload {
             },
             // A view of the gate is no report session (PRE_UNLOCK.md): a session is the report.
             { label: "Report opened", n: subs.filter((s) => s.visits > 0).length, pays: false },
-            { label: "Bought the full report", n: subs.filter((s) => s.full).length, pays: true },
+            {
+              label: "Bought the full report",
+              n: subs.filter((s) => s.full).length,
+              pays: true,
+              ...(giftSplit(subs) !== null && { detail: giftSplit(subs)! }),
+            },
           ];
     const refunded = input.refundedSubs;
     return {
@@ -1040,10 +1061,11 @@ export async function fetchPayToStartRecords(
       survey_submission_id: number;
       initial_gate_cohort_at: string;
       initial_gate_seen_at: string | null;
+      initial_gift_arm: string | null;
     }>(
       `/rest/v1/personal_report?initial_gate_cohort_at=gte.${sinceIso}` +
         `&initial_gate_cohort_at=lt.${new Date(until.getTime() + STAMPED_AT_SUBMIT_MS).toISOString()}` +
-        "&select=survey_submission_id,initial_gate_cohort_at,initial_gate_seen_at&order=id.asc",
+        "&select=survey_submission_id,initial_gate_cohort_at,initial_gate_seen_at,initial_gift_arm&order=id.asc",
       "personal_report"
     ),
     isInitialUnlockGateEnabled(),
@@ -1142,9 +1164,10 @@ export async function fetchPayToStartRecords(
     }
   }
 
-  // The €1.99 page's buttons and its way out, one row a press: pressed "Unlock now" on the card
-  // or the bar, pressed "Not ready to unlock yet" (stored since 27 Oct 2026), or Unlock on the
-  // exit page that opens since 28.10 (`exit_card` / `exit_sticky`).
+  // The €1.99 page's buttons and its ways out, one row a press: pressed "Unlock now" on the card
+  // or the bar, pressed "Not ready to unlock yet" (stored since 27 Oct 2026), Unlock on the exit
+  // page that opens since 28.10 (`exit_card` / `exit_sticky`), or the browser's own Back, which
+  // opens that exit page too (stored once a page since #700).
   const taps = new Map<number, NonNullable<GateMember["taps"]>>();
   for (const ids of chunks(cohort.map((c) => c.survey_submission_id))) {
     const rows = await must<{
@@ -1153,7 +1176,7 @@ export async function fetchPayToStartRecords(
       place: string | null;
     }>(
       `/rest/v1/analytics_event?survey_submission_id=in.(${ids.join(",")})` +
-        "&event_type=in.(initial_gate_cta_click,initial_gate_back)" +
+        "&event_type=in.(initial_gate_cta_click,initial_gate_back,initial_gate_browser_back)" +
         "&select=survey_submission_id,event_type,place:metadata->>place&order=id.asc",
       "analytics_event"
     );
@@ -1163,8 +1186,10 @@ export async function fetchPayToStartRecords(
         bar: false,
         notReady: false,
         exit: false,
+        browserBack: false,
       };
       if (r.event_type === "initial_gate_back") t.notReady = true;
+      else if (r.event_type === "initial_gate_browser_back") t.browserBack = true;
       else if (r.place?.startsWith("exit_")) t.exit = true;
       else if (r.place === "sticky") t.bar = true;
       else t.card = true;
@@ -1186,6 +1211,9 @@ export async function fetchPayToStartRecords(
       cohortAt: c.initial_gate_cohort_at,
       seenAt: c.initial_gate_seen_at,
       ...(taps.has(c.survey_submission_id) && { taps: taps.get(c.survey_submission_id) }),
+      ...((c.initial_gift_arm === "gift" || c.initial_gift_arm === "holdout") && {
+        giftArm: c.initial_gift_arm,
+      }),
     })),
     gateOn,
   };

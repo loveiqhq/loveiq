@@ -4,6 +4,11 @@ const mockFetchWithTimeout = vi.fn();
 const mockCheckCooldown = vi.fn();
 const mockIsEmailSuppressed = vi.fn();
 const mockResendSend = vi.fn();
+// The email journeys (features/email-journeys): R1's switch, its record and the buyer's draft.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
+const mockClaimSend = vi.fn(async (_spec: unknown): Promise<number | null> => 1);
+const mockSettleClaim = vi.fn(async (_id: number, _result: unknown) => undefined);
+const mockIsPurchaseDraft = vi.fn(async (_sessionId: string) => false);
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: Parameters<typeof mockFetchWithTimeout>) =>
@@ -33,6 +38,18 @@ vi.mock("resend", () => ({
   },
 }));
 
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
+vi.mock("@features/email-journeys/server/send", () => ({
+  claimSend: (spec: unknown) => mockClaimSend(spec),
+  settleClaim: (id: number, result: unknown) => mockSettleClaim(id, result),
+}));
+vi.mock("@features/email-journeys/server/journeys", () => ({
+  isPurchaseDraft: (sessionId: string) => mockIsPurchaseDraft(sessionId),
+}));
+
 // Bypass the prod-cron-host gate in unit tests.
 vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: () => true,
@@ -51,6 +68,9 @@ function makeRequest(token?: string): Request {
 describe("GET /api/cron/survey-paused", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps implementations: reset the switches and the draft link each test.
+    mockSwitchOn.mockImplementation(async () => false);
+    mockIsPurchaseDraft.mockImplementation(async () => false);
     process.env = {
       ...ORIGINAL_ENV,
       CRON_SECRET: "test-cron-secret",
@@ -249,6 +269,10 @@ describe("GET /api/cron/survey-paused", () => {
     expect(mockResendSend).toHaveBeenCalledTimes(1);
     // Confirm the address routed to Resend matches the email in the candidate answers.
     expect(mockResendSend.mock.calls[0]![0].to).toBe("user@example.com");
+    // Its link back carries its email (shared/emails/email-link.ts).
+    expect(mockResendSend.mock.calls[0]![0].text).toContain(
+      "/survey?utm_source=email&utm_medium=nurture&utm_campaign=survey_paused"
+    );
   });
 
   // The cooldown mock above answers the same for every key. These two need the real
@@ -299,5 +323,145 @@ describe("GET /api/cron/survey-paused", () => {
     const body = await (await GET(makeRequest("test-cron-secret"))).json();
     expect(body.skippedCooldown).toBe(1);
     expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  // ─── The email journeys: R1's record, its switch and the buyer's draft ─────────
+
+  it("records R1 before it goes and settles the record as sent", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValue({ data: { id: "re_1" }, error: null });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect((await res.json()).sent).toBe(1);
+    expect(mockClaimSend).toHaveBeenCalledWith({
+      emailKey: "survey_paused",
+      target: "session:sess-abc",
+    });
+    expect(mockClaimSend.mock.invocationCallOrder[0]).toBeLessThan(
+      mockResendSend.mock.invocationCallOrder[0]!
+    );
+    expect(mockSettleClaim).toHaveBeenCalledWith(1, { sent: true, resendId: "re_1" });
+  });
+
+  it("does not send a draft already recorded as emailed", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockClaimSend.mockResolvedValueOnce(null);
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(0);
+    expect(body.skippedCooldown).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("frees the record when Resend rate-limits (429), keeps it as failed otherwise", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "slow", statusCode: 429 },
+    });
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockSettleClaim).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sent: false, retry: true })
+    );
+    mockResendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: "validation_error", message: "bad", statusCode: 422 },
+    });
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockSettleClaim).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sent: false, retry: false })
+    );
+    mockResendSend.mockRejectedValueOnce(new Error("Resend timeout"));
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockSettleClaim).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sent: false, retry: false })
+    );
+  });
+
+  it("still sends today's R1 when the record can't be written (the cooldown guards it, as before)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockClaimSend.mockRejectedValueOnce(new Error("journey_claim_failed:500"));
+    mockResendSend.mockResolvedValue({ data: { id: "re_2" }, error: null });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(1);
+    expect(mockSettleClaim).not.toHaveBeenCalled();
+  });
+
+  it("sends the redesigned R1, one email with its stage tag, when its switch is on", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "r1");
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValue({ data: { id: "re_3" }, error: null });
+    await GET(makeRequest("test-cron-secret"));
+    const payload = mockResendSend.mock.calls[0]?.[0] as {
+      subject: string;
+      html: string;
+      tags: unknown;
+    };
+    // The draft answered two asked questions (its email and first name): 2 of 62.
+    expect(payload.subject).toBe(
+      `First, you’re ${Math.round((2 / 62) * 100)}% through your LoveIQ test`
+    );
+    expect(payload.html).toContain("2 of 62 questions");
+    expect(payload.html).toContain("Or paste this link into your browser");
+    expect(payload.tags).toEqual([{ name: "stage", value: "survey_paused" }]);
+  });
+
+  it("keeps today's email's A/B tags and names it by its stage, with no reader (no survey yet)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValue({ data: { id: "re_4" }, error: null });
+    await GET(makeRequest("test-cron-secret"));
+    const payload = mockResendSend.mock.calls[0]?.[0] as {
+      tags: Array<{ name: string; value: string }>;
+    };
+    expect(payload.tags.map((t) => t.name)).toEqual(["exp", "arm", "stage"]);
+    expect(payload.tags[0]).toEqual({ name: "exp", value: "survey-paused" });
+    expect(payload.tags[2]).toEqual({ name: "stage", value: "survey_paused" });
+  });
+
+  it("sends today's R1 when the draft's purchase link can't be read (as before the link existed)", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "ptsReminders");
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockIsPurchaseDraft.mockRejectedValueOnce(new Error("journeys_query_failed:500"));
+    mockResendSend.mockResolvedValue({ data: { id: "re_4" }, error: null });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).sent).toBe(1);
+  });
+
+  it("with pay to start's reminders off, a buyer's linked draft is treated as today (the link unread)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockIsPurchaseDraft.mockResolvedValue(true);
+    mockResendSend.mockResolvedValue({ data: { id: "re_5" }, error: null });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(1);
+    expect(mockIsPurchaseDraft).not.toHaveBeenCalled();
+  });
+
+  it("leaves a pay-to-start buyer's draft to the buyer's own reminders once those are on", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "ptsReminders");
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockIsPurchaseDraft.mockResolvedValueOnce(true);
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.skippedPrepaid).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+    expect(mockIsPurchaseDraft).toHaveBeenCalledWith("sess-abc");
   });
 });

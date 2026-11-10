@@ -32,6 +32,12 @@ vi.mock("resend", () => ({
     emails = { send: (...args: unknown[]) => mockResendSend(...args) };
   },
 }));
+// U1's switch (features/email-journeys): off unless a test turns it on.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
 vi.mock("@features/pricing/logic/reportPricing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/pricing/logic/reportPricing")>();
   return { ...actual, markReportPriceQuotePurchased: vi.fn() };
@@ -247,7 +253,7 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     });
   });
 
-  it("emails E06 once: its own copy, under no A/B test, unsubscribable as its own campaign", async () => {
+  it("emails E06 once: its own copy, under no A/B test, its stage and reader, unsubscribable as its own campaign", async () => {
     backend();
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
     expect(mockResendSend).toHaveBeenCalledTimes(1);
@@ -261,8 +267,41 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     expect(sent.to).toBe("alice@example.com");
     expect(sent.subject).toBe("Your Core Archetype is unlocked");
     expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
-    expect(sent).not.toHaveProperty("tags");
+    // The receipt's link back carries its email (shared/emails/email-link.ts).
+    expect(sent.html).toContain(
+      `/report/${TOKEN}?from=email&amp;utm_source=email&amp;utm_medium=purchase&amp;utm_campaign=receipt`
+    );
+    // No `exp` or `arm`: E06 is under no test. Its stage and reader keep its own events.
+    expect(sent.tags).toEqual([
+      { name: "stage", value: "receipt_initial" },
+      { name: "sub", value: "70" },
+    ]);
     expect(sent.headers["List-Unsubscribe"]).toContain("src=initial_unlocked");
+  });
+
+  it("emails the redesigned U1 when its switch is on: the same link, its stage and reader tags", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "u1");
+    try {
+      backend();
+      await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+      const sent = mockResendSend.mock.calls[0]?.[0] as {
+        subject: string;
+        html: string;
+        tags: Array<{ name: string; value: string }>;
+        headers: Record<string, string>;
+      };
+      expect(sent.subject).toMatch(/your Core Archetype was identified$/i);
+      expect(sent.html).toContain(
+        `/report/${TOKEN}?from=email&amp;utm_source=email&amp;utm_medium=purchase&amp;utm_campaign=receipt`
+      );
+      expect(sent.html).toContain("Why unlock your");
+      expect(sent.tags[0]).toEqual({ name: "stage", value: "core_unlocked" });
+      expect(sent.tags[1]?.name).toBe("sub");
+      expect(sent.headers["List-Unsubscribe"]).toContain("src=initial_unlocked");
+    } finally {
+      mockSwitchOn.mockImplementation(async () => false);
+    }
   });
 
   it("sends nothing a second time when the same purchase arrives again", async () => {

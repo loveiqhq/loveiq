@@ -14,6 +14,7 @@ import {
 } from "@features/checkout/server/stripeCheckout";
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isOnOverlayEntry } from "@shared/ui/overlay-history";
 import { previewPaidHref } from "../previewCheckout";
 import { GATE_COPY } from "./gateContent";
 
@@ -123,7 +124,12 @@ export function useInitialUnlockCheckout({
           return;
         }
         posthog.capture("checkout_started", { currency: "EUR", plan: "initial" });
-        window.location.assign(json.url);
+        // Replace, not push, when the entry on top is the Back catch's own (useGateBack), the
+        // same rule as the pricing modal (startReportCheckout): pushed on top, Stripe left that
+        // same-URL duplicate behind, and Back from Stripe walked through an extra copy of the
+        // report. With no such entry on top, this is the assign() it has always been.
+        if (isOnOverlayEntry()) window.location.replace(json.url);
+        else window.location.assign(json.url);
       } catch {
         fail(GATE_COPY.checkout.unreachable);
       }

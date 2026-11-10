@@ -4,6 +4,7 @@
  */
 import { fields as assessment } from "./assessment";
 import { fields as data } from "./data";
+import { fields as emails } from "./emails";
 import { fields as focus } from "./focus";
 import { fields as landing } from "./landing";
 import { fields as payment } from "./payment";
@@ -22,5 +23,6 @@ export const FIELDS: FieldRegistry = {
   ...report,
   ...payment,
   ...payToStart,
+  ...emails,
   ...data,
 };

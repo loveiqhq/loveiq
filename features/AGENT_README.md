@@ -13,26 +13,27 @@
 
 **Domains:**
 
-| Feature       | Role                                                                                |
-| ------------- | ----------------------------------------------------------------------------------- |
-| `landing/`    | `/` marketing page + shared nav/footer                                              |
-| `about/`      | `/about`                                                                            |
-| `glossary/`   | `/glossary` + `/glossary/[slug]`                                                    |
-| `legal/`      | shared chrome for legal pages                                                       |
-| `trust-zone/` | `/trust-zone`                                                                       |
-| `not-found/`  | 404                                                                                 |
-| `staging/`    | staging password gate                                                               |
-| `survey/`     | assessment funnel `/survey` + submission                                            |
-| `report/`     | `/report` + `/report/[token]` (paywalled)                                           |
-| `checkout/`   | Stripe checkout for report purchases                                                |
-| `pricing/`    | report pricing math + quote snapshots                                               |
-| `scoring/`    | V4+V5 archetype scoring engine                                                      |
-| `invite/`     | partner invite UI + send/track + reminders                                          |
-| `contact/`    | `/contact` form pipeline                                                            |
-| `cron/`       | scheduled jobs (invite reminders, fulfillment sweep, discount email, survey-paused) |
-| `analytics/`  | client tracking + server event ingest                                               |
-| `ux-signals/` | Marcus's 22 behaviour signals, measured on real visits and proven on the walks      |
-| `admin/`      | internal operator panel (≥280 files, preserves internal subdomain structure)        |
+| Feature           | Role                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `landing/`        | `/` marketing page + shared nav/footer                                              |
+| `about/`          | `/about`                                                                            |
+| `glossary/`       | `/glossary` + `/glossary/[slug]`                                                    |
+| `legal/`          | shared chrome for legal pages                                                       |
+| `trust-zone/`     | `/trust-zone`                                                                       |
+| `not-found/`      | 404                                                                                 |
+| `staging/`        | staging password gate                                                               |
+| `survey/`         | assessment funnel `/survey` + submission                                            |
+| `report/`         | `/report` + `/report/[token]` (paywalled)                                           |
+| `checkout/`       | Stripe checkout for report purchases                                                |
+| `pricing/`        | report pricing math + quote snapshots                                               |
+| `scoring/`        | V4+V5 archetype scoring engine                                                      |
+| `invite/`         | partner invite UI + send/track + reminders                                          |
+| `contact/`        | `/contact` form pipeline                                                            |
+| `cron/`           | scheduled jobs (invite reminders, fulfillment sweep, discount email, survey-paused) |
+| `email-journeys/` | the reworked emails (phase 1): one design kit, a switch per email, the hourly job   |
+| `analytics/`      | client tracking + server event ingest                                               |
+| `ux-signals/`     | Marcus's 22 behaviour signals, measured on real visits and proven on the walks      |
+| `admin/`          | internal operator panel (≥280 files, preserves internal subdomain structure)        |
 
 **Does NOT belong:** cross-feature infrastructure (use `shared/`), Next.js routing files (use `app/`), Supabase migrations (use `supabase/`).
 

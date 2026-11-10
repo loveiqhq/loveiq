@@ -72,7 +72,12 @@ const mockTrackPaywallView = vi.fn();
 const mockTrackPaywallInitiated = vi.fn();
 const mockTrackBeginCheckout = vi.fn();
 const mockTrackPriceShown = vi.fn();
+const mockEmailReturnOf = vi.fn((_params: unknown): { campaign: string | null } | null => null);
+const mockTrackEmailReturn = vi.fn();
 vi.mock("@features/analytics/client", () => ({
+  // A return through one of our emails' links (the #incoming-surveys message's).
+  emailReturnOf: (params: unknown) => mockEmailReturnOf(params),
+  trackEmailReturn: (...args: unknown[]) => mockTrackEmailReturn(...args),
   trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
   trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
   trackPaywallInitiated: (...args: unknown[]) => mockTrackPaywallInitiated(...args),
@@ -608,6 +613,39 @@ describe("ReportPage", () => {
     expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur", null);
   });
 
+  describe("a return through an email link", () => {
+    beforeEach(() => mockEmailReturnOf.mockReturnValue(null));
+
+    const opened = (data: Record<string, unknown> = {}) => {
+      const base = buildSuccessResponse();
+      mockUseReportData.mockReturnValue({
+        ...base,
+        data: { ...base.data, submissionId: 2698, ...data },
+      });
+    };
+
+    it("is reported for the owner, once a page load, with the link's campaign", async () => {
+      mockEmailReturnOf.mockReturnValue({ campaign: "initial_gift" });
+      opened();
+      const { rerender } = render(<ReportPage />);
+      await waitFor(() => expect(mockTrackEmailReturn).toHaveBeenCalledTimes(1));
+      expect(mockTrackEmailReturn).toHaveBeenCalledWith({ campaign: "initial_gift" });
+      rerender(<ReportPage />);
+      expect(mockTrackEmailReturn).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["a visit no email brought", null, "owner"],
+      ["a shared view", { campaign: "initial_gift" }, "shared"],
+    ])("is not reported for %s", async (_label, arrival, viewMode) => {
+      mockEmailReturnOf.mockReturnValue(arrival);
+      opened({ viewMode });
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+      expect(mockTrackEmailReturn).not.toHaveBeenCalled();
+    });
+  });
+
   it("tags report_viewed with the slimmed layout on a V4 page (16.10)", async () => {
     mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
     try {
@@ -1096,6 +1134,52 @@ describe("ReportPage", () => {
    * admin funnel read as though 39% of report readers never saw a price, when
    * the client-side event shows 89% did.
    */
+  // C1's "Share my report" (features/email-journeys) opens /report/<token>?share=1. On
+  // 9 Nov 2026 production opened the window but dropped the persisted report_share_opened:
+  // the effect ran before the parent's that publishes the submission, like the price below.
+  describe("the share window from an email's ?share=1", () => {
+    const opened = (viewMode: "owner" | "shared") => {
+      const base = buildSuccessResponse();
+      return { ...base, data: { ...base.data, viewMode, submissionId: 1920 } };
+    };
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("opens for the owner, once, and publishes the submission BEFORE the share event", async () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("share=1"));
+      mockUseReportData.mockReturnValue(opened("owner"));
+
+      const { container } = render(<ReportPage />);
+
+      const shareOpened = vi.mocked(analytics.trackReportShareOpened);
+      await waitFor(() => expect(shareOpened).toHaveBeenCalledWith({ source: "email" }));
+      expect(shareOpened).toHaveBeenCalledTimes(1);
+      const setCtx = vi.mocked(analytics.setReportSubmissionContext);
+      expect(setCtx).toHaveBeenCalledWith(1920);
+      // Order IS the defect: fired first, the persisted event has no submission and is dropped.
+      expect(Math.min(...setCtx.mock.invocationCallOrder)).toBeLessThan(
+        Math.min(...shareOpened.mock.invocationCallOrder)
+      );
+      expect(container.querySelector(".report-share-modal")).toHaveAttribute("data-state", "open");
+    });
+
+    it.each([
+      ["without ?share=1", "", "owner"],
+      ["for a recipient of a shared link", "share=1", "shared"],
+    ] as const)("stays shut %s", async (_label, query, viewMode) => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+      mockUseReportData.mockReturnValue(opened(viewMode));
+
+      const { container } = render(<ReportPage />);
+
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalled());
+      expect(vi.mocked(analytics.trackReportShareOpened)).not.toHaveBeenCalled();
+      expect(container.querySelector('.report-share-modal[data-state="open"]')).toBeNull();
+    });
+  });
+
   describe("persisted analytics can be attributed", () => {
     function withSubmission(id: number | null) {
       const base = buildSuccessResponse();

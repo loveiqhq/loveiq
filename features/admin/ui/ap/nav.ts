@@ -23,7 +23,13 @@ export const ASSESSMENT_A = `${AP_BASE}/assessment-a`;
 export const NAV: NavGroup[] = [
   {
     title: "Reports",
-    items: [{ key: "focus", label: "Dashboard", href: AP_BASE, level: 1 }],
+    items: [
+      { key: "focus", label: "Dashboard", href: AP_BASE, level: 1 },
+      { key: "emails", label: "Emails", href: `${AP_BASE}/emails`, level: 1 },
+      // Marcus's board for one-off campaigns and newsletters: none has been sent yet. Until one is,
+      // a send under its own stage tag shows on Emails, under "Not tied to an assessment".
+      { key: "promo", label: "Promotional emails", href: "", level: 1, badge: "soon" },
+    ],
   },
   {
     title: "Assessments",
@@ -54,6 +60,7 @@ export const NAV: NavGroup[] = [
         href: `${ASSESSMENT_A}/unlock-feedback`,
         level: 2,
       },
+      { key: "a-emails", label: "Emails", href: `${ASSESSMENT_A}/emails`, level: 2 },
       { key: "b", label: "Assessment B", href: "", level: 1, badge: "soon" },
       { key: "c", label: "Assessment C", href: "", level: 1, badge: "soon" },
     ],
@@ -80,6 +87,8 @@ export const NAV: NavGroup[] = [
 export function activeKey(pathname: string): string {
   const p = pathname.replace(/\/+$/, "");
   if (p === AP_BASE) return "focus";
+  if (p === `${AP_BASE}/emails`) return "emails";
+  if (p === `${ASSESSMENT_A}/emails`) return "a-emails";
   if (p === ASSESSMENT_A) return "a-dashboard";
   if (p === `${ASSESSMENT_A}/traffic`) return "a-traffic";
   if (p === `${ASSESSMENT_A}/payment`) return "a-payment";

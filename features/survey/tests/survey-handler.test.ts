@@ -377,6 +377,23 @@ describe("POST /api/survey", () => {
     expect(json.success).toBe(true);
   });
 
+  // Every customer email's link back is tagged (shared/emails/email-link.ts), so a return
+  // through it is named on the #incoming-surveys message and credited to Email in GA4.
+  it("tags the report-ready email's link with its email", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => expect(mockResendEmailsSend).toHaveBeenCalledTimes(1));
+    const sent = mockResendEmailsSend.mock.calls[0]![0] as { text: string };
+    expect(sent.text).toMatch(
+      /\/report\/rpt_\w+\?from=email&utm_source=email&utm_medium=report&utm_campaign=report_ready/
+    );
+  });
+
   // Eman, 27.10: the pre-report map names the EUR 1.99 to a reader the gate will stop, so the
   // reply says so, and only then.
   it("tells a reader in the EUR 1.99 gate's cohort its price, and no one else", async () => {

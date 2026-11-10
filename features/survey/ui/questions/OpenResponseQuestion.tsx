@@ -119,7 +119,8 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
            523.5 x 48 from 640px but never wider than the column, which is narrower up to
            about 660px (the full column on a phone), and no confirm box. The frame
            draws only the empty field: typed text takes the placeholder's size in the
-           title's ink, and focus and error keep today's orange and red lines. Nothing sits
+           title's ink; focus takes the scale's purple (0.6, so it stands apart from the grey line at
+           rest) and an error keeps today's red line. Nothing sits
            under the field until there is an error, so the Why row stays 20px under the line,
            as drawn. The line is an inset shadow, not a border: Chrome draws a 1.454px border
            1px thick at every pixel density (a third lighter than the frame), while the
@@ -139,7 +140,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             className={`h-[48px] w-full max-w-full bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none forced-colors:border-b-[1.454px] sm:w-[523.5px] ${
               error
                 ? "shadow-[inset_0_-1.454px_0_0_#ef4444]"
-                : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(107,91,149,0.4)]"
+                : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(107,91,149,0.6)]"
             }`}
           />
           <div className={`flex items-center gap-1.5${error ? " mt-2" : ""}`} aria-live="polite">

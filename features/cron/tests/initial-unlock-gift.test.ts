@@ -33,6 +33,16 @@ vi.mock("@shared/observability/slack", () => ({
 vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: (...args: unknown[]) => mockIsProdCronHost(...args),
 }));
+const mockRefreshJourneyDetail = vi.fn();
+// I3's switch (features/email-journeys): off unless a test turns it on.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
+}));
 
 import { GET } from "@/app/api/cron/initial-unlock-gift/route";
 import { __resetSystemFlagsCacheForTests } from "@shared/flags/system-flags";
@@ -135,6 +145,10 @@ function routeFetches({
       }
       if (method === "GET" && url.includes("/rest/v1/report_access_token")) {
         return json([{ token: TOKEN }]);
+      }
+      // The questions' times, for the redesigned I3's minutes: 62 questions of 13.5 s, 14 min.
+      if (method === "GET" && url.includes("/rest/v1/survey_behavior_event")) {
+        return json(Array.from({ length: 62 }, () => ({ time_spent_ms: 13_548 })));
       }
       if (method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.")) {
         const body = JSON.parse(init?.body ?? "{}") as Record<string, unknown>;
@@ -243,6 +257,32 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
     }
   });
 
+  it("sends the redesigned I3 when its switch is on: the minutes spent, the map, the same tags", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "i3");
+    try {
+      const withSession = candidate(GIFT_ID);
+      (withSession.survey_submission as Record<string, unknown>).session_id =
+        "0f0e0d0c-0b0a-4908-8706-050403020100";
+      routeFetches({ candidates: [withSession] });
+      const body = await (await GET(makeRequest("test-cron-secret"))).json();
+      expect(body.summary).toEqual(expect.objectContaining({ gifted: 1, failed: 0 }));
+      const sent = mockResendSend.mock.calls[0]![0];
+      expect(sent.subject).toBe("Alex, we unlocked your Core Archetype for you");
+      expect(sent.html).toContain(
+        "Yesterday you invested 14 minutes and answered some very personal questions."
+      );
+      expect(sent.html).toContain("Why unlock your");
+      expect(sent.html).toContain("Or paste this link into your browser");
+      expect(sent.text).toContain(`utm_campaign=initial_gift`);
+      expect(sent.tags).toEqual([
+        { name: "stage", value: "initial_gift" },
+        { name: "sub", value: String(GIFT_ID + 1000) },
+      ]);
+    } finally {
+      mockSwitchOn.mockImplementation(async () => false);
+    }
+  });
+
   it("gifts a report on the gift arm: the arm, the EUR 0 unlock, one E07, the stamp", async () => {
     const calls = routeFetches({ candidates: [candidate(GIFT_ID)] });
 
@@ -271,10 +311,16 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
     expect(sent.html).toContain("Yesterday you answered some very personal questions.");
     expect(`${sent.text}${sent.html}`).not.toMatch(/few days ago/i);
     expect(sent.html).toContain(`/report/${TOKEN}?from=email`);
+    // Tagged, so a return through it is named on the Slack journey message ("gift email (E07)").
+    expect(sent.text).toContain(
+      `/report/${TOKEN}?from=email&utm_source=email&utm_medium=nurture&utm_campaign=initial_gift`
+    );
     expect(sent.tags).toEqual([
       { name: "stage", value: "initial_gift" },
       { name: "sub", value: String(GIFT_ID + 1000) },
     ]);
+    // The survey's #incoming-surveys message says the unlock was gifted now.
+    expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(GIFT_ID + 1000);
   });
 
   it.each([
@@ -339,6 +385,7 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
     expect(calls.armWrites.map((w) => w.body)).toEqual([{ initial_gift_arm: "holdout" }]);
     expect(calls.grants).toHaveLength(0);
     expect(mockResendSend).not.toHaveBeenCalled();
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
   });
 
   it.each([

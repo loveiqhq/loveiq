@@ -12,9 +12,10 @@ vi.mock("@shared/http/ratelimit", () => ({
 }));
 vi.mock("@shared/http/csrf", () => ({ verifyCsrfToken: vi.fn().mockResolvedValue(true) }));
 const mockSupabaseFetch = vi.fn();
+const mockFetchAllRows = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
-  fetchAllRows: vi.fn(),
+  fetchAllRows: (...args: unknown[]) => mockFetchAllRows(...args),
   countRows: vi.fn().mockResolvedValue(0),
   POSTGREST_MAX_ROWS: 1000,
 }));
@@ -32,6 +33,7 @@ import { GET as paymentGet } from "@/app/api/admin/ap/payment/route";
 import { GET as reportGet } from "@/app/api/admin/ap/report/route";
 import { GET as surveyGet } from "@/app/api/admin/ap/survey/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
+import type { PaygateExitsBlock } from "@features/admin/server/ap/paygate-exits";
 
 const json = (body: unknown, status = 200) => ({
   ok: status < 400,
@@ -82,6 +84,7 @@ beforeEach(() => {
   mockVerifyAdminSession.mockResolvedValue({ email: "mb@loveiq.org", role: "admin" });
   mockCheckRateLimit.mockResolvedValue({ allowed: true });
   mockHogql.mockResolvedValue({ ok: false, error: "not in this test" });
+  mockFetchAllRows.mockImplementation(async () => undefined);
   mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
     const { p_from } = JSON.parse(init?.body ?? "{}") as { p_from?: string };
     const range = p_from === THIS.from ? THIS : p_from === PREV.from ? PREV : null;
@@ -291,5 +294,60 @@ describe("the New & returning filter on every page route", () => {
     expect(tile(await read(surveyGet, "survey", "returning"), "subs")).toBe(1);
     expect(tile(await read(reportGet, "report", "new"), "opened")).toBe(1);
     expect(tile(await read(reportGet, "report", "all"), "opened")).toBe(3);
+  });
+});
+
+// The card "count every way out": the €1.99 page's own Back opens its exit page too (#700).
+describe("GET /api/admin/ap/payment: how readers reached the €1.99 page's exit page", () => {
+  const DAY = "2026-11-04";
+  const ev = (sid: number, event_type: string, stage: string | null = null) => ({
+    survey_submission_id: sid,
+    event_type,
+    event_time: `${DAY}T12:00:00Z`,
+    stage,
+    reason: null,
+    place: null,
+    via: null,
+    note: null,
+  });
+  /** The page's exit block, with personal_report answering `seen` (null: the read fails). */
+  const exits = async (seen: unknown[] | null) => {
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
+      const { p_from } = JSON.parse(init?.body ?? "{}") as { p_from?: string };
+      if (path === "/rest/v1/rpc/ap_facts")
+        return json(facts(p_from === DAY ? [1, 2, 3].map((id) => finisher(id, DAY)) : []));
+      return json(null, 404);
+    });
+    mockFetchAllRows.mockImplementation(async (path: string) => {
+      if (path.startsWith("/rest/v1/analytics_event?event_type=in.(paygate_exit_viewed"))
+        return [ev(1, "paygate_exit_viewed", "pre"), ev(2, "paygate_exit_viewed", "pre")];
+      if (path.startsWith("/rest/v1/analytics_event?event_type=in.(initial_gate_back,"))
+        return [ev(1, "initial_gate_back"), ev(2, "initial_gate_browser_back")];
+      if (path.startsWith("/rest/v1/personal_report?initial_gate_seen_at=")) return seen;
+      return [];
+    });
+    const res = await paymentGet(
+      new Request(`http://localhost/api/admin/ap/payment?period=custom&from=${DAY}&to=${DAY}`)
+    );
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { exits: PaygateExitsBlock }).exits;
+  };
+
+  it("splits the page's readers by what opened it, of the finishers who saw the €1.99 page", async () => {
+    // 9 saw it but finished outside the range: not one of the page's people.
+    const block = await exits([1, 2, 3, 9].map((id) => ({ survey_submission_id: id })));
+    expect(block.why).toBeNull();
+    expect(block.pages[0]).toMatchObject({
+      stage: "pre",
+      reached: 2,
+      came: { notReady: 1, browserBack: 1, sawGate: 3 },
+    });
+    expect(block.pages[1]!.came).toBeNull();
+  });
+
+  it("keeps the page when who saw the €1.99 page can't be read, the shares left out", async () => {
+    const block = await exits(null);
+    expect(block.why).toBeNull();
+    expect(block.pages[0]!.came).toEqual({ notReady: 1, browserBack: 1, sawGate: null });
   });
 });

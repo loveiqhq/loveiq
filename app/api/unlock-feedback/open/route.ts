@@ -7,6 +7,7 @@ import {
   LINK_COOKIE_MAX_AGE_S,
   LINK_COOKIE_PATH,
 } from "@features/unlock-feedback/server/link";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 /**
  * GET /api/unlock-feedback/open?r=<reason>&t=<token>: where each of the email's eight answers
@@ -32,8 +33,12 @@ export async function GET(request: NextRequest) {
   const reason = params.get("r");
   const token = params.get("t");
   const valid = isUnlockReason(reason);
+  // Tagged as our other emails' links are (shared/emails/email-link.ts): this is the email's.
   const response = NextResponse.redirect(
-    new URL(valid ? `/why?r=${reason}` : "/why", request.url),
+    tagEmailLink(
+      new URL(valid ? `/why?r=${reason}` : "/why", request.url).toString(),
+      EMAIL_LINKS.unlockFeedback
+    ),
     303
   );
   response.headers.set("Cache-Control", "no-store");

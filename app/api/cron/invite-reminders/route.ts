@@ -33,6 +33,12 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
+import {
+  inviteReminderOneEmail,
+  inviteReminderTwoEmail,
+} from "@features/email-journeys/emails/purchase";
+import { EMAIL_STAGES, isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -51,6 +57,9 @@ const REMINDER_1_MIN_DAYS = 3;
 const REMINDER_1_MAX_DAYS = 7;
 const REMINDER_2_MIN_DAYS = 7;
 const REMINDER_2_MAX_DAYS = 21;
+/** C3 and C4 redesigned (features/email-journeys): days 3 and 5, behind their switch. */
+const C3_MIN_DAYS = 3;
+const C4_MIN_DAYS = 5;
 const COOLDOWN_MS = 365 * 24 * 60 * 60 * 1000;
 const CANDIDATE_LIMIT = 200;
 const SUPABASE_TIMEOUT_MS = 8_000;
@@ -152,6 +161,23 @@ async function reportTokenForPayment(row: PaidUserRow): Promise<string | null> {
   return liveReportToken(`survey_submission_id=eq.${submissionId}`);
 }
 
+/** The report's submission, for the `sub` tag; null when it can't be read (no tag then). */
+async function submissionIdForReport(personalReportId?: number | null): Promise<number | null> {
+  if (!personalReportId) return null;
+  try {
+    const res = await supabaseGet(
+      `/rest/v1/personal_report?id=eq.${personalReportId}&select=survey_submission_id&limit=1`
+    );
+    if (!res.ok) return null;
+    return (
+      ((await res.json()) as Array<{ survey_submission_id?: number }>)[0]?.survey_submission_id ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function hasSentInvite(email: string): Promise<boolean> {
   const path = `/rest/v1/invite_event?referrer_email=eq.${encodeURIComponent(email)}&select=id&limit=1`;
   const response = await supabaseGet(path);
@@ -160,7 +186,12 @@ async function hasSentInvite(email: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-function reminderForAge(daysSincePurchase: number): 1 | 2 | null {
+function reminderForAge(daysSincePurchase: number, redesign = false): 1 | 2 | null {
+  if (redesign) {
+    if (daysSincePurchase >= C4_MIN_DAYS && daysSincePurchase < REMINDER_2_MAX_DAYS) return 2;
+    if (daysSincePurchase >= C3_MIN_DAYS && daysSincePurchase < C4_MIN_DAYS) return 1;
+    return null;
+  }
   if (daysSincePurchase >= REMINDER_2_MIN_DAYS && daysSincePurchase < REMINDER_2_MAX_DAYS) {
     // Prefer reminder 2 (later in funnel) when both windows overlap (7d).
     return 2;
@@ -211,6 +242,7 @@ export async function GET(request: Request) {
     skippedNoToken: 0,
     errors: 0,
   };
+  const redesign = await isEmailSwitchOn("c3c4");
 
   try {
     const candidates = await fetchPaidCandidates();
@@ -237,7 +269,7 @@ export async function GET(request: Request) {
 
       const ageDays =
         (Date.now() - new Date(row.payment_date_time).getTime()) / (24 * 60 * 60 * 1000);
-      const reminder = reminderForAge(ageDays);
+      const reminder = reminderForAge(ageDays, redesign);
       if (!reminder) {
         summary.skippedOutOfWindow++;
         continue;
@@ -269,7 +301,10 @@ export async function GET(request: Request) {
         logger.warn({ paymentId: row.id }, "invite-reminders: no report link for a buyer");
         continue;
       }
-      const inviteCtaUrl = `${siteUrl}/report/${encodeURIComponent(reportToken)}?invite=1&from=email`;
+      const inviteCtaUrl = tagEmailLink(
+        `${siteUrl}/report/${encodeURIComponent(reportToken)}?invite=1&from=email`,
+        reminder === 1 ? EMAIL_LINKS.inviteReminder1 : EMAIL_LINKS.inviteReminder2
+      );
 
       // After the link, never before: checkCooldown sets the year-long key as it checks,
       // so a lookup that failed after it cost the buyer their reminder for a year.
@@ -285,10 +320,18 @@ export async function GET(request: Request) {
         ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, `invite_reminder_${reminder}`)
         : undefined;
 
-      const tpl =
-        reminder === 1
+      const tpl = redesign
+        ? (reminder === 1 ? inviteReminderOneEmail : inviteReminderTwoEmail)({
+            firstName,
+            inviteUrl: inviteCtaUrl,
+            siteUrl,
+            unsubscribeUrl,
+          })
+        : reminder === 1
           ? inviteReminder1Email({ firstName, inviteCtaUrl, siteUrl, unsubscribeUrl })
           : inviteReminder2Email({ firstName, inviteCtaUrl, siteUrl, unsubscribeUrl });
+      // `stage` and `sub` keep this email's delivery, opens and clicks per reader.
+      const submissionId = await submissionIdForReport(row.personal_report_id);
 
       try {
         const { error } = await Promise.race([
@@ -299,6 +342,10 @@ export async function GET(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            tags: [
+              { name: "stage", value: reminder === 1 ? EMAIL_STAGES.c3 : EMAIL_STAGES.c4 },
+              ...(submissionId ? [{ name: "sub", value: String(submissionId) }] : []),
+            ],
             headers: {
               "X-LoveIQ-Reminder": String(reminder),
               // P-06: dedicated list identity for per-list reputation in

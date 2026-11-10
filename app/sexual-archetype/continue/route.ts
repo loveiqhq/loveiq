@@ -9,6 +9,7 @@ import {
 import { claimedReportPathForPayer } from "@features/pay-to-start/server/reportLink";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 export const runtime = "nodejs";
 
@@ -31,8 +32,12 @@ export const runtime = "nodejs";
 const RATE_LIMIT = { bucket: "pay-to-start-continue", limit: 20, windowMs: 60_000 };
 const LANDING = "/sexual-archetype";
 
+// Every way on is the confirmation email's link, so each carries its tags (email-link.ts).
 function redirect(request: Request, path: string): NextResponse {
-  const response = NextResponse.redirect(new URL(path, request.url), 303);
+  const response = NextResponse.redirect(
+    tagEmailLink(new URL(path, request.url).toString(), EMAIL_LINKS.payToStart),
+    303
+  );
   response.headers.set("Cache-Control", "no-store");
   // The token is in this URL: never send it on to the next page as a referrer.
   response.headers.set("Referrer-Policy", "no-referrer");
