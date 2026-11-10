@@ -188,6 +188,48 @@ describe("one email over a range", () => {
     expect(s).toMatchObject({ sent: 2, delivered: 1, bounced: 1, conv: 1, convSent: 2 });
   });
 
+  it("knows no open of an email sent before open tracking, read per reader too", () => {
+    const data = empty();
+    data.msgs = [
+      msg("newsletter_x", at("2026-10-14"), { deliveredAt: at("2026-10-14") }),
+      msg("newsletter_x", at("2026-10-17"), {
+        deliveredAt: at("2026-10-17"),
+        openedAt: at("2026-10-18"),
+      }),
+    ];
+    const page = buildEmailsPage({
+      data,
+      previous: null,
+      filters: range("2026-10-10", "2026-10-20"),
+      scope: "overall",
+      today: TODAY,
+      now: NOW,
+    });
+    expect(page.rows.find((r) => r.key === "stage:newsletter_x")!.stat).toMatchObject({
+      sent: 2,
+      delivered: 2,
+      opened: 1,
+      openBase: 1,
+    });
+  });
+
+  it("lists versions only when an email went out as two or more", () => {
+    const data = empty();
+    data.msgs = [
+      msg("72h_no_unlock", at("2026-11-12"), { variant: "a", deliveredAt: at("2026-11-12") }),
+      msg("72h_no_unlock", at("2026-11-13"), { variant: "a", deliveredAt: at("2026-11-13") }),
+    ];
+    const page = buildEmailsPage({
+      data,
+      previous: null,
+      filters: range("2026-11-11", "2026-11-17"),
+      scope: "overall",
+      today: TODAY,
+      now: NOW,
+    });
+    expect(page.rows.filter((r) => r.key === "h72")).toHaveLength(1);
+  });
+
   it("reads Resend's daily tallies by the event's day, opens only from 16 Oct", () => {
     const data = empty();
     const t = (day: string, event: string, n: number, arm = "a") => ({
