@@ -330,8 +330,8 @@ export async function GET(request: Request) {
         : reminder === 1
           ? inviteReminder1Email({ firstName, inviteCtaUrl, siteUrl, unsubscribeUrl })
           : inviteReminder2Email({ firstName, inviteCtaUrl, siteUrl, unsubscribeUrl });
-      // The redesign's `stage` and `sub` keep its delivery, opens and clicks per reader.
-      const submissionId = redesign ? await submissionIdForReport(row.personal_report_id) : null;
+      // `stage` and `sub` keep this email's delivery, opens and clicks per reader.
+      const submissionId = await submissionIdForReport(row.personal_report_id);
 
       try {
         const { error } = await Promise.race([
@@ -342,14 +342,10 @@ export async function GET(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            ...(redesign
-              ? {
-                  tags: [
-                    { name: "stage", value: reminder === 1 ? EMAIL_STAGES.c3 : EMAIL_STAGES.c4 },
-                    ...(submissionId ? [{ name: "sub", value: String(submissionId) }] : []),
-                  ],
-                }
-              : {}),
+            tags: [
+              { name: "stage", value: reminder === 1 ? EMAIL_STAGES.c3 : EMAIL_STAGES.c4 },
+              ...(submissionId ? [{ name: "sub", value: String(submissionId) }] : []),
+            ],
             headers: {
               "X-LoveIQ-Reminder": String(reminder),
               // P-06: dedicated list identity for per-list reputation in

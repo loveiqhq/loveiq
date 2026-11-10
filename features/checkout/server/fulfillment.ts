@@ -426,17 +426,18 @@ async function sendPurchaseEmail({
         subject: tpl.subject,
         html: tpl.html,
         text: tpl.text,
-        // Echoed back on every Resend webhook, which is how the A/B result is read.
-        ...(redesign
-          ? {
-              tags: [
-                { name: "stage", value: redesign },
-                { name: "sub", value: String(submissionId) },
-              ],
-            }
-          : purchaseExperiment
-            ? { tags: emailExperimentTags(purchaseExperiment, variant) }
-            : {}),
+        // Echoed back on every Resend webhook: `exp` and `arm` count the A/B test per day,
+        // `stage` and `sub` keep this email's own events per reader (email_message_event).
+        tags: redesign
+          ? [
+              { name: "stage", value: redesign },
+              { name: "sub", value: String(submissionId) },
+            ]
+          : [
+              ...(purchaseExperiment ? emailExperimentTags(purchaseExperiment, variant) : []),
+              { name: "stage", value: `receipt_${plan}` },
+              { name: "sub", value: String(submissionId) },
+            ],
         headers: {
           "X-LoveIQ-Variant": variant,
           ...(unsubscribeUrl && {

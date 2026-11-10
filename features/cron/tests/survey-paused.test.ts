@@ -417,6 +417,20 @@ describe("GET /api/cron/survey-paused", () => {
     expect(payload.tags).toEqual([{ name: "stage", value: "survey_paused" }]);
   });
 
+  it("keeps today's email's A/B tags and names it by its stage, with no reader (no survey yet)", async () => {
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockResendSend.mockResolvedValue({ data: { id: "re_4" }, error: null });
+    await GET(makeRequest("test-cron-secret"));
+    const payload = mockResendSend.mock.calls[0]?.[0] as {
+      tags: Array<{ name: string; value: string }>;
+    };
+    expect(payload.tags.map((t) => t.name)).toEqual(["exp", "arm", "stage"]);
+    expect(payload.tags[0]).toEqual({ name: "exp", value: "survey-paused" });
+    expect(payload.tags[2]).toEqual({ name: "stage", value: "survey_paused" });
+  });
+
   it("sends today's R1 when the draft's purchase link can't be read (as before the link existed)", async () => {
     mockSwitchOn.mockImplementation(async (key: string) => key === "ptsReminders");
     mockSupabaseSequence();

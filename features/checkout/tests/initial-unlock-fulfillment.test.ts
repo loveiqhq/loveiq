@@ -253,7 +253,7 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     });
   });
 
-  it("emails E06 once: its own copy, under no A/B test, unsubscribable as its own campaign", async () => {
+  it("emails E06 once: its own copy, under no A/B test, its stage and reader, unsubscribable as its own campaign", async () => {
     backend();
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
     expect(mockResendSend).toHaveBeenCalledTimes(1);
@@ -271,7 +271,11 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     expect(sent.html).toContain(
       `/report/${TOKEN}?from=email&amp;utm_source=email&amp;utm_medium=purchase&amp;utm_campaign=receipt`
     );
-    expect(sent).not.toHaveProperty("tags");
+    // No `exp` or `arm`: E06 is under no test. Its stage and reader keep its own events.
+    expect(sent.tags).toEqual([
+      { name: "stage", value: "receipt_initial" },
+      { name: "sub", value: "70" },
+    ]);
     expect(sent.headers["List-Unsubscribe"]).toContain("src=initial_unlocked");
   });
 

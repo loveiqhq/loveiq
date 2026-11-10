@@ -895,6 +895,12 @@ export async function POST(request: Request) {
             : null;
       const experiment = claim || redesign ? null : "survey-complete";
       const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
+      // A pay-to-start reader's email, by what opened: its `email` tag and its `stage`.
+      const ptsEmail = unlockedInitial
+        ? "pts_initial_unlocked"
+        : claim?.outcome === "unlocked"
+          ? "pts_report_unlocked"
+          : "pts_report_ready";
       const redesignParams = {
         firstName: normalizedFirstName,
         reportUrl,
@@ -945,7 +951,8 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            // Echoed back on every Resend webhook, which is how the A/B result is read.
+            // Echoed back on every Resend webhook: `exp` and `arm` count the A/B test per day,
+            // `stage` and `sub` keep this email's own events per reader (email_message_event).
             tags: redesign
               ? [
                   { name: "stage", value: redesign },
@@ -953,17 +960,17 @@ export async function POST(request: Request) {
                   ...(claim ? [{ name: "journey", value: PAY_TO_START_JOURNEY }] : []),
                 ]
               : experiment
-                ? emailExperimentTags(experiment, variant)
+                ? [
+                    ...emailExperimentTags(experiment, variant),
+                    // The same stage as the redesign (I1), so it stays one email across the switch.
+                    { name: "stage", value: EMAIL_STAGES.i1 },
+                    { name: "sub", value: String(submissionId) },
+                  ]
                 : [
                     { name: "journey", value: PAY_TO_START_JOURNEY },
-                    {
-                      name: "email",
-                      value: unlockedInitial
-                        ? "pts_initial_unlocked"
-                        : claim?.outcome === "unlocked"
-                          ? "pts_report_unlocked"
-                          : "pts_report_ready",
-                    },
+                    { name: "email", value: ptsEmail },
+                    { name: "stage", value: ptsEmail },
+                    { name: "sub", value: String(submissionId) },
                   ],
             headers: {
               "X-LoveIQ-Variant": variant,

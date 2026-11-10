@@ -167,8 +167,10 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
   value picked on question 1 (1-7) as well, to PostHog only, never to GA4 (also 2026-10-13).
 - **Email opens and clicks are tracked without consent — owner decision 2026-10-14.** Resend's
   open image and wrapped links are on for every email from the sending domain, transactional ones
-  included, and every nurture email is kept per reader (`email_message_event`: delivered, opened,
-  clicked, bounced and when, by submission id) whatever the Q16015 answer, on legitimate interest
+  included, and every email about the reader's report is kept per reader (`email_message_event`:
+  sent, delivered, opened, clicked, bounced, complained and when, and the A/B version, by
+  submission id; from 11 Nov 2026 the report-ready email, the receipts and the invite reminders
+  too, as privacy policy §7.3 says) whatever the Q16015 answer, on legitimate interest
   and the disclosure in privacy policy §7.3 and the Q16015 guide line. Resend itself records the
   IP, user agent and clicked link; our record does not. Whether the open image needs consent under
   ePrivacy (§25 TDDDG) has not been reviewed by a lawyer.

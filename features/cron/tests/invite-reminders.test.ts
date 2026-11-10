@@ -400,12 +400,13 @@ describe("GET /api/cron/invite-reminders", () => {
     });
   });
 
-  it("keeps today's days (3 to 7, then 7 to 21) and emails while the switch is off", async () => {
+  it("keeps today's days (3 to 7, then 7 to 21) and emails while the switch is off, tagged with its stage and reader", async () => {
     mockResendSend.mockResolvedValue({ data: { id: "e1" } });
     mockSupabaseSequence({
       candidates: [
         paidRow({
           payment_date_time: new Date(Date.now() - 5.5 * 24 * 60 * 60 * 1000).toISOString(),
+          personal_report_id: 9,
           metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" },
         }),
       ],
@@ -413,7 +414,10 @@ describe("GET /api/cron/invite-reminders", () => {
     const body = await (await GET(makeRequest("test-cron-secret"))).json();
     expect(body.reminder1Sent).toBe(1);
     const payload = mockResendSend.mock.calls[0]![0] as { html: string; tags?: unknown };
-    expect(payload.tags).toBeUndefined();
+    expect(payload.tags).toEqual([
+      { name: "stage", value: "invite_reminder_1" },
+      { name: "sub", value: "555" },
+    ]);
     expect(payload.html).not.toContain("Yours stays private");
   });
 });

@@ -1433,7 +1433,11 @@ describe("checkout fulfillment", () => {
             // Bought from another archetype's tile: today's email (it names that archetype).
             expect(sent.subject).not.toMatch(/Here’s where to start/);
             expect(sent.html).not.toContain("share=1");
-            expect(sent.tags.map((t) => t.name)).toEqual(["exp", "arm"]);
+            expect(sent.tags.map((t) => t.name)).toEqual(["exp", "arm", "stage", "sub"]);
+            expect(sent.tags.slice(2)).toEqual([
+              { name: "stage", value: "receipt_full_report" },
+              { name: "sub", value: "70" },
+            ]);
           }
         } finally {
           mockSwitchOn.mockImplementation(async () => false);

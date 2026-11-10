@@ -203,8 +203,9 @@ PostHog organization or billing entity, since the agreement is per-organization.
 - Survey submissions also keep Meta's click id (`fbclid`) and the referring site's
   hostname with their campaign tags (activity #2), to tell Meta and organic search
   apart from direct visits.
-- Per-email delivery, opens and clicks of the nurture emails (`email_message_event`,
-  activity #6).
+- Per-email sending, delivery, opens, clicks, bounces and complaints of the emails about the
+  reader's report (`email_message_event`, activity #6; the report-ready email, the receipts and
+  the invite reminders from 11 Nov 2026), ids, a time and the A/B version only.
 
 **What changed on 2026-08-27**, and what it does and does not fix:
 
