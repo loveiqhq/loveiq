@@ -689,7 +689,7 @@ export function buildEmailsPage(input: {
     trend: caption,
   });
   const tiles: Tile[] = [
-    tile("sent", "Emails sent", "count", (s) => s.sent, `${counted.length} emails`, "either"),
+    tile("sent", "Emails sent", "count", (s) => s.sent, `${counted.length} email types`, "either"),
     tile(
       "delivered",
       "Delivered",

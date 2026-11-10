@@ -84,6 +84,8 @@ type SortKey =
 interface Column {
   key: SortKey;
   label: string;
+  /** As the narrow header writes it: a soft hyphen where a long word may break. */
+  display?: string;
   info?: string;
   right?: boolean;
 }
@@ -94,17 +96,36 @@ function columns(scope: Scope): Column[] {
     { key: "group", label: scope === "overall" ? "Assessment" : "Funnel" },
     { key: "goal", label: "CVR goal", info: "emails.goal" },
     { key: "sent", label: "Sent", info: "emails.sent", right: true },
-    { key: "conv", label: "Conversions", info: "emails.conversions", right: true },
+    {
+      key: "conv",
+      label: "Conversions",
+      display: "Conver\u00adsions",
+      info: "emails.conversions",
+      right: true,
+    },
     { key: "click", label: "Clicked", info: "emails.clicked", right: true },
-    { key: "del", label: "Delivered", info: "emails.delivered", right: true },
+    {
+      key: "del",
+      label: "Delivered",
+      display: "Deliv\u00adered",
+      info: "emails.delivered",
+      right: true,
+    },
     { key: "bnc", label: "Bounced", info: "emails.bounced", right: true },
     { key: "open", label: "Opened", info: "emails.opened", right: true },
-    { key: "unsub", label: "Unsubscribed", info: "emails.unsubscribed", right: true },
+    {
+      key: "unsub",
+      label: "Unsubscribed",
+      display: "Unsub\u00adscribed",
+      info: "emails.unsubscribed",
+      right: true,
+    },
     { key: "trend", label: `Clicks · ${CLICK_DAYS} days`, info: "emails.clicks30" },
   ];
 }
+// The design's columns (Assessment A · Emails); its headers wrap rather than overlap.
 const GRID =
-  "minmax(170px,1.5fr) minmax(104px,0.85fr) minmax(120px,1fr) repeat(7, minmax(74px,0.6fr)) minmax(130px,1fr)";
+  "minmax(160px,1.3fr) minmax(100px,0.8fr) minmax(120px,1fr) repeat(7, minmax(70px,1fr)) minmax(120px,1.2fr)";
 
 const rates = {
   conv: (s: Stat) => (s.conv === null ? null : ratio(s.conv, s.convSent)),
@@ -227,7 +248,7 @@ function ClicksLine({
   const titles = clicks.map((_, i) => shortDate(addDays(from, i)));
   return (
     <span className="flex flex-col gap-1">
-      <Spark values={clicks} height={28} titles={titles} name="Clicks" />
+      {trend.tone !== "none" && <Spark values={clicks} height={28} titles={titles} name="Clicks" />}
       <span className={`text-[11px] font-semibold ${TREND_TONE[trend.tone]}`}>{trend.text}</span>
     </span>
   );
@@ -342,11 +363,11 @@ function EveryEmail({ data }: { data: Data }) {
           />
         </label>
       </div>
-      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Every email" className="min-w-[1080px]">
+      <div className="relative min-w-0 max-w-full overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Every email" lang="en" className="min-w-[1050px]">
           <div
             role="row"
-            className="grid items-end gap-x-1 bg-ap-ground px-3 py-2.5"
+            className="grid items-start gap-x-1 bg-ap-ground px-3 py-2.5"
             style={{ gridTemplateColumns: GRID }}
           >
             {cols.map((c) => {
@@ -356,7 +377,7 @@ function EveryEmail({ data }: { data: Data }) {
                   key={c.key}
                   role="columnheader"
                   aria-sort={on ? (sort!.dir === 1 ? "ascending" : "descending") : "none"}
-                  className={`flex items-center gap-0.5 ${c.right ? "justify-end" : ""} ${HEAD}`}
+                  className={`flex min-w-0 flex-wrap items-start gap-x-1 gap-y-0.5 px-1 ${c.right ? "justify-end text-right" : ""} text-xs font-bold leading-tight text-ap-ink`}
                 >
                   <button
                     type="button"
@@ -365,10 +386,10 @@ function EveryEmail({ data }: { data: Data }) {
                         on && sort!.dir === -1 ? { key: c.key, dir: 1 } : { key: c.key, dir: -1 }
                       )
                     }
-                    className={`inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-left ${HEAD}`}
+                    className={`inline-flex min-w-0 max-w-full cursor-pointer items-start gap-[3px] whitespace-normal border-0 bg-transparent p-0 text-xs font-bold leading-tight text-ap-ink ${c.right ? "text-right" : "text-left"}`}
                     aria-label={`Sort by ${c.label}`}
                   >
-                    {c.label}
+                    {c.display ?? c.label}
                     <span className={on ? "text-ap-violet" : "text-ap-quiet"}>
                       <SortIcon dir={on ? sort!.dir : null} />
                     </span>
@@ -403,7 +424,7 @@ function EveryEmail({ data }: { data: Data }) {
                   className={`flex min-w-0 flex-col ${r.version !== null ? "pl-4" : ""}`}
                 >
                   <span
-                    className={`truncate ${r.version !== null ? "text-[13px] font-semibold text-ap-muted" : "text-sm font-bold text-ap-ink"}`}
+                    className={`line-clamp-2 ${r.version !== null ? "text-[13px] font-semibold text-ap-muted" : "text-sm font-bold leading-snug text-ap-ink"}`}
                     title={r.name}
                   >
                     {r.name}
@@ -437,7 +458,7 @@ function EveryEmail({ data }: { data: Data }) {
                     ))
                   : Array.from({ length: 7 }, (_, i) => (
                       <span role="cell" key={i}>
-                        <Cell value={EMPTY} sub={i === 0 ? (r.note ?? "") : ""} />
+                        <Cell value={EMPTY} sub="" />
                       </span>
                     ))}
                 <span role="cell">
@@ -556,7 +577,7 @@ function Overview({ data }: { data: Data }) {
         title={overall ? "All emails" : "Assessment A emails"}
         description={`${data.range.label}, ${overall ? "every email together, any assessment or none" : "the emails Assessment A’s survey, report and payments send"}.`}
       />
-      <TileGrid min={150}>
+      <TileGrid min={128}>
         {data.tiles.map((t) => (
           <KpiTileV2
             key={t.key}
@@ -723,14 +744,14 @@ function Weeks({ data }: { data: Data }) {
           {data.weeks.map((w) => (
             <span
               key={w.from}
-              className="flex h-full flex-1 flex-col items-center justify-end px-[12%]"
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
             >
               <span className="text-[11px] font-bold tabular-nums text-ap-ink">
                 {count(w.sent)}
               </span>
               <span
                 title={`${w.label}: ${count(w.sent)} sent, ${count(w.clicked)} clicked`}
-                className="w-full rounded-t-md"
+                className="w-1/2 max-w-12 rounded-t-md"
                 style={{ height: `${(w.sent / top) * 100}%`, background: "#c0b4e6" }}
               />
             </span>
