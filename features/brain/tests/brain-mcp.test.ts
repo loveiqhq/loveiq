@@ -4049,18 +4049,18 @@ describe("/api/mcp", () => {
       expect(urlOf()).toContain("source=neq.paper");
     });
 
-    it("says the corporate website is opt-in when a site filter comes back empty", async () => {
+    it("says the company websites are opt-in when a site filter comes back empty", async () => {
       wire([]);
       const r = await call({ meta: { site: "appliedpsychometrics.org" } });
       expect(r.content[0].text).toContain(
-        'The corporate website is left out unless `sources` names "corporate".'
+        'The company websites (appliedpsychometrics.org, novutalent.com) are left out unless `sources` names "corporate".'
       );
       wire([]);
       const named = await call({
         sources: ["corporate"],
         meta: { site: "appliedpsychometrics.org" },
       });
-      expect(named.content[0].text).not.toContain("The corporate website is left out");
+      expect(named.content[0].text).not.toContain("The company websites (appliedpsychometrics.org");
     });
 
     it("orders by when the brain learned it, and shows that date", async () => {

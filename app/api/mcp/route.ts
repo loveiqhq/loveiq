@@ -5444,7 +5444,7 @@ async function callTool(
         ? ' Papers are left out unless `sources` names "paper".'
         : "") +
       (!opts.sources?.includes("corporate") && opts.meta?.site
-        ? ' The corporate website is left out unless `sources` names "corporate".'
+        ? ' The company websites (appliedpsychometrics.org, novutalent.com) are left out unless `sources` names "corporate".'
         : "");
     const learnedSince =
       typeof args.learned_since === "string" && args.learned_since.trim()
@@ -8231,11 +8231,14 @@ export const MCP_INSTRUCTIONS =
   'Pass `sources: ["paper"]`; an ordinary search never returns them. They are other ' +
   "people's research, not LoveIQ's findings, so name the paper and its authors when you use " +
   'one. To see what the literature on a construct looks like as a whole, read its evidence card (`sources: ["evidence"]`) first.\n\n' +
-  "THE CORPORATE WEBSITE, searched only when you ask for it: appliedpsychometrics.org, the " +
-  "website of Applied Psychometrics UG, the company that operates LoveIQ. Its daily, weekly and " +
-  "monthly visits, channels and most-read pages, its clicks out to other sites (loveiq.org above all), and the Google " +
-  'searches that find it, refreshed nightly. Pass `sources: ["corporate"]`; an ordinary search ' +
-  "never returns it, so a question about LoveIQ's traffic is answered with LoveIQ's. Its visits " +
+  "THE COMPANY'S OTHER WEBSITES, searched only when you ask for them: appliedpsychometrics.org, " +
+  "the website of Applied Psychometrics UG, the company that operates LoveIQ, and novutalent.com, " +
+  "its recruiting brand. For each, its daily, weekly and monthly visits, channels and most-read " +
+  "pages, its clicks out to other sites (from appliedpsychometrics.org, loveiq.org above all), " +
+  "novutalent.com's leads (clicks on its hr@novutalent.com email links), and the Google searches " +
+  'that find it, refreshed nightly. Pass `sources: ["corporate"]`, and `meta: {site: ' +
+  '"novutalent.com"}` (or "appliedpsychometrics.org") for one site; an ordinary search never ' +
+  "returns them, so a question about LoveIQ's traffic is answered with LoveIQ's. Their visits " +
   "count only people who accepted the site's cookie banner.\n\n" +
   "LIVE STATE, queried straight from the production database with full history and no " +
   "lag: payments and refunds, Resend email delivery and bounces, call invitations, " +
