@@ -17,9 +17,15 @@ import {
 import { recordSweep, shouldSweep, syncSource, type BrainRow, type IngestResult } from "./upsert";
 
 /**
- * appliedpsychometrics.org -- the corporate website of Applied Psychometrics UG, the company
- * that operates LoveIQ -- as source `corporate`: its Google Analytics 4 traffic and the Google
- * searches that find it.
+ * The websites of Applied Psychometrics UG, the company that operates LoveIQ, as source
+ * `corporate`: appliedpsychometrics.org (its corporate site) and novutalent.com (its recruiting
+ * brand, from 10 November 2026). For each, its Google Analytics 4 traffic and the Google
+ * searches that find it; every row names its site in its title, its first line and `meta.site`.
+ *
+ * ONE SOURCE, ONE RUN FOR BOTH SITES. The sweep deletes the source's rows that a run did not
+ * write, so the sites cannot be synced one after the other: the second sync would delete the
+ * first one's rows. Each site's rows are built on their own, and one that cannot be read keeps
+ * last night's rows (no sweep) without stopping the other.
  *
  * OPT-IN, like the books and the papers (migration 20261004150000): a second website's visits
  * sitting beside LoveIQ's own `ga4` rows would answer "how many visitors did we have" with the
@@ -41,16 +47,51 @@ import { recordSweep, shouldSweep, syncSource, type BrainRow, type IngestResult 
  * for a reason a reader would otherwise guess at.
  */
 const SOURCE = "corporate";
-/** GA4 property "Applied Psychometrics", in LoveIQ's GA account. */
-const PROPERTY_ID = "556864746";
-const SITE = "sc-domain:appliedpsychometrics.org";
-const SITE_NAME = "appliedpsychometrics.org";
-/** The day before launch, so no timezone can cut the first day off. */
-const SINCE = "2026-09-29";
 
-const WHOSE =
-  "Applied Psychometrics' corporate website, appliedpsychometrics.org: the parent company's " +
-  "own site, not LoveIQ.";
+export interface CorporateSite {
+  /** The host name, in every title and in `meta.site`. */
+  name: string;
+  /** Its GA4 property, in LoveIQ's GA account. */
+  propertyId: string;
+  /** Its Search Console property: a domain property or a URL prefix. */
+  searchSite: string;
+  /** The day before launch, so no timezone can cut the first day off. */
+  since: string;
+  /** Whose site it is, the first line of every row. */
+  whose: string;
+  /** Put before every source_id so two sites never share one; "" keeps the ids AP had before. */
+  idPrefix: string;
+  /** A GA4 key event that counts as a lead, and how a traffic row names it. */
+  lead?: { event: string; label: string };
+}
+
+export const CORPORATE_SITES: CorporateSite[] = [
+  {
+    name: "appliedpsychometrics.org",
+    propertyId: "556864746",
+    searchSite: "sc-domain:appliedpsychometrics.org",
+    since: "2026-09-29",
+    whose:
+      "Applied Psychometrics' corporate website, appliedpsychometrics.org: the parent company's " +
+      "own site, not LoveIQ.",
+    idPrefix: "",
+  },
+  {
+    name: "novutalent.com",
+    propertyId: "563588616",
+    searchSite: "https://novutalent.com/",
+    since: "2026-11-09",
+    whose:
+      "novutalent.com: the recruiting brand of Applied Psychometrics, the parent company " +
+      "(tested tech, growth and sales talent, booked by the month), not LoveIQ.",
+    idPrefix: "novutalent.com/",
+    lead: {
+      event: "generate_lead",
+      label: "Leads (clicks on an email link to hr@novutalent.com)",
+    },
+  },
+];
+
 const CONSENT_NOTE =
   "GA4 counts only visitors who accepted analytics cookies in the site's cookie banner.";
 
@@ -61,6 +102,8 @@ interface Traffic {
   views: number;
   engaged: number;
   channels: Map<string, number>;
+  /** Lead events, for a site that has one. */
+  leads: number;
 }
 
 const emptyTraffic = (): Traffic => ({
@@ -70,6 +113,7 @@ const emptyTraffic = (): Traffic => ({
   views: 0,
   engaged: 0,
   channels: new Map(),
+  leads: 0,
 });
 
 const listOf = (m: Map<string, number>, limit: number, unit = (_n: number) => ""): string =>
@@ -79,12 +123,18 @@ const listOf = (m: Map<string, number>, limit: number, unit = (_n: number) => ""
     .map(([k, v]) => `${k} ${v}${unit(v)}`)
     .join(", ");
 
-function renderTraffic(period: string, t: Traffic, extra: string[] = []): string {
+function renderTraffic(
+  site: CorporateSite,
+  period: string,
+  t: Traffic,
+  extra: string[] = []
+): string {
   return [
-    WHOSE,
+    site.whose,
     `Period: ${period}`,
     `Sessions: ${t.sessions} · Users: ${t.users ?? "n/a"} · New users: ${t.newUsers ?? "n/a"} · ` +
       `Page views: ${t.views} · Engaged sessions: ${t.engaged}`,
+    site.lead ? `${site.lead.label}: ${t.leads}` : null,
     t.channels.size ? `Sessions by channel: ${listOf(t.channels, 8)}` : null,
     ...extra,
     CONSENT_NOTE,
@@ -106,11 +156,11 @@ function addSearch(s: Search, r: GscRow): void {
   s.positionWeighted += (r.position ?? 0) * (r.impressions ?? 0);
 }
 
-function renderSearch(period: string, s: Search): string {
+function renderSearch(site: CorporateSite, period: string, s: Search): string {
   const ctr = s.impressions ? ((s.clicks / s.impressions) * 100).toFixed(2) : "0.00";
   const position = s.impressions ? (s.positionWeighted / s.impressions).toFixed(1) : "n/a";
   return [
-    WHOSE,
+    site.whose,
     `Period: ${period}`,
     `Google search clicks: ${s.clicks} · Impressions: ${s.impressions} · ` +
       `Click-through rate: ${ctr}% · Average position: ${position}`,
@@ -145,8 +195,44 @@ export async function ingestCorporateSite(
     };
   }
 
+  const rows: BrainRow[] = [];
+  let complete = true;
+  let failure: unknown = null;
+  for (const site of CORPORATE_SITES) {
+    try {
+      const built = await siteRows(site, token, stampedAt, isOutOfTime);
+      rows.push(...built.rows);
+      complete &&= built.complete;
+      failure ??= built.searchError;
+    } catch (err) {
+      // This site keeps last night's rows (no sweep below); the other is still written.
+      complete = false;
+      failure ??= err;
+      logger.warn({ err, site: site.name }, "brain-ingest corporate: a site could not be read");
+    }
+  }
+
+  const sweeping = complete && (await shouldSweep(SOURCE));
+  if (sweeping) await recordSweep(SOURCE);
+  const { rows: written, swept } = await syncSource(SOURCE, rows, { sweep: sweeping });
+  if (failure) throw failure;
+  return {
+    source: SOURCE,
+    rows: written,
+    swept,
+    ...(complete ? {} : { complete: false, sweepBlocked: true }),
+  };
+}
+
+/** One site's rows. Its Search Console failure is returned, not thrown, so its traffic is still written. */
+async function siteRows(
+  site: CorporateSite,
+  token: string,
+  stampedAt: string,
+  isOutOfTime: () => boolean
+): Promise<{ rows: BrainRow[]; complete: boolean; searchError: unknown }> {
   const today = stampedAt.slice(0, 10);
-  const dateRanges = [{ startDate: SINCE, endDate: "today" }];
+  const dateRanges = [{ startDate: site.since, endDate: "today" }];
   const metrics = [
     { name: "sessions" },
     { name: "totalUsers" },
@@ -164,7 +250,7 @@ export async function ingestCorporateSite(
   const report = (dimensions: string[], extra: Record<string, unknown> = {}) =>
     runGa4Report(
       token,
-      PROPERTY_ID,
+      site.propertyId,
       {
         dateRanges,
         dimensions: dimensions.map((name) => ({ name })),
@@ -198,6 +284,36 @@ export async function ingestCorporateSite(
     into.set(key, t);
   };
   for (const r of byDay) fill(days, ga4Date(r.dimensionValues?.[0]?.value ?? ""), r.metricValues);
+  // Leads are events, so a week's or a month's are the sum of its days'.
+  if (site.lead) {
+    for (const r of await runGa4Report(
+      token,
+      site.propertyId,
+      {
+        dateRanges,
+        dimensions: [{ name: "date" }],
+        metrics: [{ name: "eventCount" }],
+        dimensionFilter: {
+          filter: { fieldName: "eventName", stringFilter: { value: site.lead.event } },
+        },
+        limit: 10_000,
+      },
+      isOutOfTime,
+      traffic
+    )) {
+      const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
+      const n = num(r.metricValues?.[0]?.value);
+      for (const [into, key] of [
+        [days, day],
+        [weeks, isoWeek(day)],
+        [months, day.slice(0, 7)],
+      ] as const) {
+        const t = into.get(key) ?? emptyTraffic();
+        t.leads += n;
+        into.set(key, t);
+      }
+    }
+  }
   for (const r of byWeek) fill(weeks, ga4Week(r.dimensionValues?.[0]?.value ?? ""), r.metricValues);
   for (const r of byMonth)
     fill(months, ga4Month(r.dimensionValues?.[0]?.value ?? ""), r.metricValues);
@@ -217,15 +333,16 @@ export async function ingestCorporateSite(
     }
   }
 
-  // For the monthly rows: the pages read most, and the clicks out to LoveIQ, which are the
-  // reason the site exists. Losing them must not lose the daily and weekly traffic.
+  // For the monthly rows: the pages read most, and the clicks out to other sites (from
+  // appliedpsychometrics.org, to LoveIQ: the reason it exists). Losing them must not lose the
+  // daily and weekly traffic.
   const topPages = new Map<string, Map<string, number>>();
   const linkClicks = new Map<string, Map<string, number>>();
   let extrasRead = false;
   try {
     for (const r of await runGa4Report(
       token,
-      PROPERTY_ID,
+      site.propertyId,
       {
         dateRanges,
         dimensions: [{ name: "yearMonth" }, { name: "pagePath" }],
@@ -242,7 +359,7 @@ export async function ingestCorporateSite(
     }
     for (const r of await runGa4Report(
       token,
-      PROPERTY_ID,
+      site.propertyId,
       {
         dateRanges,
         dimensions: [{ name: "yearMonth" }, { name: "linkDomain" }],
@@ -272,17 +389,17 @@ export async function ingestCorporateSite(
   let searchDays: GscRow[] = [];
   let searchQueries: GscRow[] = [];
   try {
-    const body = { startDate: SINCE, endDate: today };
+    const body = { startDate: site.since, endDate: today };
     searchDays = await queryGsc(
       token,
-      SITE,
+      site.searchSite,
       { ...body, dimensions: ["date"], rowLimit: 5000 },
       isOutOfTime,
       search
     );
     searchQueries = await queryGsc(
       token,
-      SITE,
+      site.searchSite,
       { ...body, dimensions: ["date", "query"], rowLimit: 5000 },
       isOutOfTime,
       search
@@ -301,11 +418,11 @@ export async function ingestCorporateSite(
   ) =>
     rows.push({
       source: SOURCE,
-      source_id: sourceId,
+      source_id: site.idPrefix + sourceId,
       title,
       url: null,
       body,
-      meta: { site: SITE_NAME, ...meta },
+      meta: { site: site.name, ...meta },
       updated_at: stampedAt,
       period_end: periodEnd,
     });
@@ -319,8 +436,8 @@ export async function ingestCorporateSite(
     const label = `${longDate(day)} (${day})${day === today ? ", so far" : ""}`;
     row(
       `ga4-day:${day}`,
-      `${SITE_NAME} website traffic — ${longDate(day)}`,
-      renderTraffic(label, t),
+      `${site.name} website traffic — ${longDate(day)}`,
+      renderTraffic(site, label, t),
       { grain: "day", day, sessions: t.sessions, users: t.users },
       day
     );
@@ -333,8 +450,8 @@ export async function ingestCorporateSite(
     const label = `week of ${longDate(first)} to ${longDate(last)} (${week})${last >= today ? ", so far" : ""}`;
     row(
       `ga4-week:${week}`,
-      `${SITE_NAME} website traffic — week of ${longDate(first)}`,
-      renderTraffic(label, t),
+      `${site.name} website traffic — week of ${longDate(first)}`,
+      renderTraffic(site, label, t),
       { grain: "week", week, sessions: t.sessions, users: t.users },
       last < today ? last : today
     );
@@ -347,8 +464,9 @@ export async function ingestCorporateSite(
     const clicks = linkClicks.get(month);
     row(
       `ga4-month:${month}`,
-      `${SITE_NAME} website traffic — ${longMonth(month)}`,
+      `${site.name} website traffic — ${longMonth(month)}`,
       renderTraffic(
+        site,
         label,
         t,
         [
@@ -400,8 +518,8 @@ export async function ingestCorporateSite(
   for (const [day, s] of writeSearch ? searchByDay : []) {
     row(
       `gsc-day:${day}`,
-      `${SITE_NAME} Google searches — ${longDate(day)}`,
-      renderSearch(`${longDate(day)} (${day})`, s),
+      `${site.name} Google searches — ${longDate(day)}`,
+      renderSearch(site, `${longDate(day)} (${day})`, s),
       { grain: "day", day, clicks: s.clicks, impressions: s.impressions },
       day
     );
@@ -412,8 +530,8 @@ export async function ingestCorporateSite(
     const { first, last } = isoWeekBounds(anyDay);
     row(
       `gsc-week:${week}`,
-      `${SITE_NAME} Google searches — week of ${longDate(first)}`,
-      renderSearch(`week of ${longDate(first)} to ${longDate(last)} (${week})`, s),
+      `${site.name} Google searches — week of ${longDate(first)}`,
+      renderSearch(site, `week of ${longDate(first)} to ${longDate(last)} (${week})`, s),
       { grain: "week", week, clicks: s.clicks, impressions: s.impressions },
       last < today ? last : today
     );
@@ -422,22 +540,12 @@ export async function ingestCorporateSite(
     const last = monthEnd(month);
     row(
       `gsc-month:${month}`,
-      `${SITE_NAME} Google searches — ${longMonth(month)}`,
-      renderSearch(`${longMonth(month)} (${month})`, s),
+      `${site.name} Google searches — ${longMonth(month)}`,
+      renderSearch(site, `${longMonth(month)} (${month})`, s),
       { grain: "month", month, clicks: s.clicks, impressions: s.impressions },
       last < today ? last : today
     );
   }
 
-  const complete = writeTraffic && writeMonths && writeSearch;
-  const sweeping = complete && (await shouldSweep(SOURCE));
-  if (sweeping) await recordSweep(SOURCE);
-  const { rows: written, swept } = await syncSource(SOURCE, rows, { sweep: sweeping });
-  if (searchError) throw searchError;
-  return {
-    source: SOURCE,
-    rows: written,
-    swept,
-    ...(complete ? {} : { complete: false, sweepBlocked: true }),
-  };
+  return { rows, complete: writeTraffic && writeMonths && writeSearch, searchError };
 }
