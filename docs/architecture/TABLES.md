@@ -105,7 +105,7 @@ flowchart LR
 | `booking_event`          | 11      | `personal_report`, `survey_submission`       |                                                                                                                |
 | `email_experiment_event` | 6       |                                              | Daily per-arm counters for the email A/B tests.                                                                |
 | `email_journey_send`     | 9       | `prepaid_report_access`, `survey_submission` | One row per journey email and target, claimed before the send (features/email-journeys).                       |
-| `email_message_event`    | 5       | `survey_submission`                          | Each nurture email's delivery, opens and clicks: the first of each kind per email, from the Resend webhook,... |
+| `email_message_event`    | 6       | `survey_submission`                          | Each email's sending, delivery, opens, clicks, bounce and spam complaint, kept per reader: the first of eac... |
 | `email_suppression`      | 5       |                                              |                                                                                                                |
 | `invite_event`           | 6       |                                              |                                                                                                                |
 | `resend_webhook_event`   | 4       |                                              |                                                                                                                |
