@@ -9,6 +9,7 @@ import {
 } from "@features/scoring/logic";
 import type { SurveyAnswers } from "./types";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { OPT_IN_SHEET_COPY_VERSION, type MarketingOptInVia } from "@features/survey/optInSheet";
 
 const SUPABASE_TIMEOUT_MS = 8000;
 /** The submit writes every answer, so it gets longer than a lookup; the browser waits 30 s. */
@@ -48,6 +49,16 @@ export const SUBMIT_OUTCOME_UNKNOWN = "submit_survey_outcome_unknown";
 export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 
 /**
+ * T-11 again, for a Yes given in the opt-in's "Sure you want to miss out?" sheet (Mark,
+ * 10 Nov 2026), which only opens after a No. That reader saw Q16015's words AND the
+ * sheet's (features/survey/optInSheet.ts), so the version names both: the question's
+ * version, then "+sheet-", then the sheet copy's date (2026-10-14+sheet-2026-11-10).
+ * It follows either bump by itself. A Yes on the question alone keeps
+ * MARKETING_OPT_IN_TERMS_VERSION.
+ */
+export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
+
+/**
  * Audit M2: GDPR Art. 5(2)/9(2)(a) accountability. Version of the consent terms
  * shown on the survey ConsentScreen (age confirmation + terms acceptance).
  * Stored on `survey_submission.terms_version` alongside `consent_at` so a
@@ -85,6 +96,11 @@ export interface SurveySubmissionPayload {
    * `marketing_opt_in_at = now()` timestamp set inside the RPC.
    */
   marketingOptIn?: boolean | null;
+  /**
+   * "sheet" when that Yes was given in the "Sure you want to miss out?" sheet: the row is
+   * then stamped with MARKETING_OPT_IN_SHEET_TERMS_VERSION. Ignored unless the answer is Yes.
+   */
+  marketingOptInVia?: MarketingOptInVia | null;
 }
 
 export interface SurveyScoringSummary {
@@ -259,7 +275,10 @@ export async function submitSurveyOnce(
       terms_version: CONSENT_TERMS_VERSION,
     };
     if (payload.marketingOptIn === true) {
-      consentPatch.marketing_opt_in_terms_version = MARKETING_OPT_IN_TERMS_VERSION;
+      consentPatch.marketing_opt_in_terms_version =
+        payload.marketingOptInVia === "sheet"
+          ? MARKETING_OPT_IN_SHEET_TERMS_VERSION
+          : MARKETING_OPT_IN_TERMS_VERSION;
     }
     // Session-replay id rides along on the PATCH that already exists rather than in
     // the submit_survey RPC: the RPC's signature would have to change (and with it

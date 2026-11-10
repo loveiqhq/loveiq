@@ -179,18 +179,19 @@ Submits a completed survey and schedules downstream scoring/notification work af
 }
 ```
 
-| Field         | Type   | Required | Notes                                                             |
-| ------------- | ------ | -------- | ----------------------------------------------------------------- |
-| `email`       | string | Yes      | Valid email, max 320 chars.                                       |
-| `firstName`   | string | Yes      | Max 80 chars.                                                     |
-| `answers`     | object | Yes      | Record of question ID to string, string array, or integer 1 to 7. |
-| `startedAt`   | string | Yes      | ISO 8601 datetime.                                                |
-| `durationMs`  | number | Yes      | Integer from `0` to `86,400,000`. Client clamps; see below.       |
-| `utmTracker`  | string | No       | Max 1000 chars. Server may append A/B stamps; see below.          |
-| `sessionId`   | string | No       | UUID-like submission/session identifier.                          |
-| `optionOrder` | object | No       | Order options were shown in, per question ID. See below.          |
-| `landingPath` | string | No       | First page this browser opened; a bare path, max 200. See below.  |
-| `website`     | string | No       | Honeypot field and must stay empty.                               |
+| Field               | Type   | Required | Notes                                                                                                                                                                                     |
+| ------------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `email`             | string | Yes      | Valid email, max 320 chars.                                                                                                                                                               |
+| `firstName`         | string | Yes      | Max 80 chars.                                                                                                                                                                             |
+| `answers`           | object | Yes      | Record of question ID to string, string array, or integer 1 to 7.                                                                                                                         |
+| `startedAt`         | string | Yes      | ISO 8601 datetime.                                                                                                                                                                        |
+| `durationMs`        | number | Yes      | Integer from `0` to `86,400,000`. Client clamps; see below.                                                                                                                               |
+| `utmTracker`        | string | No       | Max 1000 chars. Server may append A/B stamps; see below.                                                                                                                                  |
+| `sessionId`         | string | No       | UUID-like submission/session identifier.                                                                                                                                                  |
+| `optionOrder`       | object | No       | Order options were shown in, per question ID. See below.                                                                                                                                  |
+| `landingPath`       | string | No       | First page this browser opened; a bare path, max 200. See below.                                                                                                                          |
+| `marketingOptInVia` | string | No       | `"sheet"` when the `16015` Yes was given in the opt-in's "miss out" sheet ([survey.md](survey.md)): picks the consent version it is filed under. Anything else is dropped, never refused. |
+| `website`           | string | No       | Honeypot field and must stay empty.                                                                                                                                                       |
 
 **A/B stamps on `utmTracker`.** The server may add fields to the JSON object before
 storing it on `survey_submission.utm_tracker`:

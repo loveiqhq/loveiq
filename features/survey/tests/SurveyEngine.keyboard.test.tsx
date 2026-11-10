@@ -23,6 +23,8 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyFormError: vi.fn(),
   trackSurveyGuidanceExpanded: vi.fn(),
   setReportSubmissionContext: vi.fn(),
+  trackOptInSheetShown: vi.fn(),
+  trackOptInSheetClosed: vi.fn(),
   setSurveyVariant: vi.fn(),
 }));
 vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({

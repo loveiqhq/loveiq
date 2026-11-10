@@ -1212,6 +1212,17 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* The opt-in's "Sure you want to miss out?" sheet rises from the bottom edge
+   (features/survey/ui/OptInSheet.tsx). */
+@keyframes survey-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 @keyframes survey-avatar-pulse {
   0%,
   100% {
