@@ -39,6 +39,7 @@ import {
   CLICK_DAYS,
   EMAIL_TAGS_FROM,
   EMAILS,
+  GOAL_DAYS,
   MIN_DELIVERED,
   OPENS_FROM,
   goalsByStage,
@@ -266,7 +267,11 @@ interface Reading {
   data: EmailsData;
   /** Events after it don't count (the period before, at the same age); null: none. */
   cut: number | null;
+  /** The moment read at: a goal is read only for sends whose 7 days are over by then. */
+  asOf: number;
 }
+
+const GOAL_MS = GOAL_DAYS * 86_400_000;
 
 /** One email's (or one of its versions') figures over [from, to]. */
 export function statOf(d: EmailDef, r: Reading, from: string, to: string, version?: string): Stat {
@@ -286,7 +291,8 @@ export function statOf(d: EmailDef, r: Reading, from: string, to: string, versio
       s.openBase += c.delivered && day >= OPENS_FROM ? 1 : 0;
       s.clicked += c.clicked ? 1 : 0;
       s.complained += c.complained ? 1 : 0;
-      if (s.conv !== null) {
+      // Only a send whose 7 days are over: a younger one can't have missed its goal yet.
+      if (s.conv !== null && Date.parse(m.sentAt) + GOAL_MS <= r.asOf) {
         s.conv += c.goal ? 1 : 0;
         s.convSent += 1;
       }
@@ -567,10 +573,15 @@ export function buildEmailsPage(input: {
   const all: ApFilters = { ...f, source: "all", device: "all", tier: "all", visitor: "all" };
   const pageHead = head(all, today, now);
   const notes = [...pageHead.notes];
-  const cur: Reading = { data, cut: null };
+  const cur: Reading = { data, cut: null, asOf: now.getTime() };
   const cmp = comparisonRange(f);
   const prev: Reading | null =
-    input.previous && cmp ? { data: input.previous, cut: sameAge(f, cmp, now).getTime() } : null;
+    input.previous && cmp
+      ? (() => {
+          const cut = sameAge(f, cmp, now).getTime();
+          return { data: input.previous, cut, asOf: cut };
+        })()
+      : null;
 
   const defs = [...EMAILS, ...unknownDefs(data)].filter(
     (d) => scope === "overall" || d.assessment === "A"

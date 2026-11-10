@@ -199,6 +199,13 @@ function statCells(r: EmailRow, finished: number) {
     />,
     s.conv === null ? (
       <Cell key="conv" value={EMPTY} sub="not tracked" title={r.goalNote ?? undefined} />
+    ) : s.convSent === 0 ? (
+      <Cell
+        key="conv"
+        value={EMPTY}
+        sub={s.sent ? "under 7 days" : ""}
+        title={s.sent ? "Its emails are still inside their 7 days" : undefined}
+      />
     ) : (
       <Cell
         key="conv"
@@ -207,7 +214,7 @@ function statCells(r: EmailRow, finished: number) {
         standing={st.conv}
         title={
           s.convSent < s.sent
-            ? `Read for the ${count(s.convSent)} emails counted per reader`
+            ? `Read for the ${count(s.convSent)} emails whose 7 days are over`
             : undefined
         }
       />

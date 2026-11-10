@@ -60,7 +60,7 @@ const msg = (stage: string, sentAt: string, over: Partial<Msg> = {}): Msg => ({
 const at = (day: string, hm = "09:00") => `${day}T${hm}:00Z`;
 const empty = (): EmailsData => ({ msgs: [], tallies: [], unsubs: [], finished: [] });
 const def = (key: string) => EMAILS.find((d) => d.key === key)!;
-const read = (data: EmailsData) => ({ data, cut: null });
+const read = (data: EmailsData) => ({ data, cut: null, asOf: NOW.getTime() });
 
 describe("the email registry", () => {
   it("names each stage once, and gives every goal a stage to read it by", () => {
@@ -228,6 +228,20 @@ describe("one email over a range", () => {
       now: NOW,
     });
     expect(page.rows.filter((r) => r.key === "h72")).toHaveLength(1);
+  });
+
+  it("reads a goal only once its 7 days are over, so a new email isn't ranked on misses", () => {
+    const data = empty();
+    data.msgs = [
+      msg("72h_no_unlock", at("2026-11-10"), {
+        deliveredAt: at("2026-11-10"),
+        goalAt: at("2026-11-11"),
+      }),
+      msg("72h_no_unlock", at("2026-11-12"), { deliveredAt: at("2026-11-12") }),
+      msg("72h_no_unlock", at("2026-11-19"), { deliveredAt: at("2026-11-19") }), // a day old on 20 Nov
+    ];
+    const s = statOf(def("h72"), read(data), "2026-11-01", "2026-11-19");
+    expect(s).toMatchObject({ sent: 3, conv: 1, convSent: 2 });
   });
 
   it("reads Resend's daily tallies by the event's day, opens only from 16 Oct", () => {

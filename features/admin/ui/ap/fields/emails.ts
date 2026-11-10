@@ -315,7 +315,7 @@ select stage, reader_from as counted_from, goal
       mult: "× 100",
     },
     caveat:
-      "Read per reader only. A goal reached for another reason (the reader came back by themselves) counts too: it is what happened after the email, not proof the email caused it. Emails of the last 7 days are still inside their window. A report opened means a report session (not the team's own look); a purchase is a paid one (gifts and €0 codes are not).",
+      "Read per reader only, and only for emails whose 7 days are over: a younger email can't have missed its goal yet. A report already open when the email arrives counts only if it is opened again. A goal reached for another reason (the reader came back by themselves) counts too: it is what happened after the email, not proof the email caused it. Emails of the last 7 days are still inside their window. A report opened means a report session (not the team's own look); a purchase is a paid one (gifts and €0 codes are not).",
     tables: [
       T_MSG,
       PROD("report_session", "personal_report_id, user_id, started_at", "After each send, 7 days"),
@@ -330,8 +330,10 @@ select stage, reader_from as counted_from, goal
       lang: "SQL",
       text: `${PER_READER}
 select count(*) filter (where goal_at is not null) as conversions,
-       count(*) filter (where goal <> '') as sent
-  from counted;`,
+       count(*) as sent
+  from counted
+ where goal <> ''
+   and sent_at + interval '${GOAL_DAYS} days' <= now();`,
     },
     related: ["emails.goal", "emails.sent"],
   },
