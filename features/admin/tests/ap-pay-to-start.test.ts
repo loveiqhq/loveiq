@@ -427,7 +427,13 @@ describe("buildPayToStart", () => {
       id: number,
       seen: boolean,
       gapMs = 5_000,
-      taps?: { card: boolean; bar: boolean; notReady: boolean; exit?: boolean }
+      taps?: {
+        card: boolean;
+        bar: boolean;
+        notReady: boolean;
+        exit?: boolean;
+        browserBack?: boolean;
+      }
     ) => {
       const s = subs.find((x) => x.id === id)!;
       return {
@@ -437,11 +443,18 @@ describe("buildPayToStart", () => {
         ...(taps && { taps }),
       };
     };
-    const tap = (card: boolean, bar: boolean, notReady = false, exit = false) => ({
+    const tap = (
+      card: boolean,
+      bar: boolean,
+      notReady = false,
+      exit = false,
+      browserBack = false
+    ) => ({
       card,
       bar,
       notReady,
       exit,
+      browserBack,
     });
     const p = buildPayToStart(
       input({
@@ -456,14 +469,16 @@ describe("buildPayToStart", () => {
           subs,
         },
         gateMembers: [
-          // The page's buttons and its way out: 3 pressed the card, 4 both, 8 the bar and
-          // didn't pay, 7 pressed "Not ready to unlock yet" and then Unlock on its exit page.
+          // The page's buttons and its ways out: 3 pressed the card, 4 both, 8 the bar and
+          // didn't pay, then the browser's Back; 7 pressed "Not ready to unlock yet", Unlock on
+          // its exit page and the browser's Back. 6 (the campaign's, not this funnel's) pressed
+          // Back too.
           member(3, true, 5_000, tap(true, false)),
           member(4, true, 5_000, tap(true, true)),
-          member(7, true, 5_000, tap(false, false, true, true)),
-          member(8, true, 5_000, tap(false, true)),
+          member(7, true, 5_000, tap(false, false, true, true, true)),
+          member(8, true, 5_000, tap(false, true, false, false, true)),
           member(9, false),
-          member(6, true, 3 * 86_400_000),
+          member(6, true, 3 * 86_400_000, tap(false, false, false, false, true)),
         ],
         ads: {
           ok: true,
@@ -498,7 +513,7 @@ describe("buildPayToStart", () => {
       ["Bought the full report", 1, true],
     ]);
     expect(gate.steps.find((s) => s.label === "Saw the €1.99 page")?.detail).toBe(
-      "1 pressed “Not ready to unlock yet”"
+      "1 pressed “Not ready to unlock yet” · 2 pressed the browser's Back"
     );
     expect(gate.steps.find((s) => s.label === "Pressed Unlock")?.detail).toBe(
       "on the card 2 · on the bar 2 · on the exit page 1"
@@ -613,6 +628,64 @@ describe("buildPayToStart", () => {
     expect(p.notes).toContain(
       "Today is still running: its figures are so far, and the ads lag a few hours."
     );
+  });
+});
+
+describe("E07, the gift a day after the €1.99 page", () => {
+  const at = (day: string, h = 10) => `${day}T${String(h).padStart(2, "0")}:00:00Z`;
+  const later = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+  const subs = [
+    // Gifted, then bought the full report.
+    sub({
+      id: 21,
+      day: "2026-10-20",
+      at: at("2026-10-20", 9),
+      paidAt: at("2026-10-22", 10),
+      sales: 1,
+      revenue: 19.99,
+      pays: [[2, 19.99, "full_report"]],
+      plan: "full_report",
+      full: true,
+      visits: 3,
+    }),
+    sub({ id: 22, day: "2026-10-20", at: at("2026-10-20", 10), visits: 1 }),
+    sub({ id: 23, day: "2026-10-20", at: at("2026-10-20", 11), visits: 0 }),
+    sub({ id: 24, day: "2026-10-20", at: at("2026-10-20", 12), visits: 0 }),
+  ];
+  const member = (id: number, giftArm?: "gift" | "holdout") => {
+    const s = subs.find((x) => x.id === id)!;
+    return {
+      sid: id,
+      cohortAt: later(s.at, 5_000),
+      seenAt: later(s.at, 60_000),
+      ...(giftArm && { giftArm }),
+    };
+  };
+  const fullStep = (gateMembers: PtsInput["gateMembers"]) =>
+    funnel(
+      buildPayToStart(
+        input({
+          facts: { visits: [visit("2026-10-20", 50)], starts: [], subs },
+          gateMembers,
+          gateOn: true,
+        })
+      ),
+      "gate"
+    ).steps.find((s) => s.label === "Bought the full report");
+
+  it("splits the full-report buyers by its draw, under the €1.99 page's funnel", () => {
+    const step = fullStep([
+      member(21, "gift"),
+      member(22, "gift"),
+      member(23, "holdout"),
+      member(24),
+    ]);
+    expect(step?.n).toBe(1);
+    expect(step?.detail).toBe("E07 gift email: 1 of 2 gifted bought it · 0 of 1 held out");
+  });
+
+  it("says nothing before anyone is drawn", () => {
+    expect(fullStep([member(21), member(22), member(23), member(24)])?.detail).toBeUndefined();
   });
 });
 

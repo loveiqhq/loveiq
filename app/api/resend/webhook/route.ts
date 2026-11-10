@@ -94,15 +94,17 @@ function readTags(raw: unknown): Map<string, string> {
  * Best-effort and silent: an experiment counter is not worth failing a webhook
  * whose real job is suppressing bounces and complaints. An untagged email — every
  * transactional send, and every A/B email sent before this shipped — has no tags
- * and is skipped rather than bucketed into a fake arm.
+ * and is skipped rather than bucketed into a fake arm. So is a test send (see
+ * `isTestRecipient`): staging's emails reach this webhook too.
  */
 async function recordExperimentEvent(
   payload: { data?: { tags?: unknown } },
-  eventType: string
+  eventType: string,
+  recipient: string | undefined
 ): Promise<void> {
   const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return;
+  if (!url || !key || isTestRecipient(recipient)) return;
 
   const tags = readTags(payload.data?.tags);
   const experiment = tags.get("exp");
@@ -147,18 +149,66 @@ async function recordExperimentEvent(
   }
 }
 
-/** The events kept for each nurture email (email_message_event). */
+/** The events kept for each email (email_message_event). */
 const PER_EMAIL_EVENTS = new Set([
+  "email.sent",
   "email.delivered",
   "email.opened",
   "email.clicked",
   "email.bounced",
+  "email.complained",
 ]);
 
 /**
- * Keep a nurture email's delivery, open, click or bounce: the admin's Report page counts them
- * per campaign. The email is known by the `stage` and `sub` (submission) tags its send carried
- * (nurture-sequence); every other email lacks them and is skipped.
+ * A test send, never a reader: Resend's test addresses (delivered@resend.dev, bounced@…), which
+ * staging mails. Production's webhook receives staging's emails too (one Resend account), so
+ * neither the daily tallies nor an email's own events may count them.
+ */
+function isTestRecipient(recipient: string | undefined): boolean {
+  return Boolean(recipient?.endsWith("@resend.dev"));
+}
+
+/**
+ * Whether the email went to its submission's own reader: the only case its events are kept
+ * against that submission. Staging's emails reach this webhook too, and staging's submission
+ * ids collide with real readers' on production; a send to anyone else (a recipient, a test
+ * address) is no event of that reader's either. A failed lookup keeps nothing. The addresses
+ * are compared here and never stored or logged.
+ */
+async function sentToReader(
+  url: string,
+  key: string,
+  sub: string,
+  recipient: string | undefined,
+  log: { stage: string; eventType: string }
+): Promise<boolean> {
+  if (!recipient) return false;
+  try {
+    const res = await fetchWithTimeout(
+      `${url}/rest/v1/survey_submission?id=eq.${sub}&select=app_user!fk_survey_submission_user(email)&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 3000 }
+    );
+    if (!res.ok) {
+      logger.warn({ status: res.status, ...log }, "email message event: reader lookup non-ok");
+      return false;
+    }
+    const rows = (await res.json()) as Array<{ app_user?: { email?: unknown } | null }>;
+    const owner = rows[0]?.app_user?.email;
+    if (typeof owner === "string" && owner.toLowerCase().trim() === recipient) return true;
+    logger.info(log, "email message event skipped: not sent to the submission's reader");
+    return false;
+  } catch (err) {
+    logger.warn({ err, ...log }, "email message event: reader lookup failed");
+    return false;
+  }
+}
+
+/**
+ * Keep an email's send, delivery, open, click, bounce or complaint: AP-Analytics counts them per
+ * email (Emails, Report, Unlock feedback). The email is known by the `stage` and `sub`
+ * (submission) tags its send carried; one without them (no reader yet, as Survey paused) is
+ * skipped, and so is one not sent to that submission's reader (`sentToReader`) or sent to a test
+ * address. Its A/B version, the `arm` tag, is kept as `variant` when it has one.
  *
  * Ids and a time only: never the address, the IP, the user agent or the clicked link, which
  * carries the report token and the promo code.
@@ -167,14 +217,23 @@ const PER_EMAIL_EVENTS = new Set([
  * open adds nothing and, unlike the counter, this needs no certain claim. Best effort, like
  * the counter: a failure is logged, never answered with an error.
  */
-async function recordMessageEvent(payload: {
-  type?: unknown;
-  created_at?: unknown;
-  data?: { email_id?: unknown; tags?: unknown };
-}): Promise<void> {
+async function recordMessageEvent(
+  payload: {
+    type?: unknown;
+    created_at?: unknown;
+    data?: { email_id?: unknown; tags?: unknown };
+  },
+  recipient: string | undefined
+): Promise<void> {
   const url = supabaseRestUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key || typeof payload.type !== "string" || !PER_EMAIL_EVENTS.has(payload.type)) {
+  if (
+    !url ||
+    !key ||
+    typeof payload.type !== "string" ||
+    !PER_EMAIL_EVENTS.has(payload.type) ||
+    isTestRecipient(recipient)
+  ) {
     return;
   }
   const tags = readTags(payload.data?.tags);
@@ -190,6 +249,8 @@ async function recordMessageEvent(payload: {
     return;
   }
   const eventType = payload.type.replace(/^email\./, "");
+  if (!(await sentToReader(url, key, sub, recipient, { stage, eventType }))) return;
+  const arm = tags.get("arm");
   // When it happened: the envelope's time. data.created_at is when the EMAIL was created, the
   // same for its delivery, opens and clicks.
   const at = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
@@ -207,6 +268,7 @@ async function recordMessageEvent(payload: {
         event_type: eventType,
         stage,
         survey_submission_id: Number(sub),
+        ...(arm && /^[A-Za-z0-9_-]{1,16}$/.test(arm) ? { variant: arm } : {}),
         first_at: new Date(Number.isFinite(at) ? at : Date.now()).toISOString(),
       }),
       timeoutMs: 3000,
@@ -273,7 +335,7 @@ export async function POST(request: Request) {
     "svix-signature": request.headers.get("svix-signature") ?? "",
   };
 
-  // `tags` carries the A/B arm, or a nurture email's stage and submission, back from the send;
+  // `tags` carries the A/B arm and the email's stage and submission back from the send;
   // see recordExperimentEvent and recordMessageEvent.
   let payload: {
     type: string;
@@ -352,10 +414,10 @@ export async function POST(request: Request) {
    * a retry storm.
    */
   if (claimCertain && typeof payload.type === "string") {
-    await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""));
+    await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""), email);
   }
   // Keyed per email and kind, so a retry adds nothing: no certain claim needed.
-  await recordMessageEvent(payload);
+  await recordMessageEvent(payload, email);
 
   if (!email) {
     return NextResponse.json({ ok: true });

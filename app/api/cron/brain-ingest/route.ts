@@ -184,7 +184,7 @@ export async function GET(request: Request) {
     // what made the keyless path fail silently in production.
     const oidcToken = readVercelOidcToken(request);
     await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, windowDays, oidcToken));
-    // appliedpsychometrics.org, the parent company's website: opt-in source `corporate`.
+    // The parent company's websites, appliedpsychometrics.org and novutalent.com: opt-in source `corporate`.
     await run("corporate", () => ingestCorporateSite(stampedAt, isOutOfTime, oidcToken));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for

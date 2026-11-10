@@ -2,7 +2,7 @@
 
 <!-- cspell:disable -->
 
-> **Generated:** 2026-10-29 | **Source:** the live schema (PostgREST OpenAPI) | 99 relations, 1040 columns, 72 foreign keys
+> **Generated:** 2026-11-08 | **Source:** the live schema (PostgREST OpenAPI) | 100 relations, 1050 columns, 74 foreign keys
 
 A map of every table and view the API exposes. It is generated, so it matches production on the day shown. Rebuild it with `node scripts/generate-table-map.mjs` (read-only; needs the Supabase URL and service key).
 
@@ -81,7 +81,7 @@ flowchart LR
 | `payment`                        | 30      | `app_user`, `personal_report`, `report_price_quote` |                                                                                                               |
 | `payment_item`                   | 9       | `payment`                                           |                                                                                                               |
 | `payment_webhook_event`          | 11      | `payment`                                           |                                                                                                               |
-| `prepaid_report_access`          | 21      | `payment`, `survey_submission`                      |                                                                                                               |
+| `prepaid_report_access`          | 22      | `payment`, `survey_submission`                      |                                                                                                               |
 | `report_price_quote`             | 40      | `app_user`, `personal_report`, `survey_submission`  |                                                                                                               |
 | `report_price_quote_arm_history` | 14      | `report_price_quote`                                | Every change to a price quote's arm (experiment_group) or list price (msrp, starting_price), one row each,... |
 
@@ -98,16 +98,17 @@ flowchart LR
 | `short_link`                    | 9       |                                                                      | Short links for the AI influencer pilot (Seedlane, from 2026-10-30): loveiq.org/<code> redirects to the lan... |
 | `user_interactions`             | 9       | `app_user`                                                           |                                                                                                                |
 
-## Email and invites (6)
+## Email and invites (7)
 
-| Relation                 | Columns | Points to                              | What it holds                                                                                                  |
-| ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `booking_event`          | 11      | `personal_report`, `survey_submission` |                                                                                                                |
-| `email_experiment_event` | 6       |                                        | Daily per-arm counters for the email A/B tests.                                                                |
-| `email_message_event`    | 5       | `survey_submission`                    | Each nurture email's delivery, opens and clicks: the first of each kind per email, from the Resend webhook,... |
-| `email_suppression`      | 5       |                                        |                                                                                                                |
-| `invite_event`           | 6       |                                        |                                                                                                                |
-| `resend_webhook_event`   | 4       |                                        |                                                                                                                |
+| Relation                 | Columns | Points to                                    | What it holds                                                                                                  |
+| ------------------------ | ------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `booking_event`          | 11      | `personal_report`, `survey_submission`       |                                                                                                                |
+| `email_experiment_event` | 6       |                                              | Daily per-arm counters for the email A/B tests.                                                                |
+| `email_journey_send`     | 9       | `prepaid_report_access`, `survey_submission` | One row per journey email and target, claimed before the send (features/email-journeys).                       |
+| `email_message_event`    | 6       | `survey_submission`                          | Each email's sending, delivery, opens, clicks, bounce and spam complaint, kept per reader: the first of eac... |
+| `email_suppression`      | 5       |                                              |                                                                                                                |
+| `invite_event`           | 6       |                                              |                                                                                                                |
+| `resend_webhook_event`   | 4       |                                              |                                                                                                                |
 
 ## Company brain (9)
 

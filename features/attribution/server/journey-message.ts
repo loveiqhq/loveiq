@@ -270,7 +270,10 @@ export async function refreshJourneyMessage(
     // Whichever is further along: what the data shows, or what the caller saw.
     const derived = journeyStateOf(journey.milestones);
     const state = STATES.indexOf(witnessed) > STATES.indexOf(derived) ? witnessed : derived;
-    if (!isAdvance(stored.state, state)) return;
+    // A payment always redraws: the rail may already read Paid (the EUR 1.99 unlock), but
+    // the funnel line's "Paid €…" has to take the next one too. Payments are few, so this
+    // costs a handful of edits, not the twenty report opens the advance check exists for.
+    if (!isAdvance(stored.state, state) && witnessed !== "paid") return;
 
     // Rebuilt from source, so the arms that were unknowable at submit time
     // (pricing needs a quote to exist) fill themselves in on the first update.

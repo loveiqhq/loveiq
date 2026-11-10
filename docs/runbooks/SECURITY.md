@@ -74,7 +74,10 @@ whatever the Q16015 answer: the send tags it `stage` + `sub`, and the webhook
 keeps its delivery, opens and clicks in `email_message_event` (ids and a time
 only, never the address, IP, user agent or link) for the admin Report page.
 Transactional emails carry the image and wrapped links too, because tracking
-is per domain; for them we keep only the daily totals. The problems below are
+is per domain; since AP-Analytics' Emails page (November 2026) every email
+with a reader (report ready, receipts, invite reminders) is kept per reader
+the same way, and only when it went to that submission's own reader (the
+webhook also receives staging's test sends). The problems below are
 what the decision accepts; the turn-off steps further down still work.
 
 Resend enables open-tracking pixels and click-link wrapping by DEFAULT on

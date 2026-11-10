@@ -46,6 +46,8 @@ const r = (dims: string[], metrics: number[]) => ({
 
 let failSearch = false;
 let failLinkClicks = false;
+/** novutalent.com's GA4 property answers 500, as it would before the service account had access. */
+let failNovutalent = false;
 let truncateDays = false;
 let truncateQueries = false;
 /** The run's clock, as the cron passes it: flipped once a full page of queries is served. */
@@ -54,8 +56,14 @@ let outOfTime = false;
 /** Answers each report by the dimensions it asks for, like GA4 and Search Console do. */
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init: { body: string }) => {
-    const body = JSON.parse(init.body) as { dimensions: Array<{ name: string } | string> };
+    const body = JSON.parse(init.body) as {
+      dimensions: Array<{ name: string } | string>;
+      dimensionFilter?: { filter?: { stringFilter?: { value?: string } } };
+    };
     const dims = body.dimensions.map((d) => (typeof d === "string" ? d : d.name)).join(",");
+    const novutalent =
+      String(url).includes("properties/563588616") ||
+      String(url).includes(encodeURIComponent("https://novutalent.com/"));
     const ok = (json: unknown) => ({
       ok: true,
       status: 200,
@@ -70,6 +78,34 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       json: async () => ({}),
       text: async () => "boom",
     };
+    if (novutalent) {
+      if (failNovutalent && !String(url).includes("searchconsole")) return bad;
+      if (String(url).includes("searchconsole")) {
+        if (failSearch) return bad;
+        return ok({
+          rows:
+            dims === "date"
+              ? [{ keys: ["2026-11-11"], clicks: 0, impressions: 4, position: 9 }]
+              : [{ keys: ["2026-11-11", "novutalent"], clicks: 0, impressions: 4 }],
+        });
+      }
+      const leads = body.dimensionFilter?.filter?.stringFilter?.value === "generate_lead";
+      const nrows: Record<string, unknown[]> = {
+        date: leads
+          ? [r(["20261111"], [2])]
+          : [r(["20261110"], [3, 2, 2, 5, 2]), r(["20261111"], [4, 3, 1, 6, 3])],
+        isoYearIsoWeek: [r(["202646"], [7, 4, 3, 11, 5])],
+        yearMonth: [r(["202611"], [7, 4, 3, 11, 5])],
+        "date,sessionDefaultChannelGroup": [
+          r(["20261110", "Direct"], [3]),
+          r(["20261111", "Referral"], [4]),
+        ],
+        "yearMonth,pagePath": [r(["202611", "/"], [10]), r(["202611", "/privacy"], [1])],
+        "yearMonth,linkDomain": [r(["202611", "appliedpsychometrics.org"], [1])],
+      };
+      const found = nrows[dims] ?? [];
+      return ok({ rows: found, rowCount: found.length });
+    }
     if (String(url).includes("searchconsole")) {
       if (failSearch) return bad;
       // A full page, so queryGsc asks for another, which the run's clock then refuses.
@@ -122,6 +158,8 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 import { ingestCorporateSite } from "@features/brain/server/ingest/corporate";
 
 const STAMP = "2026-10-04T03:00:00.000Z";
+/** After novutalent.com's launch, for its own rows. */
+const STAMP_NOV = "2026-11-12T03:00:00.000Z";
 const byId = (id: string) => written.find((w) => w.source_id === id);
 
 describe("the corporate website's traffic and searches", () => {
@@ -130,6 +168,7 @@ describe("the corporate website's traffic and searches", () => {
     written = [];
     failSearch = false;
     failLinkClicks = false;
+    failNovutalent = false;
     truncateDays = false;
     truncateQueries = false;
     outOfTime = false;
@@ -139,7 +178,13 @@ describe("the corporate website's traffic and searches", () => {
     const result = await ingestCorporateSite(STAMP);
     expect(result).toMatchObject({ source: "corporate", rows: written.length });
     expect(new Set(written.map((w) => w.source))).toEqual(new Set(["corporate"]));
-    expect(written.every((w) => w.meta.site === "appliedpsychometrics.org")).toBe(true);
+    // appliedpsychometrics.org keeps the ids it had before novutalent.com joined.
+    const ap = written.filter((w) => !w.source_id.startsWith("novutalent.com/"));
+    const novu = written.filter((w) => w.source_id.startsWith("novutalent.com/"));
+    expect(ap.length).toBeGreaterThan(0);
+    expect(novu.length).toBeGreaterThan(0);
+    expect(ap.every((w) => w.meta.site === "appliedpsychometrics.org")).toBe(true);
+    expect(novu.every((w) => w.meta.site === "novutalent.com")).toBe(true);
     expect(syncSource).toHaveBeenCalledWith("corporate", written, swept);
   });
 
@@ -220,6 +265,42 @@ describe("the corporate website's traffic and searches", () => {
     expect(byId("ga4-day:2026-10-01")).toBeDefined();
     expect(byId("ga4-week:2026-W40")).toBeDefined();
     expect(result).toMatchObject({ complete: false, sweepBlocked: true });
+    expect(syncSource).toHaveBeenCalledWith("corporate", written, notSwept);
+  });
+
+  it("writes novutalent.com's traffic, leads and searches under ids of its own", async () => {
+    await ingestCorporateSite(STAMP_NOV);
+    const day = byId("novutalent.com/ga4-day:2026-11-11");
+    expect(day?.title).toBe("novutalent.com website traffic — Wednesday 11 November 2026");
+    expect(day?.body).toContain("recruiting brand of Applied Psychometrics");
+    expect(day?.body).toContain("not LoveIQ");
+    expect(day?.body).toContain("Sessions: 4 · Users: 3");
+    expect(day?.body).toContain("Leads (clicks on an email link to hr@novutalent.com): 2");
+    expect(day?.body).toContain("accepted analytics cookies");
+    // No lead that day is a zero, not a missing line.
+    expect(byId("novutalent.com/ga4-day:2026-11-10")?.body).toContain(
+      "Leads (clicks on an email link to hr@novutalent.com): 0"
+    );
+    expect(byId("novutalent.com/ga4-week:2026-W46")?.body).toContain(
+      "Leads (clicks on an email link to hr@novutalent.com): 2"
+    );
+    const month = byId("novutalent.com/ga4-month:2026-11");
+    expect(month?.body).toContain("Most-viewed pages: / 10 views, /privacy 1 view");
+    expect(month?.body).toContain("Leads (clicks on an email link to hr@novutalent.com): 2");
+    const search = byId("novutalent.com/gsc-day:2026-11-11");
+    expect(search?.title).toBe("novutalent.com Google searches — Wednesday 11 November 2026");
+    expect(search?.body).toContain("Impressions: 4");
+    expect(search?.body).toContain("Top search queries by impressions: novutalent 4");
+    // A site without a lead event gets no lead line.
+    expect(byId("ga4-day:2026-10-01")?.body).not.toContain("Leads");
+  });
+
+  it("still writes appliedpsychometrics.org when novutalent.com cannot be read, and holds the sweep", async () => {
+    failNovutalent = true;
+    await expect(ingestCorporateSite(STAMP_NOV)).rejects.toThrow();
+    expect(byId("ga4-day:2026-10-01")).toBeDefined();
+    expect(written.some((w) => w.source_id.startsWith("novutalent.com/"))).toBe(false);
+    // Without the sweep, last night's novutalent.com rows survive.
     expect(syncSource).toHaveBeenCalledWith("corporate", written, notSwept);
   });
 });

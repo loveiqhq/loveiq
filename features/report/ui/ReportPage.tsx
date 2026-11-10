@@ -180,7 +180,9 @@ import {
   toArchetypeSlug,
 } from "@features/report/server/archetypeSlug";
 import {
+  emailReturnOf,
   setReportSubmissionContext,
+  trackEmailReturn,
   trackLockedCardPriceShown,
   trackLockedChaptersShown,
   trackBeginCheckout,
@@ -830,6 +832,21 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowInvite(true);
   }, [shouldAutoOpenInvite]);
+  // Open the share window when the page is loaded with ?share=1: the full-report email's
+  // "Share my report" (C1, features/email-journeys). Its owner only, once, and not over the
+  // veiled report the tour runs before the EUR 1.99 gate (nothing to share there yet).
+  const shouldAutoOpenShare =
+    viewMode === "owner" && !veilIdentity && reportSearchParams.get("share") === "1";
+  const autoOpenedShareRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedShareRef.current || !shouldAutoOpenShare) return;
+    autoOpenedShareRef.current = true;
+    // This child's effect runs before the parent's that publishes the submission (see the
+    // locked-card price above): publish it here, or the persisted share event is dropped.
+    if (submissionId) setReportSubmissionContext(submissionId);
+    trackReportShareOpened({ source: "email" });
+    onOpenShareModal();
+  }, [shouldAutoOpenShare, onOpenShareModal, submissionId]);
   // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only,
   // and not the veiled report the tour runs over before the EUR 1.99 gate (nothing read there).
   useChapterStats({
@@ -3123,6 +3140,21 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       isV4 ? REPORT_LAYOUT_V4_SLIM : null
     );
   }, [data, viewedReportPlan, viewArchetype, isV4]);
+
+  // Came back through one of our emails' links: once a page load, for the owner only, the
+  // EUR 1.99 gate's reader too (they came back as much as a reader of the report did).
+  const emailReturnFiredRef = useRef(false);
+  useEffect(() => {
+    if (emailReturnFiredRef.current || isPreview) return;
+    const submissionId =
+      gate?.submissionId ?? (data?.viewMode === "shared" ? null : (data?.submissionId ?? null));
+    if (!submissionId) return;
+    emailReturnFiredRef.current = true;
+    const arrival = emailReturnOf(searchParams);
+    if (!arrival) return;
+    setReportSubmissionContext(submissionId);
+    trackEmailReturn(arrival);
+  }, [data, gate, isPreview, searchParams]);
 
   useReportEngagementTimers({
     reportType: data && !data.initialGate ? (viewedReportPlan ?? "locked") : null,

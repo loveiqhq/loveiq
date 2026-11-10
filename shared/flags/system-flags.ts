@@ -19,6 +19,8 @@
  *                              gate before their report (20261020090000; read default OFF)
  *   initial_unlock_gift_email  — when ON, E07 gifts the Core Archetype on day 1 to 80% of
  *                              the gate's non-payers (20261020090000; read default OFF)
+ *   email_*                    — the email journeys' switches, one per new or redesigned email
+ *                              (20261108230000; read default OFF: features/email-journeys)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -39,7 +41,21 @@ export type SystemFlagKey =
   | "pay_to_start_checkout"
   | "unlock_feedback"
   | "report_initial_unlock_gate"
-  | "initial_unlock_gift_email";
+  | "initial_unlock_gift_email"
+  // The email journeys (20261108230000): one switch per new or redesigned email, all off.
+  | "email_i1_v2"
+  | "email_r1_v2"
+  | "email_u1_v2"
+  | "email_c1_v2"
+  | "email_s2_v2"
+  | "email_i3_v2"
+  | "email_c3_c4_v2"
+  | "email_i2"
+  | "email_i4"
+  | "email_r2"
+  | "email_c2"
+  | "email_s3_s5"
+  | "email_pts_reminders";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

@@ -7,6 +7,12 @@
  * a second, subtly different copy.
  */
 
+import { classifySource, type SourceClass } from "@features/admin/server/ap/facts";
+import { taggedOf } from "@features/admin/server/ap/pay-to-start";
+
+/** The tracker's key for the first page the browser opened, stamped by /api/survey. */
+export const LANDING_PATH_TRACKER_KEY = "landing_path";
+
 // Paid-traffic media identifiers (utm_medium). Anything here, or any utm_campaign
 // at all, classifies the visit as a paid acquisition.
 const PAID_UTM_MEDIA = new Set(["cpc", "ppc", "paid", "paid_social", "ads", "display"]);
@@ -26,6 +32,16 @@ export type TrafficInfo = {
   keyword: string | null;
   matchType: string | null;
   network: string | null;
+  /** AP-Analytics' channel (classifySource), as its Traffic page counts the visit. */
+  channel?: SourceClass;
+  /** The referring site's host, which the channel reads only on an untagged visit. */
+  referrerHost?: string | null;
+  /**
+   * The first page this browser opened on the site (`landing_path`, stamped by
+   * /api/survey from shared/url/utm.ts's first-touch record), e.g. a glossary term.
+   * Absent before 2026-11-05 and on any survey sent without it.
+   */
+  landingPath?: string | null;
 };
 
 // Classify the visitor's acquisition channel from the survey_submission.utm_tracker
@@ -61,6 +77,7 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
 
   const source = str(parsed.utm_source);
   const medium = str(parsed.utm_medium);
+  const landingPath = str(parsed.landing_path); // LANDING_PATH_TRACKER_KEY
   const campaign = str(parsed.utm_campaign);
 
   let bucket: TrafficInfo["bucket"];
@@ -90,6 +107,13 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
     keyword: str(parsed.utm_term),
     matchType: str(parsed.matchtype),
     network: str(parsed.network),
+    ...(landingPath ? { landingPath } : {}),
+    // AP-Analytics' own reading of where they came from, so the Slack line and the dashboard
+    // agree: an organic search, an AI assistant, an email, a social app or another site,
+    // from the tags or, for an untagged visit, the referring site (an organic Google visit
+    // read "Direct" before, its referrer_host unread).
+    channel: classifySource(taggedOf(utmTracker)),
+    referrerHost: str(parsed.referrer_host),
   };
 }
 

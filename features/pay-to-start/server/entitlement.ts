@@ -236,6 +236,9 @@ export async function setEntitlementSession({
   return true;
 }
 
+/** A survey draft's id (survey_partial_save.session_id): a UUID, never anything else in a filter. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function findEntitlementByToken(token: string): Promise<Entitlement | null> {
   if (!PREPAID_TOKEN_REGEX.test(token)) return null;
   return findOne(
@@ -245,23 +248,37 @@ export async function findEntitlementByToken(token: string): Promise<Entitlement
 
 /**
  * When a paid buyer's survey first saves an answer: AP-Analytics' "Started survey" for the
- * pay-to-start pages (20261025170000). Once, on a paid row only. Best-effort and never throws:
+ * pay-to-start pages (20261025170000). Once, on a paid row only. With the draft's session, its
+ * link to the purchase too (survey_session_id, 20261108230000): written when it differs, so the
+ * latest draft wins and a save in the same draft writes nothing. Best-effort and never throws:
  * a failed stamp is logged at warn, and the draft is saved whatever happens here.
  */
-export async function markEntitlementSurveyStarted(token: string): Promise<void> {
+export async function markEntitlementSurveyStarted(
+  token: string,
+  sessionId?: string
+): Promise<void> {
   if (!PREPAID_TOKEN_REGEX.test(token)) return;
+  const row = `/rest/v1/prepaid_report_access?prepaid_token=eq.${encodeURIComponent(token)}&offer=not.is.null&paid_at=not.is.null`;
   try {
-    const response = await serviceFetch(
-      `/rest/v1/prepaid_report_access?prepaid_token=eq.${encodeURIComponent(token)}` +
-        "&offer=not.is.null&paid_at=not.is.null&survey_started_at=is.null",
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ survey_started_at: new Date().toISOString() }),
-      }
-    );
+    const response = await serviceFetch(`${row}&survey_started_at=is.null`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ survey_started_at: new Date().toISOString() }),
+    });
     if (!response.ok)
       logger.warn({ status: response.status }, "pay-to-start: survey start stamp failed");
+    if (sessionId && UUID_RE.test(sessionId)) {
+      const linked = await serviceFetch(
+        `${row}&consumed_submission_id=is.null&or=(survey_session_id.is.null,survey_session_id.neq.${sessionId})`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ survey_session_id: sessionId }),
+        }
+      );
+      if (!linked.ok)
+        logger.warn({ status: linked.status }, "pay-to-start: survey draft link failed");
+    }
   } catch {
     // Not logged with the error: a timeout's message carries the URL, and with it the buyer's
     // token, which unlocks their report.

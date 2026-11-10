@@ -27,6 +27,12 @@ vi.mock("@features/report/server/personalReport", () => ({
 vi.mock("@features/analytics/server/ga4", () => ({ sendGa4PurchaseEvent: vi.fn() }));
 vi.mock("@features/analytics/server/posthog", () => ({ sendPosthogPurchaseEvent: vi.fn() }));
 
+// C1's switch (features/email-journeys): off unless a test turns it on.
+const mockSwitchOn = vi.fn(async (_key: string) => false);
+vi.mock("@features/email-journeys/logic/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/email-journeys/logic/catalog")>()),
+  isEmailSwitchOn: (key: string) => mockSwitchOn(key),
+}));
 const mockResendSend = vi.fn();
 vi.mock("resend", () => ({
   Resend: class {
@@ -1125,7 +1131,9 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const all = rendered(slackCalls[0]!.body);
-      expect(all).toContain("Referral");
+      // AP-Analytics' channel for a link tagged utm_medium=email (classifySource): the line
+      // and the dashboard name it alike, and the tags below still say it was a referral.
+      expect(all).toContain("Email — referral / email / survey_invite");
       // utm values travel literally: Slack has no backslash escape, so the old
       // "survey\_invite" put a visible backslash in front of the whole team.
       expect(all).toContain("referral / email / survey_invite");
@@ -1383,6 +1391,61 @@ describe("checkout fulfillment", () => {
       delete process.env.RESEND_API_KEY;
     });
 
+    it.each([
+      ["the reader's own archetype", "Spark Seeker", true],
+      ["another archetype's report", "Relational Nurturer", false],
+    ] as const)(
+      "with C1's switch on, a full report bought for %s gets %s",
+      async (_case, primary, redesigned) => {
+        mockSwitchOn.mockImplementation(async (key: string) => key === "c1");
+        process.env.RESEND_API_KEY = "re_test_not_real";
+        mockResendSend.mockResolvedValue({ data: { id: "email_test_c1" }, error: null });
+        try {
+          setupHappyPathMocks({ primary });
+          await processStripeWebhookEvent({
+            event: {
+              id: `evt_c1_${primary}`,
+              type: "checkout.session.completed",
+              data: {
+                object: {
+                  id: "cs_test_slack_001",
+                  metadata: {
+                    plan: "full_report",
+                    archetype: "Spark Seeker",
+                    reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+                  },
+                },
+              },
+            } as never,
+            stripe: buildStripe("full_report", "Spark Seeker") as never,
+          });
+          const sent = mockResendSend.mock.calls[0]![0] as {
+            subject: string;
+            html: string;
+            tags: Array<{ name: string; value: string }>;
+          };
+          if (redesigned) {
+            expect(sent.subject).toMatch(/your full report is open\. Here’s where to start$/);
+            expect(sent.html).toContain("share=1");
+            expect(sent.tags[0]).toEqual({ name: "stage", value: "full_unlocked" });
+            expect(sent.tags[1]?.name).toBe("sub");
+          } else {
+            // Bought from another archetype's tile: today's email (it names that archetype).
+            expect(sent.subject).not.toMatch(/Here’s where to start/);
+            expect(sent.html).not.toContain("share=1");
+            expect(sent.tags.map((t) => t.name)).toEqual(["exp", "arm", "stage", "sub"]);
+            expect(sent.tags.slice(2)).toEqual([
+              { name: "stage", value: "receipt_full_report" },
+              { name: "sub", value: "70" },
+            ]);
+          }
+        } finally {
+          mockSwitchOn.mockImplementation(async () => false);
+          delete process.env.RESEND_API_KEY;
+        }
+      }
+    );
+
     it("records a €0 checkout once when the return page and the webhook both process it", async () => {
       process.env.RESEND_API_KEY = "re_test_not_real";
       mockResendSend.mockResolvedValue({ data: { id: "email_test_1" }, error: null });
@@ -1440,6 +1503,8 @@ describe("classifyTraffic", () => {
         keyword: null,
         matchType: null,
         network: null,
+        channel: "direct",
+        referrerHost: null,
       });
     }
   });
@@ -1490,6 +1555,8 @@ describe("classifyTraffic", () => {
       keyword: null,
       matchType: null,
       network: null,
+      channel: "direct",
+      referrerHost: null,
     });
   });
 
@@ -1503,6 +1570,8 @@ describe("classifyTraffic", () => {
       keyword: null,
       matchType: null,
       network: null,
+      channel: "direct",
+      referrerHost: null,
     });
   });
 

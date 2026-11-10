@@ -19,6 +19,8 @@
  * (`referrer_host`), which tell a Meta click and organic search apart from direct.
  */
 
+import { redactReportToken } from "@shared/format/redact-report-token";
+
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
 
 /** Google Ads click identifiers appended by auto-tagging (gbraid/wbraid are iOS). */
@@ -101,6 +103,41 @@ export function withoutTrackingParams(path: string): string {
   }
   const kept = params.toString();
   return path.slice(0, q) + (kept ? `?${kept}` : "");
+}
+
+/**
+ * The first page this browser opened on the site, e.g. `/glossary/demisexuality`: where a
+ * visitor came in, which the campaign tags above cannot say for an untagged visit (an AI
+ * chat's link, a typed address). Kept apart from the tracker and never overwritten, so it
+ * stays the first touch whatever campaign comes later; /api/survey stamps it on the
+ * submission as `landing_path`. The path only: a query can carry a click id or a token.
+ */
+export const LANDING_PATH_KEY = "loveiq-landing";
+
+/** Called on every page load (UtmCapture); only the first one is kept. */
+export function rememberLandingPath(): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (!localStorage.getItem(LANDING_PATH_KEY)) {
+      // A report's address holds its token: never kept, here or on the server.
+      localStorage.setItem(
+        LANDING_PATH_KEY,
+        redactReportToken(window.location.pathname).slice(0, 200)
+      );
+    }
+  } catch {
+    // Storage blocked: the survey goes without it.
+  }
+}
+
+/** The first page this browser opened, or null. */
+export function getLandingPath(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(LANDING_PATH_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /** Current global storage key. */

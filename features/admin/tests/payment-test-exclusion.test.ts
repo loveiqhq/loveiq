@@ -44,6 +44,10 @@ const MUST_NOT_FILTER: Array<[string, string]> = [
     "features/report/server/initialUnlockGift.ts",
     "the gift's once-per-report check must find a staff reader's test-flagged gift too",
   ],
+  [
+    "features/email-journeys/server/journeys.ts",
+    "the journeys' 'paid since?' checks (any payment, a staff test one too, stops a nudge) and C2, which greets every full-report buyer",
+  ],
 ];
 
 /** Every file that queries the payment table, found live rather than hardcoded. */

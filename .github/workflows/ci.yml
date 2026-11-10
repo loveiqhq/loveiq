@@ -130,7 +130,7 @@ jobs:
       # rather than a copy, so the test was deleted instead of provisioned.
       #
       # What remains is read-only: rls-boundary asserts the anon role cannot read
-      # 15 locked tables. The anon key is public — it ships in the browser bundle
+      # the locked tables. The anon key is public — it ships in the browser bundle
       # — and nothing is written, so it is safe against production.
       - name: Check this job can actually test something
         run: |

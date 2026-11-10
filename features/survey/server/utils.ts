@@ -38,6 +38,22 @@ function countRequiredAnswers(answers: SurveyAnswers): number {
     .length;
 }
 
+const ASKED_QIDS: ReadonlySet<string> = new Set(
+  surveyQuestions.filter((q) => !isHidden(q.qId)).map((q) => q.qId)
+);
+
+/**
+ * How many of the asked questions a draft has answered, out of `SURVEY_TOTAL_QUESTIONS` (the
+ * survey reminders' "37 of 62"): only asked questions' ids count, never an `_other` box, a
+ * hidden question or a key from an older survey.
+ */
+export function countAnsweredQuestions(
+  answers: Record<string, unknown> | null | undefined
+): number {
+  if (!answers) return 0;
+  return Object.keys(answers).filter((key) => ASKED_QIDS.has(key)).length;
+}
+
 /**
  * "60 of 62 questions": how many a respondent answered out of the "Question X of N" they
  * were shown, when the gap is the optional asks they skipped. Said as a bare count, the

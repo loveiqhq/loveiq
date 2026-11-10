@@ -28,13 +28,24 @@ import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { initialUnlockGiftEmail } from "@features/report/server/emails/initial-unlock-gift";
-import { isInitialGiftEmailEnabled } from "@features/report/server/initialGateState";
+import { giftEmail } from "@features/email-journeys/emails/free-funnel";
+import { isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
+import {
+  surveyActiveMs,
+  surveyMinutesFromDuration,
+} from "@features/report/logic/initialUnlockGate";
+import {
+  isInitialGiftEmailEnabled,
+  readSurveyQuestionTimes,
+} from "@features/report/server/initialGateState";
 import { grantGiftedInitialUnlock } from "@features/report/server/initialUnlockGift";
 import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
 import { assignInitialGiftArm } from "@shared/experiments/initialGiftArm";
 import { suppressionState } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -42,6 +53,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 
 export const maxDuration = 60;
 
@@ -115,6 +127,7 @@ interface CandidateRow {
   survey_submission?: {
     user_id?: number | null;
     created_date_time?: string | null;
+    session_id?: string | null;
     app_user?: {
       email?: string | null;
       first_name?: string | null;
@@ -132,7 +145,7 @@ async function fetchCandidates(nowMs: number): Promise<CandidateRow[]> {
     `&initial_gate_seen_at=gt.${encodeURIComponent(seenAfter)}` +
     `&initial_gift_arm=is.null` +
     `&select=id,survey_submission_id,initial_gate_seen_at,` +
-    `survey_submission!fk_personal_report_submission(user_id,created_date_time,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
+    `survey_submission!fk_personal_report_submission(user_id,created_date_time,session_id,app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
     `&order=initial_gate_seen_at.asc` +
     `&limit=${CANDIDATE_LIMIT}`;
   const r = await supabaseFetch(path);
@@ -322,13 +335,32 @@ async function processCandidate(candidate: CandidateRow, ctx: RunContext): Promi
     ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, UNSUBSCRIBE_CAMPAIGNS.initialGift)
     : undefined;
   const surveyAt = Date.parse(candidate.survey_submission?.created_date_time ?? "");
-  const tpl = initialUnlockGiftEmail({
+  // The gift is on the report now: its #incoming-surveys message says so ("Free (€1.99
+  // unlock gifted)") rather than waiting for the reader's next visit to redraw it.
+  scheduleAfterResponse("journey-gift-refresh", () =>
+    refreshJourneyDetail(candidate.survey_submission_id)
+  );
+  const giftParams = {
     answeredYesterday: Date.now() - surveyAt < ANSWERED_YESTERDAY_MS,
     firstName: user?.first_name?.trim() || null,
-    reportUrl: `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
+    reportUrl: tagEmailLink(
+      `${ctx.siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`,
+      EMAIL_LINKS.initialGift
+    ),
     siteUrl: ctx.siteUrl,
     unsubscribeUrl,
-  });
+  };
+  // I3 redesigned (features/email-journeys), behind its switch: it names the minutes the reader
+  // spent on the questions, as the EUR 1.99 page does, when the survey's tracking has them.
+  const sessionId = candidate.survey_submission?.session_id;
+  const tpl = (await isEmailSwitchOn("i3"))
+    ? giftEmail({
+        ...giftParams,
+        surveyMinutes: sessionId
+          ? surveyMinutesFromDuration(surveyActiveMs(await readSurveyQuestionTimes(sessionId)))
+          : null,
+      })
+    : initialUnlockGiftEmail(giftParams);
   try {
     const { error } = await Promise.race([
       ctx.resend.emails.send({

@@ -37,6 +37,7 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 | Page                   | Route                                    | Component                                                              | Feed                                                                              |
 | ---------------------- | ---------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Dashboard              | `/admin/ap`                              | [`ApFocus.tsx`](../features/admin/ui/ap/ApFocus.tsx)                   | `GET /api/admin/ap/focus`                                                         |
+| Emails (every email)   | `/admin/ap/emails`                       | [`ApEmails.tsx`](../features/admin/ui/ap/ApEmails.tsx)                 | `GET /api/admin/ap/emails?scope=overall`                                          |
 | Assessment A dashboard | `/admin/ap/assessment-a`                 | [`ApDashboard.tsx`](../features/admin/ui/ap/ApDashboard.tsx)           | `GET /api/admin/ap/assessment`                                                    |
 | Traffic                | `/admin/ap/assessment-a/traffic`         | [`ApTraffic.tsx`](../features/admin/ui/ap/ApTraffic.tsx)               | `GET /api/admin/ap/traffic`                                                       |
 | Landing page           | `/admin/ap/assessment-a/landing`         | [`ApLanding.tsx`](../features/admin/ui/ap/ApLanding.tsx)               | `GET /api/admin/ap/landing` (the sidebar's "Assessment page" is a section of it)  |
@@ -45,6 +46,7 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 | Payment                | `/admin/ap/assessment-a/payment`         | [`ApPayment.tsx`](../features/admin/ui/ap/ApPayment.tsx)               | `GET /api/admin/ap/payment`                                                       |
 | Pay to start           | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
 | Unlock feedback        | `/admin/ap/assessment-a/unlock-feedback` | [`ApUnlockFeedback.tsx`](../features/admin/ui/ap/ApUnlockFeedback.tsx) | `GET /api/admin/ap/unlock-feedback`                                               |
+| Emails (Assessment A)  | `/admin/ap/assessment-a/emails`          | [`ApEmails.tsx`](../features/admin/ui/ap/ApEmails.tsx)                 | `GET /api/admin/ap/emails?scope=assessment`                                       |
 | Catalog (data sources) | `/admin/ap/sources`                      | [`ApSources.tsx`](../features/admin/ui/ap/ApSources.tsx)               | `GET`/`PUT /api/admin/ap/catalog`, `GET /api/admin/ap/catalog/rows`               |
 | Raw data explorer      | `/admin/ap/explorer`                     | [`ApExplorer.tsx`](../features/admin/ui/ap/ApExplorer.tsx)             | `GET /api/admin/ap/explorer`, `POST /api/admin/ap/explorer/unlock`, saved filters |
 
@@ -55,10 +57,20 @@ Landing's pay-to-start table counts "Started survey" from `prepaid_report_access
 recorded from 28 Oct 2026. Traffic shows each search ad as searchers see it, with its
 keywords' spend, cost per survey, payment rate and revenue per survey.
 
+Emails (Marcus's board, LoveIQ Sync 5 Nov 2026) lists every email we send with its test versions
+under it: sent, delivered, bounced, opened, clicked, unsubscribed and its goal reached within 7
+days. The registry in `features/admin/server/ap/email-registry.ts` says how each email is counted:
+per reader (`email_message_event`, kept by the Resend webhook from the stage and sub tags) or from
+Resend's daily tallies (`email_experiment_event`). Survey done, the receipts and the pay-to-start
+report emails count from `EMAIL_TAGS_FROM` (11 Nov 2026): before, their tallies also held staging's
+test emails, which reach production's webhook through the same Resend account. "Promotional
+emails" is in the sidebar as "soon" until the first campaign; a send under its own stage shows on
+Emails, under "Not tied to an assessment", from its first send.
+
 Each page is a thin wrapper in `app/admin/ap/**/page.tsx` that renders its component
 inside `DashboardErrorBoundary`. The components load their data through
 [`useAdminFetch`](../features/admin/ui/hooks/useAdminFetch.ts). "Assessment B" and
-"Assessment C" are in the sidebar as "soon", with no page yet.
+"Assessment C" are in the sidebar as "soon", with no page yet, and so is "Promotional emails".
 
 Use [admin-api.md](admin-api.md) for each route's methods and roles.
 

@@ -20,6 +20,11 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
+import { redactReportToken } from "@shared/format/redact-report-token";
+import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
+import { isProbeRequest } from "@shared/http/probe-cookie";
+import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
+import { LANDING_PATH_TRACKER_KEY } from "@features/attribution/server/traffic";
 import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
@@ -28,6 +33,13 @@ import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
+import { reportReadyEmail } from "@features/email-journeys/emails/free-funnel";
+import {
+  coreUnlockedEmail,
+  fullUnlockedEmail,
+  withShareOpen,
+} from "@features/email-journeys/emails/purchase";
+import { EMAIL_STAGES, isEmailSwitchOn } from "@features/email-journeys/logic/catalog";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression";
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
@@ -309,6 +321,17 @@ const surveySchema = z.object({
     .optional()
     .nullable()
     .catch(null),
+  /**
+   * The first page this browser opened (shared/url/utm.ts), for the Slack journey's "First
+   * page" (a glossary term, say). A bare path; anything else is dropped, never refused.
+   */
+  landingPath: z
+    .string()
+    .max(200)
+    .regex(/^\/[^\s?#]*$/)
+    .optional()
+    .nullable()
+    .catch(null),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -472,6 +495,7 @@ export async function POST(request: Request) {
     sessionId,
     posthogSessionId,
     optionOrder,
+    landingPath,
     website,
   } = parsed.data;
   // A blank optional answer (16019, 16020 typed into and cleared) is no answer. Dropped
@@ -570,6 +594,25 @@ export async function POST(request: Request) {
     // session id: our survey always sends one, so we can't say what such a caller saw.
     sessionId && !prepaidToken ? EMAIL_QUESTION_WINNER : null
   );
+  /**
+   * The first page this browser opened. Unlike the arms above it is attribution, which
+   * the session id cannot give back, so it may start a tracker of its own: a visitor who
+   * came straight to a glossary term from an AI chat carries no campaign, no referrer and
+   * no landing cookie, and their first page is the whole answer to "where from". AP reads
+   * the tracker's keys, so a tracker holding only this classifies as a null one does.
+   * A report's address holds its token, which must not reach the database. A crawler or
+   * our own probes start none: proxy.ts's filter for a visit, the same regex and cookie.
+   */
+  const notVisitor =
+    BOT_UA_REGEX.test(request.headers.get("user-agent") || "") ||
+    isProbeRequest(request.headers.get("cookie"));
+  if (landingPath && !notVisitor) {
+    mergedUtmTracker = mergeTrackerArm(
+      mergedUtmTracker ?? "{}",
+      LANDING_PATH_TRACKER_KEY,
+      redactReportToken(landingPath).slice(0, 100)
+    );
+  }
 
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget
@@ -803,9 +846,12 @@ export async function POST(request: Request) {
       // email. resolveReportPaywallCohort() softens on `from=email`; the nurture
       // + chapter-nudge links already carry it. `from=email` is the paywall-only
       // signal (no utm_source), so first-view channel attribution is unchanged.
-      const reportUrl = reportToken
-        ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
-        : `${siteUrl}/report?from=email`;
+      const reportUrl = tagEmailLink(
+        reportToken
+          ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
+          : `${siteUrl}/report?from=email`,
+        EMAIL_LINKS.reportReady
+      );
 
       // An unlocked pay-to-start report's email is a purchase email: its unsubscribes are
       // counted with the purchase emails', as fulfillment's are.
@@ -828,37 +874,73 @@ export async function POST(request: Request) {
        * who came that way the survey email's A copy. None carries the A/B tags: these readers
        * are in neither test.
        */
-      const experiment = claim ? null : "survey-complete";
-      const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
       const unlockedInitial = claim?.outcome === "unlocked" && claim.offer === "pre";
+      const unlockedFull = claim?.outcome === "unlocked" && !unlockedInitial;
+      /**
+       * The reworked emails (features/email-journeys), each behind its switch: I1 for a reader
+       * the EUR 1.99 gate will stop (it names the price), U1 and C1 for a pay-to-start buyer
+       * whose report opened. With the switch on there is one email, not the A/B pair, and it
+       * carries the `stage` and `sub` tags, so its delivery, opens and clicks are kept per reader.
+       */
+      const redesign = unlockedInitial
+        ? (await isEmailSwitchOn("u1"))
+          ? EMAIL_STAGES.u1
+          : null
+        : unlockedFull
+          ? (await isEmailSwitchOn("c1"))
+            ? EMAIL_STAGES.c1
+            : null
+          : !claim && gated && (await isEmailSwitchOn("i1"))
+            ? EMAIL_STAGES.i1
+            : null;
+      const experiment = claim || redesign ? null : "survey-complete";
+      const variant = experiment ? pickEmailVariant(normalizedEmail, experiment) : "a";
+      // A pay-to-start reader's email, by what opened: its `email` tag and its `stage`.
+      const ptsEmail = unlockedInitial
+        ? "pts_initial_unlocked"
+        : claim?.outcome === "unlocked"
+          ? "pts_report_unlocked"
+          : "pts_report_ready";
+      const redesignParams = {
+        firstName: normalizedFirstName,
+        reportUrl,
+        siteUrl,
+        unsubscribeUrl,
+      };
       const tpl =
-        claim?.outcome === "unlocked"
-          ? unlockedInitial
-            ? initialUnlockEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              })
-            : reportFullEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              })
-          : variant === "b"
-            ? surveyCompleteBEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              })
-            : surveyCompleteEmail({
-                firstName: normalizedFirstName,
-                reportUrl,
-                siteUrl,
-                unsubscribeUrl,
-              });
+        redesign === EMAIL_STAGES.u1
+          ? coreUnlockedEmail(redesignParams)
+          : redesign === EMAIL_STAGES.c1
+            ? fullUnlockedEmail({ ...redesignParams, shareUrl: withShareOpen(reportUrl) })
+            : redesign === EMAIL_STAGES.i1
+              ? reportReadyEmail(redesignParams)
+              : claim?.outcome === "unlocked"
+                ? unlockedInitial
+                  ? initialUnlockEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    })
+                  : reportFullEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    })
+                : variant === "b"
+                  ? surveyCompleteBEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    })
+                  : surveyCompleteEmail({
+                      firstName: normalizedFirstName,
+                      reportUrl,
+                      siteUrl,
+                      unsubscribeUrl,
+                    });
 
       try {
         const { error } = await Promise.race([
@@ -869,20 +951,27 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            // Echoed back on every Resend webhook, which is how the A/B result is read.
-            tags: experiment
-              ? emailExperimentTags(experiment, variant)
-              : [
-                  { name: "journey", value: PAY_TO_START_JOURNEY },
-                  {
-                    name: "email",
-                    value: unlockedInitial
-                      ? "pts_initial_unlocked"
-                      : claim?.outcome === "unlocked"
-                        ? "pts_report_unlocked"
-                        : "pts_report_ready",
-                  },
-                ],
+            // Echoed back on every Resend webhook: `exp` and `arm` count the A/B test per day,
+            // `stage` and `sub` keep this email's own events per reader (email_message_event).
+            tags: redesign
+              ? [
+                  { name: "stage", value: redesign },
+                  { name: "sub", value: String(submissionId) },
+                  ...(claim ? [{ name: "journey", value: PAY_TO_START_JOURNEY }] : []),
+                ]
+              : experiment
+                ? [
+                    ...emailExperimentTags(experiment, variant),
+                    // The same stage as the redesign (I1), so it stays one email across the switch.
+                    { name: "stage", value: EMAIL_STAGES.i1 },
+                    { name: "sub", value: String(submissionId) },
+                  ]
+                : [
+                    { name: "journey", value: PAY_TO_START_JOURNEY },
+                    { name: "email", value: ptsEmail },
+                    { name: "stage", value: ptsEmail },
+                    { name: "sub", value: String(submissionId) },
+                  ],
             headers: {
               "X-LoveIQ-Variant": variant,
               ...(unsubscribeUrl && {
