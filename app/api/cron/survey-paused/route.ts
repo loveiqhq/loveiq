@@ -275,10 +275,13 @@ export async function GET(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            // Echoed back on every Resend webhook, which is how the A/B result is read; the
-            // redesign's `stage` keeps its delivery, opens and clicks (no `sub`: no survey yet).
+            // Echoed back on every Resend webhook: `exp` and `arm` count the A/B test per day;
+            // `stage` names the email (no `sub`: no survey yet, so no events kept per reader).
             tags: experiment
-              ? emailExperimentTags(experiment, variant)
+              ? [
+                  ...emailExperimentTags(experiment, variant),
+                  { name: "stage", value: EMAIL_STAGES.r1 },
+                ]
               : [{ name: "stage", value: EMAIL_STAGES.r1 }],
             headers: {
               "X-LoveIQ-Variant": variant,

@@ -158,12 +158,18 @@ describe("a survey submitted without the cookie", () => {
     expect(seen.rpcBody?.p_utm_tracker).toBe('{"utm_source":"google"}');
   });
 
-  it("keeps the survey email's A/B test", async () => {
+  it("keeps the survey email's A/B test, and its stage and reader for its own events", async () => {
     routeSupabase();
     await submit();
     await flushAfterResponse();
-    const payload = mockEmailsSend.mock.calls[0]?.[0] as { tags: Array<{ name: string }> };
-    expect(payload.tags.map((t) => t.name)).toEqual(["exp", "arm"]);
+    const payload = mockEmailsSend.mock.calls[0]?.[0] as {
+      tags: Array<{ name: string; value: string }>;
+    };
+    expect(payload.tags.map((t) => t.name)).toEqual(["exp", "arm", "stage", "sub"]);
+    expect(payload.tags.slice(2)).toEqual([
+      { name: "stage", value: "report_ready" },
+      { name: "sub", value: "123" },
+    ]);
   });
 
   it("sends a reader the gate will stop the redesigned I1 when its switch is on: one email, no A/B", async () => {
@@ -343,6 +349,8 @@ describe("a survey submitted by a buyer who paid before it", () => {
     expect(payload.tags).toEqual([
       { name: "journey", value: "pay_to_start" },
       { name: "email", value: "pts_report_unlocked" },
+      { name: "stage", value: "pts_report_unlocked" },
+      { name: "sub", value: "123" },
     ]);
   });
 
@@ -368,6 +376,8 @@ describe("a survey submitted by a buyer who paid before it", () => {
     expect(payload.tags).toEqual([
       { name: "journey", value: "pay_to_start" },
       { name: "email", value: "pts_initial_unlocked" },
+      { name: "stage", value: "pts_initial_unlocked" },
+      { name: "sub", value: "123" },
     ]);
   });
 
@@ -409,6 +419,8 @@ describe("a survey submitted by a buyer who paid before it", () => {
     expect(payload.tags).toEqual([
       { name: "journey", value: "pay_to_start" },
       { name: "email", value: "pts_report_ready" },
+      { name: "stage", value: "pts_report_ready" },
+      { name: "sub", value: "123" },
     ]);
   });
 });

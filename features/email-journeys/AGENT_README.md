@@ -42,8 +42,11 @@ approved: off, today's email goes out (or none, for a new one).
 - **No archetype name in any email**: the €1.99 step sells it; the card is one blurred image.
 - **The I3 gift test (80/20) is untouched**: the holdout never gets I4, and I2 goes to both arms.
 - Each email's links carry `utm_campaign` = its stage (or its existing tag for a redesign), so
-  #incoming-surveys names it under "Came back by email"; `stage` + `sub` tags keep its delivery,
-  opens and clicks in `email_message_event`. Pay to start's five (S3-S5, its R1/R2) have no
+  #incoming-surveys names it under "Came back by email"; `stage` + `sub` tags keep its send,
+  delivery, opens, clicks, bounce and complaint in `email_message_event` (with its A/B `arm` as
+  `variant`), only when it went to that submission's own reader and never for a test address
+  (`@resend.dev`): production's webhook also gets staging's emails, whose submission ids are real
+  readers' on production. Pay to start's five (S3-S5, its R1/R2) have no
   submission yet, so no `sub`: their sends are in `email_journey_send` (`prepaid:` target,
   `resend_id`), their effect in `prepaid_report_access` (`survey_started_at`,
   `consumed_submission_id`); their opens and clicks only in Resend.
