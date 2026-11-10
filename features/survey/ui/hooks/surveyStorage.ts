@@ -3,6 +3,7 @@
 import { GLOBAL_UTM_KEY } from "@shared/url/utm";
 import { SURVEY_SESSION_KEY, forgetSessionMirror } from "./surveySession";
 import type { SurveyAnswers } from "@features/survey/server/types";
+import type { MarketingOptInVia } from "@features/survey/optInSheet";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";
 
 export const SURVEY_STATE_KEY = "loveiq-survey-answers";
@@ -31,6 +32,12 @@ export interface PendingSurveyCompletion {
   utmTracker: string | null;
   currentIndex: number;
   savedAt: string;
+  /**
+   * "sheet" when the marketing opt-in's Yes was given in the "Sure you want to miss out?"
+   * sheet, so the server files it under that copy's consent version. Stored with the rest,
+   * so a Retry sends it too.
+   */
+  marketingOptInVia?: MarketingOptInVia;
 }
 
 /**
