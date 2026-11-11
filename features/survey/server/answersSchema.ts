@@ -9,6 +9,20 @@ const SCALE_QIDS = new Set(
 );
 
 /**
+ * How many picks a multi-select WITHOUT a cap keeps: 20, or every option when its question
+ * offers more. C9 (`16016`) has 53 topics and no cap since the 11 Nov 2026 sync, so a flat
+ * 20 would silently drop a reader's 21st pick onward.
+ */
+const UNCAPPED_PICKS = 20;
+const OPTION_COUNTS: ReadonlyMap<string, number> = new Map(
+  surveyQuestions.filter((q) => q.answerType === "multiple").map((q) => [q.qId, q.options.length])
+);
+
+function pickLimit(qId: string): number {
+  return SURVEY_SELECTION_CAPS.get(qId) ?? Math.max(UNCAPPED_PICKS, OPTION_COUNTS.get(qId) ?? 0);
+}
+
+/**
  * Validation for the `answers` map of a survey submission.
  *
  * Lives here rather than inline in `app/api/survey/route.ts` because Next.js rejects
@@ -24,7 +38,8 @@ const SCALE_QIDS = new Set(
  * readers lost their report that way in September 2026. So:
  * - text over 1000 characters is cut (the "Other" box had no limit);
  * - a pick list over its question's cap keeps its first picks (a draft saved before the
- *   cap went live, or a page left open across that deploy);
+ *   cap went live, or a page left open across that deploy); an uncapped list keeps 20
+ *   picks, or every option when its question offers more (`pickLimit`);
  * - answers to questions hidden since are dropped (an old draft still carries them);
  * - a scale answer that is not a number is dropped (two questions were text once, and
  *   submit_survey casts scale answers to numeric, which failed every retry);
@@ -55,7 +70,7 @@ export const surveyAnswersSchema = z
     // Rebuilt from entries, so a key like "__proto__" stays a plain own property.
     const given = new Map(Object.entries(obj));
     const capped = (key: string, value: string | string[] | number | undefined) =>
-      Array.isArray(value) ? value.slice(0, SURVEY_SELECTION_CAPS.get(key) ?? 20) : value;
+      Array.isArray(value) ? value.slice(0, pickLimit(key)) : value;
     const tidied = new Map<string, string | string[] | number>();
     for (const [key, value] of given) {
       const qId = key.endsWith("_other") ? key.slice(0, -"_other".length) : key;
