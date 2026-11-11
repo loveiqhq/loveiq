@@ -28,11 +28,11 @@ describe("demand block — C9, C10, C12", () => {
     for (const qId of DEMAND_BLOCK_QIDS) expect(find(qId), qId).toBeDefined();
   });
 
-  it("C9 offers all 53 topics, capped at three picks", () => {
+  it("C9 offers all 53 topics, with no cap on picks (11 Nov 2026 sync)", () => {
     const c9 = find("16016")!;
     expect(c9.answerType).toBe("multiple");
     expect(c9.options).toHaveLength(53);
-    expect(c9.maxSelections).toBe(3);
+    expect(c9.maxSelections).toBeUndefined();
     expect(new Set(c9.options).size).toBe(53); // a duplicate label would break option_text matching
   });
 

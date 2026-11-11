@@ -1541,15 +1541,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     ],
     required: true,
     guide:
-      "Pick the ones that matter most to you right now — up to three. This helps us decide what to build next, so there are no wrong answers.",
+      "Pick all that matter to you right now. This helps us decide what to build next, so there are no wrong answers.",
     supportAndGuidance:
-      "Pick the ones that matter most to you right now — up to three. This helps us decide what to build next, so there are no wrong answers.",
+      "Pick all that matter to you right now. This helps us decide what to build next, so there are no wrong answers.",
     comment:
       "Tells us which areas beyond sex people most want help with, so we build what people actually want instead of guessing.",
     howAnswerIsUsed:
       "Tells us which areas beyond sex people most want help with, so we build what people actually want instead of guessing.",
-    formatGuidance: "Select up to three options.",
-    maxSelections: 3,
+    formatGuidance: "Select all that apply.",
   },
   {
     qId: "16017",

@@ -243,9 +243,11 @@ the row's `created_date_time` are both stored, so true elapsed time stays recove
 **Selection caps.** Some multi-select questions limit how many options may be chosen. The
 limit is authored as the guidance sentence the respondent reads ("Select up to two
 options.") and parsed into `maxSelections` by `scripts/update-survey.js`. An `answers`
-array longer than its question's cap is rejected with `400 { "error": "Invalid input" }`.
-The UI enforces the same limit, so this guards against a modified client rather than a
-path real users reach.
+array longer than its question's cap keeps its first picks rather than being refused (a
+refusal at the final submit strands the reader). An uncapped list keeps 20 picks, or every
+option when its question offers more: C9 (`16016`) has 53 topics and no cap. The UI
+enforces the same limit, so this guards against a modified client rather than a path real
+users reach.
 
 **Responses:**
 

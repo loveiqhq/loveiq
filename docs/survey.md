@@ -120,7 +120,7 @@ The last seven questions are asked in this order, in both C13 arms:
 | ----- | ------- | ------------------------------------------------------ | --------------------------------------------------------------------- |
 | 1     | `16019` | A learning or insight that changed your sexuality      | Optional, multi-line. Feeds the report's Learn and Practice sections. |
 | 2     | `16020` | Books, articles, blogs or YouTube channels that helped | Optional, multi-line. Same purpose.                                   |
-| 3     | `16016` | C9 — "Beyond sex, which of these…" (up to three)       | Thirteen collapsible categories, 53 topics.                           |
+| 3     | `16016` | C9 — "Beyond sex, which of these…" (no limit)          | Thirteen collapsible categories, 53 topics.                           |
 | 4     | `16017` | C10 — "Thinking about what you just picked…"           | Refers back to C9, so it always follows it.                           |
 | 5     | `16018` | C12 — first access to the area picked                  | The waitlist opt-in.                                                  |
 | 6     | `00000` | Email                                                  | Last but one since the email-position test (2026-08-16). See below.   |
