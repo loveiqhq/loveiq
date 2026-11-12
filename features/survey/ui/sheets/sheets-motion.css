@@ -1,0 +1,137 @@
+/*
+ * Motion for the sheets between survey questions (features/survey/surveySheets.ts) and the
+ * opt-in sheet. Imported by SurveySheetShell, so it ships with the survey only, as
+ * wizard-motion.css does, never with every page (app/globals.css).
+ *
+ * The rules (researched 12 Nov 2026; sources in docs/survey.md, "Sheets between questions"):
+ * - Content fades up 8px over 240ms on the house curve, groups 50ms apart from 120ms, and
+ *   each sheet has ONE signature moment. Everything has finished by about 900ms.
+ * - Only transform and opacity move. Two exceptions, both small: a stroke drawing on an icon
+ *   of 32px or less, and one phrase whose ink fades to transparent to show the brand gradient
+ *   clipped to its text (WCAG 2.3.3 counts colour and opacity as no motion).
+ * - Nothing loops. Nothing holding a price or a button moves. No overshoot.
+ * - Everything sits under prefers-reduced-motion: no-preference. Without it nothing moves,
+ *   numbers stand at their value, checks are drawn and every element is where it ends up.
+ *   The enter and exit of the sheet itself live in Tailwind's motion-safe classes and in the
+ *   shell, for the same reason.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A group arriving: --sheet-i is its place in the order (0, 1, 2 …). */
+  .sheet-in {
+    animation: sheet-item-in 240ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: calc(120ms + var(--sheet-i, 0) * 50ms);
+  }
+
+  /* A stroke drawing itself: the path carries pathLength="1". */
+  .sheet-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: sheet-draw 360ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--sheet-delay, 250ms);
+  }
+
+  /* A rule or connector growing from its start. */
+  .sheet-grow-x {
+    transform-origin: left center;
+    animation: sheet-grow-x 300ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: var(--sheet-delay, 0ms);
+  }
+  .sheet-grow-y {
+    transform-origin: top center;
+    animation: sheet-grow-y 300ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: var(--sheet-delay, 0ms);
+  }
+
+  /* A badge settling into place, without overshoot. */
+  .sheet-settle {
+    animation: sheet-settle 200ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: var(--sheet-delay, 0ms);
+  }
+
+  /* An element rising last (a report cover), its shadow riding along. */
+  .sheet-rise {
+    animation: sheet-rise 300ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: var(--sheet-delay, 250ms);
+  }
+
+  /* A gradient phrase: its ink fades out and the gradient clipped to it shows through. */
+  .sheet-ink {
+    animation: sheet-ink 300ms ease-out backwards;
+    animation-delay: var(--sheet-delay, 450ms);
+  }
+
+  /* A tick box being ticked: the fill, then its check. */
+  .sheet-tick-fill {
+    animation: sheet-settle 100ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  }
+  .sheet-tick-fill .sheet-draw {
+    animation-duration: 150ms;
+    animation-delay: 60ms;
+  }
+
+  /* The sheet leaving over what comes next. */
+  .sheet-exit {
+    animation: sheet-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+  .sheet-exit-fade {
+    animation: sheet-fade-out 220ms ease-in forwards;
+  }
+}
+
+@keyframes sheet-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes sheet-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes sheet-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes sheet-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes sheet-settle {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes sheet-ink {
+  from {
+    color: #161021;
+  }
+}
+
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}

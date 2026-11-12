@@ -21,6 +21,8 @@
  *                              the gate's non-payers (20261020090000; read default OFF)
  *   email_*                    — the email journeys' switches, one per new or redesigned email
  *                              (20261108230000; read default OFF: features/email-journeys)
+ *   survey_sheet_*             — the sheets between survey questions, one per sheet (read
+ *                              default OFF, no row needed: features/survey/logic/sheetSwitches.ts)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -55,7 +57,14 @@ export type SystemFlagKey =
   | "email_r2"
   | "email_c2"
   | "email_s3_s5"
-  | "email_pts_reminders";
+  | "email_pts_reminders"
+  // The sheets between survey questions (Mark, 11 Nov 2026): one switch per sheet, all off.
+  | "survey_sheet_science"
+  | "survey_sheet_trustpilot"
+  | "survey_sheet_expert"
+  | "survey_sheet_halfway"
+  | "survey_sheet_desire"
+  | "survey_sheet_report_map";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

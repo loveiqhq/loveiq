@@ -789,6 +789,26 @@ async function main(argv: string[]): Promise<number> {
     let since = Date.now();
     let asked = 0;
     for (;;) {
+      // A sheet between questions (features/survey/surveySheets.ts) holds the move or rises
+      // over the next question: a person reads it and carries on. Its buttons wait out the
+      // first 400ms, so read it first, as a person would.
+      const sheet = page.locator("[data-survey-sheet]").first();
+      if (await sheet.count()) {
+        await record("survey-sheet", {
+          note: (await sheet.getAttribute("data-survey-sheet")) ?? "",
+        });
+        await page.waitForTimeout(600);
+        const keepGoing = sheet.locator("[data-sheet-keep-going]");
+        await (
+          (await keepGoing.count()) ? keepGoing : sheet.getByRole("button", { name: /^next$/i })
+        )
+          .first()
+          .click()
+          .catch(() => {});
+        await page.waitForTimeout(600);
+        since = Date.now();
+        continue;
+      }
       const s = await readScreen(page);
       if (!s.progress) {
         if (asked > 0) break; // past the last question: the processing screen

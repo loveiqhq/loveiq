@@ -57,6 +57,13 @@ const ALLOWED_KEYS = new Set([
   "email_c2",
   "email_s3_s5",
   "email_pts_reminders",
+  // The sheets between survey questions: each changes what every survey taker sees.
+  "survey_sheet_science",
+  "survey_sheet_trustpilot",
+  "survey_sheet_expert",
+  "survey_sheet_halfway",
+  "survey_sheet_desire",
+  "survey_sheet_report_map",
 ]);
 
 export async function GET() {
