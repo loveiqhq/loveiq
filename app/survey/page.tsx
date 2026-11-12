@@ -64,11 +64,12 @@ async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJou
   }
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ sheets?: string | string[] }>;
-}) {
+interface SurveyRouteProps {
+  /** Next always passes it; a direct call (features/pay-to-start/tests) may not. */
+  searchParams?: Promise<{ sheets?: string | string[] }>;
+}
+
+export default async function Page({ searchParams }: SurveyRouteProps = {}) {
   /**
    * Consent-independent daily survey-page count. Middleware flags the first
    * survey view per browser per day via `x-liq-new-survey`; record it AFTER the
@@ -90,7 +91,9 @@ export default async function Page({
   const [journey, sheets] = await Promise.all([
     payToStartJourney(headersList.get("cookie")),
     // The sheets between questions: their switches, or a staging preview (?sheets=all).
-    searchParams.then((params) => surveySheetsForVisit(params.sheets)),
+    (searchParams ?? Promise.resolve({ sheets: undefined })).then((params) =>
+      surveySheetsForVisit(params.sheets)
+    ),
   ]);
   return <SurveyPage journey={journey} sheets={sheets} />;
 }
