@@ -298,14 +298,16 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
   function ControlledC9({
     initialValue = [],
     onChangeSpy,
+    question = c9,
   }: {
     initialValue?: string[];
     onChangeSpy?: (value: string[]) => void;
+    question?: typeof c9;
   }) {
     const [value, setValue] = useState<string[]>(initialValue);
     return (
       <MultipleChoiceQuestion
-        question={c9}
+        question={question}
         value={value}
         onChange={(next) => {
           onChangeSpy?.(next);
@@ -382,11 +384,40 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
     expect(onChangeSpy).toHaveBeenLastCalledWith(["Money worries", "Poor or broken sleep"]);
   });
 
-  it("still refuses a fourth pick when the three already chosen sit in other categories", async () => {
+  it("takes a fourth pick and more across categories: no cap since the 11 Nov 2026 sync", async () => {
     const user = userEvent.setup();
     const onChangeSpy = vi.fn();
     render(
       <ControlledC9
+        initialValue={["Poor or broken sleep", "Money worries", "Grief & loss"]}
+        onChangeSpy={onChangeSpy}
+      />
+    );
+
+    await user.click(header("Mood & Energy"));
+    const fourth = screen.getByRole("checkbox", { name: "Low energy & motivation" });
+    await user.click(fourth);
+    const [fifthName] = topicsOf("Mood & Energy").filter((t) => t !== "Low energy & motivation");
+    await user.click(screen.getByRole("checkbox", { name: fifthName }));
+
+    expect(onChangeSpy).toHaveBeenLastCalledWith([
+      "Poor or broken sleep",
+      "Money worries",
+      "Grief & loss",
+      "Low energy & motivation",
+      fifthName,
+    ]);
+    expect(fourth).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText(/up to \d+ options?/i)).not.toBeInTheDocument();
+  });
+
+  it("a capped grouped question still refuses a pick past its cap, across categories", async () => {
+    // C9 itself is uncapped now; a copy with a cap keeps the grouped-cap logic covered.
+    const user = userEvent.setup();
+    const onChangeSpy = vi.fn();
+    render(
+      <ControlledC9
+        question={{ ...c9, maxSelections: 3 }}
         initialValue={["Poor or broken sleep", "Money worries", "Grief & loss"]}
         onChangeSpy={onChangeSpy}
       />

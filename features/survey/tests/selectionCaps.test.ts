@@ -23,6 +23,8 @@ describe("selection caps", () => {
 
   it("leaves genuinely uncapped questions uncapped", () => {
     expect(SURVEY_SELECTION_CAPS.has("16011")).toBe(false);
+    // C9: any number of its 53 topics since the 11 Nov 2026 sync ("Select all that apply.").
+    expect(SURVEY_SELECTION_CAPS.has("16016")).toBe(false);
   });
 
   it("every capped question is a multi-select, and the cap fits its option list", () => {
@@ -76,6 +78,14 @@ describe("surveyAnswersSchema — server-side cap enforcement", () => {
   it("leaves uncapped questions alone", () => {
     const many = ["a", "b", "c", "d", "e", "f"];
     expect(surveyAnswersSchema.safeParse({ ...ok, "16011": many }).success).toBe(true);
+  });
+
+  it("keeps every pick on an uncapped question with more than 20 options (C9's 53 topics)", () => {
+    // The 20-pick trim for uncapped lists would otherwise drop a reader's 21st C9 pick onward.
+    const c9 = surveyQuestions.find((q) => q.qId === "16016")!;
+    const parsed = surveyAnswersSchema.safeParse({ ...ok, "16016": c9.options });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.["16016"]).toEqual(c9.options);
   });
 
   it("ignores non-array answers for a capped question", () => {
