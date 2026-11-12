@@ -6,6 +6,7 @@ import { readPrepaidToken, type SurveyJourney } from "@features/pay-to-start/log
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
+import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -63,7 +64,11 @@ async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJou
   }
 }
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sheets?: string | string[] }>;
+}) {
   /**
    * Consent-independent daily survey-page count. Middleware flags the first
    * survey view per browser per day via `x-liq-new-survey`; record it AFTER the
@@ -82,5 +87,10 @@ export default async function Page() {
     after(() => recordSurveyPageView(newSurveyVariant, utmSource));
   }
 
-  return <SurveyPage journey={await payToStartJourney(headersList.get("cookie"))} />;
+  const [journey, sheets] = await Promise.all([
+    payToStartJourney(headersList.get("cookie")),
+    // The sheets between questions: their switches, or a staging preview (?sheets=all).
+    searchParams.then((params) => surveySheetsForVisit(params.sheets)),
+  ]);
+  return <SurveyPage journey={journey} sheets={sheets} />;
 }

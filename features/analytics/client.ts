@@ -2,6 +2,7 @@ import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { OptInSheetDismissVia, OptInSheetOutcome } from "@features/survey/optInSheet";
+import type { SurveySheetCloseVia, SurveySheetId } from "@features/survey/surveySheets";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import type {
   TourAudience,
@@ -1551,6 +1552,25 @@ export const trackOptInSheetClosed = ({
     { question_id: "16015" },
     { outcome, ...(via ? { via } : {}) }
   );
+
+/**
+ * A sheet between questions opened (features/survey/surveySheets.ts): which one, over which
+ * question. Once per run each. PostHog and GA4; before the submit there is no submission to
+ * persist it against. AP measures the sheets through its question funnel, before and after
+ * each switch goes on.
+ */
+export const trackSurveySheetShown = (params: { sheet: SurveySheetId; question_id: string }) =>
+  track("survey_sheet_shown", params);
+
+/**
+ * How it closed: `via` (Keep going, the scrim, Esc, a swipe, Back, the map's Previous), how
+ * long it was open, and for the State of Desire sheet whether its box was ticked. Those go to
+ * PostHog only; GA4 sees only that it closed.
+ */
+export const trackSurveySheetClosed = (
+  params: { sheet: SurveySheetId; question_id: string },
+  detail: { via: SurveySheetCloseVia; ms_open: number; ticked?: boolean }
+) => track("survey_sheet_closed", params, detail);
 
 export const trackWizardSlideAdvanced = (params: {
   from_slide: number;

@@ -142,6 +142,9 @@ export default defineConfig({
     ? {
         command: "npm run build && npm run start",
         url: baseURL,
+        // The survey's `?sheets=` preview, which production refuses, works on this test
+        // server only (e2e/survey-sheets.spec.ts); no spec without the parameter sees a sheet.
+        env: { ...process.env, SURVEY_SHEETS_PREVIEW: "1" } as Record<string, string>,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         stdout: "ignore",

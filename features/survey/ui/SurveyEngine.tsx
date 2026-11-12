@@ -9,7 +9,10 @@ import SurveyJumpMenu from "./SurveyJumpMenu";
 import SurveyNav from "./SurveyNav";
 import SurveyPauseModal from "./SurveyPauseModal";
 import OptInSheet from "./OptInSheet";
-import SurveyProgress from "./SurveyProgress";
+import SurveySheetHost from "./sheets/SurveySheetHost";
+import { trustpilotSheetReady } from "./sheets/InfoSheets";
+import type { SheetDismissVia } from "./sheets/SurveySheetShell";
+import SurveyProgress, { minutesLeft } from "./SurveyProgress";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
 import AlertCircleIcon from "./questions/AlertCircleIcon";
@@ -26,6 +29,8 @@ import {
   trackSurveyPause,
   trackOptInSheetShown,
   trackOptInSheetClosed,
+  trackSurveySheetShown,
+  trackSurveySheetClosed,
   setReportSubmissionContext,
   setSurveyVariant,
   setEmailQuestionArm,
@@ -42,6 +47,17 @@ import {
   shouldOfferOptInSheet,
   type OptInSheetDismissVia,
 } from "@features/survey/optInSheet";
+import {
+  rememberSheetShown,
+  SCIENCE_QID,
+  sheetAfterQuestion,
+  sheetBeforeQuestion,
+  sheetsShownFor,
+  surveySheetDef,
+  type SheetContext,
+  type SurveySheetCloseVia,
+  type SurveySheetId,
+} from "@features/survey/surveySheets";
 import {
   EMAIL_QUESTION_EXPERIMENT,
   EMAIL_QUESTION_WINNER,
@@ -84,7 +100,14 @@ interface SurveyEngineProps {
    * link opens a report only under that one.
    */
   payToStart?: boolean;
+  /**
+   * The sheets between questions this visit shows (features/survey/surveySheets.ts): their
+   * switches, or a staging preview (app/survey/page.tsx). None by default.
+   */
+  sheets?: readonly SurveySheetId[];
 }
+
+const NO_SHEETS: readonly SurveySheetId[] = [];
 
 const TEXT_ENTRY_TYPES = /^(text|email|search|tel|url|number|password)$/;
 
@@ -134,7 +157,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   onComplete,
   onStartOver,
   payToStart = false,
+  sheets: sheetsOffered = NO_SHEETS,
 }) => {
+  // A sheet that would draw nothing is never opened, or it would hold the move with nothing
+  // on screen: the Trustpilot sheet needs the site's Trustpilot switch and its numbers.
+  const sheets = useMemo(
+    () => sheetsOffered.filter((id) => id !== "trustpilot" || trustpilotSheetReady()),
+    [sheetsOffered]
+  );
   const {
     answers,
     currentIndex,
@@ -199,6 +229,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     optInSheetOpenRef.current = false;
     setOptInSheetOpen(false);
   }, []);
+  /**
+   * The sheets between questions (Mark, 11 Nov): the one open now, if any. The state draws
+   * it; the ref answers at once for the handlers that run in the same tick. Shown: once per
+   * run each, also across a reload (sheetsShownFor), keyed by the run.
+   */
+  const [openSheet, setOpenSheet] = useState<SurveySheetId | null>(null);
+  const openSheetRef = useRef<SurveySheetId | null>(null);
+  const sheetsShown = useRef<{ run: string; shown: Set<SurveySheetId> } | null>(null);
+  const sheetQid = useRef("");
+  const sheetOpenedAt = useRef(0);
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
@@ -451,6 +491,54 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     autoAdvanceTimer.current = null;
   }, []);
 
+  /** This run's shown sheets, read from storage once per run. */
+  const shownSheets = useCallback((): Set<SurveySheetId> => {
+    if (sheetsShown.current?.run !== startedAt) {
+      sheetsShown.current = { run: startedAt, shown: sheetsShownFor(startedAt) };
+    }
+    return sheetsShown.current.shown;
+  }, [startedAt]);
+
+  const sheetContext = useCallback(
+    (): SheetContext => ({ enabled: sheets, shown: shownSheets(), payToStart }),
+    [sheets, shownSheets, payToStart]
+  );
+
+  /** Opens a sheet over the question `qId`: once per run, and an answer's pending move goes. */
+  const showSheet = useCallback(
+    (id: SurveySheetId, qId: string) => {
+      shownSheets().add(id);
+      rememberSheetShown(startedAt, id);
+      openSheetRef.current = id;
+      sheetQid.current = qId;
+      sheetOpenedAt.current = Date.now();
+      cancelAutoAdvance();
+      setOpenSheet(id);
+      trackSurveySheetShown({ sheet: id, question_id: qId });
+    },
+    [shownSheets, startedAt, cancelAutoAdvance]
+  );
+
+  /** The sheet goes; says which it was, for the caller to carry on. */
+  const closeSheet = useCallback(
+    (via: SurveySheetCloseVia, extra?: { ticked?: boolean }): SurveySheetId | null => {
+      const id = openSheetRef.current;
+      if (!id) return null;
+      openSheetRef.current = null;
+      setOpenSheet(null);
+      trackSurveySheetClosed(
+        { sheet: id, question_id: sheetQid.current },
+        {
+          via,
+          ms_open: Date.now() - sheetOpenedAt.current,
+          ...(extra?.ticked === undefined ? {} : { ticked: extra.ticked }),
+        }
+      );
+      return id;
+    },
+    []
+  );
+
   // Navigation
   const goTo = useCallback(
     (index: number) => {
@@ -492,6 +580,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     // hasCompleted, and ArrowRight, Enter or a left swipe there re-ran the whole
     // completion: a second survey_completed, and a new payload under this tab's session.
     if (currentIndex >= totalQuestions) return;
+    // A sheet between questions is open: it has the move (its Keep going carries on). A held
+    // Enter, a pending Auto-advance or a second tap on Next must not move the survey under it.
+    if (openSheetRef.current) return;
     // A tap on the blocked Next lands here now (it used to be a disabled button), so an
     // unanswered required question must stop here too, not only at the keyboard's gate.
     const missingAnswer = !!question?.required && !hasAnswer;
@@ -520,6 +611,19 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         });
       }
       setBlocked(missingAnswer ? "missing" : "invalid");
+      return;
+    }
+    // A sheet after this question (Mark's placements, features/survey/surveySheets.ts) holds
+    // the move, once per run. Every way on lands here (Next, Auto-advance, Enter, ArrowRight,
+    // a swipe), so this one check holds them all.
+    const sheetAfter = sheetAfterQuestion(
+      question?.qId,
+      currentIndex,
+      totalQuestions,
+      sheetContext()
+    );
+    if (sheetAfter && question) {
+      showSheet(sheetAfter, question.qId);
       return;
     }
     if (currentIndex >= totalQuestions - 1) {
@@ -595,12 +699,19 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       ""
     );
     goTo(currentIndex + 1);
+    // A sheet before the next question rises over it as it arrives, in the same render.
+    const next = orderedQuestions[currentIndex + 1];
+    const sheetBefore = sheetBeforeQuestion(next?.qId, currentIndex + 1, sheetContext());
+    if (sheetBefore && next) showSheet(sheetBefore, next.qId);
   }, [
     currentIndex,
     totalQuestions,
     startedAt,
     question,
     goTo,
+    orderedQuestions,
+    sheetContext,
+    showSheet,
     submitSurvey,
     // `answers` is deliberately NOT a dependency. Nothing in this callback reads it any
     // more: the submit reads getLatestAnswers(), so a Next pressed before React has
@@ -633,6 +744,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     // the finished run's session id, saving its answers again; a reload then read them as a
     // new run (#393) and Next filed the same answers as a second submission.
     if (currentIndex >= totalQuestions) return;
+    // A sheet covers Previous; ArrowLeft and a right swipe are its, not the question's.
+    if (openSheetRef.current) return;
     cancelAutoAdvance();
     const moveWithoutHistory = () => {
       trackNavigation("back");
@@ -707,6 +820,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         closeOptInSheet();
         trackOptInSheetClosed({ outcome: "dismissed", via: "back" });
       }
+      // A sheet between questions goes with the question it was shown over.
+      closeSheet("back");
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
     };
@@ -718,6 +833,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     mayMoveOn,
     answerMissing,
     closeOptInSheet,
+    closeSheet,
   ]);
 
   useEffect(() => {
@@ -741,6 +857,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
    * pay-to-start buyer paid on, else the homepage). Back from Marcus's review of 20.10.
    */
   const handlePause = useCallback(() => {
+    if (openSheetRef.current) return; // the sheet covers Pause
     cancelBackFallback(); // it would move the question under the dialog
     cancelAutoAdvance();
     savePartial();
@@ -799,6 +916,31 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     [closeOptInSheet]
   );
 
+  // A sheet between questions: Keep going (and the map's Next) closes it and the survey
+  // carries on. One shown before a question leaves the reader on that question to answer it.
+  const handleSheetKeepGoing = useCallback(
+    (extra?: { ticked?: boolean }) => {
+      const id = closeSheet("keep_going", extra);
+      if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
+    },
+    [closeSheet]
+  );
+
+  // Closed without the button (the scrim, Esc, a swipe down). These sheets ask nothing, so it
+  // carries on as Keep going does.
+  const handleSheetDismiss = useCallback(
+    (via: SheetDismissVia) => {
+      const id = closeSheet(via);
+      if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
+    },
+    [closeSheet]
+  );
+
+  // The map's Previous (and its Esc): back to the question on screen, which can still change.
+  const handleSheetPrevious = useCallback(() => {
+    closeSheet("previous");
+  }, [closeSheet]);
+
   // Handle answer change. With Auto-advance on (off by default, SurveyControls), a single
   // choice, a scale point or a country moves on by itself a moment later. Never a
   // multiple choice or an open answer, where the reader is not done yet.
@@ -839,7 +981,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   useEffect(() => {
     if (surveyOver) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (showPauseModal || optInSheetOpen) return; // the dialog has the keyboard
+      if (showPauseModal || optInSheetOpen || openSheet) return; // the dialog has the keyboard
       // Enter on a focused control is that control's own press: a scale point, an
       // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
       // cancelled the press, so a changed answer was never saved, and Enter on Next
@@ -868,7 +1010,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal, optInSheetOpen]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal, optInSheetOpen, openSheet]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
@@ -901,7 +1043,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         return;
       }
       if (touchStartX.current === null || touchStartY.current === null) return;
-      if (showPauseModal || optInSheetOpen) {
+      if (showPauseModal || optInSheetOpen || openSheet) {
         // A swipe on the dialog is not a question move.
         clearSwipe();
         return;
@@ -921,7 +1063,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal, optInSheetOpen]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal, optInSheetOpen, openSheet]);
 
   // An answer's pending move goes with the screen.
   useEffect(() => cancelAutoAdvance, [cancelAutoAdvance]);
@@ -1241,6 +1383,19 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           onDecline={handleOptInSheetNotNow}
           onDismiss={handleOptInSheetDismiss}
         />
+        {sheets.length > 0 ? (
+          <SurveySheetHost
+            enabled={sheets}
+            open={openSheet}
+            scienceAnswer={answers[SCIENCE_QID]}
+            minutesLeft={minutesLeft(currentIndex + 1, totalQuestions)}
+            progressIndex={currentIndex}
+            total={totalQuestions}
+            onKeepGoing={handleSheetKeepGoing}
+            onDismiss={handleSheetDismiss}
+            onMapPrevious={handleSheetPrevious}
+          />
+        ) : null}
       </main>
     </SurveyThemeProvider>
   );
