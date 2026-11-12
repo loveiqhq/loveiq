@@ -2945,6 +2945,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       (searchParams.get("gate") === "tour" ? "tour" : searchParams.get("gate") === "1"),
     // `&gift=1` with `?plan=initial`: the EUR 1.99 unlock as E07's gift, for its wording.
     previewGift: isPreview && searchParams.get("gift") === "1",
+    // `&reveal=1` with a gate: Mark's redesigned EUR 1.99 page (logic/gateReveal.ts).
+    previewReveal: isPreview && searchParams.get("reveal") === "1",
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,

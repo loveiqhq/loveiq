@@ -24,6 +24,7 @@ import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
 import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import { buildInitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
 import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
+import { buildGateReveal } from "@features/report/server/gateReveal";
 
 /**
  * A report with no reader behind it — for looking at the design on a laptop.
@@ -89,6 +90,20 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
 
+  const requested = url.searchParams.get("archetype") || "Spark Seeker";
+  // ReportPage forwards the raw ?archetype= slug, so match on letters alone:
+  // "spark-seeker" and "Spark Seeker" both reduce to "sparkseeker".
+  const flatten = (v: string) => v.toLowerCase().replace(/[^a-z]/g, "");
+  const archetype =
+    KNOWN_ARCHETYPES.find((a) => flatten(a) === flatten(requested)) ?? "Spark Seeker";
+
+  // `&reveal=1` with a gate: Mark's redesigned page (gateReveal.ts), the archetype and its
+  // cards on the gate, as its switch (report_gate_archetype_reveal) will give it.
+  const reveal =
+    url.searchParams.get("reveal") === "1"
+      ? buildGateReveal(archetype, previewPercentages(archetype))
+      : null;
+
   // `?gate=1`: the EUR 1.99 gate as a gated owner meets it, its payload and nothing else
   // (features/report/logic/initialUnlockGate.ts). Its survey time is the canvas's sample.
   if (url.searchParams.get("gate") === "1") {
@@ -97,17 +112,11 @@ export async function GET(request: Request) {
         reportToken: null,
         submissionId: null,
         surveyMinutes: PREVIEW_SURVEY_MINUTES,
+        reveal,
       }),
       { headers: { "Cache-Control": "no-store" } }
     );
   }
-
-  const requested = url.searchParams.get("archetype") ?? "Spark Seeker";
-  // ReportPage forwards the raw ?archetype= slug, so match on letters alone:
-  // "spark-seeker" and "Spark Seeker" both reduce to "sparkseeker".
-  const flatten = (v: string) => v.toLowerCase().replace(/[^a-z]/g, "");
-  const archetype =
-    KNOWN_ARCHETYPES.find((a) => flatten(a) === flatten(requested)) ?? "Spark Seeker";
 
   // `?gate=tour`: the gate's first open since 30.10, the report under the guided tour with
   // who the reader is left out, then the gate (features/report/server/tourFirstReport.ts).
@@ -122,6 +131,7 @@ export async function GET(request: Request) {
           reportToken: null,
           submissionId: null,
           surveyMinutes: PREVIEW_SURVEY_MINUTES,
+          reveal,
         }),
       }),
       { headers: { "Cache-Control": "no-store" } }

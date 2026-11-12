@@ -1117,7 +1117,11 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     mockGetClientIp.mockReturnValue("1.2.3.4");
     allowCsrf();
     allowRateLimit();
-    mockIsFeatureEnabled.mockResolvedValue(true); // the paywall is enforced
+    // The paywall is enforced; Mark's archetype-on-the-gate page (gateReveal.ts) is off, as
+    // it is in production until the EUR 1.99 change.
+    mockIsFeatureEnabled.mockImplementation(
+      async (key: string) => key !== "report_gate_archetype_reveal"
+    );
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({ ...NOTHING_BOUGHT });
     vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
     vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
@@ -1152,6 +1156,17 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
       viewMode: "owner",
       surveyMinutes: null,
     });
+  });
+
+  it("adds the reader's archetype and its cards when report_gate_archetype_reveal is on", async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    const res = await meetGet();
+    const body = (await res.json()) as {
+      reveal?: { archetype: string; aspects: Array<{ locked: boolean }> };
+    };
+    expect(body.reveal?.archetype).toBe(SCORING.v5_primary_archetype || SCORING.primary_archetype);
+    expect(body.reveal?.aspects.map((a) => a.locked)).toEqual([false, false, true, true, true]);
+    expect(mockIsFeatureEnabled).toHaveBeenCalledWith("report_gate_archetype_reveal", false);
   });
 
   it("tells the gate the minutes the reader spent on the questions, not the survey's clock", async () => {
