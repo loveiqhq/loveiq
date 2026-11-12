@@ -55,6 +55,30 @@ with it. Everything ships switched off.
    `skipped…`, `failed`), and #ops hears about a stalled cron after three hours. One draw per
    person: a retake's report is left out once the person has an arm.
 
+## The archetype on the gate (Mark's redesign, 12 Nov 2026)
+
+Mark's redesigned EUR 1.99 page (Claude Design `HcHeTUFfEgmg62qqktHSMU`, "€1.99 Pre-Paywall ·
+mobile") opens on the reader's Core Archetype: its match ring, its one line
+(`report4ArchetypeBlurbs`), and five aspect cards from the report's archetype card, core
+motivation and communication open, initiation, attachment and power locked. Their verdicts show;
+their sentences travel only as same-shape stand-ins under the blur
+(`features/report/server/gateReveal.ts`). "Why you should unlock your Light Report" follows, then
+the gate's own card (titled "Your Personal Light Report", without its description line), map,
+reasons and reviews.
+
+- **Switch:** `report_gate_archetype_reveal` (system flag, off when its row is missing). With it
+  on, `/api/report` adds `reveal` to the gate's payload, the tour-first one included; the page
+  draws the new top whenever `reveal` is there.
+- **Not before the EUR 1.99 change:** it shows the Core Archetype before payment, which today's
+  EUR 1.99 sells (`INITIAL_UNLOCK_TITLE`). It goes on with the change that makes the archetype
+  free (Roadmap "Show archetype + survey nudge cards").
+- **Where the board and today differ, the page says today's:** a 14-day guarantee (the board's 7),
+  "3x full chapters" (the board's 4×), and the credit "toward your Full Report" (the board's
+  "Premium Report").
+- **Previews:** `/report?preview=1&v4=1&gate=1&reveal=1` (the page alone) and
+  `&gate=tour&reveal=1` (the first open: the tour's anonymous report, then the page), with
+  `&archetype=<slug>` for another archetype.
+
 ## Switch it off
 
 - `report_initial_unlock_gate` off: nobody is gated any more. Readers in the cohort get their
