@@ -30,6 +30,7 @@ import {
 } from "./hooks/surveySession";
 import { pingFunnelEvent } from "@features/analytics/client";
 import type { SurveyJourney } from "@features/pay-to-start/logic/journey";
+import type { SurveySheetId } from "@features/survey/surveySheets";
 
 /*
  * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
@@ -1322,9 +1323,16 @@ interface SurveyPageProps {
    * paid on, and a run this tab finished before (a free one) never stands in the way.
    */
   journey?: SurveyJourney | null;
+  /**
+   * The sheets between questions this visit shows (app/survey/page.tsx: their switches, or a
+   * staging preview). None by default.
+   */
+  sheets?: readonly SurveySheetId[];
 }
 
-const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
+const NO_SHEETS: readonly SurveySheetId[] = [];
+
+const SurveyPage: FC<SurveyPageProps> = ({ journey = null, sheets = NO_SHEETS }) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -1526,6 +1534,7 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null }) => {
         onComplete={(token) => handleReturn(true, token)}
         onStartOver={handleStartOver}
         payToStart={journey !== null}
+        sheets={sheets}
       />
     );
   }
