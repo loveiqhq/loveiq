@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 import { surveyQuestions } from "../data/survey-data";
@@ -107,6 +107,13 @@ async function sheetAnimations(page: Page, id: string) {
   }, id);
 }
 
+/** Each element's CSS animation-delay in ms, in document order (0 under reduced motion). */
+async function animationDelays(elements: Locator) {
+  return elements.evaluateAll((els) =>
+    els.map((el) => Number.parseFloat(getComputedStyle(el).animationDelay) * 1000)
+  );
+}
+
 async function saveShot(page: Page, name: string) {
   const dir = process.env.SHEETS_SHOTS_DIR;
   if (!dir) return;
@@ -116,20 +123,21 @@ async function saveShot(page: Page, name: string) {
 }
 
 test.describe("Survey: the sheets between questions", () => {
-  test("science: the reader's own share, counting up, then on to the next question", async ({
+  test("science: Mark's message, the share counting up, then on to the next question", async ({
     page,
   }) => {
     const at = indexOf("02004");
     await onQuestion(page, at, RESPOND);
     await next(page).click();
     const dialog = page.getByRole("dialog", {
-      name: `Like ${SCIENCE_SHARES.respond}% of people, you love to respond.`,
+      name: "More people love to respond",
     });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText(
-      "say their best sex starts when the other person makes the first move."
+      "say their best sex starts when the other person makes the first move. Only 12% say it’s when they start."
     );
-    // The motion budget: nothing endless, everything done by 900ms after the 450ms rise.
+    // The motion budget: nothing endless, the CSS done by 900ms after the 450ms rise (the
+    // number counts up in script, over 1.2s from 400ms: Mark's "more slowly", 12 Nov).
     for (const a of await sheetAnimations(page, "science")) {
       expect(a.iterations, a.name).not.toBe(Infinity);
       expect(a.end, a.name).toBeLessThanOrEqual(1000);
@@ -173,7 +181,9 @@ test.describe("Survey: the sheets between questions", () => {
     await expect(sheetRoot(page, "science")).toHaveCount(0);
   });
 
-  test("trustpilot: the TrustScore and one real review, static stars", async ({ page }) => {
+  test("trustpilot: the TrustScore, the stars arriving in turn, one real review", async ({
+    page,
+  }) => {
     const at = indexOf("03008");
     await onQuestion(page, at);
     await next(page).click();
@@ -188,6 +198,12 @@ test.describe("Survey: the sheets between questions", () => {
     await expect(root.getByRole("dialog")).toBeVisible();
     await expect(root).toContainText("TrustScore");
     await expect(root).toContainText("Very interesting report, and personalised");
+    // "Excellent", then the five stars one after another (Mark's review, 12 Nov).
+    const starDelays = await animationDelays(root.locator("[data-tp-star]"));
+    expect(starDelays).toHaveLength(5);
+    for (let i = 1; i < starDelays.length; i++) {
+      expect(starDelays[i]! - starDelays[i - 1]!).toBeGreaterThanOrEqual(100);
+    }
     await saveShot(page, "2-trustpilot");
     await settle(page);
     await keepGoing(page).click();
@@ -212,13 +228,24 @@ test.describe("Survey: the sheets between questions", () => {
     ).toBeVisible();
   });
 
-  test("halfway: the check draws itself; minutes as the strip counts them", async ({ page }) => {
+  test("halfway: the steps arrive one after another; minutes as the strip counts them", async ({
+    page,
+  }) => {
     const at = indexOf("11003");
     await onQuestion(page, at);
     await next(page).click();
     const root = sheetRoot(page, "halfway");
     await expect(root.getByRole("dialog")).toBeVisible();
-    await expect(root.getByRole("img", { name: "First half done" })).toBeVisible();
+    await expect(root).toContainText("Your Core Archetype is taking shape.");
+    await expect(root.getByRole("img", { name: "First half done" })).toHaveCount(0);
+    // One after another, at least 250ms apart, all settled by 1.8s (Mark's review, 12 Nov).
+    const stepDelays = await animationDelays(root.locator("[data-halfway-step]"));
+    expect(stepDelays).toHaveLength(3);
+    expect(stepDelays[1]! - stepDelays[0]!).toBeGreaterThanOrEqual(250);
+    expect(stepDelays[2]! - stepDelays[1]!).toBeGreaterThanOrEqual(250);
+    for (const a of await sheetAnimations(page, "halfway")) {
+      expect(a.end, a.name).toBeLessThanOrEqual(1800);
+    }
     await expect(root).toContainText("Your highest scored sexual personality and its motivation.");
     await expect(root).toContainText(/Only ~\d+ more minutes\./);
     await saveShot(page, "4-halfway");
@@ -237,6 +264,12 @@ test.describe("Survey: the sheets between questions", () => {
     await expect(root.getByRole("dialog")).toBeVisible();
     const box = root.getByRole("checkbox");
     await expect(box).not.toBeChecked();
+    await expect(root.locator("label")).toContainText("Email me a 5€ off code.");
+    // From 640px the line fits: no break before "5€ off" (Mark's review, 12 Nov).
+    if (page.viewportSize()!.width >= 640) {
+      const text = (await root.locator("label > span").last().boundingBox())!;
+      expect(text.height).toBeLessThan(30);
+    }
     await saveShot(page, "5-desire");
     await settle(page);
     await root.locator("label").click();
@@ -256,6 +289,13 @@ test.describe("Survey: the sheets between questions", () => {
     await expect(root).toContainText("3 questions left");
     await expect(root).toContainText("6 Parts,");
     await expect(root).toContainText("17 Chapters");
+    await expect(root).toContainText(
+      /your Light Report\s*also opening part of each featured chapter\./
+    );
+    // Readable on a desktop: drawn 238px wide from 640px, 156px on a phone (Mark, 12 Nov).
+    const map = (await root.locator("[data-report-map] > div").boundingBox())!;
+    if (page.viewportSize()!.width >= 640) expect(map.width).toBeGreaterThanOrEqual(230);
+    else expect(map.width).toBeLessThan(160);
     await saveShot(page, "6-report-map");
     await settle(page);
     // Previous: back to the question on screen.

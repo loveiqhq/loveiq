@@ -17,8 +17,6 @@ interface SurveySheetHostProps {
   enabled: readonly SurveySheetId[];
   /** The one open now, if any. */
   open: SurveySheetId | null;
-  /** The reader's answer to 02004, which sheet 1 speaks to. */
-  scienceAnswer: unknown;
   /** Minutes left after the question on screen, as the progress strip counts them. */
   minutesLeft: number;
   /** The question on screen, for the map's progress strip. */
@@ -42,7 +40,6 @@ const reportMapLeft = (() => {
 const SurveySheetHost: FC<SurveySheetHostProps> = ({
   enabled,
   open,
-  scienceAnswer,
   minutesLeft,
   progressIndex,
   total,
@@ -57,7 +54,7 @@ const SurveySheetHost: FC<SurveySheetHostProps> = ({
         const isOpen = open === id;
         switch (id) {
           case "science":
-            return <ScienceSheet key={id} open={isOpen} answer={scienceAnswer} {...handlers} />;
+            return <ScienceSheet key={id} open={isOpen} {...handlers} />;
           case "trustpilot":
             return <TrustpilotSheet key={id} open={isOpen} {...handlers} />;
           case "expert":

@@ -61,36 +61,14 @@ export const IconTile: FC<{ children: ReactNode; label?: string; className?: str
 );
 
 /**
- * A check that draws itself (Mark's goals board: "a check that draws itself"), at `at` ms.
- * Under reduced motion it is simply drawn.
+ * How long a share takes to count up, and when it starts. Research gave 600ms from 300ms;
+ * Mark's review (12 Nov): "have the stats animate slightly more slowly", so 1.2s from 400ms.
  */
-export const DrawnCheck: FC<{ size?: number; at?: number; strokeWidth?: number }> = ({
-  size = 16,
-  at = 250,
-  strokeWidth = 2.4,
-}) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={strokeWidth}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path d="M20 6 9 17l-5-5" pathLength={1} className="sheet-draw" style={delay(at)} />
-  </svg>
-);
-
-/** How long a share takes to count up, and when it starts (research: 600ms from 300ms). */
-export const COUNT_MS = 600;
-export const COUNT_AT_MS = 300;
+export const COUNT_MS = 1200;
+export const COUNT_AT_MS = 400;
 
 /** The house curve's feel (cubic-bezier(0.16, 1, 0.3, 1)), close enough for a counter. */
-const easeOut = (t: number) => 1 - Math.pow(1 - t, 4);
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 /**
  * A percentage that counts up from 0 once, writing the digits straight to the page (no
