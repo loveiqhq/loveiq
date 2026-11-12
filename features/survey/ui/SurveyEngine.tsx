@@ -49,7 +49,6 @@ import {
 } from "@features/survey/optInSheet";
 import {
   rememberSheetShown,
-  SCIENCE_QID,
   sheetAfterQuestion,
   sheetBeforeQuestion,
   sheetsShownFor,
@@ -1387,7 +1386,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           <SurveySheetHost
             enabled={sheets}
             open={openSheet}
-            scienceAnswer={answers[SCIENCE_QID]}
             minutesLeft={minutesLeft(currentIndex + 1, totalQuestions)}
             progressIndex={currentIndex}
             total={totalQuestions}

@@ -7,8 +7,8 @@ import {
   DESIRE_SHEET_COPY,
   EXPERT_SHEET_COPY,
   HALFWAY_SHEET_COPY,
+  SCIENCE_SHEET_COPY,
   TRUSTPILOT_SHEET_COPY,
-  scienceVariantFor,
 } from "@features/survey/surveySheetsCopy";
 import {
   getTrustpilotConfig,
@@ -17,15 +17,7 @@ import {
 } from "@shared/ui/trustpilot/config";
 import { trustpilotLabel } from "@shared/ui/trustpilot/label";
 import SurveySheetShell, { SheetGrabber, type SheetDismissVia } from "./SurveySheetShell";
-import {
-  CountUpPercent,
-  delay,
-  DrawnCheck,
-  GradientText,
-  IconTile,
-  KeepGoingButton,
-  order,
-} from "./parts";
+import { CountUpPercent, delay, GradientText, IconTile, KeepGoingButton, order } from "./parts";
 
 /** What the engine gives every information sheet. */
 export interface InfoSheetHandlers {
@@ -101,17 +93,13 @@ const FlaskIcon: FC = () => (
 );
 
 /**
- * Sheet 1, after 02004: the share of people who gave the reader's own answer, counting up
- * (Mark's "the 37% counting up"), and the group's phrase turning to the gradient.
+ * Sheet 1, after 02004: one message for every reader (Mark's board), the share counting up
+ * slowly (Mark's "the 37% counting up") and "respond" turning to the gradient.
  */
-export const ScienceSheet: FC<InfoSheetHandlers & { open: boolean; answer: unknown }> = ({
-  open,
-  answer,
-  ...handlers
-}) => {
+export const ScienceSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, ...handlers }) => {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
-  const v = scienceVariantFor(answer);
+  const v = SCIENCE_SHEET_COPY;
   return (
     <InfoSheetFrame
       open={open}
@@ -137,7 +125,8 @@ export const ScienceSheet: FC<InfoSheetHandlers & { open: boolean; answer: unkno
       </div>
       <p className="sheet-in font-serif text-[19px] leading-[26px] text-[#161021]" style={order(1)}>
         <CountUpPercent value={v.share} />
-        {v.statText} <GradientText>{`${v.contrastShare}%`}</GradientText>
+        {v.statText}
+        <GradientText>{`${v.contrastShare}%`}</GradientText>
         {v.contrastText}
       </p>
     </InfoSheetFrame>
@@ -162,9 +151,13 @@ const TrustpilotMark: FC = () => (
 
 /**
  * Trustpilot's stars as Trustpilot draws them: green tiles, in half-star steps (a 4.4
- * TrustScore shows four and a half). Never animated (its brand rules), never a count-up.
+ * TrustScore shows four and a half). Their shape, colours and fill never change and never
+ * count up (Trustpilot's brand rules); on the sheet they only arrive one after another, from
+ * `at` ms, 110ms apart (Mark's review, 12 Nov: "animate the Excellent and the stars").
  */
-const TrustpilotStars: FC<{ score: number }> = ({ score }) => {
+const STAR_STEP_MS = 110;
+
+const TrustpilotStars: FC<{ score: number; at?: number }> = ({ score, at }) => {
   const stars = Math.round(score * 2) / 2;
   return (
     <span className="flex gap-[3px]" aria-hidden="true">
@@ -173,8 +166,12 @@ const TrustpilotStars: FC<{ score: number }> = ({ score }) => {
         return (
           <span
             key={i}
-            className="flex h-[22px] w-[22px] items-center justify-center rounded-[3px]"
+            data-tp-star
+            className={`flex h-[22px] w-[22px] items-center justify-center rounded-[3px] ${
+              at === undefined ? "" : "sheet-star"
+            }`}
             style={{
+              ...(at === undefined ? {} : delay(at + i * STAR_STEP_MS)),
               background:
                 fill >= 1
                   ? TP_GREEN
@@ -234,7 +231,10 @@ export const TrustpilotSheet: FC<InfoSheetHandlers & { open: boolean }> = ({
             tabIndex={-1}
             className={`flex items-baseline gap-2 ${HEADING_FOCUS}`}
           >
-            <span className="font-serif text-[26px] font-semibold leading-[30px] text-[#161021]">
+            <span
+              className="sheet-star font-serif text-[26px] font-semibold leading-[30px] text-[#161021]"
+              style={delay(240)}
+            >
               {trustpilotLabel(score)}
             </span>
             <span className="font-sans text-[14px] font-normal text-[#4a4558]">
@@ -244,14 +244,14 @@ export const TrustpilotSheet: FC<InfoSheetHandlers & { open: boolean }> = ({
             </span>
           </h2>
           <span className="flex items-center gap-2">
-            <TrustpilotStars score={score} />
+            <TrustpilotStars score={score} at={420} />
             <span className="font-sans text-[12px] text-[#6b6678]">
               {copy.reviews(config.reviewCount)}
             </span>
           </span>
         </div>
-        <div className="sheet-in flex flex-col self-stretch" style={order(1)}>
-          <div aria-hidden className="sheet-grow-x h-px w-full bg-[#efedf2]" style={delay(300)} />
+        <div className="sheet-in flex flex-col self-stretch" style={order(17)}>
+          <div aria-hidden className="sheet-grow-x h-px w-full bg-[#efedf2]" style={delay(1000)} />
           <blockquote className="pt-3 font-serif text-[18px] leading-[23px] text-[#161021]">
             {`“${copy.quote}”`}
           </blockquote>
@@ -319,18 +319,10 @@ export const ExpertSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
           </div>
         </div>
         <blockquote
-          className="sheet-in relative pl-[14px] font-serif text-[18px] leading-[26px] text-[#161021]"
+          className="sheet-in pl-[14px] font-serif text-[18px] leading-[26px] text-[#161021]"
           style={order(2.6)}
         >
-          {/* The rule the board meant beside the quote (its border-image had no width). */}
-          <span
-            aria-hidden
-            className="sheet-grow-y absolute bottom-0 left-0 top-0 w-[2px] rounded-full"
-            style={{
-              backgroundImage: "linear-gradient(180deg, #fe6839 0%, #bf66d9 50%, #958ef6 100%)",
-              ...delay(250),
-            }}
-          />
+          {/* No rule beside the quote (Mark's review, 12 Nov); the board keeps its 14px indent. */}
           {"“"}
           {copy.quoteLead}
           <GradientText inkAt={500}>{copy.quoteEmphasis}</GradientText>
@@ -369,9 +361,14 @@ const LockIcon: FC = () => (
   </svg>
 );
 
+/** When each halfway step arrives (Mark's review, 12 Nov: "maybe the steps show up one after the other?"). */
+const STEP_AT_MS = [320, 640, 960] as const;
+
 /**
- * Sheet 4, after 11003: halfway. Its moment is a check that draws itself (Mark's goals
- * board), beside the heading as "first half done": not on step 1, which is still ahead.
+ * Sheet 4, after 11003: halfway. Mark's revised board (12 Nov): no tick beside the heading,
+ * step headlines top-aligned with their markers, more room between the steps and the pills a
+ * little further right. Its moment: the three steps arrive one after another, each connector
+ * growing once its step has landed, then the Free pill settles.
  */
 export const HalfwaySheet: FC<InfoSheetHandlers & { open: boolean; minutesLeft: number }> = ({
   open,
@@ -387,70 +384,69 @@ export const HalfwaySheet: FC<InfoSheetHandlers & { open: boolean; minutesLeft: 
       sheetId="halfway"
       titleId={titleId}
       headingRef={headingRef}
-      keepGoingClassName="mt-[2px]"
+      keepGoingClassName="mt-4"
       {...handlers}
     >
-      <div className="sheet-in flex items-start gap-[14px]" style={order(0)}>
-        <h2
-          id={titleId}
-          ref={headingRef}
-          tabIndex={-1}
-          className={`min-w-0 flex-1 font-serif text-[22px] font-medium leading-[1.2] text-[#161021] [text-wrap:balance] ${HEADING_FOCUS}`}
-        >
-          {copy.titleLead}
-          <GradientText inkAt={560}>{copy.titleEmphasis}</GradientText>
-          {copy.titleEnd}
-        </h2>
-        <IconTile label={copy.checkLabel} className="mt-[2px] text-[#2e7d5b]">
-          <DrawnCheck at={250} size={16} strokeWidth={2.6} />
-        </IconTile>
-      </div>
+      <h2
+        id={titleId}
+        ref={headingRef}
+        tabIndex={-1}
+        className={`sheet-in mb-2 min-h-[53px] font-serif text-[22px] font-medium leading-[1.2] text-[#161021] [text-wrap:balance] ${HEADING_FOCUS}`}
+        style={order(0)}
+      >
+        {copy.titleLead}
+        <GradientText inkAt={500}>{copy.titleEmphasis}</GradientText>
+        {copy.titleEnd}
+      </h2>
       <div className="flex flex-col font-sans">
-        <div className="sheet-in flex gap-[14px]" style={order(1)}>
+        <div data-halfway-step className="sheet-step flex gap-[14px]" style={delay(STEP_AT_MS[0])}>
           <div className="flex flex-col items-center">
             <StepMarker n={1} color="#6b5b95" />
             <div
               aria-hidden
               className="sheet-grow-y w-[2px] flex-1 bg-[#e6e3eb]"
-              style={delay(300)}
+              style={delay(STEP_AT_MS[0] + 260)}
             />
           </div>
-          <div className="flex flex-col gap-[3px] pb-[14px] pt-[5px]">
-            <div className="text-[15px] font-bold text-[#161021]">{copy.finishTitle}</div>
+          <div className="flex flex-col gap-[3px] pb-[22px]">
+            <div className="text-[15px] font-bold leading-5 text-[#161021]">{copy.finishTitle}</div>
             <div className="text-[14px] leading-[21px] text-[#4a4558]">
               {copy.finishBody(minutesLeft)}
             </div>
           </div>
         </div>
         <div
-          className="sheet-in -mx-3 mb-[14px] flex gap-[14px] rounded-[16px] bg-[#eaf6ef] p-3 shadow-[inset_0_0_0_1px_#cfe8da]"
-          style={order(2.2)}
+          data-halfway-step
+          className="sheet-step -mx-3 mb-[22px] flex gap-[14px] rounded-[16px] bg-[#eaf6ef] p-3 shadow-[inset_0_0_0_1px_#cfe8da]"
+          style={delay(STEP_AT_MS[1])}
         >
           <div className="flex flex-col items-center">
             <StepMarker n={2} color="#2e7d5b" />
             <div
               aria-hidden
-              className="sheet-grow-y -mb-[26px] w-[2px] flex-1 bg-[#e6e3eb]"
-              style={delay(420)}
+              className="sheet-grow-y -mb-[34px] w-[2px] flex-1 bg-[#e6e3eb]"
+              style={delay(STEP_AT_MS[1] + 260)}
             />
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-[3px] pt-[5px]">
-            <div className="text-[15px] font-bold text-[#161021]">{copy.archetypeTitle}</div>
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+            <div className="text-[15px] font-bold leading-5 text-[#161021]">
+              {copy.archetypeTitle}
+            </div>
             <div className="text-[14px] leading-[21px] text-[#4a4558]">{copy.archetypeBody}</div>
           </div>
           <span
-            className="sheet-settle mt-1 flex-shrink-0 self-start whitespace-nowrap rounded-full bg-white px-[10px] py-1 text-[12px] font-bold leading-4 text-[#2e7d5b]"
-            style={delay(480)}
+            className="sheet-settle -mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-white px-[10px] py-1 text-[12px] font-bold leading-4 text-[#2e7d5b]"
+            style={delay(STEP_AT_MS[1] + 300)}
           >
             {copy.free}
           </span>
         </div>
-        <div className="sheet-in flex gap-[14px]" style={order(3.4)}>
+        <div data-halfway-step className="sheet-step flex gap-[14px]" style={delay(STEP_AT_MS[2])}>
           <IconTile label={copy.lockedLabel}>
             <LockIcon />
           </IconTile>
-          <div className="flex min-w-0 flex-1 flex-col gap-[3px] pt-[5px]">
-            <div className="text-[15px] font-bold text-[#161021]">
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+            <div className="text-[15px] font-bold leading-5 text-[#161021]">
               {copy.lightTitle}
               <span className="mt-[1px] block text-[12px] leading-4 text-[#2e7d5b]">
                 {copy.lightGuarantee}
@@ -458,7 +454,7 @@ export const HalfwaySheet: FC<InfoSheetHandlers & { open: boolean; minutesLeft: 
             </div>
             <p className="m-0 text-[14px] leading-[21px] text-[#4a4558]">{copy.lightBody}</p>
           </div>
-          <span className="mt-1 flex-shrink-0 self-start whitespace-nowrap rounded-full bg-[#f4f2f7] px-[10px] py-1 text-[12px] font-bold leading-4 text-[#4a4558]">
+          <span className="-mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-[#f4f2f7] px-[10px] py-1 text-[12px] font-bold leading-4 text-[#4a4558]">
             {copy.optional}
           </span>
         </div>
@@ -551,7 +547,8 @@ export const DesireSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
           tabIndex={-1}
           className={`font-serif text-[19px] font-normal leading-[26px] text-[#161021] ${HEADING_FOCUS}`}
         >
-          <GradientText inkAt={400}>{copy.statEmphasis}</GradientText>
+          <GradientText>{copy.statLead}</GradientText>
+          <CountUpPercent value={copy.statShare} at={500} />
           {copy.statEnd}
         </h2>
       </div>
@@ -614,7 +611,6 @@ export const DesireSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
           </span>
           <span className="font-sans text-[14px] leading-[21px] text-[#3f3a4d]">
             {copy.tickLead}
-            <br />
             <b className="font-extrabold text-[#2e7d5b]">{copy.tickEmphasis}</b>
             {copy.tickEnd}
           </span>

@@ -38,8 +38,12 @@ export function mapRowKind(id: string): MapRowKind {
   return "locked";
 }
 
-/** The board draws the map at 198px and shows it at 156px. */
-const MAP_ZOOM = 0.7872;
+/**
+ * The board draws the map at 198px and shows it at 156px on a phone. From 640px it is drawn
+ * larger, 238px (Mark's review, 12 Nov: "I can hardly read the chapter overview… Can we make
+ * that bigger? Maybe the user might even have to scroll"): the screen's body scrolls.
+ */
+const MAP_ZOOM_CLASS = "[zoom:0.7872] sm:[zoom:1.2]";
 
 const PART_LABEL: CSSProperties = {
   backgroundImage: "linear-gradient(90deg, #dc5a8e, #b46ad6 70%, #a274e8)",
@@ -231,11 +235,13 @@ const ReportMapScreen: FC<ReportMapScreenProps> = ({
             {copy.titleLead}
             <GradientText inkAt={450}>{copy.titleEmphasis(left)}</GradientText>
             {copy.titleMid}
+            {/* On a desktop "This is waiting:" starts its own line (Mark's review, 12 Nov). */}
+            <br aria-hidden className="hidden sm:inline" />
             <GradientText inkAt={520}>{copy.titleEnd}</GradientText>
           </h1>
         </div>
-        <div className="mb-3 mt-[10px] flex items-center gap-4 px-5">
-          <div className="flex-none" style={{ zoom: MAP_ZOOM }}>
+        <div className="mb-3 mt-[10px] flex items-center gap-4 px-5 sm:items-start sm:gap-8">
+          <div data-report-map className={`flex-none ${MAP_ZOOM_CLASS}`}>
             <div className="relative box-border w-[198px] overflow-hidden rounded-[20px] border-[1.5px] border-solid border-[#e0d7fe] bg-white py-[13px] pl-[10.5px] pr-[10px] shadow-[0_10px_44px_rgba(22,16,33,0.28)]">
               {WIZARD_DRAWER.map((part, i) => (
                 <div key={part.part} className="sheet-in" style={order(1 + i)}>
@@ -259,7 +265,7 @@ const ReportMapScreen: FC<ReportMapScreenProps> = ({
               ))}
             </div>
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-5 font-sans">
+          <div className="flex min-w-0 flex-1 flex-col gap-5 font-sans sm:sticky sm:top-6">
             <div className="sheet-in font-serif text-[#161021]" style={order(8)}>
               <div className="text-[26px] font-medium leading-[30px]">
                 {copy.parts(WIZARD_PART_COUNT)}
@@ -288,6 +294,7 @@ const ReportMapScreen: FC<ReportMapScreenProps> = ({
               <p className="m-0 text-[13px] leading-[19px] text-[#4a4558]">
                 {copy.lightLead}
                 <b className="font-bold text-[#161021]">{copy.lightEmphasis}</b>
+                <br />
                 {copy.lightMid}
                 <b className="font-bold text-[#161021]">{copy.lightFeatured}</b>
                 {copy.lightEnd}
