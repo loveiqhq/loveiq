@@ -9,11 +9,12 @@ export const KEEP_GOING = "Keep going";
 
 /**
  * Sheet 1, after 02004 "What kind of starting point usually leads to the best sex for you?":
- * the reader sees the share of people who gave their own answer (Mark's goals board, row 9:
- * "make the Q5 card react to the answer, e.g. 'Like 37% of people, you love to respond'").
+ * one message for every reader, as Mark's board draws it (his review of 12 Nov: "Wrong
+ * headline. Check Design Artifact."; the answer-by-answer headlines are gone).
  *
- * The board's "Most people love to respond" was not true: the most common answer is "It
- * happens naturally". Shares of every finished survey, the team's own runs left out, rounded
+ * The board's "Most people love to respond" is not true: the most common answer is "It
+ * happens naturally". "More people love to respond", read with the line under it (36% against
+ * 12% who start), is. Shares of every finished survey, the team's own runs left out, rounded
  * down as the opt-in sheet's 95% is (production, 12 Nov 2026, n = 2,605): naturally 44.6%,
  * respond 36.8%, start 12.7%, plan it ahead 6.0%. Run it again before changing a number:
  *
@@ -28,74 +29,16 @@ export const KEEP_GOING = "Keep going";
  */
 export const SCIENCE_SHARES = { naturally: 44, respond: 36, start: 12, plan: 6 } as const;
 
-export interface ScienceVariant {
-  /** The reader's group's share: the number that counts up. */
-  share: number;
-  headLead: string;
-  headEmphasis: string;
-  headEnd: string;
-  /** After the counting number. */
-  statText: string;
-  /** The other group the sentence compares with. */
-  contrastShare: number;
-  contrastText: string;
-}
-
-const respond: ScienceVariant = {
-  share: SCIENCE_SHARES.respond,
-  headLead: `Like ${SCIENCE_SHARES.respond}% of people, you love to `,
+export const SCIENCE_SHEET_COPY = {
+  headLead: "More people love to ",
   headEmphasis: "respond",
-  headEnd: ".",
-  statText: " say their best sex starts when the other person makes the first move.",
+  headEnd: "",
+  /** The number that counts up. */
+  share: SCIENCE_SHARES.respond,
+  statText: " say their best sex starts when the other person makes the first move. Only ",
   contrastShare: SCIENCE_SHARES.start,
   contrastText: " say it’s when they start.",
-};
-
-/**
- * Each answer to 02004, word for word as data/survey-data.ts has it, and what the sheet says
- * to the reader who gave it. A test holds the keys to the question's options.
- */
-export const SCIENCE_VARIANTS: Readonly<Record<string, ScienceVariant>> = {
-  "I'm the one who starts things — I make the first move": {
-    share: SCIENCE_SHARES.start,
-    headLead: `Like ${SCIENCE_SHARES.start}% of people, you like to `,
-    headEmphasis: "make the first move",
-    headEnd: ".",
-    statText: " say their best sex starts when they make the first move.",
-    contrastShare: SCIENCE_SHARES.respond,
-    contrastText: " say it’s when the other person does.",
-  },
-  "The other person starts things — I respond to them": respond,
-  "It works best when we plan it ahead and both know it's coming": {
-    share: SCIENCE_SHARES.plan,
-    headLead: `Like ${SCIENCE_SHARES.plan}% of people, you like to `,
-    headEmphasis: "plan it together",
-    headEnd: ".",
-    statText: " say it works best when it’s planned and both know it’s coming.",
-    contrastShare: SCIENCE_SHARES.naturally,
-    contrastText: " say it just happens.",
-  },
-  "It happens naturally, with no one having to start": {
-    share: SCIENCE_SHARES.naturally,
-    headLead: `Like ${SCIENCE_SHARES.naturally}% of people, you like it when it `,
-    headEmphasis: "just happens",
-    headEnd: ".",
-    statText: " say their best sex happens naturally, with no one having to start.",
-    contrastShare: SCIENCE_SHARES.respond,
-    contrastText: " say it starts when the other person makes the first move.",
-  },
-};
-
-/** No answer the sheet knows (cleared, or an option renamed since): the same words for all. */
-export const SCIENCE_FALLBACK: ScienceVariant = {
-  ...respond,
-  headLead: "More people love to ",
-  headEnd: " than to start.",
-};
-
-export function scienceVariantFor(answer: unknown): ScienceVariant {
-  return (typeof answer === "string" && SCIENCE_VARIANTS[answer]) || SCIENCE_FALLBACK;
-}
+} as const;
 
 /**
  * Sheet 2, after 03008: the TrustScore and one real review. The board's quote ("Every
@@ -130,15 +73,14 @@ export const EXPERT_SHEET_COPY = {
 } as const;
 
 /**
- * Sheet 4, after 11003 (32/62): Mark's board ("it's motivation" corrected). It describes the
- * EUR 1.99 change still to come (the Core Archetype free, the Light Report for EUR 1.99), so
- * its switch stays off in production until that change ships.
+ * Sheet 4, after 11003 (32/62): Mark's board as he revised it on 12 Nov ("it's motivation"
+ * corrected). It describes the EUR 1.99 change still to come (the Core Archetype free, the
+ * Light Report for EUR 1.99), so its switch stays off in production until that change ships.
  */
 export const HALFWAY_SHEET_COPY = {
   titleLead: "You’re already ",
   titleEmphasis: "halfway",
-  titleEnd: ". Your Core Archetype is just ahead.",
-  checkLabel: "First half done",
+  titleEnd: ". Your Core Archetype is taking shape.",
   finishTitle: "Finish the remaining questions",
   finishBody: (minutes: number) => `Only ~${minutes} more minutes.`,
   archetypeTitle: "Discover your Core Archetype",
@@ -161,14 +103,16 @@ export const HALFWAY_SHEET_COPY = {
  */
 export const DESIRE_SHEET_COPY = {
   eyebrow: "Did you know?",
-  statEmphasis: "For only 15%",
+  /** "For only 15%": the words, then the number that counts up. */
+  statLead: "For only ",
+  statShare: 15,
   statEnd: " of people, sex feels steady and good right now.",
   titleLead: "Learn what ",
   titleEmphasis: "turns people on",
   titleEnd: ", and what holds them back",
   price: "€9.99",
   participants: "Insights from 2,369 participants in our State of Desire 2026 study.",
-  tickLead: "I am interested in the study. Email me a ",
+  tickLead: "I am interested in the study. Email me a ",
   tickEmphasis: "5€ off",
   tickEnd: " code.",
   coverLabel: "State of Desire 2026 report cover",
@@ -203,7 +147,8 @@ export const REPORT_MAP_COPY = {
   price: "€1.99",
   lightLead: "Unlock ",
   lightEmphasis: "your Light Report",
-  lightMid: ", the opening part of each ",
+  /** Mark's board breaks the line after "your Light Report". */
+  lightMid: "also opening part of each ",
   lightFeatured: "featured",
   lightEnd: " chapter.",
   fullLead: "The ",

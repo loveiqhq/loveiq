@@ -141,12 +141,18 @@ describe("the sheets between questions", () => {
     expect(ORDER[ORDER.length - 4]!.qId).toBe("90010");
   });
 
-  it("holds the move after 02004 and speaks to the reader's own answer", () => {
+  it("holds the move after 02004 and shows Mark's message, the same for every answer", () => {
     onQuestion(at("02004"), RESPOND);
     engine();
     fireEvent.click(next());
 
-    expect(dialog("Like 36% of people, you love to respond.")).toBeInTheDocument();
+    expect(dialog("More people love to respond")).toBeInTheDocument();
+    const sheet = screen.getByRole("dialog");
+    expect(sheet).toHaveTextContent(
+      "say their best sex starts when the other person makes the first move. Only 12% say it’s when they start."
+    );
+    // The share a screen reader hears, before the digits count up to it.
+    expect(sheet.querySelector(".sr-only")).toHaveTextContent("36%");
     expect(heading(at("02004"))).toBeInTheDocument();
     expect(analytics.shown).toHaveBeenCalledWith({ sheet: "science", question_id: "02004" });
   });
@@ -159,7 +165,7 @@ describe("the sheets between questions", () => {
     fireEvent.click(keepGoing());
     await gone();
 
-    expect(dialog(/Like 36% of people/)).not.toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).not.toBeInTheDocument();
     expect(heading(at("02004") + 1)).toBeInTheDocument();
     expect(analytics.closed).toHaveBeenCalledWith(
       { sheet: "science", question_id: "02004" },
@@ -173,7 +179,7 @@ describe("the sheets between questions", () => {
     fireEvent.click(next());
     fireEvent.click(keepGoing());
 
-    expect(dialog(/Like 36% of people/)).toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).toBeInTheDocument();
     expect(heading(at("02004"))).toBeInTheDocument();
   });
 
@@ -185,7 +191,7 @@ describe("the sheets between questions", () => {
     fireEvent.keyDown(window, { key: "Enter" });
     fireEvent.keyDown(window, { key: "ArrowLeft" });
 
-    expect(dialog(/Like 36% of people/)).toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).toBeInTheDocument();
     expect(heading(at("02004"))).toBeInTheDocument();
   });
 
@@ -210,7 +216,7 @@ describe("the sheets between questions", () => {
     engine();
     await user.click(screen.getByRole("radio", { name: RESPOND }));
 
-    await waitFor(() => expect(dialog(/Like 36% of people/)).toBeInTheDocument(), {
+    await waitFor(() => expect(dialog(/More people love to respond/)).toBeInTheDocument(), {
       timeout: 2000,
     });
     expect(heading(at("02004"))).toBeInTheDocument();
@@ -227,7 +233,7 @@ describe("the sheets between questions", () => {
     });
     await gone();
 
-    expect(dialog(/Like 36% of people/)).not.toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).not.toBeInTheDocument();
     expect(analytics.closed).toHaveBeenCalledWith(
       { sheet: "science", question_id: "02004" },
       expect.objectContaining({ via: "back" })
@@ -238,12 +244,12 @@ describe("the sheets between questions", () => {
     onQuestion(at("02004"), RESPOND);
     const first = engine();
     fireEvent.click(next());
-    expect(dialog(/Like 36% of people/)).toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).toBeInTheDocument();
     first.unmount();
 
     engine();
     fireEvent.click(next());
-    expect(dialog(/Like 36% of people/)).not.toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).not.toBeInTheDocument();
     expect(heading(at("02004") + 1)).toBeInTheDocument();
     expect(analytics.shown).toHaveBeenCalledTimes(1);
   });
@@ -267,7 +273,7 @@ describe("the sheets between questions", () => {
     engine([]);
     fireEvent.click(next());
 
-    expect(dialog(/Like 36% of people/)).not.toBeInTheDocument();
+    expect(dialog(/More people love to respond/)).not.toBeInTheDocument();
     expect(heading(at("02004") + 1)).toBeInTheDocument();
     expect(analytics.shown).not.toHaveBeenCalled();
   });
@@ -299,7 +305,16 @@ describe("the sheets between questions", () => {
     const sheet = dialog(/You’re already halfway/);
     expect(sheet).toBeInTheDocument();
     expect(sheet).toHaveTextContent(/Only ~\d+ more minutes\./);
-    expect(screen.getByRole("img", { name: "First half done" })).toBeInTheDocument();
+    expect(sheet).toHaveTextContent("Your Core Archetype is taking shape.");
+    // Mark's review (12 Nov): no tick beside the heading; the three steps arrive one by one.
+    expect(screen.queryByRole("img", { name: "First half done" })).not.toBeInTheDocument();
+    const steps = sheet!.querySelectorAll("[data-halfway-step]");
+    expect(steps).toHaveLength(3);
+    const delays = [...steps].map((s) =>
+      Number.parseInt((s as HTMLElement).style.getPropertyValue("--sheet-delay"), 10)
+    );
+    expect(delays[1]! - delays[0]!).toBeGreaterThanOrEqual(250);
+    expect(delays[2]! - delays[1]!).toBeGreaterThanOrEqual(250);
   });
 
   it("State of Desire: the box starts unticked; Keep going says whether it was ticked", async () => {
@@ -308,6 +323,9 @@ describe("the sheets between questions", () => {
     fireEvent.click(next());
     const box = screen.getByRole("checkbox");
     expect(box).not.toBeChecked();
+    // One line of text on a wide sheet: no forced break before "5€ off" (Mark's review, 12 Nov).
+    expect(box.closest("label")!.querySelector("br")).toBeNull();
+    expect(box.closest("label")).toHaveTextContent("Email me a 5€ off code.");
     fireEvent.click(box);
     expect(box).toBeChecked();
     await settle();
@@ -327,6 +345,12 @@ describe("the sheets between questions", () => {
     const map = dialog(/Only 3 questions left/);
     expect(map).toBeInTheDocument();
     expect(map).toHaveTextContent("17 Chapters");
+    // Mark's board: the line breaks after "your Light Report".
+    expect(map).toHaveTextContent(
+      /your Light Report\s*also opening part of each featured chapter\./
+    );
+    // Bigger from 640px (Mark's review, 12 Nov): 0.7872 on a phone, 1.2 on a desktop.
+    expect(map!.querySelector("[data-report-map]")!.className).toMatch(/sm:\[zoom:1\.2\]/);
     await settle();
     const previous = screen
       .getAllByRole("button", { name: /previous/i })

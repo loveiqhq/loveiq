@@ -15,12 +15,7 @@ import {
   type SheetContext,
   type SurveySheetId,
 } from "@features/survey/surveySheets";
-import {
-  SCIENCE_FALLBACK,
-  SCIENCE_SHARES,
-  SCIENCE_VARIANTS,
-  scienceVariantFor,
-} from "@features/survey/surveySheetsCopy";
+import { SCIENCE_SHARES, SCIENCE_SHEET_COPY } from "@features/survey/surveySheetsCopy";
 
 /**
  * The sheets between questions (Mark, 11 Nov 2026): where each opens in the survey as it is
@@ -144,25 +139,17 @@ describe("once per run, across a reload", () => {
 });
 
 describe("sheet 1's words", () => {
-  const question = surveyQuestions.find((q) => q.qId === SCIENCE_QID)!;
-
-  it("has one line for every answer to 02004, word for word", () => {
-    expect(Object.keys(SCIENCE_VARIANTS).sort()).toEqual([...(question.options ?? [])].sort());
-  });
-
   it("uses the measured shares, which add up to at most 100", () => {
     const shares = Object.values(SCIENCE_SHARES);
     expect(shares.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(100);
-    for (const v of Object.values(SCIENCE_VARIANTS)) {
-      expect(shares).toContain(v.share);
-      expect(shares).toContain(v.contrastShare);
-      expect(v.headLead).toContain(`${v.share}%`);
-    }
+    expect(SCIENCE_SHEET_COPY.share).toBe(SCIENCE_SHARES.respond);
+    expect(SCIENCE_SHEET_COPY.contrastShare).toBe(SCIENCE_SHARES.start);
   });
 
-  it("falls back to the same words for everyone when the answer is unknown", () => {
-    expect(scienceVariantFor(undefined)).toBe(SCIENCE_FALLBACK);
-    expect(scienceVariantFor("a renamed option")).toBe(SCIENCE_FALLBACK);
-    expect(scienceVariantFor(question.options![1])).toBe(SCIENCE_VARIANTS[question.options![1]!]);
+  it("never says 'most' of a share that is not the largest (Mark's board did)", () => {
+    const largest = Math.max(...Object.values(SCIENCE_SHARES));
+    const head = `${SCIENCE_SHEET_COPY.headLead}${SCIENCE_SHEET_COPY.headEmphasis}`;
+    if (SCIENCE_SHEET_COPY.share < largest) expect(head).not.toMatch(/most/i);
+    expect(SCIENCE_SHEET_COPY.share).toBeGreaterThan(SCIENCE_SHEET_COPY.contrastShare);
   });
 });

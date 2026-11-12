@@ -264,7 +264,7 @@ with a "Keep going" that carries on. The rules are in
 
 | Sheet           | Opens                                         | Says                                                             |
 | --------------- | --------------------------------------------- | ---------------------------------------------------------------- |
-| Science         | after 02004 (where the best sex starts)       | the share of people who gave the reader's own answer             |
+| Science         | after 02004 (where the best sex starts)       | more people love to respond (36%) than to start (12%)            |
 | Trustpilot      | after 03008                                   | the TrustScore and one real review, word for word                |
 | Expert quote    | before 01005, never within the first 10       | an expert's words                                                |
 | Halfway         | after 11003                                   | the steps ahead; the Core Archetype free, the Light Report €1.99 |
@@ -295,8 +295,10 @@ with a "Keep going" that carries on. The rules are in
   agreement.
 - **The numbers.** Sheet 1's shares (respond 36%, start 12%, naturally 44%, plan 6%) and sheet
   5's 15% are measured on finished surveys without the team's own runs, rounded down; the
-  queries sit beside the copy. The design's "Most people love to respond" was not true, so the
-  sheet speaks to each reader's own answer, as Mark's goals board suggested.
+  queries sit beside the copy. The design's "Most people love to respond" was not true (most
+  say it happens naturally), so the sheet says "More people love to respond", with 36% against
+  12% in the line under it. It is one message for every reader (Mark's review, 12 Nov); the
+  answer-by-answer headlines are gone.
 - **Measuring them.** PostHog and GA4 get `survey_sheet_shown` and `survey_sheet_closed`
   (`sheet`, `question_id`); how it closed, how long it was open and the tick go to PostHog only.
   AP-Analytics' question funnel shows the drop-off right after each sheet, before and after its
@@ -308,14 +310,18 @@ Researched 2026-11-12 (NN/g on durations, Material 3 and Carbon motion, WCAG 2.2
 goal-gradient and endowed-progress studies of 2006, web.dev on animation cost):
 
 - Content fades up 8px over 240ms on the house curve `cubic-bezier(0.16, 1, 0.3, 1)`, groups
-  50ms apart from 120ms. Each sheet has one moment of its own: the reader's share counting up
-  (Science), a check that draws itself (Halfway), a phrase turning to the brand gradient
-  (Expert), the report cover rising last (State of Desire), the map building part by part.
-- Everything has finished moving within about a second. Keep going works from the first frame;
-  the only guard is the 400ms that keeps a double tap on Next from skipping a sheet unseen.
+  50ms apart from 120ms. Each sheet has one moment of its own: the share counting up (Science,
+  and State of Desire's 15%), "Excellent" and the stars arriving one after another
+  (Trustpilot), the three steps arriving one after another (Halfway), a phrase turning to the
+  brand gradient (Expert), the map building part by part.
+- Mark's review (12 Nov) slowed the moments down: numbers count up over 1.2s from 400ms, the
+  halfway steps arrive 320ms apart over 420ms each, the stars 110ms apart. The slowest sheet has
+  settled by about 1.7s, and no single animation runs longer than 450ms. Keep going works from
+  the first frame; the only guard is the 400ms that keeps a double tap on Next from skipping a
+  sheet unseen.
 - Only transform and opacity move, plus a check's stroke and one phrase's color. Nothing loops,
   nothing overshoots, no confetti, no countdowns, and nothing moves on a price or a lock.
-  Trustpilot's stars and score never move (its brand rules).
+  Trustpilot's stars keep their shape, colors and fill (its brand rules): they only arrive.
 - Under reduced motion nothing moves: numbers stand at their value and the check is drawn. The
   rules are a test (`features/survey/tests/sheetsMotion.test.tsx`); the end-to-end spec
   (`e2e/survey-sheets.spec.ts`) checks the timings in a real browser.
