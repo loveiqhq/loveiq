@@ -10,6 +10,12 @@ interface GatePriceCardProps {
   gate: InitialUnlockGatePayload;
   onUnlock: (place: GateCtaPlace) => void;
   state: InitialUnlockCheckoutState;
+  /**
+   * Mark's redesigned page names the card "Your Personal Light Report" (gateRevealContent.ts)
+   * and drops the line under it: the archetype is already on the page.
+   */
+  title?: string;
+  description?: string | null;
 }
 
 /**
@@ -18,7 +24,13 @@ interface GatePriceCardProps {
  * initial-unlock-gate.css carries where 1604:2388 differs. The price and the button never
  * animate; the four lines below them come in one after the other (Mark, on the frame).
  */
-export const GatePriceCard = ({ gate, onUnlock, state }: GatePriceCardProps) => {
+export const GatePriceCard = ({
+  gate,
+  onUnlock,
+  state,
+  title,
+  description = GATE_COPY.card.description,
+}: GatePriceCardProps) => {
   const busy = state.status === "redirecting";
   const failed = state.status === "error" && state.place === "card" ? state.message : null;
   return (
@@ -27,9 +39,9 @@ export const GatePriceCard = ({ gate, onUnlock, state }: GatePriceCardProps) => 
 
       <div className="rpg-card__head">
         <h2 className="rpg-card__title iug-card__title">
-          <span className="rpg-card__lead">{GATE_COPY.card.title}</span>
+          <span className="rpg-card__lead">{title ?? GATE_COPY.card.title}</span>
         </h2>
-        <p className="rpg-card__desc">{GATE_COPY.card.description}</p>
+        {description ? <p className="rpg-card__desc">{description}</p> : null}
       </div>
 
       <p className="rpg-card__price">

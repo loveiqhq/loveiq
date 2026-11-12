@@ -459,3 +459,132 @@ describe("around the card", () => {
     expect(pageText()).toContain("Your Core Archetype was determined");
   });
 });
+
+/** Mark's redesigned page (12 Nov 2026): the gate's payload carries the archetype (gateReveal.ts). */
+describe("with the archetype on the gate (report_gate_archetype_reveal)", () => {
+  const REVEAL = {
+    archetype: "Spark Seeker",
+    matchStrength: 43,
+    blurb: "Sex comes alive through play, tension, and novelty.",
+    aspects: [
+      {
+        key: "motivation",
+        title: "Core motivation",
+        subtitle: "What drives your desire",
+        value: "Pleasure & Play",
+        body: "Sex is about a sense of aliveness.",
+        locked: false,
+      },
+      {
+        key: "communication",
+        title: "Communication",
+        subtitle: "How desire gets spoken",
+        value: "Charming",
+        body: "Words are part of the foreplay.",
+        locked: false,
+      },
+      {
+        key: "initiation",
+        title: "Initiation",
+        subtitle: "Who makes the first move",
+        value: "Active",
+        body: "Xxx xxxxx xxxx xxx.",
+        locked: true,
+      },
+      {
+        key: "attachment",
+        title: "Attachment",
+        subtitle: "How closeness is held",
+        value: "Avoidant / secure",
+        body: "Xxxxx xxx xxxxxx.",
+        locked: true,
+      },
+      {
+        key: "power",
+        title: "Power",
+        subtitle: "Who takes the lead",
+        value: "Switch",
+        body: "Xxx xxxxx xxxxx.",
+        locked: true,
+      },
+    ],
+  } as const;
+  const scrollTo = vi.fn();
+  const scrollIntoView = vi.fn();
+
+  beforeEach(() => {
+    Element.prototype.scrollTo = scrollTo as unknown as typeof Element.prototype.scrollTo;
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  const renderReveal = () => renderGate({ ...GATE, reveal: REVEAL });
+
+  it("opens on the reader's archetype, its match and its line, in place of the headline", () => {
+    renderReveal();
+    expect(screen.getByRole("heading", { level: 1, name: "Spark Seeker" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "43% match with Spark Seeker" })).toBeInTheDocument();
+    expect(pageText()).toContain("Sex comes alive through play, tension, and novelty.");
+    expect(pageText()).not.toContain("Find Out Your");
+    // The way out and the badge stay.
+    expect(screen.getByRole("link", { name: /not ready to unlock yet/i })).toBeInTheDocument();
+    expect(pageText()).toContain("Your Core Archetype was determined");
+  });
+
+  it("shows five aspect cards: two open, three locked with their verdicts named", () => {
+    renderReveal();
+    const carousel = screen.getByRole("region", { name: "Your Core Archetype, aspect by aspect" });
+    const cards = carousel.querySelectorAll("[data-gate-aspect]");
+    expect(cards).toHaveLength(5);
+    expect(pageText()).toContain("Words are part of the foreplay.");
+    expect(carousel.querySelectorAll("[data-locked]")).toHaveLength(3);
+    expect(pageText()).toContain("Avoidant / secure");
+    expect(
+      screen.getAllByRole("button", { name: "Locked, opens with your Light Report" })
+    ).toHaveLength(3);
+  });
+
+  it("moves card by card with its arrows and dots", () => {
+    renderReveal();
+    expect(screen.getByRole("button", { name: "Previous card" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next card" }));
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 308, behavior: "smooth" });
+    expect(screen.getByRole("button", { name: "Card 2" })).toHaveAttribute("aria-current", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Card 5" }));
+    expect(screen.getByRole("button", { name: "Next card" })).toBeDisabled();
+  });
+
+  it("takes a locked card's lock down to the plan, its button focused", () => {
+    renderReveal();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Locked, opens with your Light Report" })[0]!
+    );
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(document.activeElement).toBe(cardCta());
+  });
+
+  it("says why to unlock, names the card the Light Report, and keeps today's promises", () => {
+    renderReveal();
+    expect(
+      screen.getByRole("heading", { name: "Why you should unlock your Light Report" })
+    ).toBeInTheDocument();
+    for (const item of [
+      "Discover other archetypes you score high on",
+      "Feel more confident in bed",
+      "Ask for what you want, without shame",
+      "Bring your desire back when it fades",
+    ]) {
+      expect(pageText()).toContain(item);
+    }
+    expect(pageText()).toContain("Your Personal Light Report");
+    expect(pageText()).not.toContain("Find out your core archetype constellation");
+    expect(pageText()).toContain("14-day money-back guarantee");
+    expect(pageText()).not.toContain("7-day");
+    expect(pageText()).toContain("3x full chapters + 4x partly open");
+  });
+
+  it("draws the page as before when the payload carries no archetype", () => {
+    renderGate();
+    expect(document.querySelector("[data-gate-reveal]")).toBeNull();
+    expect(pageText()).toContain("Find Out Your");
+  });
+});

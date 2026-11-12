@@ -372,6 +372,8 @@ interface ReportIdentifier {
   previewGate?: boolean | "tour";
   /** `?gift=1` with `?plan=initial` in preview mode: the EUR 1.99 unlock as E07's gift. */
   previewGift?: boolean;
+  /** `?reveal=1` with a preview gate: Mark's redesigned page, the archetype on the gate. */
+  previewReveal?: boolean;
   /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
@@ -419,6 +421,7 @@ export function useReportData(identifier: ReportIdentifier) {
     previewPlan,
     previewGate,
     previewGift,
+    previewReveal,
     v4,
   } = identifier;
   // A preview needs no identifier: there is no reader to identify. Without this
@@ -482,6 +485,7 @@ export function useReportData(identifier: ReportIdentifier) {
               ...(v4 ? { v4: "1" } : {}),
               ...(previewGate ? { gate: previewGate === "tour" ? "tour" : "1" } : {}),
               ...(previewGift ? { gift: "1" } : {}),
+              ...(previewReveal ? { reveal: "1" } : {}),
             }).toString()}`
           : `/api/report?${params.toString()}`;
 
@@ -581,6 +585,7 @@ export function useReportData(identifier: ReportIdentifier) {
     previewPlan,
     previewGate,
     previewGift,
+    previewReveal,
     v4,
   ]);
 

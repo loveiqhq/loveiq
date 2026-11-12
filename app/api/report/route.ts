@@ -23,6 +23,7 @@ import {
 } from "@features/report/server/initialGateState";
 import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
 import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
+import { buildGateReveal, isGateRevealEnabled } from "@features/report/server/gateReveal";
 import {
   buildInitialUnlockGatePayload,
   needsInitialUnlockGate,
@@ -562,6 +563,14 @@ export async function GET(request: Request) {
               submission.session_id ? await readSurveyQuestionTimes(submission.session_id) : null
             )
           ),
+          // Mark's redesigned page (gateReveal.ts): the Core Archetype on the gate, only behind
+          // its own switch, which waits for the change that makes the archetype free.
+          reveal: (await isGateRevealEnabled())
+            ? buildGateReveal(
+                scoring.v5_primary_archetype || scoring.primary_archetype,
+                scoring.v5_percentages || scoring.percentages
+              )
+            : null,
         });
         // Tour first (sync 30.10): a reader who has never met the gate gets their report under
         // the guided tour first, with who they are left out (tourFirstReport.ts), and the
