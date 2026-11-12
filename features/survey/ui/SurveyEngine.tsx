@@ -8,6 +8,7 @@ import SurveyControls from "./SurveyControls";
 import SurveyJumpMenu from "./SurveyJumpMenu";
 import SurveyNav from "./SurveyNav";
 import SurveyPauseModal from "./SurveyPauseModal";
+import OptInSheet from "./OptInSheet";
 import SurveyProgress from "./SurveyProgress";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
@@ -23,6 +24,8 @@ import {
   trackSurveyComplete,
   trackSurveyFormError,
   trackSurveyPause,
+  trackOptInSheetShown,
+  trackOptInSheetClosed,
   setReportSubmissionContext,
   setSurveyVariant,
   setEmailQuestionArm,
@@ -30,7 +33,15 @@ import {
 } from "@features/analytics/client";
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
+import { EMAIL_QID, OPT_IN_QID, orderAskedQuestions } from "./questionOrder";
+import {
+  isOptInYes,
+  optInSheetShownFor,
+  optInYesOption,
+  rememberOptInSheetShown,
+  shouldOfferOptInSheet,
+  type OptInSheetDismissVia,
+} from "@features/survey/optInSheet";
 import {
   EMAIL_QUESTION_EXPERIMENT,
   EMAIL_QUESTION_WINNER,
@@ -172,6 +183,22 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
 
   const [animKey, setAnimKey] = useState(0);
   const [showPauseModal, setShowPauseModal] = useState(false);
+  /**
+   * The opt-in's "Sure you want to miss out?" sheet (OptInSheet, Mark, 10 Nov). Open: the
+   * state draws it; the ref answers at once for the handlers that run in the same tick.
+   * Shown: once per run, also across a reload (optInSheetShownFor). Yes: the opt-in's own
+   * Yes, taken from the question when the sheet opens. Via: the reader said Yes in it.
+   */
+  const [optInSheetOpen, setOptInSheetOpen] = useState(false);
+  const optInSheetOpenRef = useRef(false);
+  const optInSheetShown = useRef(false);
+  const optInSheetYes = useRef<string | null>(null);
+  const optInViaSheet = useRef(false);
+  /** The sheet goes; the caller then handles the reader's choice, if any. */
+  const closeOptInSheet = useCallback(() => {
+    optInSheetOpenRef.current = false;
+    setOptInSheetOpen(false);
+  }, []);
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
@@ -496,7 +523,29 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       return;
     }
     if (currentIndex >= totalQuestions - 1) {
-      if (hasCompleted.current) return;
+      if (hasCompleted.current || optInSheetOpenRef.current) return;
+      // A No on the marketing opt-in opens "Sure you want to miss out?" (Mark, 10 Nov)
+      // instead of submitting, once per run. Every way off the last question lands here
+      // (Next, Auto-advance, Enter, ArrowRight, a swipe), so this one check holds them
+      // all. The answer is read from getLatestAnswers() for the same reason the submit is.
+      const optInYes = optInYesOption(question?.options);
+      if (
+        optInYes &&
+        shouldOfferOptInSheet(
+          question?.qId,
+          getLatestAnswers()[OPT_IN_QID],
+          optInSheetShown.current || optInSheetShownFor(startedAt)
+        )
+      ) {
+        optInSheetShown.current = true;
+        rememberOptInSheetShown(startedAt);
+        optInSheetYes.current = optInYes;
+        optInSheetOpenRef.current = true;
+        cancelAutoAdvance();
+        setOptInSheetOpen(true);
+        trackOptInSheetShown();
+        return;
+      }
       hasCompleted.current = true;
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
@@ -510,7 +559,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       // `getLatestAnswers()`, never the `answers` closure: on the last question the
       // answer and this submit are two clicks apart, and the closure can predate the
       // first of them. See the note in useSurveyState.
-      submitSurvey(getLatestAnswers(), startedAt, utmTracker);
+      const latest = getLatestAnswers();
+      // A Yes given in the sheet is filed under the sheet's consent version (server.ts).
+      const viaSheet = optInViaSheet.current && isOptInYes(latest[OPT_IN_QID]);
+      submitSurvey(
+        latest,
+        startedAt,
+        utmTracker,
+        viaSheet ? { marketingOptInVia: "sheet" } : undefined
+      );
       goTo(totalQuestions); // one past the end → triggers completion
       // Collapse the question entries back onto their base, so Back after submitting
       // never meets dozens of ignored entries (the listener ignores pops once
@@ -556,6 +613,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     utmTracker,
     savePartial,
     markBase,
+    cancelAutoAdvance,
   ]);
 
   /**
@@ -644,10 +702,23 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       // Back while paused goes back a question like any other Back, and the dialog
       // closes with it instead of promising "where you left off" over another question.
       setShowPauseModal(false);
+      // The opt-in's sheet too: it goes with the question it was asked over.
+      if (optInSheetOpenRef.current) {
+        closeOptInSheet();
+        trackOptInSheetClosed({ outcome: "dismissed", via: "back" });
+      }
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
     };
-  }, [currentIndex, totalQuestions, goTo, trackNavigation, mayMoveOn, answerMissing]);
+  }, [
+    currentIndex,
+    totalQuestions,
+    goTo,
+    trackNavigation,
+    mayMoveOn,
+    answerMissing,
+    closeOptInSheet,
+  ]);
 
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
@@ -697,6 +768,37 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     onExit();
   }, [onExit]);
 
+  // "Yes, I want to keep learning": the answer becomes the opt-in's own Yes, word for word
+  // (submit_survey matches the option text), through setAnswer so the submit reads it at
+  // once, and the run is submitted as Next would. Then filed with the sheet's version.
+  const handleOptInSheetYes = useCallback(() => {
+    closeOptInSheet();
+    trackOptInSheetClosed({ outcome: "yes" });
+    const yes = optInSheetYes.current;
+    if (yes) {
+      setAnswer(OPT_IN_QID, yes);
+      optInViaSheet.current = true;
+    }
+    goNextRef.current();
+  }, [closeOptInSheet, setAnswer]);
+
+  // "Not now": the No stands and the run is submitted, one tap, as Next would.
+  const handleOptInSheetNotNow = useCallback(() => {
+    closeOptInSheet();
+    trackOptInSheetClosed({ outcome: "not_now" });
+    goNextRef.current();
+  }, [closeOptInSheet]);
+
+  // Closed without a choice (outside, Esc, a swipe down): back on the question, the No
+  // still picked. It has been shown, so the next Next submits.
+  const handleOptInSheetDismiss = useCallback(
+    (via: OptInSheetDismissVia) => {
+      closeOptInSheet();
+      trackOptInSheetClosed({ outcome: "dismissed", via });
+    },
+    [closeOptInSheet]
+  );
+
   // Handle answer change. With Auto-advance on (off by default, SurveyControls), a single
   // choice, a scale point or a country moves on by itself a moment later. Never a
   // multiple choice or an open answer, where the reader is not done yet.
@@ -737,7 +839,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   useEffect(() => {
     if (surveyOver) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (showPauseModal) return; // the dialog has the keyboard
+      if (showPauseModal || optInSheetOpen) return; // the dialog has the keyboard
       // Enter on a focused control is that control's own press: a scale point, an
       // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
       // cancelled the press, so a changed answer was never saved, and Enter on Next
@@ -766,7 +868,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal, optInSheetOpen]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
@@ -799,7 +901,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         return;
       }
       if (touchStartX.current === null || touchStartY.current === null) return;
-      if (showPauseModal) {
+      if (showPauseModal || optInSheetOpen) {
         // A swipe on the dialog is not a question move.
         clearSwipe();
         return;
@@ -819,7 +921,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver, showPauseModal, optInSheetOpen]);
 
   // An answer's pending move goes with the screen.
   useEffect(() => cancelAutoAdvance, [cancelAutoAdvance]);
@@ -1132,6 +1234,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           email={(answers[EMAIL_QID] as string | undefined) ?? ""}
           onResume={handleResumeFromPause}
           onExit={handleExitFromPause}
+        />
+        <OptInSheet
+          open={optInSheetOpen}
+          onAccept={handleOptInSheetYes}
+          onDecline={handleOptInSheetNotNow}
+          onDismiss={handleOptInSheetDismiss}
         />
       </main>
     </SurveyThemeProvider>

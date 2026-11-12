@@ -76,7 +76,7 @@ Append-only tables grow without bound; a future DSAR delete must still complete 
 
 If Q16015 copy changes, we lose proof of what each user consented to.
 
-- **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant.
+- **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant. A Yes given in the "miss out" sheet after a No (since 2026-11-10's design, [survey.md](../survey.md)) is stored as `MARKETING_OPT_IN_SHEET_TERMS_VERSION`, which names both the question's version and the sheet copy's (`OPT_IN_SHEET_COPY_VERSION`), so a change to either text keeps the proof.
 
 ### R3.8 — Team data export (MEDIUM — pseudonymised by decision, 2026-10-11)
 

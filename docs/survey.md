@@ -124,7 +124,7 @@ The last seven questions are asked in this order, in both C13 arms:
 | 4     | `16017` | C10 — "Thinking about what you just picked…"           | Refers back to C9, so it always follows it.                           |
 | 5     | `16018` | C12 — first access to the area picked                  | The waitlist opt-in.                                                  |
 | 6     | `00000` | Email                                                  | Last but one since the email-position test (2026-08-16). See below.   |
-| 7     | `16015` | Marketing opt-in                                       | Always the final question.                                            |
+| 7     | `16015` | Marketing opt-in                                       | Always the final question. A No opens the sheet below.                |
 
 All five survey-content ids sit above `16015`, because every free id below it is live or
 retired-but-still-holding-answers. The generator sorts by qId, so the order above exists only
@@ -214,6 +214,43 @@ refuse (`isValidSurveyEmail`).
 - **On the KPI page.** _Survey Drop-off Rate per Question %_ in Notion shows, every morning, the
   drop-off at the email question per version over the test's window, marked ended
   (`kpi-dropoff`).
+
+### The opt-in question and its "miss out" sheet
+
+`16015`, "Would you like to receive free LoveIQ hints and insights?", is the last question. Its
+Yes sets `survey_submission.marketing_opt_in`, and nothing is picked until the reader taps.
+Mark's design of 2026-11-10 (Claude Design `NGyoLVAex5vSW4voVs7Tcc`, board "Opt-in · B · Sample
+email sheet on Next") adds a second ask after a No:
+
+- **When it opens.** A No followed by Next opens a bottom sheet, "Sure you want to _miss out_?",
+  instead of submitting. Every way off the question (Next, Auto-advance, Enter, ArrowRight, a
+  swipe) goes through `goNext`, which holds the submit there. It opens once per run:
+  `loveiq-survey-optin-sheet` in localStorage holds the run's `startedAt`, so a reload, a pause
+  or a Previous does not ask again, and the next run does.
+- **What its buttons do.** "Yes, I want to keep learning" writes the question's own Yes, word
+  for word, and submits. "Not now" submits the No in one tap. Tapping outside it, Esc or a swipe
+  down closes it and leaves the reader on the question with the No still picked; the next Next
+  submits. Back goes to the email question and the sheet closes with it, as the Pause dialog
+  does. Taps in its first 400 ms are ignored and focus lands on the sheet, not on Yes, so a
+  double tap on Next or a held Enter never gives consent.
+- **What is recorded.** A Yes given in the sheet is sent as `marketingOptInVia: "sheet"`
+  ([API](api.md#post-apisurvey)) and stored with the consent version
+  `2026-10-14+sheet-2026-11-10` (`MARKETING_OPT_IN_SHEET_TERMS_VERSION`): that reader saw the
+  question's words and the sheet's. A Yes on the question keeps `2026-10-14`. PostHog and GA4
+  get `survey_optin_sheet_shown`, then `survey_optin_sheet_closed`, whose `outcome` (`yes`,
+  `not_now`, `dismissed`) and `via` go to PostHog only.
+- **The copy** lives in [`optInSheet.ts`](../features/survey/optInSheet.ts). A change there is a
+  change to consent text: bump `OPT_IN_SHEET_COPY_VERSION` in the same commit.
+- **The fine print's figure** is measured, not the design's 97%. On 2026-11-10, 2,551 addresses
+  outside the team had taken the survey since 2026-03-24, and 108 of them had unsubscribed from
+  our emails: 95.8% stayed, shown rounded down as 95%. The query sits beside the copy in
+  `optInSheet.ts`; run it again before changing the number.
+
+- **Measuring it.** From 2026-10-14 to 2026-11-10, 66 of 200 submissions opted in (33%). The
+  16015 answer split is on AP-Analytics' Survey page; the sheet's own Yes rows are those whose
+  `marketing_opt_in_terms_version` contains `+sheet-`.
+- **Phones and wider.** Mark drew it for phones (390 px). From 640 px it stays a bottom sheet, at
+  most 480 px wide.
 
 ### Measuring CTA click-through by urgency band
 

@@ -18,6 +18,8 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyGuidanceExpanded: vi.fn(),
   trackSurveyPause: analytics.pause,
   setReportSubmissionContext: vi.fn(),
+  trackOptInSheetShown: vi.fn(),
+  trackOptInSheetClosed: vi.fn(),
   setSurveyVariant: vi.fn(),
 }));
 const run = vi.hoisted(() => ({ submit: vi.fn(), save: vi.fn(), navigation: vi.fn() }));

@@ -332,6 +332,12 @@ const surveySchema = z.object({
     .optional()
     .nullable()
     .catch(null),
+  /**
+   * "sheet" when the Q16015 Yes was given in the opt-in's "Sure you want to miss out?"
+   * sheet (features/survey/optInSheet.ts). Picks the consent version the Yes is filed under;
+   * ignored for a No. Anything else is dropped, never refused.
+   */
+  marketingOptInVia: z.enum(["sheet"]).optional().nullable().catch(null),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -496,6 +502,7 @@ export async function POST(request: Request) {
     posthogSessionId,
     optionOrder,
     landingPath,
+    marketingOptInVia,
     website,
   } = parsed.data;
   // A blank optional answer (16019, 16020 typed into and cleared) is no answer. Dropped
@@ -667,6 +674,7 @@ export async function POST(request: Request) {
       posthogSessionId,
       optionOrder,
       marketingOptIn,
+      marketingOptInVia,
     });
     const tSubmit = performance.now();
 
