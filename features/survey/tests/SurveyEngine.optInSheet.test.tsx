@@ -187,6 +187,31 @@ describe("the opt-in's miss-out sheet", () => {
     expect(run.submit).not.toHaveBeenCalled();
   });
 
+  it("ignores a tap on Yes the moment Auto-advance's timer opens it", async () => {
+    localStorage.setItem("loveiq-survey-autoadvance", "true");
+    onTheOptIn({});
+    const user = userEvent.setup();
+    engine();
+    // Tap Yes as soon as the sheet is in the page: before React's passive effects, which a
+    // timer-driven update runs in a later task. The guard must already hold by then.
+    let tapped = false;
+    const observer = new MutationObserver(() => {
+      const yes = screen.queryByRole("button", { name: "Yes, I want to keep learning" });
+      if (yes && !tapped) {
+        tapped = true;
+        yes.click();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    await user.click(screen.getByRole("radio", { name: NO }));
+    await waitFor(() => expect(tapped).toBe(true), { timeout: 2000 });
+    observer.disconnect();
+    await settle();
+
+    expect(run.submit).not.toHaveBeenCalled();
+    expect(sheet()).toBeInTheDocument();
+  });
+
   it("takes the keyboard while open: the page's Enter and arrows neither submit nor move", () => {
     onTheOptIn({ "16015": NO });
     engine();

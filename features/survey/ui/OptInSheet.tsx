@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, type FC, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type FC,
+  type PointerEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 import {
@@ -75,14 +83,21 @@ const OptInSheet: FC<OptInSheetProps> = ({ open, onAccept, onDecline, onDismiss 
   const closeTimer = useRef<number | null>(null);
   const drag = useRef<{ id: number; y: number; t: number; dy: number } | null>(null);
 
+  // The tap guard is armed before the sheet is painted. In a passive effect it came a moment
+  // late when Auto-advance's timer opened the sheet (React runs those effects in a later
+  // task), and for that moment a tap on Yes would have counted.
+  useLayoutEffect(() => {
+    if (!open) return;
+    openedAt.current = Date.now();
+    closing.current = false;
+  }, [open]);
+
   // While open: the page under it holds still, and focus goes to the sheet itself. Never to
   // a button: Yes is the first one, and the Enter that moved the reader on may still be
   // held. On close, focus returns where it was (Next, or the answer), unless the survey
   // moved on and that is gone.
   useEffect(() => {
     if (!open) return;
-    openedAt.current = Date.now();
-    closing.current = false;
     lockBodyScroll();
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusTimer = window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 0);
@@ -142,19 +157,13 @@ const OptInSheet: FC<OptInSheetProps> = ({ open, onAccept, onDecline, onDismiss 
       if (e.key !== "Tab") return;
       const first = acceptRef.current;
       const last = declineRef.current;
-      const panel = panelRef.current;
-      if (!first || !last || !panel) return;
+      if (!first || !last) return;
+      // Every step is taken here: Safari skips buttons on Tab by default, so a step left to
+      // the browser sent focus out of the sheet to the page behind it.
+      e.preventDefault();
       const active = document.activeElement;
-      const inside = panel.contains(active);
-      if (e.shiftKey) {
-        if (!inside || active === first || active === panel) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (!inside || active === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (e.shiftKey) (active === last ? first : last).focus();
+      else (active === first ? last : first).focus();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -197,7 +206,12 @@ const OptInSheet: FC<OptInSheetProps> = ({ open, onAccept, onDecline, onDismiss 
         type="button"
         tabIndex={-1}
         aria-label="Back to the question"
-        onClick={() => closeWith("backdrop")}
+        onClick={() => {
+          // The buttons' guard holds here too: a double tap or double click on Next lands on
+          // the backdrop while the sheet is still rising, and must not close it unseen.
+          if (Date.now() - openedAt.current < OPEN_GUARD_MS) return;
+          closeWith("backdrop");
+        }}
         className="absolute inset-0 h-full w-full cursor-default bg-[rgba(22,16,33,0.38)] motion-safe:animate-[survey-fade-in_0.2s_ease-out_backwards]"
       />
       {/* Fill `backwards`, not `both`: a held end state would override the drag's transform. */}
