@@ -22,15 +22,15 @@ const isLocalTarget = targetHost === "localhost" || targetHost === "127.0.0.1";
 /**
  * Cookies every context starts with.
  *
- * Local: pin the landing A/B arm. `/` is a 50/50 split between two heroes
- * (shared/experiments/landingVariant.ts), so without this every landing assertion
+ * Local: pin the landing A/B arm. `/` is a 50/50 split between two pages, the video page
+ * and the new pain-point page (shared/experiments/landingVariant.ts), so without this every landing assertion
  * would flip arm at random. It must be a LIVE arm: proxy.ts re-rolls any other
  * value, so a `white` pin would be ignored.
  *
  * The pin reaches `next dev` only. A production build — CI's e2e job, and
  * visual-regression.yml — names the cookie `__Host-liq_lv` (below), so there a
  * bare `/` is still a coin flip. A spec whose assertions depend on the arm opens
- * `/?variant=white_card` or `/?variant=white_video` instead, as the visual
+ * `/?variant=video` or `/?variant=pain_point` instead, as the visual
  * baselines, the a11y list and the landing specs do.
  *
  * Remote: deliberately NO arm cookie. Deployed builds name it `__Host-liq_lv`, and
@@ -44,7 +44,7 @@ const startingCookies = [
     ? [
         {
           name: "__liq_lv",
-          value: "white_card",
+          value: "video",
           domain: targetHost,
           path: "/",
           expires: -1,
