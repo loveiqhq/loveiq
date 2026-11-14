@@ -7,6 +7,7 @@ import {
 } from "@shared/experiments/landingVariant";
 import { jsonLdString } from "@shared/seo/json-ld";
 import { faqs } from "@/data/faqs";
+import { ENTRY_PRICE_SCHEMA, SURVEY_FREE_LINE } from "@features/landing/logic/freeClaims";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -39,11 +40,14 @@ const softwareApplicationSchema = {
   operatingSystem: "Web",
   browserRequirements: "Requires JavaScript. Runs in any modern browser.",
   inLanguage: "en-US",
+  // The entry price, not 0 (free claims, 14 Nov): nothing personal opens before EUR 1.99, and
+  // engines read 0 as "the result is free". The full report's price varies per visitor
+  // (pricing_uplift_enabled), so only the fixed entry price is marked up.
   offers: {
     "@type": "Offer",
-    price: "0",
+    price: ENTRY_PRICE_SCHEMA,
     priceCurrency: "EUR",
-    description: "Free introductory assessment. Advanced reports available as one-time purchase.",
+    description: SURVEY_FREE_LINE,
   },
   // NOTE: aggregateRating intentionally omitted. We do not self-assert a rating in
   // our schema — on-page review social proof now comes from the Trustpilot widget,
@@ -68,8 +72,8 @@ const quizSchema = {
   "@id": `${siteUrl}/#quiz`,
   name: "LoveIQ Sexual Archetype Assessment",
   url: `${siteUrl}/survey`,
-  description:
-    "A free psychological self-assessment. Answers are scored deterministically across 21 dimensions and resolve to one of 14 sexual archetypes, with a personalised report.",
+  // Taking it is free (isAccessibleForFree below); its report is not (free claims, 14 Nov).
+  description: `A psychological self-assessment. ${SURVEY_FREE_LINE} Answers are scored deterministically across 21 dimensions and resolve to one of 14 sexual archetypes.`,
   about: [
     { "@type": "Thing", name: "Sexual psychology" },
     { "@type": "Thing", name: "Attachment theory" },

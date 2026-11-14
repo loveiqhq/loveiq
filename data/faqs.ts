@@ -1,3 +1,5 @@
+import { SURVEY_FREE_LINE } from "@features/landing/logic/freeClaims";
+
 export interface Faq {
   question: string;
   answer: string;
@@ -35,8 +37,11 @@ export const faqs: Faq[] = [
   },
   {
     question: "Is it based on science?",
+    // No machine learning: scoring follows fixed rules (data/scoring-config.ts). Free claims,
+    // 14 Nov (Marcus: no claims we can't deliver on); the dimension count is held to the
+    // config by home-schema-counts.test.ts's rule.
     answer:
-      "Yes. LoveIQ draws from relationship psychology, attachment theory, personality science, behavioral research, and large-scale pattern analysis. These foundations are combined with modern machine-learning techniques to create a rigorous and human-centered system.",
+      "Yes. LoveIQ builds on research in relationship psychology, attachment, personality and behavior. Your answers are scored by fixed rules across 21 measured dimensions.",
   },
   {
     question: "How accurate are the insights?",
@@ -48,15 +53,11 @@ export const faqs: Faq[] = [
     answer:
       "Yes. You can use LoveIQ with only an email address, to which your results will be delivered.",
   },
-  {
-    question: "Can I talk to a professional or coach through the app?",
-    answer:
-      "We are working with selected psychologists and relationship coaches to offer optional paid sessions. These experts will be familiar with the LoveIQ framework and able to support you based on your profile.",
-  },
+  // "Can I talk to a professional or coach through the app?" is gone (14 Nov): it promised
+  // paid sessions that do not exist. Bring it back with the offer, not before.
   {
     question: "Is it free?",
-    answer:
-      "You can start with a free LoveIQ assessment. Full report or specialized bundles are available through a one-time purchase.",
+    answer: `${SURVEY_FREE_LINE.slice(0, -1)}, paid once.`,
   },
   {
     question: "How long does the first assessment take?",
