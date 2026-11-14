@@ -1,3 +1,5 @@
+import { SURVEY_FREE_LINE } from "@features/landing/logic/freeClaims";
+
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
 /**
@@ -26,7 +28,7 @@ const BODY = `# LoveIQ
 > communicate, and connect. Written for a general audience, grounded in published
 > psychological research.
 
-The survey is free to take. The full report is a paid product, so report pages are
+${SURVEY_FREE_LINE} The full report is a paid product, so report pages are
 private and unlisted — see "Not for crawling" below.
 
 ## Core pages
