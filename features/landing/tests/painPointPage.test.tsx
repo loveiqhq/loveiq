@@ -187,3 +187,41 @@ describe("pain-point page — trust band and the three steps", () => {
     expect(section.textContent).not.toMatch(/free result|7-day/);
   });
 });
+
+describe("pain-point page — the six pain points", () => {
+  const section = () =>
+    screen
+      .getByRole("heading", { level: 2, name: "Is your sex life stuck in one of these patterns?" })
+      .closest("section") as HTMLElement;
+
+  it("names six patterns in people's own words, each with what the report gives", () => {
+    renderPage();
+    expect(section().getAttribute("data-landing-section")).toBe("pain_points");
+    const text = section().textContent?.replace(/\s+/g, " ") ?? "";
+    for (const line of [
+      "“I want sex more than my partner does, and asking has started to feel like begging.”",
+      "You'll understand your desire gap, and how to talk about it without keeping score.",
+      "“I love them. I just don't want sex the way I used to.”",
+      "You'll understand whether your desire is responsive, and what it needs before it shows up.",
+      "“The second it feels like pressure, I shut down.”",
+      "You'll understand your brakes: the specific things that switch your desire off.",
+      "“It's safe and kind, and somehow not exciting anymore.”",
+      "You'll understand your accelerators: the kind of novelty that works for you, not for everyone.",
+      "“I know something's missing. I just can't say what.”",
+      "You'll get the vocabulary for what you want, in plain words you can use.",
+      "“We keep having the same argument about how often.”",
+      "You'll see the pattern behind the argument, so you can stop repeating it.",
+      "These are the six things people tell us most often before they take the test.",
+    ]) {
+      expect(text).toContain(line);
+    }
+  });
+
+  it("starts the survey from its button, counted from the pain points", () => {
+    renderPage();
+    const cta = within(section()).getByRole("link", { name: "Start free test - pain points" });
+    expect(cta.getAttribute("href")).toBe("/survey");
+    fireEvent.click(cta);
+    expect(events("cta_click").at(-1)?.[1]).toMatchObject({ location: "pain_points" });
+  });
+});
