@@ -14,6 +14,7 @@ import PStats from "./PStats";
 import WArchetypeCards from "../white/WArchetypeCards";
 import WTestimonials from "../white/WTestimonials";
 import WFoundation from "../white/WFoundation";
+import PFaq from "./PFaq";
 import { PP_REUSED_H2, PP_REUSED_SHELL, PP_TYPE } from "./ppStyles";
 
 /**
@@ -70,6 +71,9 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
           shellClassName={PP_REUSED_SHELL}
           headingClassName={`animate-on-scroll stagger-1 ${PP_REUSED_H2} [text-wrap:balance]`}
         />
+        <div className={PP_TYPE}>
+          <PFaq />
+        </div>
       </div>
     </main>
   );
