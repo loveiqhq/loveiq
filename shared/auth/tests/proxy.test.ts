@@ -711,12 +711,12 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
   const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
   const withCookie = (arm: string) =>
     makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, arm);
-  const LIVE = ["white_card", "white_video"];
+  const LIVE = ["video", "pain_point"];
 
   it("assigns one of the two live arms on / and mints it as a sticky cookie", async () => {
     await proxy(makeNextRequest("http://localhost:3000/"));
-    // Round 3 is question card vs presenter video, 50/50 — either is valid here, and
-    // both sides of the coin are proved reachable below.
+    // Round 4 is the video page vs the new pain-point page, 50/50 — either is valid here,
+    // and both sides of the coin are proved reachable below.
     expect(LIVE).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
@@ -735,10 +735,10 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
     const original = globalThis.crypto.getRandomValues;
     try {
       for (const [byte, arm] of [
-        [0, "white_card"],
-        [1, "white_video"],
-        [2, "white_card"],
-        [255, "white_video"],
+        [0, "video"],
+        [1, "pain_point"],
+        [2, "video"],
+        [255, "pain_point"],
       ] as const) {
         (globalThis.crypto as { getRandomValues: (a: Uint8Array) => Uint8Array }).getRandomValues =
           (buf: Uint8Array) => {
@@ -757,11 +757,11 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
   });
 
   it("honours a ?variant= override and makes it stick", async () => {
-    await proxy(makeNextRequest("http://localhost:3000/?variant=white_video"));
-    expect(variantHeader()).toBe("white_video");
+    await proxy(makeNextRequest("http://localhost:3000/?variant=pain_point"));
+    expect(variantHeader()).toBe("pain_point");
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white_video");
+    expect(calls[0]![1]).toBe("pain_point");
   });
 
   it("still opens round 2's V1 through ?variant=white_prev, for QA", async () => {
@@ -791,7 +791,7 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
      * have parked every returning visitor in arm A, and only new visitors could ever
      * reach B. `white_prev` and `control` are older still.
      */
-    for (const old of ["white", "white_prev", "control"]) {
+    for (const old of ["white", "white_prev", "control", "white_card", "white_video"]) {
       mockNextOpts.value = null;
       mockCookiesSet.mockClear();
       await proxy(withCookie(old));
@@ -802,16 +802,19 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
     }
   });
 
-  it("serves crawlers arm A's page, never an arm, and never sets a cookie", async () => {
+  it("serves crawlers the video page as no arm, and never sets a cookie", async () => {
+    // Round 4: the card page is no longer anyone's page, so the index gets the video page
+    // that half of all visitors see. `white_video` renders it and is no live arm now.
     const googlebot = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
-    for (const url of ["http://localhost:3000/", "http://localhost:3000/?variant=white_video"]) {
+    for (const url of ["http://localhost:3000/", "http://localhost:3000/?variant=pain_point"]) {
       mockNextOpts.value = null;
       mockCookiesSet.mockClear();
       await proxy(
         makeNextRequest(url, undefined, undefined, undefined, undefined, undefined, googlebot)
       );
       // One canonical rendering in the index, and no crawler counted in either arm.
-      expect(variantHeader()).toBe("white");
+      expect(variantHeader()).toBe("white_video");
+      expect(LIVE).not.toContain(variantHeader());
       expect(landingCookieCalls()).toHaveLength(0);
     }
   });
@@ -984,7 +987,7 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     await proxy(makeVisitRequest({ dest: "document" }));
     // The visit is tagged with the arm this same request was assigned on "/".
     const visitArm = mockNextOpts.value?.request?.headers?.get("x-liq-new-visit");
-    expect(["white_card", "white_video"]).toContain(visitArm);
+    expect(["video", "pain_point"]).toContain(visitArm);
     expect(visitArm).toBe(mockNextOpts.value?.request?.headers?.get("x-landing-variant"));
     const dvCall = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv");
     expect(dvCall).toBeDefined();
