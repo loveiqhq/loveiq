@@ -291,7 +291,7 @@ async function liveLine(e: Row, now: number, load: LoadOutcomes): Promise<string
     return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was recorded with it.";
   }
   // From the start of its first day in Berlin, as the registry reads a day: the
-  // landing test's restart (LANDING_TEST_START_AT) is 22:00 UTC the evening before.
+  // landing test's start (LANDING_TEST_START_AT) is the evening before in UTC.
   const outcomes = await load(
     reportingDayStart(e.start_date ?? isoDay(now - 30 * DAY_MS)).toISOString()
   );

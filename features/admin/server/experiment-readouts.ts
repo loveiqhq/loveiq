@@ -528,12 +528,12 @@ export function armReader(
 export const LIVE_AXES: ExperimentAxis[] = ["landing"];
 
 /**
- * `armReader`, plus the landing test's restart at the condensed phone hero
- * (LANDING_TEST_START_AT): a reader who finished before it came through a phone hero
- * whose slot most visitors never reached, in either arm, so /admin reads them as not
- * attributable, as it does pricing's re-priced readers. Here rather than in `armReader`
- * because the brain's experiments tool reads a registered test from the registry's own
- * start date (registry #6 moves to the restart day), and `armReader` is that read too.
+ * `armReader`, plus the landing test's start (LANDING_TEST_START_AT, the current round's
+ * first whole Berlin day): a reader who finished before it came through an earlier
+ * round's page, or round 3's phone hero before its restart, whose slot most visitors
+ * never reached, so /admin reads them as not attributable, as it does pricing's re-priced
+ * readers. Here rather than in `armReader` because the brain's experiments tool reads a
+ * registered test from the registry's own start date, and `armReader` is that read too.
  * Exported for the brain's unregistered-test line, which pairs with liveReadouts.
  */
 export function liveArmReader(

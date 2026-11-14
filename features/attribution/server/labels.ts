@@ -31,10 +31,16 @@ export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
  * data-viz checker: lightness band PASS, chroma PASS, CVD separation 29.2 protan /
  * 33.4 tritan, normal-vision 37.3, contrast PASS. `RETIRED` is deliberately the
  * low-chroma one — a concluded arm should not compete with a live one for the eye.
+ *
+ * `EMERALD` joined on 2026-11-14 for V4 (round 4), the categorical order's third hue. With
+ * BLUE, round 4's live pair, it validates at CVD 24.9 (deutan), normal-vision 27.2, contrast
+ * PASS; with BLUE and ORANGE together, as a view of every round draws them, all pairs pass
+ * (worst CVD 10.0, protan, against ORANGE; normal-vision 27.2).
  */
 const SERIES = {
   BLUE: "#2563eb",
   ORANGE: "#e0552f",
+  EMERALD: "#059669",
   RETIRED: "#64748b",
 } as const;
 
@@ -75,6 +81,20 @@ const UNKNOWN: ArmLabel = {
  */
 const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   landing: {
+    // Round 4's two live arms (from LANDING_TEST_START_DAY), first so charts read them in
+    // the test's order, A then B. `video` is V3 exactly as round 3 kept it, so it takes V3's
+    // name and blue; `pain_point` is Marcus's new page, V4, in the categorical order's next
+    // hue: blue and orange already belong to V1/V3 and V2, permanently.
+    video: {
+      short: "Landing Page V3 (Video in Hero)",
+      long: "Landing Page V3: video in the hero",
+      color: SERIES.BLUE,
+    },
+    pain_point: {
+      short: "Landing Page V4 (Pain Points)",
+      long: "Landing Page V4: the pain-point page",
+      color: SERIES.EMERALD,
+    },
     // Marketing's naming convention (2026-08-27), adopted verbatim so the words in
     // Slack, in AP-Analytics and in a meeting are the same words. It replaced "Landing
     // page A / B (current / previous design)", which had two problems: the A/B
@@ -101,19 +121,23 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
       color: SERIES.ORANGE,
       retired: true,
     },
-    // Round 3's two live arms. `white_card` is V2 exactly as it was, so it keeps V2's
-    // name and its orange. `white_video` is the new design, V3, and takes the live
-    // pair's blue: V1's blue is retired, and V1 can never share a chart with V3 —
-    // charts draw only live arms, and the round-3 comparison starts at its launch day.
+    // Round 3's two arms, retired with it (round 4 re-rolled their cookies). `white_card` is
+    // V2 exactly as it was, so it keeps V2's name and its orange. `white_video` is V3 and
+    // kept V1's blue: V1 can never share a chart with V3, as charts draw only live arms.
+    // Round 4's `video` is the same V3 under a new value, so this one says "before V4",
+    // as `white` says "before V3": the explorer groups by display name, and one name on
+    // both would pool round 3's arm B into round 4's arm A.
     white_card: {
       short: "Landing Page V2 (Survey in Hero)",
       long: "Landing Page V2: survey in the hero",
       color: SERIES.ORANGE,
+      retired: true,
     },
     white_video: {
-      short: "Landing Page V3 (Video in Hero)",
-      long: "Landing Page V3: video in the hero",
+      short: "Landing Page V3 (Video in Hero, before V4)",
+      long: "Landing Page V3: video in the hero, before the V4 test",
       color: SERIES.BLUE,
+      retired: true,
     },
     // CONCLUDED 2026-09-19 in favour of white (V2). proxy.ts no longer assigns it;
     // a returning visitor holding this cookie is re-rolled onto round 3's arms.

@@ -1834,24 +1834,24 @@ describe("conversion-digest handler", () => {
     expect(arg.text).not.toContain("ever paid");
   });
 
-  it("compares only round 3's two versions in the message it really sends", async () => {
+  it("compares only round 4's two versions in the message it really sends", async () => {
     /**
      * THE TEST THE OTHER LANDING TESTS CANNOT BE.
      *
      * Every one of them goes through `landingLiveBlocks()`, which reads ROUND 2 so
      * the block-building code stays covered. That leaves nobody asserting what the
-     * handler really sends: since round 3 started, production compares V2's
-     * question card with V3's video — and nothing of round 2's arms.
+     * handler really sends: since round 4 started, production compares V3's video
+     * page with V4's pain-point page — and nothing of the earlier rounds' arms.
      *
      * Asserted on the LIVE path, with fixtures that would happily draw round 2's
      * charts: makeStartFunnel() and makeAxisRows() carry V1 and V2, and the midway
-     * fixture below carries both plus an unattributed bucket. Round 3's versions
+     * fixture below carries both plus an unattributed bucket. Round 4's versions
      * have no data in them, which is the point.
      *
-     * A morning after the restart (LANDING_TEST_START_DAY): before it the block says the
-     * test restarts instead ("says the test restarts, not that nobody visited").
+     * A morning after the start (LANDING_TEST_START_DAY): before it the block says when
+     * the test starts instead ("says when the test starts, not that nobody visited").
      */
-    vi.setSystemTime(new Date("2026-10-20T07:05:00.000Z"));
+    vi.setSystemTime(new Date("2026-11-23T07:05:00.000Z"));
     mockFetchMidwayProgress.mockResolvedValue({
       // Above the fixture's 510 finishers, so the funnel keeps the midway row.
       overall: { sessions: 1000, reached: 620 },
@@ -1873,19 +1873,21 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const json = JSON.stringify(arg.blocks);
 
-    // The landing block is there, for round 3's versions, which have no visits here.
+    // The landing block is there, for round 4's versions, which have no visits here.
     expect(json).toContain("Landing page → survey");
     expect(json).toContain("no visits recorded for either version yet");
     // Nothing of round 2's arms: no counts, no chart legending them, no verdict.
     expect(json).not.toContain(armLabel("landing", "white_prev").short);
     expect(json).not.toContain(armLabel("landing", "white").short);
+    expect(json).not.toContain(armLabel("landing", "white_card").short);
+    expect(json).not.toContain(armLabel("landing", "white_video").short);
     expect(json).not.toContain("visits →");
     expect(json).not.toContain("genuinely ahead");
     expect(json).not.toContain("no clear winner yet");
     expect(landingChartPayloads(arg.blocks), "no chart may legend a landing arm").toHaveLength(0);
 
     // No per-landing midway split of round 2's drafts, and no false start date for
-    // round 3's. The funnel's own midway row stays: it was never split by arm.
+    // round 4's. The funnel's own midway row stays: it was never split by arm.
     expect(json).toContain("Midway (question 30)");
     expect(json).not.toContain("Midway progress");
     expect(json).not.toContain("surveys reached question");
@@ -1894,12 +1896,12 @@ describe("conversion-digest handler", () => {
   });
 
   /**
-   * The line the landing test is decided on. Built for round 3 with the shared
-   * fixtures' round-2 rows still in every source, so a regression that read the
-   * wrong arms, or dropped a half of the count, shows up as a wrong number.
+   * The line the landing test is decided on. Built for round 4 with round 3's rows
+   * (its arm B, the likeliest mix-up) still in every source, so a regression that read
+   * the wrong arms, or dropped a half of the count, shows up as a wrong number.
    */
-  describe("survey starts per visit, round 3's deciding number", () => {
-    // From the restart at the condensed phone hero: the per-arm counts start there.
+  describe("survey starts per visit, the landing test's deciding number", () => {
+    // From the round's first day: the per-arm counts start there.
     const days = Array.from({ length: 14 }, (_, i) =>
       new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + i * 86_400_000)
         .toISOString()
@@ -1908,26 +1910,22 @@ describe("conversion-digest handler", () => {
     /** Daily rows behind a midway read's totals, all on the first day. */
     const onFirstDay = <T extends { arm: string }>(totals: T[]) =>
       totals.map((t) => ({ day: days[0]!, ...t }));
-    const startFunnel = (videoVisitsPerDay = 22) => ({
+    const startFunnel = (bVisitsPerDay = 22) => ({
       daily: days.flatMap((day) => [
-        { day, arm: "white_card", visits: 20, starts: 2 },
-        ...(videoVisitsPerDay
-          ? [{ day, arm: "white_video", visits: videoVisitsPerDay, starts: 2 }]
-          : []),
-        { day, arm: "white", visits: 99, starts: 9 },
+        { day, arm: "video", visits: 20, starts: 2 },
+        ...(bVisitsPerDay ? [{ day, arm: "pain_point", visits: bVisitsPerDay, starts: 2 }] : []),
+        { day, arm: "white_video", visits: 99, starts: 9 },
       ]),
       totals: [
-        { arm: "white_card", visits: 280, starts: 28 },
-        ...(videoVisitsPerDay
-          ? [{ arm: "white_video", visits: videoVisitsPerDay * 14, starts: 28 }]
-          : []),
-        { arm: "white", visits: 1386, starts: 126 },
+        { arm: "video", visits: 280, starts: 28 },
+        ...(bVisitsPerDay ? [{ arm: "pain_point", visits: bVisitsPerDay * 14, starts: 28 }] : []),
+        { arm: "white_video", visits: 1386, starts: 126 },
       ],
     });
     const pastFirstTotals = [
-      { arm: "white_card", sessions: 60, reached: 20 },
-      { arm: "white_video", sessions: 70, reached: 25 },
-      { arm: "white", sessions: 170, reached: 75 },
+      { arm: "video", sessions: 60, reached: 20 },
+      { arm: "pain_point", sessions: 70, reached: 25 },
+      { arm: "white_video", sessions: 170, reached: 75 },
     ];
     const startsPastFirst = {
       overall: { sessions: 300, reached: 120 },
@@ -1937,12 +1935,12 @@ describe("conversion-digest handler", () => {
       firstArmDay: "2026-10-06",
     };
     const cohorts = [
-      { axis: "landing" as const, arm: "white_card", n: 4, conversions: 0 },
-      { axis: "landing" as const, arm: "white_video", n: 6, conversions: 1 },
-      { axis: "landing" as const, arm: "white", n: 50, conversions: 3 },
+      { axis: "landing" as const, arm: "video", n: 4, conversions: 0 },
+      { axis: "landing" as const, arm: "pain_point", n: 6, conversions: 1 },
+      { axis: "landing" as const, arm: "white_video", n: 50, conversions: 3 },
     ];
     const build = async (over: Record<string, unknown> = {}) => {
-      vi.setSystemTime(new Date("2026-10-27T09:05:00.000Z"));
+      vi.setSystemTime(new Date("2026-11-30T09:05:00.000Z"));
       const now = new Date();
       const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
       return blockText(
@@ -1968,17 +1966,17 @@ describe("conversion-digest handler", () => {
         ).blocks
       );
     };
-    const card = armLabel("landing", "white_card").short;
-    const video = armLabel("landing", "white_video").short;
+    const card = armLabel("landing", "video").short;
+    const video = armLabel("landing", "pain_point").short;
 
     it("counts drafts past question one plus finished surveys over visits, per live arm", async () => {
       const text = await build();
       expect(text).toContain("*Survey starts per visit* — what this test is decided on");
-      // V2: 20 drafts + 4 finished of 280 visits; V3: 25 + 6 of 308.
+      // V3: 20 drafts + 4 finished of 280 visits; V4: 25 + 6 of 308.
       expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
       expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
-      // Round 2's arm is in every source and in none of the counts.
-      expect(text).not.toContain(armLabel("landing", "white").short);
+      // Round 3's arm B is in every source and in none of the counts.
+      expect(text).not.toContain(armLabel("landing", "white_video").short);
     });
 
     it("says the number is unavailable when a read fails, instead of leaving it out", async () => {
@@ -1996,9 +1994,9 @@ describe("conversion-digest handler", () => {
      * twice. Same numbers as above, so the line must not move.
      */
     const withFinishedTotals = [
-      { arm: "white_card", sessions: 64, reached: 24, finished: 4 },
-      { arm: "white_video", sessions: 76, reached: 31, finished: 6 },
-      { arm: "white", sessions: 170, reached: 75, finished: 0 },
+      { arm: "video", sessions: 64, reached: 24, finished: 4 },
+      { arm: "pain_point", sessions: 76, reached: 31, finished: 6 },
+      { arm: "white_video", sessions: 170, reached: 75, finished: 0 },
     ];
     const withFinished = {
       ...startsPastFirst,
@@ -2021,16 +2019,16 @@ describe("conversion-digest handler", () => {
       );
       const otherCohorts = await build({
         startsPastFirst: withFinished,
-        cohorts: [{ axis: "landing" as const, arm: "white_video", n: 99, conversions: 0 }],
+        cohorts: [{ axis: "landing" as const, arm: "pain_point", n: 99, conversions: 0 }],
       });
       expect(otherCohorts).toContain(
         `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
       );
     });
 
-    it("counts each landing page from the restart, not over the whole window", async () => {
-      // Five days of round 3 before the condensed phone hero, under the same arm names:
-      // in the window and in the functions' totals, and in none of the counts.
+    it("counts each landing page from the round's start, not over the whole window", async () => {
+      // Five days before the start under round 4's arm names (staging, a forced
+      // ?variant=): in the window and in the functions' totals, and in none of the counts.
       const early = Array.from({ length: 5 }, (_, i) =>
         new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (5 - i) * 86_400_000)
           .toISOString()
@@ -2041,25 +2039,23 @@ describe("conversion-digest handler", () => {
         startFunnel: {
           daily: [
             ...early.flatMap((day) => [
-              { day, arm: "white_card", visits: 50, starts: 9 },
-              { day, arm: "white_video", visits: 50, starts: 9 },
+              { day, arm: "video", visits: 50, starts: 9 },
+              { day, arm: "pain_point", visits: 50, starts: 9 },
             ]),
             ...base.daily,
           ],
           totals: base.totals.map((t) =>
-            t.arm === "white" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
+            t.arm === "white_video" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
           ),
         },
         startsPastFirst: {
           ...startsPastFirst,
           daily: [
-            ...early.map((day) => ({ day, arm: "white_card", sessions: 9, reached: 9 })),
+            ...early.map((day) => ({ day, arm: "video", sessions: 9, reached: 9 })),
             ...startsPastFirst.daily,
           ],
           totals: startsPastFirst.totals.map((t) =>
-            t.arm === "white_card"
-              ? { ...t, sessions: t.sessions + 45, reached: t.reached + 45 }
-              : t
+            t.arm === "video" ? { ...t, sessions: t.sessions + 45, reached: t.reached + 45 } : t
           ),
         },
       });
@@ -2067,7 +2063,7 @@ describe("conversion-digest handler", () => {
       expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
     });
 
-    it("counts from the restart on the production path too, where finished surveys are counted", async () => {
+    it("counts from the start on the production path too, where finished surveys are counted", async () => {
       // As above, with get_midway_progress_daily's `finished` (migration 20261007190000):
       // five earlier days under the same arm names, finishers included, in no count.
       const early = Array.from({ length: 5 }, (_, i) =>
@@ -2080,13 +2076,13 @@ describe("conversion-digest handler", () => {
         startFunnel: {
           daily: [
             ...early.flatMap((day) => [
-              { day, arm: "white_card", visits: 50, starts: 9 },
-              { day, arm: "white_video", visits: 50, starts: 9 },
+              { day, arm: "video", visits: 50, starts: 9 },
+              { day, arm: "pain_point", visits: 50, starts: 9 },
             ]),
             ...base.daily,
           ],
           totals: base.totals.map((t) =>
-            t.arm === "white" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
+            t.arm === "white_video" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
           ),
         },
         startsPastFirst: {
@@ -2094,7 +2090,7 @@ describe("conversion-digest handler", () => {
           daily: [
             ...early.map((day) => ({
               day,
-              arm: "white_card",
+              arm: "video",
               sessions: 9,
               reached: 9,
               finished: 5,
@@ -2102,7 +2098,7 @@ describe("conversion-digest handler", () => {
             ...withFinished.daily,
           ],
           totals: withFinished.totals.map((t) =>
-            t.arm === "white_card"
+            t.arm === "video"
               ? {
                   ...t,
                   sessions: t.sessions + 45,
@@ -2117,8 +2113,8 @@ describe("conversion-digest handler", () => {
       expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
     });
 
-    it("says the test restarts, not that nobody visited, on the morning before it does", async () => {
-      // 14 Oct's digest reports 13 Oct: a week of visits, all before the restart.
+    it("says when the test starts, not that nobody visited, on the morning before it does", async () => {
+      // 17 Nov's digest reports 16 Nov: a week of round 3's visits, all before the start.
       const before = Array.from({ length: 7 }, (_, i) =>
         new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (7 - i) * 86_400_000)
           .toISOString()
@@ -2155,13 +2151,13 @@ describe("conversion-digest handler", () => {
           } as Parameters<typeof buildConversionDigest>[0])
         ).blocks
       );
-      expect(text).toContain("the landing test restarts on 14 Oct, with the condensed phone hero");
-      expect(text).toContain("its first numbers arrive in the 15 Oct digest");
+      expect(text).toContain(`the landing test starts on 17 Nov, ${card} against ${video}`);
+      expect(text).toContain("its first numbers arrive in the 18 Nov digest");
       expect(text).not.toContain("no visits recorded");
     });
 
-    it("shows the numbers from the morning after the restart day", async () => {
-      // 15 Oct's digest reports 14 Oct, the restart day itself: counts, not the notice.
+    it("shows the numbers from the morning after the start day", async () => {
+      // 18 Nov's digest reports 17 Nov, the start day itself: counts, not the notice.
       const day = LANDING_TEST_START_DAY;
       const text = blockText(
         (
@@ -2172,12 +2168,12 @@ describe("conversion-digest handler", () => {
             cohorts,
             startFunnel: {
               daily: [
-                { day, arm: "white_card", visits: 200, starts: 14 },
-                { day, arm: "white_video", visits: 210, starts: 10 },
+                { day, arm: "video", visits: 200, starts: 14 },
+                { day, arm: "pain_point", visits: 210, starts: 10 },
               ],
               totals: [
-                { arm: "white_card", visits: 200, starts: 14 },
-                { arm: "white_video", visits: 210, starts: 10 },
+                { arm: "video", visits: 200, starts: 14 },
+                { arm: "pain_point", visits: 210, starts: 10 },
               ],
             },
             startsPastFirst: { ...withFinished, daily: [] },
@@ -2193,7 +2189,7 @@ describe("conversion-digest handler", () => {
           } as Parameters<typeof buildConversionDigest>[0])
         ).blocks
       );
-      expect(text).not.toContain("restarts on");
+      expect(text).not.toContain("starts on");
       expect(text).toContain("one day of data for each version");
       expect(text).toContain(`${card}* — 200 visits → 14 started the survey`);
     });
@@ -2849,18 +2845,18 @@ describe("conversion-digest verdicts", () => {
     // 60/500 vs 20/500 — a wide, unambiguous gap. On the LANDING axis: the survey
     // axis used to host this fixture, and its `dark` arm is retired now, so
     // buildArmVerdict correctly filters it and the pair collapses to one arm.
-    // Round 3's two live arms, so no includeRetired is needed.
+    // Round 4's two live arms, so no includeRetired is needed.
     const verdict = buildArmVerdict("landing", [
-      { arm: "white_card", n: 500, conversions: 60 },
-      { arm: "white_video", n: 500, conversions: 20 },
+      { arm: "video", n: 500, conversions: 60 },
+      { arm: "pain_point", n: 500, conversions: 20 },
     ]);
     expect(verdict.state).toBe("winner");
     expect(verdict.sentence).toContain("genuinely ahead");
     expect(verdict.sentence).toContain("95% CI");
     // Plain-English arm names only — never a raw stored value.
-    // The sentence names the leading arm, V2 here.
-    expect(verdict.sentence).toContain("Landing Page V2 (Survey in Hero)");
-    expect(verdict.sentence).not.toMatch(/white_card|white_video/);
+    // The sentence names the leading arm, V3 here.
+    expect(verdict.sentence).toContain("Landing Page V3 (Video in Hero)");
+    expect(verdict.sentence).not.toMatch(/pain_point|white_card|white_video/);
   });
 
   it("refuses to call the real 308-vs-13 landing split, however tempting the rates", () => {
@@ -2944,13 +2940,13 @@ describe("conversion-digest verdicts", () => {
     const verdict = buildArmVerdict(
       "landing",
       [
-        { arm: "white_card", n: 300, conversions: 10 },
+        { arm: "video", n: 300, conversions: 10 },
         // `control` is the retired dark landing — nobody has been served it for months.
         { arm: "control", n: 800, conversions: 40 },
       ]
       // No `includeRetired` here, deliberately: this is the test OF that filter.
     );
-    expect(verdict.arms.map((a) => a.label)).toEqual(["Landing Page V2 (Survey in Hero)"]);
+    expect(verdict.arms.map((a) => a.label)).toEqual(["Landing Page V3 (Video in Hero)"]);
     expect(verdict.state).toBe("single-arm");
     expect(verdict.sentence).toContain("nothing to compare");
   });
@@ -3328,15 +3324,15 @@ describe("the price test's verdict waits for a window wholly after its lists sta
   });
 });
 
-describe("the landing test's verdict waits for a window wholly after its restart", () => {
-  // Decisive again; the restart at the condensed phone hero is the only thing in the way.
+describe("the landing test's verdict waits for a window wholly after its start", () => {
+  // Decisive again; the round's first day is the only thing in the way.
   const cohorts = [
-    { axis: "landing", arm: "white_card", n: 500, conversions: 80 },
-    { axis: "landing", arm: "white_video", n: 500, conversions: 20 },
+    { axis: "landing", arm: "video", n: 500, conversions: 80 },
+    { axis: "landing", arm: "pain_point", n: 500, conversions: 20 },
   ];
-  const digestOn = async (daysAfterRestart: number) => {
+  const digestOn = async (daysAfterStart: number) => {
     const day = new Date(
-      Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + daysAfterRestart * 86_400_000
+      Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + daysAfterStart * 86_400_000
     )
       .toISOString()
       .slice(0, 10);
@@ -3353,13 +3349,13 @@ describe("the landing test's verdict waits for a window wholly after its restart
     return blockText(blocks);
   };
 
-  it("stays silent while the 30-day cohorts still hold readers of the old phone hero", async () => {
+  it("stays silent while the 30-day cohorts still hold readers from before the round", async () => {
     expect(await digestOn(28)).not.toContain("Worth acting on");
   });
 
-  it("waits for the comparison's own first day on a historical read, not the restart", async () => {
+  it("waits for the comparison's own first day on a historical read, not the start", async () => {
     // Round 2 read back (V2 vs V1 from 21 Aug): its 30-day window is wholly after its own
-    // start on 19 Sep, long before round 3's restart, so the verdict is due.
+    // start on 19 Sep, long before round 4's start, so the verdict is due.
     const { blocks } = await buildConversionDigest({
       dayKey: "2026-09-19",
       funnel: null,
@@ -3379,10 +3375,10 @@ describe("the landing test's verdict waits for a window wholly after its restart
     expect(blockText(blocks)).toContain("Worth acting on");
   });
 
-  it("calls it once every reader in the window came through the condensed phone hero", async () => {
+  it("calls it once every reader in the window came in during the round", async () => {
     const text = await digestOn(29);
     expect(text).toContain("Worth acting on");
-    expect(text).toContain(armLabel("landing", "white_card").short);
+    expect(text).toContain(armLabel("landing", "video").short);
   });
 });
 
