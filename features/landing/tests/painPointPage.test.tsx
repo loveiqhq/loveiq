@@ -152,3 +152,38 @@ describe("pain-point page — reveals never hide content", () => {
     );
   });
 });
+
+describe("pain-point page — trust band and the three steps", () => {
+  it("shows the three reasons to trust LoveIQ in the band under the hero", () => {
+    renderPage();
+    const band = screen.getByRole("region", { name: "Why people trust LoveIQ" });
+    expect(band.getAttribute("data-landing-section")).toBe("trust_band");
+    const items = within(band)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent?.replace(/\s+/g, " ").trim());
+    expect(items).toEqual([
+      "10,000+ people have started the test",
+      "Grounded in 100+ papers and books",
+      "Anonymous, encrypted, never sold",
+    ]);
+  });
+
+  it("walks through the three steps, with the true time, price, chapters and guarantee", () => {
+    renderPage();
+    const heading = screen.getByRole("heading", {
+      level: 2,
+      name: "~15 minutes. 14 archetypes. Your next steps.",
+    });
+    const section = heading.closest("section") as HTMLElement;
+    expect(section.getAttribute("data-landing-section")).toBe("how_it_works");
+    const steps = within(section)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent?.replace(/\s+/g, " ").trim());
+    expect(steps).toEqual([
+      "1Answer 62 questionsAnonymous, no account needed.",
+      "2Meet your archetypePlus your core motivation.",
+      "3Get your resultGo deeper from €1.99: 17 chapters with practices. 14-day money-back guarantee.",
+    ]);
+    expect(section.textContent).not.toMatch(/free result|7-day/);
+  });
+});
