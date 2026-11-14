@@ -3,13 +3,7 @@
 import { useState, type FC } from "react";
 import { faqs } from "@/data/faqs";
 import { trackFaqExpanded } from "@features/analytics/client";
-
-// Tiny stable hash for the analytics `question_text_hash` (no PII, just a key).
-function hashQuestion(q: string): string {
-  let h = 5381;
-  for (let i = 0; i < q.length; i++) h = (h * 33) ^ q.charCodeAt(i);
-  return (h >>> 0).toString(36);
-}
+import { hashQuestion } from "@features/landing/logic/faqHash";
 
 const WFAQ: FC = () => {
   const [open, setOpen] = useState<number | null>(null);
