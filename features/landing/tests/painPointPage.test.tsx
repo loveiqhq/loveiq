@@ -225,3 +225,31 @@ describe("pain-point page — the six pain points", () => {
     expect(events("cta_click").at(-1)?.[1]).toMatchObject({ location: "pain_points" });
   });
 });
+
+describe("pain-point page — what changes", () => {
+  it("strikes through four old habits and names what replaces each", () => {
+    renderPage();
+    const section = screen
+      .getByRole("heading", { level: 2, name: "What changes with LoveIQ." })
+      .closest("section") as HTMLElement;
+    expect(section.getAttribute("data-landing-section")).toBe("promise");
+    expect(section.textContent).toContain(
+      "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot kinder."
+    );
+    const struck = [...section.querySelectorAll("s")].map((s) => s.textContent);
+    expect(struck).toEqual([
+      "Hoping your partner will guess",
+      "Wondering what's going on with you",
+      "The same argument about frequency",
+      "Sex on autopilot",
+    ]);
+    for (const after of [
+      "Ask for what you want in one clear sentence.",
+      "Know the conditions your desire needs, and create them on purpose.",
+      "Talk about the gap between you without blame on either side.",
+      "Know which new things are worth trying for you, and which aren't.",
+    ]) {
+      expect(section.textContent).toContain(after);
+    }
+  });
+});
