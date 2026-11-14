@@ -372,16 +372,16 @@ describe("axis trend charts — which experiments may be drawn", () => {
   });
 
   it("clips each axis to its own like-for-like window", () => {
-    // Round 3: a day before its restart is cut, whatever arm name it carries.
+    // Round 4: a day before its start is cut, whatever arm name it carries.
     const launch = LANDING_TEST_START_DAY;
     const all = [
-      ...rows("landing", "white_card", {
+      ...rows("landing", "video", {
         days: 1,
         lastDay: plusDays(launch, -3),
         completions: 99,
         checkouts: 99,
       }),
-      ...rows("landing", "white_card", {
+      ...rows("landing", "video", {
         days: 5,
         lastDay: plusDays(launch, 4),
         completions: 10,
@@ -421,16 +421,18 @@ describe("axis trend charts — which experiments may be drawn", () => {
     const lastDay = plusDays(LANDING_TEST_START_DAY, 4);
     const scoped = rowsForAxis(
       [
-        ...rows("landing", "white_card", { days: 5, lastDay, completions: 10, checkouts: 1 }),
+        ...rows("landing", "video", { days: 5, lastDay, completions: 10, checkouts: 1 }),
         // tracker_arm returns the literal 'unknown' for a missing stamp; `control` is
-        // round 1's dark landing and `white` round 2's V2, both retired.
+        // round 1's dark landing, `white` round 2's V2 and `white_card` round 3's, all
+        // retired.
         ...rows("landing", "unknown", { days: 5, lastDay, completions: 5, checkouts: 1 }),
         ...rows("landing", "control", { days: 5, lastDay, completions: 5, checkouts: 1 }),
         ...rows("landing", "white", { days: 5, lastDay, completions: 5, checkouts: 1 }),
+        ...rows("landing", "white_card", { days: 5, lastDay, completions: 5, checkouts: 1 }),
       ],
       "landing"
     );
-    expect([...new Set(scoped.rows.map((r) => r.arm))]).toEqual(["white_card"]);
+    expect([...new Set(scoped.rows.map((r) => r.arm))]).toEqual(["video"]);
   });
 
   it("will not claim a winner off too few conversions, however many surveys", () => {

@@ -151,10 +151,10 @@ export const STARTED_QUESTION_INDEX = 1;
  * mistake the /admin dashboard made before it was corrected. A verdict on a test
  * nobody is running is not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3),
  * but only once the whole window lies after its current lists started (`verdictAxesFor`).
- * `landing` is live again for its round 3 (V2's question card vs V3's hero video). Its
- * arms are new values, so its verdict can only ever count round-3 readers, but it waits
- * like pricing for a window wholly after LANDING_TEST_START_DAY: before the condensed
- * phone hero most phone visitors never reached either arm's slot.
+ * `landing` is live for its round 4 (V3's video page vs V4's pain-point page). Its arms
+ * are new values, so its verdict can only ever count round-4 readers, and it waits like
+ * pricing for a window wholly after LANDING_TEST_START_DAY, the round's first whole day
+ * (round 3 waited the same way for its restart at the condensed phone hero).
  */
 const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
@@ -164,7 +164,7 @@ const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
  * prices and were re-priced (the 2.x lists, list B's first prices), and a verdict pooled
  * over them would call that a result. The price test is still in *The tests*
  * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY). The landing
- * test waits the same way for its restart at the condensed phone hero.
+ * test waits the same way for its round's first day (LANDING_TEST_START_DAY).
  */
 function verdictAxesFor(
   dayKey: string,
@@ -408,10 +408,11 @@ export function buildSiteStartSeries(
  *
  * get_landing_start_funnel_daily and get_midway_progress_daily both SUM their per-arm
  * totals from their own daily rows, so these are exactly the totals a read starting at
- * `from` returns. Every per-landing-page line reads them: a restart of the landing test
- * (LANDING_TEST_START_DAY, the condensed phone hero) moved the charts' first day but the
- * per-arm counts and the deciding number still pooled the days before it under the same
- * arm names. The site-wide lines keep reading the uncut window.
+ * `from` returns. Every per-landing-page line reads them: round 3's restart under the same
+ * arm names (the condensed phone hero) moved the charts' first day but the per-arm counts
+ * and the deciding number still pooled the days before it, and a round's arms can carry
+ * days before its start (staging, a forced ?variant=). The site-wide lines keep reading
+ * the uncut window.
  */
 export function landingStartSince(funnel: LandingStartFunnel, from: string): LandingStartFunnel {
   const daily = funnel.daily.filter((r) => r.day >= from);
@@ -514,7 +515,7 @@ interface DigestInput {
    * Treat these axes as live, retired arms included.
    *
    * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing`, and `landing`
-   * for its round 3 (round 2 concluded on 2026-09-19).
+   * for its round 4 (round 3 concluded at the 2026-11-10 sync).
    *
    * ONE field, not an axis list plus a retired-arms flag, because those two can
    * disagree and a message has to have a single answer to "what is running". An
@@ -534,8 +535,8 @@ interface DigestInput {
   liveAxesOverride?: ExperimentAxis[];
   /**
    * The landing pair the per-arm blocks compare, in reading order, and the day that
-   * comparison starts. Production omits both and gets round 3's live arms (V2's
-   * question card, then V3's video) from LANDING_TEST_START_DAY. A read of
+   * comparison starts. Production omits both and gets round 4's live arms (V3's
+   * video page, then V4's pain-point page) from LANDING_TEST_START_DAY. A read of
    * round 2 passes ["white_prev", "white"] and 2026-08-21.
    *
    * The day matters even with new arm values: the per-arm series take their x-axis
@@ -1128,8 +1129,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     } else if (midway.firstArmDay && midway.firstArmDay >= landingFrom) {
       // Says WHY it is empty and WHEN it starts, so nobody reads the absence as
       // "no one gets halfway". Only when drafts began carrying an arm within this
-      // round: in round 3 they have carried one since before it, so the empty state
-      // is simply that neither version has a draft yet, and the date would be false.
+      // round: since round 3 they have carried one from before a round began, so the
+      // empty state is simply that neither version has a draft yet, and the date would
+      // be false.
       midwayBlocks.push(
         context(
           `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)} — before that, drafts did not record which landing page the visitor came from.`
@@ -1141,7 +1143,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
     /**
-     * In version order (V2 then V3 in round 3), so the message reads that way.
+     * In version order (V3 then V4 in round 4), so the message reads that way.
      *
      * This used to be sorted by label, and the sort was load-bearing: the renderer
      * coloured by POSITION, so the order the arms were passed in decided which one
@@ -1243,9 +1245,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         );
       }
     } else if (dayKey < landingFrom) {
-      // The day this digest reports is before the comparison restarts, so its per-arm
+      // The day this digest reports is before the comparison starts, so its per-arm
       // counts are empty by design. Say so: "no visits" under a funnel full of them reads
-      // as a broken test.
+      // as a broken test. The two pages are named, so the line needs no edit next round.
       const label = (day: string) => {
         const at = new Date(`${day}T00:00:00Z`);
         return `${at.getUTCDate()} ${at.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
@@ -1254,7 +1256,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       firstDigest.setUTCDate(firstDigest.getUTCDate() + 1);
       landingStartBlocks.push(
         section(
-          `*Landing page → survey* — the landing test restarts on ${label(landingFrom)}, with the condensed phone hero; its first numbers arrive in the ${label(firstDigest.toISOString().slice(0, 10))} digest.`
+          `*Landing page → survey* — the landing test starts on ${label(landingFrom)}, ${armLabel("landing", liveArms[0]).short} against ${armLabel("landing", liveArms[1]).short}; its first numbers arrive in the ${label(firstDigest.toISOString().slice(0, 10))} digest.`
         )
       );
     } else if (!hasVisits(liveArms[0]) && !hasVisits(liveArms[1])) {
