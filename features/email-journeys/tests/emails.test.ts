@@ -231,9 +231,11 @@ describe("the reworked emails", () => {
     expect(map.find((r) => r.id === "core_archetype")?.access).toBe("free");
     expect(map.find((r) => r.id === "constellation")?.access).toBe("free");
     expect(map.filter((r) => r.access === "open")).toHaveLength(4);
-    // I2 tags the rows the €1.99 opens with the price, U1 with FREE.
+    // I2 tags the rows the €1.99 opens with the price, U1 (paid) with IN FULL, I3 (gifted) with
+    // FREE: the report's own rule since 27.10, free wording 14 Nov.
     expect(ALL.I2.email.html).toContain(`>${PRICE}</span>`);
-    expect(ALL.U1.email.html).toContain(">FREE</span>");
+    expect(ALL.U1.email.html).toContain(">IN FULL</span>");
+    expect(ALL.I3.email.html).toContain(">FREE</span>");
   });
 
   it("C1's share button opens the report's share window; C2's picks open their chapters", () => {
@@ -323,5 +325,23 @@ describe("trial sends (scripts/email-trials.ts)", () => {
       expect(out.html).not.toContain("<!-- loveiq:card-top -->");
       expect(out.text.startsWith("TRIAL ")).toBe(true);
     }
+  });
+});
+
+// Free wording (14 Nov): the report says IN FULL, never FREE, once a reader has paid (27.10),
+// and Marcus: no claim we can't deliver on. A EUR 1.99 buyer's chapters are paid for, not
+// free; the day-1 gift's really are free, so I3 keeps the word.
+describe("what the chapter map's legend calls free", () => {
+  it("never tells a EUR 1.99 buyer their chapters are free (U1)", () => {
+    const { html, text } = coreUnlockedEmail(reader);
+    expect(html).not.toMatch(/\bfree\b/i);
+    expect(text).not.toMatch(/\bfree\b/i);
+    expect(html).toContain("IN FULL");
+    expect(html).toContain("Read your opening chapters <strong>in full</strong>.");
+  });
+
+  it("still calls the gifted chapters free (I3)", () => {
+    const { html } = giftEmail({ ...reader, answeredYesterday: true });
+    expect(html).toContain("free chapters");
   });
 });
