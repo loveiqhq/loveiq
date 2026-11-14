@@ -13,14 +13,14 @@ import { HERO } from "./painPointContent";
  *
  * The board's box is content-sized (1180 wide plus 24px sides) and its desktop content box
  * is fixed at 545px, which the column overflows by about 40px into the 80px foot. The same
- * picture comes from a 39px foot here, without a fixed height that narrower desktops would
+ * picture comes from a 37.5px foot here, without a fixed height that narrower desktops would
  * overflow into the next section.
  */
 const PHero: FC = () => (
   <section
     data-testid="pp-hero"
     data-landing-time="hero"
-    className="mx-auto flex max-w-[1212px] flex-wrap items-center gap-8 px-4 pb-14 pt-10 lg:max-w-[1228px] lg:gap-14 lg:px-6 lg:pb-[39px] lg:pt-[72px]"
+    className="mx-auto flex max-w-[1212px] flex-wrap items-center gap-8 px-4 pb-14 pt-10 lg:max-w-[1228px] lg:gap-14 lg:px-6 lg:pb-[37.5px] lg:pt-[72px]"
   >
     <div className="flex min-w-0 flex-[1_1_min(100%,480px)] flex-col gap-6">
       <h1 className="m-0 font-serif text-[38px] font-semibold leading-[1.15] tracking-[-0.01em] text-[#161021] [text-wrap:balance] lg:text-[58px] lg:leading-[1.12]">
