@@ -53,14 +53,25 @@ export const KPI_SEGMENTS = [
   "Computer",
   "Landing: question card",
   "Landing: video",
+  "Landing: pain points",
 ] as const;
 export type KpiSegment = (typeof KPI_SEGMENTS)[number];
 
-/** The landing test of 7 Oct 2026 (shared/experiments/landingVariant.ts, round 3). */
-const LANDING_ARMS: Array<[string, KpiSegment]> = [
-  ["white_card", "Landing: question card"],
-  ["white_video", "Landing: video"],
+/**
+ * The landing pages' segments and the arms that served each (shared/experiments/landingVariant.ts).
+ * The video page is one segment across rounds 3 and 4: round 3's white_video and round 4's video
+ * are the same page under a new cookie value, so the week round 4 began writes one row for it.
+ * A segment writes rows only in weeks it had visits.
+ */
+const LANDING_SEGMENTS: Array<[KpiSegment, string[]]> = [
+  ["Landing: question card", ["white_card"]],
+  ["Landing: video", ["white_video", "video"]],
+  ["Landing: pain points", ["pain_point"]],
 ];
+
+/** A segment's count: its arms' counts added up. */
+const armsTotal = (byArm: Map<string, number>, arms: string[]) =>
+  arms.reduce((n, arm) => n + (byArm.get(arm) ?? 0), 0);
 
 /** One week of get_kpi_week. */
 export interface KpiWeekData {
@@ -258,8 +269,8 @@ export const KPIS: KpiDef[] = [
     high: true,
     values: (w) => [
       plain("All traffic", w.visits.all),
-      ...LANDING_ARMS.filter(([arm]) => (w.visits.byArm.get(arm) ?? 0) > 0).map(([arm, seg]) =>
-        plain(seg, w.visits.byArm.get(arm)!)
+      ...LANDING_SEGMENTS.filter(([, arms]) => armsTotal(w.visits.byArm, arms) > 0).map(
+        ([seg, arms]) => plain(seg, armsTotal(w.visits.byArm, arms))
       ),
     ],
     rule: "under half the usual visits in a week (an outage or stopped ads)",
@@ -275,8 +286,9 @@ export const KPIS: KpiDef[] = [
       c.startsComplete
         ? [
             ratio("All traffic", w.starts.all, w.visits.all, 20),
-            ...LANDING_ARMS.filter(([arm]) => (w.visits.byArm.get(arm) ?? 0) >= 20).map(
-              ([arm, seg]) => ratio(seg, w.starts.byArm.get(arm) ?? 0, w.visits.byArm.get(arm)!, 20)
+            ...LANDING_SEGMENTS.filter(([, arms]) => armsTotal(w.visits.byArm, arms) >= 20).map(
+              ([seg, arms]) =>
+                ratio(seg, armsTotal(w.starts.byArm, arms), armsTotal(w.visits.byArm, arms), 20)
             ),
           ]
         : [],

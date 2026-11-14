@@ -53,11 +53,12 @@ export function listPageShots(): string {
     `A page not on this list has no screenshot, which is a gap in what was captured and ` +
     `not a page that looks like nothing.\n\n` +
     PAGE_SHOTS.map((s) => `  ${s.name.padEnd(26)} ${s.width}x${s.height}  ${s.what}`).join("\n") +
-    `\n\nThe landing entries are different pages, not shots of one: \`landing-white\` and ` +
-    `\`landing-white-video\` are the two arms of the live hero test (question 1 or the intro ` +
-    `video), each shown to half of visitors, and \`landing-white-prev\` is the design retired ` +
-    `on 2026-09-19. A live arm missing from the list above has not been photographed yet. ` +
-    `Critique the live arms unless asked to compare.`
+    `\n\nThe landing entries are different pages, not shots of one: \`landing-white-video\` ` +
+    `and \`landing-pain-point\` are the two arms of the live landing test (the video page and ` +
+    `the new pain-point page, from the 2026-11-16 release), each shown to half of visitors. ` +
+    `\`landing-white\` is round 3's question-card version, retired when round 4 began, and ` +
+    `\`landing-white-prev\` the design retired on 2026-09-19. A live arm missing from the list ` +
+    `above has not been photographed yet. Critique the live arms unless asked to compare.`
   );
 }
 

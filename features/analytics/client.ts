@@ -1640,7 +1640,8 @@ export const trackFaqExpanded = (params: { question_index: number; question_text
   track("faq_expanded", params);
 
 /**
- * The landing hero video (arm `white_video` of the landing A/B). The arm is not a
+ * The presenter video: the video page's hero (round 4's arm `video`, round 3's `white_video`)
+ * and the new page's film card (`pain_point`). The arm is not a
  * param: it rides on every event as the `landing_variant` super-property, so these
  * say only what the video did. A tap on play is counted at once (`hero_video_tap`, the
  * click-through, since 29.10); a play when frames start, so a start that fails is an
