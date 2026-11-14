@@ -103,7 +103,7 @@ function mapList(parts: MapPart[], freeTag: string | null, lockSrc: string): str
 }
 
 export interface MapLegend {
-  /** The tag on the rows opened in full ("FREE", or the price before it is paid). */
+  /** The tag on the rows opened in full: the price before it is paid, "IN FULL" after, "FREE" when gifted. */
   freeTag: string;
   freeLine: string;
   featuredLine: string;
