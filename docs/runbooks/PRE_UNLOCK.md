@@ -78,7 +78,7 @@ reasons and reviews.
   guarantee and the emails are the same in both (Mark's answers 1, 2, 4 and 5).
 - **Reading it:** `experiment_exposure` with `experiment: gate_reveal_2026_11`, `surface: gate`,
   in both halves, once per gate view; `utm_tracker.gate_reveal_arm` on submissions made while it
-  runs (recomputable from `session_id`). Count from the day the switch went on, leave out
+  runs (the same arm comes back from `session_id`). Count from the day the switch went on, leave out
   readers who paid before the survey, and judge on EUR 1.99 sales per gate view.
 - **Where the board and today differ, the page says today's:** a 14-day guarantee (the board's 7),
   "3x full chapters" (the board's 4×), and the credit "toward your Full Report" (the board's
