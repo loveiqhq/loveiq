@@ -140,7 +140,7 @@ test.describe("Landing arm B (round 4) — the pain-point page", () => {
       ["Terms", "/terms-and-conditions"],
       ["Imprint", "/imprint"],
       ["Medical disclaimer", "/medical-disclaimer"],
-    ]) {
+    ] as const) {
       await expect(footer.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);
     }
   });
