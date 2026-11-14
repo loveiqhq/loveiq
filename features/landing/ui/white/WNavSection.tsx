@@ -260,7 +260,10 @@ const WNavSection: FC<WNavSectionProps> = ({
               }}
             >
               <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} priority />
-              <LoveIQWordmark className="text-xl" loveClassName="text-gray-900" />
+              <LoveIQWordmark
+                className="text-xl"
+                loveClassName={painpoint ? "text-[#161021]" : "text-gray-900"}
+              />
             </Link>
 
             {/* Center links (desktop) */}
