@@ -3,9 +3,26 @@
  * phone 390). Desktop values apply from lg; below lg the phone board's.
  */
 
+/**
+ * The board's root type: 16px on a 25.6px line in #161021, which every line without its
+ * own height inherits (the hero's button and scale labels among them). Only the page's own
+ * sections take it; the live sections it reuses keep the site's relative 1.5 line.
+ */
+export const PP_TYPE = "text-[16px] leading-[25.6px] text-[#161021]";
+
 /** Section headings: Lora 500, 32px on a 1.2 line on a phone, 46px on 1.18 from lg. */
 export const PP_H2 =
   "m-0 font-serif text-[32px] font-medium leading-[1.2] tracking-[-0.01em] text-[#161021] [text-wrap:balance] lg:text-[46px] lg:leading-[1.18]";
+
+/** The board's headings on the live sections it reuses (the research one adds a balanced wrap). */
+export const PP_REUSED_H2 =
+  "font-serif text-[32px] font-medium leading-[1.2] tracking-[-0.01em] text-[#161021] lg:text-[46px] lg:leading-[1.18]";
+
+/**
+ * The board's container on those sections: min(1200px, 100% - 48px) at every width, where
+ * the site's .content-shell is 100% - 2.5rem (8px wider on a phone, the same from 1248px).
+ */
+export const PP_REUSED_SHELL = "mx-auto w-[calc(100%-48px)] max-w-[1200px]";
 
 /** The brand gradient as text (the board's highlighted words and numbers). */
 export const PP_ACCENT =
