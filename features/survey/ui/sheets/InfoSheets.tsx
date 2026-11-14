@@ -17,7 +17,16 @@ import {
 } from "@shared/ui/trustpilot/config";
 import { trustpilotLabel } from "@shared/ui/trustpilot/label";
 import SurveySheetShell, { SheetGrabber, type SheetDismissVia } from "./SurveySheetShell";
-import { CountUpPercent, delay, GradientText, IconTile, KeepGoingButton, order } from "./parts";
+import {
+  COUNT_AT_MS,
+  COUNT_MS,
+  CountUpPercent,
+  delay,
+  GradientText,
+  IconTile,
+  KeepGoingButton,
+  order,
+} from "./parts";
 
 /** What the engine gives every information sheet. */
 export interface InfoSheetHandlers {
@@ -94,8 +103,12 @@ const FlaskIcon: FC = () => (
 
 /**
  * Sheet 1, after 02004: one message for every reader (Mark's board), the share counting up
- * slowly (Mark's "the 37% counting up") and "respond" turning to the gradient.
+ * slowly (Mark's "the 37% counting up") and "respond" turning to the gradient. The share it
+ * is set against counts up too, at the same speed, starting once the first is halfway
+ * (Mark's second review, 13 Nov: "after the 36% is half way or fully done").
  */
+const CONTRAST_AT_MS = COUNT_AT_MS + COUNT_MS / 2;
+
 export const ScienceSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, ...handlers }) => {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
@@ -126,7 +139,7 @@ export const ScienceSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, 
       <p className="sheet-in font-serif text-[19px] leading-[26px] text-[#161021]" style={order(1)}>
         <CountUpPercent value={v.share} />
         {v.statText}
-        <GradientText>{`${v.contrastShare}%`}</GradientText>
+        <CountUpPercent value={v.contrastShare} at={CONTRAST_AT_MS} />
         {v.contrastText}
       </p>
     </InfoSheetFrame>
@@ -269,7 +282,12 @@ export const TrustpilotSheet: FC<InfoSheetHandlers & { open: boolean }> = ({
   );
 };
 
-/** Sheet 3, before 01005: an expert's words, the phrase that matters turning to the gradient. */
+/**
+ * Sheet 3, before 01005: an expert's words, the phrase that matters turning to the gradient.
+ * Mark's second review (13 Nov): "no need for an animation of the image… make the entire card
+ * slide up slower". Nothing inside moves; the card arrives as one piece, more slowly
+ * (sheets-motion.css), and the phrase turns once it has landed.
+ */
 export const ExpertSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, ...handlers }) => {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
@@ -285,11 +303,10 @@ export const ExpertSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
       <div className="flex flex-col gap-[14px]">
         <div className="flex items-center gap-[14px]">
           <div
-            className="sheet-settle h-16 w-16 flex-none rounded-full border-[2.5px] border-solid border-transparent p-[3px]"
+            className="h-16 w-16 flex-none rounded-full border-[2.5px] border-solid border-transparent p-[3px]"
             style={{
               background:
                 "linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(135deg, #fe6839 0%, #bf66d9 50%, #958ef6 100%) border-box",
-              ...delay(120),
             }}
           >
             <Image
@@ -305,27 +322,20 @@ export const ExpertSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
               id={titleId}
               ref={headingRef}
               tabIndex={-1}
-              className={`sheet-in text-[15px] font-bold leading-5 text-[#161021] ${HEADING_FOCUS}`}
-              style={order(1)}
+              className={`text-[15px] font-bold leading-5 text-[#161021] ${HEADING_FOCUS}`}
             >
               {copy.name}
             </h2>
-            <p className="sheet-in text-[13px] leading-[18px] text-[#4a4558]" style={order(1.8)}>
-              {copy.discipline}
-            </p>
-            <p className="sheet-in text-[12px] leading-4 text-[#6b6678]" style={order(2.6)}>
-              {copy.affiliation}
-            </p>
+            <p className="text-[13px] leading-[18px] text-[#4a4558]">{copy.discipline}</p>
+            <p className="text-[12px] leading-4 text-[#6b6678]">{copy.affiliation}</p>
           </div>
         </div>
-        <blockquote
-          className="sheet-in pl-[14px] font-serif text-[18px] leading-[26px] text-[#161021]"
-          style={order(2.6)}
-        >
+        <blockquote className="pl-[14px] font-serif text-[18px] leading-[26px] text-[#161021]">
           {/* No rule beside the quote (Mark's review, 12 Nov); the board keeps its 14px indent. */}
           {"“"}
           {copy.quoteLead}
-          <GradientText inkAt={500}>{copy.quoteEmphasis}</GradientText>
+          {/* Once the card has landed (0.75s, sheets-motion.css). */}
+          <GradientText inkAt={800}>{copy.quoteEmphasis}</GradientText>
           {copy.quoteEnd}
           {"”"}
         </blockquote>
@@ -519,8 +529,10 @@ const DesireCover: FC = () => {
 
 /**
  * Sheet 5, after 16005: a finding from the State of Desire study and the report. Its box
- * starts unticked (a ticked box is not consent: GDPR recital 32) and records nothing yet;
- * Keep going only says whether it was ticked, to PostHog. Prices never move.
+ * starts unticked (a ticked box is not consent: GDPR recital 32). Keep going says whether it
+ * was ticked, to PostHog, and a tick is kept for the run and sent with the answers, whose
+ * #incoming-surveys message says who asked for the study (Mark, 13 Nov: "just record the
+ * tick for now"; he sends it by hand). Prices never move.
  */
 export const DesireSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, ...handlers }) => {
   const titleId = useId();

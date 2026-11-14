@@ -287,12 +287,20 @@ with a "Keep going" that carries on. The rules are in
   switch; production ignores it. A reader who paid before the survey never sees a sheet with a
   price (Halfway, State of Desire, the map). The Trustpilot sheet needs the site's Trustpilot
   switch and numbers, or it is skipped.
-- **Before production.** All six stay off until the C13 check-in (2026-11-20), since they land
-  at different points in its two orders. Halfway and the map describe the €1.99 change still to
-  come (the Core Archetype free), so they wait for it. The State of Desire tick box records
-  nothing yet: what it promises waits on the report's delivery and the €5 code, and keeping the
-  tick needs its own consent, written up as a new activity. The expert's words need her written
-  agreement.
+- **Going live (Fatih, 2026-11-14).** Science, Trustpilot and State of Desire go on first: both
+  C13 orders meet them alike. The expert's sheet waits for the C13 check-in (2026-11-20): C13's
+  control order asks 01005 too early for it, so until then only one C13 half would see it.
+  Halfway and the map promise the Core Archetype free, which only Mark's new €1.99 page gives
+  (`docs/runbooks/PRE_UNLOCK.md`), so they need its switch on as well as their own, and then
+  open only for that page's half of his 50/50 (`REVEAL_ONLY_SHEETS`, `sheetsForRevealArm`; the
+  arm is the run's session id, `shared/experiments/gateRevealArm.ts`). A `?sheets=` preview
+  shows them to anyone; `?reveal=1` or `0` picks a half on dev and staging. The expert's words
+  need her written agreement.
+- **The State of Desire tick.** Mark, 13 Nov: "just record the tick for now"; he sends the study
+  by hand. A tick is kept for its run (`loveiq-survey-desire-tick`) and sent with the answers
+  (`stateOfDesireTicked`); the submission's #incoming-surveys message then says "State of
+  Desire: ticked (send the study)", and /admin has the address by submission. It is not a
+  database field yet: storing it there, with its consent wording, is a migration still to do.
 - **The numbers.** Sheet 1's shares (respond 36%, start 12%, naturally 44%, plan 6%) and sheet
   5's 15% are measured on finished surveys without the team's own runs, rounded down; the
   queries sit beside the copy. The design's "Most people love to respond" was not true (most
@@ -319,6 +327,12 @@ goal-gradient and endowed-progress studies of 2006, web.dev on animation cost):
   settled by about 1.7s, and no single animation runs longer than 450ms. Keep going works from
   the first frame; the only guard is the 400ms that keeps a double tap on Next from skipping a
   sheet unseen.
+- His second review (13 Nov) asked for slower again on Trustpilot, Halfway and the map: those
+  three run at `--sheet-tempo: 1.5`, every duration and delay multiplied, so their order and
+  spacing hold (no animation past 700ms; the slowest sheet settles by about 2.2s). Science's
+  12% now counts up too, at the same speed, once the 36% is halfway. The expert's card lost its
+  own entrance ("no need for an animation of the image"): the whole card slides up over 0.75s
+  instead of 0.45s, and its phrase turns once it has landed. State of Desire stays as it was.
 - Only transform and opacity move, plus a check's stroke and one phrase's color. Nothing loops,
   nothing overshoots, no confetti, no countdowns, and nothing moves on a price or a lock.
   Trustpilot's stars keep their shape, colors and fill (its brand rules): they only arrive.

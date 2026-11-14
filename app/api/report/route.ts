@@ -23,7 +23,7 @@ import {
 } from "@features/report/server/initialGateState";
 import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
 import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
-import { buildGateReveal, isGateRevealEnabled } from "@features/report/server/gateReveal";
+import { buildGateReveal, gateRevealArmFor } from "@features/report/server/gateReveal";
 import {
   buildInitialUnlockGatePayload,
   needsInitialUnlockGate,
@@ -555,6 +555,10 @@ export async function GET(request: Request) {
           accessLookupFailed: !accessLookupOk,
         })
       ) {
+        // Mark's redesigned page (gateReveal.ts), the Core Archetype on the gate: behind its own
+        // switch, and then for one half of his 50/50, by the session the survey ran under
+        // (gateRevealArm.ts), the arm the survey's sheets and the wizard already followed.
+        const revealArm = await gateRevealArmFor(submission.session_id);
         const gatePayload = buildInitialUnlockGatePayload({
           reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
           submissionId: submission.id,
@@ -563,14 +567,14 @@ export async function GET(request: Request) {
               submission.session_id ? await readSurveyQuestionTimes(submission.session_id) : null
             )
           ),
-          // Mark's redesigned page (gateReveal.ts): the Core Archetype on the gate, only behind
-          // its own switch, which waits for the change that makes the archetype free.
-          reveal: (await isGateRevealEnabled())
-            ? buildGateReveal(
-                scoring.v5_primary_archetype || scoring.primary_archetype,
-                scoring.v5_percentages || scoring.percentages
-              )
-            : null,
+          reveal:
+            revealArm === "reveal"
+              ? buildGateReveal(
+                  scoring.v5_primary_archetype || scoring.primary_archetype,
+                  scoring.v5_percentages || scoring.percentages
+                )
+              : null,
+          revealArm,
         });
         // Tour first (sync 30.10): a reader who has never met the gate gets their report under
         // the guided tour first, with who they are left out (tourFirstReport.ts), and the

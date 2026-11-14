@@ -113,6 +113,7 @@ import {
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { flushAfterResponse } from "@shared/http/after-response";
+import { assignGateRevealArm } from "@shared/experiments/gateRevealArm";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000", query = "") {
   return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}${query}`);
@@ -1158,15 +1159,53 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     });
   });
 
-  it("adds the reader's archetype and its cards when report_gate_archetype_reveal is on", async () => {
+  /** A survey session id in the given half of Mark's 50/50 (gateRevealArm.ts). */
+  const sessionIn = (arm: "control" | "reveal") => {
+    for (let i = 0; ; i += 1) {
+      const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+      if (assignGateRevealArm(id) === arm) return id;
+    }
+  };
+  const submittedUnder = (sessionId: string) =>
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/report_access_token?token=eq.")) {
+        return rows([{ survey_submission_id: 55 }]);
+      }
+      if (url.includes("/rest/v1/survey_submission?")) {
+        return rows([{ ...SUBMISSION, session_id: sessionId }]);
+      }
+      if (url.includes("/rest/v1/scoring_result?")) return rows([SCORING]);
+      return rows([]);
+    });
+  type RevealBody = {
+    reveal?: { archetype: string; aspects: Array<{ locked: boolean }> };
+    revealArm?: string;
+  };
+
+  // Mark, 13 Nov: his page runs as a 50/50 test, decided by the survey's session.
+  it("shows the new page's half its archetype and cards when report_gate_archetype_reveal is on", async () => {
     mockIsFeatureEnabled.mockResolvedValue(true);
-    const res = await meetGet();
-    const body = (await res.json()) as {
-      reveal?: { archetype: string; aspects: Array<{ locked: boolean }> };
-    };
+    submittedUnder(sessionIn("reveal"));
+    const body = (await (await meetGet()).json()) as RevealBody;
     expect(body.reveal?.archetype).toBe(SCORING.v5_primary_archetype || SCORING.primary_archetype);
     expect(body.reveal?.aspects.map((a) => a.locked)).toEqual([false, false, true, true, true]);
+    expect(body.revealArm).toBe("reveal");
     expect(mockIsFeatureEnabled).toHaveBeenCalledWith("report_gate_archetype_reveal", false);
+  });
+
+  it("keeps today's page for the other half, and tells the gate which half it is", async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    submittedUnder(sessionIn("control"));
+    const body = (await (await meetGet()).json()) as RevealBody;
+    expect(body.reveal).toBeUndefined();
+    expect(body.revealArm).toBe("control");
+  });
+
+  it("keeps today's page for a submission with no session, in the control half", async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    const body = (await (await meetGet()).json()) as RevealBody;
+    expect(body.reveal).toBeUndefined();
+    expect(body.revealArm).toBe("control");
   });
 
   it("tells the gate the minutes the reader spent on the questions, not the survey's clock", async () => {

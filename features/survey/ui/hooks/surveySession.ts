@@ -29,6 +29,7 @@ export const PAID_WIZARD_KEY = "loveiq-paid-wizard";
  * the pre-report map still names it after a reload during the wizard (Eman, 27.10).
  */
 export const GATE_PRICE_KEY = "loveiq-gate-price";
+export const GATE_REVEAL_KEY = "loveiq-gate-reveal";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -172,6 +173,7 @@ export function getSessionId(): string {
 let inMemoryCompleted: string | null = null;
 let inMemoryPaidWizard: PayToStartWizard | null = null;
 let inMemoryGatePrice: number | null = null;
+let inMemoryGateReveal = false;
 
 /** Drop the draft's saved id (the run it belonged to is over). */
 export function forgetSessionMirror(): void {
@@ -398,11 +400,13 @@ export function forgetCompletedReport(): void {
   inMemorySessionId = null;
   inMemoryPaidWizard = null;
   inMemoryGatePrice = null;
+  inMemoryGateReveal = false;
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
     sessionStorage.removeItem(PAID_WIZARD_KEY);
     sessionStorage.removeItem(GATE_PRICE_KEY);
+    sessionStorage.removeItem(GATE_REVEAL_KEY);
     forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
@@ -424,6 +428,30 @@ export function rememberPaidWizard(wizard: PayToStartWizard): void {
 function readPaidWizard(value: string | null): PayToStartWizard | null {
   if (value === "pay_to_start" || value === "pay_to_start_initial") return value;
   return value === "1" ? "pay_to_start" : null;
+}
+
+/**
+ * Remember that this tab's finished run will meet Mark's new EUR 1.99 page (his 50/50,
+ * shared/experiments/gateRevealArm.ts), so the wizard's map names its offer after a reload too.
+ */
+export function rememberGateReveal(): void {
+  inMemoryGateReveal = true;
+  if (!canUseStorage()) return;
+  try {
+    sessionStorage.setItem(GATE_REVEAL_KEY, "1");
+  } catch {
+    /* kept in memory for this page load */
+  }
+}
+
+/** True when this tab's finished run will meet Mark's new EUR 1.99 page, else null. */
+export function gateRevealRemembered(): true | null {
+  if (!canUseStorage()) return inMemoryGateReveal ? true : null;
+  try {
+    return sessionStorage.getItem(GATE_REVEAL_KEY) === "1" || inMemoryGateReveal ? true : null;
+  } catch {
+    return inMemoryGateReveal ? true : null;
+  }
 }
 
 /** Remember that this tab's finished run will meet the EUR 1.99 gate, at this price. */

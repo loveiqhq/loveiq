@@ -51,12 +51,20 @@ import {
   rememberSheetShown,
   sheetAfterQuestion,
   sheetBeforeQuestion,
+  desireTickedFor,
+  rememberDesireTick,
+  sheetsForRevealArm,
   sheetsShownFor,
   surveySheetDef,
   type SheetContext,
   type SurveySheetCloseVia,
   type SurveySheetId,
 } from "@features/survey/surveySheets";
+import {
+  assignGateRevealArm,
+  resolveGateRevealOverride,
+  type GateRevealArm,
+} from "@shared/experiments/gateRevealArm";
 import {
   EMAIL_QUESTION_EXPERIMENT,
   EMAIL_QUESTION_WINNER,
@@ -74,6 +82,8 @@ import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
 import {
   completedReportToken,
   gatePriceRemembered,
+  gateRevealRemembered,
+  getSessionId,
   paidWizardRemembered,
 } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
@@ -104,6 +114,8 @@ interface SurveyEngineProps {
    * switches, or a staging preview (app/survey/page.tsx). None by default.
    */
   sheets?: readonly SurveySheetId[];
+  /** Of those, the ones a staging preview named: no half of Mark's 50/50 holds them back. */
+  previewedSheets?: readonly SurveySheetId[];
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -157,12 +169,27 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   onStartOver,
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
+  previewedSheets = NO_SHEETS,
 }) => {
+  // Mark's 50/50 (shared/experiments/gateRevealArm.ts): the halfway sheet and the report map
+  // promise the archetype for free, so they open only for the half whose EUR 1.99 page shows
+  // it. The arm comes from this run's session id, the one the report's server reads off the
+  // submission when it builds the gate, so both agree; `?reveal=1` or `0` picks one on staging.
+  // Read once, in the browser, as the run's session id itself is (surveySession.ts).
+  const [revealArm] = useState<GateRevealArm>(() =>
+    typeof window === "undefined"
+      ? "control"
+      : (resolveGateRevealOverride(new URLSearchParams(window.location.search).get("reveal")) ??
+        assignGateRevealArm(getSessionId()))
+  );
   // A sheet that would draw nothing is never opened, or it would hold the move with nothing
   // on screen: the Trustpilot sheet needs the site's Trustpilot switch and its numbers.
   const sheets = useMemo(
-    () => sheetsOffered.filter((id) => id !== "trustpilot" || trustpilotSheetReady()),
-    [sheetsOffered]
+    () =>
+      sheetsForRevealArm(sheetsOffered, revealArm, previewedSheets).filter(
+        (id) => id !== "trustpilot" || trustpilotSheetReady()
+      ),
+    [sheetsOffered, revealArm, previewedSheets]
   );
   const {
     answers,
@@ -185,6 +212,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     submissionId,
     paidWizard,
     gatePriceCents,
+    gateReveal,
     status: submitStatus,
     errorKind: submitErrorKind,
   } = useSubmitSurvey();
@@ -533,9 +561,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           ...(extra?.ticked === undefined ? {} : { ticked: extra.ticked }),
         }
       );
+      // Mark, 13 Nov: record the State of Desire tick. Kept for this run and sent with the
+      // answers, whose message in #incoming-surveys says who asked for the study.
+      if (id === "desire" && extra?.ticked !== undefined) {
+        rememberDesireTick(startedAt, extra.ticked);
+      }
       return id;
     },
-    []
+    [startedAt]
   );
 
   // Navigation
@@ -665,11 +698,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       const latest = getLatestAnswers();
       // A Yes given in the sheet is filed under the sheet's consent version (server.ts).
       const viaSheet = optInViaSheet.current && isOptInYes(latest[OPT_IN_QID]);
+      const desireTicked = desireTickedFor(startedAt);
       submitSurvey(
         latest,
         startedAt,
         utmTracker,
-        viaSheet ? { marketingOptInVia: "sheet" } : undefined
+        viaSheet || desireTicked
+          ? {
+              ...(viaSheet ? { marketingOptInVia: "sheet" as const } : {}),
+              ...(desireTicked ? { stateOfDesireTicked: true } : {}),
+            }
+          : undefined
       );
       goTo(totalQuestions); // one past the end → triggers completion
       // Collapse the question entries back onto their base, so Back after submitting
@@ -1177,6 +1216,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           variant={paidWizard ?? paidWizardRemembered() ?? "standard"}
           // The EUR 1.99 gate will stop this reader: the map names its price.
           gatePriceCents={gatePriceCents ?? gatePriceRemembered()}
+          // Mark's new page will show their archetype: the map names that offer.
+          mapOffer={(gateReveal ?? gateRevealRemembered()) ? "light" : "today"}
           onComplete={() => onComplete(reportToken ?? completedReportToken())}
         />
       );

@@ -6,7 +6,7 @@ import { readPrepaidToken, type SurveyJourney } from "@features/pay-to-start/log
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
-import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
+import { surveySheetsOffer } from "@features/survey/server/sheetSwitches";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -92,8 +92,8 @@ export default async function Page({ searchParams }: SurveyRouteProps = {}) {
     payToStartJourney(headersList.get("cookie")),
     // The sheets between questions: their switches, or a staging preview (?sheets=all).
     (searchParams ?? Promise.resolve({ sheets: undefined })).then((params) =>
-      surveySheetsForVisit(params.sheets)
+      surveySheetsOffer(params.sheets)
     ),
   ]);
-  return <SurveyPage journey={journey} sheets={sheets} />;
+  return <SurveyPage journey={journey} sheets={sheets.sheets} previewedSheets={sheets.previewed} />;
 }

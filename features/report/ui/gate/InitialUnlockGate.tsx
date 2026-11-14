@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { setReportSubmissionContext, trackInitialGateViewed } from "@features/analytics/client";
+import {
+  setReportSubmissionContext,
+  trackExperimentExposure,
+  trackInitialGateViewed,
+} from "@features/analytics/client";
 import ScrollAnimator from "@features/landing/ui/ScrollAnimator";
+import { GATE_REVEAL_EXPERIMENT, isGateRevealArm } from "@shared/experiments/gateRevealArm";
 import { isGateReveal } from "@features/report/logic/gateReveal";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
 import { GateChapterMap } from "./GateChapterMap";
@@ -61,13 +66,23 @@ export default function InitialUnlockGate({
     return () => setReportSubmissionContext(null);
   }, [gate.submissionId]);
 
-  // Seen once per page.
+  // Seen once per page. While Mark's 50/50 runs (shared/experiments/gateRevealArm.ts), the
+  // reader's half is counted here too, in both halves, so its readout compares readers who
+  // reached the gate (the pay pop-up's pattern, popupArm.ts).
   const viewedRef = useRef(false);
+  const revealArm = isGateRevealArm(gate.revealArm) ? gate.revealArm : null;
   useEffect(() => {
     if (viewedRef.current) return;
     viewedRef.current = true;
     trackInitialGateViewed({ submission_id: gate.submissionId });
-  }, [gate.submissionId]);
+    if (revealArm) {
+      trackExperimentExposure({
+        experiment: GATE_REVEAL_EXPERIMENT,
+        variant: revealArm,
+        surface: "gate",
+      });
+    }
+  }, [gate.submissionId, revealArm]);
 
   // Mark's redesigned page (logic/gateReveal.ts), when its switch sent the archetype along.
   const reveal = isGateReveal(gate.reveal) ? gate.reveal : null;

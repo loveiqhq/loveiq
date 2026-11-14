@@ -16,6 +16,7 @@ import {
   getSessionId,
   rememberCompletedReport,
   rememberGatePrice,
+  rememberGateReveal,
   rememberPaidWizard,
   setReportSessionId,
 } from "./surveySession";
@@ -161,6 +162,8 @@ export function useSubmitSurvey() {
   const [paidWizard, setPaidWizard] = useState<PayToStartWizard | null>(null);
   /** The EUR 1.99 gate will stop this reader: its price, which the pre-report map names. */
   const [gatePriceCents, setGatePriceCents] = useState<number | null>(null);
+  /** The gate will be Mark's new page (his 50/50): the pre-report map names its offer. */
+  const [gateReveal, setGateReveal] = useState<true | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -229,6 +232,7 @@ export function useSubmitSurvey() {
             ...(Object.keys(optionOrder).length > 0 ? { optionOrder } : {}),
             ...(landingPath ? { landingPath } : {}),
             ...(payload.marketingOptInVia ? { marketingOptInVia: payload.marketingOptInVia } : {}),
+            ...(payload.stateOfDesireTicked ? { stateOfDesireTicked: true } : {}),
           }),
           ...(controller ? { signal: controller.signal } : {}),
         });
@@ -244,6 +248,7 @@ export function useSubmitSurvey() {
               unlockPending?: boolean;
               wizard?: string;
               initialGatePriceCents?: unknown;
+              initialGateReveal?: unknown;
             };
             if (
               json.journey === "pay_to_start" &&
@@ -260,6 +265,10 @@ export function useSubmitSurvey() {
             if (typeof gatePrice === "number" && Number.isSafeInteger(gatePrice) && gatePrice > 0) {
               setGatePriceCents(gatePrice);
               rememberGatePrice(gatePrice);
+            }
+            if (json.initialGateReveal === true) {
+              setGateReveal(true);
+              rememberGateReveal();
             }
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
@@ -333,7 +342,7 @@ export function useSubmitSurvey() {
       answers: Record<string, AnswerValue>,
       startedAt: string,
       utmTracker?: string | null,
-      options?: { marketingOptInVia?: MarketingOptInVia }
+      options?: { marketingOptInVia?: MarketingOptInVia; stateOfDesireTicked?: boolean }
     ) => {
       if (status === "submitting") return;
 
@@ -355,6 +364,7 @@ export function useSubmitSurvey() {
         currentIndex: surveyQuestions.length,
         savedAt: new Date().toISOString(),
         ...(options?.marketingOptInVia ? { marketingOptInVia: options.marketingOptInVia } : {}),
+        ...(options?.stateOfDesireTicked ? { stateOfDesireTicked: true } : {}),
       };
 
       syncPendingCompletion(payload);
@@ -388,6 +398,7 @@ export function useSubmitSurvey() {
     submissionId,
     paidWizard,
     gatePriceCents,
+    gateReveal,
     status,
     errorKind,
   };

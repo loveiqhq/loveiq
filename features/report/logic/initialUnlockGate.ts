@@ -1,6 +1,7 @@
 import { getOfferDefinition } from "@features/pay-to-start/logic/offer";
 import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnlock";
 import type { GateReveal } from "@features/report/logic/gateReveal";
+import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
 
 /**
  * The forced EUR 1.99 gate after the survey (Notion "RFD > Pre-Unlock", Figma Report-3.0
@@ -82,10 +83,15 @@ export interface InitialUnlockGatePayload {
   surveyMinutes?: number | null;
   /**
    * Mark's redesigned page (gateReveal.ts): the Core Archetype, its match and five aspect
-   * cards. Only behind `report_gate_archetype_reveal` (or the preview's `&reveal=1`); absent,
-   * the gate draws as it always has.
+   * cards. Only behind `report_gate_archetype_reveal` (or the preview's `&reveal=1`), and only
+   * for the reader's half of his 50/50; absent, the gate draws as it always has.
    */
   reveal?: GateReveal | null;
+  /**
+   * Which half of that 50/50 the reader is in (shared/experiments/gateRevealArm.ts), while the
+   * switch is on: the gate counts its exposure in both halves. Absent while no test runs.
+   */
+  revealArm?: GateRevealArm | null;
 }
 
 /** Below this a run is a skim, above it the survey was left open: neither is time "invested". */
@@ -126,11 +132,13 @@ export function buildInitialUnlockGatePayload({
   submissionId,
   surveyMinutes = null,
   reveal = null,
+  revealArm = null,
 }: {
   reportToken: string | null;
   submissionId: number | null;
   surveyMinutes?: number | null;
   reveal?: GateReveal | null;
+  revealArm?: GateRevealArm | null;
 }): InitialUnlockGatePayload {
   return {
     gate: "initial_unlock",
@@ -143,6 +151,7 @@ export function buildInitialUnlockGatePayload({
     viewMode: "owner",
     surveyMinutes,
     ...(reveal ? { reveal } : {}),
+    ...(revealArm ? { revealArm } : {}),
   };
 }
 
