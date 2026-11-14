@@ -24,9 +24,10 @@
  * would have kept every returning visitor in arm A and only new visitors could
  * reach B. New values re-roll those cookies, and keep round 2's rows from pooling
  * into round 3's (Pricing 3.0 took new letters, A3/B3, for the same reason).
- * Its readouts restarted on 2026-10-14, when the phone hero was condensed so the slot is
- * on the first screen and the page took the 12.10 copy (both arms, same arms and
- * cookies). Closed at the 2026-11-10 sync: the video stays.
+ * Its readouts restarted on LANDING_HERO_RESTART_DAY, when the phone hero was condensed so
+ * the slot is on the first screen and the page took the 12.10 copy (both arms, same arms
+ * and cookies). Closed at the 2026-11-10 sync: the video stays (registry #6 ends on
+ * LANDING_HERO_LAST_DAY).
  *
  * ROUND 4 (from the 2026-11-16 release; Marcus, #all-loveiq 2026-11-12, "it will replace
  * the version without the video and run against the current video version 50/50"):
@@ -75,8 +76,21 @@ export const LANDING_VARIANT_EXPERIMENT = "landing-pain-point-ab";
 export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-07";
 
 /**
+ * Round 3's restart, registry #6's first day: the first whole Berlin day after the phone hero
+ * was condensed (PR #573, live 2026-10-13 19:05 Berlin; Figma Report-3.0 `1604:5505`). The
+ * readouts that show round 3 count its second run from here.
+ */
+export const LANDING_HERO_RESTART_DAY = "2026-10-14";
+
+/**
+ * Round 3's last day in the registry (#6 runs 2026-10-14 to 2026-11-11). The 2026-11-10 sync
+ * kept the video; its arms were still served until round 4's release, outside any test.
+ */
+export const LANDING_HERO_LAST_DAY = "2026-11-11";
+
+/**
  * The first whole (Berlin) reporting day of round 4, where its readouts start. Round 3's
- * restart day was 2026-10-14 (the condensed phone hero, Figma Report-3.0 `1604:5505`).
+ * restart is LANDING_HERO_RESTART_DAY.
  * The axis trend and the conversion digest's landing blocks and verdict start here, and
  * the /admin readout at LANDING_TEST_START_AT. The brain's experiments tool reads round 4
  * (registry #10) from its own start date. Set for a production deploy on Mon 2026-11-16:

@@ -663,6 +663,14 @@ export interface HeroVideo {
  * whose start failed. People, not visits: what share of those who see the video tap play is
  * the question it answers. Anyone who ever forced a version is left out with the team.
  */
+/**
+ * The landing arms whose hero is the presenter video: #6's version B and #10's version A, the
+ * same page. Round 4's new page plays the same film in a card of its own, with the same events,
+ * so the block reads the video page alone, as it did in round 3 (every hero video event from
+ * 13 Oct to 14 Nov 2026 carries white_video: checked in PostHog on 14 Nov).
+ */
+const VIDEO_PAGE_ARMS = ["white_video", "video"] as const;
+
 export async function fetchHeroVideo(from: string, to: string): Promise<PostHogResult<HeroVideo>> {
   const { since, until } = windowOf({ from, to });
   const q = `
@@ -684,6 +692,7 @@ export async function fetchHeroVideo(from: string, to: string): Promise<PostHogR
     WHERE event IN ('cta_seen', 'hero_video_tap', 'hero_video_play', 'hero_video_progress',
                     'hero_video_complete', 'hero_video_error')
       AND properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+      AND properties.landing_variant IN (${VIDEO_PAGE_ARMS.map((a) => `'${a}'`).join(", ")})
       AND ${NOT_FORCED}${await notStaff()}
     LIMIT 1`;
   const r = await rows(q, 1);

@@ -12,7 +12,11 @@
  */
 import type { AdCost } from "@features/brain/server/ingest/analytics";
 import { twoProportionSignal } from "@features/admin/server/statistics";
-import { LANDING_TEST_START_DAY } from "@shared/experiments/landingVariant";
+import {
+  LANDING_HERO_LAST_DAY,
+  LANDING_HERO_RESTART_DAY,
+  LANDING_TEST_START_DAY,
+} from "@shared/experiments/landingVariant";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
 import { countryCodesByTier } from "@features/pricing/logic/reportPricing";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -342,12 +346,13 @@ const CHANNEL_ROWS: Array<{ source: Source; name: string; sub: string }> = [
 ];
 
 /**
- * The landing test's two live versions as the design names them (the 21 Oct 2026 call: the
- * labels didn't match); retired versions keep the shared labels' names.
+ * The landing test's two live versions as the AP pages name them (the 21 Oct 2026 call: the
+ * labels didn't match): round 4's video page and Marcus's pain-point page. Retired versions,
+ * round 3's question card and presenter video among them, keep the shared labels' names.
  */
 const LIVE_LANDING_NAMES = new Map([
-  ["white_card", "Hero · question card"],
-  ["white_video", "Hero · presenter video"],
+  ["video", "Video page"],
+  ["pain_point", "Pain-point page"],
 ]);
 
 /** The cohorts' rows, in the design's order: paid, organic search, owned, Direct, then the rest. */
@@ -1843,18 +1848,19 @@ function buildExperiments(
   const payersOf = (xs: SubFact[]) => xs.filter((x) => x.paidAt).length;
   const revOf = (xs: SubFact[]) => round2(xs.reduce((n, x) => n + x.revenue, 0));
 
-  // #6 · the landing hero: visits per arm are counted, starts per visit decide it. Visits carry
+  // The landing tests: visits per arm are counted, starts per visit decide them. Visits carry
   // no source, device, tier or visitor history: under such a filter the visitor-based figures
-  // and the test are blank, rather than filtered starts over every visit.
-  {
-    const w = win(LANDING_TEST_START_DAY);
+  // and the test are blank, rather than filtered starts over every visit. An ended test reads
+  // its own days, written as the Payment page writes one ("May – Aug 2026 · ended").
+  const landingTest = (
+    test: string,
+    armsOf: ReadonlyArray<readonly [arm: string, name: string]>,
+    start: string,
+    ended?: { lastDay: string; why: string }
+  ) => {
+    const w = win(start, ended?.lastDay);
     const vB = visitsBlocked(scope, w?.from ?? facts.from);
-    const test = "Landing hero";
-    const note = liveSince(LANDING_TEST_START_DAY);
-    const armsOf = [
-      ["white_card", "Question card"],
-      ["white_video", "Presenter video"],
-    ] as const;
+    const note = ended ? `${rangeLabel(start, ended.lastDay)} · ended` : liveSince(start);
     const rows = armsOf.map(([arm, name]) => {
       const visitors = w && !vB ? visitTotal(facts, w.from, w.to, scope.source, arm) : 0;
       const starts =
@@ -1873,7 +1879,9 @@ function buildExperiments(
             chance: null,
             confidence: null,
             why: !w
-              ? "Not running in this range"
+              ? ended && facts.from > ended.lastDay
+                ? ended.why
+                : "Not running in this range"
               : (vB ?? "Starts per version aren't complete for this range"),
           };
     for (const [i, r] of rows.entries()) {
@@ -1890,9 +1898,32 @@ function buildExperiments(
         revPerVisitor: w && !vB ? ratio(revOf(r.xs), r.visitors) : null,
         metric: "Start CVR",
         ...(i === 0 ? { lift: null, chance: null, confidence: null, why: null } : t),
+        ...(ended ? { ended: true } : {}),
       });
     }
-  }
+  };
+  // #10 · round 4: the video page (A) against Marcus's pain-point page (B).
+  landingTest(
+    "New landing page",
+    [
+      ["video", "Video page"],
+      ["pain_point", "Pain-point page"],
+    ],
+    LANDING_TEST_START_DAY
+  );
+  // #6 · round 3, the landing hero: ended at the 10 Nov 2026 sync, which kept the video.
+  landingTest(
+    "Landing hero",
+    [
+      ["white_card", "Question card"],
+      ["white_video", "Presenter video"],
+    ],
+    LANDING_HERO_RESTART_DAY,
+    {
+      lastDay: LANDING_HERO_LAST_DAY,
+      why: "Ended on 11 Nov 2026: the video stays, as #10's version A",
+    }
+  );
 
   // #5 · Pricing 3.0: the arm comes with the report, so it starts at the submission. Its
   // readers are those who finished from the restart (PRICE_TEST_START_AT, 8 Oct 17:23 Berlin),

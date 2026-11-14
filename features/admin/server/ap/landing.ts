@@ -7,6 +7,8 @@
  */
 import { addDays } from "./days";
 import {
+  LANDING_HERO_LAST_DAY,
+  LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
@@ -64,16 +66,27 @@ export interface LandingTest {
 /**
  * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), named
  * as the design names them (Traffic board: "#6 · Landing hero"). The rebuild test (V1 vs V2,
- * Aug–Sep 2026) was taken off the page on the 21 Oct 2026 call.
+ * Aug–Sep 2026) was taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new
+ * page against the video page, under the number the registry gives it at its release.
  */
 export const LANDING_TESTS: LandingTest[] = [
+  {
+    key: "pain-point",
+    name: "#10 · New landing page",
+    code: "#10",
+    from: LANDING_TEST_START_DAY,
+    to: null,
+    outcome: "Running, read over up to 28 days.",
+    arms: ["video", "pain_point"],
+  },
   {
     key: "hero",
     name: "#6 · Landing hero",
     code: "#6",
-    from: LANDING_TEST_START_DAY,
-    to: null,
-    outcome: "Running (test #6 in the registry), read over up to 28 days.",
+    from: LANDING_HERO_RESTART_DAY,
+    to: LANDING_HERO_LAST_DAY,
+    winner: "white_video",
+    outcome: "Ended: the 10 Nov 2026 sync kept the presenter video, now version A of #10.",
     arms: ["white_card", "white_video"],
   },
   {
@@ -81,17 +94,20 @@ export const LANDING_TESTS: LandingTest[] = [
     name: "#6 · Landing hero · first run (7–13 Oct)",
     code: "#6 · run 1",
     from: LANDING_HERO_VIDEO_LAUNCH_DAY,
-    to: addDays(LANDING_TEST_START_DAY, -1),
-    outcome: `Run again from ${rangeLabel(LANDING_TEST_START_DAY, LANDING_TEST_START_DAY)}, when the video or question 1 moves onto a phone's first screen and both versions take the new copy.`,
+    to: addDays(LANDING_HERO_RESTART_DAY, -1),
+    outcome: `Run again from ${rangeLabel(LANDING_HERO_RESTART_DAY, LANDING_HERO_RESTART_DAY)}, when the video or question 1 moves onto a phone's first screen and both versions take the new copy.`,
     arms: ["white_card", "white_video"],
   },
 ];
 
 /**
- * The versions' names on this page, as the design writes them: arm A has question 1 in the hero,
- * arm B the presenter video. The Slack digest keeps its own names (attribution/server/labels.ts).
+ * The versions' names on this page, as the design writes them. In #10, A is the video page and
+ * B Marcus's pain-point page; in #6, A had question 1 in the hero and B the presenter video.
+ * The Slack digest keeps its own names (attribution/server/labels.ts).
  */
 const ARM_NAMES = new Map([
+  ["video", "Video page"],
+  ["pain_point", "Pain-point page"],
   ["white_card", "Question card"],
   ["white_video", "Presenter video"],
 ]);

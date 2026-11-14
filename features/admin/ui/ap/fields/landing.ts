@@ -7,6 +7,8 @@
  */
 import { addDays } from "@features/admin/server/ap/days";
 import {
+  LANDING_HERO_LAST_DAY,
+  LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
@@ -185,18 +187,23 @@ SELECT r.eur AS revenue, f.n AS finished_surveys,
   FROM (SELECT coalesce(sum(amount), 0) AS eur FROM sales) r,
        (SELECT count(*) AS n FROM finished WHERE day BETWEEN :from AND :to) f;`;
 
-const Q_ARMS = `-- Each version of the landing test per run, over the run's days inside the range (one table
--- row each). A is the question card (white_card), B the presenter video (white_video).
+const Q_ARMS = `-- Each version of each landing test run, over the run's days inside the range (one table
+-- row each). In #10, A is the video page (video) and B the pain-point page (pain_point); in #6,
+-- A the question card (white_card) and B the presenter video (white_video).
 WITH ${STAFF},
 ${TEAM_NETWORKS},
 ${STARTS},
 ${FINISHED},
 ${PAID},
-test_runs AS (             -- the test's runs and their days inside the range; the running one to today
-  SELECT run, greatest(r_from, :from) AS r_from, least(r_to, :to) AS r_to
-    FROM (VALUES ('run 2', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
-                 ('run 1', DATE '${LANDING_HERO_VIDEO_LAUNCH_DAY}', DATE '${addDays(LANDING_TEST_START_DAY, -1)}'))
-         AS t(run, r_from, r_to)
+test_runs AS (             -- each run's versions and days inside the range; the running one to today
+  SELECT run, version, greatest(r_from, :from) AS r_from, least(r_to, :to) AS r_to
+    FROM (VALUES ('#10', 'video', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
+                 ('#10', 'pain_point', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
+                 ('#6', 'white_card', DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
+                 ('#6', 'white_video', DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
+                 ('#6 run 1', 'white_card', DATE '${LANDING_HERO_VIDEO_LAUNCH_DAY}', DATE '${addDays(LANDING_HERO_RESTART_DAY, -1)}'),
+                 ('#6 run 1', 'white_video', DATE '${LANDING_HERO_VIDEO_LAUNCH_DAY}', DATE '${addDays(LANDING_HERO_RESTART_DAY, -1)}'))
+         AS t(run, version, r_from, r_to)
 ),
 day_visits AS (            -- our visit log: one row per browser per day, on any page
   SELECT day, landing_variant AS version
@@ -204,7 +211,7 @@ day_visits AS (            -- our visit log: one row per browser per day, on any
    WHERE event_type = 'unique_visitor' AND coalesce(landing_variant, '') <> 'pay_to_start'
      AND coalesce(lower(trim(utm_source)), '') NOT IN ${PROBES}
 )
-SELECT r.run, r.r_from AS first_day, r.r_to AS last_day, a.version,
+SELECT r.run, r.r_from AS first_day, r.r_to AS last_day, r.version,
        v.n AS visits,
        s.n AS survey_starts,
        round(100.0 * s.n / nullif(v.n, 0), 1) AS start_cvr_pct,
@@ -219,18 +226,17 @@ SELECT r.run, r.r_from AS first_day, r.r_to AS last_day, a.version,
        f.eur AS revenue,
        round(f.eur / nullif(v.n, 0), 3) AS eur_per_visit
   FROM test_runs r
- CROSS JOIN (VALUES ('white_card'), ('white_video')) a(version)
  CROSS JOIN LATERAL (SELECT count(*) AS n FROM day_visits
-                      WHERE version = a.version AND day BETWEEN r.r_from AND r.r_to) v
+                      WHERE version = r.version AND day BETWEEN r.r_from AND r.r_to) v
  CROSS JOIN LATERAL (SELECT count(*) AS n FROM starts
-                      WHERE version = a.version AND day BETWEEN r.r_from AND r.r_to) s
+                      WHERE version = r.version AND day BETWEEN r.r_from AND r.r_to) s
  CROSS JOIN LATERAL (SELECT count(*) AS n, count(*) FILTER (WHERE p.full_unlock) AS full_unlocks,
                             count(*) FILTER (WHERE p.pre_unlock) AS pre_unlocks,
                             coalesce(sum(p.eur), 0) AS eur
                        FROM finished x LEFT JOIN paid p ON p.id = x.id
-                      WHERE x.version = a.version AND x.day BETWEEN r.r_from AND r.r_to) f
+                      WHERE x.version = r.version AND x.day BETWEEN r.r_from AND r.r_to) f
  WHERE r.r_from <= r.r_to
- ORDER BY r.r_from DESC, a.version;`;
+ ORDER BY r.r_from DESC, r.version;`;
 
 /** The pay-to-start pages' steps, as the Pay to start page counts them (its Step by step card). */
 const Q_PAY_FIRST = `-- Each pay-to-start page's steps over the range, as the Pay to start page counts them, a row
@@ -308,12 +314,18 @@ const PH_RANGE = `properties.$host = 'www.loveiq.org'
     AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 1 DAY
     AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN :team_visits)`;
 
-/** A PostHog row's version: each run of the landing test's own, by the day it happened. */
+/**
+ * A PostHog row's version: each landing test run's own, by the day it happened (none between
+ * #6's last day and #10's first), and only for that run's own versions.
+ */
 const PH_RUN = (
   at: string
-) => `multiIf(${at} >= toDateTime('${LANDING_TEST_START_DAY}', 'Europe/Berlin'), 'run 2',
-                    ${at} >= toDateTime('${LANDING_HERO_VIDEO_LAUNCH_DAY}', 'Europe/Berlin'), 'run 1', '')`;
-const PH_VERSION = `arrayJoin([if(arm IN ('white_card', 'white_video') AND run != '',
+) => `multiIf(${at} >= toDateTime('${LANDING_TEST_START_DAY}', 'Europe/Berlin'), '#10',
+                    ${at} >= toDateTime('${addDays(LANDING_HERO_LAST_DAY, 1)}', 'Europe/Berlin'), '',
+                    ${at} >= toDateTime('${LANDING_HERO_RESTART_DAY}', 'Europe/Berlin'), '#6',
+                    ${at} >= toDateTime('${LANDING_HERO_VIDEO_LAUNCH_DAY}', 'Europe/Berlin'), '#6 run 1', '')`;
+const PH_VERSION = `arrayJoin([if((run = '#10' AND arm IN ('video', 'pain_point'))
+                             OR (run IN ('#6', '#6 run 1') AND arm IN ('white_card', 'white_video')),
                           concat(run, ' · ', arm), ''), 'All landing pages'])`;
 
 const Q_PH_VISITS = `-- PostHog's visits that saw the landing page: per version of each run of the landing test
@@ -384,7 +396,8 @@ const PH_NOT_FORCED = `person_id NOT IN (SELECT person_id FROM events
                             AND match(toString(properties.$current_url), '[?&]variant='))`;
 
 /** The hero video block's query: run read-only for 14 – 28 Oct 2026 on 29 Oct, 8 of 364 started. */
-const Q_PH_VIDEO = `-- The landing hero's presenter video (version B, white_video), step by step: the people
+const Q_PH_VIDEO = `-- The video page's presenter video (#6's version B, white_video; #10's version A, video),
+-- step by step: the people
 -- PostHog recorded at each step in the range, and each step's share of the people who saw it
 -- (half of its box on screen). Read from 13 Oct 2026, the first whole day PostHog recorded who
 -- saw it. The team's own people are left out, and so is anyone who ever forced a version with
@@ -416,6 +429,8 @@ FROM (
                   'hero_video_complete', 'hero_video_error')
     AND ${PH_RANGE}
     AND timestamp >= toDateTime('2026-10-13 00:00:00', 'Europe/Berlin')
+    -- the video page's hero alone: the new page (pain_point) plays the same film in a card
+    AND properties.landing_variant IN ('white_video', 'video')
     AND ${PH_NOT_FORCED}
 )`;
 
@@ -501,11 +516,11 @@ const T_PH_VIDEO: FieldTable = {
   source: "posthog",
   table: "events",
   columns:
-    "event (cta_seen, hero_video_tap, hero_video_play, hero_video_progress, hero_video_complete, hero_video_error), properties.cta, properties.percent, properties.video, timestamp, person_id, $session_id, properties.$host, properties.$current_url",
+    "event (cta_seen, hero_video_tap, hero_video_play, hero_video_progress, hero_video_complete, hero_video_error), properties.cta, properties.percent, properties.video, properties.landing_variant, timestamp, person_id, $session_id, properties.$host, properties.$current_url",
   filters:
-    "Period, by timestamp (Berlin days), from 13 Oct 2026 at the earliest. Nothing else: the video is version B's on every visit PostHog recorded (source, device, tier and visitor are fixed on this page, and the Funnel filter doesn't reach it).",
+    "Period, by timestamp (Berlin days), from 13 Oct 2026 at the earliest, and the video page's versions (white_video, video). Nothing else: source, device, tier and visitor are fixed on this page, and the Funnel filter doesn't reach it.",
   watch:
-    "Only version B (white_video) shows the video, so only its visitors send these events. A person counts once in the range, however often they came back.",
+    "The video page has the film in its hero: #6's version B (white_video), #10's version A (video). The new page (pain_point) plays the same film in a card lower down, with the same events: left out here. A person counts once in the range, however often they came back.",
 };
 
 const PER_VISIT = "per visit (a browser counts once a day)";
@@ -535,7 +550,7 @@ const VIDEO_FROM =
 const VIDEO_LEFT_OUT =
   "The team's own people are left out, and so is anyone who ever forced a version with ?variant= in the address: the override sticks to their later visits.";
 const VIDEO_BOTS =
-  "About 11% of version B's visitors look like bots (no click at all, on Linux and Chrome; 14–28 Oct 2026): those among the people who saw the video never play it, so every share here reads a little low.";
+  "About 11% of the video page's visitors looked like bots when it was #6's version B (no click at all, on Linux and Chrome; 14–28 Oct 2026): those among the people who saw the video never play it, so every share here reads a little low.";
 const VIDEO_WATCH = `${VIDEO_PEOPLE} ${VIDEO_FROM} ${VIDEO_LEFT_OUT} ${VIDEO_BOTS}`;
 
 /** Every hero video card's table and query: the block reads all its steps at once. */
@@ -916,7 +931,7 @@ export const fields: FieldRegistry = {
   "landing.scroll-100": scroll(100, "to the bottom (99% or more)", "99%"),
   "landing.hero-video": {
     label: "Hero video",
-    what: "How far the people who saw version B's presenter video got with it: how many tapped play, saw it start, reached each quarter and watched it to the end, and whose start failed. Each step is a share of the people who saw it.",
+    what: "How far the people who saw the video page's presenter video (#6's version B, #10's version A) got with it: how many tapped play, saw it start, reached each quarter and watched it to the end, and whose start failed. Each step is a share of the people who saw it.",
     stat: "Share",
     per: "per person PostHog recorded",
     formula: { num: "People at the step", den: "People who saw the video", mult: "× 100" },
@@ -930,7 +945,7 @@ export const fields: FieldRegistry = {
     stat: "Count",
     per: "per person PostHog recorded",
     formula: { num: "People with half of the video's box on screen (cta_seen 'hero_video')" },
-    caveat: `Sent once a page, the first time half of the box is in view: a page view alone isn't enough, as the video can sit below a small phone's first screen and a visitor can leave before it shows. Only version B shows it. ${VIDEO_WATCH}`,
+    caveat: `Sent once a page, the first time half of the box is in view: a page view alone isn't enough, as the video can sit below a small phone's first screen and a visitor can leave before it shows. Only the video page's hero counts, not the new page's film card. ${VIDEO_WATCH}`,
     ...VIDEO_SOURCE,
     related: ["landing.video-tapped", "landing.video-started", "landing.hero-video"],
   },
