@@ -1357,3 +1357,22 @@ describe("session-recording link", () => {
     expect(JSON.stringify(message.blocks)).toContain("EUR 39.99");
   });
 });
+
+// Mark, 13 Nov: "lets just record the tick for now… maybe add it to the incoming-survey data".
+// The State of Desire sheet's tick shows on the survey's message, so whoever sends the study
+// by hand sees who asked for it (the address stays masked; /admin has it by submission).
+describe("the State of Desire tick on the survey's message", () => {
+  it("says the reader ticked the box", () => {
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 58,
+      stateOfDesireTicked: true,
+    });
+    expect(JSON.stringify(message.blocks)).toContain("State of Desire: *ticked*");
+  });
+
+  it("says nothing when they did not", () => {
+    const message = buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: 58 });
+    expect(JSON.stringify(message.blocks)).not.toContain("State of Desire");
+  });
+});

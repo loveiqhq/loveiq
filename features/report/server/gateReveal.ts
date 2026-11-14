@@ -5,7 +5,6 @@ import {
   type GateReveal,
   type GateRevealAspect,
 } from "@features/report/logic/gateReveal";
-import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { scrambleLockedText } from "./scrambleLockedText";
 
 /**
@@ -68,7 +67,4 @@ export function buildGateReveal(
   };
 }
 
-/** The reveal's switch, off on any error: it shows the archetype before payment. */
-export function isGateRevealEnabled(): Promise<boolean> {
-  return isFeatureEnabled("report_gate_archetype_reveal", false).catch(() => false);
-}
+export { gateRevealArmFor, isGateRevealEnabled } from "./gateRevealSwitch";

@@ -254,6 +254,23 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(screen.getAllByText("IN FULL")).toHaveLength(5);
   });
 
+  // Mark, 13 Nov: a reader whose EUR 1.99 page will show the archetype (the new page's half of
+  // the test) meets a map that names that offer as the survey's report map (Q59) did.
+  it("before the new EUR 1.99 page, names the offer as the survey's report map", () => {
+    render(<PreReportWizard onComplete={vi.fn()} gatePriceCents={199} mapOffer="light" />);
+    press(continueButton());
+    const row = (id: string) => document.querySelector<HTMLElement>(`[data-wizard-row="${id}"]`)!;
+    expect(row("core_archetype").textContent).toContain("Free");
+    expect(row("introduction").textContent).toContain("€1.99");
+    expect(row("top_archetypes").textContent).toContain("€1.99");
+    expect(screen.queryAllByText("IN FULL")).toHaveLength(0);
+    const pitch = document.querySelector<HTMLElement>(".wz-pitch")!.textContent;
+    expect(pitch).toContain("Read your Core Archetype for free.");
+    expect(pitch).toContain("Unlock your Light Report");
+    expect(pitch).toContain("also opening part of each featured chapter.");
+    expect(pitch).toContain("The full report unlocks all chapters.");
+  });
+
   it("▼ and ▲ step through the four deep dives, marking each chapter in the drawer", () => {
     openMap();
     const ids = REPORT_DEEP_DIVES.map((d) => d.id);

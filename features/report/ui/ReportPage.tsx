@@ -199,6 +199,8 @@ import { REPORT_LAYOUT_V4_SLIM } from "@features/analytics/reportLayout";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { FIRST_PAYWALL_SELECTOR } from "../logic/paywallSelector";
 import { INITIAL_UNLOCK_SECTION_ID } from "../logic/initialUnlock";
+import { isGateReveal } from "../logic/gateReveal";
+import { TOUR_FIRST_OPEN_CHAPTER_IDS, tourFirstNavAccess } from "../logic/lightReportMap";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import { useGuidedTour } from "./hooks/useGuidedTour";
 import V4GuidedTour from "./v3/V4GuidedTour";
@@ -470,6 +472,12 @@ interface ReportExperienceProps {
    * I's welcome) is drawn locked; a lock leads to the gate.
    */
   veilIdentity?: boolean;
+  /**
+   * With `veilIdentity`: which EUR 1.99 page the tour leads to. `light` is Mark's new page,
+   * which shows the archetype, so the chapter menu names that offer as the survey's report map
+   * does (logic/lightReportMap.ts, Mark 13 Nov); `today` keeps what the page under it opens.
+   */
+  tourOffer?: "today" | "light";
   /** `?v4=1` — V2's report with the Report 3.0 components swapped in. */
   isV4: boolean;
   accessPlan: ReportAccessPlan;
@@ -619,16 +627,6 @@ interface ReportExperienceProps {
  */
 const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
 
-/**
- * Toured before the EUR 1.99 gate, only these chapters open: Part I's welcome, which names no
- * one, and Typical Beliefs, where the tour's stops are (its words cleared of the archetype's
- * name on the server). Everything else is locked, and its lock leads to the gate.
- */
-const TOUR_FIRST_OPEN_CHAPTER_IDS: ReadonlySet<string> = new Set([
-  "introduction",
-  "what_shaped_this_report",
-  "typical_beliefs",
-]);
 /** The nav's Core Archetype row: its card and the Summary behind INITIAL_UNLOCK_SECTION_ID. */
 const CORE_ARCHETYPE_NAV_ID = "core_archetype";
 
@@ -644,6 +642,7 @@ const WithActiveSection: FC<{
 const ReportExperience: FC<ReportExperienceProps> = ({
   isV3,
   veilIdentity = false,
+  tourOffer = "today",
   isV4,
   accessPlan,
   initialUnlock,
@@ -1070,16 +1069,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     for (const part of parts) {
       for (const item of part.items) {
         // Toured before the EUR 1.99 gate: the menu the tour opens on says what the page
-        // draws. Part I's welcome in full, Typical Beliefs partly open, the rest locked.
+        // draws (Part I's welcome in full, Typical Beliefs partly open, the rest locked), or,
+        // before Mark's new page, the offer as the survey's report map names it.
         if (veilIdentity) {
-          access.set(
-            item.id,
-            item.id === "typical_beliefs"
-              ? "unlocked"
-              : TOUR_FIRST_OPEN_CHAPTER_IDS.has(item.id)
-                ? "free"
-                : "locked"
-          );
+          access.set(item.id, tourFirstNavAccess(item.id, tourOffer));
           continue;
         }
         // The Core Archetype: the server half-locks its card and its Summary (`locked` on
@@ -1130,6 +1123,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     archetypeCard,
     summaryChapter,
     veilIdentity,
+    tourOffer,
   ]);
   // The whole report is this reader's (sync 23.10): the navs drop every chip and padlock
   // and set each title bold. navAccessById keeps its tiers, which the chapter locks read.
@@ -4025,6 +4019,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               isV3={isV3}
               isV4={isV4}
               veilIdentity={tourFirst}
+              tourOffer={tourFirst && isGateReveal(data.initialGate?.reveal) ? "light" : "today"}
               submissionId={data.submissionId ?? null}
               devParam={devParam}
               accessPlan={data.accessPlan}

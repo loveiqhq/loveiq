@@ -133,11 +133,14 @@ test.describe("Survey: the sheets between questions", () => {
       name: "More people love to respond",
     });
     await expect(dialog).toBeVisible();
+    // The 12% counts up too since Mark's second review (13 Nov): its digits are checked below.
     await expect(dialog).toContainText(
-      "say their best sex starts when the other person makes the first move. Only 12% say it’s when they start."
+      "say their best sex starts when the other person makes the first move. Only"
     );
+    await expect(dialog).toContainText("say it’s when they start.");
     // The motion budget: nothing endless, the CSS done by 900ms after the 450ms rise (the
-    // number counts up in script, over 1.2s from 400ms: Mark's "more slowly", 12 Nov).
+    // numbers count up in script, over 1.2s from 400ms: Mark's "more slowly", 12 Nov; the 12%
+    // follows once the 36% is halfway: his second review, 13 Nov).
     for (const a of await sheetAnimations(page, "science")) {
       expect(a.iterations, a.name).not.toBe(Infinity);
       expect(a.end, a.name).toBeLessThanOrEqual(1000);
@@ -149,7 +152,10 @@ test.describe("Survey: the sheets between questions", () => {
     const box = (await panel.boundingBox())!;
     expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(1);
     if (viewport.width >= 640) expect(box.width).toBeLessThanOrEqual(480);
-    await expect(dialog.locator("[data-count-up]")).toHaveText(`${SCIENCE_SHARES.respond}%`);
+    await expect(dialog.locator("[data-count-up]")).toHaveText([
+      `${SCIENCE_SHARES.respond}%`,
+      `${SCIENCE_SHARES.start}%`,
+    ]);
     await saveShot(page, "1-science");
 
     await keepGoing(page).click();
@@ -238,13 +244,14 @@ test.describe("Survey: the sheets between questions", () => {
     await expect(root.getByRole("dialog")).toBeVisible();
     await expect(root).toContainText("Your Core Archetype is taking shape.");
     await expect(root.getByRole("img", { name: "First half done" })).toHaveCount(0);
-    // One after another, at least 250ms apart, all settled by 1.8s (Mark's review, 12 Nov).
+    // One after another, at least 250ms apart (Mark's review, 12 Nov), at 1.5x since his second
+    // review (13 Nov: "everything a bit slower"), so all settled by 2.3s.
     const stepDelays = await animationDelays(root.locator("[data-halfway-step]"));
     expect(stepDelays).toHaveLength(3);
-    expect(stepDelays[1]! - stepDelays[0]!).toBeGreaterThanOrEqual(250);
-    expect(stepDelays[2]! - stepDelays[1]!).toBeGreaterThanOrEqual(250);
+    expect(stepDelays[1]! - stepDelays[0]!).toBeGreaterThanOrEqual(400);
+    expect(stepDelays[2]! - stepDelays[1]!).toBeGreaterThanOrEqual(400);
     for (const a of await sheetAnimations(page, "halfway")) {
-      expect(a.end, a.name).toBeLessThanOrEqual(1800);
+      expect(a.end, a.name).toBeLessThanOrEqual(2300);
     }
     await expect(root).toContainText("Your highest scored sexual personality and its motivation.");
     await expect(root).toContainText(/Only ~\d+ more minutes\./);
@@ -315,7 +322,10 @@ test.describe("Survey: the sheets between questions", () => {
     const dialog = sheetRoot(page, "science").getByRole("dialog");
     await expect(dialog).toBeVisible();
     expect(await sheetAnimations(page, "science")).toEqual([]);
-    await expect(dialog.locator("[data-count-up]")).toHaveText(`${SCIENCE_SHARES.respond}%`);
+    await expect(dialog.locator("[data-count-up]")).toHaveText([
+      `${SCIENCE_SHARES.respond}%`,
+      `${SCIENCE_SHARES.start}%`,
+    ]);
     const results = await new AxeBuilder({ page })
       .include('[data-survey-sheet="science"]')
       .analyze();

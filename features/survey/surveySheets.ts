@@ -79,6 +79,26 @@ export const SURVEY_SHEETS: readonly SurveySheetDef[] = [
 
 export const SURVEY_SHEET_IDS: readonly SurveySheetId[] = SURVEY_SHEETS.map((s) => s.id);
 
+/**
+ * The two sheets whose words promise the Core Archetype for free ("Core Archetype · Free" on
+ * the halfway sheet, the report map's Free pill), which only Mark's new EUR 1.99 page gives.
+ * His 50/50 shows that page to half the readers (shared/experiments/gateRevealArm.ts), so
+ * these two open only for that half (Fatih, 14 Nov), and stay off while its switch is
+ * (server/sheetSwitches.ts). A staging preview (`?sheets=`) still shows them to anyone.
+ */
+export const REVEAL_ONLY_SHEETS: ReadonlySet<SurveySheetId> = new Set(["halfway", "reportMap"]);
+
+/** The sheets this reader may meet, given their half of Mark's 50/50 and any preview. */
+export function sheetsForRevealArm(
+  sheets: readonly SurveySheetId[],
+  arm: "control" | "reveal",
+  previewed: readonly SurveySheetId[]
+): SurveySheetId[] {
+  return sheets.filter(
+    (id) => !REVEAL_ONLY_SHEETS.has(id) || arm === "reveal" || previewed.includes(id)
+  );
+}
+
 export function isSurveySheetId(value: unknown): value is SurveySheetId {
   return typeof value === "string" && (SURVEY_SHEET_IDS as readonly string[]).includes(value);
 }
@@ -174,6 +194,30 @@ export function sheetsShownFor(startedAt: string): Set<SurveySheetId> {
   } catch {
     // Storage blocked or unreadable: SurveyEngine still remembers them for this page.
     return new Set();
+  }
+}
+
+/**
+ * The State of Desire sheet's tick (Mark, 13 Nov: "lets just record the tick for now"), kept
+ * for the run that gave it: it is given at Q48 and sent with the answers at the end, so it has
+ * to outlive a reload in between, and never reach the next run.
+ */
+export const DESIRE_TICK_STORAGE_KEY = "loveiq-survey-desire-tick";
+
+export function rememberDesireTick(startedAt: string, ticked: boolean): void {
+  try {
+    if (ticked) localStorage.setItem(DESIRE_TICK_STORAGE_KEY, startedAt);
+    else localStorage.removeItem(DESIRE_TICK_STORAGE_KEY);
+  } catch {
+    // Storage blocked: SurveyEngine still keeps it for this page.
+  }
+}
+
+export function desireTickedFor(startedAt: string): boolean {
+  try {
+    return localStorage.getItem(DESIRE_TICK_STORAGE_KEY) === startedAt;
+  } catch {
+    return false;
   }
 }
 

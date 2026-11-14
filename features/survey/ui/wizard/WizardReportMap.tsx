@@ -12,11 +12,13 @@ import {
 import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import { formatOfferPrice } from "@features/pay-to-start/logic/offer";
+import { REPORT_MAP_COPY } from "@features/survey/surveySheetsCopy";
 import {
   WIZARD_CHAPTER_COUNT,
   WIZARD_PART_COUNT,
   wizardDrawer,
   type WizardDrawerRow,
+  type WizardMapOffer,
   type WizardVariant,
 } from "./wizardContent";
 
@@ -83,7 +85,19 @@ interface WizardReportMapProps {
    * for it, so the first line says so (Eman, 27.10: "show gated readers the price").
    */
   gatePriceCents?: number | null;
+  /**
+   * Which EUR 1.99 page follows. Before Mark's new one (`light`, the archetype shown before
+   * payment) the drawer and the pitch name that offer as the survey's report map does (Mark,
+   * 13 Nov): the Core Archetype free, the Light Report at its price, the full report locked.
+   */
+  mapOffer?: WizardMapOffer;
 }
+
+/** The survey report map's two pills (ReportMapScreen.tsx), drawn at the drawer's scale. */
+const PILL_COLOURS = {
+  free_pill: { background: "#e3f3ea", color: "#2e7d5b" },
+  price_pill: { background: "#f1ebfd", color: "#6b5b95" },
+} as const;
 
 /* ------------------------------------------------------------------ */
 /*  The drawer — 1049:1831, a cropped instance of the drawer 856:243   */
@@ -98,10 +112,15 @@ interface WizardReportMapProps {
  * panel at 0.4905, its labels overridden to 7px, Regular, the four featured chapters
  * SemiBold, 3.9 from their badge.
  */
-const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) => {
+const DrawerRow: FC<{ row: WizardDrawerRow; step: number; priceLabel: string }> = ({
+  row,
+  step,
+  priceLabel,
+}) => {
   const dive = DEEP_DIVE_INDEX.get(row.id);
   const active = dive !== undefined && dive === step;
   const isCoreArchetype = row.id === "core_archetype";
+  const pill = row.badge === "free_pill" || row.badge === "price_pill" ? row.badge : null;
   return (
     <div
       data-wizard-row={row.id}
@@ -140,6 +159,13 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
         >
           IN FULL
         </span>
+      ) : pill ? (
+        <span
+          className="flex h-[9.905px] shrink-0 items-center whitespace-nowrap rounded-full px-[3.924px] text-[4.9px] font-bold leading-[4.9px]"
+          style={{ fontFamily: JAKARTA, ...PILL_COLOURS[pill] }}
+        >
+          {pill === "free_pill" ? REPORT_MAP_COPY.free : priceLabel}
+        </span>
       ) : (
         <Image
           src={
@@ -152,13 +178,19 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
           className="block h-[6.867px] w-[6.867px] shrink-0"
         />
       )}
-      {/* Outlines: the four deep dives always, the free rows on the overview only. */}
-      {dive !== undefined || (row.badge === "free" && step === 0) ? (
+      {/* Outlines: the four deep dives always, the free (and, before the new page, the
+       * Light Report's) rows on the overview only. */}
+      {dive !== undefined || ((row.badge === "free" || pill) && step === 0) ? (
         <span
           aria-hidden
           className="pointer-events-none absolute inset-y-0 -left-px -right-px rounded-[6px] border border-dashed transition-opacity duration-300 motion-reduce:transition-none"
           style={{
-            borderColor: dive !== undefined ? "rgba(254,104,57,0.4)" : "rgba(46,125,91,0.4)",
+            borderColor:
+              dive !== undefined
+                ? "rgba(254,104,57,0.4)"
+                : pill === "price_pill"
+                  ? "rgba(107,91,149,0.4)"
+                  : "rgba(46,125,91,0.4)",
           }}
         />
       ) : null}
@@ -184,7 +216,12 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
   );
 };
 
-const Drawer: FC<{ step: number; variant: WizardVariant }> = ({ step, variant }) => (
+const Drawer: FC<{
+  step: number;
+  variant: WizardVariant;
+  mapOffer: WizardMapOffer;
+  priceLabel: string;
+}> = ({ step, variant, mapOffer, priceLabel }) => (
   <div
     aria-hidden
     className="wz-drawer absolute left-0 top-0 h-[597px] w-[142.6px] rounded-[14px] bg-white"
@@ -195,7 +232,7 @@ const Drawer: FC<{ step: number; variant: WizardVariant }> = ({ step, variant })
   >
     {/* The panel's pill and "Refer a friend" sit above the crop; the list starts 5.266 down. */}
     <div className="flex flex-col gap-[6.9px] px-[4.8905px] pt-[5.266px]">
-      {wizardDrawer(variant).map((part) => (
+      {wizardDrawer(variant, mapOffer).map((part) => (
         <div key={part.part} className="flex flex-col gap-[1.962px]">
           <div className="min-h-[13.924px] px-[2px] pb-[0.981px] pt-[2.943px]">
             <p
@@ -209,7 +246,7 @@ const Drawer: FC<{ step: number; variant: WizardVariant }> = ({ step, variant })
             </p>
           </div>
           {part.rows.map((row) => (
-            <DrawerRow key={row.id} row={row} step={step} />
+            <DrawerRow key={row.id} row={row} step={step} priceLabel={priceLabel} />
           ))}
         </div>
       ))}
@@ -297,16 +334,25 @@ const TileControls: FC<WizardReportMapProps & { width: number }> = ({ step, onSt
 /*  The overview's pitch — 1049:1638                                   */
 /* ------------------------------------------------------------------ */
 
-const Pitch: FC<{ icon: "free" | "open" | "locked"; top: number; children: ReactNode }> = ({
-  icon,
-  top,
-  children,
-}) => (
+const Pitch: FC<{
+  icon: "free" | "open" | "locked" | "free_pill" | "price_pill";
+  top: number;
+  /** A pill's words: Free, or the Light Report's price. */
+  pill?: string;
+  children: ReactNode;
+}> = ({ icon, top, pill, children }) => (
   <div
     className="wz-pitch-item flex flex-col items-start pt-[var(--wz-pitch-gap)]"
     style={{ "--wz-pitch-gap": `${top}px` } as CSSProperties}
   >
-    {icon === "free" ? (
+    {icon === "free_pill" || icon === "price_pill" ? (
+      <span
+        className="wz-pitch-badge flex whitespace-nowrap rounded-full px-[9px] py-[3px] font-sans text-[11px] font-bold leading-[13px]"
+        style={PILL_COLOURS[icon]}
+      >
+        {pill}
+      </span>
+    ) : icon === "free" ? (
       <span
         className="wz-pitch-badge flex rounded-[4px] px-[5px] py-[2px] font-sans text-[8px] font-bold uppercase leading-[10px] tracking-[0.5px] text-[#ffb89c]"
         style={{ background: "rgba(255,158,122,0.16)", border: "1px solid rgba(255,158,122,0.35)" }}
@@ -433,8 +479,12 @@ const WizardReportMap: FC<WizardReportMapProps> = ({
   onStep,
   variant = "standard",
   gatePriceCents = null,
+  mapOffer = "today",
 }) => {
   const overview = step === 0;
+  const light = mapOffer === "light" && variant === "standard";
+  const priceLabel = gatePriceCents ? formatOfferPrice(gatePriceCents) : REPORT_MAP_COPY.price;
+  const map = REPORT_MAP_COPY;
   const fade = (shown: boolean) => ({
     opacity: shown ? 1 : 0,
     visibility: shown ? ("visible" as const) : ("hidden" as const),
@@ -500,7 +550,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({
     >
       {/* 640 tall: the 36px header row and the 604 main area (1049:1637). */}
       <div className="wz-canvas absolute left-0 top-0 h-[640px] w-[345px]">
-        <Drawer step={step} variant={variant} />
+        <Drawer step={step} variant={variant} mapOffer={mapOffer} priceLabel={priceLabel} />
 
         {/* 1049:1637 — the pitch, centred in the 604 below the header row, at x 165. */}
         <div
@@ -515,23 +565,55 @@ const WizardReportMap: FC<WizardReportMapProps> = ({
               <br />
               <span className="wz-pitch-small text-[20px]">{WIZARD_CHAPTER_COUNT} Chapters</span>
             </h2>
-            <Pitch icon="free" top={20}>
-              <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
-                Read <strong className="font-bold">your opening chapters</strong> in full
-                {gatePriceCents ? ` for ${formatOfferPrice(gatePriceCents)}` : ""}.
-              </p>
-            </Pitch>
-            <Pitch icon="open" top={20}>
-              <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
-                Explore our <strong className="font-bold">featured</strong> chapters.
-              </p>
-            </Pitch>
-            <Pitch icon="locked" top={22}>
-              <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
-                See the <strong className="font-bold">insights waiting for you</strong> in every
-                chapter.
-              </p>
-            </Pitch>
+            {light ? (
+              // The survey's report map legend, word for word (surveySheetsCopy.ts).
+              <>
+                <Pitch icon="free_pill" pill={map.free} top={20}>
+                  <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white">
+                    {map.freeLead}
+                    <strong className="font-bold">{map.freeEmphasis}</strong>
+                    {map.freeEnd}
+                  </p>
+                </Pitch>
+                <Pitch icon="price_pill" pill={priceLabel} top={20}>
+                  <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white/85">
+                    {map.lightLead}
+                    <strong className="font-bold">{map.lightEmphasis}</strong>
+                    <br />
+                    {map.lightMid}
+                    <strong className="font-bold">{map.lightFeatured}</strong>
+                    {map.lightEnd}
+                  </p>
+                </Pitch>
+                <Pitch icon="locked" top={22}>
+                  <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
+                    {map.fullLead}
+                    <strong className="font-bold">{map.fullEmphasis}</strong>
+                    {map.fullEnd}
+                  </p>
+                </Pitch>
+              </>
+            ) : (
+              <>
+                <Pitch icon="free" top={20}>
+                  <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
+                    Read <strong className="font-bold">your opening chapters</strong> in full
+                    {gatePriceCents ? ` for ${formatOfferPrice(gatePriceCents)}` : ""}.
+                  </p>
+                </Pitch>
+                <Pitch icon="open" top={20}>
+                  <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
+                    Explore our <strong className="font-bold">featured</strong> chapters.
+                  </p>
+                </Pitch>
+                <Pitch icon="locked" top={22}>
+                  <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
+                    See the <strong className="font-bold">insights waiting for you</strong> in every
+                    chapter.
+                  </p>
+                </Pitch>
+              </>
+            )}
           </div>
           <TileControls step={step} onStep={onStep} width={157} />
         </div>

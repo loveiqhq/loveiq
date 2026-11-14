@@ -7,7 +7,9 @@ const mockTrackCta = vi.fn();
 const mockTrackBack = vi.fn();
 const mockTrackBeginCheckout = vi.fn();
 const mockSetContext = vi.fn();
+const mockTrackExposure = vi.fn();
 vi.mock("@features/analytics/client", () => ({
+  trackExperimentExposure: (...args: unknown[]) => mockTrackExposure(...args),
   trackInitialGateViewed: (...args: unknown[]) => mockTrackViewed(...args),
   trackInitialGateCta: (...args: unknown[]) => mockTrackCta(...args),
   trackInitialGateBack: (...args: unknown[]) => mockTrackBack(...args),
@@ -130,6 +132,32 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+});
+
+// Mark, 13 Nov: his page runs as a 50/50 test. Both halves count their exposure at the gate,
+// once, so the readout compares readers who reached it; nothing is counted while no test runs.
+describe("the EUR 1.99 gate in Mark's 50/50", () => {
+  it("counts the reader's half once, as an experiment exposure", () => {
+    const { rerender } = renderGate({ ...GATE, revealArm: "control" });
+    rerender(
+      <InitialUnlockGate
+        gate={{ ...GATE, revealArm: "control" }}
+        reportToken={GATE.reportToken}
+        reportSessionId={null}
+      />
+    );
+    expect(mockTrackExposure).toHaveBeenCalledTimes(1);
+    expect(mockTrackExposure).toHaveBeenCalledWith({
+      experiment: "gate_reveal_2026_11",
+      variant: "control",
+      surface: "gate",
+    });
+  });
+
+  it("counts nothing while no test runs", () => {
+    renderGate();
+    expect(mockTrackExposure).not.toHaveBeenCalled();
+  });
 });
 
 describe("the EUR 1.99 gate, as drawn (Figma 1604:2374, 1650:2667)", () => {

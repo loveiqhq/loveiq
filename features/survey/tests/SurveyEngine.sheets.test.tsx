@@ -68,6 +68,8 @@ vi.mock("@features/survey/ui/hooks/useUtmCapture", () => ({
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import { SURVEY_SHEET_IDS, type SurveySheetId } from "@features/survey/surveySheets";
+import { SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
+import { assignGateRevealArm } from "@shared/experiments/gateRevealArm";
 
 const RESPOND = "The other person starts things — I respond to them";
 QUESTIONS.push(
@@ -113,9 +115,24 @@ function onQuestion(index: number, answer: unknown = 4) {
   );
 }
 
-const engine = (sheets: readonly SurveySheetId[] = SURVEY_SHEET_IDS, payToStart = false) =>
+/**
+ * The engine with these sheets, offered as a staging preview offers them, so no half of Mark's
+ * 50/50 holds back the two that promise a free archetype (`previewed`); the arm has tests of
+ * its own below.
+ */
+const engine = (
+  sheets: readonly SurveySheetId[] = SURVEY_SHEET_IDS,
+  payToStart = false,
+  previewed: readonly SurveySheetId[] = sheets
+) =>
   render(
-    <SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} sheets={sheets} payToStart={payToStart} />
+    <SurveyEngine
+      onExit={vi.fn()}
+      onComplete={vi.fn()}
+      sheets={sheets}
+      previewedSheets={previewed}
+      payToStart={payToStart}
+    />
   );
 const next = () => screen.getByRole("button", { name: /^next$/i });
 const heading = (index: number) =>
@@ -149,10 +166,15 @@ describe("the sheets between questions", () => {
     expect(dialog("More people love to respond")).toBeInTheDocument();
     const sheet = screen.getByRole("dialog");
     expect(sheet).toHaveTextContent(
-      "say their best sex starts when the other person makes the first move. Only 12% say it’s when they start."
+      "say their best sex starts when the other person makes the first move. Only"
     );
-    // The share a screen reader hears, before the digits count up to it.
-    expect(sheet.querySelector(".sr-only")).toHaveTextContent("36%");
+    expect(sheet).toHaveTextContent("say it’s when they start.");
+    // The shares a screen reader hears, before the digits count up to them: the 12% counts
+    // up too since Mark's second review (13 Nov).
+    expect([...sheet.querySelectorAll(".sr-only")].map((n) => n.textContent)).toEqual(
+      expect.arrayContaining(["36%", "12%"])
+    );
+    expect(sheet.querySelectorAll("[data-count-up]")).toHaveLength(2);
     expect(heading(at("02004"))).toBeInTheDocument();
     expect(analytics.shown).toHaveBeenCalledWith({ sheet: "science", question_id: "02004" });
   });
@@ -363,5 +385,36 @@ describe("the sheets between questions", () => {
       { sheet: "reportMap", question_id: "90010" },
       expect.objectContaining({ via: "previous" })
     );
+  });
+});
+
+// Fatih, 14 Nov: the halfway sheet and the report map promise the archetype for free, which
+// only Mark's new EUR 1.99 page gives, so they open only for that page's half of his 50/50.
+// The half comes from the run's session id, the one the report's server reads for the gate.
+describe("the sheets in Mark's 50/50 of the new EUR 1.99 page", () => {
+  const sessionIn = (arm: "control" | "reveal") => {
+    for (let i = 0; ; i += 1) {
+      const id = `11111111-2222-4333-8444-${String(i).padStart(12, "0")}`;
+      if (assignGateRevealArm(id) === arm) return id;
+    }
+  };
+  afterEach(() => sessionStorage.clear());
+
+  it("opens the report map for the new page's half", () => {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, sessionIn("reveal"));
+    onQuestion(ORDER.length - 4);
+    engine(SURVEY_SHEET_IDS, false, []);
+    fireEvent.click(next());
+    expect(dialog(/Only 3 questions left/)).toBeInTheDocument();
+  });
+
+  it("keeps it shut for today's half, who carries straight on", () => {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, sessionIn("control"));
+    const index = ORDER.length - 4;
+    onQuestion(index);
+    engine(SURVEY_SHEET_IDS, false, []);
+    fireEvent.click(next());
+    expect(dialog(/Only 3 questions left/)).not.toBeInTheDocument();
+    expect(heading(index + 1)).toBeInTheDocument();
   });
 });

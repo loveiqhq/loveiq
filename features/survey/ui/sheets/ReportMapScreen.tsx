@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, type CSSProperties, type FC } from "react";
+import { lightMapRowKind } from "@features/report/logic/lightReportMap";
 import { REPORT_MAP_COPY } from "@features/survey/surveySheetsCopy";
 import {
   WIZARD_CHAPTER_COUNT,
@@ -13,30 +14,10 @@ import SurveySheetShell, { useSheetPress, type SheetDismissVia } from "./SurveyS
 import { GradientText, order } from "./parts";
 
 /**
- * How each chapter reads on the map in the EUR 1.99 change still to come (Mark's board F2):
- * the Core Archetype free, the welcome and the snapshot of the top archetypes in the Light
- * Report, the opening of four featured chapters with it, the rest in the full report.
+ * How each chapter reads on the map in the EUR 1.99 Light Report offer (Mark's board F2): one
+ * list with the pre-report wizard's map and the report's own menu (lightReportMap.ts).
  */
-type MapRowKind = "free" | "priced" | "featured" | "locked";
-
-const PRICED_ROWS: ReadonlySet<string> = new Set([
-  "introduction",
-  "what_shaped_this_report",
-  "top_archetypes",
-]);
-const FEATURED_ROWS: ReadonlySet<string> = new Set([
-  "typical_beliefs",
-  "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
-  "challenges_in_partnership",
-  "typical_sexual_fantasy_amp_practice_tendencies",
-]);
-
-export function mapRowKind(id: string): MapRowKind {
-  if (id === "core_archetype") return "free";
-  if (PRICED_ROWS.has(id)) return "priced";
-  if (FEATURED_ROWS.has(id)) return "featured";
-  return "locked";
-}
+export const mapRowKind = lightMapRowKind;
 
 /**
  * The board draws the map at 198px and shows it at 156px on a phone. From 640px it is drawn
