@@ -9,6 +9,7 @@ import {
   WIZARD_CHAPTER_COUNT,
   WIZARD_PART_COUNT,
   wizardDrawer,
+  type WizardDrawerBadge,
 } from "@features/survey/ui/wizard/wizardContent";
 import { C, SANS, SERIF, e, row } from "./kit";
 
@@ -36,8 +37,16 @@ export function initialReportMap(): MapPart[] {
   return wizardDrawer("pay_to_start_initial").map((p) => ({
     part: p.part,
     label: p.label,
-    rows: p.rows.map((r) => ({ id: r.id, label: r.label, access: r.badge })),
+    rows: p.rows.map((r) => ({ id: r.id, label: r.label, access: asChapterAccess(r.badge) })),
   }));
+}
+
+/**
+ * A buyer's map draws only these three. The Free and EUR 1.99 pills belong to a free reader's
+ * map before Mark's new EUR 1.99 page (wizardContent.ts), which no email draws.
+ */
+function asChapterAccess(badge: WizardDrawerBadge): ChapterAccess {
+  return badge === "free" || badge === "open" ? badge : "locked";
 }
 
 export const PART_COUNT = WIZARD_PART_COUNT;

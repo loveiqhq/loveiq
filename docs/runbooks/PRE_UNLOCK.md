@@ -67,17 +67,25 @@ the gate's own card (titled "Your Personal Light Report", without its descriptio
 reasons and reviews.
 
 - **Switch:** `report_gate_archetype_reveal` (system flag, off when its row is missing). With it
-  on, `/api/report` adds `reveal` to the gate's payload, the tour-first one included; the page
-  draws the new top whenever `reveal` is there.
-- **Not before the EUR 1.99 change:** it shows the Core Archetype before payment, which today's
-  EUR 1.99 sells (`INITIAL_UNLOCK_TITLE`). It goes on with the change that makes the archetype
-  free (Roadmap "Show archetype + survey nudge cards").
+  on, Mark's 50/50 runs (13 Nov: "a 50/50 split of only the paywall change"): `/api/report`
+  adds `reveal` to the gate's payload, the tour-first one included, for the half whose survey
+  session hashes to `reveal` (`shared/experiments/gateRevealArm.ts`, salt `gate_reveal_2026_11`),
+  and `revealArm` for both halves. The page draws the new top whenever `reveal` is there.
+- **One arm for the whole run** (Fatih, 14 Nov): that half alone gets the survey's halfway sheet
+  and report map, the wizard's map and the tour's chapter menu that name the offer as the map
+  does (Core Archetype Free, the Light Report €1.99; `features/report/logic/lightReportMap.ts`).
+  The other half meets today's page and today's words everywhere. The offer, the price, the
+  guarantee and the emails are the same in both (Mark's answers 1, 2, 4 and 5).
+- **Reading it:** `experiment_exposure` with `experiment: gate_reveal_2026_11`, `surface: gate`,
+  in both halves, once per gate view; `utm_tracker.gate_reveal_arm` on submissions made while it
+  runs (recomputable from `session_id`). Count from the day the switch went on, leave out
+  readers who paid before the survey, and judge on EUR 1.99 sales per gate view.
 - **Where the board and today differ, the page says today's:** a 14-day guarantee (the board's 7),
   "3x full chapters" (the board's 4×), and the credit "toward your Full Report" (the board's
   "Premium Report").
 - **Previews:** `/report?preview=1&v4=1&gate=1&reveal=1` (the page alone) and
-  `&gate=tour&reveal=1` (the first open: the tour's anonymous report, then the page), with
-  `&archetype=<slug>` for another archetype.
+  `&gate=tour&reveal=1` (the first open: the tour's anonymous report, its menu naming the new
+  offer, then the page), with `&archetype=<slug>` for another archetype.
 
 ## Switch it off
 

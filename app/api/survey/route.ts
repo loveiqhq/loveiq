@@ -50,6 +50,8 @@ import {
   isInInitialGateCohort,
   joinInitialGateCohort,
 } from "@features/report/server/initialGateState";
+import { gateRevealArmFor } from "@features/report/server/gateRevealSwitch";
+import { GATE_REVEAL_ARM_KEY } from "@shared/experiments/gateRevealArm";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -228,6 +230,7 @@ async function replyWithExistingSubmission(
     scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, existing.id));
   }
   const gated = await isInInitialGateCohort(existing.id);
+  const revealArm = gated && !prepaidToken ? await gateRevealArmFor(sessionId) : null;
   const response = NextResponse.json(
     {
       success: true,
@@ -235,6 +238,7 @@ async function replyWithExistingSubmission(
       ...(reportToken ? { reportToken } : {}),
       ...(claim ? claimResponseFields(claim) : {}),
       ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
+      ...(revealArm === "reveal" ? { initialGateReveal: true } : {}),
     },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
   );
@@ -338,6 +342,12 @@ const surveySchema = z.object({
    * ignored for a No. Anything else is dropped, never refused.
    */
   marketingOptInVia: z.enum(["sheet"]).optional().nullable().catch(null),
+  /**
+   * The State of Desire sheet's box was ticked (Mark, 13 Nov: "just record the tick for now").
+   * It goes on the submission's #incoming-surveys message; Mark sends the study by hand.
+   * Anything but `true` is dropped, never refused.
+   */
+  stateOfDesireTicked: z.literal(true).optional().nullable().catch(null),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -356,6 +366,7 @@ const notifySlackSurvey = async ({
   firstName,
   questionCount,
   durationMs,
+  stateOfDesireTicked = false,
 }: {
   submissionId: number;
   sessionId: string | null;
@@ -363,6 +374,7 @@ const notifySlackSurvey = async ({
   firstName: string;
   questionCount: number;
   durationMs: number;
+  stateOfDesireTicked?: boolean;
 }) => {
   // Routed through notifySlack rather than a bespoke fetch, which is what buys the
   // 60s dedup, the dead-letter row on failure, and Block Kit support. The old
@@ -375,14 +387,18 @@ const notifySlackSurvey = async ({
     await notifySlack({
       channel: "survey",
       kind: "survey_completed",
-      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${describeQuestionCount(questionCount)} in ~${Math.round(durationMs / 60_000)} min`,
+      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${describeQuestionCount(questionCount)} in ~${Math.round(durationMs / 60_000)} min${stateOfDesireTicked ? " — State of Desire: *ticked* (send the study)" : ""}`,
       username: "survey_response",
       context: { submissionId, sessionId },
     });
     return;
   }
 
-  const message = buildJourneyMessage(journey, { kind: "survey_completed", questionCount });
+  const message = buildJourneyMessage(journey, {
+    kind: "survey_completed",
+    questionCount,
+    stateOfDesireTicked,
+  });
 
   logger.info(
     {
@@ -503,6 +519,7 @@ export async function POST(request: Request) {
     optionOrder,
     landingPath,
     marketingOptInVia,
+    stateOfDesireTicked,
     website,
   } = parsed.data;
   // A blank optional answer (16019, 16020 typed into and cleared) is no answer. Dropped
@@ -553,6 +570,12 @@ export async function POST(request: Request) {
    * hit still produces no utm_tracker at all rather than a bare {} .
    */
   const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
+  /**
+   * Mark's 50/50 of his new EUR 1.99 page (gateRevealArm.ts), while its switch is on: from the
+   * same session id, so it is the half the browser's sheets followed and the report's gate will
+   * follow. A buyer who paid before the survey meets no EUR 1.99 page, so is in neither half.
+   */
+  const gateRevealArm = sessionId && !prepaidToken ? await gateRevealArmFor(sessionId) : null;
 
   // A visitor who paid before the survey is in no landing arm (stampLandingArm), and is
   // labelled by the server, never the browser: `journey` is stripped from everyone
@@ -601,6 +624,8 @@ export async function POST(request: Request) {
     // session id: our survey always sends one, so we can't say what such a caller saw.
     sessionId && !prepaidToken ? EMAIL_QUESTION_WINNER : null
   );
+  // Mark's 50/50, by the same rules: derived, never claimed, never starting a tracker.
+  mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, GATE_REVEAL_ARM_KEY, gateRevealArm);
   /**
    * The first page this browser opened. Unlike the arms above it is attribution, which
    * the session id cannot give back, so it may start a tracker of its own: a visitor who
@@ -820,6 +845,7 @@ export async function POST(request: Request) {
         firstName: normalizedFirstName,
         questionCount,
         durationMs,
+        stateOfDesireTicked: stateOfDesireTicked === true,
       });
     });
 
@@ -1033,6 +1059,8 @@ export async function POST(request: Request) {
         ...(claim ? claimResponseFields(claim) : {}),
         // The EUR 1.99 gate will stop this reader: the pre-report map names its price.
         ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
+        // That gate will be Mark's new page: the wizard's map names its offer (Mark, 13 Nov).
+        ...(gated && gateRevealArm === "reveal" ? { initialGateReveal: true } : {}),
       },
       {
         // The response carries a fresh report access token — never let

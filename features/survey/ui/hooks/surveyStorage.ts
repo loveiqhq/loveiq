@@ -38,6 +38,8 @@ export interface PendingSurveyCompletion {
    * so a Retry sends it too.
    */
   marketingOptInVia?: MarketingOptInVia;
+  /** The State of Desire sheet's box was ticked (Mark, 13 Nov): stored, so a Retry sends it. */
+  stateOfDesireTicked?: boolean;
 }
 
 /**

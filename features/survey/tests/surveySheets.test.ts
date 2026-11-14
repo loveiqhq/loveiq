@@ -4,12 +4,15 @@ import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import {
+  desireTickedFor,
   parseSheetsPreview,
+  rememberDesireTick,
   rememberSheetShown,
   sheetAfterQuestion,
   sheetBeforeQuestion,
   sheetsShownFor,
   SCIENCE_QID,
+  sheetsForRevealArm,
   SURVEY_SHEET_IDS,
   SURVEY_SHEETS_STORAGE_KEY,
   type SheetContext,
@@ -97,6 +100,40 @@ describe("where the sheets open", () => {
   it("never shows a price to a reader who paid before the survey", () => {
     const { opened } = walk("variant", { ...all, payToStart: true });
     expect(opened.map((o) => o.sheet)).toEqual(["science", "trustpilot", "expert"]);
+  });
+});
+
+// Fatih, 14 Nov: the halfway sheet and the report map promise the Core Archetype for free,
+// which only Mark's new EUR 1.99 page gives; his 50/50 shows that page to half the readers.
+describe("the two sheets that promise a free archetype", () => {
+  const all = [...SURVEY_SHEET_IDS];
+
+  it("open only for the half that meets Mark's new EUR 1.99 page", () => {
+    expect(sheetsForRevealArm(all, "reveal", [])).toEqual(all);
+    expect(sheetsForRevealArm(all, "control", [])).toEqual([
+      "science",
+      "trustpilot",
+      "expert",
+      "desire",
+    ]);
+  });
+
+  it("open on a staging preview, whatever the half", () => {
+    expect(
+      sheetsForRevealArm(["halfway", "reportMap"], "control", ["halfway", "reportMap"])
+    ).toEqual(["halfway", "reportMap"]);
+  });
+});
+
+// Mark, 13 Nov: "lets just record the tick". It is given at Q48 and sent with the answers at
+// the end, so it is kept for its run across a reload, and never carried into the next run.
+describe("the State of Desire tick, kept for its run", () => {
+  it("remembers a tick for this run, and forgets it for the next or when unticked", () => {
+    rememberDesireTick("run-1", true);
+    expect(desireTickedFor("run-1")).toBe(true);
+    expect(desireTickedFor("run-2")).toBe(false);
+    rememberDesireTick("run-1", false);
+    expect(desireTickedFor("run-1")).toBe(false);
   });
 });
 

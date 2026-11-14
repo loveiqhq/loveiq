@@ -638,7 +638,13 @@ export interface JourneyMessage {
 export function buildJourneyMessage(
   journey: SubmissionJourney,
   options:
-    | { kind: "survey_completed"; questionCount: number; reachedFloor?: JourneyStep }
+    | {
+        kind: "survey_completed";
+        questionCount: number;
+        reachedFloor?: JourneyStep;
+        /** The reader ticked the State of Desire sheet's box (Mark, 13 Nov: send the study). */
+        stateOfDesireTicked?: boolean;
+      }
     | {
         kind: "purchase";
         planLabel: string;
@@ -729,7 +735,11 @@ export function buildJourneyMessage(
      * nothing in a line nobody reads in-channel.
      */
     text = `:memo: Survey submission #${journey.submissionId} — ${describeQuestionCount(options.questionCount)}${surveyTime ? ` in ${surveyTime}` : ""}`;
-    blocks.push(section(compactSurveyLines(journey, options.reachedFloor).join("\n")));
+    const lines = compactSurveyLines(journey, options.reachedFloor);
+    // Mark, 13 Nov: "just record the tick for now"; he sends the study by hand, so the
+    // message that announces the submission says who asked for it.
+    if (options.stateOfDesireTicked) lines.push("State of Desire: *ticked* (send the study)");
+    blocks.push(section(lines.join("\n")));
   }
 
   /**
