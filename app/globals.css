@@ -3876,3 +3876,31 @@ body {
     animation: none;
   }
 }
+/* The report page in the vocabulary section's browser frame, slowly scrolled top to bottom
+   and back (the board's lqFly); paused under a mouse, still under reduced motion. The
+   frame's inner height is --fly-h, so the page stops with its foot at the frame's foot. */
+.pp-fly {
+  animation: pp-fly 22s ease-in-out infinite;
+}
+.pp-fly-wrap:hover .pp-fly {
+  animation-play-state: paused;
+}
+@keyframes pp-fly {
+  0%,
+  8% {
+    transform: translateY(0);
+  }
+  46%,
+  58% {
+    transform: translateY(calc(-100% + var(--fly-h)));
+  }
+  96%,
+  100% {
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-fly {
+    animation: none;
+  }
+}
