@@ -289,6 +289,14 @@ export const LOCKED_CHAPTER_CTAS =
 export const LOCKED_CHAPTERS =
   ".report-premium-overlay, .rv4-premium:not(.rv4-premium--summary), .rv4-lockbadge, .rv4-chapter__lock";
 
+/**
+ * The landing FAQ question the walk opens (plants.faq): the first CLOSED one. Round 4's new
+ * page opens its first answer by itself, as its board draws it, so its first question
+ * would close an answer; on either arm the first closed question opens one, and the
+ * faq_expanded the walk counts for it is real.
+ */
+export const LANDING_FAQ_QUESTION = "button[aria-controls^='w-faq-panel-'][aria-expanded='false']";
+
 export const PROOF_PAGE_SCRIPT = `
 window.__loveiqEventTap = function (name, params) {
   try { window.__walkHeard(Date.now(), name, JSON.stringify(params || {})); } catch (e) {}
@@ -717,7 +725,7 @@ async function main(argv: string[]): Promise<number> {
         await landingBanner.click();
       }
       if (plants.faq) {
-        const question = page.locator("button[aria-controls^='w-faq-panel-']").first();
+        const question = page.locator(LANDING_FAQ_QUESTION).first();
         if (await question.count()) {
           await question.scrollIntoViewIfNeeded();
           await question.click();
