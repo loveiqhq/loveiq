@@ -8,6 +8,7 @@ import PHero from "./PHero";
 import PTrustBand from "./PTrustBand";
 import PHowItWorks from "./PHowItWorks";
 import PPainPoints from "./PPainPoints";
+import PPromise from "./PPromise";
 
 /**
  * Round 4's arm B (`pain_point`): Marcus's new landing page, "LoveIQ landing page ·
@@ -44,6 +45,7 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
         <PTrustBand />
         <PHowItWorks />
         <PPainPoints />
+        <PPromise />
       </div>
     </main>
   );
