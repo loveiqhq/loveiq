@@ -290,3 +290,28 @@ describe("pain-point page — sentences you can actually say", () => {
     expect(events("cta_click").at(-1)?.[1]).toMatchObject({ location: "words" });
   });
 });
+
+describe("pain-point page — the numbers", () => {
+  it("shows four numbers with what they count, and where they come from", () => {
+    renderPage();
+    const section = screen
+      .getByRole("heading", {
+        level: 2,
+        name: "Sex problems are common. Talking about them isn't.",
+      })
+      .closest("section") as HTMLElement;
+    expect(section.getAttribute("data-landing-section")).toBe("stats");
+    const cards = [...section.querySelectorAll("[data-stat]")].map((card) =>
+      card.textContent?.replace(/\s+/g, " ").trim()
+    );
+    expect(cards).toEqual([
+      "47%of adults have a sexual concern they've never raised with a partner.",
+      "56%of people who take our test need emotional closeness before desire shows up.",
+      "42%shut down when sex starts to feel like pressure.",
+      "77%want more variety in their sex life than they have now.",
+    ]);
+    expect(section.textContent).toContain(
+      "Sources: LoveHoney Global Sex Survey 2023 · LoveIQ State of Desire 2026 (n = 2,369)"
+    );
+  });
+});
