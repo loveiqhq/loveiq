@@ -5,6 +5,8 @@ import LandingPageTracker from "../LandingPageTracker";
 import LandingSectionsSeen from "../LandingSectionsSeen";
 import WNavSection from "../white/WNavSection";
 import PHero from "./PHero";
+import PTrustBand from "./PTrustBand";
+import PHowItWorks from "./PHowItWorks";
 
 /**
  * Round 4's arm B (`pain_point`): Marcus's new landing page, "LoveIQ landing page ·
@@ -38,6 +40,8 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
       {/* The bar is fixed, 64px plus its 1px rule: the page starts under it. */}
       <div className="pt-[65px]">
         <PHero />
+        <PTrustBand />
+        <PHowItWorks />
       </div>
     </main>
   );
