@@ -128,3 +128,35 @@ describe("WNavSection", () => {
     );
   });
 });
+
+/**
+ * The new landing page (round 4's pain_point) dresses the same bar its own way (board
+ * Hero 3). Every other page keeps the default, which these pin as it was.
+ */
+describe("WNavSection — appearance", () => {
+  const barButton = () => screen.getByRole("link", { name: "Start test now - navigation" });
+  // "Home" is in the bar and in the phone menu; the bar's comes first.
+  const linksRow = () =>
+    screen.getAllByRole("link", { name: "Home" })[0]!.parentElement as HTMLElement;
+  const menuButton = () => screen.getByRole("button", { name: "Open menu" });
+
+  it("keeps the default bar as it was: centred links, black button, boxed menu button", () => {
+    render(<WNavSection />);
+    expect(linksRow().className).toContain("absolute left-1/2");
+    expect(barButton().className).toContain("rounded-lg bg-black");
+    expect(menuButton().className).toContain("rounded-xl border");
+    expect(menuButton().querySelector("svg")).toBeNull();
+  });
+
+  it("dresses the new page's bar: links in the row, a gradient-edged pill, a bare icon", () => {
+    render(<WNavSection appearance="painpoint" />);
+    expect(linksRow().className).not.toContain("absolute");
+    expect(barButton().className).toContain("rounded-full");
+    expect(barButton().className).toContain("border-transparent");
+    expect(barButton().className).not.toContain("bg-black");
+    expect(barButton().getAttribute("href")).toBe("/survey");
+    expect(menuButton().querySelector("svg path")?.getAttribute("d")).toBe(
+      "M4 7h16M4 12h16M4 17h16"
+    );
+  });
+});

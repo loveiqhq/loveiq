@@ -600,7 +600,10 @@ export const trackStartSurvey = (
     | "vocab"
     | "find_out"
     | "result_teaser"
-    | "sticky",
+    | "sticky"
+    // The new landing page's (round 4's pain_point) own buttons.
+    | "pain_points"
+    | "words",
   /**
    * Set only for question 1's card (hero or closing), whose Continue shares its `location`
    * with the button beside it ("hero", "footer"). Without it the two read as one CTA.
@@ -1818,7 +1821,11 @@ export const trackLandingCardAnswer = ({
   value: number;
 }) => track("landing_card_answer", params, { value });
 
-/** The live landing's sections, top to bottom (`data-landing-section` on each root). */
+/**
+ * The landing pages' sections, top to bottom (`data-landing-section` on each root): the
+ * video page's, then the new page's own (round 4's pain_point), which also reuses
+ * archetypes, testimonials, foundation, faq, closing_cta and footer.
+ */
 export type LandingSection =
   | "trust_strip"
   | "discover"
@@ -1831,7 +1838,13 @@ export type LandingSection =
   | "foundation"
   | "faq"
   | "closing_cta"
-  | "footer";
+  | "footer"
+  | "trust_band"
+  | "how_it_works"
+  | "pain_points"
+  | "promise"
+  | "words"
+  | "stats";
 
 /**
  * How far down the landing a visitor got, section by section: once per section per page,

@@ -438,7 +438,8 @@ input.autofill-dark:-internal-autofill-previewed {
    still has no such rule. */
 @media (prefers-reduced-motion: reduce) {
   .pts-page .animate-on-scroll,
-  .iug-page .animate-on-scroll {
+  .iug-page .animate-on-scroll,
+  .pp-root .animate-on-scroll {
     opacity: 1;
     transform: none;
     transition: none;
@@ -3846,4 +3847,32 @@ input.autofill-dark:-internal-autofill-previewed {
    when this rule is removed. */
 body {
   padding-bottom: var(--liq-consent-h, 0px);
+}
+
+/* The new landing page (round 4's pain_point, features/landing/ui/painpoint). Its own
+   sections do not fade in (the board draws none); the live sections it reuses do, so its
+   reveals are shown without JavaScript and under reduced motion, like pay to start's. */
+@media (scripting: none) {
+  .pp-root .animate-on-scroll {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* The live dot's soft pulse (the board's lqPulse). */
+.pp-live {
+  animation: pp-live-pulse 2s ease-in-out infinite;
+}
+@keyframes pp-live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(224, 122, 95, 0.05);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-live {
+    animation: none;
+  }
 }
