@@ -629,3 +629,61 @@ describe("hero video — whether it was seen", () => {
     expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The new landing page's hero (round 4's `pain_point`) shows the same film as a card:
+ * Claude Design "LoveIQ landing page · pain-point version", board Hero 3. Same player,
+ * same events, so the two arms' video numbers compare like with like; only the poster's
+ * dress differs.
+ */
+describe("hero video — the film card skin", () => {
+  it("shows the film's title and length over the poster", () => {
+    render(<WHeroVideo skin="film" />);
+    expect(screen.getByText("Why we created LoveIQ")).toBeTruthy();
+    expect(screen.getByText("Watch the 70-second film · 1:10")).toBeTruthy();
+  });
+
+  it("names the play button after the title it shows", () => {
+    render(<WHeroVideo skin="film" />);
+    expect(button().getAttribute("aria-label")).toBe(
+      "Why we created LoveIQ: watch the 70-second film with sound (1:10)"
+    );
+  });
+
+  it("draws a 16:9 card with no pulsing ring and no corner pill", () => {
+    render(<WHeroVideo skin="film" />);
+    const box = screen.getByTestId("hero-video");
+    expect(box.style.aspectRatio).toBe("16 / 9");
+    expect(box.className).toContain("rounded-[26px]");
+    expect(screen.queryByTestId("hero-video-play-pulse")).toBeNull();
+    expect(screen.queryByText("1:10")).toBeNull();
+  });
+
+  it("plays the same film on a tap, counted like the hero's", () => {
+    render(<WHeroVideo skin="film" />);
+    expect(film().getAttribute("src")).toBeNull();
+    tap();
+    expect(film().getAttribute("src")).toBe(HERO_VIDEO_SRC);
+    expect(analytics.trackHeroVideoTap).toHaveBeenCalledWith({ replay: false });
+  });
+
+  it("gives the button back after a start that fails, with one error", async () => {
+    playResult = rejectWith("NotAllowedError");
+    render(<WHeroVideo skin="film" />);
+    tap();
+    await act(async () => {});
+    expect(button().disabled).toBe(false);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledTimes(1);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "NotAllowedError",
+    });
+  });
+
+  it("serves the hero skin unchanged when no skin is given", () => {
+    render(<WHeroVideo />);
+    expect(screen.getByTestId("hero-video").style.aspectRatio).toBe("472 / 269.896");
+    expect(screen.getByTestId("hero-video-play-pulse")).toBeTruthy();
+    expect(screen.getByText("1:10")).toBeTruthy();
+  });
+});

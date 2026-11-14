@@ -31,6 +31,12 @@ import { HERO_POSTER_SRC, HERO_VIDEO_SRC } from "./heroVideoFiles";
  *
  * Files: encoded from Marcus's VEED export (see public/AGENT_README.md). The captions are
  * burned in, so no caption track is needed.
+ *
+ * Two skins, one player: `hero` (default) is the video page's poster above; `film` is the
+ * new landing page's card (round 4's `pain_point`; Claude Design "LoveIQ landing page ·
+ * pain-point version", board Hero 3): a 16:9 card, radius 26, with the film's title and
+ * length over a dark fade and a static gradient disc. Same file, same tap, same events,
+ * so the two arms' video numbers compare like with like.
  */
 export { HERO_POSTER_SRC, HERO_VIDEO_SRC };
 
@@ -47,6 +53,13 @@ const START_TIMEOUT_MS = 12_000;
 
 /** poster: the poster and the button · starting: tapped, waiting for frames · playing: own controls. */
 type Phase = "poster" | "starting" | "playing";
+
+/** `hero`: the video page's poster · `film`: the new landing page's film card. */
+export type HeroVideoSkin = "hero" | "film";
+
+/** The film card's words (board Hero 3); the brand is spelled LoveIQ. */
+const FILM_TITLE = "Why we created LoveIQ";
+const FILM_SUBTITLE = `Watch the 70-second film · ${DURATION_LABEL}`;
 
 const errorName = (error: unknown): string =>
   (error as { name?: string } | null)?.name || "play-rejected";
@@ -84,7 +97,8 @@ const unload = (video: HTMLVideoElement) => {
   video.load();
 };
 
-const WHeroVideo: FC = () => {
+const WHeroVideo: FC<{ skin?: HeroVideoSkin }> = ({ skin = "hero" }) => {
+  const film = skin === "film";
   const hydrated = useSyncExternalStore(subscribeToNothing, hydratedInBrowser, notHydratedOnServer);
   const [phase, setPhase] = useState<Phase>("poster");
 
@@ -277,16 +291,27 @@ const WHeroVideo: FC = () => {
       // Present once hydrated: a tap before then reaches a button with no handler yet.
       // Tests and probes wait on this rather than on a timer.
       data-ready={hydrated ? "" : undefined}
-      className="relative isolate mx-auto w-[min(472px,90.5%)] overflow-hidden bg-[#efe4d8] lg:mx-0 lg:w-full"
+      className={
+        film
+          ? // The design's card: radius 26, a lilac ground under the poster, the panel
+            // shadow, and the landing cards' lift under a mouse.
+            "relative isolate w-full overflow-hidden rounded-[26px] bg-[#f3ecff] shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)] transition-[transform,box-shadow] duration-[350ms] ease-[cubic-bezier(.16,1,.3,1)] hover:shadow-[0_10px_28px_-14px_rgba(20,15,33,0.25)] motion-safe:hover:-translate-y-1"
+          : "relative isolate mx-auto w-[min(472px,90.5%)] overflow-hidden bg-[#efe4d8] lg:mx-0 lg:w-full"
+      }
       // Figma's box (472 x 269.896, radius 17.99 at desktop, 12.07 at 316.75 on a phone):
       // one rule at every width, because the radius is a share of the box, not pixels.
-      style={{ aspectRatio: "472 / 269.896", borderRadius: "3.811% / 6.665%" }}
+      // The film card is the video's own 16:9.
+      style={
+        film
+          ? { aspectRatio: "16 / 9" }
+          : { aspectRatio: "472 / 269.896", borderRadius: "3.811% / 6.665%" }
+      }
     >
       <Image
         src={HERO_POSTER_SRC}
         alt=""
         fill
-        sizes="(min-width: 1024px) 472px, 91vw"
+        sizes={film ? "(min-width: 1024px) 480px, 92vw" : "(min-width: 1024px) 472px, 91vw"}
         fetchPriority="high"
         loading="eager"
         className="rounded-[inherit] object-cover"
@@ -323,7 +348,11 @@ const WHeroVideo: FC = () => {
           disabled={phase === "starting"}
           // Contains the visible "1:10", so a voice user saying what they see finds it
           // (WCAG 2.5.3).
-          aria-label={`Watch the intro video with sound (${DURATION_LABEL})`}
+          aria-label={
+            film
+              ? `${FILM_TITLE}: watch the 70-second film with sound (${DURATION_LABEL})`
+              : `Watch the intro video with sound (${DURATION_LABEL})`
+          }
           // The whole video is the target; the circle is the visible affordance. Its focus
           // ring is drawn inside the edge: the box clips anything outside it, and the
           // site's `focus-visible-ring` (an outer shadow) was cut off entirely. An outline,
@@ -331,43 +360,74 @@ const WHeroVideo: FC = () => {
           // it keeps it apart from the photo.
           className="group absolute inset-0 z-10 cursor-pointer rounded-[inherit] outline-none focus-visible:shadow-[inset_0_0_0_5px_#fff] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-[-3px] focus-visible:outline-[#9c7dff] disabled:cursor-progress"
         >
-          {/* Under a mouse the poster dims a little (hover: Tailwind's hoverOnlyWhenSupported). */}
-          <span
-            aria-hidden
-            className="absolute inset-0 rounded-[inherit] bg-[#161021]/0 transition-colors duration-300 group-hover:bg-[#161021]/15"
-          />
-          {/* Low, on Emma's chest, so her face stays clear: its centre at 70% of the box. */}
-          <span
-            aria-hidden
-            data-testid="hero-video-play-icon"
-            className="absolute left-1/2 top-[70%] h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 transition-transform duration-300 motion-safe:group-hover:scale-[1.08] sm:h-[72px] sm:w-[72px]"
-          >
-            {/* A soft ring swelling out of the circle and fading, as the hero's live dot pings:
-                none under reduced motion, and none while the film starts. */}
-            {phase !== "starting" && (
+          {film ? (
+            <>
+              {/* The board's fade: clear at the top, ink at 70% at the foot, under the words. */}
               <span
-                data-testid="hero-video-play-pulse"
-                className="absolute inset-0 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] opacity-0 motion-safe:animate-play-pulse motion-reduce:hidden"
+                aria-hidden
+                data-testid="hero-video-film-caption"
+                className="absolute inset-x-0 bottom-0 flex items-center gap-[14px] bg-[linear-gradient(180deg,rgba(22,16,33,0)_0%,rgba(22,16,33,0.7)_100%)] px-6 pb-[22px] pt-16 text-left"
+              >
+                <span className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] shadow-[0_0_0_4px_rgba(255,255,255,0.3)]">
+                  {phase === "starting" ? (
+                    <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white motion-safe:animate-spin" />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="#ffffff" className="h-4 w-4">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                </span>
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-serif text-[20px] font-medium leading-[26px] text-white">
+                    {FILM_TITLE}
+                  </span>
+                  <span className="font-sans text-[14px] leading-5 text-white/[0.88]">
+                    {FILM_SUBTITLE}
+                  </span>
+                </span>
+              </span>
+            </>
+          ) : (
+            <>
+              {/* Under a mouse the poster dims a little (hover: Tailwind's hoverOnlyWhenSupported). */}
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-[inherit] bg-[#161021]/0 transition-colors duration-300 group-hover:bg-[#161021]/15"
               />
-            )}
-            {/* The old corner pill's circle (before 29.10): the brand gradient, a white triangle. */}
-            <span className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] shadow-[0_8px_24px_-8px_rgba(22,16,33,0.55)] ring-2 ring-white/30">
-              {phase === "starting" ? (
-                <span className="h-[18px] w-[18px] rounded-full border-2 border-white/40 border-t-white motion-safe:animate-spin sm:h-6 sm:w-6" />
-              ) : (
-                <svg
-                  viewBox="0 0 12 12"
-                  fill="white"
-                  className="ml-[2px] h-[18px] w-[18px] sm:ml-[3px] sm:h-6 sm:w-6"
-                >
-                  <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
-                </svg>
-              )}
-            </span>
-          </span>
-          <span className="absolute bottom-2.5 right-2.5 rounded-full bg-[#161021]/75 px-2 py-0.5 text-[12px] font-medium leading-[18px] text-white tabular-nums sm:bottom-4 sm:right-4 sm:px-2.5 sm:py-1 sm:text-[14px] sm:leading-[20px]">
-            {DURATION_LABEL}
-          </span>
+              {/* Low, on Emma's chest, so her face stays clear: its centre at 70% of the box. */}
+              <span
+                aria-hidden
+                data-testid="hero-video-play-icon"
+                className="absolute left-1/2 top-[70%] h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 transition-transform duration-300 motion-safe:group-hover:scale-[1.08] sm:h-[72px] sm:w-[72px]"
+              >
+                {/* A soft ring swelling out of the circle and fading, as the hero's live dot pings:
+                  none under reduced motion, and none while the film starts. */}
+                {phase !== "starting" && (
+                  <span
+                    data-testid="hero-video-play-pulse"
+                    className="absolute inset-0 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] opacity-0 motion-safe:animate-play-pulse motion-reduce:hidden"
+                  />
+                )}
+                {/* The old corner pill's circle (before 29.10): the brand gradient, a white triangle. */}
+                <span className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] shadow-[0_8px_24px_-8px_rgba(22,16,33,0.55)] ring-2 ring-white/30">
+                  {phase === "starting" ? (
+                    <span className="h-[18px] w-[18px] rounded-full border-2 border-white/40 border-t-white motion-safe:animate-spin sm:h-6 sm:w-6" />
+                  ) : (
+                    <svg
+                      viewBox="0 0 12 12"
+                      fill="white"
+                      className="ml-[2px] h-[18px] w-[18px] sm:ml-[3px] sm:h-6 sm:w-6"
+                    >
+                      <path d="M2.5 1.4v9.2a.6.6 0 0 0 .9.52l7.7-4.6a.6.6 0 0 0 0-1.04L3.4.88a.6.6 0 0 0-.9.52Z" />
+                    </svg>
+                  )}
+                </span>
+              </span>
+              <span className="absolute bottom-2.5 right-2.5 rounded-full bg-[#161021]/75 px-2 py-0.5 text-[12px] font-medium leading-[18px] text-white tabular-nums sm:bottom-4 sm:right-4 sm:px-2.5 sm:py-1 sm:text-[14px] sm:leading-[20px]">
+                {DURATION_LABEL}
+              </span>
+            </>
+          )}
         </button>
       )}
     </div>
