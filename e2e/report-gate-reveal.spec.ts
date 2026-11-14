@@ -62,7 +62,20 @@ test.describe("The EUR 1.99 page with the archetype on it", () => {
 
   test("passes axe on the new top", async ({ page }) => {
     await page.goto(URL);
-    await expect(page.locator("[data-gate-reveal]")).toBeVisible();
+    const top = page.locator("[data-gate-reveal]");
+    await expect(top).toBeVisible();
+    // Its heading and line rise in from opacity 0 (gate-reveal.css, iugr-rise). Playwright
+    // calls them visible from the first frame, so axe could measure the contrast of text still
+    // fading in: "color-contrast: h1" on one run, ".iugr-blurb" on its retry (#725, Mobile
+    // Chrome). Scan what the reader ends up seeing: once every finite animation has run.
+    await top.evaluate((root) =>
+      Promise.all(
+        root
+          .getAnimations({ subtree: true })
+          .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+          .map((a) => a.finished)
+      )
+    );
     const results = await new AxeBuilder({ page }).include("[data-gate-reveal]").analyze();
     const serious = results.violations.filter(
       (v) => v.impact === "serious" || v.impact === "critical"
