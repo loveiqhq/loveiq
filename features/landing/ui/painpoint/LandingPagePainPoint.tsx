@@ -4,6 +4,7 @@ import ScrollAnimator from "../ScrollAnimator";
 import LandingPageTracker from "../LandingPageTracker";
 import LandingSectionsSeen from "../LandingSectionsSeen";
 import WNavSection from "../white/WNavSection";
+import PHero from "./PHero";
 
 /**
  * Round 4's arm B (`pain_point`): Marcus's new landing page, "LoveIQ landing page ·
@@ -18,14 +19,26 @@ import WNavSection from "../white/WNavSection";
  */
 const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
   return (
-    <main id="main-content" className="pp-root relative bg-white text-[#161021]">
+    // The board's root: 16px Manrope on a 25.6px line, which every line without its own
+    // height inherits (the hero's button and scale labels among them).
+    <main
+      id="main-content"
+      className="pp-root relative bg-white text-[16px] leading-[25.6px] text-[#161021]"
+    >
       {/* The global body background is dark (var(--color-bg)); paint the page white so
           mobile overscroll never shows it. Server-rendered, so no flash. */}
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <ScrollAnimator />
       <LandingPageTracker variant={variant} />
       <LandingSectionsSeen />
-      <WNavSection />
+      <WNavSection
+        appearance="painpoint"
+        shellClassName="mx-auto w-[calc(100%-32px)] max-w-[1200px] lg:w-[calc(100%-48px)]"
+      />
+      {/* The bar is fixed, 64px plus its 1px rule: the page starts under it. */}
+      <div className="pt-[65px]">
+        <PHero />
+      </div>
     </main>
   );
 };

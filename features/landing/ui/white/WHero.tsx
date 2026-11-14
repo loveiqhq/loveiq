@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useSyncExternalStore, type FC } from "react";
+import { useRef, type FC } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
+import { useLiveTakers } from "@features/landing/logic/liveTakers";
 import WHeroVideo from "./WHeroVideo";
 import WQuestionCard from "./WQuestionCard";
 
@@ -27,17 +28,6 @@ const RATING_AVATARS = [
   "/testimonials/rating-2.jpg",
   "/testimonials/rating-3.jpg",
 ];
-
-/** Plausible band for the "taking the test right now" ticker. */
-const CONCURRENT_MIN = 70;
-const CONCURRENT_MAX = 100;
-const CONCURRENT_SSR = 84;
-
-// Drawn once per page load, so the snapshot below is referentially stable.
-const CONCURRENT_CLIENT =
-  CONCURRENT_MIN + Math.floor(Math.random() * (CONCURRENT_MAX - CONCURRENT_MIN + 1));
-
-const subscribeNoop = () => () => {};
 
 /**
  * The rating row, the "taking the test right now" ticker and the privacy line. On a
@@ -131,14 +121,8 @@ const HeroProof: FC<{ concurrent: number; where: "phone" | "desktop" }> = ({
 };
 
 const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
-  // Same pattern the deleted /checkout page used: the server renders a fixed number (so
-  // hydration matches) and the client swaps in the randomised one — without a
-  // setState-in-effect and its extra render.
-  const concurrent = useSyncExternalStore(
-    subscribeNoop,
-    () => CONCURRENT_CLIENT,
-    () => CONCURRENT_SSR
-  );
+  // The "taking the test right now" number (features/landing/logic/liveTakers.ts).
+  const concurrent = useLiveTakers();
   // Question 1 in the hero slot, seen or not. On a phone it sat below the first screen
   // until the condensed hero (12.10); short screens can still cut it, so it is counted.
   // The video counts its own (WHeroVideo), and in its arm this ref stays empty.
