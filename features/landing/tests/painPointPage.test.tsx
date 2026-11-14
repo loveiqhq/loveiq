@@ -253,3 +253,40 @@ describe("pain-point page — what changes", () => {
     }
   });
 });
+
+describe("pain-point page — sentences you can actually say", () => {
+  const section = () =>
+    screen
+      .getByRole("heading", { level: 2, name: "Sentences you can actually say." })
+      .closest("section") as HTMLElement;
+
+  it("names six terms from the report and shows a page of a real report", () => {
+    renderPage();
+    expect(section().getAttribute("data-landing-section")).toBe("words");
+    for (const chip of [
+      "responsive desire",
+      "accelerators and brakes",
+      "desire discrepancy",
+      "initiation style",
+      "novelty seeking",
+      "aftercare",
+    ]) {
+      expect(within(section()).getByText(chip)).toBeTruthy();
+    }
+    const img = within(section()).getByRole("img", {
+      name: "A page from the LoveIQ report: your constellation of top three archetypes, the core archetype card and the summary",
+    });
+    expect(img.getAttribute("src")).toContain("report-preview");
+    expect(section().textContent).toContain(
+      "A look inside a real LoveIQ report. Yours is written for your own pattern."
+    );
+  });
+
+  it("starts the survey from its button, counted from the words", () => {
+    renderPage();
+    const cta = within(section()).getByRole("link", { name: "Start free test - words" });
+    expect(cta.getAttribute("href")).toBe("/survey");
+    fireEvent.click(cta);
+    expect(events("cta_click").at(-1)?.[1]).toMatchObject({ location: "words" });
+  });
+});
