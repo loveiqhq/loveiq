@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import LandingPageWhite from "@features/landing/ui/white/LandingPageWhite";
 import LandingPageWhiteV1 from "@features/landing/ui/white-v1/LandingPageWhiteV1";
+import LandingPagePainPoint from "@features/landing/ui/painpoint/LandingPagePainPoint";
 import {
   LANDING_VARIANT_HEADER,
   normalizeLandingVariant,
@@ -153,15 +154,14 @@ const academicBoardSchema = {
 };
 
 export default async function Page() {
-  // 50/50 A/B between two heroes on the same page: question 1 ("white_card") or the
-  // presenter video ("white_video"). The arm is decided in proxy.ts and handed over
-  // as a request header rather than read from cookies() here — on the visit that
-  // MINTS the cookie, cookies() cannot see it yet, so the first render would show the
-  // wrong arm and the second would flip. The video arm's poster is the only extra
-  // preload, and next/image emits it for that arm alone. The JSON-LD below is
-  // product/site metadata, identical for both arms, which keeps `/` a single
-  // canonical page for crawlers (they are served arm A's page — see
-  // resolveLandingVariant). "white_prev" still opens round 2's V1 for QA.
+  // Round 4, 50/50: the video page ("video", the control) or Marcus's new pain-point
+  // page ("pain_point"). The arm is decided in proxy.ts and handed over as a request
+  // header rather than read from cookies() here — on the visit that MINTS the cookie,
+  // cookies() cannot see it yet, so the first render would show the wrong arm and the
+  // second would flip. The JSON-LD below is product/site metadata, identical for both
+  // arms; crawlers are served the video page as "white_video" (see resolveLandingVariant),
+  // whose FAQ is the one the FAQPage markup repeats. "white_card" (and "white") still
+  // open the question-card page and "white_prev" round 2's V1, for QA.
   const variant = normalizeLandingVariant((await headers()).get(LANDING_VARIANT_HEADER));
 
   return (
@@ -182,7 +182,13 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      {variant === "white_prev" ? <LandingPageWhiteV1 /> : <LandingPageWhite variant={variant} />}
+      {variant === "pain_point" ? (
+        <LandingPagePainPoint variant={variant} />
+      ) : variant === "white_prev" ? (
+        <LandingPageWhiteV1 />
+      ) : (
+        <LandingPageWhite variant={variant} />
+      )}
     </>
   );
 }

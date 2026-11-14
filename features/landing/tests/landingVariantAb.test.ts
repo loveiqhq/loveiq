@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  LANDING_TEST_START_AT,
+  LANDING_TEST_START_DAY,
   LANDING_VARIANT_ARMS,
   LANDING_VARIANT_COOKIE,
   LANDING_VARIANT_EXPERIMENT,
@@ -11,17 +13,18 @@ import {
 } from "@shared/experiments/landingVariant";
 
 /**
- * Round 3 of the landing A/B: the same page with question 1 in the hero
- * (`white_card`) or the presenter video there (`white_video`). The pieces live in
- * six files and a broken link in any one of them loses the test's data without
+ * Round 4 of the landing A/B: today's video page (`video`, the control kept at the
+ * 10.11 sync) against Marcus's new pain-point page (`pain_point`). The pieces live in
+ * several files and a broken link in any one of them loses the test's data without
  * breaking the page — so they are pinned here rather than left to a read-through.
  */
 describe("landing A/B — the two arms", () => {
-  it("serves exactly round 3's two arms; earlier rounds' values stay valid but unassigned", () => {
-    expect([...LANDING_VARIANT_ARMS]).toEqual(["white_card", "white_video"]);
+  it("serves exactly round 4's two arms; earlier rounds' values stay valid but unassigned", () => {
+    expect([...LANDING_VARIANT_ARMS]).toEqual(["video", "pain_point"]);
     for (const arm of LANDING_VARIANT_ARMS) expect(isLiveLandingArm(arm)).toBe(true);
     // Stored rows carry these, so they must still parse; none is assigned any more.
-    for (const old of ["control", "white", "white_prev"]) {
+    // Round 3's two arms are here too: a returning visitor holding one is re-rolled.
+    for (const old of ["control", "white", "white_prev", "white_card", "white_video"]) {
       expect(isLandingVariant(old)).toBe(true);
       expect(isLiveLandingArm(old)).toBe(false);
       expect(LANDING_VARIANT_ARMS).not.toContain(old);
@@ -30,18 +33,27 @@ describe("landing A/B — the two arms", () => {
     expect(isLiveLandingArm("purple")).toBe(false);
   });
 
-  it("defaults an absent or unknown value to arm A's page, never to either arm", () => {
-    // "white" renders question 1 like arm A, but it is not an arm: a buyer with no
-    // cookie (checkout-session's Stripe metadata) is credited to neither side.
+  it("defaults an absent or unknown value to a page outside the test, never to either arm", () => {
+    // "white" renders question 1's page, but it is not an arm: a buyer with no cookie
+    // (checkout-session's Stripe metadata) is credited to neither side.
     expect(normalizeLandingVariant(null)).toBe("white");
     expect(normalizeLandingVariant("nonsense")).toBe("white");
     expect(isLiveLandingArm(normalizeLandingVariant(null))).toBe(false);
+    expect(normalizeLandingVariant("pain_point")).toBe("pain_point");
+    expect(normalizeLandingVariant("video")).toBe("video");
     expect(normalizeLandingVariant("white_video")).toBe("white_video");
     expect(normalizeLandingVariant("white_prev")).toBe("white_prev");
   });
 
   it("uses a fresh experiment id so the rounds stay apart in GA4 and PostHog", () => {
-    expect(LANDING_VARIANT_EXPERIMENT).toBe("landing-hero-video-ab");
+    expect(LANDING_VARIANT_EXPERIMENT).toBe("landing-pain-point-ab");
+  });
+
+  it("starts round 4's readouts on the first whole Berlin day after the release", () => {
+    // Release planned for Mon 16 Nov 2026: the first whole day is Tue 17 Nov, whose
+    // Berlin midnight (CET, UTC+1) is 23:00 UTC the evening before.
+    expect(LANDING_TEST_START_DAY).toBe("2026-11-17");
+    expect(LANDING_TEST_START_AT).toBe("2026-11-16T23:00:00Z");
   });
 
   it("renders one arm per variant, chosen from the proxy's header", () => {
@@ -51,15 +63,18 @@ describe("landing A/B — the two arms", () => {
     expect(page).toContain("LANDING_VARIANT_HEADER");
     // ...and not by importing next/headers' cookies (the comment explains why).
     expect(page).not.toMatch(/^import \{[^}]*\bcookies\b/m);
-    expect(page).toContain(
-      'variant === "white_prev" ? <LandingPageWhiteV1 /> : <LandingPageWhite variant={variant} />'
+    // The new page for its arm, round 2's V1 for QA, and the white page for the rest.
+    expect(page).toMatch(
+      /variant === "pain_point" \? \(\s*<LandingPagePainPoint variant=\{variant\} \/>\s*\) : variant === "white_prev" \? \(\s*<LandingPageWhiteV1 \/>\s*\) : \(\s*<LandingPageWhite variant=\{variant\} \/>\s*\)/
     );
-    // ...and the page hands the video to the hero for arm B alone.
+    // ...and the white page shows the video for the control and round 3's video arm.
     const current = readFileSync(
       join(process.cwd(), "features/landing/ui/white/LandingPageWhite.tsx"),
       "utf8"
     );
-    expect(current).toContain('<WHero media={variant === "white_video" ? "video" : "card"} />');
+    expect(current).toMatch(
+      /<WHero\s+media=\{variant === "video" \|\| variant === "white_video" \? "video" : "card"\}\s*\/>/
+    );
   });
 
   it("stamps the arm on every durable event, the submission and the Stripe session", () => {
@@ -117,8 +132,13 @@ describe("landing A/B — the two arms", () => {
       join(process.cwd(), "features/landing/ui/white-v1/LandingPageWhiteV1.tsx"),
       "utf8"
     );
+    const painPoint = readFileSync(
+      join(process.cwd(), "features/landing/ui/painpoint/LandingPagePainPoint.tsx"),
+      "utf8"
+    );
     // The page registers the arm it was served, not a hard-coded one.
     expect(current).toContain("<LandingPageTracker variant={variant} />");
+    expect(painPoint).toContain("<LandingPageTracker variant={variant} />");
     expect(previous).toContain('<LandingPageTracker variant="white_prev" />');
   });
 

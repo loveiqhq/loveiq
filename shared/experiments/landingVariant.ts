@@ -24,9 +24,21 @@
  * would have kept every returning visitor in arm A and only new visitors could
  * reach B. New values re-roll those cookies, and keep round 2's rows from pooling
  * into round 3's (Pricing 3.0 took new letters, A3/B3, for the same reason).
- * Its readouts restart at LANDING_TEST_START_DAY, when the phone hero was condensed
- * so the slot is on the first screen and the page took the 12.10 copy (both arms, same
- * arms and cookies).
+ * Its readouts restarted on 2026-10-14, when the phone hero was condensed so the slot is
+ * on the first screen and the page took the 12.10 copy (both arms, same arms and
+ * cookies). Closed at the 2026-11-10 sync: the video stays.
+ *
+ * ROUND 4 (from the 2026-11-16 release; Marcus, #all-loveiq 2026-11-12, "it will replace
+ * the version without the video and run against the current video version 50/50"):
+ *   - `"video"`      — arm A, the control: round 3's video page exactly (V3)
+ *   - `"pain_point"` — arm B, Marcus's new page (Claude Design "LoveIQ landing page ·
+ *     pain-point version", board Hero 3; features/landing/ui/painpoint/)
+ * Two new values again, for round 3's reason: a live arm's cookie is sticky, so keeping
+ * `white_video` live would have parked every returning round-3 video visitor in arm A.
+ * New values re-roll every round-3 cookie and keep round 3's rows apart from round 4's.
+ * Crawlers now get `white_video` (the video page, no longer an arm): the card page is
+ * nobody's page any more, and the index should show what half of all visitors see.
+ * Its readouts start at LANDING_TEST_START_DAY.
  *
  * The variant flows through the funnel for attribution:
  *   - `LandingPageTracker` sets it as a GA4 user property and PostHog
@@ -41,14 +53,16 @@
 
 const isProduction = process.env.NODE_ENV === "production";
 
-export type LandingVariant = "control" | "white" | "white_prev" | "white_card" | "white_video";
+export type LandingVariant =
+  "control" | "white" | "white_prev" | "white_card" | "white_video" | "video" | "pain_point";
 
 /**
  * Bumped every round so GA4 and PostHog keep the tests apart: `landing-white-ab` is
  * round 1 (dark vs white), `landing-white-rebuild-ab` round 2 (V2 vs V1),
- * `landing-hero-video-ab` round 3 (question card vs video).
+ * `landing-hero-video-ab` round 3 (question card vs video), `landing-pain-point-ab`
+ * round 4 (video page vs the new pain-point page).
  */
-export const LANDING_VARIANT_EXPERIMENT = "landing-hero-video-ab";
+export const LANDING_VARIANT_EXPERIMENT = "landing-pain-point-ab";
 
 /**
  * The day round 3 started assigning arms on production (Berlin day). Its readouts
@@ -61,26 +75,22 @@ export const LANDING_VARIANT_EXPERIMENT = "landing-hero-video-ab";
 export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-07";
 
 /**
- * The first whole (Berlin) reporting day of the condensed phone hero (Figma Report-3.0
- * `1604:5505`), and where round 3's readouts restart. Until then, on a phone, the video
- * and question 1 sat below the first screen and about 6 in 10 phone visits never reached
- * either (Eman, 2026-10-11), so the days before it compare two things most visitors did
- * not see. The same release puts the 12.10 copy (Figma `1604:8233`) on the whole page.
- * Both arms changed alike; assignment and cookies did not. The axis trend and the
- * conversion digest's landing blocks and verdict start here, and the /admin readout at
- * LANDING_TEST_START_AT. The brain's experiments tool reads registry #6 from its own start
- * date, which moves to this day with it. Set for a production deploy on 2026-10-13: if the
- * release reaches production later, move this to the first whole day after its deploy,
- * and the moment below with it.
+ * The first whole (Berlin) reporting day of round 4, where its readouts start. Round 3's
+ * restart day was 2026-10-14 (the condensed phone hero, Figma Report-3.0 `1604:5505`).
+ * The axis trend and the conversion digest's landing blocks and verdict start here, and
+ * the /admin readout at LANDING_TEST_START_AT. The brain's experiments tool reads round 4
+ * (registry #10) from its own start date. Set for a production deploy on Mon 2026-11-16:
+ * if the release reaches production later, move this to the first whole day after its
+ * deploy, and the moment below with it.
  */
-export const LANDING_TEST_START_DAY = "2026-10-14";
+export const LANDING_TEST_START_DAY = "2026-11-17";
 
 /**
- * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin. Not the deploy's
- * own moment, which is not known when this is written: a cut a few hours late loses a few
- * hours of readers, a cut too early would count readers of the old phone hero.
+ * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin (CET, UTC+1, in
+ * November). Not the deploy's own moment, which is not known when this is written: a cut a
+ * few hours late loses a few hours of readers, a cut too early would count round 3's.
  */
-export const LANDING_TEST_START_AT = "2026-10-13T22:00:00Z";
+export const LANDING_TEST_START_AT = "2026-11-16T23:00:00Z";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +
@@ -102,31 +112,34 @@ export function isLandingVariant(value: string | null | undefined): value is Lan
     value === "white" ||
     value === "white_prev" ||
     value === "white_card" ||
-    value === "white_video"
+    value === "white_video" ||
+    value === "video" ||
+    value === "pain_point"
   );
 }
 
 /**
- * The two arms currently in the test, in reading order (A, then B). `control`,
- * `white` and `white_prev` are history: valid on stored rows, never assigned.
+ * The two arms currently in the test, in reading order (A, then B). `control`, `white`,
+ * `white_prev`, `white_card` and `white_video` are history: valid on stored rows and for
+ * `?variant=`, never assigned.
  */
 export const LANDING_VARIANT_ARMS = [
-  "white_card",
-  "white_video",
+  "video",
+  "pain_point",
 ] as const satisfies readonly LandingVariant[];
 
 export type LiveLandingArm = (typeof LANDING_VARIANT_ARMS)[number];
 
 /** True only for an arm the current test assigns — not for a valid but retired value. */
 export function isLiveLandingArm(value: string | null | undefined): value is LiveLandingArm {
-  return value === "white_card" || value === "white_video";
+  return value === "video" || value === "pain_point";
 }
 
 /**
- * Normalize any raw value to a variant. Defaults to `"white"`: it renders arm A's page
- * (question 1 in the hero), and it is NOT a live arm, so an absent or unrecognised
- * value is never credited to either side of the test. Defaulting to `"white_card"`
- * would hand every buyer without a cookie (checkout-session's Stripe metadata) to A.
+ * Normalize any raw value to a variant. Defaults to `"white"`: it renders the question-card
+ * page, and it is NOT a live arm, so an absent or unrecognised value is never credited to
+ * either side of the test. Defaulting to a live arm would hand every buyer without a cookie
+ * (checkout-session's Stripe metadata) to that arm.
  */
 export function normalizeLandingVariant(value: string | null | undefined): LandingVariant {
   return isLandingVariant(value) ? value : "white";
