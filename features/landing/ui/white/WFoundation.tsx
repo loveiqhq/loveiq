@@ -72,20 +72,38 @@ const spotlights: {
   },
 ];
 
-const WFoundation: FC = () => (
+/**
+ * Opt-in dress for a page that reuses the section at its own scale (the new landing page,
+ * round 4's pain_point): the section's padding, its container and the heading. Unset, the
+ * section renders exactly as on the video page.
+ */
+interface WFoundationProps {
+  sectionClassName?: string;
+  shellClassName?: string;
+  headingClassName?: string;
+}
+
+const WFoundation: FC<WFoundationProps> = ({
+  sectionClassName,
+  shellClassName,
+  headingClassName,
+}) => (
   <section
-    className="bg-white py-16 lg:py-[84px]"
+    className={sectionClassName ?? "bg-white py-16 lg:py-[84px]"}
     aria-labelledby="w-foundation-heading"
     data-landing-section="foundation"
   >
-    <div className="content-shell">
+    <div className={shellClassName ?? "content-shell"}>
       {/* Centered intro. Its "THE FOUNDATION" eyebrow, and the "HOW YOUR RESULT IS
           DERIVED" label over the rail, went with the 12.10 copy (Figma Report-3.0
           1604:8233); the rail keeps its 24px, as the frame does. */}
       <div className="mx-auto flex max-w-[640px] flex-col items-center gap-3.5 text-center">
         <h2
           id="w-foundation-heading"
-          className="animate-on-scroll stagger-1 font-serif text-[clamp(1.6rem,4.5vw,2.125rem)] font-medium leading-[1.28] tracking-[-0.01em] text-[#161021]"
+          className={
+            headingClassName ??
+            "animate-on-scroll stagger-1 font-serif text-[clamp(1.6rem,4.5vw,2.125rem)] font-medium leading-[1.28] tracking-[-0.01em] text-[#161021]"
+          }
         >
           Built by researchers and on practical wisdom.
         </h2>

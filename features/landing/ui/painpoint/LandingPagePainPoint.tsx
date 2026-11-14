@@ -11,6 +11,10 @@ import PPainPoints from "./PPainPoints";
 import PPromise from "./PPromise";
 import PWords from "./PWords";
 import PStats from "./PStats";
+import WArchetypeCards from "../white/WArchetypeCards";
+import WTestimonials from "../white/WTestimonials";
+import WFoundation from "../white/WFoundation";
+import { PP_REUSED_H2, PP_REUSED_SHELL, PP_TYPE } from "./ppStyles";
 
 /**
  * Round 4's arm B (`pain_point`): Marcus's new landing page, "LoveIQ landing page ·
@@ -25,12 +29,9 @@ import PStats from "./PStats";
  */
 const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
   return (
-    // The board's root: 16px Manrope on a 25.6px line, which every line without its own
-    // height inherits (the hero's button and scale labels among them).
-    <main
-      id="main-content"
-      className="pp-root relative bg-white text-[16px] leading-[25.6px] text-[#161021]"
-    >
+    // gray-900 text, as on the video page, for the live sections reused here; the page's
+    // own sections take the board's root type (PP_TYPE).
+    <main id="main-content" className="pp-root relative bg-white text-gray-900">
       {/* The global body background is dark (var(--color-bg)); paint the page white so
           mobile overscroll never shows it. Server-rendered, so no flash. */}
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
@@ -43,13 +44,32 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
       />
       {/* The bar is fixed, 64px plus its 1px rule: the page starts under it. */}
       <div className="pt-[65px]">
-        <PHero />
-        <PTrustBand />
-        <PHowItWorks />
-        <PPainPoints />
-        <PPromise />
-        <PWords />
-        <PStats />
+        <div className={PP_TYPE}>
+          <PHero />
+          <PTrustBand />
+          <PHowItWorks />
+          <PPainPoints />
+          <PPromise />
+          <PWords />
+          <PStats />
+        </div>
+        {/* The live sections at the board's scale: its headings (46px from lg, 32px on a
+            phone), its section padding and container, and its review row inset. Their insides
+            stay the live ones, so the gliding rows and the phone cards are today's. */}
+        <WArchetypeCards
+          sectionClassName="overflow-hidden bg-white py-24"
+          headingClassName={PP_REUSED_H2}
+        />
+        <WTestimonials
+          sectionClassName="overflow-hidden bg-white py-24"
+          shellClassName={PP_REUSED_SHELL}
+          rowClassName="pb-6 pl-0 pr-[29px] pt-2"
+        />
+        <WFoundation
+          sectionClassName="bg-white py-[84px]"
+          shellClassName={PP_REUSED_SHELL}
+          headingClassName={`animate-on-scroll stagger-1 ${PP_REUSED_H2} [text-wrap:balance]`}
+        />
       </div>
     </main>
   );
