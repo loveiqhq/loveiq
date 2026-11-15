@@ -169,6 +169,16 @@ const TrustpilotMark: FC = () => (
  * `at` ms, 110ms apart (Mark's review, 12 Nov: "animate the Excellent and the stars").
  */
 const STAR_STEP_MS = 110;
+const STARS_AT_MS = 420;
+
+/**
+ * Trustpilot's quote, and the rule above it, arrive once the last star has landed (from
+ * STARS_AT_MS + 4 x STAR_STEP_MS + its 320ms, so 1180ms, before the sheet's tempo of 1.5), and
+ * the quote fades in slower than the rest (.sheet-quote). Mark's third review, 15 Nov: "can we
+ * have the quote appear a bit later and fade in slower". It used to arrive with the last stars.
+ */
+const QUOTE_RULE_AT_MS = 1200;
+const QUOTE_AT_MS = 1300;
 
 const TrustpilotStars: FC<{ score: number; at?: number }> = ({ score, at }) => {
   const stars = Math.round(score * 2) / 2;
@@ -257,25 +267,32 @@ export const TrustpilotSheet: FC<InfoSheetHandlers & { open: boolean }> = ({
             </span>
           </h2>
           <span className="flex items-center gap-2">
-            <TrustpilotStars score={score} at={420} />
+            <TrustpilotStars score={score} at={STARS_AT_MS} />
             <span className="font-sans text-[12px] text-[#6b6678]">
               {copy.reviews(config.reviewCount)}
             </span>
           </span>
         </div>
-        <div className="sheet-in flex flex-col self-stretch" style={order(17)}>
-          <div aria-hidden className="sheet-grow-x h-px w-full bg-[#efedf2]" style={delay(1000)} />
-          <blockquote className="pt-3 font-serif text-[18px] leading-[23px] text-[#161021]">
-            {`“${copy.quote}”`}
-          </blockquote>
-          <a
-            href={copy.reviewUrl || config.profileUrl || TRUSTPILOT_FALLBACK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 self-start font-sans text-[12px] text-[#6b6678] underline-offset-2 hover:underline"
-          >
-            {`${copy.author} · Trustpilot review, ${copy.date}`}
-          </a>
+        <div className="flex flex-col self-stretch">
+          <div
+            aria-hidden
+            data-tp-rule
+            className="sheet-grow-x h-px w-full bg-[#efedf2]"
+            style={delay(QUOTE_RULE_AT_MS)}
+          />
+          <div data-tp-quote className="sheet-quote flex flex-col" style={delay(QUOTE_AT_MS)}>
+            <blockquote className="pt-3 font-serif text-[18px] leading-[23px] text-[#161021]">
+              {`“${copy.quote}”`}
+            </blockquote>
+            <a
+              href={copy.reviewUrl || config.profileUrl || TRUSTPILOT_FALLBACK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 self-start font-sans text-[12px] text-[#6b6678] underline-offset-2 hover:underline"
+            >
+              {`${copy.author} · Trustpilot review, ${copy.date}`}
+            </a>
+          </div>
         </div>
       </div>
     </InfoSheetFrame>
@@ -285,8 +302,9 @@ export const TrustpilotSheet: FC<InfoSheetHandlers & { open: boolean }> = ({
 /**
  * Sheet 3, before 01005: an expert's words, the phrase that matters turning to the gradient.
  * Mark's second review (13 Nov): "no need for an animation of the image… make the entire card
- * slide up slower". Nothing inside moves; the card arrives as one piece, more slowly
- * (sheets-motion.css), and the phrase turns once it has landed.
+ * slide up slower". Nothing inside moves; the card arrives as one piece over 1s (since his
+ * third review, 15 Nov, every sheet's pace: SurveySheetShell), and the phrase turns once it
+ * has landed.
  */
 export const ExpertSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, ...handlers }) => {
   const titleId = useId();
@@ -334,7 +352,7 @@ export const ExpertSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
           {/* No rule beside the quote (Mark's review, 12 Nov); the board keeps its 14px indent. */}
           {"“"}
           {copy.quoteLead}
-          {/* Once the card has landed (0.75s, sheets-motion.css). */}
+          {/* Once the card has landed: 99% of its 1s rise is done by 0.8s (SurveySheetShell). */}
           <GradientText inkAt={800}>{copy.quoteEmphasis}</GradientText>
           {copy.quoteEnd}
           {"”"}

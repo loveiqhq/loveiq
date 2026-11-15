@@ -14,6 +14,9 @@
  *   multiplied by it, so their order and spacing stay as designed, only slower. The expert
  *   sheet lost its own entrance ("no need for an animation of the image"): the whole card
  *   slides up, more slowly, instead. Leaving stays quick on every sheet.
+ * - His third review (15 Nov): every sheet rises over 1s (in SurveySheetShell), so the reader
+ *   sees it arrive; the map runs at 2.25 ("slow down all the animations"); Trustpilot's quote
+ *   arrives once the stars have landed, and fades in slower (.sheet-quote).
  * - Only transform and opacity move. Two exceptions, both small: a stroke drawing on an icon
  *   of 32px or less, and one phrase whose ink fades to transparent to show the brand gradient
  *   clipped to its text (WCAG 2.3.3 counts colour and opacity as no motion).
@@ -27,15 +30,14 @@
 @media (prefers-reduced-motion: no-preference) {
   /* Mark's second review (13 Nov): "slow down the animation again", "everything a bit slower". */
   [data-survey-sheet="trustpilot"],
-  [data-survey-sheet="halfway"],
-  [data-survey-sheet="reportMap"] {
+  [data-survey-sheet="halfway"] {
     --sheet-tempo: 1.5;
   }
 
-  /* The expert card arrives as one piece, sliding up more slowly than the 0.45s every sheet
-     takes (SurveySheetShell). Not while it leaves: that stays quick. */
-  [data-survey-sheet="expert"] > [role="dialog"]:not(.sheet-exit) {
-    animation-duration: 0.75s;
+  /* The map, slower again in his third review (15 Nov): "Slow down all the animations". Its
+     screen's fade follows (0.45s, SurveySheetShell). */
+  [data-survey-sheet="reportMap"] {
+    --sheet-tempo: 2.25;
   }
 
   /* A group arriving: --sheet-i is its place in the order (0, 1, 2 …). */
@@ -51,6 +53,14 @@
     stroke-dashoffset: 1;
     animation: sheet-draw calc(360ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1) forwards;
     animation-delay: calc(var(--sheet-delay, 250ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A passage read once the rest has landed (Trustpilot's quote): later and slower than a
+     group, on ease-out, whose fade is seen; the house curve does most of its work in the first
+     tenth of its time (Mark's third review, 15 Nov: "appear a bit later and fade in slower"). */
+  .sheet-quote {
+    animation: sheet-item-in calc(500ms * var(--sheet-tempo, 1)) ease-out backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
   }
 
   /* A step in a list arriving on its own beat (the halfway sheet): --sheet-delay sets it. */
