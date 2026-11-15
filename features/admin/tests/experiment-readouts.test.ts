@@ -239,7 +239,10 @@ describe("loadPriceListChanges: when each price list changed", () => {
 });
 
 describe("20261016170000: the 2.x changes it pins, and its rollback", () => {
-  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  // LF line ends: .gitattributes doesn't pin *.sql, so a Windows checkout (core.autocrlf)
+  // gives CRLF and the line-anchored patterns below would miss.
+  const read = (path: string) =>
+    readFileSync(join(process.cwd(), path), "utf8").replace(/\r\n/g, "\n");
   const sql = read("supabase/migrations/20261016170000_report_price_quote_arm_history.sql");
 
   it("pins each 2.x list at exactly the prices the re-sync of the time wrote", () => {
