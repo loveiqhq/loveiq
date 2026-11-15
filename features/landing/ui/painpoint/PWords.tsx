@@ -4,9 +4,11 @@ import PCta from "./PCta";
 import { HERO, WORDS } from "./painPointContent";
 import { PP_H2, PP_INNER } from "./ppStyles";
 
-/** A page of a real report (Spark Seeker's constellation, core archetype card and summary),
- *  from the board; 1344 × 2216. Named by its content's hash: images are cached for a year. */
-export const REPORT_PREVIEW_SRC = "/images/painpoint/report-preview.65314ac4.jpg";
+/** A page of today's report UI (the unlocked preview, captured 15 Nov at the board's
+ *  composition: Spark Seeker's constellation, core archetype card and summary); 1344 × 2216.
+ *  Not the board's own screenshot, which showed a 7-day guarantee and FREE badges. Named by its
+ *  content's hash: images are cached for a year. */
+export const REPORT_PREVIEW_SRC = "/images/painpoint/report-preview.4c05cfc1.jpg";
 
 /**
  * "Sentences you can actually say." (board "The words"): the report's plain words for what
