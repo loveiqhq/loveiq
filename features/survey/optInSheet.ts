@@ -132,3 +132,15 @@ export function rememberOptInSheetShown(startedAt: string): void {
     // Storage blocked: SurveyEngine still remembers it for this page.
   }
 }
+
+/**
+ * The run may be asked again: the staging jump menu's replay of the sheets (Fatih, 15 Nov).
+ * Only the jump menu calls it, and that is never on the live site.
+ */
+export function forgetOptInSheetShown(): void {
+  try {
+    localStorage.removeItem(OPT_IN_SHEET_STORAGE_KEY);
+  } catch {
+    // Storage blocked: SurveyEngine forgets it for this page.
+  }
+}

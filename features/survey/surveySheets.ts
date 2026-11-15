@@ -221,6 +221,19 @@ export function desireTickedFor(startedAt: string): boolean {
   }
 }
 
+/**
+ * Every sheet opens again in this run: the staging jump menu's replay (Fatih, 15 Nov), so a
+ * reviewer who has seen a sheet once can see it again without starting a new run. Only the
+ * jump menu calls it, and that is never on the live site.
+ */
+export function forgetSheetsShown(): void {
+  try {
+    localStorage.removeItem(SURVEY_SHEETS_STORAGE_KEY);
+  } catch {
+    // Storage blocked: SurveyEngine forgets them for this page.
+  }
+}
+
 export function rememberSheetShown(startedAt: string, id: SurveySheetId): void {
   try {
     const shown = sheetsShownFor(startedAt);

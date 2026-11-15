@@ -278,6 +278,8 @@ with a "Keep going" that carries on. The rules are in
   ArrowRight and a swipe all go through `goNext`, which opens it instead. One "before" a
   question rises over it as it arrives. Each opens once per run (`loveiq-survey-sheets`, keyed
   by the run's `startedAt`), never on Back, a resume or the jump menu, and one at most per move.
+  A jump in the staging menu makes the run forget which it has seen, the miss-out sheet too, so
+  a reviewer sees each again when passing its question (Fatih, 2026-11-15).
 - **Closing.** Keep going carries on (a "before" sheet leaves the reader on its question).
   Tapping outside, Esc or a swipe down do the same: these sheets ask nothing. Back closes it and
   steps back. The map is a full screen with Previous (back to the question) and Next.
