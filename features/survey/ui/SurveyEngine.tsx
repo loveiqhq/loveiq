@@ -40,6 +40,7 @@ import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { EMAIL_QID, OPT_IN_QID, orderAskedQuestions } from "./questionOrder";
 import {
+  forgetOptInSheetShown,
   isOptInYes,
   optInSheetShownFor,
   optInYesOption,
@@ -48,6 +49,7 @@ import {
   type OptInSheetDismissVia,
 } from "@features/survey/optInSheet";
 import {
+  forgetSheetsShown,
   rememberSheetShown,
   sheetAfterQuestion,
   sheetBeforeQuestion,
@@ -587,6 +589,23 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       window.scrollTo({ top: 0, behavior: "instant" });
     },
     [totalQuestions, setCurrentIndex, cancelBackFallback, cancelAutoAdvance, orderedQuestions]
+  );
+
+  /**
+   * The staging jump menu (SurveyJumpMenu, never on the live site) moves as goTo does, and
+   * replays the sheets: this run forgets which it has seen, the miss-out sheet too, so each
+   * opens again when its question is passed. A reviewer who has seen one no longer needs a new
+   * run to see it again (Fatih, 15 Nov).
+   */
+  const jumpTo = useCallback(
+    (index: number) => {
+      sheetsShown.current = { run: startedAt, shown: new Set() };
+      forgetSheetsShown();
+      optInSheetShown.current = false;
+      forgetOptInSheetShown();
+      goTo(index);
+    },
+    [goTo, startedAt]
   );
 
   /**
@@ -1303,7 +1322,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                 <SurveyJumpMenu
                   questions={orderedQuestions}
                   currentIndex={currentIndex}
-                  onJump={goTo}
+                  onJump={jumpTo}
                 />
               </div>
             ) : null}

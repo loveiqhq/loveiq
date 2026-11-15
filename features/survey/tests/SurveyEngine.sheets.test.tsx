@@ -276,6 +276,27 @@ describe("the sheets between questions", () => {
     expect(analytics.shown).toHaveBeenCalledTimes(1);
   });
 
+  // Fatih, 15 Nov: reviewing them, a sheet seen once never came back without a new run. The
+  // staging jump menu replays them: a jump forgets which sheets this run has seen.
+  it("opens again after a jump in the staging menu, which forgets what this run has seen", () => {
+    onQuestion(at("02004"), RESPOND);
+    const first = engine();
+    fireEvent.click(next());
+    expect(dialog(/More people love to respond/)).toBeInTheDocument();
+    first.unmount();
+
+    engine();
+    fireEvent.click(next());
+    expect(heading(at("02004") + 1)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Jump to question"), {
+      target: { value: String(at("02004")) },
+    });
+    expect(heading(at("02004"))).toBeInTheDocument();
+    fireEvent.click(next());
+    expect(dialog(/More people love to respond/)).toBeInTheDocument();
+    expect(analytics.shown).toHaveBeenCalledTimes(2);
+  });
+
   it("rises over 01005 as it arrives; Keep going leaves the reader there", async () => {
     onQuestion(at("01005") - 1);
     engine();

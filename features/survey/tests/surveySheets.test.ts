@@ -5,6 +5,7 @@ import { isHidden } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import {
   desireTickedFor,
+  forgetSheetsShown,
   parseSheetsPreview,
   rememberDesireTick,
   rememberSheetShown,
@@ -161,6 +162,19 @@ describe("once per run, across a reload", () => {
     rememberSheetShown("run-2", "desire");
     expect([...sheetsShownFor("run-2")]).toEqual(["desire"]);
     expect(sheetsShownFor("run-1").size).toBe(0);
+  });
+
+  it("forgets every sheet this run has seen, for the staging jump menu's replay", () => {
+    rememberSheetShown("run-1", "science");
+    rememberSheetShown("run-1", "trustpilot");
+    forgetSheetsShown();
+    expect(sheetsShownFor("run-1").size).toBe(0);
+    vi.stubGlobal("localStorage", {
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    expect(() => forgetSheetsShown()).not.toThrow();
   });
 
   it("survives storage that refuses or holds nonsense", () => {
