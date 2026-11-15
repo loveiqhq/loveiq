@@ -24,6 +24,14 @@ export const PP_REUSED_H2 =
  */
 export const PP_REUSED_SHELL = "mx-auto w-[calc(100%-48px)] max-w-[1200px]";
 
+/**
+ * The board's focus ring: a 2px #795fc8 outline, 2px off, for the keyboard only. Here, not in
+ * PCta.tsx: a server component that imports a value from a "use client" module gets a client
+ * reference, not the string (tests/painPointRscBoundary.test.ts).
+ */
+export const PP_FOCUS =
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#795fc8]";
+
 /** The brand gradient as text (the board's highlighted words and numbers). */
 export const PP_ACCENT =
   "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text text-transparent";

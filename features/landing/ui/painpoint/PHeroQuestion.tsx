@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, type FC, type KeyboardEvent } from "react";
+import { useId, useRef, type FC, type KeyboardEvent } from "react";
 import { useLandingPick } from "@features/landing/logic/landingPick";
-import PCta, { PP_FOCUS } from "./PCta";
+import PCta from "./PCta";
+import { PP_FOCUS } from "./ppStyles";
 import { HERO, QUESTION_1 } from "./painPointContent";
 
 /** The board's dot diameters, 1 to 7: large at the ends, small in the middle. */
@@ -19,6 +20,7 @@ const rimFor = (i: number) => (i < 3 ? "#e6b5a6" : i > 3 ? "#c9bff0" : "#e0dce6"
  */
 const PHeroQuestion: FC = () => {
   const { selected, pick } = useLandingPick();
+  const questionId = useId();
   const dotsRef = useRef<Array<HTMLButtonElement | null>>([]);
   const answered = selected !== null;
   // The roving tab stop: the picked dot, or the first before any pick.
@@ -40,12 +42,16 @@ const PHeroQuestion: FC = () => {
 
   return (
     <div id="start" className="flex max-w-[520px] flex-col gap-4 border-t border-[#e9e6ee] pt-6">
-      <p className="m-0 font-serif text-[22px] font-medium leading-[30px] text-[#161021]">
+      <p
+        id={questionId}
+        className="m-0 font-serif text-[22px] font-medium leading-[30px] text-[#161021]"
+      >
         {QUESTION_1}
       </p>
       <div
         role="radiogroup"
-        aria-label={HERO.scaleAria}
+        // Named by the statement it rates, as the video page's card names its scale.
+        aria-labelledby={questionId}
         className="flex items-center justify-between gap-[6px]"
       >
         {HERO.scaleLabels.map((label, i) => {

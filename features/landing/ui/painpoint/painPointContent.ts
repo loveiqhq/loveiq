@@ -22,7 +22,6 @@ export const HERO = {
   // CHANGED: full stop added; the board's sentence ends without one.
   introRest:
     ", decode your sexual personality and patterns, so you get clear, practical steps to improve intimacy.",
-  scaleAria: "How true is this for you?",
   scaleLabels: [
     "1, not true at all",
     "2",
@@ -48,7 +47,14 @@ export const HERO = {
 export const TRUST_BAND = {
   label: "Why people trust LoveIQ",
   items: [
-    { icon: "people", strong: "10,000+ people", muted: "have started the test", strongFirst: true },
+    // CHANGED (Fatih, 15 Nov): the board says "have started the test"; AP-Analytics counts
+    // about 5,400 starts. The video page's words, its claim already with Marcus for a source.
+    {
+      icon: "people",
+      strong: "10,000+ people",
+      muted: "have taken a first step",
+      strongFirst: true,
+    },
     { icon: "book", muted: "Grounded in", strong: "100+ papers and books", strongFirst: false },
     { icon: "lock", strong: "Anonymous, encrypted,", muted: "never sold", strongFirst: true },
   ],
@@ -60,13 +66,15 @@ export const HOW_IT_WORKS = {
   title: "~15 minutes. 14 archetypes. Your next steps.",
   steps: [
     { title: "Answer {questions} questions", body: "Anonymous, no account needed." },
-    { title: "Meet your archetype", body: "Plus your core motivation." },
-    // CHANGED (Fatih, 14 Nov): the board says "Get your free result", but nothing personal
-    // opens before €1.99 today; and "7-day money-back guarantee", where the guarantee is
-    // 14 days (Fatih, 02.10).
+    // CHANGED (Fatih, 14 and 15 Nov): the board says "Meet your archetype" before "Get your
+    // free result", but nothing personal opens before {price} today, and on today's {price}
+    // page the Core Archetype is what {price} opens; no step may put it before the price
+    // (shared/experiments/gateRevealArm.ts). And "7-day money-back guarantee", where the
+    // guarantee is 14 days (Fatih, 02.10).
+    { title: "Unlock your archetype", body: "{price}, with your core motivation." },
     {
-      title: "Get your result",
-      body: "Go deeper from {price}: {chapters} chapters with practices. 14-day money-back guarantee.",
+      title: "Go deeper",
+      body: "{chapters} chapters with practices. 14-day money-back guarantee.",
     },
   ],
 } as const;
@@ -77,7 +85,9 @@ export const PAIN_POINTS = {
   titleTail: "?",
   /** Phone board only. */
   intro:
-    "These are the six things people tell us most often before they take the test. Each one has a cause you can name, and your report shows you what it is in your case and what to do about it.",
+    // CHANGED (Fatih, 15 Nov): the board says "the six things people tell us most often";
+    // nobody tells LoveIQ anything before the test.
+    "These are six patterns people often recognise in themselves before they take the test. Each one has a cause you can name, and your report shows you what it is in your case and what to do about it.",
   cards: [
     {
       quote: "“I want sex more than my partner does, and asking has started to feel like begging.”",
@@ -181,11 +191,15 @@ export const READY = {
 
 export const FOOTER = {
   line: "© 2026 Applied Psychometrics UG · Berlin · Democratizing sexual psychology",
-  // CHANGED: the board's links are placeholders ("#top"); these are the real pages.
+  // CHANGED: the board's links are placeholders ("#top"); these are the real pages, and the
+  // three the board leaves out join them, as on the video page (Fatih, 15 Nov).
   links: [
     { label: "Privacy", href: "/privacy-policy" },
-    { label: "Terms", href: "/terms-and-conditions" },
+    { label: "Cookies", href: "/cookies" },
     { label: "Imprint", href: "/imprint" },
+    { label: "Terms & Conditions", href: "/terms-and-conditions" },
+    { label: "Terms of Use", href: "/terms-of-use" },
+    { label: "Digital content terms", href: "/digital-content-terms" },
     { label: "Medical disclaimer", href: "/medical-disclaimer" },
   ],
 } as const;

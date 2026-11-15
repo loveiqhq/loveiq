@@ -67,6 +67,7 @@ test.describe("Landing arm B (round 4) — the pain-point page", () => {
       "foundation",
       "faq",
       "closing_cta",
+      "footer",
     ]) {
       await expect(page.locator(`[data-landing-section="${section}"]`), section).toHaveCount(1);
     }
@@ -132,13 +133,24 @@ test.describe("Landing arm B (round 4) — the pain-point page", () => {
     await expect(page.locator("#w-faq-panel-0")).toBeHidden();
   });
 
-  test("its footer links the four legal pages the design names", async ({ page }) => {
+  test("ships no client reference as a class name", async ({ page }) => {
+    // A server component that imports a value from a "use client" module gets a client
+    // reference, rendered as a function's source (PP_FOCUS on five links, final review 15.11).
+    await openPage(page);
+    await expect(page.locator('[class*="Attempted to call"]')).toHaveCount(0);
+    expect(await page.content()).not.toContain("is on the client");
+  });
+
+  test("its footer links the seven legal pages", async ({ page }) => {
     await openPage(page);
     const footer = page.getByRole("contentinfo");
     for (const [name, href] of [
       ["Privacy", "/privacy-policy"],
-      ["Terms", "/terms-and-conditions"],
+      ["Cookies", "/cookies"],
       ["Imprint", "/imprint"],
+      ["Terms & Conditions", "/terms-and-conditions"],
+      ["Terms of Use", "/terms-of-use"],
+      ["Digital content terms", "/digital-content-terms"],
       ["Medical disclaimer", "/medical-disclaimer"],
     ] as const) {
       await expect(footer.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);

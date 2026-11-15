@@ -3,7 +3,7 @@ import Link from "next/link";
 import WHeroVideo from "../white/WHeroVideo";
 import PHeroQuestion from "./PHeroQuestion";
 import PLiveTakers from "./PLiveTakers";
-import { PP_FOCUS } from "./PCta";
+import { PP_FOCUS } from "./ppStyles";
 import { HERO } from "./painPointContent";
 
 /**
