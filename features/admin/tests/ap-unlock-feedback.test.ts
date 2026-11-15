@@ -525,10 +525,12 @@ describe("written answers", () => {
 });
 
 describe("ap_unlock_feedback (the migration's text: no database here)", () => {
-  const SQL = readFileSync("supabase/migrations/20261018210200_ap_unlock_feedback.sql", "utf8");
-  const ROLLBACK = readFileSync(
-    "supabase/rollbacks/20261018210200_ap_unlock_feedback_down.sql",
-    "utf8"
+  // Read with LF line ends: .gitattributes doesn't pin *.sql, so a Windows checkout
+  // (core.autocrlf) gives CRLF and the line-anchored patterns below would miss.
+  const lf = (text: string) => text.replace(/\r\n/g, "\n");
+  const SQL = lf(readFileSync("supabase/migrations/20261018210200_ap_unlock_feedback.sql", "utf8"));
+  const ROLLBACK = lf(
+    readFileSync("supabase/rollbacks/20261018210200_ap_unlock_feedback_down.sql", "utf8")
   );
 
   it("runs as its owner on a fixed search path, for the service role only", () => {
