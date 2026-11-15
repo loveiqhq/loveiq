@@ -38,8 +38,9 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
           page's own sections take the board's root type (PP_TYPE). */}
       <main id="main-content" className="pp-root relative bg-white text-gray-900">
         {/* The global body background is dark (var(--color-bg)); paint the page white so
-            mobile overscroll never shows it. Server-rendered, so no flash. */}
-        <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
+            mobile overscroll never shows it. Server-rendered, so no flash. A constant text
+            child: no raw HTML is needed, so security.yml's check has nothing to refuse. */}
+        <style>{"html,body{background:#ffffff;}"}</style>
         <ScrollAnimator />
         <LandingPageTracker variant={variant} />
         <LandingSectionsSeen />
