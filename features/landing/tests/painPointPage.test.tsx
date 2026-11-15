@@ -14,7 +14,8 @@ import { LANDING_PREFILL_QID, SURVEY_STATE_KEY } from "@features/survey/ui/hooks
 /**
  * Round 4's arm B, Marcus's pain-point page (Claude Design "LoveIQ landing page ·
  * pain-point version", final boards "Desktop · Hero 3" and "Mobile · Hero 3"). Copy is the
- * boards' after Fatih's calls of 14.11: 15 minutes, "Get your result", 14-day guarantee,
+ * boards' after Fatih's calls of 14.11 and 15.11: 15 minutes, the price on the archetype
+ * (never implied free), the 14-day guarantee, "taken a first step", patterns people recognise,
  * today's FAQ, sources under the numbers, every button to /survey.
  */
 class FakeObserver {
@@ -53,6 +54,14 @@ describe("pain-point page — nav and hero", () => {
     expect(h1s[0]!.textContent).toBe("Become a better and more intelligent lover.");
   });
 
+  it("names question 1's scale by its statement, as the video page's card does", () => {
+    renderPage();
+    // A screen reader tabbing into the scale hears what is being rated (final review, 15 Nov).
+    expect(
+      screen.getByRole("radiogroup", { name: "Right now, I feel satisfied with my sex life." })
+    ).toBeInTheDocument();
+  });
+
   it("times the survey as the survey does: 15 minutes", () => {
     renderPage();
     const hero = screen.getByTestId("pp-hero");
@@ -75,7 +84,9 @@ describe("pain-point page — nav and hero", () => {
 
   it("asks question 1 on a 7-point scale and carries the answer into the survey", () => {
     renderPage();
-    const scale = screen.getByRole("radiogroup", { name: "How true is this for you?" });
+    const scale = screen.getByRole("radiogroup", {
+      name: "Right now, I feel satisfied with my sex life.",
+    });
     const dots = within(scale).getAllByRole("radio");
     expect(dots.map((d) => d.getAttribute("aria-label"))).toEqual([
       "1, not true at all",
@@ -162,7 +173,7 @@ describe("pain-point page — trust band and the three steps", () => {
       .getAllByRole("listitem")
       .map((li) => li.textContent?.replace(/\s+/g, " ").trim());
     expect(items).toEqual([
-      "10,000+ people have started the test",
+      "10,000+ people have taken a first step",
       "Grounded in 100+ papers and books",
       "Anonymous, encrypted, never sold",
     ]);
@@ -181,10 +192,12 @@ describe("pain-point page — trust band and the three steps", () => {
       .map((li) => li.textContent?.replace(/\s+/g, " ").trim());
     expect(steps).toEqual([
       "1Answer 62 questionsAnonymous, no account needed.",
-      "2Meet your archetypePlus your core motivation.",
-      "3Get your resultGo deeper from €1.99: 17 chapters with practices. 14-day money-back guarantee.",
+      "2Unlock your archetype€1.99, with your core motivation.",
+      "3Go deeper17 chapters with practices. 14-day money-back guarantee.",
     ]);
-    expect(section.textContent).not.toMatch(/free result|7-day/);
+    // On today's EUR 1.99 page the Core Archetype is what EUR 1.99 opens: no step may put it
+    // before the price (Fatih, 14 Nov; gateRevealArm.ts).
+    expect(section.textContent).not.toMatch(/free result|7-day|Meet your archetype/);
   });
 });
 
@@ -211,10 +224,12 @@ describe("pain-point page — the six pain points", () => {
       "You'll get the vocabulary for what you want, in plain words you can use.",
       "“We keep having the same argument about how often.”",
       "You'll see the pattern behind the argument, so you can stop repeating it.",
-      "These are the six things people tell us most often before they take the test.",
+      "These are six patterns people often recognise in themselves before they take the test.",
     ]) {
       expect(text).toContain(line);
     }
+    // Nobody tells LoveIQ anything before the test (Fatih, 15 Nov).
+    expect(text).not.toContain("people tell us");
   });
 
   it("starts the survey from its button, counted from the pain points", () => {

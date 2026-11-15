@@ -4,9 +4,8 @@ import { useState, type FC } from "react";
 import { faqs } from "@/data/faqs";
 import { trackFaqExpanded } from "@features/analytics/client";
 import { hashQuestion } from "@features/landing/logic/faqHash";
-import { PP_FOCUS } from "./PCta";
 import { FAQ_TITLE } from "./painPointContent";
-import { PP_H2 } from "./ppStyles";
+import { PP_FOCUS, PP_H2 } from "./ppStyles";
 
 /**
  * "The questions people actually ask." (board "FAQ"): today's questions from data/faqs.ts,
