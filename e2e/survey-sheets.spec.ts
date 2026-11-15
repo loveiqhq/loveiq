@@ -114,11 +114,25 @@ async function animationDelays(elements: Locator) {
   );
 }
 
+/** Each element's CSS animation delay and duration in ms, in document order. */
+async function animationTimes(elements: Locator) {
+  return elements.evaluateAll((els) =>
+    els.map((el) => {
+      const style = getComputedStyle(el);
+      return {
+        delay: Number.parseFloat(style.animationDelay) * 1000,
+        duration: Number.parseFloat(style.animationDuration) * 1000,
+      };
+    })
+  );
+}
+
 async function saveShot(page: Page, name: string) {
   const dir = process.env.SHEETS_SHOTS_DIR;
   if (!dir) return;
   mkdirSync(dir, { recursive: true });
-  await page.waitForTimeout(1100);
+  // Every sheet has settled by 2.7s since Mark's third review (15 Nov): Trustpilot's quote last.
+  await page.waitForTimeout(3000);
   await page.screenshot({ path: join(dir, `${name}-${test.info().project.name}.png`) });
 }
 
@@ -138,17 +152,21 @@ test.describe("Survey: the sheets between questions", () => {
       "say their best sex starts when the other person makes the first move. Only"
     );
     await expect(dialog).toContainText("say it’s when they start.");
-    // The motion budget: nothing endless, the CSS done by 900ms after the 450ms rise (the
+    // The motion budget: nothing endless, the CSS done by 1s, the sheet's own rise included (the
     // numbers count up in script, over 1.2s from 400ms: Mark's "more slowly", 12 Nov; the 12%
     // follows once the 36% is halfway: his second review, 13 Nov).
     for (const a of await sheetAnimations(page, "science")) {
       expect(a.iterations, a.name).not.toBe(Infinity);
       expect(a.end, a.name).toBeLessThanOrEqual(1000);
     }
-    // Flush with the bottom edge, at most 480px wide from 640px (Fatih, 10 Nov).
-    await page.waitForTimeout(700);
-    const viewport = page.viewportSize()!;
+    // Every sheet rises over 1s, so the reader sees it arrive (his third review, 15 Nov).
     const panel = sheetRoot(page, "science").getByRole("dialog");
+    await expect(panel).toHaveCSS("animation-duration", "1s");
+    // Flush with the bottom edge once it has risen, at most 480px wide from 640px (Fatih, 10 Nov).
+    await panel.evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((a) => a.finished));
+    });
+    const viewport = page.viewportSize()!;
     const box = (await panel.boundingBox())!;
     expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(1);
     if (viewport.width >= 640) expect(box.width).toBeLessThanOrEqual(480);
@@ -210,6 +228,12 @@ test.describe("Survey: the sheets between questions", () => {
     for (let i = 1; i < starDelays.length; i++) {
       expect(starDelays[i]! - starDelays[i - 1]!).toBeGreaterThanOrEqual(100);
     }
+    // The quote once every star has landed, fading in slower (Mark's third review, 15 Nov).
+    const stars = await animationTimes(root.locator("[data-tp-star]"));
+    const landed = Math.max(...stars.map((s) => s.delay + s.duration));
+    const [quote] = await animationTimes(root.locator("[data-tp-quote]"));
+    expect(quote!.delay).toBeGreaterThanOrEqual(landed);
+    expect(quote!.duration).toBeGreaterThanOrEqual(700);
     await saveShot(page, "2-trustpilot");
     await settle(page);
     await keepGoing(page).click();
@@ -303,6 +327,15 @@ test.describe("Survey: the sheets between questions", () => {
     const map = (await root.locator("[data-report-map] > div").boundingBox())!;
     if (page.viewportSize()!.width >= 640) expect(map.width).toBeGreaterThanOrEqual(230);
     else expect(map.width).toBeLessThan(160);
+    // Slower again since Mark's third review (15 Nov: "Slow down all the animations"): the
+    // screen fades in over 0.45s, and the six parts arrive over 100ms apart, each over 0.5s.
+    await expect(root.getByRole("dialog")).toHaveCSS("animation-duration", "0.45s");
+    const parts = await animationTimes(root.locator("[data-report-map] .sheet-in"));
+    expect(parts).toHaveLength(6);
+    for (let i = 1; i < parts.length; i++) {
+      expect(parts[i]!.delay - parts[i - 1]!.delay).toBeGreaterThanOrEqual(100);
+    }
+    for (const part of parts) expect(part.duration).toBeGreaterThanOrEqual(500);
     await saveShot(page, "6-report-map");
     await settle(page);
     // Previous: back to the question on screen.

@@ -93,11 +93,18 @@ export interface SurveySheetShellProps {
   children: ReactNode;
 }
 
+/*
+ * How a sheet arrives. Mark's third review (15 Nov): "all the sheets appear/move up a tiny bit
+ * slower, so that the user actually sees it appear". Every bottom sheet now rises over 1s (it
+ * was 0.45s, most of it in the first 100ms; the expert's card had 0.75s since his second
+ * review, and Fatih found that still too fast), and the map's screen fades in over 0.45s, its
+ * 0.2s at the map's tempo of 2.25 (sheets-motion.css). Leaving stays quick (CLOSE_MS).
+ */
 const SHEET_PANEL =
-  "absolute inset-x-0 bottom-[var(--liq-consent-h,0px)] mx-auto flex w-full select-none flex-col rounded-t-[24px] border-[1.5px] border-b-0 border-solid border-transparent px-5 pt-[10px] text-[#161021] shadow-[0_-10px_40px_-10px_rgba(22,16,33,0.35)] outline-none [touch-action:none] motion-safe:animate-[survey-sheet-up_0.45s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:max-w-[480px]";
+  "absolute inset-x-0 bottom-[var(--liq-consent-h,0px)] mx-auto flex w-full select-none flex-col rounded-t-[24px] border-[1.5px] border-b-0 border-solid border-transparent px-5 pt-[10px] text-[#161021] shadow-[0_-10px_40px_-10px_rgba(22,16,33,0.35)] outline-none [touch-action:none] motion-safe:animate-[survey-sheet-up_1s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:max-w-[480px]";
 
 const SCREEN_PANEL =
-  "absolute inset-0 mx-auto flex w-full flex-col bg-white text-[#161021] outline-none motion-safe:animate-[survey-fade-in_0.2s_ease-out_backwards] sm:max-w-[768px]";
+  "absolute inset-0 mx-auto flex w-full flex-col bg-white text-[#161021] outline-none motion-safe:animate-[survey-fade-in_0.45s_ease-out_backwards] sm:max-w-[768px]";
 
 /** The brand gradient border on a white sheet, and room for a phone's home bar. */
 const SHEET_STYLE: CSSProperties = {

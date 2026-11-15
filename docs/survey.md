@@ -336,6 +336,13 @@ goal-gradient and endowed-progress studies of 2006, web.dev on animation cost):
   12% now counts up too, at the same speed, once the 36% is halfway. The expert's card lost its
   own entrance ("no need for an animation of the image"): the whole card slides up over 0.75s
   instead of 0.45s, and its phrase turns once it has landed. State of Desire stays as it was.
+- His third review (15 Nov), "so that the user actually sees it appear": every sheet rises over
+  1s (it was 0.45s, most of its travel in the first 100ms; the expert card's 0.75s still felt
+  fast to Fatih). The map runs at `--sheet-tempo: 2.25` and its screen fades in over 0.45s
+  ("slow down all the animations"). Trustpilot's quote arrives once the last star has landed
+  and fades in over 0.75s on ease-out ("a bit later and fade in slower"). No CSS animation
+  runs longer than 1s (the numbers still count over 1.2s); the slowest sheet, Trustpilot,
+  settles by about 2.7s.
 - Only transform and opacity move, plus a check's stroke and one phrase's color. Nothing loops,
   nothing overshoots, no confetti, no countdowns, and nothing moves on a price or a lock.
   Trustpilot's stars keep their shape, colors and fill (its brand rules): they only arrive.

@@ -4,14 +4,16 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import { CountUpPercent } from "@features/survey/ui/sheets/parts";
-import { ExpertSheet, ScienceSheet } from "@features/survey/ui/sheets/InfoSheets";
+import { ExpertSheet, ScienceSheet, TrustpilotSheet } from "@features/survey/ui/sheets/InfoSheets";
+import ReportMapScreen from "@features/survey/ui/sheets/ReportMapScreen";
 
 /**
  * The sheets' motion rules, held as a contract (as gateMotion2310 holds the EUR 1.99 gate's):
  * motion only under prefers-reduced-motion: no-preference; only transform, opacity, a
  * stroke's dash and one phrase's colour move; nothing loops; nothing scales past its size.
- * Researched 12 Nov 2026, see docs/survey.md, "Sheets between questions". Mark's two
- * reviews (12 and 13 Nov) slowed it: the slowest sheet now settles by about 2.2s.
+ * Researched 12 Nov 2026, see docs/survey.md, "Sheets between questions". Mark's three
+ * reviews (12, 13 and 15 Nov) slowed it: the slowest sheet now settles by about 2.7s
+ * (Trustpilot, its quote last).
  */
 const CSS = readFileSync(
   join(process.cwd(), "features/survey/ui/sheets/sheets-motion.css"),
@@ -71,15 +73,16 @@ describe("the sheets' motion contract", () => {
     }
   });
 
-  // Mark's second review (13 Nov) wanted slower again, so the 450ms budget of the 12 Nov
-  // research now holds before the tempo: no duration or delay runs past 700ms once multiplied.
-  it("keeps every duration within the budget at its tempo, and the house curve, without overshoot", () => {
+  // Mark's reviews keep asking for slower (13 and 15 Nov), so the budget holds before the
+  // tempo: nothing runs past 500ms (Trustpilot's quote, the slowest fade), nor past 1.2s once
+  // multiplied by the slowest tempo (the map's 2.25).
+  it("keeps every duration within the budget at its tempo, without overshoot", () => {
     const tempos = [...CSS.matchAll(/--sheet-tempo:\s*([\d.]+)/g)].map((m) => Number(m[1]));
     const tempo = Math.max(1, ...tempos);
-    expect(tempo).toBeLessThanOrEqual(1.5);
+    expect(tempo).toBeLessThanOrEqual(2.25);
     for (const m of CSS.matchAll(/(\d+)ms/g)) {
-      expect(Number(m[1]), m[0]).toBeLessThanOrEqual(450);
-      expect(Number(m[1]) * tempo, m[0]).toBeLessThanOrEqual(700);
+      expect(Number(m[1]), m[0]).toBeLessThanOrEqual(500);
+      expect(Number(m[1]) * tempo, m[0]).toBeLessThanOrEqual(1200);
     }
     for (const m of CSS.matchAll(/cubic-bezier\(([^)]+)\)/g)) {
       const [, y1, , y2] = m[1]!.split(",").map((n) => Number(n.trim()));
@@ -88,15 +91,102 @@ describe("the sheets' motion contract", () => {
     }
   });
 
-  it("slows only the three sheets Mark named, and slides the expert's card in more slowly", () => {
+  it("runs Trustpilot and Halfway at 1.5 and the map at 2.25; the rest at their own pace", () => {
     expect(CSS).toMatch(
-      /\[data-survey-sheet="trustpilot"\],\s*\[data-survey-sheet="halfway"\],\s*\[data-survey-sheet="reportMap"\]\s*\{\s*--sheet-tempo:\s*1\.5;\s*\}/
+      /\[data-survey-sheet="trustpilot"\],\s*\[data-survey-sheet="halfway"\]\s*\{\s*--sheet-tempo:\s*1\.5;\s*\}/
     );
-    expect([...CSS.matchAll(/--sheet-tempo:/g)]).toHaveLength(1);
-    // Its slide only, never its leaving, which stays quick on every sheet.
-    expect(CSS).toMatch(
-      /\[data-survey-sheet="expert"\] > \[role="dialog"\]:not\(\.sheet-exit\)\s*\{\s*animation-duration:\s*0\.75s;\s*\}/
+    expect(CSS).toMatch(/\[data-survey-sheet="reportMap"\]\s*\{\s*--sheet-tempo:\s*2\.25;\s*\}/);
+    expect([...CSS.matchAll(/--sheet-tempo:/g)]).toHaveLength(2);
+  });
+});
+
+/** The rule for `selector` in the CSS (its first block). */
+function ruleFor(selector: string): string {
+  const at = CSS.indexOf(`${selector} {`);
+  expect(at, selector).toBeGreaterThanOrEqual(0);
+  return CSS.slice(at, CSS.indexOf("}", at));
+}
+
+/** A class's base duration in ms: the first `calc(<n>ms * var(--sheet-tempo` in its rule. */
+function baseMs(selector: string): number {
+  const m = ruleFor(selector).match(/calc\((\d+)ms \* var\(--sheet-tempo/);
+  expect(m, selector).not.toBeNull();
+  return Number(m![1]);
+}
+
+/** An element's `--sheet-delay` in ms. */
+const delayOf = (el: Element | null): number =>
+  Number.parseFloat((el as HTMLElement).style.getPropertyValue("--sheet-delay"));
+
+describe("Mark's third review of the sheets (15 Nov)", () => {
+  const handlers = { onKeepGoing: () => {}, onDismiss: () => {} };
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
+
+  // "Can we have all the sheets appear/move up a tiny bit slower? So that the user actually
+  // sees it appear?" One pace for every bottom sheet, on the house curve: 1s (was 0.45s, and
+  // 0.75s for the expert's card since his second review, which Fatih found still too fast).
+  it("brings every bottom sheet up at one pace: 1s", () => {
+    const rise = "motion-safe:animate-[survey-sheet-up_1s_cubic-bezier(0.16,1,0.3,1)_backwards]";
+    render(<ScienceSheet open {...handlers} />);
+    render(<ExpertSheet open {...handlers} />);
+    const dialogs = document.querySelectorAll('[data-survey-sheet] > [role="dialog"]');
+    expect(dialogs).toHaveLength(2);
+    for (const dialog of dialogs) expect(dialog.className).toContain(rise);
+    // The shell alone sets how a sheet arrives: no sheet has a pace of its own any more.
+    expect(CSS).not.toMatch(/\[role="dialog"\]/);
+  });
+
+  // "After Q59: Slow down all the animations": the screen's fade too, at the map's tempo.
+  it("fades the map's screen in over 0.45s (0.2s at the map's 2.25)", () => {
+    render(
+      <ReportMapScreen
+        open
+        left={3}
+        progressIndex={58}
+        total={62}
+        onNext={() => {}}
+        onPrevious={() => {}}
+        onDismiss={() => {}}
+      />
     );
+    const dialog = document.querySelector('[data-survey-sheet="reportMap"] > [role="dialog"]');
+    expect(dialog?.className).toContain(
+      "motion-safe:animate-[survey-fade-in_0.45s_ease-out_backwards]"
+    );
+  });
+
+  // "After Q14: can we have the quote appear a bit later and fade in slower".
+  it("brings Trustpilot's quote in once every star has landed, and fades it in slower", () => {
+    vi.stubEnv("NEXT_PUBLIC_TRUSTPILOT_ENABLED", "true");
+    vi.stubEnv("NEXT_PUBLIC_TRUSTPILOT_SCORE", "4.4");
+    vi.stubEnv("NEXT_PUBLIC_TRUSTPILOT_REVIEW_COUNT", "12");
+    render(<TrustpilotSheet open {...handlers} />);
+    const sheet = document.querySelector('[data-survey-sheet="trustpilot"]')!;
+    expect(sheet).not.toBeNull();
+    const stars = [...sheet.querySelectorAll("[data-tp-star]")].map(delayOf);
+    expect(stars).toHaveLength(5);
+    const landed = Math.max(...stars) + baseMs(".sheet-star");
+
+    const rule = sheet.querySelector("[data-tp-rule]");
+    const quote = sheet.querySelector("[data-tp-quote]");
+    expect(quote?.className).toContain("sheet-quote");
+    expect(quote?.textContent).toContain("Very interesting report");
+    expect(delayOf(rule)).toBeGreaterThanOrEqual(landed);
+    expect(delayOf(quote)).toBeGreaterThan(delayOf(rule));
+    // Slower: at least twice a group's fade, on a curve whose fade is seen (the house curve
+    // does most of its work in the first tenth).
+    expect(baseMs(".sheet-quote")).toBeGreaterThanOrEqual(2 * baseMs(".sheet-in"));
+    expect(ruleFor(".sheet-quote")).toMatch(/\bease-out\b/);
+    // Nothing else in the sheet waits for the quote: it is the last to arrive. ("Excellent",
+    // the five stars, the rule and the quote carry a delay.)
+    const timed = sheet.querySelectorAll<HTMLElement>("[style*='--sheet-delay']");
+    expect(timed).toHaveLength(8);
+    for (const el of timed) {
+      if (el !== quote) expect(delayOf(el)).toBeLessThan(delayOf(quote));
+    }
   });
 });
 
