@@ -32,4 +32,9 @@ describe("the new page's server/client boundary", () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  it("uses no dangerouslySetInnerHTML, which security.yml refuses outside its allow-list", () => {
+    // PR #727's "Next.js Security Checks" failed on the page's white-background <style>.
+    expect(files.filter((f) => source(f).includes("dangerouslySetInnerHTML"))).toEqual([]);
+  });
 });
