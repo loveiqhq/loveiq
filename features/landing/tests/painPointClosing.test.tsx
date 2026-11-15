@@ -67,23 +67,27 @@ describe("pain-point page — closing question", () => {
 });
 
 describe("pain-point page — footer", () => {
-  it("is the page's footer landmark, after <main>", () => {
+  it("is the page's footer landmark, after <main>, marked for section_seen", () => {
     renderPage();
     const footer = screen.getByRole("contentinfo");
     expect(screen.getByRole("main").contains(footer)).toBe(false);
+    expect(footer).toHaveAttribute("data-landing-section", "footer");
     expect(footer.textContent).toContain(
       "© 2026 Applied Psychometrics UG · Berlin · Democratizing sexual psychology"
     );
   });
 
-  it("links the four legal pages the board names, each a real page", () => {
+  it("links the seven legal pages the video page's footer links, each a real page", () => {
     renderPage();
     const footer = screen.getByRole("contentinfo");
     const links = within(footer).getAllByRole("link") as HTMLAnchorElement[];
     expect(links.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
       ["Privacy", "/privacy-policy"],
-      ["Terms", "/terms-and-conditions"],
+      ["Cookies", "/cookies"],
       ["Imprint", "/imprint"],
+      ["Terms & Conditions", "/terms-and-conditions"],
+      ["Terms of Use", "/terms-of-use"],
+      ["Digital content terms", "/digital-content-terms"],
       ["Medical disclaimer", "/medical-disclaimer"],
     ]);
     for (const a of links) {

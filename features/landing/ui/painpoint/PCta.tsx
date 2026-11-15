@@ -3,13 +3,7 @@
 import type { FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
-
-/** The board's focus ring: 2px violet outline, 2px off the edge, on every link and button. */
-export const PP_FOCUS =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#795fc8]";
-
-/** The brand gradient at the board's angle and stops. */
-export const PP_GRADIENT = "linear-gradient(135deg,#fe6839 0%,#bf66d9 43%,#958ef6 100%)";
+import { PP_FOCUS } from "./ppStyles";
 
 type CtaLocation = Parameters<typeof trackStartSurvey>[0];
 
