@@ -331,11 +331,13 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it("no thread to reply to: the day is kept, nothing is posted", async () => {
+  it("no thread to reply to: the day is kept, nothing is posted, nothing logged as failing", async () => {
     backend({ message: null });
     await noteReaderReturn({ submissionId: 2790, source: "answer", at: NEXT_DAY, reader: READER });
     expect(claims()).toHaveLength(1);
     expect(mockPost).not.toHaveBeenCalled();
+    // An older message posted by the webhook has no stored ts: normal, not a failure.
+    expect(mockWarn).not.toHaveBeenCalled();
   });
 
   it("without the bot the day is still kept (AP counts it), and no message is read", async () => {
