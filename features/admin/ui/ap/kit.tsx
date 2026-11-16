@@ -206,10 +206,10 @@ export function Spark({
   const read = Boolean(titles && titles.length === n && n > 0);
   const xs = values.map((_, i) => (g.x(i) / 120) * 100);
   const yPct = (v: number) => ((height - g.y(v)) / height) * 100;
-  // The tile's decimals, unless they round a point to nothing ("0%" for 0.4%): fmt's own then.
+  // The tile's decimals, unless they round a point to nothing ("€0" for €0.40): fmt's own then.
   const show = (v: number) => {
     if (digits === undefined || v === 0) return fmt(unit, v, digits);
-    const scaled = Math.abs(v) * (unit === "pct" ? 100 : 1) * 10 ** digits;
+    const scaled = Math.abs(v) * 10 ** digits;
     return fmt(unit, v, Math.round(scaled) === 0 ? undefined : digits);
   };
   return (

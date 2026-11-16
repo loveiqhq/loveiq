@@ -53,7 +53,7 @@ import {
 } from "./common";
 import type { NewReturning, PostHogResult, SessionTags } from "./posthog";
 
-/** A figure's parts as the page prints them, for its info card ("502 ÷ 12,608 = 3.98%"). */
+/** A figure's parts as the page prints them, for its info card ("502 ÷ 12,608 = 4.0%"). */
 export interface Worked {
   num?: string;
   den?: string;
@@ -79,7 +79,7 @@ export interface JourneyStep {
   n: number;
   label: string;
   value: number | null;
-  /** Share of the step before, in words: "9.06% of visits". */
+  /** Share of the step before, in words: "9.1% of visits". */
   step: string;
   href: string;
   /** Its info card's field key; none on step 2, which has no figure of its own. */
@@ -598,7 +598,7 @@ export function buildDashboard(input: {
       label: "Survey start",
       // Incomplete starts read low: blank, as the tile and the Survey page are.
       value: startsOk ? t.starts : null,
-      step: `${pct(startsOk ? share(t.starts, t.visits) : null)} of visits`,
+      step: `${fmt("pct", startsOk ? share(t.starts, t.visits) : null)} of visits`,
       href: "survey",
       info: "assessment.step-start",
     },
@@ -606,7 +606,7 @@ export function buildDashboard(input: {
       n: 4,
       label: "Submitted",
       value: known(t.subs),
-      step: `${pct(startsOk ? share(t.subs, t.starts) : null)} of starts`,
+      step: `${fmt("pct", startsOk ? share(t.subs, t.starts) : null)} of starts`,
       href: "survey",
       info: "assessment.step-submitted",
     },
@@ -614,7 +614,7 @@ export function buildDashboard(input: {
       n: 5,
       label: "Report opened",
       value: known(t.opened),
-      step: `${pct(share(t.opened, t.subs))} of submits`,
+      step: `${fmt("pct", share(t.opened, t.subs))} of submits`,
       href: "report",
       info: "assessment.step-opened",
     },
@@ -622,7 +622,9 @@ export function buildDashboard(input: {
       n: 6,
       label: "Paywall reached",
       value: paywallOk ? known(t.paywall) : null,
-      step: paywallOk ? `${pct(share(t.paywall, t.opened))} of opens` : "recorded from 6 Sep 2026",
+      step: paywallOk
+        ? `${fmt("pct", share(t.paywall, t.opened))} of opens`
+        : "recorded from 6 Sep 2026",
       href: "report",
       info: "assessment.step-paywall",
     },
@@ -630,7 +632,7 @@ export function buildDashboard(input: {
       n: 7,
       label: "Paid",
       value: known(t.paidCohort),
-      step: `${pct(paywallOk ? share(t.paidCohort, t.paywall) : null)} of paywall`,
+      step: `${fmt("pct", paywallOk ? share(t.paidCohort, t.paywall) : null)} of paywall`,
       href: "#payment",
       info: "assessment.step-paid",
     },
@@ -672,13 +674,12 @@ export function buildDashboard(input: {
   const sources: Table = {
     sample: split.ok,
     barLabel: "Share of visits",
-    // The design's decimals: a share in tenths, a CVR in hundredths.
     columns: [
       { label: "Source", unit: "text" },
       { label: "Visitors", unit: "count", info: "assessment.src-visitors" },
-      { label: "Share", unit: "pct", digits: 1, info: "assessment.src-share" },
+      { label: "Share", unit: "pct", info: "assessment.src-share" },
       { label: "Submissions", unit: "count", info: "assessment.src-subs" },
-      { label: "Survey CVR", unit: "pct", digits: 2, info: "assessment.src-cvr" },
+      { label: "Survey CVR", unit: "pct", info: "assessment.src-cvr" },
       { label: "€ / visit", unit: "eur3", info: "assessment.src-per-visit" },
     ],
     rows: bySource
@@ -818,7 +819,3 @@ const PEOPLE_ROWS = new Set([
   "Report airtime",
   "Virality",
 ]);
-
-function pct(v: number | null): string {
-  return v === null ? "—" : `${(v * 100).toFixed(v * 100 >= 10 ? 1 : 2)}%`;
-}

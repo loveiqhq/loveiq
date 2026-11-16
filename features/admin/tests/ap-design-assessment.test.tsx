@@ -129,7 +129,7 @@ describe("the tiles", () => {
     ]);
     for (const t of d.tiles) expect(FIELDS[t.info], t.info).toBeDefined();
     // A rate shows its parts as the page prints them; a count, just its value.
-    expect(tile(d, "start-cvr").worked).toEqual({ num: "14", den: "220", value: "6.36%" });
+    expect(tile(d, "start-cvr").worked).toEqual({ num: "14", den: "220", value: "6.4%" });
     expect(tile(d, "cac").worked).toEqual({ num: "€100.00", den: "1", value: "€100" });
     expect(tile(d, "visits").worked).toEqual({ value: "220" });
     // A blank figure has none.

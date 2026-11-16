@@ -104,7 +104,6 @@ const TILE_SPECS: Record<KpiKey, TileSpec> = {
     label: "Survey submission CVR",
     info: "traffic.submitCvr",
     unit: "pct",
-    digits: 2,
     goodWhen: "up",
   },
   contribPerVisitor: {
@@ -134,14 +133,12 @@ const TILE_SPECS: Record<KpiKey, TileSpec> = {
     label: "Visitor → paid",
     info: "traffic.visitorToPaid",
     unit: "pct",
-    digits: 3,
     goodWhen: "up",
   },
   purchaseCvr: {
     label: "Purchase CVR",
     info: "traffic.purchaseCvr",
     unit: "pct",
-    digits: 2,
     goodWhen: "up",
   },
 };
@@ -284,7 +281,6 @@ export const COLS: Col[] = [
     info: "traffic.ctr",
     group: "acq",
     unit: "pct",
-    digits: 1,
     better: "hi",
   },
   {
@@ -302,7 +298,6 @@ export const COLS: Col[] = [
     info: "traffic.startCvr",
     group: "fun",
     unit: "pct",
-    digits: 1,
     better: "hi",
   },
   {
@@ -311,7 +306,6 @@ export const COLS: Col[] = [
     info: "traffic.completionCvr",
     group: "fun",
     unit: "pct",
-    digits: 1,
     better: "hi",
   },
   {
@@ -337,7 +331,6 @@ export const COLS: Col[] = [
     info: "traffic.preRate",
     group: "mon",
     unit: "pct",
-    digits: 1,
     better: "hi",
   },
   {
@@ -346,7 +339,6 @@ export const COLS: Col[] = [
     info: "traffic.fullRate",
     group: "mon",
     unit: "pct",
-    digits: 1,
     better: "hi",
   },
   {
@@ -355,7 +347,6 @@ export const COLS: Col[] = [
     info: "traffic.purchaseCvr",
     group: "mon",
     unit: "pct",
-    digits: 2,
     better: "hi",
   },
   {
@@ -364,7 +355,6 @@ export const COLS: Col[] = [
     info: "traffic.visitorToPaid",
     group: "mon",
     unit: "pct",
-    digits: 3,
     better: "hi",
   },
   {
@@ -437,7 +427,6 @@ export const COLS: Col[] = [
     info: "traffic.refundRate",
     group: "mon",
     unit: "pct",
-    digits: 1,
     better: "lo",
   },
   {
@@ -698,11 +687,10 @@ export const LEAK_STEPS: Array<{
   info: string;
   /** The bar's full width, as drawn: start 20%, completion 100%, purchase 10%. */
   scale: number;
-  digits: number;
 }> = [
-  { key: "att", label: "Start CVR", info: "traffic.startCvr", scale: 0.2, digits: 1 },
-  { key: "comp", label: "Completion CVR", info: "traffic.completionCvr", scale: 1, digits: 1 },
-  { key: "buy", label: "Purchase CVR", info: "traffic.purchaseCvr", scale: 0.1, digits: 2 },
+  { key: "att", label: "Start CVR", info: "traffic.startCvr", scale: 0.2 },
+  { key: "comp", label: "Completion CVR", info: "traffic.completionCvr", scale: 1 },
+  { key: "buy", label: "Purchase CVR", info: "traffic.purchaseCvr", scale: 0.1 },
 ];
 
 /** Each funnel step's numerator and denominator, as rowValues divides them. */
@@ -848,9 +836,7 @@ export function stackChart(
         y: ((lo[w]! + hi[w]!) / 2 / max) * 100,
         anchor: anchorOf(w, n),
         label:
-          scale === "share"
-            ? fmt("count", row[w] ?? 0)
-            : `${(((row[w] ?? 0) / totals[w]!) * 100).toFixed(0)}%`,
+          scale === "share" ? fmt("count", row[w] ?? 0) : fmt("pct", (row[w] ?? 0) / totals[w]!),
       });
     }
     const last = n - 1;
@@ -860,7 +846,7 @@ export function stackChart(
       mid: ((lo[last]! + hi[last]!) / 2 / max) * 100,
       endY: 0,
       endVal: fmt("count", row[last] ?? 0),
-      endShare: totals[last] ? `${(((row[last] ?? 0) / totals[last]!) * 100).toFixed(1)}%` : EMPTY,
+      endShare: totals[last] ? fmt("pct", (row[last] ?? 0) / totals[last]!) : EMPTY,
     };
   });
   // The labels at the lines' end: at their layer's middle, at least 8% apart, inside the plot.
@@ -878,7 +864,7 @@ export function stackChart(
   return {
     grid: [0, 0.25, 0.5, 0.75, 1].map((f) => ({
       y: f * 100,
-      label: scale === "share" ? `${Math.round(f * 100)}%` : fmt("count", f * max),
+      label: scale === "share" ? fmt("pct", f) : fmt("count", f * max),
     })),
     layers: layers.map(({ pts, marks, endY, endVal, endShare }) => ({
       pts,
@@ -994,8 +980,8 @@ export function scatter(all: QualityDot[]): Scatter {
   const cvr = (d: QualityDot) => (d.clickToPaid ?? 0) * 100;
   const best = dots.map(cvr).sort((a, b) => b - a);
   const ref = (best[1] ?? 0) > 0 ? best[1]! : (best[0] ?? 0);
-  // Three steps a round number of thousandths of a point, so every line is written exactly.
-  const yStep = ref > 0 ? roundStep((ref * 2) / 3, 0.001) : 0;
+  // Three steps a round number of tenths of a point, so every line is written exactly.
+  const yStep = ref > 0 ? roundStep((ref * 2) / 3, 0.1) : 0;
   const yMax = Number((3 * yStep).toPrecision(12));
   const yOf = (pct: number) => (yMax > 0 ? (Math.min(pct, yMax) / yMax) * 100 : 0);
   const cacs = dots

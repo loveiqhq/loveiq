@@ -263,15 +263,16 @@ describe("the funnel comparison", () => {
 });
 
 describe("the design's wording and formats", () => {
-  it("chart 1's line, 2 decimals where drawn, and the boxes' lines", () => {
+  it("chart 1's line, rates with the one decimal every rate has, and the boxes' lines", () => {
     const p = focus();
     expect(chartOf(p, "submissions").sub).toEqual({
       day: "Per day, with what each submission cost in ads and earned in revenue",
       week: "Per week, with what each submission cost in ads and earned in revenue",
       month: "Per month, with what each submission cost in ads and earned in revenue",
     });
-    expect(chartOf(p, "start-cvr").views.day.series[0]!.digits).toBe(2);
-    expect(chartOf(p, "full-unlock").views.day.series[0]!.digits).toBe(2);
+    // No decimals of their own: fmt writes a rate with one (Marcus, 29–30 Oct 2026).
+    expect(chartOf(p, "start-cvr").views.day.series[0]!.digits).toBeUndefined();
+    expect(chartOf(p, "full-unlock").views.day.series[0]!.digits).toBeUndefined();
     expect(p.assessments.survey.sub).toBe("2 submissions since 1 Oct");
     // A range from 18 Sep 2026 on: every visit's reading is recorded.
     expect(p.assessments.rows[0]!.reportSub).toBe("live, since 18 Sep");
@@ -367,7 +368,7 @@ describe("the page", () => {
       "1,000",
       "€100",
       "10",
-      "1.00%",
+      "1.0%",
       "€0.070",
       "€10.00",
       "0.70×",
@@ -381,7 +382,7 @@ describe("the page", () => {
       "1,000",
       "€50",
       "30",
-      "3.00%",
+      "3.0%",
       "€0.900",
       "€1.67",
       "17.99×",

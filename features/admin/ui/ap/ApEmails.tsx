@@ -12,7 +12,7 @@ import {
 } from "@features/admin/server/ap/email-registry";
 import type { EmailRow, EmailsPayload, Stat } from "@features/admin/server/ap/emails";
 import { addDays, shortDate } from "@features/admin/server/ap/days";
-import { EMPTY, fmt } from "@features/admin/server/ap/format";
+import { EMPTY, fmt, quarterTop } from "@features/admin/server/ap/format";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
@@ -45,7 +45,7 @@ const NOTE = "m-0 text-xs leading-relaxed text-ap-muted";
 const HEAD = "text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted";
 const ORANGE = "#c2650a";
 
-const pct1 = (v: number | null) => fmt("pct", v, 1);
+const pct1 = (v: number | null) => fmt("pct", v);
 const count = (n: number | null) => fmt("count", n);
 const ratio = (a: number | null, b: number) => (a === null || !b ? null : a / b);
 
@@ -589,7 +589,6 @@ function Overview({ data }: { data: Data }) {
             key={t.key}
             tile={t}
             foot
-            digits={t.unit === "pct" ? 1 : undefined}
             titles={titles}
             info={{ k: info[t.key] ?? "", trend: trend(t.key, t.unit === "pct" ? "pct" : "count") }}
           />
@@ -697,7 +696,8 @@ function Weeks({ data }: { data: Data }) {
   const top = Math.max(10, Math.ceil(maxSent / 10) * 10);
   const rateOf = (w: Data["weeks"][number]) => ratio(w.clicked, w.sent);
   const maxRate = Math.max(0.05, ...data.weeks.map((w) => rateOf(w) ?? 0));
-  const rateTop = Math.ceil(maxRate * 20) / 20;
+  // Quarter lines on whole tenths of a point, so each reads exactly as written ("1.5%").
+  const rateTop = quarterTop(maxRate, 0.001);
   const n = data.weeks.length;
   const pts = data.weeks
     .map((w, i) => {
@@ -742,7 +742,7 @@ function Weeks({ data }: { data: Data }) {
               {count(Math.round(t * top))}
             </span>
             <span className="absolute -right-10 -translate-y-1/2 text-[11px] tabular-nums text-ap-muted">
-              {fmt("pct", t * rateTop, 0)}
+              {fmt("pct", t * rateTop)}
             </span>
           </span>
         ))}

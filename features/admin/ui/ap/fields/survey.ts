@@ -1617,8 +1617,7 @@ export const fields: FieldRegistry = {
       den: "Visits to the survey page",
       mult: "× 100",
     },
-    caveat:
-      "PostHog's clicks for every range: it sees most visits, not people with a blocker. A share under 10% shows a tenth.",
+    caveat: "PostHog's clicks for every range: it sees most visits, not people with a blocker.",
     tables: [
       {
         source: "posthog",
