@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -162,10 +163,17 @@ const SurveySheetShell: FC<SurveySheetShellProps> = ({
     return () => window.clearTimeout(timer);
   }, [exiting]);
 
-  useEffect(() => {
+  // The tap guard is armed before the sheet is painted. In a passive effect it came a moment
+  // late when Auto-advance's timer opened a sheet (React runs those effects in a later task),
+  // and for that moment a tap on the opt-in sheet's Yes counted (Eman, #722, 13 Nov).
+  useLayoutEffect(() => {
     if (!open) return;
     openedAt.current = Date.now();
     closing.current = false;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     lockBodyScroll();
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusTimer = window.setTimeout(() => {
@@ -233,25 +241,20 @@ const SurveySheetShell: FC<SurveySheetShellProps> = ({
       if (e.key !== "Tab") return;
       const panel = panelRef.current;
       if (!panel) return;
+      // Every step is taken here: Safari skips buttons on Tab by default, so a step left to the
+      // browser sent focus out of the sheet to the page behind it (Eman, #722, 13 Nov).
+      e.preventDefault();
       const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (!first || !last) {
-        e.preventDefault();
-        return;
-      }
-      const active = document.activeElement;
-      const inside = panel.contains(active);
-      const onEdgeBack = !inside || active === first || !focusables.includes(active as HTMLElement);
-      if (e.shiftKey) {
-        if (onEdgeBack) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (!inside || active === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (focusables.length === 0) return;
+      const at = focusables.indexOf(document.activeElement as HTMLElement);
+      const step = e.shiftKey
+        ? at <= 0
+          ? focusables.length - 1
+          : at - 1
+        : at < 0 || at === focusables.length - 1
+          ? 0
+          : at + 1;
+      focusables[step]!.focus();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -301,7 +304,13 @@ const SurveySheetShell: FC<SurveySheetShellProps> = ({
           type="button"
           tabIndex={-1}
           aria-label={scrimLabel}
-          onClick={() => closeWith("backdrop")}
+          onClick={() => {
+            // The buttons' guard holds here too: a double tap or double click on Next lands on
+            // the backdrop while the sheet is still rising, and must not close it unseen
+            // (Eman, #722, 13 Nov).
+            if (Date.now() - openedAt.current < OPEN_GUARD_MS) return;
+            closeWith("backdrop");
+          }}
           className={`absolute inset-0 h-full w-full cursor-default bg-[rgba(22,16,33,0.38)] ${
             exiting
               ? "sheet-exit-fade"
