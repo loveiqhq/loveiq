@@ -561,7 +561,7 @@ medians AS (
   ORDERS +
   `
 SELECT u.k AS n, u.q AS question, m.median_ms,
-       round(sum(coalesce(m.median_ms, 0)) OVER (ORDER BY u.k) / 60000.0, 1) AS minutes_so_far
+       round((sum(coalesce(m.median_ms, 0)) OVER (ORDER BY u.k) / 60000.0)::numeric, 1) AS minutes_so_far
   FROM orders o CROSS JOIN unnest(o.qs) WITH ORDINALITY AS u (q, k)
   LEFT JOIN medians m ON m.question = u.q
  WHERE o.arm = 'control'  -- the test's order: 'variant'

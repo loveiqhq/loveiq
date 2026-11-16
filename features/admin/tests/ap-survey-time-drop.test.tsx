@@ -266,9 +266,12 @@ describe("the Survey page's time and drop-out per question", () => {
     expect(time.textContent).toContain("#1 · 00001 · Name");
     expect(time.textContent).toContain("Median time: 8 s");
     expect(time.textContent).toContain("Survey time so far: 0.1 min");
+    // Question 2 is the detail's own first pick (the countable one most people leave on): go to 3.
+    expect(screen.getByText(/^Survey · Question detail · 01002 · Step 2 of \d+$/)).toBeTruthy();
+    fireEvent.keyDown(time, { key: "ArrowRight" });
     fireEvent.keyDown(time, { key: "ArrowRight" });
     fireEvent.keyDown(time, { key: "Enter" });
-    expect(screen.getByText(/^Survey · Question detail · 01002 · Step 2 of \d+$/)).toBeTruthy();
+    expect(screen.getByText(/^Survey · Question detail · 01005 · Step 3 of \d+$/)).toBeTruthy();
     expect(scrolled).toHaveBeenCalled();
     expect((scrolled.mock.contexts.at(-1) as HTMLElement).id).toBe("question-detail");
   });
