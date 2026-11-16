@@ -980,7 +980,9 @@ function TimeSection({ data }: { data: ReportPayload }) {
               >
                 <span className="text-xs font-bold">
                   {fmt("pct", b.share)}{" "}
-                  <span className="font-medium text-ap-muted">· {fmt("pct", b.bench)}</span>
+                  <span className="whitespace-nowrap font-medium text-ap-muted">
+                    · {fmt("pct", b.bench)}
+                  </span>
                 </span>
                 <span
                   className="w-full max-w-12 rounded-t-md rounded-b-sm bg-ap-purple"
