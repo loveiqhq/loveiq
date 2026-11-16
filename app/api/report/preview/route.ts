@@ -23,6 +23,7 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
 import { isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
 import { buildInitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
 import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
 import { buildGateReveal } from "@features/report/server/gateReveal";
 
@@ -103,6 +104,11 @@ export async function GET(request: Request) {
     url.searchParams.get("reveal") === "1"
       ? buildGateReveal(archetype, previewPercentages(archetype))
       : null;
+  // And which half of Mark's 50/50 the preview shows (reveal=1 his new page's, reveal=0 today's
+  // page's), so the tour's menu tells that half's offer (features/report/logic/lightReportMap.ts).
+  const revealParam = url.searchParams.get("reveal");
+  const revealArm: GateRevealArm | null =
+    revealParam === "1" ? "reveal" : revealParam === "0" ? "control" : null;
 
   // `?gate=1`: the EUR 1.99 gate as a gated owner meets it, its payload and nothing else
   // (features/report/logic/initialUnlockGate.ts). Its survey time is the canvas's sample.
@@ -113,6 +119,7 @@ export async function GET(request: Request) {
         submissionId: null,
         surveyMinutes: PREVIEW_SURVEY_MINUTES,
         reveal,
+        revealArm,
       }),
       { headers: { "Cache-Control": "no-store" } }
     );
@@ -132,6 +139,7 @@ export async function GET(request: Request) {
           submissionId: null,
           surveyMinutes: PREVIEW_SURVEY_MINUTES,
           reveal,
+          revealArm,
         }),
       }),
       { headers: { "Cache-Control": "no-store" } }

@@ -116,6 +116,18 @@ describe("GET /api/report/preview — the gate with the archetype on it", () => 
     const { json } = await get("archetype=Spark%20Seeker&v4=1&gate=1");
     expect(json).not.toHaveProperty("reveal");
   });
+
+  // Mark's 50/50 (16 Nov): the tour's menu tells the reader's half its offer, so a preview
+  // names the half it shows: reveal=1 the new page's, reveal=0 today's page's.
+  it("names the half of Mark's 50/50 it shows, and none without the param", async () => {
+    const half = async (query: string) =>
+      ((await get(query)).json as { initialGate?: { revealArm?: string } }).initialGate?.revealArm;
+    expect(await half("archetype=Spark%20Seeker&v4=1&gate=tour&reveal=1")).toBe("reveal");
+    expect(await half("archetype=Spark%20Seeker&v4=1&gate=tour&reveal=0")).toBe("control");
+    expect(await half("archetype=Spark%20Seeker&v4=1&gate=tour")).toBeUndefined();
+    const gate = await get("archetype=Spark%20Seeker&v4=1&gate=1&reveal=0");
+    expect((gate.json as { revealArm?: string }).revealArm).toBe("control");
+  });
 });
 
 /** `?plan=initial`: the report the EUR 1.99 journey lands in (features/report/logic/initialUnlock.ts). */
