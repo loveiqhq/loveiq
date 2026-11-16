@@ -116,9 +116,19 @@ describe("OptInSheet", () => {
   it("closes on a tap outside it", () => {
     const p = props();
     render(<OptInSheet open {...p} />);
+    settle();
     fireEvent.click(screen.getByRole("button", { name: "Back to the question", hidden: true }));
     act(() => vi.advanceTimersByTime(CLOSE_MS));
     expect(p.onDismiss).toHaveBeenCalledWith("backdrop");
+  });
+
+  it("ignores a tap outside that lands as it opens (a double click on Next must not close it)", () => {
+    const p = props();
+    render(<OptInSheet open {...p} />);
+    fireEvent.click(screen.getByRole("button", { name: "Back to the question", hidden: true }));
+    act(() => vi.advanceTimersByTime(CLOSE_MS));
+    expect(p.onDismiss).not.toHaveBeenCalled();
+    expect(dialog()).toBeInTheDocument();
   });
 
   it("closes on a swipe down, and springs back from a short slow drag", () => {
@@ -165,6 +175,19 @@ describe("OptInSheet", () => {
     expect(document.activeElement).toBe(yes());
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(notNow());
+  });
+
+  it("takes every Tab itself, from the sheet too (Safari would leave the sheet)", () => {
+    render(<OptInSheet open {...props()} />);
+    act(() => vi.advanceTimersByTime(0));
+    expect(document.activeElement).toBe(dialog());
+    // fireEvent returns false when the handler called preventDefault.
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(yes());
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(notNow());
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(yes());
   });
 
   it("holds the page still while open, and gives focus back on close", () => {
