@@ -406,7 +406,7 @@ export function signOff(): string {
     `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
   <tr><td style="padding-top:24px; border-top:1px solid ${C.line};">
-    <p style="margin:0 0 16px; font-family:${SANS}; font-size:15px; line-height:24px; color:${C.body};">Something not working? Write to <a href="mailto:hello@loveiq.org" style="color:${C.linkViolet}; font-weight:600;">hello@loveiq.org</a> and we&rsquo;ll get you back in.</p>
+    <p style="margin:0 0 16px; font-family:${SANS}; font-size:15px; line-height:24px; color:${C.body};">Something not working? Write to <a href="mailto:hello@loveiq.org" style="color:${C.linkViolet}; font-weight:600;">hello@loveiq.org</a> and we&rsquo;ll sort it out.</p>
     <div style="font-family:${SERIF}; font-style:italic; font-size:17px; line-height:24px; color:${C.body};">With kindness,</div>
     <div style="font-family:${SERIF}; font-size:17px; line-height:24px; font-weight:600; color:${C.ink};">Your LoveIQ team</div>
   </td></tr>

@@ -133,6 +133,11 @@ export interface FullUnlockedParams extends PurchaseEmailParams {
   shareUrl: string;
 }
 
+const THANKS =
+  "Thank you for trusting us with something this personal. Your full report is unlocked and waiting for you.";
+/** C1's and C2's line under the button. */
+const KEEP = "Keep this email. Your link brings you back to your report.";
+
 /** C1: a full-report purchase, or a EUR 29.99 pay-to-start buyer who finished the survey. */
 export function fullUnlockedEmail({
   firstName,
@@ -147,7 +152,6 @@ export function fullUnlockedEmail({
     : "Your full report is open. Here’s where to start";
   const previewText =
     "Every chapter is yours now. Three good places to begin, and two people you can share it with.";
-  const keep = "Keep this email. Your link brings you back to your report whenever you want it.";
   const html = shell({
     siteUrl,
     title: subject,
@@ -157,14 +161,14 @@ export function fullUnlockedEmail({
     rows: [
       heading("Every chapter is yours now"),
       paragraphs([
-        `${e(hiLine(name))}<br>Thank you for trusting us with something this personal. Your full report is open.`,
+        `${e(hiLine(name))}<br>${e(THANKS)}`,
         "It reads the patterns in your answers across every dimension we measure: your archetype mix, core motivation, relational stage, desire drivers, attachment style and more.",
       ]),
-      button({ href: reportUrl, label: "Open my full report", notes: [keep] }),
+      button({ href: reportUrl, label: "Open my full report", notes: [e(KEEP)] }),
       panel(siteUrl, {
         icon: "iconShare",
         kicker: "Share your report",
-        title: "Share it with up to two people you trust",
+        title: "Share it with two people you trust",
         body: "Some of the best conversations start with “this part sounds like me”.",
         href: shareUrl,
         cta: "Share my report",
@@ -176,12 +180,12 @@ export function fullUnlockedEmail({
   const text = joinText([
     "Every chapter is yours now",
     hiLine(name),
-    "Thank you for trusting us with something this personal. Your full report is open.",
+    THANKS,
     ["Open my full report:", reportUrl],
-    keep,
+    KEEP,
     [
       "SHARE YOUR REPORT",
-      "Share it with up to two people you trust. Some of the best conversations start with “this part sounds like me”.",
+      "Share it with two people you trust. Some of the best conversations start with “this part sounds like me”.",
       shareUrl,
     ],
     textFooter(FULL_REASON, unsubscribeUrl),
@@ -246,8 +250,10 @@ export function backIntoReportEmail({
 </table>`
     )
     .join("");
-  const keep =
-    "<strong>Keep this email.</strong> Your link brings you back to your report whenever you want it.";
+  const keep = "<strong>Keep this email.</strong> Your link brings you back to your report.";
+  const intro =
+    "Your full report is open. Readers say the following three chapters sound most like them.";
+  const picksTitle = `${picks.length} Chapters you should read`;
   const html = shell({
     siteUrl,
     title: subject,
@@ -256,10 +262,8 @@ export function backIntoReportEmail({
     unsubscribeUrl,
     rows: [
       heading("Pick up where you left off"),
-      paragraphs([
-        `${e(hiLine(name))}<br>Your full report is open. These are the chapters readers say sound most like them.`,
-      ]),
-      row(`${sectionTitle("Where readers find themselves")}${cards}`),
+      paragraphs([`${e(hiLine(name))}<br>${e(intro)}`]),
+      row(`${sectionTitle(picksTitle)}${cards}`),
       button({ href: reportUrl, label: "Continue reading", notes: [keep] }),
       signOff(),
     ],
@@ -267,13 +271,10 @@ export function backIntoReportEmail({
   const text = joinText([
     "Pick up where you left off",
     hiLine(name),
-    "Your full report is open. These are the chapters readers say sound most like them.",
-    [
-      "WHERE READERS FIND THEMSELVES",
-      ...picks.map((p, i) => `${i + 1}. ${p.label}: ${p.question}`),
-    ],
+    intro,
+    [picksTitle.toUpperCase(), ...picks.map((p, i) => `${i + 1}. ${p.label}: ${p.question}`)],
     ["Continue reading:", reportUrl],
-    "Keep this email. Your link brings you back to your report whenever you want it.",
+    KEEP,
     textFooter(FULL_REASON, unsubscribeUrl),
   ]);
   return { subject, html, text };

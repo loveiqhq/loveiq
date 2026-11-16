@@ -267,7 +267,7 @@ describe("GET /api/cron/initial-unlock-gift (E07, the day-1 gift)", () => {
       const body = await (await GET(makeRequest("test-cron-secret"))).json();
       expect(body.summary).toEqual(expect.objectContaining({ gifted: 1, failed: 0 }));
       const sent = mockResendSend.mock.calls[0]![0];
-      expect(sent.subject).toBe("Alex, we unlocked your Core Archetype for you");
+      expect(sent.subject).toBe("Alex, we unlocked your Core Archetype for you, for free");
       expect(sent.html).toContain(
         "Yesterday you invested 14 minutes and answered some very personal questions."
       );

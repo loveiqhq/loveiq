@@ -5,7 +5,8 @@
  */
 
 import { greetingName } from "@features/unlock-feedback/logic/audience";
-import { ARCHETYPES, PRICE, QUESTIONS, minutesLeft } from "./facts";
+import { QUESTIONS, eur, minutesLeft } from "./facts";
+import { OPEN_CORE_STEP, UNLOCK_FULL_STEP } from "./free-funnel";
 import {
   INSIDE_TILES,
   button,
@@ -39,20 +40,23 @@ export interface SurveyReminderParams {
   unsubscribeUrl?: string;
   /** Set for a pay-to-start buyer: what opens when they finish. */
   paidOffer?: PaidOffer | null;
+  /** What that buyer paid (prepaid_report_access.amount_cents); 0 with a 100% code. */
+  paidCents?: number | null;
 }
 
 export const STARTED_REASON = "You get this email because you started the LoveIQ test.";
 export const BOUGHT_REASON = "You get this email because you bought the LoveIQ test on loveiq.org.";
 
-/** "Payment received · €1.99 for the survey and your initial report". */
-export function paymentStep(offer: PaidOffer): Step {
+/**
+ * "Payment received · €1.99 for the survey and your initial report", with the amount the buyer
+ * paid: a 100% code pays nothing, so then no amount, never a price they did not pay.
+ */
+export function paymentStep(offer: PaidOffer, paidCents?: number | null): Step {
+  const what = `the survey and your ${offer === "pre" ? "initial" : "full"} report`;
   return {
     state: "done",
     title: "Payment received",
-    detail:
-      offer === "pre"
-        ? `${PRICE} for the survey and your initial report`
-        : "For your full LoveIQ report",
+    detail: paidCents && paidCents > 0 ? `${eur(paidCents)} for ${what}` : `For ${what}`,
   };
 }
 
@@ -73,6 +77,7 @@ export function surveyPausedEmail({
   siteUrl,
   unsubscribeUrl,
   paidOffer = null,
+  paidCents = null,
 }: SurveyReminderParams): KitEmail {
   const name = greetingName(firstName);
   const answered = clampAnswered(rawAnswered);
@@ -87,15 +92,17 @@ export function surveyPausedEmail({
     : `Your answers are saved. ${left} to your Core Archetype.`;
   const stopped = `stopped at question ${answered} of ${QUESTIONS}. Your answers so far are saved on this device, so you can carry on where you left off.`;
   const intro = paidOffer ? `Your report is paid for, and you ${stopped}` : `You ${stopped}`;
+  // A €29.99 buyer owns the full report: no step 4 and no price to pay (Mark, 9 Nov).
   const list: Step[] = paidOffer
     ? [
-        paymentStep(paidOffer),
+        paymentStep(paidOffer, paidCents),
         { state: "next", title: "Take the survey", detail: minutesText(minutes) },
         {
           state: "todo",
           title: paidOffer === "pre" ? "Read your Core Archetype" : "Read your full report",
           detail: "Opens the moment you finish",
         },
+        ...(paidOffer === "pre" ? [UNLOCK_FULL_STEP] : []),
       ]
     : [
         { state: "done", title: "Start the survey", detail: `${answered} questions answered` },
@@ -104,11 +111,8 @@ export function surveyPausedEmail({
           title: "Finish the survey",
           detail: `${minutesText(minutes).replace(" left", "")}, anonymous by default`,
         },
-        {
-          state: "todo",
-          title: "See your Core Archetype",
-          detail: `Which of ${ARCHETYPES} archetypes leads for you`,
-        },
+        { state: "todo", ...OPEN_CORE_STEP },
+        UNLOCK_FULL_STEP,
       ];
   const reason = paidOffer ? BOUGHT_REASON : STARTED_REASON;
   const html = shell({

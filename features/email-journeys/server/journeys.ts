@@ -480,9 +480,12 @@ interface PurchaseRow {
   customer_email: string | null;
   paid_at: string;
   survey_session_id?: string | null;
+  /** What was paid (0 with a 100% code); R1 names it. */
+  amount_cents?: number | null;
 }
 
-const PURCHASE_SELECT = "id,prepaid_token,offer,customer_email,paid_at,survey_session_id";
+const PURCHASE_SELECT =
+  "id,prepaid_token,offer,customer_email,paid_at,survey_session_id,amount_cents";
 
 function paidOffer(row: PurchaseRow): PaidOffer | null {
   return row.offer === "pre" || row.offer === "full" ? row.offer : null;
@@ -629,6 +632,7 @@ export async function runPaidSurveyReminders(ctx: JourneyContext): Promise<Stage
         siteUrl,
         unsubscribeUrl,
         paidOffer: offer,
+        paidCents: row.amount_cents ?? null,
       })
     );
   });
