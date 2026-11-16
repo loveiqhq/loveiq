@@ -73,6 +73,8 @@ import logger from "@shared/observability/logger";
 import {
   __resetSurveyStatusCacheForTests,
   __setSubmitLandPollMsForTests,
+  MARKETING_OPT_IN_SHEET_TERMS_VERSION,
+  MARKETING_OPT_IN_TERMS_VERSION,
   SUBMIT_WORST_CASE_MS,
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
@@ -698,6 +700,77 @@ describe("POST /api/survey", () => {
 
     await new Promise((r) => setTimeout(r, 10));
     expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The opt-in's "Sure you want to miss out?" sheet (features/survey/optInSheet.ts): a Yes
+   * given there is filed under the sheet's consent version, which names both texts the
+   * reader saw (GDPR Art. 7(1), T-11). A Yes on the question keeps Q16015's own version, and
+   * a No gets none, wherever it was given.
+   */
+  describe("the consent version a Yes is filed under", () => {
+    const YES = "Yes, I want to keep learning about myself.";
+    const NO = "No, I am not interested in this growth opportunity.";
+
+    async function submitOptIn(answer: string, extra: Record<string, unknown> = {}) {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+      const res = await POST(
+        makeRequest({
+          ...validBody(),
+          answers: { ...validBody().answers, "16015": answer },
+          ...extra,
+        })
+      );
+      expect(res.status).toBe(200);
+    }
+
+    function consentPatch(): Record<string, unknown> {
+      const patch = mockFetchWithTimeout.mock.calls
+        .map((c) => ({
+          url: c[0] as string,
+          method: ((c[1] as { method?: string })?.method || "GET").toUpperCase(),
+          body: (c[1] as { body?: string })?.body,
+        }))
+        .find(
+          (c) =>
+            c.url.includes("/rest/v1/survey_submission") &&
+            c.method === "PATCH" &&
+            (c.body ?? "").includes("terms_version")
+        );
+      expect(patch, "expected the consent PATCH to survey_submission").toBeDefined();
+      return JSON.parse(patch!.body!) as Record<string, unknown>;
+    }
+
+    it("names both texts in the sheet's version", () => {
+      expect(MARKETING_OPT_IN_SHEET_TERMS_VERSION).toBe(
+        `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-2026-11-10`
+      );
+    });
+
+    it("files a Yes given in the sheet under the sheet's version", async () => {
+      await submitOptIn(YES, { marketingOptInVia: "sheet" });
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(
+        MARKETING_OPT_IN_SHEET_TERMS_VERSION
+      );
+    });
+
+    it("keeps Q16015's own version for a Yes given on the question", async () => {
+      await submitOptIn(YES);
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(MARKETING_OPT_IN_TERMS_VERSION);
+    });
+
+    it("files no version for a No, even one sent from the sheet", async () => {
+      await submitOptIn(NO, { marketingOptInVia: "sheet" });
+      expect(consentPatch()).not.toHaveProperty("marketing_opt_in_terms_version");
+    });
+
+    it("drops an unknown source instead of refusing the submission", async () => {
+      await submitOptIn(YES, { marketingOptInVia: "popup" });
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(MARKETING_OPT_IN_TERMS_VERSION);
+    });
   });
 
   /**
