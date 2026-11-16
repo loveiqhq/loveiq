@@ -202,7 +202,7 @@ function deviceCard(mine: SubFact[], bench: SubFact[], from: string, benchFrom: 
     "Device",
     mine.map((s) => deviceLabel(s.device)),
     bench.map((s) => deviceLabel(s.device)),
-    `Mobile is iPhone and Android${iphone === null ? "" : ` (here ${fmt("pct", iphone, 0)} iPhone, ${fmt("pct", 1 - iphone, 0)} Android)`}, from the reader's price quote, else the survey's own steps (recorded from ${rangeLabel(STEP_DEVICE_FROM, STEP_DEVICE_FROM)}). Tablet from the survey's steps, told apart in ranges from ${launch}; in one starting earlier, tablets count as Mobile or Desktop. Unknown: neither has one.`,
+    `Mobile is iPhone and Android${iphone === null ? "" : ` (here ${fmt("pct", iphone)} iPhone, ${fmt("pct", 1 - iphone)} Android)`}, from the reader's price quote, else the survey's own steps (recorded from ${rangeLabel(STEP_DEVICE_FROM, STEP_DEVICE_FROM)}). Tablet from the survey's steps, told apart in ranges from ${launch}; in one starting earlier, tablets count as Mobile or Desktop. Unknown: neither has one.`,
     ["Mobile", "Desktop", "Tablet", "Unknown"]
   );
   const rows = ["Mobile", "Desktop", "Tablet"].map(

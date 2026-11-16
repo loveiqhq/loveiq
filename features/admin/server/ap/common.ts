@@ -75,7 +75,7 @@ export interface Column {
   unit: Unit | "text";
   /** Its info card's field key (features/admin/ui/ap/fields). */
   info?: string;
-  /** Decimals, where the design fixes them (a share in whole percent, money with cents). */
+  /** Decimals, where the design fixes them (money with cents); a rate always has one. */
   digits?: number;
 }
 

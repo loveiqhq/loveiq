@@ -78,20 +78,11 @@ const COLUMNS: Array<{
   { key: "medianSeconds", label: "Median time", heat: true, info: "landing.median-time" },
 ];
 
-/** Percentages as the design writes them here: "5.4%", unlocks "0.19%", bounce "61%". */
-const DIGITS: Partial<Record<MetricKey, number>> = {
-  startCvr: 1,
-  submitCvr: 1,
-  preCvr: 2,
-  fullCvr: 2,
-  bounce: 0,
-};
-
 function cell(key: MetricKey, v: number | null): string {
   if (key === "visits") return fmt("count", v);
   if (key === "perVisit") return fmt("eur3", v);
   if (key === "medianSeconds") return fmt("mmss", v === null ? null : v * 1000);
-  return fmt("pct", v, DIGITS[key]);
+  return fmt("pct", v);
 }
 
 /** A cell's number as it reads ("5.4%" is 5.4, "5 s" is 5, "1:05" is 65): the design shades what it shows. */
@@ -349,7 +340,7 @@ const PAY_FIRST_COLUMNS: Array<{
   {
     label: "Visitor → paid",
     info: "landing.pf-v2p",
-    cell: (r) => fmt("pct", r.v2p, 2),
+    cell: (r) => fmt("pct", r.v2p),
     value: (r) => r.v2p,
   },
   // A count, not coloured: as drawn (the page with more buyers starts more surveys).
@@ -357,7 +348,7 @@ const PAY_FIRST_COLUMNS: Array<{
   {
     label: "Paid → completed",
     info: "landing.pf-p2c",
-    cell: (r) => fmt("pct", r.p2c, 0),
+    cell: (r) => fmt("pct", r.p2c),
     value: (r) => r.p2c,
   },
 ];
@@ -478,10 +469,10 @@ function engagementValues(r: ArmRow): Array<number | null> {
   return [r.bounce, r.medianSeconds, r.cta, ...(r.scroll ?? [null, null, null, null])];
 }
 
-/** As the design writes them: "61%", "5 s", "8.6%", "80%" (the all-pages row a tenth more). */
-function engagementText(i: number, v: number | null, average = false): string {
+/** As written on every row: rates with a tenth ("61.4%", "8.6%"), the time as "5 s". */
+function engagementText(i: number, v: number | null): string {
   if (i === 1) return fmt("mmss", v === null ? null : v * 1000);
-  return fmt("pct", v, i === 2 || (average && i === 0) ? 1 : 0);
+  return fmt("pct", v);
 }
 
 function EngagementTable({ data }: { data: LandingPayload }) {
@@ -607,7 +598,7 @@ function EngagementTable({ data }: { data: LandingPayload }) {
                   className="flex items-center justify-end px-2 py-1.5 text-[13px] font-bold tabular-nums text-ap-ink"
                 >
                   <span className="px-2 py-1.5">
-                    {engagementText(i, avg ? (avg[i] ?? null) : null, true)}
+                    {engagementText(i, avg ? (avg[i] ?? null) : null)}
                   </span>
                 </span>
               ))}
@@ -668,7 +659,7 @@ function HeroVideoCard({ data }: { data: LandingPayload }) {
         : {
             num: fmt("count", s.people),
             den: fmt("count", saw),
-            value: fmt("pct", s.share, 1),
+            value: fmt("pct", s.share),
             span,
           };
     const tip: TipRow[] = [
@@ -678,7 +669,7 @@ function HeroVideoCard({ data }: { data: LandingPayload }) {
         : [
             {
               label: "Of those who saw it",
-              value: fmt("pct", s.share, 1),
+              value: fmt("pct", s.share),
               color,
               mark: "square" as const,
               muted: s.share === null,
@@ -688,7 +679,7 @@ function HeroVideoCard({ data }: { data: LandingPayload }) {
         ? [
             {
               label: "Of those who started it",
-              value: fmt("pct", ofStarted, 0),
+              value: fmt("pct", ofStarted),
               muted: ofStarted === null,
             },
           ]
@@ -715,10 +706,10 @@ function HeroVideoCard({ data }: { data: LandingPayload }) {
           {fmt("count", s.people)}
         </span>
         <span role="cell" className="text-right font-bold tabular-nums text-ap-muted">
-          {s.key === "saw" ? "" : fmt("pct", s.share, 1)}
+          {s.key === "saw" ? "" : fmt("pct", s.share)}
           {/* What the row's read-out adds, for a screen reader. */}
           {ofStarted !== null && (
-            <span className="sr-only">, {fmt("pct", ofStarted, 0)} of those who started it</span>
+            <span className="sr-only">, {fmt("pct", ofStarted)} of those who started it</span>
           )}
         </span>
         <span aria-hidden="true" className="hidden items-center sm:flex">
@@ -867,7 +858,7 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
                     data.engagement.value.medianSeconds,
                     data.engagement.value.cta,
                     ...data.engagement.value.scroll.map((x) => x.share),
-                  ].map((v, i) => engagementText(i, v, true)),
+                  ].map((v, i) => engagementText(i, v)),
                   avgTime(data.engagement.value.meanSeconds),
                 ],
               },

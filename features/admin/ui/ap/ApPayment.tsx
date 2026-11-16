@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import type { Column, Table, Tile } from "@features/admin/server/ap/common";
 import { rangeLabel, type Grain } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt, quarterTop } from "@features/admin/server/ap/format";
+import { EMPTY, fmt, quarterTop, tenths } from "@features/admin/server/ap/format";
 import type {
   CheckoutPoint,
   OverTimeRow,
@@ -53,14 +53,10 @@ const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
 const NOT_ON_SALE =
   "Pre-unlock figures start on 23 Oct 2026, the first whole day the €1.99 Core Archetype was on sale (from the evening of 22 Oct): earlier periods have none to count.";
 const GRAIN_NAME: Record<Grain, string> = { day: "Day", week: "Week", month: "Month" };
-/** The tiles' decimals as the design writes them ("€650", "1.60%", "14.0%"). */
+/** The money tiles' decimals as the design writes them ("€650", "€14.99"); a rate has one. */
 const TILE_DIGITS: Record<string, number> = {
   revenue: 0,
   aov: 2,
-  "pre-cvr": 2,
-  "full-cvr": 2,
-  "pay-cvr": 2,
-  checkout: 1,
 };
 
 /** Each tile's info card (fields/payment.ts). */
@@ -407,7 +403,7 @@ function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boole
                   { label: "Finishers (each person once)", value: fmt("count", r.finishers) },
                   {
                     label: "Payment CVR",
-                    value: fmt("pct", ratio(r.payers, r.finishers), 2),
+                    value: fmt("pct", ratio(r.payers, r.finishers)),
                     muted: !r.finishers,
                   },
                 ],
@@ -484,7 +480,7 @@ function OverTime({ d }: { d: PaymentPayload }) {
                 { v: fmt("eur", ratio(r.fullRevenue, r.fullSales), 2) },
                 { v: fmt("eur", r.revenue, 2) },
                 { v: fmt("count", r.finishers) },
-                { v: fmt("pct", cvrs[i], 2), weight: "bold", shade: band(cvrs, cvrs[i] ?? null) },
+                { v: fmt("pct", cvrs[i]), weight: "bold", shade: band(cvrs, cvrs[i] ?? null) },
               ],
             }))}
           />
@@ -551,9 +547,9 @@ function PaymentTypes({ d }: { d: PaymentPayload }) {
                 { v: fmt("count", r.sales), shade: r.live ? band(sales, r.sales) : "plain" },
                 { v: fmt("eur", ratio(r.revenue, r.sales), 2) },
                 { v: fmt("eur", r.revenue, 2), shade: r.live ? band(revenue, r.revenue) : "plain" },
-                { v: fmt("pct", r.live ? ratio(r.revenue, total) : null, 1) },
+                { v: fmt("pct", r.live ? ratio(r.revenue, total) : null) },
                 { v: fmt("count", r.refunds) },
-                { v: fmt("pct", rate(r), 1), shade: r.live ? band(rates, rate(r), true) : "plain" },
+                { v: fmt("pct", rate(r)), shade: r.live ? band(rates, rate(r), true) : "plain" },
               ],
             }))}
           />
@@ -645,7 +641,7 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
                   { label: "Succeeded", value: fmt("count", p.paid), color: GREEN, mark: "square" },
                   {
                     label: "Checkout success",
-                    value: fmt("pct", ratio(p.paid, p.reached), 0),
+                    value: fmt("pct", ratio(p.paid, p.reached)),
                     strong: Boolean(p.reached),
                     muted: !p.reached,
                   },
@@ -666,10 +662,10 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
                 <br />
                 <strong
                   className={
-                    s === null ? "text-ap-muted" : s >= 0.3 ? "text-ap-good" : "text-ap-bad"
+                    s === null ? "text-ap-muted" : tenths(s) >= 300 ? "text-ap-good" : "text-ap-bad"
                   }
                 >
-                  {fmt("pct", s, 0)}
+                  {fmt("pct", s)}
                 </strong>{" "}
                 success
               </span>
@@ -780,7 +776,7 @@ function Methods({ c }: { c: PaymentPayload["checkout"] }) {
                     {fmt("count", m.sales)}
                   </span>
                   <span role="cell" className="px-3 py-[9px] text-right font-bold">
-                    {fmt("pct", ratio(m.sales, total), 0)}
+                    {fmt("pct", ratio(m.sales, total))}
                   </span>
                   <span role="cell" className="px-3 py-[9px] text-right">
                     {fmt("eur", m.revenue, 0)}
@@ -818,7 +814,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
       n: c.attempted,
       w: ratio(c.attempted, c.reached),
       color: ATTEMPTED,
-      rate: bOfA === null ? EMPTY : `${fmt("pct", bOfA, 1)} of a`,
+      rate: bOfA === null ? EMPTY : `${fmt("pct", bOfA)} of a`,
       tone: stepTone(bOfA, 0.5, 0.3),
     },
     {
@@ -827,7 +823,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
       n: c.paid,
       w: ratio(c.paid, c.reached),
       color: GREEN,
-      rate: cOfB === null ? EMPTY : `${fmt("pct", cOfB, 1)} of b`,
+      rate: cOfB === null ? EMPTY : `${fmt("pct", cOfB)} of b`,
       tone: stepTone(cOfB, 0.85, 0.7),
     },
   ];
@@ -971,10 +967,10 @@ function Segments({
               cells: [
                 { v: r.label, left: true, weight: "bold" },
                 { v: fmt("count", r.finishers) },
-                { v: fmt("pct", ratio(r.sales, allSales), 0) },
-                { v: fmt("pct", r.preCvr, 2) },
+                { v: fmt("pct", ratio(r.sales, allSales)) },
+                { v: fmt("pct", r.preCvr) },
                 { v: fmt("eur", r.preAvg, 2) },
-                { v: fmt("pct", r.fullCvr, 2), weight: "bold", shade: band(cv, r.fullCvr) },
+                { v: fmt("pct", r.fullCvr), weight: "bold", shade: band(cv, r.fullCvr) },
                 { v: fmt("eur", r.fullAvg, 2), shade: band(av, r.fullAvg) },
                 { v: fmt("eur", r.revenue, 0) },
                 { v: fmt("eur", rf[i], 2), shade: band(rf, rf[i] ?? null) },
@@ -1009,7 +1005,7 @@ function liftCell(a: PricingArmRow): Cell {
   if (a.control) return { v: EMPTY };
   if (a.aovLift === null) return { v: EMPTY, sub: a.aovWhy ?? "" };
   return {
-    v: `${a.aovLift > 0 ? "+" : ""}${fmt("pct", a.aovLift, 1)}`,
+    v: `${a.aovLift > 0 ? "+" : ""}${fmt("pct", a.aovLift)}`,
     // The verdict beside the confidence, as drawn: 95% or more is credible, as on Traffic.
     sub:
       a.aovConfidence !== null
@@ -1103,7 +1099,7 @@ function Pricing({ d }: { d: PaymentPayload }) {
                   v: fmt("eur", ratio(a.revenue, a.paidSales), 2),
                   ...(won ? { weight: "bold" as const, shade: "good" as const } : {}),
                 },
-                { v: fmt("pct", ratio(a.paidSales, a.checkouts), 0), ...stalled },
+                { v: fmt("pct", ratio(a.paidSales, a.checkouts)), ...stalled },
                 {
                   v: fmt(
                     "eur",
@@ -1262,7 +1258,7 @@ function ElasticityModel({
     {
       label: `At ${fmt("eur", probe, 2)}`,
       k: "payment.el-at",
-      value: fmt("pct", cvrAt(probe), 2),
+      value: fmt("pct", cvrAt(probe)),
       sub: `Predicted payment CVR · ${fmt("eur", netAt(probe), 3)} net per finisher`,
       look: "border-ap-line bg-white",
     },
@@ -1271,7 +1267,7 @@ function ElasticityModel({
           {
             label: `At today’s ${fmt("eur", today.price, 2)} (${today.arm})`,
             k: "payment.el-today",
-            value: fmt("pct", cvrAt(today.price), 2),
+            value: fmt("pct", cvrAt(today.price)),
             sub: `${fmt("eur", netAt(today.price), 3)} net per finisher${
               bestNet > 0
                 ? ` · ${((1 - netAt(today.price) / bestNet) * 100).toFixed(0)}% less than at the best price`
@@ -1339,7 +1335,7 @@ function ElasticityModel({
                   className="absolute -left-11 w-[38px] translate-y-1/2 text-right text-[11px] tabular-nums text-ap-purple"
                   style={{ bottom: `${f * 100}%` }}
                 >
-                  {fmt("pct", f * cvrTop, 1)}
+                  {fmt("pct", f * cvrTop)}
                 </span>
                 <span
                   className="absolute left-full ml-1.5 translate-y-1/2 text-[11px] tabular-nums text-ap-good"
@@ -1420,7 +1416,7 @@ function ElasticityModel({
                   rows: [
                     {
                       label: "Predicted payment CVR",
-                      value: fmt("pct", cvrAt(p), 2),
+                      value: fmt("pct", cvrAt(p)),
                       color: "#795fc8",
                       mark: "line",
                     },
@@ -1432,7 +1428,7 @@ function ElasticityModel({
                     },
                     ...seen.map((o) => ({
                       label: `Observed, ${pointTitle(o)}`,
-                      value: fmt("pct", o.cvr, 2),
+                      value: fmt("pct", o.cvr),
                       color: INK,
                       mark: "dot" as const,
                     })),
@@ -1456,7 +1452,7 @@ function ElasticityModel({
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        {`Low confidence: ${inWords(n)} monthly points, and price moved together with traffic and the paywall over those months. Conversion is capped at ${fmt("pct", m.cap, 1)}, the best month observed, so the model does not promise more than we have seen. Net revenue takes off Stripe's 2.9% + €0.25. Use it to choose the next price test, not as a forecast.`}
+        {`Low confidence: ${inWords(n)} monthly points, and price moved together with traffic and the paywall over those months. Conversion is capped at ${fmt("pct", m.cap)}, the best month observed, so the model does not promise more than we have seen. Net revenue takes off Stripe's 2.9% + €0.25. Use it to choose the next price test, not as a forecast.`}
       </p>
     </>
   );
@@ -1475,7 +1471,7 @@ function ShareRow({ label, n, share }: { label: string; n: number; share: number
         {fmt("count", n)}
       </span>
       <span className="text-right text-xs font-bold tabular-nums text-ap-muted">
-        {fmt("pct", share, 0)}
+        {fmt("pct", share)}
       </span>
     </div>
   );
@@ -1557,7 +1553,7 @@ function Exits({ d }: { d: PaymentPayload }) {
                 },
                 {
                   v: fmt("count", p.answered),
-                  sub: `${fmt("pct", ratio(p.answered, p.reached), 0)} · ${fmt("count", p.wrote)} wrote`,
+                  sub: `${fmt("pct", ratio(p.answered, p.reached))} · ${fmt("count", p.wrote)} wrote`,
                 },
                 {
                   v: fmt("count", p.pressed.any),
@@ -1565,7 +1561,7 @@ function Exits({ d }: { d: PaymentPayload }) {
                 },
                 {
                   v: fmt("count", p.paidAfter),
-                  sub: fmt("pct", ratio(p.paidAfter, p.reached), 0),
+                  sub: fmt("pct", ratio(p.paidAfter, p.reached)),
                 },
                 {
                   v: fmt("count", p.stage === "pre" ? p.left.maybeLater : p.left.chapters),

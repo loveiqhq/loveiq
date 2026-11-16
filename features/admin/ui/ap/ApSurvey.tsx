@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
 import type { Table, Tile } from "@features/admin/server/ap/common";
-import { delta, EMPTY, fmt } from "@features/admin/server/ap/format";
+import { delta, EMPTY, fmt, tenths } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type {
   Benchmark,
@@ -39,7 +39,7 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
-import TimeDropSection from "./SurveyTimeDrop";
+import TimeDropSection, { overFive } from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -100,12 +100,8 @@ const questionTable = (list: QuestionRow[]): Table => ({
 /** The design's bars in a demographic card, darkest first. */
 const DEMO_COLORS = ["#5a42a6", "#795fc8", "#9d8bd8", "#c0b4e6", "#ddd5f2"];
 
-/** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
-const wholePct = (v: number | null) =>
-  v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
-
-/** At least `pct` percent as the whole percentage shows it: the design's highlights. */
-const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 100) >= pct;
+/** At least `pct` percent as the figure shows it: the design's highlights. */
+const atLeast = (v: number | null, pct: number) => v !== null && tenths(v) >= pct * 10;
 
 /** A question matches a search by its Q-id or its text. */
 const matches = (r: QuestionRow, term: string) =>
@@ -368,13 +364,13 @@ function DemographicCard({ card }: { card: DemoCard }) {
                   rows: [
                     {
                       label: "This survey",
-                      value: fmt("pct", r.share, 1),
+                      value: fmt("pct", r.share),
                       color: DEMO_COLORS[ri % DEMO_COLORS.length],
                       mark: "square",
                     },
                     {
                       label: "Benchmark",
-                      value: fmt("pct", r.bench, 1),
+                      value: fmt("pct", r.bench),
                       color: "#161021",
                       mark: "line",
                       muted: r.bench === null,
@@ -391,7 +387,7 @@ function DemographicCard({ card }: { card: DemoCard }) {
             <span className="truncate font-semibold" title={r.label}>
               {r.label}
               {r.bench !== null && !r.pending && (
-                <span className="sr-only">, benchmark {fmt("pct", r.bench, 1)}</span>
+                <span className="sr-only">, benchmark {fmt("pct", r.bench)}</span>
               )}
             </span>
             {r.pending ? (
@@ -414,7 +410,7 @@ function DemographicCard({ card }: { card: DemoCard }) {
                     />
                   )}
                 </span>
-                <span className="text-right font-bold tabular-nums">{fmt("pct", r.share, 1)}</span>
+                <span className="text-right font-bold tabular-nums">{fmt("pct", r.share)}</span>
                 <span
                   className={`rounded-md px-1.5 py-0.5 text-right text-xs font-bold tabular-nums ${
                     big && d !== null
@@ -446,11 +442,7 @@ function IntroSection({ data }: { data: SurveyPayload }) {
   const c = data.intro.clicks;
   const ok = c && c.ok ? c.value : null;
   const share = (n: number) => (ok && ok.opened ? n / ok.opened : null);
-  // Whole percentages, as drawn, but a tenth under 10%: 7 of 1,483 must not read "0%".
-  const pct = (n: number) => {
-    const v = share(n);
-    return fmt("pct", v, v !== null && v < 0.1 ? 1 : 0);
-  };
+  const pct = (n: number) => fmt("pct", share(n));
   const eng = (step: string) =>
     !ok
       ? "—"
@@ -483,26 +475,18 @@ function IntroSection({ data }: { data: SurveyPayload }) {
       <AllTraffic note={data.narrowed} />
       <TileGrid min={200}>
         {data.intro.tiles.map((t) => {
-          // Whole percentages, as drawn; a share under 1% keeps a tenth so a handful never reads 0%.
-          const digits =
-            t.unit !== "pct"
-              ? undefined
-              : t.value !== null && t.value > 0 && t.value < 0.01
-                ? 1
-                : 0;
           const nd = parts[t.key];
           return (
             <KpiTileV2
               key={t.key}
               tile={t}
-              digits={digits}
               titles={bucketTitles(data.range.from, data.range.to)}
               // No 12-week line: before the tracking day these are PostHog's, for a whole range.
               info={{
                 k: TILE_INFO.find((x) => x.tile === t.key)?.k ?? `survey.${t.key}`,
                 worked: workedOf(t) && {
                   ...(nd ? { num: fmt("count", nd[0]), den: fmt("count", nd[1]) } : {}),
-                  value: fmt(t.unit, t.value, digits),
+                  value: fmt(t.unit, t.value),
                 },
               }}
             />
@@ -609,16 +593,14 @@ function IntroRow({ card, from }: { card: IntroRowData; from: string | null }) {
             <span className="flex-1">
               <Bar pct={card.reachedShare} height={8} />
             </span>
-            <span className="text-xs font-bold tabular-nums">
-              {fmt("pct", card.reachedShare, 0)}
-            </span>
+            <span className="text-xs font-bold tabular-nums">{fmt("pct", card.reachedShare)}</span>
             <span className="text-[11px] text-ap-muted tabular-nums">
               {fmt("count", card.reached)}
             </span>
           </>
         )}
       </span>
-      {/* Whole percentages; the design's red from 15% skipping and 8% leaving. */}
+      {/* The design's red from 15% skipping and 8% leaving. */}
       {(
         [
           [card.cont, false],
@@ -632,7 +614,7 @@ function IntroRow({ card, from }: { card: IntroRowData; from: string | null }) {
           role="cell"
           className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${red ? "font-bold text-ap-bad" : ""}`}
         >
-          {wholePct(v)}
+          {fmt("pct", v)}
         </span>
       ))}
       <span role="cell" className="px-3 py-2.5 text-xs leading-snug text-ap-body">
@@ -707,7 +689,7 @@ function QuestionDetail({
           label="Exits"
           info={{ k: "survey.exits", worked: { value: fmt("count", q.exits) } }}
           value={fmt("count", q.exits)}
-          note={`${fmt("pct", q.dropRate, 2)} drop-out${unfiltered ? " · all traffic" : ""}`}
+          note={`${fmt("pct", q.dropRate)} drop-out${unfiltered ? " · all traffic" : ""}`}
         />
         <Figure
           compact
@@ -717,10 +699,10 @@ function QuestionDetail({
             worked: {
               num: fmt("count", q.skipped),
               den: fmt("count", shownBoth),
-              value: fmt("pct", skipShare, 1),
+              value: fmt("pct", skipShare),
             },
           }}
-          value={fmt("pct", skipShare, 1)}
+          value={fmt("pct", skipShare)}
           note={`${fmt("count", q.skipped)} passed without an answer${allTraffic}`}
         />
         <Figure
@@ -812,7 +794,7 @@ function QuestionDetail({
                         title: a.label,
                         rows: data.segments.map((sg, i) => ({
                           label: `${sg.name} · n=${fmt("count", sg.n)}`,
-                          value: fmt("pct", a.shares[i] ?? null, 1),
+                          value: fmt("pct", a.shares[i] ?? null),
                           color: SEGMENT_COLORS[i],
                           mark: "square" as const,
                           muted: a.shares[i] === null,
@@ -837,7 +819,7 @@ function QuestionDetail({
                               />
                             </span>
                             <span className="text-right font-bold tabular-nums">
-                              {fmt("pct", v, 0)}
+                              {fmt("pct", v)}
                             </span>
                           </div>
                         ))}
@@ -922,8 +904,8 @@ function FunnelSection({
         exits: r.exits,
         drop: r.dropRate,
         time: r.medianMs,
-        // The design's orange: more than 5% fewer than the step before.
-        heavy: ofPrev !== null && ofPrev < 0.95,
+        // The design's orange: more than 5% fewer than the step before, by the figure shown.
+        heavy: ofPrev !== null && tenths(ofPrev) < 950,
       };
     }),
     ...rows
@@ -1026,7 +1008,7 @@ function FunnelSection({
                     ? {
                         num: fmt("count", last.reached),
                         den: fmt("count", top),
-                        value: fmt("pct", last.reached / top, 1),
+                        value: fmt("pct", last.reached / top),
                       }
                     : undefined
                 }
@@ -1034,7 +1016,7 @@ function FunnelSection({
             </span>
             <span className="font-serif text-xl font-semibold tabular-nums">
               {last && top
-                ? `${fmt("pct", last.reached / top, 1)} · ${fmt("count", last.reached)}`
+                ? `${fmt("pct", last.reached / top)} · ${fmt("count", last.reached)}`
                 : "—"}
             </span>
           </span>
@@ -1102,7 +1084,7 @@ function FunnelSection({
           </div>
           {shown.map((x) => {
             const on = x.r.id === selected;
-            const dropRed = x.drop !== null && x.drop > 0.05;
+            const dropRed = overFive(x.drop);
             // The picked row's purple tint leaves the brighter red under 4.5:1; its ink passes.
             const red = on ? "text-ap-bad-ink" : "text-ap-bad";
             return (
@@ -1163,13 +1145,13 @@ function FunnelSection({
                   role="cell"
                   className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums"
                 >
-                  {fmt("pct", x.ofStart, 1)}
+                  {fmt("pct", x.ofStart)}
                 </span>
                 <span
                   role="cell"
                   className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? `font-bold ${red}` : "text-ap-body"}`}
                 >
-                  {fmt("pct", x.ofPrev, 1)}
+                  {fmt("pct", x.ofPrev)}
                 </span>
                 <span
                   role="cell"
@@ -1181,14 +1163,14 @@ function FunnelSection({
                   role="cell"
                   className={`px-3 py-2 text-right text-[13px] tabular-nums ${dropRed ? `font-bold ${red}` : "text-ap-body"}`}
                 >
-                  {fmt("pct", x.drop, 2)}
+                  {fmt("pct", x.drop)}
                 </span>
                 <span
                   role="cell"
                   title={
                     x.time === null || !slowest
                       ? "No time recorded"
-                      : `${fmt("mmss", x.time)} median · ${fmt("pct", x.time / slowest, 1)} of the slowest question (${fmt("mmss", slowest)}) · median of all questions ${fmt("mmss", middle)}`
+                      : `${fmt("mmss", x.time)} median · ${fmt("pct", x.time / slowest)} of the slowest question (${fmt("mmss", slowest)}) · median of all questions ${fmt("mmss", middle)}`
                   }
                   className="flex items-center justify-end gap-2 px-3 py-2"
                 >

@@ -74,6 +74,23 @@ inside `DashboardErrorBoundary`. The components load their data through
 
 Use [admin-api.md](admin-api.md) for each route's methods and roles.
 
+## How numbers are written
+
+Every rate on every AP page has exactly one decimal (Marcus, 29–30 Oct 2026): tiles, tables,
+charts, their axes and the info texts all go through `fmt("pct")` in
+[`features/admin/server/ap/format.ts`](../features/admin/server/ap/format.ts), which ignores any
+`digits` a caller passes.
+
+- Rounded half up on the figure as written, so 68.35% reads 68.4%.
+- A rate above zero never reads "0.0%" (it reads "<0.1%"), and one short of everyone never reads
+  "100.0%" (it reads ">99.9%").
+- Changes are points with one decimal ("+0.5 pt"); one that rounds to nothing reads "±0.0 pt",
+  in grey.
+- Highlights follow the figure shown (`tenths()`): the Survey page's "over 5%" flag, in its
+  charts and its funnel table, marks a drop-out that reads above 5.0%, so "5.0%" is not flagged.
+- Not rates, so unchanged: counts, euros, times, confidence, threshold labels ("Scroll 25%") and
+  the CSV exports, which keep two decimals for spreadsheets.
+
 ## What the admin no longer does
 
 - **Submissions:** there is no submissions page. One submission can still be read,

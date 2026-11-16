@@ -14,7 +14,7 @@ import {
   periodRange,
   trendBuckets,
 } from "@features/admin/server/ap/filters";
-import { delta, deltaRel, fmt, lowerFirst } from "@features/admin/server/ap/format";
+import { delta, deltaRel, fmt, lowerFirst, tenths } from "@features/admin/server/ap/format";
 import {
   ageMatched,
   ALL,
@@ -180,7 +180,7 @@ describe("AP filters", () => {
 
 describe("AP number format", () => {
   it("writes numbers as the design does", () => {
-    expect(fmt("pct", 0.0596)).toBe("5.96%");
+    expect(fmt("pct", 0.0596)).toBe("6.0%");
     expect(fmt("pct", 0.129)).toBe("12.9%");
     expect(fmt("eur", 1199)).toBe("€1,199");
     expect(fmt("eur", 29.5)).toBe("€29.50");
@@ -196,20 +196,74 @@ describe("AP number format", () => {
     expect(fmt("count", null)).toBe("—");
   });
 
-  it("writes a change in points as the design does: tenths from a point, hundredths below", () => {
+  it("writes every rate with exactly one decimal (Marcus, 29–30 Oct 2026)", () => {
+    // Figures the pages wrote with two decimals, or none.
+    expect(fmt("pct", 0.0639)).toBe("6.4%");
+    expect(fmt("pct", 0.0993)).toBe("9.9%");
+    expect(fmt("pct", 0.1511)).toBe("15.1%");
+    expect(fmt("pct", 0.683)).toBe("68.3%");
+    expect(fmt("pct", 0.53)).toBe("53.0%");
+    expect(fmt("pct", 0)).toBe("0.0%");
+    expect(fmt("pct", 1)).toBe("100.0%");
+    // A rate can pass 100% (submissions per start on a day).
+    expect(fmt("pct", 1.25)).toBe("125.0%");
+    // Asked-for decimals don't apply to a rate.
+    expect(fmt("pct", 0.0596, 2)).toBe("6.0%");
+    expect(fmt("pct", 0.53, 0)).toBe("53.0%");
+    expect(fmt("pct", 0.0002, 3)).toBe("<0.1%");
+    // Tiny denominators round like any other.
+    expect([0 / 1, 1 / 1, 1 / 3, 2 / 3, 1 / 7, 3 / 8].map((v) => fmt("pct", v))).toEqual([
+      "0.0%",
+      "100.0%",
+      "33.3%",
+      "66.7%",
+      "14.3%",
+      "37.5%",
+    ]);
+    // No figure: nothing to divide (0 / 0, 1 / 0) reads "—" like a missing one.
+    expect([null, undefined, 0 / 0, 1 / 0].map((v) => fmt("pct", v))).toEqual(["—", "—", "—", "—"]);
+    // A change of a rate keeps its sign (the AOV lift).
+    expect(fmt("pct", -0.0234)).toBe("−2.3%");
+    expect(fmt("pct", -0.0004)).toBe("−<0.1%");
+  });
+
+  it("rounds a rate half up on its decimal figure, never to a false 0.0% or 100.0%", () => {
+    // 68.35% is 68.4%: toFixed would round its binary 68.3499… down.
+    expect(fmt("pct", 0.6835)).toBe("68.4%");
+    expect(fmt("pct", 23 / 80)).toBe("28.8%");
+    expect(fmt("pct", 0.0015)).toBe("0.2%");
+    expect(fmt("pct", 0.1245)).toBe("12.5%");
+    // 201 of 400 is 50.25%: its binary × 1000 is 502.4999…, still 50.3%.
+    expect(fmt("pct", 201 / 400)).toBe("50.3%");
+    expect([0.6835, 0.0005, 0.00049, 0.9995, 0].map(tenths)).toEqual([684, 1, 0, 1000, 0]);
+    // 0.05% is a tenth; under it, a rate above nothing reads "<0.1%", never "0.0%".
+    expect(fmt("pct", 0.0005)).toBe("0.1%");
+    expect(fmt("pct", 0.00049)).toBe("<0.1%");
+    expect(fmt("pct", 1 / 3000)).toBe("<0.1%");
+    // 99.95% and up, but short of everyone, is ">99.9%", never "100.0%".
+    expect(fmt("pct", 0.99949)).toBe("99.9%");
+    expect(fmt("pct", 0.9995)).toBe(">99.9%");
+    expect(fmt("pct", 2999 / 3000)).toBe(">99.9%");
+    // Float noise is no rate: a sum of shares that is everyone stays 100.0%, nothing stays 0.0%.
+    expect(fmt("pct", 0.9999999999999999)).toBe("100.0%");
+    expect(fmt("pct", 0.1 + 0.2 - 0.3)).toBe("0.0%");
+  });
+
+  it("writes a change in points with one decimal, as the rates", () => {
     expect(delta("pct", 0.96, 0.981)?.text).toBe("−2.1 pt");
     expect(delta("pct", 0.394, 0.372)?.text).toBe("+2.2 pt");
-    // No trailing ".0".
-    expect(delta("pct", 0.33, 0.3)?.text).toBe("+3 pt");
-    expect(delta("pct", 0.002, 0.0096)?.text).toBe("−0.76 pt");
-    expect(delta("pct", 0.0596, 0.055)?.text).toBe("+0.46 pt");
-    // A change that rounds up to a point reads as one, not "1.00 pt".
-    expect(delta("pct", 0.10996, 0.1)?.text).toBe("+1 pt");
-    expect(delta("pct", 0.25, 0.1)?.text).toBe("+15 pt");
+    expect(delta("pct", 0.33, 0.3)?.text).toBe("+3.0 pt");
+    expect(delta("pct", 0.002, 0.0096)?.text).toBe("−0.8 pt");
+    expect(delta("pct", 0.0596, 0.055)?.text).toBe("+0.5 pt");
+    expect(delta("pct", 0.10996, 0.1)?.text).toBe("+1.0 pt");
+    expect(delta("pct", 0.25, 0.1)?.text).toBe("+15.0 pt");
+    // A change that rounds to nothing reads as none, in grey.
+    expect(delta("pct", 0.1003, 0.1)).toEqual({ text: "±0.0 pt", tone: "flat" });
+    expect(delta("pct", 0.1, 0.1)).toEqual({ text: "±0.0 pt", tone: "flat" });
   });
 
   it("gives rates in points and calls a change under 1% flat", () => {
-    expect(delta("pct", 0.07, 0.05)).toEqual({ text: "+2 pt", tone: "good" });
+    expect(delta("pct", 0.07, 0.05)).toEqual({ text: "+2.0 pt", tone: "good" });
     expect(delta("count", 1005, 1000)?.tone).toBe("flat");
     expect(delta("eur", 90, 100, "down")).toEqual({ text: "−10.0%", tone: "good" });
     expect(delta("count", 5, 0)).toEqual({ text: "+5", tone: "good" });
@@ -223,7 +277,7 @@ describe("AP number format", () => {
     expect(fmt("mmss", 59_600)).toBe("1:00");
     expect(fmt("mmss", 0)).toBe("0 s");
     // A check whose change is neither good nor bad (the report open rate) reads grey.
-    expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2 pt", tone: "flat" });
+    expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2.0 pt", tone: "flat" });
     expect(delta("count", 1, 4, "up", "abs")).toEqual({ text: "−3", tone: "bad" });
     // Small sums of money: cents once the change is ten cents or more, a third decimal below.
     expect(delta("eur3", 0.058, 0.309)?.text).toBe("−€0.25");

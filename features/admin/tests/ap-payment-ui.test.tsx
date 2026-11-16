@@ -426,9 +426,9 @@ describe("the Payment page as drawn", () => {
       screen.getAllByText(label)[0]!.parentElement!.textContent!.replace(/\u00a0/g, " ");
     expect(tileText("Revenue")).toBe("Revenue €6501 May – 15 Jul 2026");
     expect(tileText("Pre-unlocks")).toBe("Pre-unlocks —Initial plan · not on sale yet");
-    expect(tileText("Full-unlock CVR")).toBe("Full-unlock CVR 2.75%of 1,126 submissions");
+    expect(tileText("Full-unlock CVR")).toBe("Full-unlock CVR 2.8%of 1,126 submissions");
     expect(tileText("Avg. order value")).toBe("Avg. order value €16.50over 31 paid sales");
-    expect(tileText("Payment CVR")).toBe("Payment CVR 1.80%20 of 1,126 finishers");
+    expect(tileText("Payment CVR")).toBe("Payment CVR 1.8%20 of 1,126 finishers");
     expect(tileText("Checkout success")).toBe(
       "Checkout success 14.0%39 of 279 reached the payment page"
     );
@@ -454,7 +454,7 @@ describe("the Payment page as drawn", () => {
       "€124.87",
       "410",
       // The month's finishers who paid (12 of 410), as the Payment CVR tile counts them.
-      "2.93%",
+      "2.9%",
     ]);
     // Payment CVR shaded: May best (green), July worst (red).
     const cvr = (i: number) => within(rows(table)[i]!).getAllByRole("cell")[6]!.className;
@@ -467,6 +467,24 @@ describe("the Payment page as drawn", () => {
     ).toBeTruthy();
   });
 
+  it("colours each month's checkout success by the figure shown: green from 30.0%", () => {
+    view.payload = {
+      ...payload,
+      checkout: {
+        ...payload.checkout,
+        points: [
+          // 599 of 2,000 is 29.95%: it reads "30.0%", so green; 299 of 1,000 reads "29.9%".
+          { label: "May 2026", partial: false, reached: 2000, attempted: 900, paid: 599 },
+          { label: "Jun 2026", partial: false, reached: 1000, attempted: 500, paid: 299 },
+        ],
+      },
+    };
+    render(<ApPayment />);
+    const card = region("Checkout and payment methods");
+    expect(within(card).getByText("30.0%").className).toContain("text-ap-good");
+    expect(within(card).getByText("29.9%").className).toContain("text-ap-bad");
+  });
+
   it("checkout: the a/b/c funnel with rates coloured as drawn, then the methods", () => {
     render(<ApPayment />);
     const card = region("Checkout and payment methods");
@@ -475,14 +493,14 @@ describe("the Payment page as drawn", () => {
     expect(within(card).getByText("40.0% of a").className).toContain("text-ap-ink");
     expect(within(card).getByText("75.0% of b").className).toContain("text-ap-ink");
     // Each month's success: green from 30%.
-    expect(within(card).getByText("65%").className).toContain("text-ap-good");
-    expect(within(card).getByText("12%").className).toContain("text-ap-bad");
+    expect(within(card).getByText("65.0%").className).toContain("text-ap-good");
+    expect(within(card).getByText("12.0%").className).toContain("text-ap-bad");
     expect(within(card).getByText("32 paid sales in this range, via Stripe")).toBeTruthy();
     const methods = within(card).getByRole("table", { name: "Payment methods" });
     // Revenue in whole euros, as drawn; the AOV keeps its cents.
     expect(texts(rows(methods))).toEqual([
-      "Stripe Linksaved details2475%€371€15.46",
-      "Visacard825%€142€17.74",
+      "Stripe Linksaved details2475.0%€371€15.46",
+      "Visacard825.0%€142€17.74",
     ]);
   });
 
@@ -492,11 +510,11 @@ describe("the Payment page as drawn", () => {
     const card = region("Paygate exits");
     const table = within(card).getByRole("table", { name: "Paygate exits" });
     expect(texts(rows(table))).toEqual([
-      "After the €1.99 page“Not ready” or Back on the €1.99 page4052 views1845% · 3 wrote6card 4 · bar 3513%12Maybe later · back arrow 9 · browser Back 4",
-      "After the full report's plans“Not ready” on the plans, €1.99 holders900% · 0 wrote0card 0 · bar 000%5to the chapters · back arrow 2 · browser Back 1",
+      "After the €1.99 page“Not ready” or Back on the €1.99 page4052 views1845.0% · 3 wrote6card 4 · bar 3512.5%12Maybe later · back arrow 9 · browser Back 4",
+      "After the full report's plans“Not ready” on the plans, €1.99 holders900.0% · 0 wrote0card 0 · bar 000.0%5to the chapters · back arrow 2 · browser Back 1",
     ]);
     expect(within(card).getByText("I want to see some of it before I pay")).toBeTruthy();
-    expect(within(card).getByText("56%")).toBeTruthy();
+    expect(within(card).getByText("55.6%")).toBeTruthy();
     expect(within(card).getByText("Nobody has answered on this page in this range.")).toBeTruthy();
     expect(within(card).getByText("I wanted a sample chapter first.")).toBeTruthy();
     expect(within(card).getByText(/2026-10-29 · Something else/)).toBeTruthy();
@@ -521,9 +539,9 @@ describe("the Payment page as drawn", () => {
     ).toBeTruthy();
     const line = (label: string) => within(card).getByText(label).parentElement!.textContent;
     expect(line("Pressed “Not ready to unlock yet”")).toBe(
-      "Pressed “Not ready to unlock yet”3220%"
+      "Pressed “Not ready to unlock yet”3220.0%"
     );
-    expect(line("Pressed the browser's Back")).toBe("Pressed the browser's Back128%");
+    expect(line("Pressed the browser's Back")).toBe("Pressed the browser's Back127.5%");
   });
 
   it("paygate exits: the ways in without a share when who saw the €1.99 page is unknown or none", () => {
@@ -575,10 +593,10 @@ describe("the Payment page as drawn", () => {
     // Share of sales 10/22; full CVR 10/600; €15 a sale; €0.25 per finisher.
     expect(texts(within(rows(table())[0]!).getAllByRole("cell"))).toEqual([
       "600",
-      "45%",
+      "45.5%",
       "—",
       "—",
-      "1.67%",
+      "1.7%",
       "€15.00",
       "€150",
       "€0.25",
@@ -606,10 +624,10 @@ describe("the Payment page as drawn", () => {
     // Country N: 70 finishers, 2 of the 14 sales, 2 buyers, €30.
     expect(texts(within(rows(table())[13]!).getAllByRole("cell"))).toEqual([
       "70",
-      "14%",
+      "14.3%",
       "—",
       "—",
-      "2.86%",
+      "2.9%",
       "€15.00",
       "€30",
       "€0.43",
@@ -636,7 +654,7 @@ describe("the Payment page as drawn", () => {
       // Revenue in whole euros, as drawn; the AOV keeps its cents.
       "€20",
       "€9.99",
-      "20%",
+      "20.0%",
       "—",
       "—",
     ]);
@@ -649,7 +667,7 @@ describe("the Payment page as drawn", () => {
       "4",
       "€136",
       "€34.00",
-      "25%",
+      "25.0%",
       "—",
       "+240.0%90% confidence · not significant yet",
     ]);
@@ -712,10 +730,10 @@ describe("the Payment page as drawn", () => {
       "Best price (net revenue) €15.00Where net revenue per finisher peaks: €0.143"
     );
     expect(tileText("At €15.00")).toBe(
-      "At €15.00 1.00%Predicted payment CVR · €0.143 net per finisher"
+      "At €15.00 1.0%Predicted payment CVR · €0.143 net per finisher"
     );
     expect(tileText("At today’s €29.99 (A3)")).toBe(
-      "At today’s €29.99 (A3) 0.25%€0.072 net per finisher · 50% less than at the best price"
+      "At today’s €29.99 (A3) 0.3%€0.072 net per finisher · 50% less than at the best price"
     );
     expect(within(card).getByText("Best ≈ €15.00")).toBeTruthy();
     expect(within(card).getByText("May €10")).toBeTruthy();
@@ -726,7 +744,7 @@ describe("the Payment page as drawn", () => {
     fireEvent.change(within(card).getByLabelText(/Test a price/), { target: { value: "20" } });
     expect(within(card).getByLabelText("Test a price · €20.00")).toBeTruthy();
     expect(tileText("At €20.00")).toBe(
-      "At €20.00 0.56%Predicted payment CVR · €0.108 net per finisher"
+      "At €20.00 0.6%Predicted payment CVR · €0.108 net per finisher"
     );
   });
 

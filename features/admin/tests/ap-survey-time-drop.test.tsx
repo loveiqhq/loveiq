@@ -7,11 +7,12 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseFilters } from "@features/admin/server/ap/filters";
+import { fmt } from "@features/admin/server/ap/format";
 import { buildSurveyQuestions, type QuestionRow } from "@features/admin/server/ap/survey";
 import { buildSurveyPage } from "@features/admin/server/ap/survey-page";
 import type { DropoffRun } from "@features/admin/server/dropoff-report";
 import { askedQuestions } from "@features/admin/server/dropoff-weekly";
-import { chapterBand, timeDropChart } from "@features/admin/ui/ap/SurveyTimeDrop";
+import { chapterBand, overFive, timeDropChart } from "@features/admin/ui/ap/SurveyTimeDrop";
 
 import { factsFixture } from "./ap-fixtures";
 
@@ -72,6 +73,19 @@ describe("the time and drop-out charts' figures", () => {
     // At least 4%, as drawn; above it, exact quarter lines (25% → 32%, 8% each).
     expect(c.pctTop).toBe(32);
     expect(timeDropChart([row("00001", 1, 1000, 0.01)]).pctTop).toBe(4);
+  });
+
+  it("has one over-5% rule for the chart and the funnel table: the figure the reader sees", () => {
+    expect([0.05, 0.0504, 0.0505, 0.0506, 0.25, null].map(overFive)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    // The figures they show: "5.0%" is not over 5%, "5.1%" is.
+    expect([0.0504, 0.0505].map((v) => fmt("pct", v))).toEqual(["5.0%", "5.1%"]);
   });
 
   it("leaves out a question no longer asked and groups the chapters as drawn", () => {
@@ -238,6 +252,10 @@ describe("the Survey page's time and drop-out per question", () => {
     // One of the four runs put question 1 left there: 25.0% on a 32% scale.
     expect(cols[0]).toMatchObject({ label: "25.0%", color: "rgb(254, 104, 57)", height: "78.1%" });
     expect(cols[1]).toMatchObject({ label: "", color: "rgb(185, 173, 223)", height: "0%" });
+    // The scale writes a tenth like every rate: 8.0% a line.
+    const plot = chart("Drop-out rate per question").parentElement!;
+    for (const t of ["0.0%", "8.0%", "16.0%", "24.0%", "32.0%"])
+      expect(within(plot.parentElement!).getAllByText(t).length).toBeGreaterThan(0);
   });
 
   it("follows the order picked here or in the funnel, and a picked bar opens its question", () => {
