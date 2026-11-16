@@ -354,7 +354,8 @@ function Figure({
                         className="flex min-w-0 flex-1 flex-col items-stretch justify-end"
                       >
                         {b?.label && (
-                          <span className="mb-0.5 whitespace-nowrap text-center text-[9px] font-bold text-ap-ink">
+                          // Wider than its column: drawn over the next bars, haloed so it reads.
+                          <span className="relative z-[1] mb-0.5 whitespace-nowrap text-center text-[9px] font-bold text-ap-ink [text-shadow:0_0_2px_#fff,0_0_2px_#fff]">
                             {b.label}
                           </span>
                         )}

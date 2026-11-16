@@ -1124,7 +1124,7 @@ export const fields: FieldRegistry = {
     per: "per question, in the order picked",
     formula: { num: "The median times of the first question to this one, added up" },
     caveat:
-      "A sum of each question's median, not the median of people's own times: nobody need have taken exactly this long, and the intro wizard before question 1 is not in it. Each median is all traffic's and both question orders', whatever the filters; a question with no time recorded in the range adds nothing. The team's runs are left out.",
+      "A sum of each question's median, not the median of people's own times: nobody need have taken exactly this long. It runs shorter than a whole survey's time from start to finish: medians leave out the slow stays, and the intro wizard before question 1 is not in it. Each median is all traffic's and both question orders', whatever the filters; a question with no time recorded in the range adds nothing. The team's runs are left out.",
     tables: [
       {
         source: "production",
