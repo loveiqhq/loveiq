@@ -407,9 +407,9 @@ describe("the pay-to-start section", () => {
               : "";
           return `${copy.textContent}${tone}`;
         });
-    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.00%-", "7", "75%-"]);
+    expect(seen(full!)).toEqual(["400", "—", "20-", "8-", "2.0%-", "7", "75.0%-"]);
     // Paid → completed is of the paying buyers only: 12 of 15, never above 100%.
-    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.00%+", "14", "80%+"]);
+    expect(seen(pre!)).toEqual(["300", "—", "30+", "15+", "5.0%+", "14", "80.0%+"]);
     // Saw the price is no step on these pages: blank, with no card, and the note says why.
     for (const h of within(table).getAllByRole("columnheader").slice(1))
       expect(within(h).queryByRole("button", { name: /^About / }) !== null).toBe(
@@ -524,7 +524,7 @@ describe("the hero video block", () => {
     expect(card).toHaveTextContent("People6");
     expect(card).toHaveTextContent("Of those who saw it1.6%");
     // 6 of the 8 whose film started: how far a watch goes.
-    expect(card).toHaveTextContent("Of those who started it75%");
+    expect(card).toHaveTextContent("Of those who started it75.0%");
   });
 
   it("draws the bar from a tablet up, the failed starts in red and apart", () => {

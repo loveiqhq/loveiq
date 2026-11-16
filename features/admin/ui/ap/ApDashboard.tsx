@@ -261,7 +261,6 @@ export default function ApDashboard() {
                       info="assessment.perf-cvr"
                       rows={data.performance.map((r) => ({ label: r.label, value: r.surveyCvr }))}
                       unit="pct"
-                      digits={2}
                     />
                     <SourceBars
                       title="€ revenue per visit"
@@ -320,7 +319,6 @@ function SourceBars({
   info,
   rows,
   unit,
-  digits,
   color = "#795fc8",
 }: {
   title: string;
@@ -328,8 +326,6 @@ function SourceBars({
   info: string;
   rows: Array<{ label: string; value: number | null }>;
   unit: "pct" | "eur3";
-  /** Decimals where the design fixes them (a CVR in hundredths, as the Sources table). */
-  digits?: number;
   color?: string;
 }) {
   const max = Math.max(0, ...rows.map((r) => r.value ?? 0)) || 1;
@@ -346,7 +342,7 @@ function SourceBars({
         >
           <span>{r.label}</span>
           <Bar pct={r.value === null ? null : r.value / max} color={color} />
-          <span className="text-right font-bold tabular-nums">{fmt(unit, r.value, digits)}</span>
+          <span className="text-right font-bold tabular-nums">{fmt(unit, r.value)}</span>
         </div>
       ))}
     </div>
@@ -375,7 +371,7 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
     segTip.bind(() => ({
       title: `${label} visitors`,
       rows: [
-        { label: "Share", value: fmt("pct", share(g.visitors), 1), color, mark: "square" },
+        { label: "Share", value: fmt("pct", share(g.visitors)), color, mark: "square" },
         { label: "Visitors", value: fmt("count", g.visitors), strong: true },
         { label: "Finished the survey", value: fmt("count", g.completed) },
       ],
@@ -421,7 +417,7 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
                   className="h-2.5 w-2.5 rounded-full"
                   style={{ background: color }}
                 />
-                {label} · {fmt("pct", share(g.visitors), 0)}
+                {label} · {fmt("pct", share(g.visitors))}
                 <Info
                   k="assessment.nr-visitors"
                   label={`${label} visitors`}
@@ -440,11 +436,11 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
                       : {
                           num: fmt("count", g.completed),
                           den: fmt("count", g.visitors),
-                          value: fmt("pct", cvr, 1),
+                          value: fmt("pct", cvr),
                         }
                   }
                 />{" "}
-                {fmt("pct", cvr, 1)} · € / visit{" "}
+                {fmt("pct", cvr)} · € / visit{" "}
                 <Info
                   k="assessment.nr-per-visit"
                   label="€ / visit"

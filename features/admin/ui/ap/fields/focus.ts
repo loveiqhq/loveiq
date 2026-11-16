@@ -1051,7 +1051,7 @@ ORDER BY s.day;`,
       mult: "× 100",
     },
     caveat:
-      "It counts the period's own finishers, whenever they bought, so a recent range can still rise; an upgrade to full counts. Written with 2 decimals.",
+      "It counts the period's own finishers, whenever they bought, so a recent range can still rise; an upgrade to full counts. Written with one decimal, like every rate here.",
     tables: [
       SUBMISSIONS,
       { ...PAYMENTS, columns: "metadata (plan), amount, status, is_test, personal_report_id" },

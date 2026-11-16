@@ -1,6 +1,6 @@
 "use client";
 
-import { fmt, quarterTop } from "@features/admin/server/ap/format";
+import { fmt, quarterTop, tenths } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
 
@@ -46,6 +46,12 @@ export interface ChartColumn {
   over: boolean;
 }
 
+/**
+ * A drop-out over 5% as the reader sees it: its one-decimal figure above 5.0% ("5.1%" is, "5.0%"
+ * isn't). The one rule for the chart here and for the question funnel's table.
+ */
+export const overFive = (rate: number | null) => rate !== null && tenths(rate) > 50;
+
 export interface TimeDropChart {
   cols: ChartColumn[];
   /** Consecutive questions of one chapter group, for the bands under the charts. */
@@ -77,8 +83,7 @@ export function timeDropChart(rows: QuestionRow[]): TimeDropChart {
       band: chapterBand(row.id),
       soFarMs: run,
       slow: row.medianMs !== null && avg > 0 && row.medianMs >= SLOW * avg,
-      // fmt("pct", v, 1)'s own arithmetic, so the colour and the figure always agree.
-      over: row.dropRate !== null && Number((row.dropRate * 100).toFixed(1)) > 5,
+      over: overFive(row.dropRate),
     };
   });
   const bands: TimeDropChart["bands"] = [];
@@ -219,7 +224,7 @@ export default function TimeDropSection({
               { label: "Over 5%", color: OVER_BAR },
             ]}
             chart={chart}
-            left={(v) => `${v}%`}
+            left={(v) => fmt("pct", v / 100)}
             leftTop={chart.pctTop}
             bar={(c) =>
               c.row.dropRate === null
@@ -227,7 +232,7 @@ export default function TimeDropSection({
                 : {
                     h: (c.row.dropRate * 100) / chart.pctTop,
                     color: c.over ? OVER_BAR : BAR,
-                    label: c.over ? fmt("pct", c.row.dropRate, 1) : "",
+                    label: c.over ? fmt("pct", c.row.dropRate) : "",
                   }
             }
             onPick={onPick}
@@ -237,7 +242,7 @@ export default function TimeDropSection({
               rows: [
                 {
                   label: "Drop-out rate",
-                  value: fmt("pct", c.row.dropRate, 1),
+                  value: fmt("pct", c.row.dropRate),
                   color: c.over ? OVER_BAR : BAR,
                   mark: "square",
                   strong: true,

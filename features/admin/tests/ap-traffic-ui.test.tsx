@@ -546,18 +546,33 @@ describe("the Traffic page as drawn", () => {
     clean();
   });
 
+  it("reads the attribution red by the figure shown: under 50.0%", () => {
+    const share = (v: number) => {
+      view.payload = { ...payload, attribution: { ...payload.attribution, visitorsWithSource: v } };
+      render(<ApTraffic />);
+      const el = screen.getByText("Visitors with a source").nextSibling as HTMLElement;
+      const out = { text: el.textContent, red: el.classList.contains("text-ap-bad") };
+      clean();
+      cleanup();
+      return out;
+    };
+    // 49.96% reads "50.0%": not under half, so not red; 49.6% is.
+    expect(share(0.4996)).toEqual({ text: "50.0%", red: false });
+    expect(share(0.496)).toEqual({ text: "49.6%", red: true });
+  });
+
   it("draws the nine tiles as written, the contribution following the assumptions", () => {
     render(<ApTraffic />);
     expect(TILES.map(tileValue)).toEqual([
       "€1,000",
       "€0.50",
       "10,000",
-      "4.00%",
+      "4.0%",
       "−€0.092",
       "€0.0100",
       "0.10×",
-      "0.040%",
-      "1.00%",
+      "<0.1%",
+      "1.0%",
     ]);
     // Spend's change is grey whichever way it goes; visitors' green as they rose.
     expect(tileChange("Ad spend")).toHaveTextContent("+25.0%");
@@ -570,9 +585,9 @@ describe("the Traffic page as drawn", () => {
     for (const text of [
       "€0.50 per click",
       "€0.10 per visitor",
-      "9.00% start CVR",
+      "9.0% start CVR",
       "44.4% completion",
-      "1.00% purchase CVR",
+      "1.0% purchase CVR",
       // Buyers, then their purchases: 4 people bought, 4 purchases.
       "4 purchases · €250 CAC",
       "€25.00 AOV",

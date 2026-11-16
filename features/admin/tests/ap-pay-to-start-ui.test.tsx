@@ -184,7 +184,7 @@ describe("ApPayToStart", () => {
       "€1.99 after the surveyOff",
     ]);
     expect(cells("Ad spend")).toEqual(["€900", "€450", "€450", "—"]);
-    expect(cells("Visit → paying customer")).toEqual(["0.03%", "1.20%", "5.54%", "—"]);
+    expect(cells("Visit → paying customer")).toEqual(["<0.1%", "1.2%", "5.5%", "—"]);
     expect(cells("Revenue per visit")).toEqual(["€0.010", "€0.360", "€0.217", "—"]);
     expect(cells("ROAS")).toEqual(["0.07×", "0.40×", "0.27×", "—"]);
     expect(cells("Return on ad spend (€)")).toEqual(["−€840.02", "−€270.06", "−€328.34", "—"]);
@@ -250,7 +250,7 @@ describe("ApPayToStart", () => {
       "Paid €1.99\u00a031 5.5%Market 51% of checkouts · here 44.3%Market 1.4% of visits",
       "Survey finished\u00a029 5.2%",
       "Report opened\u00a028 5.0%",
-      "Bought the full report\u00a03 0.54%",
+      "Bought the full report\u00a03 0.5%",
     ]);
     // Mark, 23 Oct: a funnel picture, each band narrowing with its step's share of the visits
     // (log scale): 560 visits (100%, full width) down to 70 checkouts (12.5%: 77.42 wide).
@@ -364,7 +364,7 @@ describe("ApPayToStart", () => {
     view.payload = payload;
     render(<ApPayToStart />);
     const [after, , pre] = within(row("Visit → paying customer")).getAllByRole("cell");
-    expect(after!.textContent).toBe("0.03% (worst of the running funnels)");
+    expect(after!.textContent).toBe("<0.1% (worst of the running funnels)");
     expect(pre!.getAttribute("title")).toBe("best of the running funnels");
     // Safari paints no box-shadow on a table row: the core accent is on its header cell.
     expect(row("ROAS").className).not.toContain("shadow");
@@ -382,9 +382,25 @@ describe("ApPayToStart", () => {
     view.payload = tiny;
     render(<ApPayToStart />);
     expect(cells("Revenue per visit").slice(0, 2)).toEqual(["<€0.001", "€1.200"]);
-    expect(cells("Visit → paying customer")[0]).toBe("<0.01%");
+    expect(cells("Visit → paying customer")[0]).toBe("<0.1%");
     expect(cells("Return on ad spend (€)")[0]).toBe("+€0.00");
     expect(cells("ROAS")[0]).toBe("<0.01×");
+  });
+
+  it("writes the conversion axis in whole tenths of a point, even for small rates", () => {
+    const small = structuredClone(payload);
+    for (const w of small.weeks)
+      for (const k of Object.keys(w.funnels) as FunnelKey[])
+        if (w.funnels[k].cvr !== null) w.funnels[k].cvr = Math.min(w.funnels[k].cvr!, 0.0003);
+    view.payload = small;
+    render(<ApPayToStart />);
+    fireEvent.click(screen.getByRole("button", { name: "Visit → paying customer" }));
+    const chart = screen.getByRole("group", {
+      name: /Visit → paying customer per week, per funnel/,
+    });
+    // 0.03% at most: lines at 0.1% steps, each written exactly, never "<0.1%" on the axis.
+    for (const t of ["0.0%", "0.1%", "0.2%", "0.3%", "0.4%"])
+      expect(within(chart.parentElement!).getAllByText(t).length).toBeGreaterThan(0);
   });
 
   it("says so when no funnel has a figure for the measure, instead of an empty axis", () => {

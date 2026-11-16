@@ -745,7 +745,7 @@ describe("page builders", () => {
     expect(before.rows[0]).toMatchObject({ share: 1, bench: 1 });
     expect(before.rows[2]).toMatchObject({ bench: null, pending: "Recorded from 17 Oct 2026" });
     // The iPhone and Android split of Mobile stays in the note.
-    expect(before.note).toContain("here 100% iPhone, 0% Android");
+    expect(before.note).toContain("here 100.0% iPhone, 0.0% Android");
     const after = factsFixture({
       from: "2026-10-17",
       to: "2026-10-18",
@@ -938,12 +938,13 @@ describe("visitors per source: a sample split, the totals live", () => {
       "€ / visit",
     ]);
     expect(p.sources).toMatchObject({ sample: true, barLabel: "Share of visits" });
+    // No decimals of its own: the share and the CVR are rates, written with one.
     expect(p.sources.columns.map((c) => c.digits)).toEqual([
       undefined,
       undefined,
-      1,
       undefined,
-      2,
+      undefined,
+      undefined,
       undefined,
     ]);
     // Google Ads' 66 are counted, never PostHog's share of all its visits (30%, mostly Google
@@ -1171,10 +1172,10 @@ describe("blanks say why, and notes say what the numbers are", () => {
   it("Dashboard: chapter ratings say they are all traffic's under a filter, and the A boxes say why they are empty", () => {
     const ratings = { up: 15, down: 2 };
     expect(focus({ ratings }).assessments.nps.sub).toBe(
-      "Not asked yet. 88% of 17 chapter ratings say helpful."
+      "Not asked yet. 88.2% of 17 chapter ratings say helpful."
     );
     expect(focus({ ratings, filters: { ...filters, source: "direct" } }).assessments.nps.sub).toBe(
-      "Not asked yet. 88% of 17 chapter ratings say helpful (all traffic)."
+      "Not asked yet. 88.2% of 17 chapter ratings say helpful (all traffic)."
     );
     const b = focus({ filters: { ...filters, assessment: "b" } }).assessments;
     expect(b.survey).toEqual({
