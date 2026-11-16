@@ -109,6 +109,8 @@ afterEach(() => {
 
 const funnel = () => screen.getByRole("table", { name: "Survey question funnel" });
 const funnelRows = () => within(funnel()).getAllByRole("row").slice(1);
+/** The funnel's own order toggle (the charts above it have one too). */
+const funnelOrder = () => within(screen.getByRole("group", { name: "Question order" }));
 const rowOf = (id: string) => funnelRows().find((r) => r.textContent!.includes(id))!;
 const cells = (id: string) => within(rowOf(id)).getAllByRole("cell");
 
@@ -119,8 +121,8 @@ describe("the Survey page, Marcus's design", () => {
 
   it("gives each question order its own funnel, the survey's first", () => {
     render(<ApSurvey />);
-    const survey3 = screen.getByRole("button", { name: "Survey order · 3 runs" });
-    const test2 = screen.getByRole("button", { name: "Test order (C13) · 2 runs" });
+    const survey3 = funnelOrder().getByRole("button", { name: "Survey order · 3 runs" });
+    const test2 = funnelOrder().getByRole("button", { name: "Test order (C13) · 2 runs" });
     expect(survey3).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByText(/^Since 6 Oct 2026 half of new runs are asked the opening questions/)
@@ -153,7 +155,7 @@ describe("the Survey page, Marcus's design", () => {
     expect(cells("16020")[4]!.textContent).toBe("100.0%");
     // No question has more runs than the one before it, in either order.
     for (const name of [/^Survey order/, /^Test order/]) {
-      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(funnelOrder().getByRole("button", { name }));
       const counts = funnelRows()
         .filter((r) => !r.textContent!.includes("not asked now"))
         .map((r) => Number(within(r).getAllByRole("cell")[1]!.textContent!.replace(/,/g, "")));

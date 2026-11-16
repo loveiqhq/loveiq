@@ -39,6 +39,7 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
+import TimeDropSection from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -242,6 +243,20 @@ export default function ApSurvey() {
               />
             ))}
           </TileGrid>
+
+          {/* Marcus's Survey copy board (10 Nov 2026): above the funnel, in the order picked. */}
+          <TimeDropSection
+            data={data}
+            rows={rows}
+            order={questions?.test ? order : null}
+            onOrder={setOrder}
+            onPick={(id) => {
+              setSelected(id);
+              document
+                .getElementById("question-detail")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
 
           <FunnelSection
             data={data}
