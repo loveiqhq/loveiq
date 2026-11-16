@@ -1,6 +1,7 @@
 import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
+import type { OptInSheetDismissVia, OptInSheetOutcome } from "@features/survey/optInSheet";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import type {
   TourAudience,
@@ -1523,6 +1524,33 @@ export const trackSurveyFormError = (params: {
   question_id: string;
   error_kind: "required" | "too_short" | "invalid_email" | "out_of_range" | string;
 }) => track("survey_form_error", params);
+
+/**
+ * The marketing opt-in's "Sure you want to miss out?" sheet opened: the reader answered
+ * No on the last question (16015) and moved on (features/survey/optInSheet.ts). Once per
+ * run. PostHog and GA4; before the submit there is no submission to persist it against.
+ */
+export const trackOptInSheetShown = () =>
+  track("survey_optin_sheet_shown", { question_id: "16015" });
+
+/**
+ * How the sheet closed: "yes" (the reader opted in after all), "not_now" (the No stands)
+ * or "dismissed" (closed without a choice: `via` says how). The outcome is the reader's
+ * marketing choice, so it goes to PostHog only, like an answer (trackLandingCardAnswer);
+ * GA4 sees only that the sheet closed.
+ */
+export const trackOptInSheetClosed = ({
+  outcome,
+  via,
+}: {
+  outcome: OptInSheetOutcome;
+  via?: OptInSheetDismissVia | "back";
+}) =>
+  track(
+    "survey_optin_sheet_closed",
+    { question_id: "16015" },
+    { outcome, ...(via ? { via } : {}) }
+  );
 
 export const trackWizardSlideAdvanced = (params: {
   from_slide: number;

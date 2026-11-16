@@ -44,20 +44,23 @@ function lockSrc(siteUrl: string): string {
 
 // ── I1 · Your report is ready ────────────────────────────────────────────────────────────
 
+/** The €1.99 step and the full report after it, as I1 names them; R1 takes both (Mark, 9 Nov). */
+export const OPEN_CORE_STEP = {
+  title: "Open your Core Archetype",
+  detail: `${PRICE}, with a preview of every chapter`,
+};
+export const UNLOCK_FULL_STEP: Step = {
+  state: "todo",
+  title: "Unlock the full report",
+  detail: `Every chapter in full, ${CREDIT} off with your Core Archetype`,
+  chip: `${CREDIT} off`,
+};
+
 const I1_STEPS: Step[] = [
   { state: "done", title: "Take the survey", detail: "Done, every question answered" },
   { state: "done", title: "Get your result", detail: `Matched to 1 of ${ARCHETYPES} archetypes` },
-  {
-    state: "next",
-    title: "Open your Core Archetype",
-    detail: `${PRICE}, with a preview of every chapter`,
-  },
-  {
-    state: "todo",
-    title: "Unlock the full report",
-    detail: `Every chapter in full, ${CREDIT} off with your Core Archetype`,
-    chip: `${CREDIT} off`,
-  },
+  { state: "next", ...OPEN_CORE_STEP },
+  UNLOCK_FULL_STEP,
 ];
 
 /** I1, for a reader the EUR 1.99 gate will stop: it names the price up front. */
@@ -68,7 +71,7 @@ export function reportReadyEmail({
   unsubscribeUrl,
 }: ReaderEmailParams): KitEmail {
   const name = greetingName(firstName);
-  const subject = name ? `${name}, your Core Archetype is ready to open` : "Your archetype is in";
+  const subject = name ? `${name}, your Core Archetype is ready` : "Your archetype is in";
   const previewText = `It opens for ${PRICE}, with ${CREDIT} off the full report.`;
   const notes = [`${PRICE}, paid once &middot; ${GUARANTEE_DAYS}-day money-back guarantee`];
   const html = shell({
@@ -182,12 +185,22 @@ export interface GiftEmailParams extends ReaderEmailParams {
   surveyMinutes?: number | null;
 }
 
-/** The FREE-tagged map's legend, shared by I3 and U1. */
+/** The FREE-tagged map's legend: I3, the day-1 gift, whose chapters really are free. */
 export const FREE_MAP_LEGEND = {
   freeTag: "FREE",
   freeLine: "Read through your <strong>free chapters</strong>.",
   featuredLine: "Explore our <strong>featured</strong> chapters.",
   lockedLine: `See the <strong>insights waiting for you</strong> in each chapter preview. Use <strong>your ${CREDIT} credit</strong> to unlock them anytime.`,
+};
+
+/**
+ * U1's legend: a EUR 1.99 buyer paid for those chapters, so they are IN FULL, never "free",
+ * as the report itself has said since 27.10 (free wording, 14 Nov).
+ */
+export const PAID_MAP_LEGEND = {
+  ...FREE_MAP_LEGEND,
+  freeTag: "IN FULL",
+  freeLine: "Read your opening chapters <strong>in full</strong>.",
 };
 
 /** I3, the day-1 gift: the initial report unlocked for free, sent with the unlock. */
@@ -201,14 +214,15 @@ export function giftEmail({
 }: GiftEmailParams): KitEmail {
   const name = greetingName(firstName);
   const subject = name
-    ? `${name}, we unlocked your Core Archetype for you`
-    : "We unlocked your Core Archetype for you";
+    ? `${name}, we unlocked your Core Archetype for you, for free`
+    : "We unlocked your Core Archetype for you, for free";
   const previewText = `No payment needed. Your result is waiting, with ${CREDIT} off the full report.`;
   const invested =
     surveyMinutes !== null ? `invested ${surveyMinutes} minutes and answered` : "answered";
   const opening = answeredYesterday
     ? `Yesterday you ${invested} some very personal questions. Your result has been waiting ever since, and we’d rather you read it than leave it there.`
     : `You ${invested} some very personal questions. Your result has been waiting ever since, and we’d rather you read it than leave it there.`;
+  const unlocked = `unlocked your Initial Report for you, for free (worth ${PRICE}), including your Core Archetype. No payment, no catch.`;
   const html = shell({
     siteUrl,
     title: subject,
@@ -219,7 +233,7 @@ export function giftEmail({
       heading("We unlocked your Core Archetype for you"),
       paragraphs([
         `${e(hiLine(name))}<br>${e(opening)}`,
-        "So we’ve unlocked your Initial Report for you, including your Core Archetype. No payment, no catch.",
+        `So we’ve ${e(unlocked)}`,
         e(MATCHED),
         `To learn even more about your Sexual Personality, use the <strong style="color:#161021;">${CREDIT} credit</strong> to unlock the full report.`,
       ]),
@@ -235,7 +249,7 @@ export function giftEmail({
     "We unlocked your Core Archetype for you",
     hiLine(name),
     opening,
-    "So we've unlocked your Initial Report for you, including your Core Archetype. No payment, no catch.",
+    `So we've ${unlocked}`,
     `To learn even more about your Sexual Personality, use the ${CREDIT} credit to unlock the full report.`,
     ["Read my Core Archetype:", reportUrl],
     textSteps(GIFT_STEPS),
@@ -263,7 +277,7 @@ export function giftUnopenedEmail({
     rows: [
       heading("Your Core Archetype is still waiting."),
       paragraphs([
-        `${e(hiLine(name))}<br>Yesterday we opened your Initial Report for you, free. It looks like you haven’t read it yet.`,
+        `${e(hiLine(name))}<br>Yesterday we opened your Initial Report for you, for free. It looks like you haven’t read it yet.`,
       ]),
       archetypeCard(siteUrl),
       button({ href: reportUrl, label: "Read my Core Archetype" }),
@@ -274,7 +288,7 @@ export function giftUnopenedEmail({
   const text = joinText([
     "Your Core Archetype is still waiting.",
     hiLine(name),
-    "Yesterday we opened your Initial Report for you, free. It looks like you haven't read it yet.",
+    "Yesterday we opened your Initial Report for you, for free. It looks like you haven't read it yet.",
     ["Read my Core Archetype:", reportUrl],
     textSteps(GIFT_STEPS),
     textFooter(FINISHED_REASON, unsubscribeUrl),

@@ -30,6 +30,8 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyComplete: analytics.complete,
   trackSurveyGuidanceExpanded: analytics.guidance,
   setReportSubmissionContext: analytics.setCtx,
+  trackOptInSheetShown: vi.fn(),
+  trackOptInSheetClosed: vi.fn(),
   setSurveyVariant: analytics.setVariant,
   // The email question test reports its arm when the email step shows. The walk below
   // fills every input, so it completes in either arm.

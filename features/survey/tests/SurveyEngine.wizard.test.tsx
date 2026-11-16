@@ -67,6 +67,8 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyComplete: vi.fn(),
   trackSurveyPause: vi.fn(),
   setReportSubmissionContext: vi.fn(),
+  trackOptInSheetShown: vi.fn(),
+  trackOptInSheetClosed: vi.fn(),
   setSurveyVariant: vi.fn(),
   trackExperimentExposure: vi.fn(),
   trackWizardSlideAdvanced: vi.fn(),
