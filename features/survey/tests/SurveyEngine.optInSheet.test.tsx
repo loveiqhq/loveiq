@@ -166,6 +166,40 @@ describe("the opt-in's miss-out sheet", () => {
     expect(analytics.shown).toHaveBeenCalledTimes(1);
   });
 
+  it("files a Yes picked on the question after closing the sheet under the sheet's version", async () => {
+    onTheOptIn({ "16015": NO });
+    engine();
+    fireEvent.click(next());
+    fireEvent.keyDown(window, { key: "Escape" });
+    await closed();
+    fireEvent.click(screen.getByRole("radio", { name: YES }));
+    fireEvent.click(next());
+
+    expect(run.submit).toHaveBeenCalledTimes(1);
+    const [answers, , , options] = run.submit.mock.calls[0]!;
+    expect(answers).toMatchObject({ "16015": YES });
+    // That reader saw the sheet's words too.
+    expect(options).toEqual({ marketingOptInVia: "sheet" });
+  });
+
+  it("still files the Yes under the sheet's version after a reload", () => {
+    onTheOptIn({ "16015": NO });
+    const first = engine();
+    fireEvent.click(next());
+    expect(sheet()).toBeInTheDocument();
+    first.unmount();
+
+    // The page comes back (the in-page memory is gone), and the reader picks Yes.
+    engine();
+    fireEvent.click(screen.getByRole("radio", { name: YES }));
+    fireEvent.click(next());
+
+    expect(sheet()).not.toBeInTheDocument();
+    expect(run.submit).toHaveBeenCalledTimes(1);
+    expect(run.submit.mock.calls[0]![0]).toMatchObject({ "16015": YES });
+    expect(run.submit.mock.calls[0]![3]).toEqual({ marketingOptInVia: "sheet" });
+  });
+
   it("never opens on a Yes", () => {
     onTheOptIn({ "16015": YES });
     engine();

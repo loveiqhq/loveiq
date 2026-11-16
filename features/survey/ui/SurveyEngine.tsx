@@ -187,13 +187,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
    * The opt-in's "Sure you want to miss out?" sheet (OptInSheet, Mark, 10 Nov). Open: the
    * state draws it; the ref answers at once for the handlers that run in the same tick.
    * Shown: once per run, also across a reload (optInSheetShownFor). Yes: the opt-in's own
-   * Yes, taken from the question when the sheet opens. Via: the reader said Yes in it.
+   * Yes, taken from the question when the sheet opens.
    */
   const [optInSheetOpen, setOptInSheetOpen] = useState(false);
   const optInSheetOpenRef = useRef(false);
   const optInSheetShown = useRef(false);
   const optInSheetYes = useRef<string | null>(null);
-  const optInViaSheet = useRef(false);
   /** The sheet goes; the caller then handles the reader's choice, if any. */
   const closeOptInSheet = useCallback(() => {
     optInSheetOpenRef.current = false;
@@ -560,8 +559,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       // answer and this submit are two clicks apart, and the closure can predate the
       // first of them. See the note in useSurveyState.
       const latest = getLatestAnswers();
-      // A Yes given in the sheet is filed under the sheet's consent version (server.ts).
-      const viaSheet = optInViaSheet.current && isOptInYes(latest[OPT_IN_QID]);
+      // A Yes given once the sheet has been shown, in it or on the question after closing
+      // it (also after a reload: optInSheetShownFor), is filed under the sheet's consent
+      // version (server.ts): that reader saw the question's words and the sheet's.
+      const viaSheet =
+        isOptInYes(latest[OPT_IN_QID]) &&
+        (optInSheetShown.current || optInSheetShownFor(startedAt));
       submitSurvey(
         latest,
         startedAt,
@@ -775,10 +778,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "yes" });
     const yes = optInSheetYes.current;
-    if (yes) {
-      setAnswer(OPT_IN_QID, yes);
-      optInViaSheet.current = true;
-    }
+    if (yes) setAnswer(OPT_IN_QID, yes);
     goNextRef.current();
   }, [closeOptInSheet, setAnswer]);
 

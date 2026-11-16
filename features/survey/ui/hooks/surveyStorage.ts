@@ -33,9 +33,9 @@ export interface PendingSurveyCompletion {
   currentIndex: number;
   savedAt: string;
   /**
-   * "sheet" when the marketing opt-in's Yes was given in the "Sure you want to miss out?"
-   * sheet, so the server files it under that copy's consent version. Stored with the rest,
-   * so a Retry sends it too.
+   * "sheet" when the marketing opt-in's Yes came once the "Sure you want to miss out?" sheet
+   * had been shown, so the server files it under that copy's consent version. Stored with
+   * the rest, so a Retry sends it too.
    */
   marketingOptInVia?: MarketingOptInVia;
 }

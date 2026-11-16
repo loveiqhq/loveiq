@@ -49,11 +49,12 @@ export const SUBMIT_OUTCOME_UNKNOWN = "submit_survey_outcome_unknown";
 export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 
 /**
- * T-11 again, for a Yes given in the opt-in's "Sure you want to miss out?" sheet (Mark,
- * 10 Nov 2026), which only opens after a No. That reader saw Q16015's words AND the
- * sheet's (features/survey/optInSheet.ts), so the version names both: the question's
- * version, then "+sheet-", then the sheet copy's date (2026-10-14+sheet-2026-11-10).
- * It follows either bump by itself. A Yes on the question alone keeps
+ * T-11 again, for a Yes given once the opt-in's "Sure you want to miss out?" sheet (Mark,
+ * 10 Nov 2026) has been shown, which happens only after a No: in the sheet, or on the
+ * question after closing it. That reader saw Q16015's words AND the sheet's
+ * (features/survey/optInSheet.ts), so the version names both: the question's version,
+ * then "+sheet-", then the sheet copy's date (2026-10-14+sheet-2026-11-10). It follows
+ * either bump by itself. A Yes from a reader who never saw the sheet keeps
  * MARKETING_OPT_IN_TERMS_VERSION.
  */
 export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
@@ -97,8 +98,9 @@ export interface SurveySubmissionPayload {
    */
   marketingOptIn?: boolean | null;
   /**
-   * "sheet" when that Yes was given in the "Sure you want to miss out?" sheet: the row is
-   * then stamped with MARKETING_OPT_IN_SHEET_TERMS_VERSION. Ignored unless the answer is Yes.
+   * "sheet" when that Yes came once the "Sure you want to miss out?" sheet had been shown:
+   * the row is then stamped with MARKETING_OPT_IN_SHEET_TERMS_VERSION. Ignored unless the
+   * answer is Yes.
    */
   marketingOptInVia?: MarketingOptInVia | null;
 }
