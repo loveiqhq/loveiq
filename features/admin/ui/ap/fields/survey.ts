@@ -1084,7 +1084,7 @@ export const fields: FieldRegistry = {
   },
   "survey.dropRate": {
     label: "Drop-out rate",
-    what: "Of the runs the question was put to, the share that left the survey there. Above 5% it is red.",
+    what: "Of the runs the question was put to, the share that left the survey there. Shown above 5.0% (5.1% and up), it is red in the table and orange in the chart.",
     good: "down",
     stat: "Share",
     per: "per survey run the question was put to",

@@ -39,7 +39,7 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
-import TimeDropSection from "./SurveyTimeDrop";
+import TimeDropSection, { overFive } from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -1084,7 +1084,7 @@ function FunnelSection({
           </div>
           {shown.map((x) => {
             const on = x.r.id === selected;
-            const dropRed = x.drop !== null && tenths(x.drop) > 50;
+            const dropRed = overFive(x.drop);
             // The picked row's purple tint leaves the brighter red under 4.5:1; its ink passes.
             const red = on ? "text-ap-bad-ink" : "text-ap-bad";
             return (
@@ -1170,7 +1170,7 @@ function FunnelSection({
                   title={
                     x.time === null || !slowest
                       ? "No time recorded"
-                      : `${fmt("mmss", x.time)} median · ${fmt("pct", x.time / slowest, 1)} of the slowest question (${fmt("mmss", slowest)}) · median of all questions ${fmt("mmss", middle)}`
+                      : `${fmt("mmss", x.time)} median · ${fmt("pct", x.time / slowest)} of the slowest question (${fmt("mmss", slowest)}) · median of all questions ${fmt("mmss", middle)}`
                   }
                   className="flex items-center justify-end gap-2 px-3 py-2"
                 >
