@@ -1693,6 +1693,27 @@ describe("report page, on screen", () => {
     expect(bar("Bookmark / direct")).toBeCloseTo(33.33);
   });
 
+  it("colours the chapters by the figure shown, to a tenth", () => {
+    // Show all is green from 18%: 17.6% isn't, 17.96% reads "18.0%" and is. The paywall's
+    // bold green from 5%: 4.6% isn't, 4.96% reads "5.0%" and is.
+    const [a, b] = payload.chapters;
+    screenData.payload = {
+      ...payload,
+      chapterReading: { ...payload.chapterReading, recorded: true },
+      chapters: [
+        { ...a!, showMore: 0.176, paywall: 0.046, paywallSeen: 500, paywallClicked: 23 },
+        { ...b!, showMore: 0.1796, paywall: 0.0496, paywallSeen: 500, paywallClicked: 25 },
+      ],
+    };
+    render(createElement(ApReport));
+    const table = within(screen.getByRole("table", { name: "Chapters" }));
+    const cellOf = (text: string) => table.getByText(text);
+    expect(cellOf("17.6%").className).not.toContain("text-ap-good-ink");
+    expect(cellOf("18.0%").className).toContain("font-bold text-ap-good-ink");
+    expect(cellOf("4.6%").className).not.toContain("text-ap-good-ink");
+    expect(cellOf("5.0%").className).toContain("font-bold text-ap-good-ink");
+  });
+
   it("gives the feedback log's comment the room left, and names each chapter alone", () => {
     screenData.payload = payload;
     render(createElement(ApReport));

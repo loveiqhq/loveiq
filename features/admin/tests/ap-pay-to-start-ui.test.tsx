@@ -387,6 +387,22 @@ describe("ApPayToStart", () => {
     expect(cells("ROAS")[0]).toBe("<0.01×");
   });
 
+  it("writes the conversion axis in whole tenths of a point, even for small rates", () => {
+    const small = structuredClone(payload);
+    for (const w of small.weeks)
+      for (const k of Object.keys(w.funnels) as FunnelKey[])
+        if (w.funnels[k].cvr !== null) w.funnels[k].cvr = Math.min(w.funnels[k].cvr!, 0.0003);
+    view.payload = small;
+    render(<ApPayToStart />);
+    fireEvent.click(screen.getByRole("button", { name: "Visit → paying customer" }));
+    const chart = screen.getByRole("group", {
+      name: /Visit → paying customer per week, per funnel/,
+    });
+    // 0.03% at most: lines at 0.1% steps, each written exactly, never "<0.1%" on the axis.
+    for (const t of ["0.0%", "0.1%", "0.2%", "0.3%", "0.4%"])
+      expect(within(chart.parentElement!).getAllByText(t).length).toBeGreaterThan(0);
+  });
+
   it("says so when no funnel has a figure for the measure, instead of an empty axis", () => {
     const none = structuredClone(payload);
     for (const w of none.weeks)

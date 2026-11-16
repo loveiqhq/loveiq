@@ -59,7 +59,7 @@ const userHref = (id: number | string) =>
  * none reads "—", as the design writes it.
  */
 export function wholeSplit(parts: Array<number | null>): string[] {
-  const t = parts.map((p) => (p === null ? 0 : Number((p * 1000).toPrecision(12))));
+  const t = parts.map((p) => (p === null ? 0 : p * 1000));
   const whole = t.map(Math.floor);
   const known = parts.flatMap((p, i) => (p === null ? [] : [i]));
   const left =

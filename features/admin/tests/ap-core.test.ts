@@ -233,6 +233,8 @@ describe("AP number format", () => {
     expect(fmt("pct", 23 / 80)).toBe("28.8%");
     expect(fmt("pct", 0.0015)).toBe("0.2%");
     expect(fmt("pct", 0.1245)).toBe("12.5%");
+    // 201 of 400 is 50.25%: its binary × 1000 is 502.4999…, still 50.3%.
+    expect(fmt("pct", 201 / 400)).toBe("50.3%");
     expect([0.6835, 0.0005, 0.00049, 0.9995, 0].map(tenths)).toEqual([684, 1, 0, 1000, 0]);
     // 0.05% is a tenth; under it, a rate above nothing reads "<0.1%", never "0.0%".
     expect(fmt("pct", 0.0005)).toBe("0.1%");

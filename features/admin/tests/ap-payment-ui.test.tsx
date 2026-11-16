@@ -467,6 +467,24 @@ describe("the Payment page as drawn", () => {
     ).toBeTruthy();
   });
 
+  it("colours each month's checkout success by the figure shown: green from 30.0%", () => {
+    view.payload = {
+      ...payload,
+      checkout: {
+        ...payload.checkout,
+        points: [
+          // 599 of 2,000 is 29.95%: it reads "30.0%", so green; 299 of 1,000 reads "29.9%".
+          { label: "May 2026", partial: false, reached: 2000, attempted: 900, paid: 599 },
+          { label: "Jun 2026", partial: false, reached: 1000, attempted: 500, paid: 299 },
+        ],
+      },
+    };
+    render(<ApPayment />);
+    const card = region("Checkout and payment methods");
+    expect(within(card).getByText("30.0%").className).toContain("text-ap-good");
+    expect(within(card).getByText("29.9%").className).toContain("text-ap-bad");
+  });
+
   it("checkout: the a/b/c funnel with rates coloured as drawn, then the methods", () => {
     render(<ApPayment />);
     const card = region("Checkout and payment methods");

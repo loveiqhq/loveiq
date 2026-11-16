@@ -546,6 +546,21 @@ describe("the Traffic page as drawn", () => {
     clean();
   });
 
+  it("reads the attribution red by the figure shown: under 50.0%", () => {
+    const share = (v: number) => {
+      view.payload = { ...payload, attribution: { ...payload.attribution, visitorsWithSource: v } };
+      render(<ApTraffic />);
+      const el = screen.getByText("Visitors with a source").nextSibling as HTMLElement;
+      const out = { text: el.textContent, red: el.classList.contains("text-ap-bad") };
+      clean();
+      cleanup();
+      return out;
+    };
+    // 49.96% reads "50.0%": not under half, so not red; 49.6% is.
+    expect(share(0.4996)).toEqual({ text: "50.0%", red: false });
+    expect(share(0.496)).toEqual({ text: "49.6%", red: true });
+  });
+
   it("draws the nine tiles as written, the contribution following the assumptions", () => {
     render(<ApTraffic />);
     expect(TILES.map(tileValue)).toEqual([
