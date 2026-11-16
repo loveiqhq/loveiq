@@ -287,7 +287,7 @@ export const TOUR_TRACKING_FROM = "2026-10-23";
  * their release. Readers who finished earlier may have come back unrecorded, so they are not
  * counted. Correct it if the release moves; the info card's query holds the same day.
  */
-export const RETURN_PINGS_FROM = "2026-11-17";
+export const RETURN_PINGS_FROM = "2026-11-18";
 
 /** A reader's day back (reader_return), as "Came back within 7 days" reads it. */
 export interface ReaderReturn {

@@ -2230,16 +2230,16 @@ describe("maskContacts: a reader's words as the feedback log shows them", () => 
 });
 
 describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' replies)", () => {
-  // Finished 17, 18 and 19 Nov; the 19th's week is not over on the 25th.
-  const NOW = new Date("2026-11-25T12:00:00Z");
+  // Finished 18, 19 and 20 Nov; the 20th's week is not over on the 26th.
+  const NOW = new Date("2026-11-26T12:00:00Z");
   const finished = (id: number, at: string) => sub({ id, day: at.slice(0, 10), at });
   const SUBS = [
-    finished(1, "2026-11-17T09:00:00Z"),
-    finished(2, "2026-11-17T20:00:00Z"),
-    finished(3, "2026-11-18T08:00:00Z"),
-    finished(4, "2026-11-19T15:00:00Z"),
+    finished(1, "2026-11-18T09:00:00Z"),
+    finished(2, "2026-11-18T20:00:00Z"),
+    finished(3, "2026-11-19T08:00:00Z"),
+    finished(4, "2026-11-20T15:00:00Z"),
     // Before the replies were recorded: left out, whatever it has.
-    finished(5, "2026-11-16T09:00:00Z"),
+    finished(5, "2026-11-17T09:00:00Z"),
   ];
   const back = (sid: number, at: string, source: string, via: string | null): ReaderReturn => ({
     sid,
@@ -2249,20 +2249,20 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
   });
   const ROWS = [
     // 1: the gift email, then its report on a later day: the first way back is what counts.
-    back(1, "2026-11-18T07:00:00Z", "email", "initial_gift"),
-    back(1, "2026-11-20T07:00:00Z", "report", null),
+    back(1, "2026-11-19T07:00:00Z", "email", "initial_gift"),
+    back(1, "2026-11-21T07:00:00Z", "report", null),
     // 2: back only after its 7 days: not within them.
-    back(2, "2026-11-25T08:00:00Z", "report", null),
+    back(2, "2026-11-26T08:00:00Z", "report", null),
     // 3: its report link, no email.
-    back(3, "2026-11-19T18:00:00Z", "report", null),
+    back(3, "2026-11-20T18:00:00Z", "report", null),
     // 4: inside its week still, so waiting; 5: before the start.
-    back(4, "2026-11-20T10:00:00Z", "answer", "unlock_feedback"),
-    back(5, "2026-11-17T10:00:00Z", "report", null),
+    back(4, "2026-11-21T10:00:00Z", "answer", "unlock_feedback"),
+    back(5, "2026-11-18T10:00:00Z", "report", null),
   ];
 
   it("counts the surveys whose week is over, by what brought each back first", () => {
     expect(pingReturns(SUBS, ROWS, NOW)).toEqual({
-      from: "17 Nov 2026",
+      from: "18 Nov 2026",
       finished: 3,
       cameBack: 2,
       share: 2 / 3,
@@ -2276,21 +2276,21 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
 
   it("names a way back by AP › Emails, then the message's name, then plainly", () => {
     const one = (r: ReaderReturn) =>
-      pingReturns([finished(1, "2026-11-17T09:00:00Z")], [r], NOW)!.ways[0]!.way;
-    expect(one(back(1, "2026-11-18T07:00:00Z", "answer", "unlock_feedback"))).toBe(
+      pingReturns([finished(1, "2026-11-18T09:00:00Z")], [r], NOW)!.ways[0]!.way;
+    expect(one(back(1, "2026-11-19T07:00:00Z", "answer", "unlock_feedback"))).toBe(
       "Why didn’t you unlock?"
     );
     // A receipt's link campaign is no stage: the message's name for it.
-    expect(one(back(1, "2026-11-18T07:00:00Z", "report", "receipt"))).toBe("receipt email");
-    expect(one(back(1, "2026-11-18T07:00:00Z", "report", "email"))).toBe("An email link");
-    expect(one(back(1, "2026-11-18T07:00:00Z", "draft", null))).toBe(
+    expect(one(back(1, "2026-11-19T07:00:00Z", "report", "receipt"))).toBe("receipt email");
+    expect(one(back(1, "2026-11-19T07:00:00Z", "report", "email"))).toBe("An email link");
+    expect(one(back(1, "2026-11-19T07:00:00Z", "draft", null))).toBe(
       "A survey begun on an earlier day"
     );
   });
 
   it("is null when the rows could not be read, and none before the start", () => {
     expect(pingReturns(SUBS, null, NOW)).toBeNull();
-    expect(pingReturns([finished(5, "2026-11-16T09:00:00Z")], [], NOW)).toMatchObject({
+    expect(pingReturns([finished(5, "2026-11-17T09:00:00Z")], [], NOW)).toMatchObject({
       finished: 0,
       cameBack: 0,
       share: null,
@@ -2301,7 +2301,7 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
   it("reads the rows that can fall within 7 days of the range, page by page, in Berlin days", async () => {
     const full = Array.from({ length: 1000 }, (_, i) => ({
       survey_submission_id: i + 1,
-      returned_at: "2026-11-18T07:00:00Z",
+      returned_at: "2026-11-19T07:00:00Z",
       source: "report",
       via: null,
     }));
@@ -2312,17 +2312,17 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
         json: async () => [
           {
             survey_submission_id: 7,
-            returned_at: "2026-11-19T07:00:00Z",
+            returned_at: "2026-11-20T07:00:00Z",
             source: "email",
             via: "initial_gift",
           },
         ],
       });
-    const rows = await fetchReaderReturns("2026-11-17", "2026-11-20");
+    const rows = await fetchReaderReturns("2026-11-18", "2026-11-21");
     expect(rows).toHaveLength(1001);
     expect(rows[1000]).toEqual({
       sid: 7,
-      at: "2026-11-19T07:00:00Z",
+      at: "2026-11-20T07:00:00Z",
       source: "email",
       via: "initial_gift",
     });
@@ -2332,15 +2332,15 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
     expect(first!.pathname).toBe("/rest/v1/reader_return");
     // From the range's first Berlin midnight to the one 8 days after its last.
     expect(first!.searchParams.getAll("returned_at")).toEqual([
-      "gte.2026-11-16T23:00:00.000Z",
-      "lt.2026-11-27T23:00:00.000Z",
+      "gte.2026-11-17T23:00:00.000Z",
+      "lt.2026-11-28T23:00:00.000Z",
     ]);
     expect(second!.searchParams.get("offset")).toBe("1000");
   });
 
   it("fails loudly when the table cannot be read, so the route can say so", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 404, json: async () => [] });
-    await expect(fetchReaderReturns("2026-11-17", "2026-11-20")).rejects.toThrow(
+    await expect(fetchReaderReturns("2026-11-18", "2026-11-21")).rejects.toThrow(
       "reader_return failed (404)"
     );
   });
@@ -2357,16 +2357,16 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
 
   describe("on screen", () => {
     const screenFilters = parseFilters(
-      { period: "custom", from: "2026-11-17", to: "2026-11-19" },
-      "2026-11-25"
+      { period: "custom", from: "2026-11-18", to: "2026-11-20" },
+      "2026-11-26"
     );
     const draw = (pings: ReaderReturn[] | null) => {
-      const f = factsFixture({ from: "2026-11-17", to: "2026-11-19", subs: SUBS.slice(0, 4) });
+      const f = factsFixture({ from: "2026-11-18", to: "2026-11-20", subs: SUBS.slice(0, 4) });
       screenData.payload = page({
         facts: f,
         benchmark: f,
         filters: screenFilters,
-        today: "2026-11-25",
+        today: "2026-11-26",
         now: NOW,
         pings,
       });
