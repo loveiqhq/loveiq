@@ -26,7 +26,7 @@ import {
   type KitEmail,
   type Step,
 } from "./kit";
-import { BOUGHT_REASON, opensWhat, paymentStep, type PaidOffer } from "./survey-reminders";
+import { BOUGHT_REASON, opensWhat, type PaidOffer } from "./survey-reminders";
 
 export interface PayToStartEmailParams {
   offer: PaidOffer;
@@ -51,31 +51,9 @@ function takeStep(): Step {
   };
 }
 
-function readStep(offer: PaidOffer, initialDetail: string): Step {
+/** S2's steps for what was bought; S3 takes them word for word (Mark, 9 Nov). */
+function paidSteps(offer: PaidOffer): Step[] {
   return offer === "pre"
-    ? { state: "todo", title: "Read your Core Archetype", detail: initialDetail }
-    : {
-        state: "todo",
-        title: "Read your full report",
-        detail: `${CHAPTER_COUNT} chapters, every part in full`,
-      };
-}
-
-/** S2, the moment the payment is confirmed, survey not started. */
-export function paymentReceivedEmail({
-  offer,
-  continueUrl,
-  siteUrl,
-  unsubscribeUrl,
-}: PayToStartEmailParams): KitEmail {
-  const pre = offer === "pre";
-  const subject = pre
-    ? "Payment received. Your survey is ready when you are"
-    : "Payment received. Your full report is waiting for you.";
-  const previewText = pre
-    ? "Payment received. Finish the test to unlock your Core Archetype now."
-    : "Finish the survey and every chapter opens straight away.";
-  const list: Step[] = pre
     ? [
         {
           state: "done",
@@ -98,8 +76,29 @@ export function paymentReceivedEmail({
     : [
         { state: "done", title: "Payment received", detail: "For your full LoveIQ report" },
         takeStep(),
-        readStep("full", ""),
+        {
+          state: "todo",
+          title: "Read your full report",
+          detail: `${CHAPTER_COUNT} chapters, every part in full`,
+        },
       ];
+}
+
+/** S2, the moment the payment is confirmed, survey not started. */
+export function paymentReceivedEmail({
+  offer,
+  continueUrl,
+  siteUrl,
+  unsubscribeUrl,
+}: PayToStartEmailParams): KitEmail {
+  const pre = offer === "pre";
+  const subject = pre
+    ? "Payment received. Your survey is ready when you are"
+    : "Payment received. Your full report is waiting for you.";
+  const previewText = pre
+    ? "Payment received. Finish the test to unlock your Core Archetype now."
+    : "Finish the survey and every chapter opens straight away.";
+  const list = paidSteps(offer);
   const body = pre
     ? [
         "Thank you for your purchase.<br>You have unlocked the LoveIQ Survey.",
@@ -161,15 +160,12 @@ export function surveyWaitingEmail({
   unsubscribeUrl,
 }: PayToStartEmailParams): KitEmail {
   const subject = "Your LoveIQ survey is still waiting";
-  const previewText = `You’ve paid. ${QUESTIONS} questions, about ${SURVEY_MINUTES} minutes, and your report opens.`;
-  const list: Step[] = [
-    paymentStep(offer),
-    takeStep(),
-    readStep(offer, `Your initial report, with ${CREDIT} off the full report`),
-  ];
+  // Both offers open the Core Archetype, so one preview and one closing line for both.
+  const previewText = `About ${SURVEY_MINUTES} minutes to your Core Archetype: how desire, connection and attraction work for you.`;
+  const list = paidSteps(offer);
   const lines = [
-    "You paid for your LoveIQ report yesterday, and the survey is ready when you are.",
-    `It’s ${QUESTIONS} questions, about ${SURVEY_MINUTES} minutes, and you can stop and pick it up again on the same device.`,
+    "You paid for your LoveIQ report yesterday. Your survey is ready to start.",
+    `It’s ${QUESTIONS} questions, about ${SURVEY_MINUTES} minutes, and you can stop and pick it up again on the same device. At the end, your Core Archetype shows how desire, connection and attraction work for you.`,
   ];
   const html = shell({
     siteUrl,
