@@ -182,12 +182,22 @@ export interface GiftEmailParams extends ReaderEmailParams {
   surveyMinutes?: number | null;
 }
 
-/** The FREE-tagged map's legend, shared by I3 and U1. */
+/** The FREE-tagged map's legend: I3, the day-1 gift, whose chapters really are free. */
 export const FREE_MAP_LEGEND = {
   freeTag: "FREE",
   freeLine: "Read through your <strong>free chapters</strong>.",
   featuredLine: "Explore our <strong>featured</strong> chapters.",
   lockedLine: `See the <strong>insights waiting for you</strong> in each chapter preview. Use <strong>your ${CREDIT} credit</strong> to unlock them anytime.`,
+};
+
+/**
+ * U1's legend: a EUR 1.99 buyer paid for those chapters, so they are IN FULL, never "free",
+ * as the report itself has said since 27.10 (free wording, 14 Nov).
+ */
+export const PAID_MAP_LEGEND = {
+  ...FREE_MAP_LEGEND,
+  freeTag: "IN FULL",
+  freeLine: "Read your opening chapters <strong>in full</strong>.",
 };
 
 /** I3, the day-1 gift: the initial report unlocked for free, sent with the unlock. */

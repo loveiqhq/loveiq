@@ -7,6 +7,7 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 import { getLandingPath } from "@shared/url/utm";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { SurveyAnswers } from "@features/survey/server/types";
+import type { MarketingOptInVia } from "@features/survey/optInSheet";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
 import { isRandomised } from "@features/survey/questionFlags";
@@ -227,6 +228,7 @@ export function useSubmitSurvey() {
             ...(replaySessionId ? { posthogSessionId: replaySessionId } : {}),
             ...(Object.keys(optionOrder).length > 0 ? { optionOrder } : {}),
             ...(landingPath ? { landingPath } : {}),
+            ...(payload.marketingOptInVia ? { marketingOptInVia: payload.marketingOptInVia } : {}),
           }),
           ...(controller ? { signal: controller.signal } : {}),
         });
@@ -327,7 +329,12 @@ export function useSubmitSurvey() {
   );
 
   const submit = useCallback(
-    async (answers: Record<string, AnswerValue>, startedAt: string, utmTracker?: string | null) => {
+    async (
+      answers: Record<string, AnswerValue>,
+      startedAt: string,
+      utmTracker?: string | null,
+      options?: { marketingOptInVia?: MarketingOptInVia }
+    ) => {
       if (status === "submitting") return;
 
       const { email, firstName } = getSurveyContactInfo(answers as SurveyAnswers);
@@ -347,6 +354,7 @@ export function useSubmitSurvey() {
         utmTracker: utmTracker ?? null,
         currentIndex: surveyQuestions.length,
         savedAt: new Date().toISOString(),
+        ...(options?.marketingOptInVia ? { marketingOptInVia: options.marketingOptInVia } : {}),
       };
 
       syncPendingCompletion(payload);

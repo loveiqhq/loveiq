@@ -8,7 +8,10 @@ import { ApStatusProvider } from "./status";
 
 /**
  * The light frame of AP-Analytics: the sidebar on the left from 1024px, behind a menu button
- * on narrower screens, and the page beside it. The admin's dark shell is not used here.
+ * on narrower screens, and the page beside it. The page starts at the sidebar and takes the
+ * whole width, so a wide screen shows more tiles to a row and whole tables without scrolling
+ * sideways (Marcus, 10 and 11 Nov 2026). The design's boards still draw a centred 1160px
+ * column. The admin's dark shell is not used here.
  */
 export default function ApShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -53,7 +56,7 @@ export default function ApShell({ children }: { children: ReactNode }) {
           </Suspense>
         </div>
         <main className="min-w-0 flex-1 px-4 pb-[72px] pt-7 sm:px-[clamp(16px,3vw,40px)]">
-          <div className="mx-auto flex max-w-[1160px] flex-col gap-6">
+          <div className="flex flex-col gap-6">
             <Suspense fallback={null}>
               <FieldInfoProvider>{children}</FieldInfoProvider>
             </Suspense>

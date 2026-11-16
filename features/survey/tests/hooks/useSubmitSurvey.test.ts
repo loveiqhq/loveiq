@@ -293,6 +293,48 @@ describe("useSubmitSurvey", () => {
     expect(await send()).not.toHaveProperty("landingPath");
   });
 
+  // The opt-in's "Sure you want to miss out?" sheet: its Yes is filed under its own consent
+  // version, so the submission says where the Yes came from, and keeps saying it on Retry.
+  it("says the opt-in's Yes came from the sheet, also when the run is sent again", async () => {
+    // The first submit is lost to the network; the recovery snapshot and the Retry land.
+    let submits = 0;
+    const mockFetch = vi.fn((url: string) =>
+      url === "/api/survey" && submits++ === 0
+        ? Promise.reject(new Error("Network failure"))
+        : Promise.resolve({ ok: true, json: async () => ({}) })
+    );
+    globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+    const { result } = renderHook(() => useSubmitSurvey());
+    await act(async () => {
+      await result.current.submit(makeAnswers(), "2026-11-10T09:00:00.000Z", null, {
+        marketingOptInVia: "sheet",
+      });
+    });
+    expect(result.current.status).toBe("error");
+    const stored = JSON.parse(localStorage.getItem(PENDING_COMPLETION_KEY) ?? "{}");
+    expect(stored.marketingOptInVia).toBe("sheet");
+
+    await act(async () => {
+      await result.current.retryPending();
+    });
+    const sent = mockFetch.mock.calls.filter((call) => call[0] === "/api/survey");
+    expect(sent).toHaveLength(2);
+    for (const call of sent) {
+      expect(JSON.parse((call[1] as RequestInit).body as string).marketingOptInVia).toBe("sheet");
+    }
+  });
+
+  it("sends no source for an opt-in answered on the question", async () => {
+    const mockFetch = mockFetchOk();
+    globalThis.fetch = mockFetch;
+    const { result } = renderHook(() => useSubmitSurvey());
+    await act(async () => {
+      await result.current.submit(makeAnswers(), "2026-11-10T09:00:00.000Z");
+    });
+    const body = JSON.parse((findSurveyCall(mockFetch)?.[1] as RequestInit).body as string);
+    expect(body).not.toHaveProperty("marketingOptInVia");
+  });
+
   /**
    * `startedAt` is restored from the localStorage draft, so a respondent who began the
    * survey days ago and came back produced a duration the API refuses outright — losing a

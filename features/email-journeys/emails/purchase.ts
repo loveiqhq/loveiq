@@ -13,7 +13,7 @@ import {
   questionsMap,
 } from "./chapters";
 import { ARCHETYPES, CREDIT, PRICE } from "./facts";
-import { FREE_MAP_LEGEND } from "./free-funnel";
+import { PAID_MAP_LEGEND } from "./free-funnel";
 import {
   C,
   EMAIL_IMAGES,
@@ -102,7 +102,7 @@ export function coreUnlockedEmail({
       archetypeCard(siteUrl),
       button({ href: reportUrl, label: "Read my Core Archetype" }),
       steps(U1_STEPS),
-      chapterMap(lock, FREE_MAP_LEGEND),
+      chapterMap(lock, PAID_MAP_LEGEND),
       whyUnlock(),
       signOff(),
     ],
