@@ -101,4 +101,29 @@ describe("what the EUR 1.99 opens, counted the same everywhere", () => {
   it("on the tour before today's EUR 1.99 page, as it always has", () => {
     expect(wizardDrawer("standard", "today")).toEqual(wizardDrawer("standard"));
   });
+
+  // Mark's 50/50 (16 Nov): today's page's half meets the survey's map with the Core Archetype
+  // in the EUR 1.99, and its wizard's map must say the same.
+  it("before today's EUR 1.99 page in Mark's 50/50, row for row as that half's survey map", () => {
+    const wizardRows = wizardDrawer("standard", "price").flatMap((part) => part.rows);
+    const ids = (badge: string) => wizardRows.filter((r) => r.badge === badge).map((r) => r.id);
+    expect(ids("free_pill")).toEqual([]);
+    expect(ids("free")).toEqual([]);
+    // Part 1's three, then the Core Archetype, which opens Part 2.
+    expect(ids("price_pill")).toEqual([
+      "introduction",
+      "what_shaped_this_report",
+      "top_archetypes",
+      "core_archetype",
+    ]);
+    expect(ids("open")).toEqual(partlyOpen.map((row) => row.id));
+    const asTheSurveyMap = {
+      free: "free_pill",
+      priced: "price_pill",
+      featured: "open",
+      locked: "locked",
+    };
+    for (const row of wizardRows)
+      expect(row.badge, row.id).toBe(asTheSurveyMap[mapRowKind(row.id, "price")]);
+  });
 });

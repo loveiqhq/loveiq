@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -115,25 +115,29 @@ function onQuestion(index: number, answer: unknown = 4) {
   );
 }
 
+/** A session id in the given half of Mark's 50/50 of the new EUR 1.99 page. */
+const sessionIn = (arm: "control" | "reveal") => {
+  for (let i = 0; ; i += 1) {
+    const id = `11111111-2222-4333-8444-${String(i).padStart(12, "0")}`;
+    if (assignGateRevealArm(id) === arm) return id;
+  }
+};
+
 /**
- * The engine with these sheets, offered as a staging preview offers them, so no half of Mark's
- * 50/50 holds back the two that promise a free archetype (`previewed`); the arm has tests of
- * its own below.
+ * The engine with these sheets, its run in one half of Mark's 50/50: the new page's
+ * (`reveal`) unless a test asks for today's. The half decides how the halfway sheet and the
+ * map tell the offer; the arm has tests of its own below.
  */
 const engine = (
   sheets: readonly SurveySheetId[] = SURVEY_SHEET_IDS,
   payToStart = false,
-  previewed: readonly SurveySheetId[] = sheets
-) =>
-  render(
-    <SurveyEngine
-      onExit={vi.fn()}
-      onComplete={vi.fn()}
-      sheets={sheets}
-      previewedSheets={previewed}
-      payToStart={payToStart}
-    />
+  arm: "control" | "reveal" = "reveal"
+) => {
+  sessionStorage.setItem(SURVEY_SESSION_KEY, sessionIn(arm));
+  return render(
+    <SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} sheets={sheets} payToStart={payToStart} />
   );
+};
 const next = () => screen.getByRole("button", { name: /^next$/i });
 const heading = (index: number) =>
   screen.queryByRole("heading", { name: ORDER[index]!.question, level: 1 }) ??
@@ -149,7 +153,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  sessionStorage.clear();
+});
 
 describe("the sheets between questions", () => {
   it("lays the test's questions out where the placements need them", () => {
@@ -409,33 +416,79 @@ describe("the sheets between questions", () => {
   });
 });
 
-// Fatih, 14 Nov: the halfway sheet and the report map promise the archetype for free, which
-// only Mark's new EUR 1.99 page gives, so they open only for that page's half of his 50/50.
-// The half comes from the run's session id, the one the report's server reads for the gate.
+// Mark's write-up of his 50/50 (16 Nov, the round-2 thread): every reader meets all six
+// sheets. The half that meets today's EUR 1.99 page, which shows no archetype, gets his
+// versions of the halfway sheet and the report map with the Core Archetype in the EUR 1.99
+// (Variant A); the new page's half keeps them as they were (Variant B). The half comes from the
+// run's session id, the one the report's server reads for the gate.
 describe("the sheets in Mark's 50/50 of the new EUR 1.99 page", () => {
-  const sessionIn = (arm: "control" | "reveal") => {
-    for (let i = 0; ; i += 1) {
-      const id = `11111111-2222-4333-8444-${String(i).padStart(12, "0")}`;
-      if (assignGateRevealArm(id) === arm) return id;
-    }
-  };
-  afterEach(() => sessionStorage.clear());
+  const REASONS = [
+    "Feel more confident in bed",
+    "Ask for what you want, without shame",
+    "Bring your desire back when it fades",
+  ];
 
-  it("opens the report map for the new page's half", () => {
-    sessionStorage.setItem(SURVEY_SESSION_KEY, sessionIn("reveal"));
-    onQuestion(ORDER.length - 4);
-    engine(SURVEY_SHEET_IDS, false, []);
+  it("today's page's half: the halfway sheet sells the Core Archetype for €1.99", () => {
+    onQuestion(at("11003"));
+    engine(SURVEY_SHEET_IDS, false, "control");
     fireEvent.click(next());
-    expect(dialog(/Only 3 questions left/)).toBeInTheDocument();
+
+    const sheet = dialog(/You’re already halfway/)!;
+    expect(sheet).toHaveTextContent("Your Core Archetype is taking shape.");
+    expect(sheet).toHaveTextContent("Unlock your Core Archetype for €1.99");
+    expect(sheet).toHaveTextContent("with a 14-day money-back guarantee");
+    expect(sheet).toHaveTextContent(
+      "Your highest scored sexual personality and its motivation. Dive deeper into your sexual behavior & improve your sex life."
+    );
+    expect(within(sheet).getByRole("img", { name: "Step 2, locked" })).toBeInTheDocument();
+    expect(within(sheet).getByText("€1.99")).toBeInTheDocument();
+    // Two steps: no free archetype and no separate Light Report.
+    expect(sheet.querySelectorAll("[data-halfway-step]")).toHaveLength(2);
+    expect(within(sheet).queryByText("Free")).not.toBeInTheDocument();
+    expect(within(sheet).queryByText("Optional")).not.toBeInTheDocument();
+    expect(sheet).not.toHaveTextContent("Light Report");
   });
 
-  it("keeps it shut for today's half, who carries straight on", () => {
-    sessionStorage.setItem(SURVEY_SESSION_KEY, sessionIn("control"));
-    const index = ORDER.length - 4;
-    onQuestion(index);
-    engine(SURVEY_SHEET_IDS, false, []);
+  it("the new page's half: the Core Archetype free, then the Light Report for €1.99", () => {
+    onQuestion(at("11003"));
+    engine(SURVEY_SHEET_IDS, false, "reveal");
     fireEvent.click(next());
-    expect(dialog(/Only 3 questions left/)).not.toBeInTheDocument();
-    expect(heading(index + 1)).toBeInTheDocument();
+
+    const sheet = dialog(/You’re already halfway/)!;
+    expect(sheet).toHaveTextContent("Discover your Core Archetype");
+    expect(within(sheet).getByText("Free")).toBeInTheDocument();
+    expect(sheet).toHaveTextContent("Unlock your Light Report for €1.99");
+    expect(sheet.querySelectorAll("[data-halfway-step]")).toHaveLength(3);
+  });
+
+  it("today's page's half: the map puts the Core Archetype in the €1.99, with three reasons", () => {
+    onQuestion(ORDER.length - 4);
+    engine(SURVEY_SHEET_IDS, false, "control");
+    fireEvent.click(next());
+
+    const map = dialog(/Only 3 questions left/)!;
+    const core = map.querySelector('[data-map-row-id="core_archetype"]');
+    expect(core).toHaveAttribute("data-map-row", "priced");
+    expect(core).toHaveTextContent("€1.99");
+    expect(map.querySelectorAll('[data-map-row="free"]')).toHaveLength(0);
+    expect(within(map).queryByText("Free")).not.toBeInTheDocument();
+    expect(map).not.toHaveTextContent("for free");
+    expect(map).not.toHaveTextContent("your Light Report");
+    expect(map).toHaveTextContent("Unlock your Core Archetype, and part of each featured chapter.");
+    for (const reason of REASONS) expect(map).toHaveTextContent(reason);
+  });
+
+  it("the new page's half: the Core Archetype free on the map, the Light Report at €1.99", () => {
+    onQuestion(ORDER.length - 4);
+    engine(SURVEY_SHEET_IDS, false, "reveal");
+    fireEvent.click(next());
+
+    const map = dialog(/Only 3 questions left/)!;
+    expect(map.querySelector('[data-map-row-id="core_archetype"]')).toHaveAttribute(
+      "data-map-row",
+      "free"
+    );
+    expect(map).toHaveTextContent("Read your Core Archetype for free.");
+    for (const reason of REASONS) expect(map).not.toHaveTextContent(reason);
   });
 });

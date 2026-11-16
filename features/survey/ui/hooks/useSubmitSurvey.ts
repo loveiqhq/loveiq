@@ -6,6 +6,7 @@ import { surveyQuestions } from "@/data/survey-data";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { getLandingPath } from "@shared/url/utm";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
+import { isGateRevealArm, type GateRevealArm } from "@shared/experiments/gateRevealArm";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import type { MarketingOptInVia } from "@features/survey/optInSheet";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
@@ -16,7 +17,7 @@ import {
   getSessionId,
   rememberCompletedReport,
   rememberGatePrice,
-  rememberGateReveal,
+  rememberGateArm,
   rememberPaidWizard,
   setReportSessionId,
 } from "./surveySession";
@@ -163,7 +164,7 @@ export function useSubmitSurvey() {
   /** The EUR 1.99 gate will stop this reader: its price, which the pre-report map names. */
   const [gatePriceCents, setGatePriceCents] = useState<number | null>(null);
   /** The gate will be Mark's new page (his 50/50): the pre-report map names its offer. */
-  const [gateReveal, setGateReveal] = useState<true | null>(null);
+  const [gateArm, setGateArm] = useState<GateRevealArm | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -248,7 +249,7 @@ export function useSubmitSurvey() {
               unlockPending?: boolean;
               wizard?: string;
               initialGatePriceCents?: unknown;
-              initialGateReveal?: unknown;
+              initialGateArm?: unknown;
             };
             if (
               json.journey === "pay_to_start" &&
@@ -266,9 +267,10 @@ export function useSubmitSurvey() {
               setGatePriceCents(gatePrice);
               rememberGatePrice(gatePrice);
             }
-            if (json.initialGateReveal === true) {
-              setGateReveal(true);
-              rememberGateReveal();
+            // Which half of Mark's 50/50 the gate is: the wizard's map tells its page's offer.
+            if (isGateRevealArm(json.initialGateArm)) {
+              setGateArm(json.initialGateArm);
+              rememberGateArm(json.initialGateArm);
             }
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
@@ -398,7 +400,7 @@ export function useSubmitSurvey() {
     submissionId,
     paidWizard,
     gatePriceCents,
-    gateReveal,
+    gateArm,
     status,
     errorKind,
   };

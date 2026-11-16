@@ -200,7 +200,12 @@ import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { FIRST_PAYWALL_SELECTOR } from "../logic/paywallSelector";
 import { INITIAL_UNLOCK_SECTION_ID } from "../logic/initialUnlock";
 import { isGateReveal } from "../logic/gateReveal";
-import { TOUR_FIRST_OPEN_CHAPTER_IDS, tourFirstNavAccess } from "../logic/lightReportMap";
+import {
+  TOUR_FIRST_OPEN_CHAPTER_IDS,
+  tourFirstNavAccess,
+  tourMenuOffer,
+  type LightMapOffer,
+} from "../logic/lightReportMap";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import { useGuidedTour } from "./hooks/useGuidedTour";
 import V4GuidedTour from "./v3/V4GuidedTour";
@@ -475,9 +480,11 @@ interface ReportExperienceProps {
   /**
    * With `veilIdentity`: which EUR 1.99 page the tour leads to. `light` is Mark's new page,
    * which shows the archetype, so the chapter menu names that offer as the survey's report map
-   * does (logic/lightReportMap.ts, Mark 13 Nov); `today` keeps what the page under it opens.
+   * does (logic/lightReportMap.ts, Mark 13 Nov); `price` is today's page in the other half of
+   * his 50/50, whose map put the Core Archetype in the EUR 1.99 (16 Nov); `today` keeps what
+   * the page under it opens while no test runs.
    */
-  tourOffer?: "today" | "light";
+  tourOffer?: "today" | LightMapOffer;
   /** `?v4=1` — V2's report with the Report 3.0 components swapped in. */
   isV4: boolean;
   accessPlan: ReportAccessPlan;
@@ -4019,7 +4026,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
               isV3={isV3}
               isV4={isV4}
               veilIdentity={tourFirst}
-              tourOffer={tourFirst && isGateReveal(data.initialGate?.reveal) ? "light" : "today"}
+              tourOffer={
+                tourFirst
+                  ? tourMenuOffer(
+                      isGateReveal(data.initialGate?.reveal),
+                      data.initialGate?.revealArm
+                    )
+                  : "today"
+              }
               submissionId={data.submissionId ?? null}
               devParam={devParam}
               accessPlan={data.accessPlan}

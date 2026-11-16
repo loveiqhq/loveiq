@@ -14,7 +14,7 @@ vi.mock("@shared/flags/system-flags", () => ({
   },
 }));
 
-import { surveySheetsForVisit, surveySheetsOffer } from "@features/survey/server/sheetSwitches";
+import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
 import { SURVEY_SHEET_IDS } from "@features/survey/surveySheets";
 
 beforeEach(() => {
@@ -48,10 +48,10 @@ describe("the sheets a visit to /survey gets", () => {
     expect(await surveySheetsForVisit(undefined)).toEqual(["science", "desire"]);
   });
 
-  // Fatih, 14 Nov: the halfway sheet and the report map promise the archetype for free, which
-  // only Mark's new EUR 1.99 page gives. While its switch is off they stay off, whatever theirs
-  // say; with it on, the survey shows them only to that page's half (sheetsForRevealArm).
-  it("keeps the two sheets that promise a free archetype off while Mark's page is off", async () => {
+  // The halfway sheet and the report map are the survey's half of Mark's 50/50 of his new EUR
+  // 1.99 page: both halves meet them, each in its page's words (Mark, 16 Nov). While the test's
+  // switch is off they stay off, whatever theirs say.
+  it("keeps the halfway sheet and the map off while Mark's 50/50 is off", async () => {
     env.on = new Set(["survey_sheet_report_map", "survey_sheet_halfway", "survey_sheet_science"]);
     expect(await surveySheetsForVisit(undefined)).toEqual(["science"]);
     env.on.add("report_gate_archetype_reveal");
@@ -61,18 +61,6 @@ describe("the sheets a visit to /survey gets", () => {
   it("still previews them on staging, Mark's page on or off", async () => {
     env.nonProd = true;
     expect(await surveySheetsForVisit("halfway,reportMap")).toEqual(["halfway", "reportMap"]);
-  });
-
-  // A reviewer's ?sheets= link shows what it names, whichever half their own session is in.
-  it("says which sheets came from the preview, so no half of the 50/50 holds them back", async () => {
-    env.nonProd = true;
-    env.on = new Set(["survey_sheet_science"]);
-    expect(await surveySheetsOffer("halfway")).toEqual({
-      sheets: ["science", "halfway"],
-      previewed: ["halfway"],
-    });
-    env.nonProd = false;
-    expect(await surveySheetsOffer("halfway")).toEqual({ sheets: ["science"], previewed: [] });
   });
 
   it("none when the switches cannot be read", async () => {

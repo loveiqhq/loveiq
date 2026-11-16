@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import type { LightMapOffer } from "@features/report/logic/lightReportMap";
 import { surveySheetDef, type SurveySheetId } from "@features/survey/surveySheets";
 import {
   DesireSheet,
@@ -17,6 +18,11 @@ interface SurveySheetHostProps {
   enabled: readonly SurveySheetId[];
   /** The one open now, if any. */
   open: SurveySheetId | null;
+  /**
+   * Which EUR 1.99 page follows this run, in Mark's 50/50: his new one (`light`) or today's
+   * (`price`). The halfway sheet and the map tell the offer in its words.
+   */
+  offer: LightMapOffer;
   /** Minutes left after the question on screen, as the progress strip counts them. */
   minutesLeft: number;
   /** The question on screen, for the map's progress strip. */
@@ -40,6 +46,7 @@ const reportMapLeft = (() => {
 const SurveySheetHost: FC<SurveySheetHostProps> = ({
   enabled,
   open,
+  offer,
   minutesLeft,
   progressIndex,
   total,
@@ -60,7 +67,15 @@ const SurveySheetHost: FC<SurveySheetHostProps> = ({
           case "expert":
             return <ExpertSheet key={id} open={isOpen} {...handlers} />;
           case "halfway":
-            return <HalfwaySheet key={id} open={isOpen} minutesLeft={minutesLeft} {...handlers} />;
+            return (
+              <HalfwaySheet
+                key={id}
+                open={isOpen}
+                minutesLeft={minutesLeft}
+                offer={offer}
+                {...handlers}
+              />
+            );
           case "desire":
             return <DesireSheet key={id} open={isOpen} {...handlers} />;
           case "reportMap":
@@ -68,6 +83,7 @@ const SurveySheetHost: FC<SurveySheetHostProps> = ({
               <ReportMapScreen
                 key={id}
                 open={isOpen}
+                offer={offer}
                 left={reportMapLeft}
                 progressIndex={progressIndex}
                 total={total}

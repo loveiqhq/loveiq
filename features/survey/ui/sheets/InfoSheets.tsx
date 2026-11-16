@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type FC, type ReactNode, type RefObject } from "react";
 import Image from "next/image";
+import type { LightMapOffer } from "@features/report/logic/lightReportMap";
 import type { SurveySheetId } from "@features/survey/surveySheets";
 import {
   DESIRE_SHEET_COPY,
@@ -395,14 +396,17 @@ const STEP_AT_MS = [320, 640, 960] as const;
 /**
  * Sheet 4, after 11003: halfway. Mark's revised board (12 Nov): no tick beside the heading,
  * step headlines top-aligned with their markers, more room between the steps and the pills a
- * little further right. Its moment: the three steps arrive one after another, each connector
- * growing once its step has landed, then the Free pill settles.
+ * little further right. Its moment: the steps arrive one after another, each connector growing
+ * once its step has landed, then the pill settles.
+ *
+ * Which EUR 1.99 page follows decides the second step (Mark's 50/50, 16 Nov). Before his new
+ * page (`light`): the Core Archetype free, then the Light Report for EUR 1.99. Before today's
+ * page (`price`), which shows no archetype: one locked step that sells the Core Archetype for
+ * EUR 1.99, so nobody is told the archetype is free.
  */
-export const HalfwaySheet: FC<InfoSheetHandlers & { open: boolean; minutesLeft: number }> = ({
-  open,
-  minutesLeft,
-  ...handlers
-}) => {
+export const HalfwaySheet: FC<
+  InfoSheetHandlers & { open: boolean; minutesLeft: number; offer: LightMapOffer }
+> = ({ open, minutesLeft, offer, ...handlers }) => {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const copy = HALFWAY_SHEET_COPY;
@@ -443,51 +447,91 @@ export const HalfwaySheet: FC<InfoSheetHandlers & { open: boolean; minutesLeft: 
             </div>
           </div>
         </div>
-        <div
-          data-halfway-step
-          className="sheet-step -mx-3 mb-[22px] flex gap-[14px] rounded-[16px] bg-[#eaf6ef] p-3 shadow-[inset_0_0_0_1px_#cfe8da]"
-          style={delay(STEP_AT_MS[1])}
-        >
-          <div className="flex flex-col items-center">
-            <StepMarker n={2} color="#2e7d5b" />
-            <div
-              aria-hidden
-              className="sheet-grow-y -mb-[34px] w-[2px] flex-1 bg-[#e6e3eb]"
-              style={delay(STEP_AT_MS[1] + 260)}
-            />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-            <div className="text-[15px] font-bold leading-5 text-[#161021]">
-              {copy.archetypeTitle}
-            </div>
-            <div className="text-[14px] leading-[21px] text-[#4a4558]">{copy.archetypeBody}</div>
-          </div>
-          <span
-            className="sheet-settle -mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-white px-[10px] py-1 text-[12px] font-bold leading-4 text-[#2e7d5b]"
-            style={delay(STEP_AT_MS[1] + 300)}
+        {offer === "price" ? (
+          <div
+            data-halfway-step
+            className="sheet-step -mx-3 flex gap-[14px] rounded-[16px] bg-[#f3ecff] p-3 shadow-[inset_0_0_0_1px_#e2d6fb]"
+            style={delay(STEP_AT_MS[1])}
           >
-            {copy.free}
-          </span>
-        </div>
-        <div data-halfway-step className="sheet-step flex gap-[14px]" style={delay(STEP_AT_MS[2])}>
-          <IconTile label={copy.lockedLabel}>
-            <LockIcon />
-          </IconTile>
-          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-            <div className="text-[15px] font-bold leading-5 text-[#161021]">
-              {copy.lightTitle}
-              <span className="mt-[1px] block text-[12px] leading-4 text-[#2e7d5b]">
-                {copy.lightGuarantee}
-              </span>
+            <IconTile label={copy.archetypeLockedLabel}>
+              <LockIcon />
+            </IconTile>
+            <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+              <div className="text-[15px] font-bold leading-5 text-[#161021]">
+                {copy.archetypePriceTitle}
+                {/* Mark's #2e7d5b, 2% darker: on the violet box it read at 4.35:1, under AA's 4.5. */}
+                <span className="mt-[1px] block text-[12px] leading-4 text-[#2d7a59]">
+                  {copy.lightGuarantee}
+                </span>
+              </div>
+              <div className="text-[14px] leading-[21px] text-[#4a4558]">
+                {copy.archetypePriceBody}
+              </div>
             </div>
-            <p className="m-0 text-[14px] leading-[21px] text-[#4a4558]">{copy.lightBody}</p>
+            <span
+              className="sheet-settle -mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-white px-[10px] py-1 text-[12px] font-bold leading-4 text-[#6b5b95]"
+              style={delay(STEP_AT_MS[1] + 300)}
+            >
+              {copy.price}
+            </span>
           </div>
-          <span className="-mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-[#f4f2f7] px-[10px] py-1 text-[12px] font-bold leading-4 text-[#4a4558]">
-            {copy.optional}
-          </span>
-        </div>
+        ) : (
+          <FreeArchetypeSteps />
+        )}
       </div>
     </InfoSheetFrame>
+  );
+};
+
+/** The halfway sheet's second and third steps before Mark's new page: the archetype free, then the Light Report. */
+const FreeArchetypeSteps: FC = () => {
+  const copy = HALFWAY_SHEET_COPY;
+  return (
+    <>
+      <div
+        data-halfway-step
+        className="sheet-step -mx-3 mb-[22px] flex gap-[14px] rounded-[16px] bg-[#eaf6ef] p-3 shadow-[inset_0_0_0_1px_#cfe8da]"
+        style={delay(STEP_AT_MS[1])}
+      >
+        <div className="flex flex-col items-center">
+          <StepMarker n={2} color="#2e7d5b" />
+          <div
+            aria-hidden
+            className="sheet-grow-y -mb-[34px] w-[2px] flex-1 bg-[#e6e3eb]"
+            style={delay(STEP_AT_MS[1] + 260)}
+          />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <div className="text-[15px] font-bold leading-5 text-[#161021]">
+            {copy.archetypeTitle}
+          </div>
+          <div className="text-[14px] leading-[21px] text-[#4a4558]">{copy.archetypeBody}</div>
+        </div>
+        <span
+          className="sheet-settle -mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-white px-[10px] py-1 text-[12px] font-bold leading-4 text-[#2e7d5b]"
+          style={delay(STEP_AT_MS[1] + 300)}
+        >
+          {copy.free}
+        </span>
+      </div>
+      <div data-halfway-step className="sheet-step flex gap-[14px]" style={delay(STEP_AT_MS[2])}>
+        <IconTile label={copy.lockedLabel}>
+          <LockIcon />
+        </IconTile>
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <div className="text-[15px] font-bold leading-5 text-[#161021]">
+            {copy.lightTitle}
+            <span className="mt-[1px] block text-[12px] leading-4 text-[#2e7d5b]">
+              {copy.lightGuarantee}
+            </span>
+          </div>
+          <p className="m-0 text-[14px] leading-[21px] text-[#4a4558]">{copy.lightBody}</p>
+        </div>
+        <span className="-mr-[6px] flex-shrink-0 self-start whitespace-nowrap rounded-full bg-[#f4f2f7] px-[10px] py-1 text-[12px] font-bold leading-4 text-[#4a4558]">
+          {copy.optional}
+        </span>
+      </div>
+    </>
   );
 };
 
