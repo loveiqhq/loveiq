@@ -30,8 +30,12 @@ import {
   surveyMinutesFromDuration,
 } from "@features/report/logic/initialUnlockGate";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
-import { emailLinkOf, noteReaderReturn, readerOf } from "@features/attribution/server/return-ping";
-import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
+import {
+  emailLinkOf,
+  isCrawler,
+  noteReaderReturn,
+  readerOf,
+} from "@features/attribution/server/return-ping";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -308,7 +312,7 @@ export async function GET(request: Request) {
       !isShareAccess &&
       url.searchParams.get("gate") !== "now" &&
       !isProbeRequest(request.headers.get("cookie")) &&
-      !BOT_UA_REGEX.test(userAgent ?? "")
+      !isCrawler(userAgent)
     ) {
       const via = emailLinkOf(request.headers.get("referer"));
       const reader = readerOf({

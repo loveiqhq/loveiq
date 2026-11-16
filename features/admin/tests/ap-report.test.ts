@@ -21,7 +21,7 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 
-import { parseFilters } from "@features/admin/server/ap/filters";
+import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
 import {
   buildReportPage,
   fetchReaderReturns,
@@ -2331,8 +2331,14 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
     );
   });
 
-  it("its info card's query starts on the same day as the page", () => {
-    expect(FIELDS["report.ping_returns"]!.query.text).toContain(`DATE '${RETURN_PINGS_FROM}'`);
+  it("its info card starts on the same day as the page, in its query and in its words", () => {
+    const card = FIELDS["report.ping_returns"]!;
+    expect(card.query.text).toContain(`DATE '${RETURN_PINGS_FROM}'`);
+    // Moving the release day must move every sentence that names it.
+    const day = rangeLabel(RETURN_PINGS_FROM, RETURN_PINGS_FROM);
+    expect(card.formula.den).toContain(day);
+    expect(card.caveat).toContain(day);
+    expect(card.tables.find((t) => t.table === "reader_return")!.watch).toContain(day);
   });
 
   describe("on screen", () => {

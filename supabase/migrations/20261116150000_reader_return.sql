@@ -19,8 +19,9 @@
 --
 -- Ids, times and labels only: no address, IP or user agent. Erased with its submission.
 --
--- Apply before or after the deploy: without the table the claim fails, which the code logs and
--- treats as "not claimed", so nothing is posted and nothing else is touched.
+-- APPLY BEFORE THE DEPLOY. Without the table every claim is refused: nothing is posted and no
+-- request fails, but supabaseFetch logs each refused write at error level, which posts "write
+-- REJECTED" to #prod-alerts for every later-day report visit and email click.
 
 BEGIN;
 
@@ -38,6 +39,9 @@ CREATE TABLE IF NOT EXISTS public.reader_return (
 );
 
 ALTER TABLE public.reader_return ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.reader_return FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.reader_return TO service_role;
 
 DROP POLICY IF EXISTS "Service role only" ON public.reader_return;
 

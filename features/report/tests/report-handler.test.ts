@@ -1456,6 +1456,10 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
 
     it("leaves out a crawler, one of our probes and the gate's own follow-up request", async () => {
       await open({ "user-agent": "AdsBot-Google (+http://www.google.com/adsbot.html)" });
+      // A link-scanning sandbox: AP-Analytics leaves headless browsers out of report sessions.
+      await open({
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/120.0",
+      });
       await open({ cookie: "loveiq_probe=1" });
       await meetGet();
       await flushAfterResponse();

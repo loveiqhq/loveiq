@@ -754,9 +754,28 @@ describe("resend webhook: each nurture email's own events", () => {
             via: "initial_gift",
             // The email's own creation: a click seconds after it is a scanner's.
             sentAt: "2026-10-15T08:00:00.000Z",
+            userAgent: null,
           },
         ],
       ]);
+    });
+
+    it("hands over the click's own user agent, for the reply to tell a scanner by", async () => {
+      mockVerify.mockReturnValue(
+        nurture("email.clicked", {
+          click: {
+            link: "https://www.loveiq.org/report/rpt_SECRET?utm_source=email",
+            userAgent: "Mozilla/5.0 (X11) HeadlessChrome/120.0",
+          },
+        })
+      );
+      await POST(request());
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn.mock.calls[0]![0]).toMatchObject({
+        userAgent: "Mozilla/5.0 (X11) HeadlessChrome/120.0",
+      });
+      // The link it opened is never handed on: it carries the report's token.
+      expect(JSON.stringify(mockNoteReaderReturn.mock.calls[0]![0])).not.toContain("rpt_SECRET");
     });
 
     it("no other event is a return", async () => {

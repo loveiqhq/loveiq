@@ -260,7 +260,7 @@ describe("POST /api/survey notifications", () => {
     );
   });
 
-  describe("a survey begun on an earlier day: the 'Came back' reply, once the bot posted", () => {
+  describe("a survey begun on an earlier day: handed to the 'Came back' reply", () => {
     const BEGUN_EARLIER = {
       ...SUBMISSION_ROW,
       start_date_time: "2026-08-22T18:00:00.000Z",
@@ -298,19 +298,22 @@ describe("POST /api/survey notifications", () => {
       });
     });
 
-    it("hands nothing over without a bot: no thread exists to reply in", async () => {
+    it("without a bot too, after the webhook's message: AP counts the day back all the same", async () => {
       // Its own id: the webhook drops a repeat of the same text within a minute.
       mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 124, isExisting: false });
       routeJourneyAndSlack({ ...BEGUN_EARLIER, id: 124 });
       expect((await POST(makeRequest())).status).toBe(200);
-      await vi.waitFor(() =>
-        expect(
-          mockFetchWithTimeout.mock.calls.some((c) =>
-            String(c[0]).startsWith("https://hooks.slack.test/")
-          )
-        ).toBe(true)
-      );
-      expect(mockNoteReaderReturn).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(mockNoteReaderReturn).toHaveBeenCalledTimes(1));
+      // The webhook's message went first; the reply finds no thread and only keeps the day.
+      expect(
+        mockFetchWithTimeout.mock.calls.some((c) =>
+          String(c[0]).startsWith("https://hooks.slack.test/")
+        )
+      ).toBe(true);
+      expect(mockNoteReaderReturn.mock.calls[0]![0]).toMatchObject({
+        submissionId: 124,
+        source: "draft",
+      });
     });
   });
 

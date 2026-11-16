@@ -24,6 +24,7 @@ import {
   buildReturnReply,
   emailLinkOf,
   emailNameOf,
+  isCrawler,
   isReturn,
   noteReaderReturn,
   readerOf,
@@ -57,6 +58,21 @@ describe("isReturn: what counts as coming back", () => {
     expect(isReturn({ source: "report", at: new Date("2026-11-14T23:30:00.000Z") }, READER)).toBe(
       true
     );
+  });
+
+  it("a sitting that runs on past midnight is still the first visit, until 3 hours on", () => {
+    const lateFinish = { ...READER, finishedAt: "2026-11-14T22:20:00.000Z" }; // 23:20 Berlin
+    // 00:05 Berlin, 45 minutes on: a reload, a checkout return, an archetype switch.
+    expect(
+      isReturn({ source: "report", at: new Date("2026-11-14T23:05:00.000Z") }, lateFinish)
+    ).toBe(false);
+    // 02:19 and 02:21 Berlin: either side of three hours.
+    expect(
+      isReturn({ source: "report", at: new Date("2026-11-15T01:19:00.000Z") }, lateFinish)
+    ).toBe(false);
+    expect(
+      isReturn({ source: "report", at: new Date("2026-11-15T01:21:00.000Z") }, lateFinish)
+    ).toBe(true);
   });
 
   it("a report opened just past midnight, minutes after the survey, is still the first visit", () => {
@@ -109,6 +125,36 @@ describe("isReturn: what counts as coming back", () => {
     expect(isReturn({ source: "draft", at: new Date(overMidnight.finishedAt) }, overMidnight)).toBe(
       false
     );
+    // #2625 on 24 Oct: begun 23:18, finished 00:11, its longest pause 10 minutes. One sitting.
+    const longSitting = {
+      ...READER,
+      startedAt: "2026-10-24T21:18:00.000Z",
+      finishedAt: "2026-10-24T22:11:00.000Z",
+    };
+    expect(isReturn({ source: "draft", at: new Date(longSitting.finishedAt) }, longSitting)).toBe(
+      false
+    );
+    // #2440 on 7 Oct: begun 22:09, back after a 128-minute pause, finished 01:27. A return.
+    const resumed = {
+      ...READER,
+      startedAt: "2026-10-07T20:09:00.000Z",
+      finishedAt: "2026-10-07T23:27:00.000Z",
+    };
+    expect(isReturn({ source: "draft", at: new Date(resumed.finishedAt) }, resumed)).toBe(true);
+  });
+
+  it("a crawler's click is no return: link-scanning sandboxes run headless browsers", () => {
+    const at = after(READER.finishedAt!, 26 * 60 * MINUTE);
+    const click = (userAgent: string | null) =>
+      isReturn({ source: "email", at, sentAt: null, userAgent }, READER);
+    expect(click("Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 HeadlessChrome/131.0")).toBe(
+      false
+    );
+    expect(click("python-requests/2.32")).toBe(false);
+    expect(
+      click("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15")
+    ).toBe(true);
+    expect(click(null)).toBe(true);
   });
 
   it("the team's own surveys never count, whatever the way back", () => {
@@ -126,6 +172,32 @@ describe("isReturn: what counts as coming back", () => {
     const at = new Date("2026-11-16T10:00:00.000Z");
     expect(isReturn({ source: "report", at }, { ...READER, finishedAt: null })).toBe(false);
     expect(isReturn({ source: "draft", at }, { ...READER, startedAt: null })).toBe(false);
+  });
+});
+
+describe("isCrawler: what AP-Analytics and the visit counter leave out", () => {
+  it("knows crawlers, link previewers, headless browsers and plain HTTP clients", () => {
+    for (const ua of [
+      "AdsBot-Google (+http://www.google.com/adsbot.html)",
+      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "WhatsApp/2.23.20.0",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/120.0",
+      "curl/8.4.0",
+      "python-requests/2.31.0",
+      "okhttp/4.12.0",
+      "node-fetch/1.0",
+    ]) {
+      expect(isCrawler(ua), ua).toBe(true);
+    }
+  });
+
+  it("lets a person's browser through, and a request with none", () => {
+    expect(
+      isCrawler(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15"
+      )
+    ).toBe(false);
+    expect(isCrawler(null)).toBe(false);
   });
 });
 
@@ -232,7 +304,7 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     opts: {
       claimed?: unknown[];
       claimOk?: boolean;
-      message?: typeof MESSAGE | null;
+      message?: (typeof MESSAGE & { backfilled_at?: string }) | null;
       submission?: unknown[];
     } = {}
   ) {
@@ -337,6 +409,14 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     expect(claims()).toHaveLength(1);
     expect(mockPost).not.toHaveBeenCalled();
     // An older message posted by the webhook has no stored ts: normal, not a failure.
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
+  it("never replies under a row the August catch-up wrote: its ts may be a reply in that thread", async () => {
+    backend({ message: { ...MESSAGE, backfilled_at: "2026-08-24T18:23:34.000Z" } });
+    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
+    expect(claims()).toHaveLength(1);
+    expect(mockPost).not.toHaveBeenCalled();
     expect(mockWarn).not.toHaveBeenCalled();
   });
 

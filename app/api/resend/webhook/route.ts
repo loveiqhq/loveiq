@@ -223,7 +223,12 @@ async function recordMessageEvent(
   payload: {
     type?: unknown;
     created_at?: unknown;
-    data?: { email_id?: unknown; tags?: unknown; created_at?: unknown; click?: { link?: unknown } };
+    data?: {
+      email_id?: unknown;
+      tags?: unknown;
+      created_at?: unknown;
+      click?: { link?: unknown; userAgent?: unknown };
+    };
   },
   recipient: string | undefined
 ): Promise<void> {
@@ -287,8 +292,10 @@ async function recordMessageEvent(
   }
   // A click is the reader coming back: their #incoming-surveys thread hears of it, once a day,
   // after this answers (return-ping.ts). Not the unsubscribe link: that is leaving. The send
-  // time tells a link scanner from a reader. The link is only looked at, never kept.
-  const link = payload.data?.click?.link;
+  // time and the click's user agent tell a link scanner from a reader. Both the link and the
+  // user agent are only looked at, never kept.
+  const click = payload.data?.click;
+  const link = click?.link;
   if (eventType === "clicked" && !(typeof link === "string" && link.includes("/api/unsubscribe"))) {
     const signal = {
       submissionId: Number(sub),
@@ -296,6 +303,7 @@ async function recordMessageEvent(
       at: new Date(Number.isFinite(at) ? at : Date.now()),
       via: stage,
       sentAt: typeof payload.data?.created_at === "string" ? payload.data.created_at : null,
+      userAgent: typeof click?.userAgent === "string" ? click.userAgent : null,
     };
     scheduleAfterResponse("reader-return-click", () => noteReaderReturn(signal));
   }
