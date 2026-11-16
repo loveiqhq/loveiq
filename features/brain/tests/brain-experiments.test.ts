@@ -137,8 +137,8 @@ afterEach(() => mockSupabaseFetch.mockClear());
 
 describe("experiments: the registry, read", () => {
   it("times an unregistered landing test's pace from its start, as /admin counts it", async () => {
-    // 70 readers per arm before round 4's start (17 Nov) and 70 after: round 3's restart
-    // case (14 Oct) moved 34 days on, so the pace reads as it did then.
+    // 70 readers per arm before round 4's start (18 Nov) and 70 after, as in round 3's
+    // restart case (14 Oct), so the pace reads as it did then.
     const at = (day: string, arm: string, i: number) => ({
       id: i,
       created_date_time: `${day}T10:00:00Z`,

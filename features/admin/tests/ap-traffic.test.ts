@@ -261,28 +261,28 @@ describe("Traffic page builder", () => {
   it("reads round 4's test from its first day, A the video page, and says #6 has ended", () => {
     const p = traffic({
       filters: parseFilters(
-        { period: "custom", from: "2026-11-17", to: "2026-11-18" },
-        "2026-11-19"
+        { period: "custom", from: "2026-11-18", to: "2026-11-19" },
+        "2026-11-20"
       ),
       facts: factsFixture({
-        from: "2026-11-17",
-        to: "2026-11-18",
-        asOf: "2026-11-19",
+        from: "2026-11-18",
+        to: "2026-11-19",
+        asOf: "2026-11-20",
         visits: [
-          { day: "2026-11-17", arm: "video", src: null, n: 40 },
-          { day: "2026-11-17", arm: "pain_point", src: null, n: 50 },
+          { day: "2026-11-18", arm: "video", src: null, n: 40 },
+          { day: "2026-11-18", arm: "pain_point", src: null, n: 50 },
           // A re-rolled browser's round-3 stamp: in neither of #10's arms.
-          { day: "2026-11-17", arm: "white_video", src: null, n: 9 },
+          { day: "2026-11-18", arm: "white_video", src: null, n: 9 },
         ],
         starts: [],
         subs: [],
       }),
-      today: "2026-11-19",
+      today: "2026-11-20",
     });
     const t = p.experiments.arms.filter((a) => a.test === "New landing page");
     expect(t.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
-      ["Video page", true, 40, "Since 17 Nov 2026 · live", false],
-      ["Pain-point page", false, 50, "Since 17 Nov 2026 · live", false],
+      ["Video page", true, 40, "Since 18 Nov 2026 · live", false],
+      ["Pain-point page", false, 50, "Since 18 Nov 2026 · live", false],
     ]);
     const hero = p.experiments.arms.filter((a) => a.test === "Landing hero");
     expect(hero.map((a) => [a.note, a.visitors, a.ended])).toEqual([

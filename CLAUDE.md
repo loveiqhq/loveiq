@@ -587,7 +587,7 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 #### Add a New Landing Section
 
-The landing page is a 50/50 A/B (round 4, from the 2026-11-16 release): arm A
+The landing page is a 50/50 A/B (round 4, from the 2026-11-17 release): arm A
 (`video`) is the white design under `features/landing/ui/white/` with the presenter
 video in the hero (`white/WHeroVideo.tsx`); arm B (`pain_point`) is Marcus's new
 pain-point page under `features/landing/ui/painpoint/`, which reuses three live

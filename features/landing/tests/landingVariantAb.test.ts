@@ -50,10 +50,10 @@ describe("landing A/B — the two arms", () => {
   });
 
   it("starts round 4's readouts on the first whole Berlin day after the release", () => {
-    // Release planned for Mon 16 Nov 2026: the first whole day is Tue 17 Nov, whose
+    // Released Tue 17 Nov 2026: the first whole day is Wed 18 Nov, whose
     // Berlin midnight (CET, UTC+1) is 23:00 UTC the evening before.
-    expect(LANDING_TEST_START_DAY).toBe("2026-11-17");
-    expect(LANDING_TEST_START_AT).toBe("2026-11-16T23:00:00Z");
+    expect(LANDING_TEST_START_DAY).toBe("2026-11-18");
+    expect(LANDING_TEST_START_AT).toBe("2026-11-17T23:00:00Z");
   });
 
   it("renders one arm per variant, chosen from the proxy's header", () => {
