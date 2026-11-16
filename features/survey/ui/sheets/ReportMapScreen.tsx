@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, type CSSProperties, type FC } from "react";
-import { lightMapRowKind } from "@features/report/logic/lightReportMap";
+import { lightMapRowKind, type LightMapOffer } from "@features/report/logic/lightReportMap";
 import { REPORT_MAP_COPY } from "@features/survey/surveySheetsCopy";
 import {
   WIZARD_CHAPTER_COUNT,
@@ -81,6 +81,28 @@ const GreyLock: FC<{ size: number; color?: string; strokeWidth?: number }> = ({
   </svg>
 );
 
+/** The green tick before each reason in today's page's legend (Mark's board, 16 Nov). */
+const CheckDot: FC = () => (
+  <span
+    aria-hidden
+    className="flex h-4 w-4 flex-none items-center justify-center rounded-full bg-[#e8f4ee]"
+  >
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#2e7d5b"
+      strokeWidth="3.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      focusable="false"
+    >
+      <path d="M4 12.5l5 5L20 6.5" />
+    </svg>
+  </span>
+);
+
 const Pill: FC<{ kind: "free" | "priced"; children: string; size?: "map" | "legend" }> = ({
   kind,
   children,
@@ -97,29 +119,40 @@ const Pill: FC<{ kind: "free" | "priced"; children: string; size?: "map" | "lege
   </span>
 );
 
-const MapRow: FC<{ id: string; label: string; gradientId: string }> = ({
+const CORE_ARCHETYPE_ROW = "core_archetype";
+
+const MapRow: FC<{ id: string; label: string; gradientId: string; offer: LightMapOffer }> = ({
   id,
   label,
   gradientId,
+  offer,
 }) => {
-  const kind = mapRowKind(id);
+  const kind = mapRowKind(id, offer);
   const base =
     "relative my-[1px] -mr-[1px] flex items-center justify-between gap-[6px] whitespace-nowrap pl-[16.5px] text-[10px] font-normal text-[#3f3a4d]";
   if (kind === "locked") {
     return (
-      <div data-map-row={kind} className={`${base} h-[29.22px] pr-[7.8px]`}>
+      <div data-map-row={kind} data-map-row-id={id} className={`${base} h-[29.22px] pr-[7.8px]`}>
         <span className="min-w-0 truncate">{label}</span>
         <GreyLock size={11} />
       </div>
     );
   }
-  const dashed =
-    kind === "free"
-      ? "rounded-[9px] border-[0.8px] border-dashed border-[#93cdb0] bg-[#f6f1fd]"
-      : "rounded-[7px] border-[0.8px] border-dashed border-[#c9b6f2]";
+  // The Core Archetype keeps its tinted row and dot in both halves of Mark's 50/50; before
+  // today's page its dashes turn the EUR 1.99's violet (his board, 16 Nov).
+  const core = id === CORE_ARCHETYPE_ROW;
+  const dashed = core
+    ? `rounded-[9px] border-[0.8px] border-dashed bg-[#f6f1fd] ${
+        kind === "free" ? "border-[#93cdb0]" : "border-[#c9b6f2]"
+      }`
+    : "rounded-[7px] border-[0.8px] border-dashed border-[#c9b6f2]";
   return (
-    <div data-map-row={kind} className={`${base} h-[27.22px] pr-[7px] ${dashed}`}>
-      {kind === "free" ? (
+    <div
+      data-map-row={kind}
+      data-map-row-id={id}
+      className={`${base} h-[27.22px] pr-[7px] ${dashed}`}
+    >
+      {core ? (
         <span
           aria-hidden
           className="absolute left-[6px] top-1/2 -mt-[2px] h-1 w-1 rounded-full bg-[#b48cf0]"
@@ -161,6 +194,11 @@ const MapFooter: FC<{
 
 interface ReportMapScreenProps {
   open: boolean;
+  /**
+   * Which EUR 1.99 page follows (Mark's 50/50, 16 Nov): his new one (`light`, the Core
+   * Archetype free) or today's (`price`, the Core Archetype in the EUR 1.99).
+   */
+  offer: LightMapOffer;
   /** How many questions are left after the one on screen (3). */
   left: number;
   /** The question on screen, for the progress strip. */
@@ -180,6 +218,7 @@ interface ReportMapScreenProps {
  */
 const ReportMapScreen: FC<ReportMapScreenProps> = ({
   open,
+  offer,
   left,
   progressIndex,
   total,
@@ -240,6 +279,7 @@ const ReportMapScreen: FC<ReportMapScreenProps> = ({
                       id={row.id}
                       label={row.label}
                       gradientId={`${gradientBase}-${row.id}`}
+                      offer={offer}
                     />
                   ))}
                 </div>
@@ -253,18 +293,20 @@ const ReportMapScreen: FC<ReportMapScreenProps> = ({
               </div>
               <div className="text-[19px] leading-6">{copy.chapters(WIZARD_CHAPTER_COUNT)}</div>
             </div>
-            <div className="sheet-in flex flex-col gap-[6px]" style={order(9.2)}>
-              <span className="self-start">
-                <Pill kind="free" size="legend">
-                  {copy.free}
-                </Pill>
-              </span>
-              <p className="m-0 text-[13px] leading-[19px] text-[#4a4558]">
-                {copy.freeLead}
-                <b className="font-bold text-[#161021]">{copy.freeEmphasis}</b>
-                {copy.freeEnd}
-              </p>
-            </div>
+            {offer === "light" ? (
+              <div className="sheet-in flex flex-col gap-[6px]" style={order(9.2)}>
+                <span className="self-start">
+                  <Pill kind="free" size="legend">
+                    {copy.free}
+                  </Pill>
+                </span>
+                <p className="m-0 text-[13px] leading-[19px] text-[#4a4558]">
+                  {copy.freeLead}
+                  <b className="font-bold text-[#161021]">{copy.freeEmphasis}</b>
+                  {copy.freeEnd}
+                </p>
+              </div>
+            ) : null}
             <div className="sheet-in flex flex-col gap-[6px]" style={order(10.4)}>
               <span className="flex items-center gap-2">
                 <Pill kind="priced" size="legend">
@@ -272,14 +314,37 @@ const ReportMapScreen: FC<ReportMapScreenProps> = ({
                 </Pill>
                 <GradientLock size={18} id={`${gradientBase}-legend`} />
               </span>
-              <p className="m-0 text-[13px] leading-[19px] text-[#4a4558]">
-                {copy.lightLead}
-                <b className="font-bold text-[#161021]">{copy.lightEmphasis}</b>
-                <br />
-                {copy.lightMid}
-                <b className="font-bold text-[#161021]">{copy.lightFeatured}</b>
-                {copy.lightEnd}
-              </p>
+              {offer === "light" ? (
+                <p className="m-0 text-[13px] leading-[19px] text-[#4a4558]">
+                  {copy.lightLead}
+                  <b className="font-bold text-[#161021]">{copy.lightEmphasis}</b>
+                  <br />
+                  {copy.lightMid}
+                  <b className="font-bold text-[#161021]">{copy.lightFeatured}</b>
+                  {copy.lightEnd}
+                </p>
+              ) : (
+                <>
+                  <p className="m-0 text-[13px] leading-[19px] text-[#4a4558]">
+                    {copy.priceLead}
+                    <b className="font-bold text-[#161021]">{copy.priceEmphasis}</b>
+                    {copy.priceMid}
+                    <b className="font-bold text-[#161021]">{copy.priceFeatured}</b>
+                    {copy.priceEnd}
+                  </p>
+                  <ul className="m-0 mt-2 flex list-none flex-col gap-[6px] p-0">
+                    {copy.priceReasons.map((reason) => (
+                      <li
+                        key={reason}
+                        className="flex items-start gap-[7px] text-[12px] leading-4 text-[#3f3a4d]"
+                      >
+                        <CheckDot />
+                        <span>{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
             <div className="sheet-in flex flex-col gap-[6px]" style={order(11.6)}>
               <GreyLock size={18} color="#6b6678" strokeWidth={2} />

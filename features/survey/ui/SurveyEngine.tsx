@@ -55,7 +55,6 @@ import {
   sheetBeforeQuestion,
   desireTickedFor,
   rememberDesireTick,
-  sheetsForRevealArm,
   sheetsShownFor,
   surveySheetDef,
   type SheetContext,
@@ -67,6 +66,7 @@ import {
   resolveGateRevealOverride,
   type GateRevealArm,
 } from "@shared/experiments/gateRevealArm";
+import { offerForGateArm, type LightMapOffer } from "@features/report/logic/lightReportMap";
 import {
   EMAIL_QUESTION_EXPERIMENT,
   EMAIL_QUESTION_WINNER,
@@ -84,7 +84,7 @@ import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
 import {
   completedReportToken,
   gatePriceRemembered,
-  gateRevealRemembered,
+  gateArmRemembered,
   getSessionId,
   paidWizardRemembered,
 } from "./hooks/surveySession";
@@ -116,8 +116,6 @@ interface SurveyEngineProps {
    * switches, or a staging preview (app/survey/page.tsx). None by default.
    */
   sheets?: readonly SurveySheetId[];
-  /** Of those, the ones a staging preview named: no half of Mark's 50/50 holds them back. */
-  previewedSheets?: readonly SurveySheetId[];
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -171,27 +169,25 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   onStartOver,
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
-  previewedSheets = NO_SHEETS,
 }) => {
-  // Mark's 50/50 (shared/experiments/gateRevealArm.ts): the halfway sheet and the report map
-  // promise the archetype for free, so they open only for the half whose EUR 1.99 page shows
-  // it. The arm comes from this run's session id, the one the report's server reads off the
-  // submission when it builds the gate, so both agree; `?reveal=1` or `0` picks one on staging.
-  // Read once, in the browser, as the run's session id itself is (surveySession.ts).
+  // Mark's 50/50 (shared/experiments/gateRevealArm.ts, his write-up of 16 Nov): every reader
+  // meets every sheet, and the halfway sheet and the report map tell the EUR 1.99 offer in the
+  // words of the page that follows, the archetype free before his new page and in the EUR 1.99
+  // before today's. The arm comes from this run's session id, the one the report's server reads
+  // off the submission when it builds the gate, so both agree; `?reveal=1` or `0` picks one on
+  // staging. Read once, in the browser, as the run's session id itself is (surveySession.ts).
   const [revealArm] = useState<GateRevealArm>(() =>
     typeof window === "undefined"
       ? "control"
       : (resolveGateRevealOverride(new URLSearchParams(window.location.search).get("reveal")) ??
         assignGateRevealArm(getSessionId()))
   );
+  const sheetOffer: LightMapOffer = revealArm === "reveal" ? "light" : "price";
   // A sheet that would draw nothing is never opened, or it would hold the move with nothing
   // on screen: the Trustpilot sheet needs the site's Trustpilot switch and its numbers.
   const sheets = useMemo(
-    () =>
-      sheetsForRevealArm(sheetsOffered, revealArm, previewedSheets).filter(
-        (id) => id !== "trustpilot" || trustpilotSheetReady()
-      ),
-    [sheetsOffered, revealArm, previewedSheets]
+    () => sheetsOffered.filter((id) => id !== "trustpilot" || trustpilotSheetReady()),
+    [sheetsOffered]
   );
   const {
     answers,
@@ -214,7 +210,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     submissionId,
     paidWizard,
     gatePriceCents,
-    gateReveal,
+    gateArm,
     status: submitStatus,
     errorKind: submitErrorKind,
   } = useSubmitSurvey();
@@ -1236,7 +1232,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           // The EUR 1.99 gate will stop this reader: the map names its price.
           gatePriceCents={gatePriceCents ?? gatePriceRemembered()}
           // Mark's new page will show their archetype: the map names that offer.
-          mapOffer={(gateReveal ?? gateRevealRemembered()) ? "light" : "today"}
+          mapOffer={offerForGateArm(gateArm ?? gateArmRemembered())}
           onComplete={() => onComplete(reportToken ?? completedReportToken())}
         />
       );
@@ -1446,6 +1442,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
           <SurveySheetHost
             enabled={sheets}
             open={openSheet}
+            offer={sheetOffer}
             minutesLeft={minutesLeft(currentIndex + 1, totalQuestions)}
             progressIndex={currentIndex}
             total={totalQuestions}

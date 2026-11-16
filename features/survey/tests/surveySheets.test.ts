@@ -13,7 +13,8 @@ import {
   sheetBeforeQuestion,
   sheetsShownFor,
   SCIENCE_QID,
-  sheetsForRevealArm,
+  GATE_TEST_SHEETS,
+  SURVEY_SHEETS,
   SURVEY_SHEET_IDS,
   SURVEY_SHEETS_STORAGE_KEY,
   type SheetContext,
@@ -104,25 +105,13 @@ describe("where the sheets open", () => {
   });
 });
 
-// Fatih, 14 Nov: the halfway sheet and the report map promise the Core Archetype for free,
-// which only Mark's new EUR 1.99 page gives; his 50/50 shows that page to half the readers.
-describe("the two sheets that promise a free archetype", () => {
-  const all = [...SURVEY_SHEET_IDS];
-
-  it("open only for the half that meets Mark's new EUR 1.99 page", () => {
-    expect(sheetsForRevealArm(all, "reveal", [])).toEqual(all);
-    expect(sheetsForRevealArm(all, "control", [])).toEqual([
-      "science",
-      "trustpilot",
-      "expert",
-      "desire",
-    ]);
-  });
-
-  it("open on a staging preview, whatever the half", () => {
-    expect(
-      sheetsForRevealArm(["halfway", "reportMap"], "control", ["halfway", "reportMap"])
-    ).toEqual(["halfway", "reportMap"]);
+// Mark's 50/50 of his new EUR 1.99 page (16 Nov): two sheets tell what EUR 1.99 opens, each
+// half in its page's words (SurveyEngine.sheets.test.tsx), and they run only with the test.
+describe("the sheets that belong to Mark's 50/50", () => {
+  it("are the halfway sheet and the report map, both priced", () => {
+    expect([...GATE_TEST_SHEETS]).toEqual(["halfway", "reportMap"]);
+    for (const id of GATE_TEST_SHEETS)
+      expect(SURVEY_SHEETS.find((s) => s.id === id)!.priced, id).toBe(true);
   });
 });
 

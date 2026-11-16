@@ -150,26 +150,31 @@ describe("POST /api/survey — Mark's 50/50 of the new EUR 1.99 page", () => {
     const res = await submit(sessionIn("reveal"));
     expect(res.status).toBe(200);
     expect(trackerOnPayload()).toMatchObject({ utm_source: "google", gate_reveal_arm: "reveal" });
-    expect(await res.json()).toMatchObject({ initialGatePriceCents: 199, initialGateReveal: true });
+    expect(await res.json()).toMatchObject({
+      initialGatePriceCents: 199,
+      initialGateArm: "reveal",
+    });
   });
 
-  it("stamps today's half too, and tells the wizard nothing new", async () => {
+  // Mark, 16 Nov: today's page's half meets the sheets too, with the Core Archetype in the
+  // EUR 1.99, so its wizard map must say the same.
+  it("stamps today's half too, and tells the wizard that half", async () => {
     const res = await submit(sessionIn("control"));
     expect(trackerOnPayload()).toMatchObject({ gate_reveal_arm: "control" });
-    expect(await res.json()).not.toHaveProperty("initialGateReveal");
+    expect(await res.json()).toMatchObject({ initialGateArm: "control" });
   });
 
   it("stamps nothing while the switch is off", async () => {
     revealOn = false;
     const res = await submit(sessionIn("reveal"));
     expect(trackerOnPayload()).not.toHaveProperty("gate_reveal_arm");
-    expect(await res.json()).not.toHaveProperty("initialGateReveal");
+    expect(await res.json()).not.toHaveProperty("initialGateArm");
   });
 
   it("tells no one the gate will not stop", async () => {
     mockJoinGate.mockResolvedValue(false);
     const res = await submit(sessionIn("reveal"));
-    expect(await res.json()).not.toHaveProperty("initialGateReveal");
+    expect(await res.json()).not.toHaveProperty("initialGateArm");
   });
 
   it("never takes an arm the browser claims", async () => {

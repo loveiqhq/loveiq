@@ -80,24 +80,15 @@ export const SURVEY_SHEETS: readonly SurveySheetDef[] = [
 export const SURVEY_SHEET_IDS: readonly SurveySheetId[] = SURVEY_SHEETS.map((s) => s.id);
 
 /**
- * The two sheets whose words promise the Core Archetype for free ("Core Archetype · Free" on
- * the halfway sheet, the report map's Free pill), which only Mark's new EUR 1.99 page gives.
- * His 50/50 shows that page to half the readers (shared/experiments/gateRevealArm.ts), so
- * these two open only for that half (Fatih, 14 Nov), and stay off while its switch is
- * (server/sheetSwitches.ts). A staging preview (`?sheets=`) still shows them to anyone.
+ * The two sheets that tell the reader what EUR 1.99 opens: the halfway sheet and the report
+ * map. They are the survey's half of Mark's 50/50 of his new EUR 1.99 page
+ * (shared/experiments/gateRevealArm.ts). Every reader meets them, in the words of the page that
+ * follows (his write-up, 16 Nov): before his new page the Core Archetype is free and the Light
+ * Report costs EUR 1.99; before today's page the Core Archetype is in the EUR 1.99. They run
+ * only while that test does (server/sheetSwitches.ts); a staging preview (`?sheets=`) still
+ * shows them.
  */
-export const REVEAL_ONLY_SHEETS: ReadonlySet<SurveySheetId> = new Set(["halfway", "reportMap"]);
-
-/** The sheets this reader may meet, given their half of Mark's 50/50 and any preview. */
-export function sheetsForRevealArm(
-  sheets: readonly SurveySheetId[],
-  arm: "control" | "reveal",
-  previewed: readonly SurveySheetId[]
-): SurveySheetId[] {
-  return sheets.filter(
-    (id) => !REVEAL_ONLY_SHEETS.has(id) || arm === "reveal" || previewed.includes(id)
-  );
-}
+export const GATE_TEST_SHEETS: ReadonlySet<SurveySheetId> = new Set(["halfway", "reportMap"]);
 
 export function isSurveySheetId(value: unknown): value is SurveySheetId {
   return typeof value === "string" && (SURVEY_SHEET_IDS as readonly string[]).includes(value);

@@ -71,11 +71,21 @@ reasons and reviews.
   adds `reveal` to the gate's payload, the tour-first one included, for the half whose survey
   session hashes to `reveal` (`shared/experiments/gateRevealArm.ts`, salt `gate_reveal_2026_11`),
   and `revealArm` for both halves. The page draws the new top whenever `reveal` is there.
-- **One arm for the whole run** (Fatih, 14 Nov): that half alone gets the survey's halfway sheet
-  and report map, the wizard's map and the tour's chapter menu that name the offer as the map
-  does (Core Archetype Free, the Light Report €1.99; `features/report/logic/lightReportMap.ts`).
-  The other half meets today's page and today's words everywhere. The offer, the price, the
-  guarantee and the emails are the same in both (Mark's answers 1, 2, 4 and 5).
+- **One arm for the whole run** (Fatih, 14 Nov), and every reader meets every sheet (Mark's
+  write-up, 16 Nov, the round-2 thread):
+  - **Variant B, the new page's half:** the survey's halfway sheet and report map, the wizard's
+    map and the tour's chapter menu name the new page's offer: Core Archetype Free, the Light
+    Report €1.99 (`features/report/logic/lightReportMap.ts`, offer `light`).
+  - **Variant A, today's page's half:** the same sheets, in Mark's €1.99 versions: the halfway
+    sheet's one locked step "Unlock your Core Archetype for €1.99", and a map, wizard map and
+    menu with the Core Archetype in the €1.99 (offer `price`). Then today's page.
+  - The survey's reply names the half (`initialGateArm`) so the wizard's map can follow it; the
+    report's tour menu reads `revealArm`. With the switch off nothing changes: no halfway sheet,
+    no map, and the wizard and menu say what they said before the test (offer `today`).
+  - The offer, the price, the guarantee and the emails are the same in both (Mark's answers 1,
+    2, 4 and 5). His hypotheses: A, readers told of the €1.99 halfway through finish and buy
+    knowing it; B, a minimal archetype keeps them from feeling cheated of the free result they
+    started for.
 - **Reading it:** `experiment_exposure` with `experiment: gate_reveal_2026_11`, `surface: gate`,
   in both halves, once per gate view; `utm_tracker.gate_reveal_arm` on submissions made while it
   runs (the same arm comes back from `session_id`). Count from the day the switch went on, leave out

@@ -482,7 +482,9 @@ const WizardReportMap: FC<WizardReportMapProps> = ({
   mapOffer = "today",
 }) => {
   const overview = step === 0;
-  const light = mapOffer === "light" && variant === "standard";
+  // The survey's report map legend, in the words of the page that follows (Mark's 50/50).
+  const light = mapOffer !== "today" && variant === "standard";
+  const archetypeFree = mapOffer === "light";
   const priceLabel = gatePriceCents ? formatOfferPrice(gatePriceCents) : REPORT_MAP_COPY.price;
   const map = REPORT_MAP_COPY;
   const fade = (shown: boolean) => ({
@@ -566,24 +568,38 @@ const WizardReportMap: FC<WizardReportMapProps> = ({
               <span className="wz-pitch-small text-[20px]">{WIZARD_CHAPTER_COUNT} Chapters</span>
             </h2>
             {light ? (
-              // The survey's report map legend, word for word (surveySheetsCopy.ts).
+              // The survey's report map legend, word for word (surveySheetsCopy.ts). Before
+              // today's EUR 1.99 page (Mark's 50/50, 16 Nov) it has no Free entry, and the
+              // EUR 1.99 opens the Core Archetype; his three reasons stay on the survey's map.
               <>
-                <Pitch icon="free_pill" pill={map.free} top={20}>
-                  <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white">
-                    {map.freeLead}
-                    <strong className="font-bold">{map.freeEmphasis}</strong>
-                    {map.freeEnd}
-                  </p>
-                </Pitch>
+                {archetypeFree ? (
+                  <Pitch icon="free_pill" pill={map.free} top={20}>
+                    <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white">
+                      {map.freeLead}
+                      <strong className="font-bold">{map.freeEmphasis}</strong>
+                      {map.freeEnd}
+                    </p>
+                  </Pitch>
+                ) : null}
                 <Pitch icon="price_pill" pill={priceLabel} top={20}>
-                  <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white/85">
-                    {map.lightLead}
-                    <strong className="font-bold">{map.lightEmphasis}</strong>
-                    <br />
-                    {map.lightMid}
-                    <strong className="font-bold">{map.lightFeatured}</strong>
-                    {map.lightEnd}
-                  </p>
+                  {archetypeFree ? (
+                    <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white/85">
+                      {map.lightLead}
+                      <strong className="font-bold">{map.lightEmphasis}</strong>
+                      <br />
+                      {map.lightMid}
+                      <strong className="font-bold">{map.lightFeatured}</strong>
+                      {map.lightEnd}
+                    </p>
+                  ) : (
+                    <p className="wz-pitch-copy mt-[6px] font-sans text-[14px] font-light leading-[19.5px] text-white/85">
+                      {map.priceLead}
+                      <strong className="font-bold">{map.priceEmphasis}</strong>
+                      {map.priceMid}
+                      <strong className="font-bold">{map.priceFeatured}</strong>
+                      {map.priceEnd}
+                    </p>
+                  )}
                 </Pitch>
                 <Pitch icon="locked" top={22}>
                   <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
