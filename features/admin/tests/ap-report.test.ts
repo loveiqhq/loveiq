@@ -2317,9 +2317,10 @@ describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' re
       .map(([p]) => new URL(`https://x${p}`));
     expect(first!.pathname).toBe("/rest/v1/reader_return");
     // From the range's first Berlin midnight to the one 8 days after its last.
-    expect(first!.searchParams.get("and")).toBe(
-      "(returned_at.gte.2026-11-16T23:00:00.000Z,returned_at.lt.2026-11-27T23:00:00.000Z)"
-    );
+    expect(first!.searchParams.getAll("returned_at")).toEqual([
+      "gte.2026-11-16T23:00:00.000Z",
+      "lt.2026-11-27T23:00:00.000Z",
+    ]);
     expect(second!.searchParams.get("offset")).toBe("1000");
   });
 

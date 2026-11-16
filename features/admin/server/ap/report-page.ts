@@ -310,16 +310,15 @@ export async function fetchReaderReturns(from: string, to: string): Promise<Read
   };
   const rows: Row[] = [];
   for (let offset = 0; ; offset += POSTGREST_MAX_ROWS) {
-    const res = await supabaseFetch(
-      `/rest/v1/reader_return?${new URLSearchParams({
-        select: "survey_submission_id,returned_at,source,via",
-        and: `(returned_at.gte.${reportingDayStart(from).toISOString()},returned_at.lt.${reportingDayStart(addDays(to, 8)).toISOString()})`,
-        order: "returned_at.asc,survey_submission_id.asc",
-        limit: String(POSTGREST_MAX_ROWS),
-        offset: String(offset),
-      })}`,
-      { paginated: true }
-    );
+    const query = new URLSearchParams({
+      select: "survey_submission_id,returned_at,source,via",
+      order: "returned_at.asc,survey_submission_id.asc",
+      limit: String(POSTGREST_MAX_ROWS),
+      offset: String(offset),
+    });
+    query.append("returned_at", `gte.${reportingDayStart(from).toISOString()}`);
+    query.append("returned_at", `lt.${reportingDayStart(addDays(to, 8)).toISOString()}`);
+    const res = await supabaseFetch(`/rest/v1/reader_return?${query}`, { paginated: true });
     if (!res.ok) throw new Error(`reader_return failed (${res.status})`);
     const page = (await res.json()) as Row[];
     rows.push(...page);

@@ -566,6 +566,30 @@ export default function ApReport() {
                           },
                         ]
                       : []),
+                    ...(data.returns.pings
+                      ? [
+                          {
+                            name: "Came back within 7 days, any way",
+                            table: {
+                              columns: [
+                                { label: "First way back", unit: "text" as const },
+                                { label: "Finished surveys", unit: "count" as const },
+                              ],
+                              rows: [
+                                ...data.returns.pings.ways.map((w) => ({
+                                  label: w.way,
+                                  values: [w.readers],
+                                })),
+                                { label: "Came back", values: [data.returns.pings.cameBack] },
+                                {
+                                  label: "Finished, 7 days over",
+                                  values: [data.returns.pings.finished],
+                                },
+                              ],
+                            },
+                          },
+                        ]
+                      : []),
                     {
                       name: "Email campaigns",
                       table: {
