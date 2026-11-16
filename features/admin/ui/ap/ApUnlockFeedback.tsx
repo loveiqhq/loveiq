@@ -48,8 +48,8 @@ const VIOLET = "#4000b6";
 const HEAD = "px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted";
 const NOTE = "m-0 text-xs leading-relaxed text-ap-muted";
 
-/** A share with a tenth, as the design writes them ("19.7%"); "—" without one. */
-const pct1 = (v: number | null) => fmt("pct", v, 1);
+/** A share with a tenth, as every rate is written ("19.7%"); "—" without one. */
+const pct1 = (v: number | null) => fmt("pct", v);
 const count = (n: number) => fmt("count", n);
 const plural = (n: number, one: string) => `${count(n)} ${one}${n === 1 ? "" : "s"}`;
 const people = (n: number) => `${count(n)} ${n === 1 ? "person" : "people"}`;
@@ -472,7 +472,7 @@ function Reasons({ data }: { data: Data }) {
               <span className="font-serif text-xl font-semibold leading-snug">{sel.label}</span>
               <span className="text-[13px] text-ap-body">
                 {sel.n
-                  ? `${plural(sel.n, "answer")} · ${count(sel.detail)} added detail (${fmt("pct", sel.detail / sel.n, 0)})`
+                  ? `${plural(sel.n, "answer")} · ${count(sel.detail)} added detail (${fmt("pct", sel.detail / sel.n)})`
                   : "No answers in this range"}
               </span>
             </div>
@@ -573,7 +573,7 @@ function Segments({ data }: { data: Data }) {
                     className={`m-[3px] rounded-lg p-2 text-center text-[13px] font-bold tabular-nums ${small || v === null ? "bg-ap-ground text-ap-quiet" : ""}`}
                     style={small || v === null ? undefined : heat(v)}
                   >
-                    {fmt("pct", v, 0)}
+                    {fmt("pct", v)}
                   </span>
                 );
               })}
@@ -599,7 +599,7 @@ function Time({ data }: { data: Data }) {
       <SectionHead
         id="h-time"
         title="Answers per day after send"
-        description={`${total ? `${fmt("pct", t.within48h, 0)} of the answers came in the first 48 hours.` : "No answers in this range yet."} No reminder is sent in this version.`}
+        description={`${total ? `${fmt("pct", t.within48h)} of the answers came in the first 48 hours.` : "No answers in this range yet."} No reminder is sent in this version.`}
       />
       <div className="relative">
         <div
@@ -635,7 +635,7 @@ function Time({ data }: { data: Data }) {
               { label: "Answers", value: count(days[i]!.n), color: PURPLE, mark: "square" },
               {
                 label: "Of all answers",
-                value: total ? fmt("pct", days[i]!.n / total, 1) : EMPTY,
+                value: total ? fmt("pct", days[i]!.n / total) : EMPTY,
                 strong: true,
               },
             ],
@@ -691,8 +691,8 @@ function Subjects({ data }: { data: Data }) {
               Subject line
             </span>
             <span role="columnheader" className={`${HEAD} flex justify-between`}>
-              <span>0%</span>
-              <span>{fmt("pct", top, 0)}</span>
+              <span>{fmt("pct", 0)}</span>
+              <span>{fmt("pct", top)}</span>
             </span>
             <span role="columnheader" className={`${HEAD} text-right`}>
               Answer rate
@@ -733,7 +733,7 @@ function Subjects({ data }: { data: Data }) {
                 <span className="text-sm font-bold">{pct1(a.rate)}</span>
                 <span className="text-xs text-ap-muted">
                   {a.delivered
-                    ? `${count(a.answers)} of ${count(a.delivered)} · ${fmt("pct", a.lo, 1)} to ${fmt("pct", a.hi, 1)}`
+                    ? `${count(a.answers)} of ${count(a.delivered)} · ${fmt("pct", a.lo)} to ${fmt("pct", a.hi)}`
                     : "none delivered"}
                 </span>
               </span>

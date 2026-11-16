@@ -485,24 +485,25 @@ describe("the report page on screen", () => {
   });
 });
 
-describe("the intro wizard's whole percents", () => {
-  it("add up to 100 and read equal shares alike", () => {
-    // 39, 1 and 1 of 41 readers: 95.1%, 2.4%, 2.4%.
-    expect(wholeSplit([39 / 41, 1 / 41, 1 / 41])).toEqual(["96%", "2%", "2%"]);
-    expect(wholeSplit([0.951, 0.0245, 0.0245])).toEqual(["96%", "2%", "2%"]);
-    // 37, 1 and 1 of 39 (94.9%, 2.6%, 2.6%): the two equal shares take the two points left.
-    expect(wholeSplit([37 / 39, 1 / 39, 1 / 39])).toEqual(["94%", "3%", "3%"]);
-    // Skip intro not recorded (before 16 Oct): the other two still add up to 100.
-    expect(wholeSplit([0.875, null, 0.125])).toEqual(["88%", "—", "12%"]);
-    // Largest remainder otherwise: 2.6% rounds up before 95.2%.
-    expect(wholeSplit([0.952, 0.026, 0.022])).toEqual(["95%", "3%", "2%"]);
+describe("the intro wizard's percentages, in tenths", () => {
+  it("add up to 100.0% and read equal shares alike", () => {
+    // 39, 1 and 1 of 41 readers: 95.1%, 2.4%, 2.4% leave a tenth, which the lone share takes.
+    expect(wholeSplit([39 / 41, 1 / 41, 1 / 41])).toEqual(["95.2%", "2.4%", "2.4%"]);
+    expect(wholeSplit([0.951, 0.0245, 0.0245])).toEqual(["95.2%", "2.4%", "2.4%"]);
+    // 37, 1 and 1 of 39 (94.87%, 2.56%, 2.56%): the two equal shares take the two tenths left.
+    expect(wholeSplit([37 / 39, 1 / 39, 1 / 39])).toEqual(["94.8%", "2.6%", "2.6%"]);
+    // Skip intro not recorded (before 16 Oct): the other two still add up to 100.0%.
+    expect(wholeSplit([0.875, null, 0.125])).toEqual(["87.5%", "—", "12.5%"]);
+    // Largest remainder otherwise: 2.16% rounds up before 95.21%.
+    expect(wholeSplit([0.9521, 0.0263, 0.0216])).toEqual(["95.2%", "2.6%", "2.2%"]);
     // Three equal shares can't read alike and add up: they still add up.
     expect(
       wholeSplit([1 / 3, 1 / 3, 1 / 3])
-        .map((x) => parseInt(x))
+        .map((x) => Math.round(parseFloat(x) * 10))
         .reduce((a, b) => a + b)
-    ).toBe(100);
-    // A share under half a percent reads "<1%", never a false 0%.
-    expect(wholeSplit([0.996, 0.004, 0])).toEqual(["100%", "<1%", "0%"]);
+    ).toBe(1000);
+    // A share under half a tenth reads "<0.1%", never a false 0.0%.
+    expect(wholeSplit([0.9996, 0.0004, 0])).toEqual(["100.0%", "<0.1%", "0.0%"]);
+    expect(wholeSplit([0.996, 0.004, 0])).toEqual(["99.6%", "0.4%", "0.0%"]);
   });
 });

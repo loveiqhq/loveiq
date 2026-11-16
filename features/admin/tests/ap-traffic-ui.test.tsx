@@ -552,12 +552,12 @@ describe("the Traffic page as drawn", () => {
       "€1,000",
       "€0.50",
       "10,000",
-      "4.00%",
+      "4.0%",
       "−€0.092",
       "€0.0100",
       "0.10×",
-      "0.040%",
-      "1.00%",
+      "<0.1%",
+      "1.0%",
     ]);
     // Spend's change is grey whichever way it goes; visitors' green as they rose.
     expect(tileChange("Ad spend")).toHaveTextContent("+25.0%");
@@ -570,9 +570,9 @@ describe("the Traffic page as drawn", () => {
     for (const text of [
       "€0.50 per click",
       "€0.10 per visitor",
-      "9.00% start CVR",
+      "9.0% start CVR",
       "44.4% completion",
-      "1.00% purchase CVR",
+      "1.0% purchase CVR",
       // Buyers, then their purchases: 4 people bought, 4 purchases.
       "4 purchases · €250 CAC",
       "€25.00 AOV",

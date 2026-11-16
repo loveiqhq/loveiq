@@ -289,18 +289,19 @@ const TOUR_TARGETS: Record<TourStepId, string> = {
 };
 
 /**
- * Whole percentages of `counts` that add up to 100, as shares (0.34): each rounded down, then
- * the points still missing go to the largest remainders. A count that is not nothing keeps at
- * least 1%, taken back from the largest share, so a skip is never shown as none. Null for none.
+ * Shares of `counts` that make up the whole, in tenths of a percent as every rate is written
+ * (0.336), adding up to 100.0%: each rounded down, then the tenths still missing go to the
+ * largest remainders. A count that is not nothing keeps at least 0.1%, taken back from the
+ * largest share, so a skip is never shown as none. Null for none.
  */
 export function wholeShares(counts: number[]): number[] | null {
   const total = counts.reduce((a, c) => a + c, 0);
   if (total <= 0) return null;
   const parts = counts.map((c) => {
-    const exact = (c * 100) / total;
+    const exact = (c * 1000) / total;
     return { exact, whole: c > 0 ? Math.max(1, Math.floor(exact)) : 0 };
   });
-  for (let missing = 100 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0;) {
+  for (let missing = 1000 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0;) {
     const step = Math.sign(missing);
     // Up: the largest remainder, the first of equals. Down: the largest share.
     const by = (p: (typeof parts)[number]) => (step > 0 ? p.exact - p.whole : p.whole);
@@ -308,7 +309,7 @@ export function wholeShares(counts: number[]): number[] | null {
     pick.whole += step;
     missing -= step;
   }
-  return parts.map((p) => p.whole / 100);
+  return parts.map((p) => p.whole / 1000);
 }
 
 /** A chapter vote (report_section_feedback), its comment already masked. */
@@ -525,24 +526,8 @@ export interface Parts {
   den: number;
 }
 
-/** A headline tile, with the design's decimals for its value (`digits`). */
-export type ReportTile = Tile & { digits?: number; parts?: Parts };
-
-/**
- * A headline rate's decimals, as the design writes them: two figures ("34%", "2.1%", "0.21%"),
- * and "0%" for none. Read off the rounded rate, so 9.96% is "10%", not "10.0%".
- */
-export function twoFigures(v: number | null): number | undefined {
-  if (v === null) return undefined;
-  const p = Math.abs(v) * 100;
-  return p >= 9.95 || p === 0 ? 0 : p >= 0.995 ? 1 : 2;
-}
-
-/**
- * Whole percentages, as the wizard's and the tour's tiles are drawn; a share under 1% keeps a
- * tenth, so a handful never reads 0%.
- */
-const wholeDigits = (v: number | null) => (v !== null && v > 0 && v < 0.01 ? 1 : 0);
+/** A headline tile, with the numbers its rate is worked out from (`parts`). */
+export type ReportTile = Tile & { parts?: Parts };
 
 /**
  * A box under Time in report or Returns: its value and the period before's at the same age,
@@ -555,7 +540,6 @@ export interface ChangeBox {
   value: number | null;
   prev: number | null;
   goodWhen: GoodWhen;
-  digits?: number;
   note?: string;
   parts?: Parts;
 }
@@ -572,7 +556,7 @@ export interface TourStopRow {
   reached: number;
   reachedShare: number | null;
   medianMs: number | null;
-  /** Whole-percent shares of the stop's runs, adding up to 1 (wholeShares); null with none. */
+  /** Shares of the stop's runs in tenths, adding up to 1 (wholeShares); null with none. */
   next: number | null;
   skip: number | null;
   exit: number | null;
@@ -939,8 +923,6 @@ export function buildReportPage(input: {
     label,
     unit,
     value,
-    // The design's headline rates read "34%", "2.1%", "0.21%"; the wizard's are whole (below).
-    digits: unit === "pct" ? twoFigures(value) : undefined,
     prev,
     goodWhen: "up",
     spark: sp,
@@ -973,7 +955,7 @@ export function buildReportPage(input: {
       "count",
       t.opened,
       p?.opened ?? null,
-      `${p ? `vs ${n(p.opened)} · ` : ""}${pct(ratio(t.opened, t.subs))} of submissions`,
+      `${p ? `vs ${n(p.opened)} · ` : ""}${fmt("pct", ratio(t.opened, t.subs))} of submissions`,
       trend(facts, scope, (x) => x.opened)
     ),
     {
@@ -1355,7 +1337,7 @@ export function buildReportPage(input: {
       // readers are not openers (the tour's report writes no report session).
       share:
         key !== "gate" && tour && tourOpeners > 0
-          ? `${fmt("pct", cur.readers / tourOpeners, 0)} of the ${n(tourOpeners)} ${
+          ? `${fmt("pct", cur.readers / tourOpeners)} of the ${n(tourOpeners)} ${
               tourOpeners === 1 ? "reader" : "readers"
             } who opened their report`
           : null,
@@ -1370,7 +1352,7 @@ export function buildReportPage(input: {
           (x) => ratio(x.left, x.runs),
           "down"
         ),
-      ].map((t) => ({ ...t, digits: wholeDigits(t.value) })),
+      ],
       stops: ids.map((id, i) => {
         const s = tour?.stops.find((x) => x.audience === key && x.id === id);
         const reached = s?.reached ?? 0;
@@ -1619,8 +1601,7 @@ export function buildReportPage(input: {
     value: number | null,
     prev: number | null,
     comparable: boolean,
-    goodWhen: GoodWhen = "up",
-    digits?: number
+    goodWhen: GoodWhen = "up"
   ): ChangeBox => ({
     key,
     label,
@@ -1628,7 +1609,6 @@ export function buildReportPage(input: {
     value,
     prev: previous && comparable ? prev : null,
     goodWhen,
-    ...(digits !== undefined ? { digits } : {}),
     ...(previous && !comparable && noCmp ? { note: noCmp } : {}),
   });
   const timeBoxes: ChangeBox[] = [
@@ -1673,9 +1653,7 @@ export function buildReportPage(input: {
         "pct",
         returnedShare(subs),
         returnedShare(prevSubs),
-        prevComparable,
-        "up",
-        0
+        prevComparable
       ),
       parts: tileParts.returned,
     },
@@ -1695,9 +1673,7 @@ export function buildReportPage(input: {
         "pct",
         viaEmail,
         emailShare(input.previousReturns ?? null),
-        true,
-        "up",
-        0
+        true
       ),
       // PostHog's own reading of the period before; blank when it was not read.
       ...(viaEmailParts ? { parts: viaEmailParts } : {}),
@@ -1729,7 +1705,6 @@ export function buildReportPage(input: {
     wizard: {
       tiles: wizardTiles.map((t) => ({
         ...t,
-        digits: wholeDigits(t.value),
         ...(wizardParts[t.key] ? { parts: wizardParts[t.key] } : {}),
       })),
       slides: tablet ? [] : slides,
@@ -1841,8 +1816,4 @@ function emailEventsNote(opens: string | null, clicks: string | null): string {
   return opens === clicks
     ? `Opens and clicks are of the emails delivered since ${day(clicks)}, when recording began.`
     : `Clicks are of the emails delivered since ${day(clicks)}, and opens of those delivered since ${day(opens)}, when open tracking began.`;
-}
-
-function pct(v: number | null): string {
-  return v === null ? "—" : `${(v * 100).toFixed(v * 100 >= 10 ? 1 : 2)}%`;
 }
