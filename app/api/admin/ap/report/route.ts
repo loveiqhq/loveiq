@@ -10,8 +10,10 @@ import {
 import { fetchReportReturns, POSTHOG_FROM, postHogFailed } from "@features/admin/server/ap/posthog";
 import {
   buildReportPage,
+  fetchReaderReturns,
   fetchReportExtras,
   fetchReportTour,
+  RETURN_PINGS_FROM,
   TOUR_TRACKING_FROM,
   fetchVotes,
 } from "@features/admin/server/ap/report-page";
@@ -63,6 +65,7 @@ export async function GET(request: Request) {
       tour,
       previousTour,
       votes,
+      pings,
     ] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
@@ -89,6 +92,14 @@ export async function GET(request: Request) {
         logger.warn({ err }, "AP report: chapter votes unavailable");
         return null;
       }),
+      // "Came back within 7 days": none to read for a range ending before they were recorded.
+      // Without them, that block says it could not be read; the page does not wait on it.
+      filters.to < RETURN_PINGS_FROM
+        ? Promise.resolve([])
+        : fetchReaderReturns(filters.from, filters.to).catch((err: unknown) => {
+            logger.warn({ err }, "AP report: the came-back days unavailable");
+            return null;
+          }),
     ]);
     return NextResponse.json(
       buildReportPage({
@@ -102,6 +113,7 @@ export async function GET(request: Request) {
         tour,
         previousTour,
         votes,
+        pings,
         gateOn: await gateRead,
         filters,
         today,

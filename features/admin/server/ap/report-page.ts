@@ -8,9 +8,12 @@ import { TOUR_COPY } from "@features/report/ui/v3/guidedTourContent";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 import { RETIRED_NAMES } from "@features/admin/ui/ap/retired-chapters";
 import { POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
+import { EMAIL_NAMES } from "@features/attribution/server/slack-journey";
+import { reportingDayStart } from "@shared/time/reporting-day";
 
 import { assessmentScope } from "./assessment";
-import { shortDate } from "./days";
+import { addDays, shortDate } from "./days";
+import { EMAILS } from "./email-registry";
 import { PRE_ON_SALE_FROM, PRE_PLANS, preBuysOf, type Facts, type SubFact } from "./facts";
 import {
   activeNarrowing,
@@ -278,6 +281,113 @@ export async function fetchReportTour(from: string, to: string): Promise<ReportT
  * figures, and a period starting earlier is not compared.
  */
 export const TOUR_TRACKING_FROM = "2026-10-23";
+
+/**
+ * The first whole Berlin day the "Came back" replies are recorded (reader_return): the day after
+ * their release. Readers who finished earlier may have come back unrecorded, so they are not
+ * counted. Correct it if the release moves; the info card's query holds the same day.
+ */
+export const RETURN_PINGS_FROM = "2026-11-17";
+
+/** A reader's day back (reader_return), as "Came back within 7 days" reads it. */
+export interface ReaderReturn {
+  sid: number;
+  at: string;
+  source: string;
+  via: string | null;
+}
+
+/**
+ * The "Came back" rows that can fall within 7 days of a survey finished in the range: from its
+ * first Berlin day to 8 days after its last. Paged, as PostgREST hands out 1,000 rows at most.
+ */
+export async function fetchReaderReturns(from: string, to: string): Promise<ReaderReturn[]> {
+  type Row = {
+    survey_submission_id: number;
+    returned_at: string;
+    source: string;
+    via: string | null;
+  };
+  const rows: Row[] = [];
+  for (let offset = 0; ; offset += POSTGREST_MAX_ROWS) {
+    const res = await supabaseFetch(
+      `/rest/v1/reader_return?${new URLSearchParams({
+        select: "survey_submission_id,returned_at,source,via",
+        and: `(returned_at.gte.${reportingDayStart(from).toISOString()},returned_at.lt.${reportingDayStart(addDays(to, 8)).toISOString()})`,
+        order: "returned_at.asc,survey_submission_id.asc",
+        limit: String(POSTGREST_MAX_ROWS),
+        offset: String(offset),
+      })}`,
+      { paginated: true }
+    );
+    if (!res.ok) throw new Error(`reader_return failed (${res.status})`);
+    const page = (await res.json()) as Row[];
+    rows.push(...page);
+    if (page.length < POSTGREST_MAX_ROWS) break;
+  }
+  return rows.map((r) => ({
+    sid: Number(r.survey_submission_id),
+    at: r.returned_at,
+    source: r.source,
+    via: r.via,
+  }));
+}
+
+/** What brought a reader back, as AP › Emails names the email; the parent message's name else. */
+function returnWay(r: ReaderReturn): string {
+  if (!r.via) {
+    return r.source === "draft"
+      ? "A survey begun on an earlier day"
+      : "Their report link, no email";
+  }
+  const via = r.via;
+  return (
+    EMAILS.find((e) => e.stages.includes(via))?.name ?? EMAIL_NAMES.get(via) ?? "An email link"
+  );
+}
+
+const WEEK_MS = 7 * 86_400_000;
+
+/**
+ * Came back within 7 days, any way: of the surveys finished from RETURN_PINGS_FROM whose 7 days are
+ * over, those with a "Came back" day within 7 days of finishing, and what brought each back first.
+ * Everyone who finished counts, not only AP's readers (a report opened): a reader the EUR 1.99
+ * gate stopped has not opened it, and coming back is what is measured. A survey still inside its
+ * week is counted once it ends (`waiting`). Null when the rows could not be read.
+ */
+export function pingReturns(
+  subs: SubFact[],
+  rows: ReaderReturn[] | null | undefined,
+  now: Date
+): ReportPayload["returns"]["pings"] {
+  if (!rows) return null;
+  const recorded = subs.filter((s) => s.day >= RETURN_PINGS_FROM);
+  const counted = recorded.filter((s) => Date.parse(s.at) + WEEK_MS <= now.getTime());
+  const first = new Map<number, ReaderReturn>();
+  for (const r of rows) {
+    const had = first.get(r.sid);
+    if (!had || Date.parse(r.at) < Date.parse(had.at)) first.set(r.sid, r);
+  }
+  const ways = new Map<string, number>();
+  let cameBack = 0;
+  for (const s of counted) {
+    const r = first.get(s.id);
+    if (!r || Date.parse(r.at) >= Date.parse(s.at) + WEEK_MS) continue;
+    cameBack += 1;
+    const way = returnWay(r);
+    ways.set(way, (ways.get(way) ?? 0) + 1);
+  }
+  return {
+    from: rangeLabel(RETURN_PINGS_FROM, RETURN_PINGS_FROM),
+    finished: counted.length,
+    cameBack,
+    share: ratio(cameBack, counted.length),
+    waiting: recorded.length - counted.length,
+    ways: [...ways]
+      .map(([way, readers]) => ({ way, readers }))
+      .sort((a, b) => b.readers - a.readers || a.way.localeCompare(b.way)),
+  };
+}
 
 /** What each stop's spotlight frames, as the reader sees it (ui/v3/guidedTourAnchors.ts). */
 const TOUR_TARGETS: Record<TourStepId, string> = {
@@ -722,6 +832,22 @@ export interface ReportPayload extends PageHead {
     emailEvents: string;
     /** What the table can't list for this range (the chapter nudges), or null. */
     campaignNote: string | null;
+    /**
+     * Came back within 7 days, any way (pingReturns): the #incoming-surveys "Came back"
+     * replies' record. Null when it could not be read.
+     */
+    pings: {
+      /** RETURN_PINGS_FROM, as the page writes it. */
+      from: string;
+      /** Surveys finished from `from` whose 7 days are over. */
+      finished: number;
+      cameBack: number;
+      share: number | null;
+      /** Surveys finished from `from` still inside their 7 days. */
+      waiting: number;
+      /** What brought each back first, most first. */
+      ways: Array<{ way: string; readers: number }>;
+    } | null;
   };
   /** What the wizard's slides can't see for this range, or null. */
   wizardNote: string | null;
@@ -868,6 +994,8 @@ export function buildReportPage(input: {
   votes?: Vote[] | null;
   /** The report's EUR 1.99 gate now, read under "Free survey" only; null when it couldn't be. */
   gateOn?: boolean | null;
+  /** The "Came back" rows (fetchReaderReturns); null when they could not be read. */
+  pings?: ReaderReturn[] | null;
   filters: ApFilters;
   today: string;
   now: Date;
@@ -1786,6 +1914,7 @@ export function buildReportPage(input: {
         f.from <= CHAPTER_NUDGES_UNTIL
           ? `The chapter nudges (a locked chapter emailed every other day, switched off on ${rangeLabel(CHAPTER_NUDGES_UNTIL, CHAPTER_NUDGES_UNTIL)}) aren't listed: only each reader's last one was dated, so they can't be put in a range.`
           : null,
+      pings: pingReturns(subs, input.pings, now),
     },
     wizardNote:
       f.from < EVENTS_COMPLETE_FROM

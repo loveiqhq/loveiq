@@ -1369,6 +1369,64 @@ function CountAndRate({
   );
 }
 
+/**
+ * Came back within 7 days, any way: the "Came back" replies on #incoming-surveys (reader_return),
+ * the KPI of the card "Ping #incoming-surveys when a reader comes back".
+ */
+function PingReturns({ p }: { p: ReportPayload["returns"]["pings"] }) {
+  const top = Math.max(1, ...(p?.ways ?? []).map((w) => w.readers));
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="flex flex-col gap-1">
+        <span className="text-[15px] font-bold text-ap-ink">
+          Came back within 7 days, any way{" "}
+          <Info k="report.ping_returns" label="Came back within 7 days, any way" />
+        </span>
+        <span className="text-[13px] text-ap-muted">
+          Everyone who finished the survey, by whether a &ldquo;Came back&rdquo; reply reached their
+          #incoming-surveys thread within 7 days, and what brought them back first
+        </span>
+      </span>
+      {p === null ? (
+        <p className="m-0 text-sm text-ap-muted">
+          Could not be read just now. Try again in a minute.
+        </p>
+      ) : p.finished === 0 ? (
+        <p className="m-0 text-sm text-ap-muted">
+          Recorded from {p.from}. No survey in this range finished since has had its 7 days yet
+          {p.waiting ? ` (${fmt("count", p.waiting)} still inside them)` : ""}.
+        </p>
+      ) : (
+        <>
+          <span className="flex items-baseline gap-2 text-sm">
+            <strong className="text-[22px] tabular-nums">{fmt("pct", p.share, 0)}</strong>
+            <span className="text-ap-muted">
+              {fmt("count", p.cameBack)} of {fmt("count", p.finished)} who finished the survey
+            </span>
+          </span>
+          {p.ways.map((w) => (
+            <div
+              key={w.way}
+              className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
+              style={{ gridTemplateColumns: "minmax(0,240px) minmax(0,1fr) 56px" }}
+            >
+              <span>{w.way}</span>
+              <Bar pct={w.readers / top} height={12} />
+              <span className="text-right font-bold tabular-nums">{fmt("count", w.readers)}</span>
+            </div>
+          ))}
+          <span className="text-xs leading-normal text-ap-muted">
+            Surveys finished from {p.from} whose 7 days are over
+            {p.waiting ? `; ${fmt("count", p.waiting)} more are counted once theirs are` : ""}. Four
+            ways back count: a report visit on a later day, a click in one of our emails, the unlock
+            question answered, a survey finished on a later day than it was begun.
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ReturnsSection({ data }: { data: ReportPayload }) {
   const r = data.returns;
   const maxBand = Math.max(0.0001, ...r.days.map((d) => d.share));
@@ -1509,6 +1567,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             ))
           )}
         </div>
+        {!data.blocked && <PingReturns p={r.pings} />}
       </div>
       <div className="flex flex-col gap-2.5">
         <span className="flex flex-col gap-1">

@@ -30,6 +30,8 @@ import {
   surveyMinutesFromDuration,
 } from "@features/report/logic/initialUnlockGate";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
+import { emailLinkOf, noteReaderReturn, readerOf } from "@features/attribution/server/return-ping";
+import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -296,6 +298,27 @@ export async function GET(request: Request) {
 
     // submissions.length checked > 0 above; [0] is non-undefined.
     const submission = submissions[0]!;
+
+    // A reader back on a later day gets a "Came back" reply in their #incoming-surveys thread,
+    // with the email link they came through (return-ping.ts). The report and the EUR 1.99 page
+    // alike; never a friend's share view, the gate's own follow-up request, one of our probes or
+    // a crawler: AdsBot-Google opens report links days after the survey (49 of the 161 report
+    // sessions of 27 Oct to 15 Nov 2026).
+    if (
+      !isShareAccess &&
+      url.searchParams.get("gate") !== "now" &&
+      !isProbeRequest(request.headers.get("cookie")) &&
+      !BOT_UA_REGEX.test(userAgent ?? "")
+    ) {
+      const via = emailLinkOf(request.headers.get("referer"));
+      const reader = readerOf({
+        finishedAt: submission.created_date_time,
+        email: getSubmissionUserEmail(submission),
+      });
+      scheduleAfterResponse("reader-return", () =>
+        noteReaderReturn({ submissionId: submission.id, source: "report", via, reader })
+      );
+    }
 
     // 6. Look up scoring_result by survey_submission_id
     const snapshotAnswerQids = SNAPSHOT_QUESTION_QIDS.join(",");

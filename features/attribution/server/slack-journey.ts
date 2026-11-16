@@ -400,9 +400,10 @@ function funnelLine(journey: SubmissionJourney): string {
 
 /**
  * Our emails by their links' utm_campaign: only these are named. `email_return` is posted by
- * the browser, so a made-up campaign reads as any untagged link does, "email link".
+ * the browser, so a made-up campaign reads as any untagged link does, "email link". The "Came
+ * back" thread replies name emails by it too (return-ping.ts).
  */
-const EMAIL_NAMES = new Map<string, string>([
+export const EMAIL_NAMES = new Map<string, string>([
   [EMAIL_LINKS.reportReady.campaign, "report-ready email"],
   [EMAIL_LINKS.receipt.campaign, "receipt email"],
   [EMAIL_LINKS.payToStart.campaign, "pay-to-start email"],

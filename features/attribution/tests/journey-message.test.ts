@@ -122,6 +122,15 @@ describe("slack-bot transport", () => {
     const [, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
     expect(init.body).not.toContain("xoxb-test-token");
   });
+
+  it("posts a thread reply where its message lives, whatever the channel setting is now", async () => {
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true, channel: "C0OLD", ts: "2.2" }));
+    await postJourneyMessage({ ...message, channel: "C0OLD", threadTs: "1.1" });
+    const [, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    expect(body.channel).toBe("C0OLD");
+    expect(body.thread_ts).toBe("1.1");
+  });
 });
 
 describe("journeyStateOf", () => {

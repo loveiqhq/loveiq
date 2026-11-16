@@ -9,15 +9,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * CVR per experiment" could only ever have shown the one landing test and
  * silently omitted five others.
  */
-const { mockFetch, mockVerify, mockNotifySlack, mockAddToSuppression, mockWarn } = vi.hoisted(
-  () => ({
-    mockFetch: vi.fn(),
-    mockVerify: vi.fn(),
-    mockNotifySlack: vi.fn(),
-    mockAddToSuppression: vi.fn(),
-    mockWarn: vi.fn(),
-  })
-);
+const {
+  mockFetch,
+  mockVerify,
+  mockNotifySlack,
+  mockAddToSuppression,
+  mockWarn,
+  mockNoteReaderReturn,
+} = vi.hoisted(() => ({
+  mockFetch: vi.fn(),
+  mockVerify: vi.fn(),
+  mockNotifySlack: vi.fn(),
+  mockAddToSuppression: vi.fn(),
+  mockWarn: vi.fn(),
+  mockNoteReaderReturn: vi.fn(),
+}));
 
 vi.mock("svix", () => ({
   Webhook: class {
@@ -41,8 +47,13 @@ vi.mock("@shared/observability/slack", () => ({
 vi.mock("@shared/emails/suppression", () => ({
   addToSuppression: (...args: unknown[]) => mockAddToSuppression(...args),
 }));
+// The "Came back" thread reply a click sets off: what it is handed (its rules are its own tests').
+vi.mock("@features/attribution/server/return-ping", () => ({
+  noteReaderReturn: (...args: unknown[]) => mockNoteReaderReturn(...args),
+}));
 
 import { POST } from "@/app/api/resend/webhook/route";
+import { flushAfterResponse } from "@shared/http/after-response";
 
 function request() {
   return new Request("https://www.loveiq.org/api/resend/webhook", {
@@ -725,5 +736,69 @@ describe("resend webhook: each nurture email's own events", () => {
 
     route({ insert: "throw" });
     expect((await POST(request())).status).toBe(200);
+  });
+
+  describe("a click is the reader coming back", () => {
+    it("hands the click to the 'Came back' reply: its email, its time and the send's", async () => {
+      mockVerify.mockReturnValue(
+        nurture("email.clicked", {}, { stage: "initial_gift", sub: "42" })
+      );
+      expect((await POST(request())).status).toBe(200);
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn.mock.calls).toEqual([
+        [
+          {
+            submissionId: 42,
+            source: "email",
+            at: new Date("2026-10-15T09:30:00.000Z"),
+            via: "initial_gift",
+            // The email's own creation: a click seconds after it is a scanner's.
+            sentAt: "2026-10-15T08:00:00.000Z",
+          },
+        ],
+      ]);
+    });
+
+    it("no other event is a return", async () => {
+      for (const kind of ["sent", "delivered", "opened", "bounced", "complained"]) {
+        mockVerify.mockReturnValue(nurture(`email.${kind}`));
+        await POST(request());
+      }
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).not.toHaveBeenCalled();
+    });
+
+    it("a click on an email sent to anyone but the submission's reader is none of theirs", async () => {
+      route({ owner: "someone.else@example.com" });
+      mockVerify.mockReturnValue(nurture("email.clicked"));
+      await POST(request());
+      mockVerify.mockReturnValue(
+        nurture("email.clicked", { to: ["delivered@resend.dev"] }, { stage: "x", sub: "42" })
+      );
+      await POST(request());
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).not.toHaveBeenCalled();
+    });
+
+    it("a click on the unsubscribe link is leaving, not coming back", async () => {
+      mockVerify.mockReturnValue(
+        nurture("email.clicked", {
+          click: { link: "https://www.loveiq.org/api/unsubscribe?token=abc&src=initial_gift" },
+        })
+      );
+      await POST(request());
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).not.toHaveBeenCalled();
+      // Its click is still kept as the email's own event.
+      expect(insert()).not.toBeNull();
+    });
+
+    it("the webhook answers 200 whatever the reply does", async () => {
+      mockNoteReaderReturn.mockRejectedValue(new Error("slack down"));
+      mockVerify.mockReturnValue(nurture("email.clicked"));
+      expect((await POST(request())).status).toBe(200);
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).toHaveBeenCalledTimes(1);
+    });
   });
 });

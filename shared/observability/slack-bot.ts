@@ -92,11 +92,16 @@ export async function postJourneyMessage(input: {
    * without eighty new messages in the channel.
    */
   threadTs?: string;
+  /**
+   * The channel the thread lives in, when it is not today's journey channel: a reply goes where
+   * its message was posted (slack_journey_message.channel), whatever the setting says now.
+   */
+  channel?: string;
 }): Promise<PostedMessage | null> {
   const cfg = config();
   if (!cfg) return null;
   const json = await callSlack("chat.postMessage", cfg.token, {
-    channel: cfg.channel,
+    channel: input.channel ?? cfg.channel,
     text: input.text,
     blocks: input.blocks,
     ...(input.threadTs ? { thread_ts: input.threadTs } : {}),

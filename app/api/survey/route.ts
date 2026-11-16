@@ -29,6 +29,7 @@ import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { tryPostJourneyViaBot } from "@features/attribution/server/journey-message";
+import { noteReaderReturn } from "@features/attribution/server/return-ping";
 import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
@@ -409,6 +410,19 @@ const notifySlackSurvey = async ({
       milestones: journey.milestones,
     })
   ) {
+    // A survey begun on an earlier day was a draft they came back to finish: the one return a
+    // thread can only hear of now, the moment it exists (return-ping.ts).
+    await noteReaderReturn({
+      submissionId,
+      source: "draft",
+      at: new Date(journey.timings.completedAt ?? Date.now()),
+      reader: {
+        finishedAt: journey.timings.completedAt,
+        startedAt: journey.timings.startedAt,
+        internal: journey.internal,
+        emailMasked: journey.emailMasked,
+      },
+    });
     return;
   }
 
