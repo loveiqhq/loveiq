@@ -123,18 +123,18 @@ describe("the Survey page as drawn", () => {
     // so no change.
     const tile = (label: string) => screen.getByText(label).nextSibling!.textContent;
     expect(tile("Saw the intro")).toBe("100");
-    // Whole percentages, as drawn.
-    expect(tile("Agreed to consent")).toBe("60%");
-    expect(tile("Skipped slides")).toBe("20%");
-    expect(tile("Left before Q1")).toBe("30%");
+    // Every rate to a tenth.
+    expect(tile("Agreed to consent")).toBe("60.0%");
+    expect(tile("Skipped slides")).toBe("20.0%");
+    expect(tile("Left before Q1")).toBe("30.0%");
     expect(screen.queryByText(/The engagement column is blank/)).toBeNull();
 
     const intro = "Intro wizard cards";
     expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);
     expect(column(intro, 1)).toEqual(["—", "5 s", "12 s", "—", "1:05", "—"]);
     const text = rows(intro).map((r) => r.textContent);
-    expect(text[0]).toContain("31% tap the silhouette");
-    // Whole percentages as drawn; a tenth under 10%, so a handful never reads "0%".
+    expect(text[0]).toContain("31.0% tap the silhouette");
+    // A tenth on every share, so a handful never reads "0.0%".
     expect(text[3]).toContain("6.0% open Trust Zone");
     expect(text[5]).toContain("Return to site 5.0% · read terms 8.0%");
 
@@ -158,7 +158,7 @@ describe("the Survey page as drawn", () => {
     ).toBeTruthy();
     // Before the consent recorded itself, its continue is PostHog's: 60 agreed of 100 sessions,
     // in whole percentages as drawn.
-    expect(column(intro, 3)[5]).toBe("60%");
+    expect(column(intro, 3)[5]).toBe("60.0%");
     // The device card: tablets are recorded from the same day.
     expect(screen.getByText("Recorded from 17 Oct 2026")).toBeTruthy();
   });
@@ -169,7 +169,7 @@ describe("the Survey page as drawn", () => {
     const intro = exported.sections.find((s) => s.name.startsWith("Intro wizard"))!.table;
     // A row's values follow its name: each sits one place left of its column.
     const cont = intro.columns.findIndex((c) => c.label === "Continue") - 1;
-    expect(column("Intro wizard cards", 3)[5]).toBe("60%");
+    expect(column("Intro wizard cards", 3)[5]).toBe("60.0%");
     expect(intro.rows[5]!.values[cont]).toBe(0.6);
   });
 
@@ -215,20 +215,20 @@ describe("the Survey page as drawn", () => {
     render(<ApSurvey />);
     expect(screen.getByText("Saw the intro").nextSibling!.textContent).toBe("10");
     // 4 agreed and went on, of the 12 who began on the intro or the consent.
-    expect(screen.getByText("Agreed to consent").nextSibling!.textContent).toBe("33%");
+    expect(screen.getByText("Agreed to consent").nextSibling!.textContent).toBe("33.3%");
     // Our own skips and exits: 2 of the intro's 10 skipped; 2 + 1 + 2 of the 12 left on a card.
-    expect(screen.getByText("Skipped slides").nextSibling!.textContent).toBe("20%");
-    expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("42%");
+    expect(screen.getByText("Skipped slides").nextSibling!.textContent).toBe("20.0%");
+    expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("41.7%");
     // PostHog failed: the engagement column says why it is blank.
     expect(
       screen.getByText("The engagement column is blank: PostHog could not be read just now.")
     ).toBeTruthy();
 
     const intro = "Intro wizard cards";
-    expect(column(intro, 4)).toEqual(["—", "25%", "0%", "0%", "0%", "—"]);
-    expect(column(intro, 6)).toEqual(["20%", "0%", "0%", "0%", "20%", "33%"]);
+    expect(column(intro, 4)).toEqual(["—", "25.0%", "0.0%", "0.0%", "0.0%", "—"]);
+    expect(column(intro, 6)).toEqual(["20.0%", "0.0%", "0.0%", "0.0%", "20.0%", "33.3%"]);
     // The consent's share leaves out the two from the landing page: 4 of the intro's 10.
-    expect(column(intro, 2)[5]).toBe("40%6");
+    expect(column(intro, 2)[5]).toBe("40.0%6");
     const cell = (r: number, c: number) => within(rows(intro)[r]!).getAllByRole("cell")[c]!;
     // The design's red: Skip intro from 15%, Exit from 8%.
     expect(cell(1, 4).className).toContain("font-bold text-ap-bad");
@@ -240,13 +240,13 @@ describe("the Survey page as drawn", () => {
     // page: by that count it would sit above slides 3 and 4 (5 each); by its 40% it is last.
     fireEvent.click(within(table(intro)).getByRole("button", { name: "Sort by Reached" }));
     expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);
-    expect(column(intro, 2).map((t) => t!.match(/^\d+%/)![0])).toEqual([
-      "100%",
-      "80%",
-      "60%",
-      "50%",
-      "50%",
-      "40%",
+    expect(column(intro, 2).map((t) => t!.match(/^[\d.]+%/)![0])).toEqual([
+      "100.0%",
+      "80.0%",
+      "60.0%",
+      "50.0%",
+      "50.0%",
+      "40.0%",
     ]);
   });
 
@@ -347,10 +347,10 @@ describe("the Survey page as drawn", () => {
     // One exit of the four who reached question 1.
     const q1 = every[0]!;
     expect(cells(q1)[5]!.textContent).toBe("1");
-    expect(cells(q1)[6]!.textContent).toBe("25.00%");
+    expect(cells(q1)[6]!.textContent).toBe("25.0%");
     expect(cells(q1)[6]!.className).toContain("text-ap-bad");
     // Nobody left on question 2.
-    expect(cells(every[1]!)[6]!.textContent).toBe("0.00%");
+    expect(cells(every[1]!)[6]!.textContent).toBe("0.0%");
     expect(cells(every[1]!)[6]!.className).not.toContain("text-ap-bad");
 
     // A click on another row picks that one and scrolls to its detail.

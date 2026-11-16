@@ -34,7 +34,7 @@ import {
 import { useApStatus } from "./status";
 import { useApFilters } from "./useApFilters";
 
-/** This range's figures, as the page shows them: "502 ÷ 12,608 = 3.98%". */
+/** This range's figures, as the page shows them: "502 ÷ 12,608 = 4.0%". */
 export interface Worked {
   num?: string;
   den?: string;
