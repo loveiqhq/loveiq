@@ -124,9 +124,8 @@ describe("the Survey page, Marcus's design", () => {
     const survey3 = funnelOrder().getByRole("button", { name: "Survey order · 3 runs" });
     const test2 = funnelOrder().getByRole("button", { name: "Test order (C13) · 2 runs" });
     expect(survey3).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.getByText(/^Since 6 Oct 2026 half of new runs are asked the opening questions/)
-    ).toBeTruthy();
+    // Marcus, 10 Nov 2026: "delete this interpretation" (the toggle's info card says it).
+    expect(screen.queryByText(/^Since 6 Oct 2026 half of new runs/)).toBeNull();
     // The survey's order: question 3 is 01005, reached by its three runs.
     expect(funnelRows()[2]!.textContent).toContain(survey[2]);
     expect(screen.getByText("First step").nextSibling!.textContent).toBe("3");

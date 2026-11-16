@@ -323,3 +323,25 @@ describe("the Survey page's time and drop-out per question", () => {
       expect(screen.getByRole("button", { name: `About ${name}` })).toBeTruthy();
   });
 });
+
+describe("the funnel table's median time bar", () => {
+  it("draws each time against the slowest question, which is dark and full", () => {
+    render(<ApSurvey />);
+    const table = screen.getByRole("table", { name: "Survey question funnel" });
+    const cell = (id: string) => {
+      const r = within(table)
+        .getAllByRole("row")
+        .find((x) => x.textContent!.includes(id))!;
+      return within(r).getAllByRole("cell")[7]!;
+    };
+    const fill = (id: string) => cell(id).querySelector<HTMLElement>("[aria-hidden] > span")!.style;
+    expect(cell("03011").textContent).toBe("30 s");
+    expect(fill("03011")).toMatchObject({ width: "100%", background: "rgb(90, 66, 166)" });
+    expect(fill("00001")).toMatchObject({ width: "27%", background: "rgb(169, 155, 217)" });
+    expect(fill("01005").width).toBe("0%");
+    expect(cell("00001").title).toBe(
+      "8 s median · 26.7% of the slowest question (30 s) · median of all questions 8 s"
+    );
+    expect(cell("01005").title).toBe("No time recorded");
+  });
+});

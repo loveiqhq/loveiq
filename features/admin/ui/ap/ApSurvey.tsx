@@ -872,8 +872,9 @@ function QuestionDetail({
   );
 }
 
+/** Median time 112px wide for its bar beside the figure (Marcus, 10 Nov 2026). */
 const FUNNEL_GRID =
-  "44px minmax(260px,3fr) 72px minmax(110px,1.2fr) 76px 76px 64px 84px 64px minmax(110px,1fr)";
+  "44px minmax(260px,3fr) 72px minmax(110px,1.2fr) 76px 76px 64px 84px 112px minmax(110px,1fr)";
 
 /**
  * The design's "Question funnel" (16 Oct 2026): the funnel and the questions table in one.
@@ -944,6 +945,10 @@ function FunnelSection({
     sort
   );
   const exitTitles = bucketTitles(data.range.from, data.range.to);
+  // The median time's bar, as drawn: one scale for the table, the slowest question a full bar.
+  const times = steps.flatMap((x) => (x.time === null ? [] : [x.time])).sort((a, b) => a - b);
+  const slowest = times[times.length - 1] ?? null;
+  const middle = times.length ? times[Math.floor(times.length / 2)]! : null;
   return (
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
@@ -957,25 +962,19 @@ function FunnelSection({
         }
       />
       {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
+      {/* No note under it (Marcus, 10 Nov 2026): its info card explains the two orders. */}
       {order && q?.test && (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pills
-              label="Question order"
-              value={order}
-              onChange={onOrder}
-              options={[
-                { value: "survey", label: `Survey order · ${fmt("count", q.people)} runs` },
-                { value: "test", label: `Test order (C13) · ${fmt("count", q.test.people)} runs` },
-              ]}
-            />
-            <Info k="survey.order" />
-          </div>
-          <p className="m-0 text-xs leading-relaxed text-ap-muted">
-            Since 6 Oct 2026 half of new runs are asked the opening questions in a different order
-            (the C13 test). Each order has its own funnel, so the counts fall from one question to
-            the next.
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Pills
+            label="Question order"
+            value={order}
+            onChange={onOrder}
+            options={[
+              { value: "survey", label: `Survey order · ${fmt("count", q.people)} runs` },
+              { value: "test", label: `Test order (C13) · ${fmt("count", q.test.people)} runs` },
+            ]}
+          />
+          <Info k="survey.order" />
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-y border-ap-line py-3">
@@ -1042,7 +1041,7 @@ function FunnelSection({
         </div>
       </div>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Survey question funnel" style={{ minWidth: 1180 }}>
+        <div role="table" aria-label="Survey question funnel" style={{ minWidth: 1228 }}>
           <div
             role="row"
             className="grid bg-ap-ground"
@@ -1184,8 +1183,30 @@ function FunnelSection({
                 >
                   {fmt("pct", x.drop, 2)}
                 </span>
-                <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                  {fmt("mmss", x.time)}
+                <span
+                  role="cell"
+                  title={
+                    x.time === null || !slowest
+                      ? "No time recorded"
+                      : `${fmt("mmss", x.time)} median · ${fmt("pct", x.time / slowest, 1)} of the slowest question (${fmt("mmss", slowest)}) · median of all questions ${fmt("mmss", middle)}`
+                  }
+                  className="flex items-center justify-end gap-2 px-3 py-2"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex h-1.5 w-12 flex-none justify-end overflow-hidden rounded-full bg-ap-track"
+                  >
+                    <span
+                      className="block h-full rounded-full"
+                      style={{
+                        width: `${x.time !== null && slowest ? ((x.time / slowest) * 100).toFixed(0) : 0}%`,
+                        background: x.time !== null && x.time === slowest ? "#5a42a6" : "#a99bd9",
+                      }}
+                    />
+                  </span>
+                  <span className="min-w-8 text-right text-[13px] tabular-nums">
+                    {fmt("mmss", x.time)}
+                  </span>
                 </span>
                 <span role="cell" className="px-3 py-2">
                   {/* Over the row's button, the line only: the cell's edges still open the row. */}
