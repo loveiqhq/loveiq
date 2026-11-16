@@ -9,7 +9,9 @@
  * sheets promise the page's free archetype (the halfway sheet and the report map), and so do
  * the pre-report wizard's map and the report's menu during the tour once they follow it. A
  * reader on today's page must never be told the archetype is free, so all of it follows
- * this one arm: the survey's sheets, the wizard, the tour's menu and the gate itself.
+ * this one arm: the survey's sheets, the wizard, the tour's menu and the gate itself. Since
+ * Mark's write-up of the test (16 Nov) both halves meet those sheets: today's page's half in
+ * his EUR 1.99 versions, which put the Core Archetype in the EUR 1.99 instead of free.
  *
  * WHY THE ARM IS DERIVED FROM THE SESSION ID. As C13's (questionOrderArm.ts): it is known in
  * the browser from the first question, survives a reload, and is stored on the submission

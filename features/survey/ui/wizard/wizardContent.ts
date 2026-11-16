@@ -63,11 +63,12 @@ export const WIZARD_PROOF_CARDS: readonly { title: string; body: string; icon: s
 export type WizardDrawerBadge = "free" | "open" | "locked" | "free_pill" | "price_pill";
 
 /**
- * Which EUR 1.99 page the map describes: today's, or Mark's new one that shows the archetype
- * before payment (the new page's half of the test), which the map then names as the survey's
- * report map does (Mark, 13 Nov).
+ * Which EUR 1.99 page the map describes, as the survey's report map did (Mark, 13 and 16 Nov):
+ * - `today`: no test runs, and the map is as before Mark's 50/50;
+ * - `light`: his new page, which shows the archetype before payment (the Core Archetype free);
+ * - `price`: today's page, in the other half of his 50/50 (the Core Archetype in the EUR 1.99).
  */
-export type WizardMapOffer = "today" | "light";
+export type WizardMapOffer = "today" | "light" | "price";
 
 export interface WizardDrawerRow {
   /** The chapter's anchor in the report, as the report's own nav names it. */
@@ -117,7 +118,7 @@ const DEEP_DIVE_IDS: ReadonlySet<string> = new Set(REPORT_DEEP_DIVES.map((d) => 
  */
 function badgeOf(id: string, variant: WizardVariant, offer: WizardMapOffer): WizardDrawerBadge {
   // Only a free reader meets the EUR 1.99 page; a reader who paid before the survey has none.
-  if (variant === "standard" && offer === "light") return LIGHT_BADGE[lightMapRowKind(id)];
+  if (variant === "standard" && offer !== "today") return LIGHT_BADGE[lightMapRowKind(id, offer)];
   if (IN_FULL_ROWS.has(id)) return "free";
   if (id === CORE_ARCHETYPE_ROW) return variant === "standard" ? "open" : "free";
   return DEEP_DIVE_IDS.has(id) ? "open" : "locked";

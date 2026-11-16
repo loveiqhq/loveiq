@@ -292,11 +292,14 @@ with a "Keep going" that carries on. The rules are in
 - **Going live (Fatih, 2026-11-14).** Science, Trustpilot and State of Desire go on first: both
   C13 orders meet them alike. The expert's sheet waits for the C13 check-in (2026-11-20): C13's
   control order asks 01005 too early for it, so until then only one C13 half would see it.
-  Halfway and the map promise the Core Archetype free, which only Mark's new €1.99 page gives
-  (`docs/runbooks/PRE_UNLOCK.md`), so they need its switch on as well as their own, and then
-  open only for that page's half of his 50/50 (`REVEAL_ONLY_SHEETS`, `sheetsForRevealArm`; the
-  arm is the run's session id, `shared/experiments/gateRevealArm.ts`). A `?sheets=` preview
-  shows them to anyone; `?reveal=1` or `0` picks a half on dev and staging. The expert's words
+  Halfway and the map belong to Mark's 50/50 of his new €1.99 page
+  (`docs/runbooks/PRE_UNLOCK.md`), so they need its switch on as well as their own
+  (`GATE_TEST_SHEETS`). Both halves meet them, each in its page's words (Mark's write-up,
+  16 Nov): before his new page the Core Archetype is Free and the Light Report costs €1.99;
+  before today's page the halfway sheet has one locked step, "Unlock your Core Archetype for
+  €1.99", and the map puts the Core Archetype in the €1.99 with three reasons under the legend.
+  The arm is the run's session id (`shared/experiments/gateRevealArm.ts`). A `?sheets=` preview
+  shows them on staging; `?reveal=1` or `0` picks a half on dev and staging. The expert's words
   need her written agreement.
 - **The State of Desire tick.** Mark, 13 Nov: "just record the tick for now"; he sends the study
   by hand. A tick is kept for its run (`loveiq-survey-desire-tick`) and sent with the answers

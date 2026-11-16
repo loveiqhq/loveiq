@@ -1,4 +1,5 @@
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
+import { isGateRevealArm, type GateRevealArm } from "@shared/experiments/gateRevealArm";
 import { SURVEY_STATE_KEY } from "./surveyStorage";
 
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
@@ -29,7 +30,8 @@ export const PAID_WIZARD_KEY = "loveiq-paid-wizard";
  * the pre-report map still names it after a reload during the wizard (Eman, 27.10).
  */
 export const GATE_PRICE_KEY = "loveiq-gate-price";
-export const GATE_REVEAL_KEY = "loveiq-gate-reveal";
+/** The half of Mark's 50/50 this tab's finished run's gate is in (rememberGateArm). */
+export const GATE_ARM_KEY = "loveiq-gate-arm";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -173,7 +175,7 @@ export function getSessionId(): string {
 let inMemoryCompleted: string | null = null;
 let inMemoryPaidWizard: PayToStartWizard | null = null;
 let inMemoryGatePrice: number | null = null;
-let inMemoryGateReveal = false;
+let inMemoryGateArm: GateRevealArm | null = null;
 
 /** Drop the draft's saved id (the run it belonged to is over). */
 export function forgetSessionMirror(): void {
@@ -400,13 +402,13 @@ export function forgetCompletedReport(): void {
   inMemorySessionId = null;
   inMemoryPaidWizard = null;
   inMemoryGatePrice = null;
-  inMemoryGateReveal = false;
+  inMemoryGateArm = null;
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
     sessionStorage.removeItem(PAID_WIZARD_KEY);
     sessionStorage.removeItem(GATE_PRICE_KEY);
-    sessionStorage.removeItem(GATE_REVEAL_KEY);
+    sessionStorage.removeItem(GATE_ARM_KEY);
     forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
@@ -431,26 +433,28 @@ function readPaidWizard(value: string | null): PayToStartWizard | null {
 }
 
 /**
- * Remember that this tab's finished run will meet Mark's new EUR 1.99 page (his 50/50,
- * shared/experiments/gateRevealArm.ts), so the wizard's map names its offer after a reload too.
+ * Remember which half of Mark's 50/50 (shared/experiments/gateRevealArm.ts) this tab's finished
+ * run's EUR 1.99 gate is in: his new page or today's. The wizard's map tells that page's offer,
+ * after a reload too.
  */
-export function rememberGateReveal(): void {
-  inMemoryGateReveal = true;
+export function rememberGateArm(arm: GateRevealArm): void {
+  inMemoryGateArm = arm;
   if (!canUseStorage()) return;
   try {
-    sessionStorage.setItem(GATE_REVEAL_KEY, "1");
+    sessionStorage.setItem(GATE_ARM_KEY, arm);
   } catch {
     /* kept in memory for this page load */
   }
 }
 
-/** True when this tab's finished run will meet Mark's new EUR 1.99 page, else null. */
-export function gateRevealRemembered(): true | null {
-  if (!canUseStorage()) return inMemoryGateReveal ? true : null;
+/** The half of Mark's 50/50 this tab's finished run's gate is in, or null when no test ran. */
+export function gateArmRemembered(): GateRevealArm | null {
+  if (!canUseStorage()) return inMemoryGateArm;
   try {
-    return sessionStorage.getItem(GATE_REVEAL_KEY) === "1" || inMemoryGateReveal ? true : null;
+    const stored = sessionStorage.getItem(GATE_ARM_KEY);
+    return isGateRevealArm(stored) ? stored : inMemoryGateArm;
   } catch {
-    return inMemoryGateReveal ? true : null;
+    return inMemoryGateArm;
   }
 }
 

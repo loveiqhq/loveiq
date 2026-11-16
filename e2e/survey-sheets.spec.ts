@@ -8,6 +8,7 @@ import { isHidden } from "../features/survey/questionFlags";
 import { orderAskedQuestions } from "../features/survey/ui/questionOrder";
 import { SCIENCE_SHARES } from "../features/survey/surveySheetsCopy";
 import { pinSurveySession } from "./surveyArm";
+import type { GateRevealArm } from "../shared/experiments/gateRevealArm";
 
 /**
  * The sheets between questions (Mark's "Survey & Report Components", 11 Nov 2026) in a real
@@ -43,8 +44,17 @@ function answerFor(q: Question): unknown {
 
 const RESPOND = "The other person starts things — I respond to them";
 
-/** A run resumed on the question at `index`, answered (with `answer` if given). */
-async function onQuestion(page: Page, index: number, answer?: unknown): Promise<void> {
+/**
+ * A run resumed on the question at `index`, answered (with `answer` if given), in one half of
+ * Mark's 50/50 of the new EUR 1.99 page (`gate`, the new page's unless named): the half decides
+ * how the halfway sheet and the report map tell the offer (Mark, 16 Nov).
+ */
+async function onQuestion(
+  page: Page,
+  index: number,
+  answer?: unknown,
+  gate: GateRevealArm = "reveal"
+): Promise<void> {
   for (const p of [
     "**/api/survey-partial",
     "**/api/survey-tracking",
@@ -55,7 +65,7 @@ async function onQuestion(page: Page, index: number, answer?: unknown): Promise<
       r.fulfill({ status: 200, contentType: "application/json", body: "{}" })
     );
   }
-  await pinSurveySession(page, ARM);
+  await pinSurveySession(page, ARM, gate);
   const q = ASKED[index]!;
   await page.addInitScript(
     ({ index: at, qId, value, arm }) => {
@@ -124,6 +134,21 @@ async function animationTimes(elements: Locator) {
         duration: Number.parseFloat(style.animationDuration) * 1000,
       };
     })
+  );
+}
+
+/**
+ * Every finite animation in the sheet run to its end: axe then measures what the reader ends up
+ * seeing, never a text still fading in (the #725 lesson on the EUR 1.99 page).
+ */
+async function animationsDone(root: Locator) {
+  await root.evaluate((el) =>
+    Promise.all(
+      el
+        .getAnimations({ subtree: true })
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished)
+    )
   );
 }
 
@@ -344,6 +369,70 @@ test.describe("Survey: the sheets between questions", () => {
     await expect(
       page.getByRole("heading", { name: ASKED[at]!.question, exact: true })
     ).toBeVisible();
+  });
+
+  // Mark's write-up of his 50/50 (16 Nov): the half that meets today's EUR 1.99 page, which shows
+  // no archetype, gets his versions of the halfway sheet and the map, with the Core Archetype in
+  // the EUR 1.99 instead of free.
+  test("halfway, today's page's half: one locked step sells the Core Archetype for €1.99", async ({
+    page,
+  }) => {
+    const at = indexOf("11003");
+    await onQuestion(page, at, undefined, "control");
+    await next(page).click();
+    const root = sheetRoot(page, "halfway");
+    await expect(root.getByRole("dialog")).toBeVisible();
+    await expect(root).toContainText("Your Core Archetype is taking shape.");
+    await expect(root).toContainText("Unlock your Core Archetype for €1.99");
+    await expect(root).toContainText("with a 14-day money-back guarantee");
+    await expect(root.getByRole("img", { name: "Step 2, locked" })).toBeVisible();
+    await expect(root.locator("[data-halfway-step]")).toHaveCount(2);
+    await expect(root.getByText("Free", { exact: true })).toHaveCount(0);
+    await expect(root).not.toContainText("Light Report");
+    await saveShot(page, "4-halfway-today");
+    await settle(page);
+    await animationsDone(root);
+    const results = await new AxeBuilder({ page })
+      .include('[data-survey-sheet="halfway"]')
+      .analyze();
+    expect(results.violations).toEqual([]);
+    await keepGoing(page).click();
+    await expect(
+      page.getByRole("heading", { name: ASKED[at + 1]!.question, exact: true })
+    ).toBeVisible();
+  });
+
+  test("report map, today's page's half: the Core Archetype in the €1.99, and three reasons", async ({
+    page,
+  }) => {
+    const at = ASKED.length - 4;
+    await onQuestion(page, at, undefined, "control");
+    await next(page).click();
+    const root = sheetRoot(page, "reportMap");
+    await expect(root.getByRole("dialog")).toBeVisible();
+    const core = root.locator('[data-map-row-id="core_archetype"]');
+    await expect(core).toHaveAttribute("data-map-row", "priced");
+    await expect(core).toContainText("€1.99");
+    await expect(root.locator('[data-map-row="free"]')).toHaveCount(0);
+    await expect(root).not.toContainText("for free");
+    await expect(root).toContainText(
+      "Unlock your Core Archetype, and part of each featured chapter."
+    );
+    for (const reason of [
+      "Feel more confident in bed",
+      "Ask for what you want, without shame",
+      "Bring your desire back when it fades",
+    ])
+      await expect(root).toContainText(reason);
+    await saveShot(page, "6-report-map-today");
+    await settle(page);
+    await animationsDone(root);
+    // The map and its legend: the footer below them is every question's own (progress strip,
+    // Next), out of this sheet's hands.
+    const results = await new AxeBuilder({ page })
+      .include('[data-survey-sheet="reportMap"] [data-lenis-prevent]')
+      .analyze();
+    expect(results.violations).toEqual([]);
   });
 
   test("under reduced motion nothing moves, the numbers stand, and axe finds nothing", async ({

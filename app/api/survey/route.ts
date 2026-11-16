@@ -238,7 +238,7 @@ async function replyWithExistingSubmission(
       ...(reportToken ? { reportToken } : {}),
       ...(claim ? claimResponseFields(claim) : {}),
       ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
-      ...(revealArm === "reveal" ? { initialGateReveal: true } : {}),
+      ...(revealArm ? { initialGateArm: revealArm } : {}),
     },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
   );
@@ -1059,8 +1059,9 @@ export async function POST(request: Request) {
         ...(claim ? claimResponseFields(claim) : {}),
         // The EUR 1.99 gate will stop this reader: the pre-report map names its price.
         ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
-        // That gate will be Mark's new page: the wizard's map names its offer (Mark, 13 Nov).
-        ...(gated && gateRevealArm === "reveal" ? { initialGateReveal: true } : {}),
+        // Which half of Mark's 50/50 that gate is: his new page, or today's. The wizard's map
+        // names that page's offer, as the survey's sheets did (Mark, 13 and 16 Nov).
+        ...(gated && gateRevealArm ? { initialGateArm: gateRevealArm } : {}),
       },
       {
         // The response carries a fresh report access token — never let

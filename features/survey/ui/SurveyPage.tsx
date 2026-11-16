@@ -1328,17 +1328,11 @@ interface SurveyPageProps {
    * staging preview). None by default.
    */
   sheets?: readonly SurveySheetId[];
-  /** Of those, the ones a staging preview named: no half of Mark's 50/50 holds them back. */
-  previewedSheets?: readonly SurveySheetId[];
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
 
-const SurveyPage: FC<SurveyPageProps> = ({
-  journey = null,
-  sheets = NO_SHEETS,
-  previewedSheets = NO_SHEETS,
-}) => {
+const SurveyPage: FC<SurveyPageProps> = ({ journey = null, sheets = NO_SHEETS }) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -1541,7 +1535,6 @@ const SurveyPage: FC<SurveyPageProps> = ({
         onStartOver={handleStartOver}
         payToStart={journey !== null}
         sheets={sheets}
-        previewedSheets={previewedSheets}
       />
     );
   }

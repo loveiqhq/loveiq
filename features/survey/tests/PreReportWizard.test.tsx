@@ -271,6 +271,23 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(pitch).toContain("The full report unlocks all chapters.");
   });
 
+  // Mark, 16 Nov: the half of his 50/50 that meets today's EUR 1.99 page saw the Core
+  // Archetype in the EUR 1.99 on the survey's map, and its wizard's map says the same.
+  it("before today's EUR 1.99 page in Mark's 50/50, puts the Core Archetype in the EUR 1.99", () => {
+    render(<PreReportWizard onComplete={vi.fn()} gatePriceCents={199} mapOffer="price" />);
+    press(continueButton());
+    const row = (id: string) => document.querySelector<HTMLElement>(`[data-wizard-row="${id}"]`)!;
+    expect(row("core_archetype").textContent).toContain("€1.99");
+    expect(row("core_archetype").textContent).not.toContain("Free");
+    expect(row("introduction").textContent).toContain("€1.99");
+    expect(screen.queryAllByText("IN FULL")).toHaveLength(0);
+    const pitch = document.querySelector<HTMLElement>(".wz-pitch")!.textContent;
+    expect(pitch).not.toContain("for free");
+    expect(pitch).not.toContain("Light Report");
+    expect(pitch).toContain("Unlock your Core Archetype, and part of each featured chapter.");
+    expect(pitch).toContain("The full report unlocks all chapters.");
+  });
+
   it("▼ and ▲ step through the four deep dives, marking each chapter in the drawer", () => {
     openMap();
     const ids = REPORT_DEEP_DIVES.map((d) => d.id);

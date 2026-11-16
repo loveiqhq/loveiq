@@ -76,6 +76,10 @@ export const EXPERT_SHEET_COPY = {
  * Sheet 4, after 11003 (32/62): Mark's board as he revised it on 12 Nov ("it's motivation"
  * corrected). It describes the EUR 1.99 change still to come (the Core Archetype free, the
  * Light Report for EUR 1.99), so its switch stays off in production until that change ships.
+ *
+ * The `archetypePrice…` lines are the version for the half of Mark's 50/50 that meets today's
+ * EUR 1.99 page (his board "B5 · Halfway … copy", 16 Nov): one locked step that sells the Core
+ * Archetype for EUR 1.99 instead of the free archetype and the Light Report.
  */
 export const HALFWAY_SHEET_COPY = {
   titleLead: "You’re already ",
@@ -91,6 +95,11 @@ export const HALFWAY_SHEET_COPY = {
   lightBody: "Dive deeper into your sexual behavior & improve your sex life",
   optional: "Optional",
   lockedLabel: "Step 3, optional",
+  archetypePriceTitle: "Unlock your Core Archetype for €1.99",
+  archetypePriceBody:
+    "Your highest scored sexual personality and its motivation. Dive deeper into your sexual behavior & improve your sex life.",
+  price: "€1.99",
+  archetypeLockedLabel: "Step 2, locked",
 } as const;
 
 /**
@@ -132,6 +141,10 @@ export const DESIRE_SHEET_COPY = {
  * report's own (features/survey/ui/wizard/wizardContent.ts): 6 parts, 17 chapters, where the
  * board said 20 and listed 22. Its Free and EUR 1.99 labels describe the EUR 1.99 change still
  * to come, so its switch stays off in production until that change ships.
+ *
+ * The `price…` lines are the legend for the half of Mark's 50/50 that meets today's EUR 1.99
+ * page (his board "Explain · F2 · Report map legend, 1.99€ funnel copy 2", 16 Nov): no Free
+ * entry, the Core Archetype in the EUR 1.99, and three reasons under it.
  */
 export const REPORT_MAP_COPY = {
   titleLead: "Only ",
@@ -154,6 +167,16 @@ export const REPORT_MAP_COPY = {
   fullLead: "The ",
   fullEmphasis: "full report",
   fullEnd: " unlocks all chapters.",
+  priceLead: "Unlock ",
+  priceEmphasis: "your Core Archetype",
+  priceMid: ", and part of each ",
+  priceFeatured: "featured",
+  priceEnd: " chapter.",
+  priceReasons: [
+    "Feel more confident in bed",
+    "Ask for what you want, without shame",
+    "Bring your desire back when it fades",
+  ],
   previous: "Previous",
   next: "Next",
 } as const;
