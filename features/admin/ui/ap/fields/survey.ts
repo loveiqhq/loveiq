@@ -6,6 +6,12 @@
  */
 import type { FieldDef, FieldRegistry, FieldTable } from "./types";
 
+/** The two orders the questions are asked in (the survey code's; stored nowhere else). */
+const ORDERS = `orders (arm, qs) AS (VALUES
+  ('control', ARRAY['00001','01002','01005','01006','02001','02002','02003','02004','03003','03004','03005','03006','03008','03009','03010','03011','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','10003','10004','10005','11001','11002','11003','11004','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015']),
+  ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015'])
+)`;
+
 /** Shared by the queries below. */
 const FUNNEL = `-- The question funnel, in one question order: per question, the survey runs (sessions) that
 -- reached it, and those whose last step it was and who never finished (exits). 'control' is
@@ -16,10 +22,7 @@ WITH b AS (
          ((:to::date + 1)::timestamp AT TIME ZONE 'Europe/Berlin') AS until_ts
 ),
 -- The two orders the questions are asked in (the survey code's; stored nowhere else).
-orders (arm, qs) AS (VALUES
-  ('control', ARRAY['00001','01002','01005','01006','02001','02002','02003','02004','03003','03004','03005','03006','03008','03009','03010','03011','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','10003','10004','10005','11001','11002','11003','11004','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015']),
-  ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015'])
-),
+${ORDERS},
 -- The team's runs: its own finished surveys, and unfinished runs from the networks they came from.
 staff_sessions AS (
   SELECT s.session_id FROM survey_submission s
@@ -478,12 +481,8 @@ SELECT f.q_id AS question, sk.skipped, sum(f.shown) AS shown_both_orders,
  ORDER BY f.q_id;
 `;
 
-const MEDIAN_TIME =
-  `-- Each question's median time: half of the steps on it were quicker, half slower. A step is
--- one stay on the question's screen until moving on (forward, back, or leaving the page);
--- stays of 30 minutes or more (a tab left open) are left out, and so are the team's runs and
--- runs begun before the range.
-` +
+/** Median time's steps: the team's runs, earlier runs and walks back out of the questions left out. */
+const MEDIAN_CTES =
   TEAM.trimEnd() +
   `,
 earlier AS (
@@ -514,8 +513,10 @@ walk AS (
                         AND o.direction IN ('forward', 'complete')
                         AND (o.created_at, o.id) > (e.created_at, e.id))
    ORDER BY e.session_id, e.created_at, e.id
-)
-SELECT e.q_id AS question,
+)`;
+
+/** Each question's median time and Went back, over the steps MEDIAN_CTES keeps. */
+const MEDIAN_BY_QUESTION = `SELECT e.q_id AS question,
        round(percentile_cont(0.5) WITHIN GROUP (ORDER BY e.time_spent_ms)
                FILTER (WHERE e.time_spent_ms >= 0 AND e.time_spent_ms < 1800000 AND NOT e.after_walk)) AS median_ms,
        count(DISTINCT e.session_id) FILTER (WHERE e.direction = 'back' AND NOT e.walking_out) AS went_back
@@ -529,8 +530,42 @@ SELECT e.q_id AS question,
            AND e.session_id IS NOT NULL AND e.q_id IS NOT NULL
            AND e.session_id NOT IN (SELECT session_id FROM team)
            AND e.session_id NOT IN (SELECT session_id FROM earlier)) e
- GROUP BY e.q_id
+ GROUP BY e.q_id`;
+
+const MEDIAN_TIME =
+  `-- Each question's median time: half of the steps on it were quicker, half slower. A step is
+-- one stay on the question's screen until moving on (forward, back, or leaving the page);
+-- stays of 30 minutes or more (a tab left open) are left out, and so are the team's runs and
+-- runs begun before the range.
+` +
+  MEDIAN_CTES +
+  "\n" +
+  MEDIAN_BY_QUESTION +
+  `
  ORDER BY e.q_id;
+`;
+
+const TIME_SO_FAR =
+  `-- The survey time so far at each question: the questions' median times (as Median time reads
+-- them) added up in the order they are asked, from the first question to that one. 'control' is
+-- the survey's own order, 'variant' the test's (C13). A question with no time adds nothing.
+` +
+  MEDIAN_CTES +
+  `,
+medians AS (
+` +
+  MEDIAN_BY_QUESTION +
+  `
+),
+` +
+  ORDERS +
+  `
+SELECT u.k AS n, u.q AS question, m.median_ms,
+       round((sum(coalesce(m.median_ms, 0)) OVER (ORDER BY u.k) / 60000.0)::numeric, 1) AS minutes_so_far
+  FROM orders o CROSS JOIN unnest(o.qs) WITH ORDINALITY AS u (q, k)
+  LEFT JOIN medians m ON m.question = u.q
+ WHERE o.arm = 'control'  -- the test's order: 'variant'
+ ORDER BY u.k;
 `;
 
 const EXITS_WEEK =
@@ -1081,6 +1116,25 @@ export const fields: FieldRegistry = {
     ],
     query: { lang: "SQL", text: MEDIAN_TIME },
     related: ["survey.skipped", "survey.reached"],
+  },
+  "survey.timeSoFar": {
+    label: "Survey time so far",
+    what: "The questions' median times added up in the order they are asked, from the first question to this one: about how long the survey has taken by the time someone reaches it.",
+    stat: "Sum of medians",
+    per: "per question, in the order picked",
+    formula: { num: "The median times of the first question to this one, added up" },
+    caveat:
+      "A sum of each question's median, not the median of people's own times: nobody need have taken exactly this long. It runs shorter than a whole survey's time from start to finish: medians leave out the slow stays, and the intro wizard before question 1 is not in it. Each median is all traffic's and both question orders', whatever the filters; a question with no time recorded in the range adds nothing. The team's runs are left out.",
+    tables: [
+      {
+        source: "production",
+        table: "survey_behavior_event",
+        columns: "session_id, q_id, time_spent_ms, direction, created_at",
+        filters: "Period (created_at). Not split by the other filters.",
+      },
+    ],
+    query: { lang: "SQL", text: TIME_SO_FAR },
+    related: ["survey.medianTime"],
   },
   "survey.exitsTrend": {
     label: "Exits over time",
