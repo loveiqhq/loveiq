@@ -2,11 +2,12 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import ReportPage from "@features/report/ui/ReportPage";
 import { preloadReportFont } from "@/app/report/preloadReportFont";
+import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
 export const metadata: Metadata = {
   title: "Your Report | LoveIQ",
   description: "Your personalized sexual archetype report based on your survey responses.",
-  robots: { index: false, follow: false },
+  ...PRIVATE_PAGE_METADATA,
 };
 
 interface Props {
