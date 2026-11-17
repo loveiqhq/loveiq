@@ -1823,7 +1823,7 @@ const BERLIN_TIME = new Intl.DateTimeFormat("en-GB", {
 });
 
 /** A running test's line under its name, as drawn: "Since 14 Oct 2026 · live". */
-function liveSince(day: string, time?: string): string {
+export function liveSince(day: string, time?: string): string {
   return `Since ${rangeLabel(day, day)}${time ? `, ${time}` : ""} · live`;
 }
 
