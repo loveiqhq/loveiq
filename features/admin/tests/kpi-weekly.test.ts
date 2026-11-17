@@ -141,6 +141,40 @@ describe("the KPIs, from one week", () => {
     expect(arms[2]!.value).toBeCloseTo(105 / 392, 6);
   });
 
+  it("keeps the video page one segment across rounds 3 and 4, and gives the new page its own", () => {
+    // The week round 4 began: round 3's video arm before the release, round 4's after it.
+    const week = parseKpiWeek(
+      raw({
+        visits: {
+          all: 1500,
+          by_arm: { white_card: 0, white_video: 100, video: 300, pain_point: 280 },
+        },
+        starts: {
+          all: 200,
+          google_ads: 150,
+          by_arm: { white_video: 10, video: 30, pain_point: 35 },
+        },
+      })
+    );
+    expect(
+      kpi("visitors")
+        .values(week, ctx())
+        .map((x) => [x.segment, x.value])
+    ).toEqual([
+      ["All traffic", 1500],
+      ["Landing: video", 400],
+      ["Landing: pain points", 280],
+    ]);
+    const rate = kpi("visit_to_start").values(week, ctx());
+    expect(rate.map((x) => x.segment)).toEqual([
+      "All traffic",
+      "Landing: video",
+      "Landing: pain points",
+    ]);
+    expect(rate[1]!.value).toBeCloseTo(40 / 400, 6);
+    expect(rate[2]!.value).toBeCloseTo(35 / 280, 6);
+  });
+
   it("leaves a number out when its source is incomplete for the week", () => {
     expect(kpi("starts").values(w, ctx({ startsComplete: false }))).toEqual([]);
     expect(kpi("visit_to_start").values(w, ctx({ startsComplete: false }))).toEqual([]);

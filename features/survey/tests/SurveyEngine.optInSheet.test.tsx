@@ -285,4 +285,21 @@ describe("the opt-in's miss-out sheet", () => {
     expect(sheet()).not.toBeInTheDocument();
     expect(run.submit).toHaveBeenCalledTimes(1);
   });
+
+  // Fatih, 15 Nov: the staging jump menu replays the sheets, this one too.
+  it("asks again after a jump in the staging menu, which forgets that this run saw it", () => {
+    localStorage.clear();
+    onTheOptIn({ "16015": NO });
+    const first = engine();
+    fireEvent.click(next());
+    expect(sheet()).toBeInTheDocument();
+    first.unmount();
+
+    engine();
+    fireEvent.change(screen.getByLabelText("Jump to question"), { target: { value: "0" } });
+    fireEvent.click(next());
+    fireEvent.click(next());
+    expect(sheet()).toBeInTheDocument();
+    expect(run.submit).not.toHaveBeenCalled();
+  });
 });

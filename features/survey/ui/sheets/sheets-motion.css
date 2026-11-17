@@ -1,0 +1,194 @@
+/*
+ * Motion for the sheets between survey questions (features/survey/surveySheets.ts) and the
+ * opt-in sheet. Imported by SurveySheetShell, so it ships with the survey only, as
+ * wizard-motion.css does, never with every page (app/globals.css).
+ *
+ * The rules (researched 12 Nov 2026; sources in docs/survey.md, "Sheets between questions"):
+ * - Content fades up 8px over 240ms on the house curve, groups 50ms apart from 120ms, and
+ *   each sheet has ONE signature moment. Everything has finished by about 900ms.
+ * - Mark's review (12 Nov) asked for more time on the signature moments: numbers count up
+ *   over 1.2s, the halfway steps arrive one after another (.sheet-step), and Trustpilot's
+ *   rating and stars arrive in turn (.sheet-star).
+ * - His second review (13 Nov) asked for slower again on Trustpilot, the halfway sheet and the
+ *   report map. Those three run at --sheet-tempo 1.5: every duration and delay below is
+ *   multiplied by it, so their order and spacing stay as designed, only slower. The expert
+ *   sheet lost its own entrance ("no need for an animation of the image"): the whole card
+ *   slides up, more slowly, instead. Leaving stays quick on every sheet.
+ * - His third review (15 Nov): every sheet rises over 1s (in SurveySheetShell), so the reader
+ *   sees it arrive; the map runs at 2.25 ("slow down all the animations"); Trustpilot's quote
+ *   arrives once the stars have landed, and fades in slower (.sheet-quote).
+ * - Only transform and opacity move. Two exceptions, both small: a stroke drawing on an icon
+ *   of 32px or less, and one phrase whose ink fades to transparent to show the brand gradient
+ *   clipped to its text (WCAG 2.3.3 counts colour and opacity as no motion).
+ * - Nothing loops. Nothing holding a price or a button moves. No overshoot.
+ * - Everything sits under prefers-reduced-motion: no-preference. Without it nothing moves,
+ *   numbers stand at their value, checks are drawn and every element is where it ends up.
+ *   The enter and exit of the sheet itself live in Tailwind's motion-safe classes and in the
+ *   shell, for the same reason.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Mark's second review (13 Nov): "slow down the animation again", "everything a bit slower". */
+  [data-survey-sheet="trustpilot"],
+  [data-survey-sheet="halfway"] {
+    --sheet-tempo: 1.5;
+  }
+
+  /* The map, slower again in his third review (15 Nov): "Slow down all the animations". Its
+     screen's fade follows (0.45s, SurveySheetShell). */
+  [data-survey-sheet="reportMap"] {
+    --sheet-tempo: 2.25;
+  }
+
+  /* A group arriving: --sheet-i is its place in the order (0, 1, 2 …). */
+  .sheet-in {
+    animation: sheet-item-in calc(240ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc((120ms + var(--sheet-i, 0) * 50ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A stroke drawing itself: the path carries pathLength="1". */
+  .sheet-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: sheet-draw calc(360ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--sheet-delay, 250ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A passage read once the rest has landed (Trustpilot's quote): later and slower than a
+     group, on ease-out, whose fade is seen; the house curve does most of its work in the first
+     tenth of its time (Mark's third review, 15 Nov: "appear a bit later and fade in slower"). */
+  .sheet-quote {
+    animation: sheet-item-in calc(500ms * var(--sheet-tempo, 1)) ease-out backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A step in a list arriving on its own beat (the halfway sheet): --sheet-delay sets it. */
+  .sheet-step {
+    animation: sheet-item-in calc(420ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A star or a rating word arriving in turn: a soft rise, no scale on Trustpilot's marks. */
+  .sheet-star {
+    animation: sheet-star-in calc(320ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A rule or connector growing from its start. */
+  .sheet-grow-x {
+    transform-origin: left center;
+    animation: sheet-grow-x calc(300ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
+  }
+  .sheet-grow-y {
+    transform-origin: top center;
+    animation: sheet-grow-y calc(300ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A badge settling into place, without overshoot. */
+  .sheet-settle {
+    animation: sheet-settle calc(200ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc(var(--sheet-delay, 0ms) * var(--sheet-tempo, 1));
+  }
+
+  /* An element rising last (a report cover), its shadow riding along. */
+  .sheet-rise {
+    animation: sheet-rise calc(300ms * var(--sheet-tempo, 1)) cubic-bezier(0.16, 1, 0.3, 1)
+      backwards;
+    animation-delay: calc(var(--sheet-delay, 250ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A gradient phrase: its ink fades out and the gradient clipped to it shows through. */
+  .sheet-ink {
+    animation: sheet-ink calc(300ms * var(--sheet-tempo, 1)) ease-out backwards;
+    animation-delay: calc(var(--sheet-delay, 450ms) * var(--sheet-tempo, 1));
+  }
+
+  /* A tick box being ticked: the fill, then its check. */
+  .sheet-tick-fill {
+    animation: sheet-settle 100ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  }
+  .sheet-tick-fill .sheet-draw {
+    animation-duration: 150ms;
+    animation-delay: 60ms;
+  }
+
+  /* The sheet leaving over what comes next. */
+  .sheet-exit {
+    animation: sheet-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+  .sheet-exit-fade {
+    animation: sheet-fade-out 220ms ease-in forwards;
+  }
+}
+
+@keyframes sheet-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes sheet-star-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes sheet-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes sheet-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes sheet-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes sheet-settle {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes sheet-ink {
+  from {
+    color: #161021;
+  }
+}
+
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}

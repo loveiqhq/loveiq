@@ -8,6 +8,11 @@ import { inHogql, OWN_HOST } from "@features/admin/server/ap/referrers";
 
 import type { FieldRegistry, FieldTable } from "./types";
 import { EMAIL_LINKS_TAGGED_FROM } from "@shared/emails/email-link";
+import {
+  LANDING_HERO_LAST_DAY,
+  LANDING_HERO_RESTART_DAY,
+  LANDING_TEST_START_DAY,
+} from "@shared/experiments/landingVariant";
 
 // ---------------------------------------------------------------------------------------------
 // The queries' shared parts. :from and :to are the range's first and last Berlin days.
@@ -346,11 +351,15 @@ const WEEK = "date_trunc(:grain, DAY)::date";
 /**
  * The tests the page reads, each arm in its window: from the test's first whole day (or the
  * range's), to the range's end or yesterday, or the test's last whole day once it ended (the
- * email question on 4 Nov 2026: from then every free run is asked, and stamped, anonymous).
+ * email question on 4 Nov 2026: from then every free run is asked, and stamped, anonymous; the
+ * landing hero, #6, on 11 Nov 2026, the registry's last day). Both landing tests are read by
+ * their visits and starts.
  */
 const EXP = `tests (test, arm, control, first_day, last_day) AS (VALUES
-  ('Landing hero', 'white_card', true, DATE '2026-10-14', NULL::date),
-  ('Landing hero', 'white_video', false, DATE '2026-10-14', NULL),
+  ('New landing page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date),
+  ('New landing page', 'pain_point', false, DATE '${LANDING_TEST_START_DAY}', NULL),
+  ('Landing hero', 'white_card', true, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
+  ('Landing hero', 'white_video', false, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
   ('Pricing 3.0', 'A3', true, DATE '2026-10-08', NULL),
   ('Pricing 3.0', 'B3', false, DATE '2026-10-08', NULL),
   ('Email question', 'control', true, DATE '2026-10-09', DATE '2026-11-03'),
@@ -380,9 +389,9 @@ arm_finishers AS (
     FROM win w
     JOIN finishers f ON (f.created_date_time AT TIME ZONE 'Europe/Berlin')::date BETWEEN w.from_day AND w.to_day
     LEFT JOIN price_arm pa ON pa.sid = f.id
-   WHERE CASE w.test
-           WHEN 'Landing hero' THEN f.j->>'landing_variant' = w.arm
-           WHEN 'Email question' THEN f.j->>'contact_question_arm' = w.arm
+   WHERE CASE
+           WHEN w.test IN ('New landing page', 'Landing hero') THEN f.j->>'landing_variant' = w.arm
+           WHEN w.test = 'Email question' THEN f.j->>'contact_question_arm' = w.arm
            ELSE pa.arm = w.arm AND f.created_date_time >= timestamptz '2026-10-08 15:23:00+00' END
      -- A survey bought before it was taken (pay to start): no arm decided its sale.
      AND NOT EXISTS (SELECT 1 FROM prepaid_report_access p2
@@ -393,7 +402,8 @@ arms AS (
   SELECT w.test, w.arm, w.control,
          -- The landing versions' visits (the visit log records the version).
          (SELECT count(*) FROM funnel_event fe
-           WHERE w.test = 'Landing hero' AND fe.event_type = 'unique_visitor' AND fe.landing_variant = w.arm
+           WHERE w.test IN ('New landing page', 'Landing hero') AND fe.event_type = 'unique_visitor'
+             AND fe.landing_variant = w.arm
              AND fe.day BETWEEN w.from_day AND w.to_day
              AND lower(trim(coalesce(fe.utm_source, ''))) NOT IN ${TEST_SOURCES}) AS visitors,
          (SELECT count(*) FROM starts st
@@ -433,8 +443,10 @@ const EXP_STATS = sql(
   [FINISHERS, SALES, STARTS, EXP],
   `, rates AS (
   SELECT test, control,
-         CASE test WHEN 'Landing hero' THEN starts WHEN 'Pricing 3.0' THEN payers ELSE finished_after_email END AS k,
-         CASE test WHEN 'Landing hero' THEN visitors WHEN 'Pricing 3.0' THEN submissions ELSE reached_email END AS n
+         CASE WHEN test IN ('New landing page', 'Landing hero') THEN starts
+              WHEN test = 'Pricing 3.0' THEN payers ELSE finished_after_email END AS k,
+         CASE WHEN test IN ('New landing page', 'Landing hero') THEN visitors
+              WHEN test = 'Pricing 3.0' THEN submissions ELSE reached_email END AS n
     FROM arms
 ), ab AS (
   SELECT a.test, a.k AS ka, a.n AS na, b.k AS kb, b.n AS nb,

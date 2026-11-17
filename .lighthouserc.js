@@ -8,8 +8,8 @@ module.exports = {
       // Both arms of the landing test, by name: a bare "/" would audit whichever
       // arm the coin gave this run.
       url: [
-        "http://localhost:3000/?variant=white_card",
-        "http://localhost:3000/?variant=white_video",
+        "http://localhost:3000/?variant=video",
+        "http://localhost:3000/?variant=pain_point",
         "http://localhost:3000/about",
       ],
       numberOfRuns: 1,

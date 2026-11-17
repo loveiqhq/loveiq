@@ -587,21 +587,27 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 #### Add a New Landing Section
 
-The landing page is the white design under `features/landing/ui/white/`. Its hero
-is in a 50/50 A/B (round 3): arm A (`white_card`) shows question 1 in the hero, arm
-B (`white_video`) the presenter video (`white/WHeroVideo.tsx`) in its place, and the
-rest of the page is the same for both. `proxy.ts` assigns the arm and `app/page.tsx`
-renders it; see `shared/experiments/landingVariant.ts`. Force an arm with
-`/?variant=white_card` or `/?variant=white_video`.
+The landing page is a 50/50 A/B (round 4, from the 2026-11-17 release): arm A
+(`video`) is the white design under `features/landing/ui/white/` with the presenter
+video in the hero (`white/WHeroVideo.tsx`); arm B (`pain_point`) is Marcus's new
+pain-point page under `features/landing/ui/painpoint/`, which reuses three live
+sections (archetypes, reviews, research) at its own scale through opt-in props.
+`proxy.ts` assigns the arm and `app/page.tsx` renders it; see
+`shared/experiments/landingVariant.ts`. Force an arm with `/?variant=video` or
+`/?variant=pain_point`; `/?variant=white_card` still renders round 3's question-card
+page, kept for a rollback.
 
-A new section goes into both arms: they share every section but the hero's
-right-hand slot. `white-v1/` is round 2's retired arm (still shown for
-`/?variant=white_prev`), a frozen snapshot that should not gain features.
+A section for the video page goes into `white/`, one for the new page into
+`painpoint/` (a `P*.tsx`, its copy in `painPointContent.ts`, its sizes from the final
+boards). A live section both pages show takes an opt-in prop for the new page's dress,
+whose default is today's exact classes, so the video page does not move. `white-v1/`
+is round 2's retired arm (still shown for `/?variant=white_prev`), a frozen snapshot
+that should not gain features.
 
-1. Create `features/landing/ui/white/WNewSection.tsx`
-2. Follow existing section patterns (see `white/WArchetypes.tsx` / `white/WReportPreview.tsx`)
-3. Import and add to `features/landing/ui/white/LandingPageWhite.tsx` in order
-4. Use `animate-on-scroll` class for scroll animations
+1. Create `features/landing/ui/white/WNewSection.tsx` (or `painpoint/PNewSection.tsx`)
+2. Follow existing section patterns (see `white/WArchetypes.tsx` / `white/WReportPreview.tsx`, or `painpoint/PStats.tsx`)
+3. Import and add to `white/LandingPageWhite.tsx` (or `painpoint/LandingPagePainPoint.tsx`) in order
+4. Use `animate-on-scroll` class for scroll animations (the new page's own sections have none: its boards draw none)
 
 #### Add a New Page
 

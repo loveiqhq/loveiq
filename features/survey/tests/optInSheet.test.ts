@@ -6,6 +6,7 @@ import {
   OPT_IN_SHEET_COPY_VERSION,
   OPT_IN_SHEET_STORAGE_KEY,
   SHEET_DISMISS_DISTANCE_PX,
+  forgetOptInSheetShown,
   isOptInYes,
   optInSheetShownFor,
   optInYesOption,
@@ -105,6 +106,12 @@ describe("once per run", () => {
     expect(optInSheetShownFor(RUN)).toBe(true);
     // A retake or Start Over is a new run, with its own start.
     expect(optInSheetShownFor("2026-11-11T09:00:00.000Z")).toBe(false);
+  });
+
+  it("forgets it for the staging jump menu's replay", () => {
+    rememberOptInSheetShown(RUN);
+    forgetOptInSheetShown();
+    expect(optInSheetShownFor(RUN)).toBe(false);
   });
 
   it("does not break when storage is blocked", () => {

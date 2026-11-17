@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const logger = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -124,9 +124,13 @@ describe("createCheckoutSession: VAT on the receipt (LoveIQ Sync, 12 Oct 2026)",
 describe("every checkout goes through createCheckoutSession", () => {
   it("no code outside it creates a Checkout Session, so none can skip the VAT", () => {
     const root = process.cwd();
+    // Paths with "/" on every platform: readdirSync and join give "\" on Windows, which the
+    // tests-folder filter and the expected path below are written against.
     const callers = ["app", "features", "shared"]
       .flatMap((dir) =>
-        (readdirSync(join(root, dir), { recursive: true }) as string[]).map((f) => join(dir, f))
+        (readdirSync(join(root, dir), { recursive: true }) as string[]).map((f) =>
+          join(dir, f).split(sep).join("/")
+        )
       )
       .filter((f) => /\.(ts|tsx)$/.test(f) && !/(^|\/)tests?\/|\.test\.tsx?$/.test(f))
       .filter((f) => /checkout\.sessions\.create\(/.test(readFileSync(join(root, f), "utf8")));

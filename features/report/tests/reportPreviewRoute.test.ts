@@ -89,6 +89,47 @@ describe("GET /api/report/preview — the EUR 1.99 gate", () => {
   });
 });
 
+/** `&reveal=1`: Mark's redesigned EUR 1.99 page, the archetype on the gate (logic/gateReveal.ts). */
+describe("GET /api/report/preview — the gate with the archetype on it", () => {
+  it("sends the requested archetype, its match and five cards with gate=1&reveal=1", async () => {
+    const { json } = await get("archetype=Explorer%20of%20Edges&v4=1&gate=1&reveal=1");
+    const reveal = (
+      json as { reveal?: { archetype: string; matchStrength: number; aspects: unknown[] } }
+    ).reveal;
+    expect(reveal?.archetype).toBe("Explorer of Edges");
+    expect(reveal?.matchStrength).toBeGreaterThan(0);
+    expect(reveal?.aspects).toHaveLength(5);
+  });
+
+  it("keeps the tour's report anonymous, the archetype only in the gate beside it", async () => {
+    const { json } = await get("archetype=Explorer%20of%20Edges&v4=1&gate=tour&reveal=1");
+    const body = json as Record<string, unknown> & {
+      initialGate?: { reveal?: { archetype: string } };
+    };
+    expect(body.initialGate?.reveal?.archetype).toBe("Explorer of Edges");
+    const { initialGate: _gate, ...report } = body;
+    expect(report.primaryArchetype).toBe("");
+    for (const name of KNOWN_ARCHETYPES) expect(JSON.stringify(report)).not.toContain(name);
+  });
+
+  it("sends no reveal without the param", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&v4=1&gate=1");
+    expect(json).not.toHaveProperty("reveal");
+  });
+
+  // Mark's 50/50 (16 Nov): the tour's menu tells the reader's half its offer, so a preview
+  // names the half it shows: reveal=1 the new page's, reveal=0 today's page's.
+  it("names the half of Mark's 50/50 it shows, and none without the param", async () => {
+    const half = async (query: string) =>
+      ((await get(query)).json as { initialGate?: { revealArm?: string } }).initialGate?.revealArm;
+    expect(await half("archetype=Spark%20Seeker&v4=1&gate=tour&reveal=1")).toBe("reveal");
+    expect(await half("archetype=Spark%20Seeker&v4=1&gate=tour&reveal=0")).toBe("control");
+    expect(await half("archetype=Spark%20Seeker&v4=1&gate=tour")).toBeUndefined();
+    const gate = await get("archetype=Spark%20Seeker&v4=1&gate=1&reveal=0");
+    expect((gate.json as { revealArm?: string }).revealArm).toBe("control");
+  });
+});
+
 /** `?plan=initial`: the report the EUR 1.99 journey lands in (features/report/logic/initialUnlock.ts). */
 describe("GET /api/report/preview — the initial unlock", () => {
   it("opens the Core Archetype card and the Summary in full, and nothing else", async () => {

@@ -106,17 +106,8 @@ const FULL_REPORT_CHAPTERS =
   REPORT_PURCHASE_PLANS.find((p) => p.plan === "full_report")?.features[1]?.label ??
   "17 chapters and personalised growth";
 
-/**
- * Trustpilot's own word for a TrustScore (its bands: 4.3 and up Excellent, 3.8 Great,
- * 2.8 Average, 1.8 Poor, below that Bad), so the card never says more than the score does.
- */
-export function trustpilotLabel(score: number): string {
-  if (score >= 4.3) return "Excellent";
-  if (score >= 3.8) return "Great";
-  if (score >= 2.8) return "Average";
-  if (score >= 1.8) return "Poor";
-  return "Bad";
-}
+/** Trustpilot's own word for a TrustScore; shared with the survey's Trustpilot sheet. */
+export { trustpilotLabel } from "@shared/ui/trustpilot/label";
 
 export const EXIT_COPY = {
   back: { pre: "Back to your result", full: "Back to my report" },

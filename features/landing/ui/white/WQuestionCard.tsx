@@ -1,14 +1,10 @@
 "use client";
 
-import { useState, useSyncExternalStore, type FC } from "react";
+import { useState, type FC } from "react";
 import Link from "next/link";
-import { trackLandingCardAnswer, trackStartSurvey } from "@features/analytics/client";
+import { trackStartSurvey } from "@features/analytics/client";
 import { QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
-import {
-  LANDING_PREFILL_QID,
-  SURVEY_STATE_KEY,
-  saveLandingPrefill,
-} from "@features/survey/ui/hooks/surveyStorage";
+import { useLandingPick } from "@features/landing/logic/landingPick";
 
 /**
  * The survey's first question, asked on the landing page (Figma 9200:32861 in
@@ -69,31 +65,10 @@ const SCALE = [
 ];
 
 /**
- * The pick is shared by both cards on the page (hero + closing CTA) and seeded
- * from the saved draft, so answering in one is reflected in the other and a
- * returning visitor sees the choice they already made. `useSyncExternalStore`
- * rather than a mount effect: the server snapshot is null, so hydration matches
- * and there is no setState-in-effect (which this repo lints as an error).
+ * The pick is shared by both cards on the page (hero + closing CTA) and seeded from the
+ * saved draft, so answering in one is reflected in the other and a returning visitor sees
+ * the choice they already made (features/landing/logic/landingPick.ts).
  */
-const pickListeners = new Set<() => void>();
-
-/** Read straight from the draft — no cache to go stale, and a number snapshot
- *  is stable by value, which is all useSyncExternalStore needs. */
-function getPickSnapshot(): number | null {
-  try {
-    const raw = window.localStorage.getItem(SURVEY_STATE_KEY);
-    const value = raw ? JSON.parse(raw)?.answers?.[LANDING_PREFILL_QID] : null;
-    return typeof value === "number" ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function subscribeToPick(listener: () => void): () => void {
-  pickListeners.add(listener);
-  return () => pickListeners.delete(listener);
-}
-
 interface WQuestionCardProps {
   /** "hero" = compact card beside the headline; "final" = wider closing card. */
   size?: "hero" | "final";
@@ -103,19 +78,14 @@ interface WQuestionCardProps {
 }
 
 const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, className = "" }) => {
-  const selected = useSyncExternalStore(subscribeToPick, getPickSnapshot, () => null);
+  const { selected, pick } = useLandingPick();
   const [why, setWhy] = useState(false);
   const large = size === "final";
   const answered = selected !== null;
 
-  // Saved on every tap — including a change of mind — so the pick is never lost
-  // even if the visitor never presses Continue.
-  const answer = (value: number) => {
-    saveLandingPrefill(LANDING_PREFILL_QID, value);
-    pickListeners.forEach((listener) => listener());
-    // The value goes to PostHog only (trackLandingCardAnswer).
-    trackLandingCardAnswer({ location, changed: selected !== null, value });
-  };
+  // Saved on every tap, a change of mind included, so the pick is never lost even if the
+  // visitor never presses Continue.
+  const answer = (value: number) => pick(value, location);
 
   return (
     <div

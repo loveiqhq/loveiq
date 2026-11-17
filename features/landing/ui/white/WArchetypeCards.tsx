@@ -27,7 +27,16 @@ const GLIDE_SPEED = 0.03; // px per ms (~30px/s) — calm, matches the dark feel
 const SETS = 3; // identical copies of the card list for a seamless wrap buffer.
 const COUNT = archetypes.length;
 
-const WArchetypeCards: FC = () => {
+/**
+ * Opt-in dress for a page that reuses the section at its own scale (the new landing page,
+ * round 4's pain_point). Unset, the section renders exactly as on the video page.
+ */
+interface WArchetypeCardsProps {
+  sectionClassName?: string;
+  headingClassName?: string;
+}
+
+const WArchetypeCards: FC<WArchetypeCardsProps> = ({ sectionClassName, headingClassName }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const translateRef = useRef(0);
   const oneSetWidthRef = useRef(0);
@@ -187,14 +196,19 @@ const WArchetypeCards: FC = () => {
 
   return (
     <section
-      className="overflow-hidden bg-white pb-16 pt-4 lg:py-24"
+      className={sectionClassName ?? "overflow-hidden bg-white pb-16 pt-4 lg:py-24"}
       data-landing-section="archetypes"
     >
       <div className="content-shell">
         {/* 820px wide, so on a desktop the first line ends at "more than" as Figma draws
             it (1604:8574): that line is 785px, one more word 865. */}
         <div className="animate-on-scroll mx-auto max-w-[820px] text-center">
-          <h2 className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]">
+          <h2
+            className={
+              headingClassName ??
+              "font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]"
+            }
+          >
             14 sexual personalities.{" "}
             <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text text-transparent">
               You are more than just one of them.

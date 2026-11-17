@@ -163,6 +163,12 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { reportingDateTime, reportingDay, reportingDayStart } from "@shared/time/reporting-day";
+import {
+  LANDING_HERO_LAST_DAY,
+  LANDING_HERO_RESTART_DAY,
+  LANDING_TEST_START_DAY,
+  LANDING_VARIANT_EXPERIMENT,
+} from "@shared/experiments/landingVariant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -2048,17 +2054,20 @@ export const TOOLS = [
       "under other hosts, and deploy_env is missing before 2026-08-27). Leave out our own " +
       "tests: anyone whose person.properties.email ends '@loveiq.org', and anyone who ever " +
       "opened a page with 'variant=' in properties.$current_url (the team's arm override). " +
-      "THE LANDING TEST: experiment_exposure with properties.experiment = " +
-      "'landing-hero-video-ab' is a visitor shown an arm (properties.variant 'white_card' is " +
-      "question 1, 'white_video' the presenter video); events after it carry the arm as " +
-      "properties.landing_variant. Its readouts restart on 2026-10-14 (from " +
-      "toDateTime('2026-10-14 00:00:00'), read in the project's Berlin time), when the phone " +
-      "hero was condensed " +
-      "so the media sits on most phones' first screen and the page took new copy: compare " +
-      "the arms from then. A page view still does not mean it was seen: cta_seen with " +
+      "THE LANDING TEST, round 4: experiment_exposure with properties.experiment = " +
+      `'${LANDING_VARIANT_EXPERIMENT}' is a visitor shown an arm (properties.variant 'video' is ` +
+      "the video page, 'pain_point' Marcus's new pain-point page); events after it carry the " +
+      `arm as properties.landing_variant. Its readouts start on ${LANDING_TEST_START_DAY} (from ` +
+      `toDateTime('${LANDING_TEST_START_DAY} 00:00:00'), read in the project's Berlin time): ` +
+      "compare the arms from then. Round 3 ('landing-hero-video-ab': 'white_card' question 1 " +
+      `against 'white_video' the presenter video, read from ${LANDING_HERO_RESTART_DAY} to ` +
+      `${LANDING_HERO_LAST_DAY}) ended with the video kept, and 'video' is that same page. ` +
+      "A page view still does not mean it was seen: cta_seen with " +
       "properties.cta 'hero_video' or 'hero_card' is a visitor who had half of it on screen. " +
       "It is sent since 2026-10-12, so a visit before that has none, which is no data rather " +
-      "than 'not seen'. The video: hero_video_tap (a tap on play, the click-through; it " +
+      "than 'not seen'. Both round-4 pages play the same film with the same events, the video " +
+      "page in its hero and the new page in a card of its own: split them by " +
+      "properties.landing_variant. The video: hero_video_tap (a tap on play, the click-through; it " +
       "exists only from the release that stopped the video's silent autoplaying loop, so " +
       "before its first event count plays instead), hero_video_play (a play with sound, " +
       "counted when frames start), hero_video_progress (properties.percent 25, 50, 75) and " +
@@ -2069,7 +2078,9 @@ export const TOOLS = [
       "'hero' or 'footer', properties.value the point picked, 1 to 7), cta_click with properties.element " +
       "'question_card' (that card's Continue; without it, the button beside it), " +
       "section_seen (properties.section, once per section per page: how far down a visitor " +
-      "got) and cta_seen 'sticky_bar'. " +
+      "got) and cta_seen 'sticky_bar'. Round 4's new page adds cta_click locations " +
+      "'pain_points' and 'words' and section_seen sections trust_band, how_it_works, " +
+      "pain_points, promise, words and stats. " +
       "It reads PostHog's events, persons and sessions only: our own database's tables " +
       "(survey answers, reports, payments) are query_product_data's, which masks what is " +
       "private, and a query that reaches them here is refused. " +
@@ -2092,13 +2103,13 @@ export const TOOLS = [
             "played the video, our own tests left out: SELECT properties.variant AS arm, " +
             "count(DISTINCT person_id) AS visitors, count(DISTINCT if(person_id IN (SELECT " +
             "person_id FROM events WHERE event = 'hero_video_play' AND properties.$host = " +
-            "'www.loveiq.org' AND timestamp >= toDateTime('2026-10-14 00:00:00')), person_id, " +
-            "NULL)) AS played FROM events WHERE event = " +
-            "'experiment_exposure' AND properties.experiment = 'landing-hero-video-ab' AND " +
-            "properties.variant IN ('white_card', 'white_video') AND " +
-            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-14 " +
+            `'www.loveiq.org' AND timestamp >= toDateTime('${LANDING_TEST_START_DAY} 00:00:00')), ` +
+            "person_id, NULL)) AS played FROM events WHERE event = " +
+            `'experiment_exposure' AND properties.experiment = '${LANDING_VARIANT_EXPERIMENT}' AND ` +
+            "properties.variant IN ('video', 'pain_point') AND " +
+            `properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('${LANDING_TEST_START_DAY} ` +
             "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
-            "toDateTime('2026-10-14 00:00:00') AND (match(toString(properties.$current_url), " +
+            `toDateTime('${LANDING_TEST_START_DAY} 00:00:00') AND (match(toString(properties.$current_url), ` +
             "'[?&]variant=') OR toString(person.properties.email) LIKE '%@loveiq.org')) " +
             "GROUP BY arm",
         },

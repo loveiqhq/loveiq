@@ -9,8 +9,9 @@ import type { SurveyQuestion } from "@/data/survey-data";
  *
  * A dropdown of every question the engine asks, in the order it asks them, grouped by
  * chapter. Picking one moves the engine there the way Previous and Next do (its goTo);
- * the answers given so far stay. SurveyEngine mounts it only where isNonProdDeploy()
- * holds — staging, Vercel previews and local dev, never the live site.
+ * the answers given so far stay, and the sheets between questions open again (its jumpTo:
+ * Fatih, 15 Nov). SurveyEngine mounts it only where isNonProdDeploy() holds — staging,
+ * Vercel previews and local dev, never the live site.
  *
  * Folded in a <details> until someone opens it, so the survey looks as it does for
  * respondents, and the option list stays out of the page's text for anything reading

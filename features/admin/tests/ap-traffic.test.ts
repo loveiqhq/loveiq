@@ -258,6 +258,40 @@ describe("Traffic page builder", () => {
     expect(hero[1]!.why).toBe("Visits don't record the device.");
   });
 
+  it("reads round 4's test from its first day, A the video page, and says #6 has ended", () => {
+    const p = traffic({
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-18", to: "2026-11-19" },
+        "2026-11-20"
+      ),
+      facts: factsFixture({
+        from: "2026-11-18",
+        to: "2026-11-19",
+        asOf: "2026-11-20",
+        visits: [
+          { day: "2026-11-18", arm: "video", src: null, n: 40 },
+          { day: "2026-11-18", arm: "pain_point", src: null, n: 50 },
+          // A re-rolled browser's round-3 stamp: in neither of #10's arms.
+          { day: "2026-11-18", arm: "white_video", src: null, n: 9 },
+        ],
+        starts: [],
+        subs: [],
+      }),
+      today: "2026-11-20",
+    });
+    const t = p.experiments.arms.filter((a) => a.test === "New landing page");
+    expect(t.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
+      ["Video page", true, 40, "Since 18 Nov 2026 · live", false],
+      ["Pain-point page", false, 50, "Since 18 Nov 2026 · live", false],
+    ]);
+    const hero = p.experiments.arms.filter((a) => a.test === "Landing hero");
+    expect(hero.map((a) => [a.note, a.visitors, a.ended])).toEqual([
+      ["14 Oct – 11 Nov 2026 · ended", null, true],
+      ["14 Oct – 11 Nov 2026 · ended", null, true],
+    ]);
+    expect(hero[1]!.why).toBe("Ended on 11 Nov 2026: the video stays, as #10's version A");
+  });
+
   it("reads the price test without readers who paid before the survey (pay to start)", () => {
     // Pinned to A3 and paid with no report checkout: no arm's price decided that sale.
     const w = parseFilters({ period: "custom", from: "2026-10-09", to: "2026-10-12" }, TODAY);
@@ -328,11 +362,20 @@ describe("Traffic page builder", () => {
       ["Anonymous email", "Finished after the email question (9 of 10)", 1],
     ]);
     expect(email[0]!.note).toBe("9 Oct – 3 Nov 2026 · ended");
-    // Its confidence is final; the running tests' isn't.
+    // Its confidence is final, as #6's is; the running tests' isn't.
     expect(email.map((a) => a.ended)).toEqual([true, true]);
     expect(
-      p.experiments.arms.filter((a) => a.test !== "Email question").map((a) => a.ended)
-    ).toEqual([undefined, undefined, undefined, undefined]);
+      p.experiments.arms
+        .filter((a) => a.test !== "Email question")
+        .map((a) => [a.test, a.ended ?? false])
+    ).toEqual([
+      ["New landing page", false],
+      ["New landing page", false],
+      ["Landing hero", true],
+      ["Landing hero", true],
+      ["Pricing 3.0", false],
+      ["Pricing 3.0", false],
+    ]);
     // A range wholly after the end has nothing to read, and says why.
     const after = traffic({
       ...at,

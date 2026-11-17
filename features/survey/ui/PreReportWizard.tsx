@@ -17,7 +17,12 @@ import {
 } from "@features/analytics/client";
 import WizardReportMap, { MAP_STEPS } from "./wizard/WizardReportMap";
 import { useWizardFit } from "./wizard/useWizardFit";
-import { WIZARD_PROOF_CARDS, wizardSlideOrder, type WizardVariant } from "./wizard/wizardContent";
+import {
+  WIZARD_PROOF_CARDS,
+  wizardSlideOrder,
+  type WizardMapOffer,
+  type WizardVariant,
+} from "./wizard/wizardContent";
 import "./wizard/wizard-desktop.css";
 import "./wizard/wizard-motion.css";
 
@@ -299,6 +304,8 @@ interface PreReportWizardProps {
   variant?: WizardVariant;
   /** The EUR 1.99 gate will stop this reader, at this price: the map names it. */
   gatePriceCents?: number | null;
+  /** Which EUR 1.99 page the map describes: Mark's new one (`light`) names its offer. */
+  mapOffer?: WizardMapOffer;
 }
 
 const PreReportWizard: FC<PreReportWizardProps> = ({
@@ -306,6 +313,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
   track = true,
   variant = "standard",
   gatePriceCents = null,
+  mapOffer = "today",
 }) => {
   const order = wizardSlideOrder(variant);
   const slideCount = order.length;
@@ -588,6 +596,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({
                       onStep={(to, control) => moveMap(to, control)}
                       variant={variant}
                       gatePriceCents={gatePriceCents}
+                      mapOffer={mapOffer}
                     />
                   </div>
                 )}

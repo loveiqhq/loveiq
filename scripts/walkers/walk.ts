@@ -289,6 +289,14 @@ export const LOCKED_CHAPTER_CTAS =
 export const LOCKED_CHAPTERS =
   ".report-premium-overlay, .rv4-premium:not(.rv4-premium--summary), .rv4-lockbadge, .rv4-chapter__lock";
 
+/**
+ * The landing FAQ question the walk opens (plants.faq): the first CLOSED one. Round 4's new
+ * page opens its first answer by itself, as its board draws it, so its first question
+ * would close an answer; on either arm the first closed question opens one, and the
+ * faq_expanded the walk counts for it is real.
+ */
+export const LANDING_FAQ_QUESTION = "button[aria-controls^='w-faq-panel-'][aria-expanded='false']";
+
 export const PROOF_PAGE_SCRIPT = `
 window.__loveiqEventTap = function (name, params) {
   try { window.__walkHeard(Date.now(), name, JSON.stringify(params || {})); } catch (e) {}
@@ -717,7 +725,7 @@ async function main(argv: string[]): Promise<number> {
         await landingBanner.click();
       }
       if (plants.faq) {
-        const question = page.locator("button[aria-controls^='w-faq-panel-']").first();
+        const question = page.locator(LANDING_FAQ_QUESTION).first();
         if (await question.count()) {
           await question.scrollIntoViewIfNeeded();
           await question.click();
@@ -789,6 +797,26 @@ async function main(argv: string[]): Promise<number> {
     let since = Date.now();
     let asked = 0;
     for (;;) {
+      // A sheet between questions (features/survey/surveySheets.ts) holds the move or rises
+      // over the next question: a person reads it and carries on. Its buttons wait out the
+      // first 400ms, so read it first, as a person would.
+      const sheet = page.locator("[data-survey-sheet]").first();
+      if (await sheet.count()) {
+        await record("survey-sheet", {
+          note: (await sheet.getAttribute("data-survey-sheet")) ?? "",
+        });
+        await page.waitForTimeout(600);
+        const keepGoing = sheet.locator("[data-sheet-keep-going]");
+        await (
+          (await keepGoing.count()) ? keepGoing : sheet.getByRole("button", { name: /^next$/i })
+        )
+          .first()
+          .click()
+          .catch(() => {});
+        await page.waitForTimeout(600);
+        since = Date.now();
+        continue;
+      }
       const s = await readScreen(page);
       if (!s.progress) {
         if (asked > 0) break; // past the last question: the processing screen
