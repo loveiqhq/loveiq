@@ -178,6 +178,23 @@ describe("the reworked emails", () => {
     }
   );
 
+  // C3/C4's only button sits in the panel; Marcus (5 Nov) wants the paste line under every
+  // main button. Mark took C4's "last reminder" line out on 9 Nov.
+  it.each(Object.entries(INVITES))(
+    "%s: the panel's button and its paste-this-link line carry the invite link",
+    (_name, email) => {
+      const href = escAttr(INVITE);
+      expect(email.html.split(`href="${href}"`)).toHaveLength(3);
+      expect(email.html).toContain(`Or paste this link into your browser: <a href="${href}"`);
+      expect(email.text).toContain(INVITE);
+    }
+  );
+
+  it("C4 no longer calls itself the last invite reminder", () => {
+    expect(INVITES.C4.html).not.toContain("last reminder");
+    expect(INVITES.C4.text).not.toContain("last reminder");
+  });
+
   it("names no archetype anywhere: the €1.99 step sells the name, and every card blurs it", () => {
     const names = archetypeNames();
     expect(names).toHaveLength(14);
