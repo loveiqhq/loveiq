@@ -85,7 +85,7 @@ export function reportReadyEmail({
       paragraphs([
         `${e(hiLine(name))}<br>You answered every question, which took honesty. It shows in your result.`,
         e(MATCHED),
-        `Your Core Archetype opens for <strong style="color:#161021;">${PRICE}</strong>, paid once. Once unlocked, you will receive <strong style="color:#161021;">${CREDIT} off the full report</strong>.`,
+        `Your Core Archetype opens for <strong style="color:#161021;">${PRICE}</strong>, paid once. Once unlocked, you’ll receive <strong style="color:#161021;">${CREDIT} off the full report</strong>.`,
       ]),
       archetypeCard(siteUrl),
       button({ href: reportUrl, label: "Open my Core Archetype", notes }),
@@ -128,7 +128,7 @@ export function whatPriceOpensEmail({
       heading(subject),
       paragraphs([
         `${e(hiLine(name))}<br>Your Initial Report is ready and your Core Archetype was determined. You can unlock both for just <strong style="color:#161021;">${PRICE}</strong>.`,
-        "You will unlock your Core Archetype and your Summary, three chapters in full, and a first look at four featured chapters.",
+        "You’ll unlock your Core Archetype and your Summary, three chapters in full, and a first look at four featured chapters.",
         `It also gives you <strong style="color:#161021;">${CREDIT} off the full report</strong>.`,
       ]),
       archetypeCard(siteUrl),
@@ -150,7 +150,7 @@ export function whatPriceOpensEmail({
     subject,
     hiLine(name),
     `Your Initial Report is ready and your Core Archetype was determined. You can unlock both for just ${PRICE}.`,
-    `You will unlock your Core Archetype and your Summary, three chapters in full, and a first look at four featured chapters. It also gives you ${CREDIT} off the full report.`,
+    `You’ll unlock your Core Archetype and your Summary, three chapters in full, and a first look at four featured chapters. It also gives you ${CREDIT} off the full report.`,
     [
       `Open my Core Archetype for ${PRICE} (paid once, ${GUARANTEE_DAYS}-day money-back guarantee):`,
       reportUrl,

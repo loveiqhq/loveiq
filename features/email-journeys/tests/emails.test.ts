@@ -493,3 +493,39 @@ describe("what the chapter map's legend calls free", () => {
     expect(html).toContain("free chapters");
   });
 });
+
+// Eman's calls on the questions sent to Mark with the trials (17 Nov 2026): U1's headline
+// drops "to read" (Mark's 9 Nov edit), C2's subject names the part, the copy follows the
+// Tone of Voice page's contractions, and the invite reminders keep their invite but carry
+// the share icon Mark asked for on every invite email.
+describe("the calls on Mark's open questions (17 Nov)", () => {
+  it("U1's headline is 'Your Core Archetype is ready'", () => {
+    const { html, text } = coreUnlockedEmail(reader);
+    expect(html).toContain("Your Core Archetype is ready<");
+    expect(text.startsWith("Your Core Archetype is ready\n")).toBe(true);
+    expect(html + text).not.toContain("ready to read");
+  });
+
+  it("C2's subject names the part about how you connect", () => {
+    expect(backIntoReportEmail(reader).subject).toBe(
+      "Have you read the part about how you connect yet?"
+    );
+  });
+
+  it("says you'll and you've, never 'you will' or 'you have unlocked'", () => {
+    for (const [name, email] of everyEmail()) {
+      for (const part of [email.subject, email.html, email.text]) {
+        expect(part, name).not.toMatch(/\byou will\b|\byou have unlocked\b/i);
+      }
+    }
+  });
+
+  it.each(Object.entries(INVITES))(
+    "%s keeps the invite and carries the share icon",
+    (_n, email) => {
+      expect(email.html).toContain(EMAIL_IMAGES.iconShare);
+      expect(email.html).not.toContain(EMAIL_IMAGES.iconRefer);
+      expect(email.html).toContain("Invite a friend&nbsp;&rarr;");
+    }
+  );
+});
