@@ -751,8 +751,12 @@ export function buildJourneyMessage(
     text = `:memo: Survey submission #${journey.submissionId} — ${describeQuestionCount(options.questionCount)}${surveyTime ? ` in ${surveyTime}` : ""}`;
     const lines = compactSurveyLines(journey, options.reachedFloor);
     // Mark, 13 Nov: "just record the tick for now"; he sends the study by hand, so the
-    // message that announces the submission says who asked for it.
-    if (options.stateOfDesireTicked) lines.push("State of Desire: *ticked* (send the study)");
+    // message that announces the submission says who asked for it. Off the row's consent
+    // stamp too, as every later edit of the message (report opened, paid) carries no options:
+    // the first post alone used to lose it within minutes.
+    if (options.stateOfDesireTicked || journey.stateOfDesireTicked) {
+      lines.push("State of Desire: *ticked* (send the study)");
+    }
     blocks.push(section(lines.join("\n")));
   }
 
