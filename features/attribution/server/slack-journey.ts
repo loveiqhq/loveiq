@@ -12,7 +12,13 @@
  * asterisk broke the layout.
  */
 
-import { armLabel, AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
+import {
+  armLabel,
+  AXIS_TITLES,
+  GATE_REVEAL_LABELS,
+  GATE_REVEAL_TITLE,
+  type ExperimentAxis,
+} from "@features/attribution/server/labels";
 import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
 import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
@@ -566,6 +572,13 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
     lines.push(
       `${AXIS_TITLES.pricing}: ${boldArmName(pricing.short)}${pricing.retired ? " _(retired arm)_" : ""}`
     );
+  }
+
+  // Mark's 50/50 of the EUR 1.99 page (17 Nov: "whether the Core Archetype was shown or
+  // not"), for a reader whose report waits behind that page. No line when nothing is
+  // stamped: the switch was off, and a "Not recorded" on every message would be noise.
+  if (journey.gateCohort && journey.gateRevealArm) {
+    lines.push(`${GATE_REVEAL_TITLE}: ${boldArmName(GATE_REVEAL_LABELS[journey.gateRevealArm])}`);
   }
 
   // Omitted when unknown rather than falling back to the pricing band — a band

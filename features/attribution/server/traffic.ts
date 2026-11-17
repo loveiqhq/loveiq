@@ -9,6 +9,11 @@
 
 import { classifySource, type SourceClass } from "@features/admin/server/ap/facts";
 import { taggedOf } from "@features/admin/server/ap/pay-to-start";
+import {
+  GATE_REVEAL_ARM_KEY,
+  isGateRevealArm,
+  type GateRevealArm,
+} from "@shared/experiments/gateRevealArm";
 
 /** The tracker's key for the first page the browser opened, stamped by /api/survey. */
 export const LANDING_PATH_TRACKER_KEY = "landing_path";
@@ -142,5 +147,24 @@ export function readStampedArms(utmTracker: string | null): {
     return { landing: pick(blob.landing_variant), survey: pick(blob.survey_variant) };
   } catch {
     return { landing: null, survey: null };
+  }
+}
+
+/**
+ * The reader's half of Mark's 50/50 of the EUR 1.99 page, as the survey's submit stamped it
+ * (`gate_reveal_arm`, app/api/survey/route.ts). Only the two real halves count. Null when
+ * nothing valid is stamped: the switch was off, they paid before the survey, or the survey
+ * carried no tracker (mergeTrackerArm stamps nothing on an empty one).
+ */
+export function readGateRevealStamp(utmTracker: string | null): GateRevealArm | null {
+  if (!utmTracker?.trim()) return null;
+  try {
+    const json: unknown = JSON.parse(utmTracker);
+    if (json === null || typeof json !== "object" || Array.isArray(json)) return null;
+    // eslint-disable-next-line security/detect-object-injection -- a constant key.
+    const value = (json as Record<string, unknown>)[GATE_REVEAL_ARM_KEY];
+    return isGateRevealArm(value) ? value : null;
+  } catch {
+    return null;
   }
 }
