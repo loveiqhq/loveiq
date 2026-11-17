@@ -8,11 +8,12 @@ import {
 } from "@features/checkout/server/reportPurchase";
 import { fromArchetypeSlug } from "@features/report/server/archetypeSlug";
 import { INITIAL_UNLOCK_PLAN, isInitialUnlockPlan } from "@features/report/logic/initialUnlock";
+import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
 export const metadata: Metadata = {
   title: "Checkout Status | LoveIQ",
   description: "Status page for your LoveIQ checkout session.",
-  robots: { index: false, follow: false },
+  ...PRIVATE_PAGE_METADATA,
 };
 
 interface Props {
