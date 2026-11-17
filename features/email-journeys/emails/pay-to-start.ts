@@ -101,8 +101,8 @@ export function paymentReceivedEmail({
   const list = paidSteps(offer);
   const body = pre
     ? [
-        "Thank you for your purchase.<br>You have unlocked the LoveIQ Survey.",
-        "After taking the LoveIQ survey, you will receive your Initial Report that includes your Core Archetype.",
+        "Thank you for your purchase.<br>You’ve unlocked the LoveIQ Survey.",
+        "After taking the LoveIQ survey, you’ll receive your Initial Report that includes your Core Archetype.",
         `To learn even more about your Sexual Personality, use the <strong style="color:#161021;">${CREDIT} credit</strong> to unlock the full report.`,
       ]
     : [
@@ -136,7 +136,7 @@ export function paymentReceivedEmail({
       ? "Finish the survey to unlock your Core Archetype."
       : "Finish the survey to open your full report.",
     pre
-      ? "Thank you for your purchase. You have unlocked the LoveIQ Survey. After taking it, you will receive your Initial Report that includes your Core Archetype."
+      ? "Thank you for your purchase. You’ve unlocked the LoveIQ Survey. After taking it, you’ll receive your Initial Report that includes your Core Archetype."
       : "Thank you for your purchase. Your full LoveIQ report is paid for. Take the survey, and every chapter opens as soon as you finish.",
     pre
       ? `To learn even more about your Sexual Personality, use the ${CREDIT} credit to unlock the full report.`

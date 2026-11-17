@@ -92,9 +92,9 @@ export function coreUnlockedEmail({
     reason: INITIAL_REASON,
     unsubscribeUrl,
     rows: [
-      heading("Your Core Archetype is ready to read"),
+      heading("Your Core Archetype is ready"),
       paragraphs([
-        `${e(hiLine(name))}<br>Thank you for your purchase. You have unlocked your Initial Report, including your Core Archetype.`,
+        `${e(hiLine(name))}<br>Thank you for your purchase. You’ve unlocked your Initial Report, including your Core Archetype.`,
         `We read the pattern in your answers and matched it to one of ${ARCHETYPES} archetypes. It describes how desire, connection and attraction tend to work for you.`,
         `To learn even more about your Sexual Personality, use the <strong style="color:#161021;">${CREDIT} credit</strong> to unlock the full report.`,
       ]),
@@ -107,9 +107,9 @@ export function coreUnlockedEmail({
     ],
   });
   const text = joinText([
-    "Your Core Archetype is ready to read",
+    "Your Core Archetype is ready",
     hiLine(name),
-    "Thank you for your purchase. You have unlocked your Initial Report, including your Core Archetype.",
+    "Thank you for your purchase. You’ve unlocked your Initial Report, including your Core Archetype.",
     `To learn even more about your Sexual Personality, use the ${CREDIT} credit to unlock the full report.`,
     ["Read my Core Archetype:", reportUrl],
     textSteps(U1_STEPS),
@@ -231,7 +231,7 @@ export function backIntoReportEmail({
   unsubscribeUrl,
 }: PurchaseEmailParams): KitEmail {
   const name = greetingName(firstName);
-  const subject = "Have you read the part about you yet?";
+  const subject = "Have you read the part about how you connect yet?";
   const previewText = "Three chapters readers come back to, and where to find them.";
   const picks = backIntoReportPicks();
   const cards = picks
@@ -310,7 +310,7 @@ export function inviteReminderOneEmail({
       heading(subject),
       paragraphs([`${e(hiLine(name))}<br>${e(intro)}`]),
       panel(siteUrl, {
-        icon: "iconRefer",
+        icon: "iconShare",
         kicker: "Refer a friend",
         title: "Invite a friend to take the test",
         body: "They get their own report. Yours stays private: they don’t see what it says.",
@@ -357,7 +357,7 @@ export function inviteReminderTwoEmail({
       heading(subject),
       paragraphs([`${e(hiLine(name))}<br>${e(intro)}`]),
       panel(siteUrl, {
-        icon: "iconRefer",
+        icon: "iconShare",
         kicker: "Refer a friend",
         title: "One invite, their own report",
         body: "They take the test on their own. Your answers and your report stay yours.",
