@@ -2,6 +2,7 @@ import type { ReportLayout } from "./reportLayout";
 import posthog, { type CaptureOptions } from "posthog-js";
 import type { PayToStartWizard } from "@features/pay-to-start/logic/journey";
 import type { OptInSheetDismissVia, OptInSheetOutcome } from "@features/survey/optInSheet";
+import type { SurveySheetCloseVia, SurveySheetId } from "@features/survey/surveySheets";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import type {
   TourAudience,
@@ -599,7 +600,10 @@ export const trackStartSurvey = (
     | "vocab"
     | "find_out"
     | "result_teaser"
-    | "sticky",
+    | "sticky"
+    // The new landing page's (round 4's pain_point) own buttons.
+    | "pain_points"
+    | "words",
   /**
    * Set only for question 1's card (hero or closing), whose Continue shares its `location`
    * with the button beside it ("hero", "footer"). Without it the two read as one CTA.
@@ -1552,6 +1556,25 @@ export const trackOptInSheetClosed = ({
     { outcome, ...(via ? { via } : {}) }
   );
 
+/**
+ * A sheet between questions opened (features/survey/surveySheets.ts): which one, over which
+ * question. Once per run each. PostHog and GA4; before the submit there is no submission to
+ * persist it against. AP measures the sheets through its question funnel, before and after
+ * each switch goes on.
+ */
+export const trackSurveySheetShown = (params: { sheet: SurveySheetId; question_id: string }) =>
+  track("survey_sheet_shown", params);
+
+/**
+ * How it closed: `via` (Keep going, the scrim, Esc, a swipe, Back, the map's Previous), how
+ * long it was open, and for the State of Desire sheet whether its box was ticked. Those go to
+ * PostHog only; GA4 sees only that it closed.
+ */
+export const trackSurveySheetClosed = (
+  params: { sheet: SurveySheetId; question_id: string },
+  detail: { via: SurveySheetCloseVia; ms_open: number; ticked?: boolean }
+) => track("survey_sheet_closed", params, detail);
+
 export const trackWizardSlideAdvanced = (params: {
   from_slide: number;
   to_slide: number;
@@ -1617,7 +1640,8 @@ export const trackFaqExpanded = (params: { question_index: number; question_text
   track("faq_expanded", params);
 
 /**
- * The landing hero video (arm `white_video` of the landing A/B). The arm is not a
+ * The presenter video: the video page's hero (round 4's arm `video`, round 3's `white_video`)
+ * and the new page's film card (`pain_point`). The arm is not a
  * param: it rides on every event as the `landing_variant` super-property, so these
  * say only what the video did. A tap on play is counted at once (`hero_video_tap`, the
  * click-through, since 29.10); a play when frames start, so a start that fails is an
@@ -1798,7 +1822,11 @@ export const trackLandingCardAnswer = ({
   value: number;
 }) => track("landing_card_answer", params, { value });
 
-/** The live landing's sections, top to bottom (`data-landing-section` on each root). */
+/**
+ * The landing pages' sections, top to bottom (`data-landing-section` on each root): the
+ * video page's, then the new page's own (round 4's pain_point), which also reuses
+ * archetypes, testimonials, foundation, faq, closing_cta and footer.
+ */
 export type LandingSection =
   | "trust_strip"
   | "discover"
@@ -1811,7 +1839,13 @@ export type LandingSection =
   | "foundation"
   | "faq"
   | "closing_cta"
-  | "footer";
+  | "footer"
+  | "trust_band"
+  | "how_it_works"
+  | "pain_points"
+  | "promise"
+  | "words"
+  | "stats";
 
 /**
  * How far down the landing a visitor got, section by section: once per section per page,

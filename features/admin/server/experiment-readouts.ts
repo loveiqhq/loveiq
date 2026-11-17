@@ -528,12 +528,12 @@ export function armReader(
 export const LIVE_AXES: ExperimentAxis[] = ["landing"];
 
 /**
- * `armReader`, plus the landing test's restart at the condensed phone hero
- * (LANDING_TEST_START_AT): a reader who finished before it came through a phone hero
- * whose slot most visitors never reached, in either arm, so /admin reads them as not
- * attributable, as it does pricing's re-priced readers. Here rather than in `armReader`
- * because the brain's experiments tool reads a registered test from the registry's own
- * start date (registry #6 moves to the restart day), and `armReader` is that read too.
+ * `armReader`, plus the landing test's start (LANDING_TEST_START_AT, the current round's
+ * first whole Berlin day): a reader who finished before it came through an earlier
+ * round's page, or round 3's phone hero before its restart, whose slot most visitors
+ * never reached, so /admin reads them as not attributable, as it does pricing's re-priced
+ * readers. Here rather than in `armReader` because the brain's experiments tool reads a
+ * registered test from the registry's own start date, and `armReader` is that read too.
  * Exported for the brain's unregistered-test line, which pairs with liveReadouts.
  */
 export function liveArmReader(
@@ -583,7 +583,7 @@ export const CONCLUDED: ConcludedExperiment[] = [
       // No rates in the prose, by the same rule as the entries below — a
       // finished test must not read as a live one. The numbers are above,
       // in the readout, where they are labelled as final.
-      "Finished on 19 September 2026 and settled on V2, the version with the first survey question in the hero. Everyone saw it until the next test began, which runs V2 against V3, the same page with the intro video in the hero in its place (listed above as a live test). V2 reached checkout more often over the 30 days to 19 September, but that gap is not one this many people can prove: the range the true difference could sit in still runs from V1 being slightly ahead to V2 being well ahead. Separating a gap that size would need roughly six times as many readers per design, which at our traffic is about six more months. V1 was nominally ahead on payments, two against one, and three payments is not a result. It was called on the checkout rate, and on not spending six more months running a design we already believed was worse.",
+      "Finished on 19 September 2026 and settled on V2, the version with the first survey question in the hero. Everyone saw it until the next test began, V2 against V3, the same page with the intro video in the hero in its place (registry #6). V2 reached checkout more often over the 30 days to 19 September, but that gap is not one this many people can prove: the range the true difference could sit in still runs from V1 being slightly ahead to V2 being well ahead. Separating a gap that size would need roughly six times as many readers per design, which at our traffic is about six more months. V1 was nominally ahead on payments, two against one, and three payments is not a result. It was called on the checkout rate, and on not spending six more months running a design we already believed was worse.",
   },
   {
     title: "Report pricing (A vs B)",

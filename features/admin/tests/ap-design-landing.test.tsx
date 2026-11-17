@@ -143,8 +143,9 @@ function heroInput(): Parameters<typeof buildLanding>[0] {
 const heroWeek = () => buildLanding(heroInput());
 
 describe("the landing tests, as the design names them", () => {
-  it("shows #6 · Landing hero and its first run, and no rebuild test", () => {
+  it("shows #10 · New landing page, #6 · Landing hero and its first run, and no rebuild test", () => {
     expect(LANDING_TESTS.map((t) => t.name)).toEqual([
+      "#10 · New landing page",
       "#6 · Landing hero",
       "#6 · Landing hero · first run (7–13 Oct)",
     ]);
@@ -583,7 +584,7 @@ describe("the hero video's info cards", () => {
       const f = FIELDS[k]!;
       expect(f.per, k).toBe("per person PostHog recorded");
       expect(f.caveat, k).toContain(rangeLabel(HERO_VIDEO_SEEN_FROM, HERO_VIDEO_SEEN_FROM));
-      expect(f.caveat, k).toMatch(/About 11% of version B's visitors look like bots/);
+      expect(f.caveat, k).toMatch(/About 11% of the video page's visitors looked like bots/);
       expect(f.caveat, k).toMatch(/every share here reads a little low/);
       // The query the block runs: from the same day, the forced versions and the team left out.
       expect(f.query.lang, k).toBe("HogQL");
@@ -592,6 +593,8 @@ describe("the hero video's info cards", () => {
       );
       expect(f.query.text, k).toContain("match(toString(properties.$current_url), '[?&]variant=')");
       expect(f.query.text, k).toContain("$session_id IN :team_visits");
+      // The video page's hero alone, as the block reads it (#6's version B, #10's version A).
+      expect(f.query.text, k).toContain("properties.landing_variant IN ('white_video', 'video')");
     }
   });
 

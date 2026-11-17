@@ -118,13 +118,28 @@ const ReviewCard: FC<{ t: Testimonial; ariaHidden?: boolean }> = ({ t, ariaHidde
   </figure>
 );
 
-const WTestimonials: FC = () => {
+/**
+ * Opt-in dress for a page that reuses the section at its own scale (the new landing page,
+ * round 4's pain_point): the section's padding, its container and the review row's inset.
+ * Unset, it renders exactly as on the video page.
+ */
+interface WTestimonialsProps {
+  sectionClassName?: string;
+  shellClassName?: string;
+  rowClassName?: string;
+}
+
+const WTestimonials: FC<WTestimonialsProps> = ({
+  sectionClassName,
+  shellClassName,
+  rowClassName,
+}) => {
   return (
     <section
-      className="overflow-hidden bg-white py-16 lg:py-24"
+      className={sectionClassName ?? "overflow-hidden bg-white py-16 lg:py-24"}
       data-landing-section="testimonials"
     >
-      <div className="content-shell">
+      <div className={shellClassName ?? "content-shell"}>
         <div className="animate-on-scroll mb-12 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           {/* Left: 10,000+ stat + subtitle */}
           <div className="flex flex-col gap-3">
@@ -160,7 +175,9 @@ const WTestimonials: FC = () => {
 
       {/* Full-bleed auto-scrolling carousel. Reduced motion → static scrollable row. */}
       <div className="relative w-full overflow-hidden motion-reduce:overflow-x-auto">
-        <div className="flex w-max gap-[29px] px-4 py-6 [animation-play-state:running] animate-marquee-x hover:[animation-play-state:paused]">
+        <div
+          className={`flex w-max gap-[29px] ${rowClassName ?? "px-4 py-6"} [animation-play-state:running] animate-marquee-x hover:[animation-play-state:paused]`}
+        >
           {TESTIMONIALS.map((t) => (
             <ReviewCard key={t.name} t={t} />
           ))}

@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { instantScroll } from "./fixtures/instant-scroll";
 
 /**
- * Arm B of the landing test (round 3, Figma Report-3.0 `1503:12473`): the presenter
- * video in the hero instead of question 1.
+ * The video page (Figma Report-3.0 `1503:12473`): the presenter video in the hero instead
+ * of question 1. Round 4's arm A (`video`), round 3's arm B (`white_video`): one page.
  *
  * Playback is stubbed. Playwright's bundled browsers do not play H.264/AAC on every CI
  * runner, and what can break here is the wiring — which element plays, with sound or
@@ -28,7 +28,7 @@ async function stubPlayback(page: Page) {
 
 /** The video component hydrates from its own chunk, after the page's; tap only once it has. */
 async function openArmB(page: Page) {
-  await page.goto("/?variant=white_video");
+  await page.goto("/?variant=video");
   await page.locator('[data-testid="hero-video"][data-ready]').waitFor();
 }
 
@@ -167,7 +167,7 @@ test.describe("Landing arm B — the hero video", () => {
   });
 
   test("keeps the hero's own call to action", async ({ page }) => {
-    await page.goto("/?variant=white_video");
+    await page.goto("/?variant=video");
     await page.getByRole("link", { name: "Start my test now - hero" }).click();
     await page.waitForURL(/\/survey/);
   });
@@ -176,7 +176,7 @@ test.describe("Landing arm B — the hero video", () => {
     // The slot rises 24px into place on load; under reduced motion it starts there,
     // so the box is measured where it settles, not part-way up.
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto("/?variant=white_video");
+    await page.goto("/?variant=video");
     const box = await page.getByTestId("hero-video").boundingBox();
     expect(box).not.toBeNull();
     const vw = page.viewportSize()!.width;
@@ -200,7 +200,7 @@ test.describe("Landing hero — the slot right under the button on a phone", () 
   for (const [variant, slotId, gap] of [
     // The grid's 40px gap; the video sits 12px into it (group `1637:616`: 28px).
     ["white_card", "hero-card", 40],
-    ["white_video", "hero-video", 28],
+    ["video", "hero-video", 28],
   ] as const) {
     test(`${variant}: the slot follows the button, and the rating, ticker and privacy line follow the slot`, async ({
       page,

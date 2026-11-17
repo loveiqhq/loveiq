@@ -16060,6 +16060,26 @@
   text-transform: uppercase;
 }
 
+/* Toured before Mark's new EUR 1.99 page (13 Nov): the survey report map's own two pills
+   (ReportMapScreen.tsx), the Core Archetype's green Free and the Light Report's violet price. */
+.report-nav-badge--free-pill,
+.report-nav-badge--price-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.625rem;
+  white-space: nowrap;
+}
+.report-nav-badge--free-pill {
+  background: #e3f3ea;
+  color: #2e7d5b;
+}
+.report-nav-badge--price-pill {
+  background: #f1ebfd;
+  color: #6b5b95;
+}
+
 /* Padlock states. Both are inline SVG inheriting `currentColor`, so the only
    difference is the tint: muted grey while gated, brand purple once the
    reader's plan opens the chapter. */

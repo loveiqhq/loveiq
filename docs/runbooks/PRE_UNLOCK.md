@@ -55,6 +55,48 @@ with it. Everything ships switched off.
    `skipped…`, `failed`), and #ops hears about a stalled cron after three hours. One draw per
    person: a retake's report is left out once the person has an arm.
 
+## The archetype on the gate (Mark's redesign, 12 Nov 2026)
+
+Mark's redesigned EUR 1.99 page (Claude Design `HcHeTUFfEgmg62qqktHSMU`, "€1.99 Pre-Paywall ·
+mobile") opens on the reader's Core Archetype: its match ring, its one line
+(`report4ArchetypeBlurbs`), and five aspect cards from the report's archetype card, core
+motivation and communication open, initiation, attachment and power locked. Their verdicts show;
+their sentences travel only as same-shape stand-ins under the blur
+(`features/report/server/gateReveal.ts`). "Why you should unlock your Light Report" follows, then
+the gate's own card (titled "Your Personal Light Report", without its description line), map,
+reasons and reviews.
+
+- **Switch:** `report_gate_archetype_reveal` (system flag, off when its row is missing). With it
+  on, Mark's 50/50 runs (13 Nov: "a 50/50 split of only the paywall change"): `/api/report`
+  adds `reveal` to the gate's payload, the tour-first one included, for the half whose survey
+  session hashes to `reveal` (`shared/experiments/gateRevealArm.ts`, salt `gate_reveal_2026_11`),
+  and `revealArm` for both halves. The page draws the new top whenever `reveal` is there.
+- **One arm for the whole run** (Fatih, 14 Nov), and every reader meets every sheet (Mark's
+  write-up, 16 Nov, the round-2 thread):
+  - **Variant B, the new page's half:** the survey's halfway sheet and report map, the wizard's
+    map and the tour's chapter menu name the new page's offer: Core Archetype Free, the Light
+    Report €1.99 (`features/report/logic/lightReportMap.ts`, offer `light`).
+  - **Variant A, today's page's half:** the same sheets, in Mark's €1.99 versions: the halfway
+    sheet's one locked step "Unlock your Core Archetype for €1.99", and a map, wizard map and
+    menu with the Core Archetype in the €1.99 (offer `price`). Then today's page.
+  - The survey's reply names the half (`initialGateArm`) so the wizard's map can follow it; the
+    report's tour menu reads `revealArm`. With the switch off nothing changes: no halfway sheet,
+    no map, and the wizard and menu say what they said before the test (offer `today`).
+  - The offer, the price, the guarantee and the emails are the same in both (Mark's answers 1,
+    2, 4 and 5). His hypotheses: A, readers told of the €1.99 halfway through finish and buy
+    knowing it; B, a minimal archetype keeps them from feeling cheated of the free result they
+    started for.
+- **Reading it:** `experiment_exposure` with `experiment: gate_reveal_2026_11`, `surface: gate`,
+  in both halves, once per gate view; `utm_tracker.gate_reveal_arm` on submissions made while it
+  runs (the same arm comes back from `session_id`). Count from the day the switch went on, leave out
+  readers who paid before the survey, and judge on EUR 1.99 sales per gate view.
+- **Where the board and today differ, the page says today's:** a 14-day guarantee (the board's 7),
+  "3x full chapters" (the board's 4×), and the credit "toward your Full Report" (the board's
+  "Premium Report").
+- **Previews:** `/report?preview=1&v4=1&gate=1&reveal=1` (the page alone) and
+  `&gate=tour&reveal=1` (the first open: the tour's anonymous report, its menu naming the new
+  offer, then the page), with `&archetype=<slug>` for another archetype.
+
 ## Switch it off
 
 - `report_initial_unlock_gate` off: nobody is gated any more. Readers in the cohort get their

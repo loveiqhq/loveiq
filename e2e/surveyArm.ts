@@ -5,6 +5,7 @@ import {
   assignQuestionOrderArm,
   type QuestionOrderArm,
 } from "../shared/experiments/questionOrderArm";
+import { assignGateRevealArm, type GateRevealArm } from "../shared/experiments/gateRevealArm";
 
 /**
  * Pin a survey session id so the C13 arm — and therefore the question order — is chosen
@@ -31,9 +32,20 @@ import {
  * so the fixtures pin only the order. (Both drew the email test's control arm, which is
  * what the walks that reach the email question once asserted.)
  */
-const SESSION_FIXTURES: ReadonlyArray<{ order: QuestionOrderArm; sessionId: string }> = [
-  { order: "control", sessionId: "00000000-0000-4000-8000-000000000007" },
-  { order: "variant", sessionId: "00000000-0000-4000-8000-000000000001" },
+/**
+ * The same id also decides the half of Mark's 50/50 of the new EUR 1.99 page (gateRevealArm.ts),
+ * which decides how the survey's halfway sheet and report map tell the offer (16 Nov). The first
+ * fixture of an order is the one a spec that names no half gets; both are in the new page's half.
+ */
+const SESSION_FIXTURES: ReadonlyArray<{
+  order: QuestionOrderArm;
+  gate: GateRevealArm;
+  sessionId: string;
+}> = [
+  { order: "control", gate: "reveal", sessionId: "00000000-0000-4000-8000-000000000007" },
+  { order: "variant", gate: "reveal", sessionId: "00000000-0000-4000-8000-000000000001" },
+  { order: "control", gate: "control", sessionId: "00000000-0000-4000-8000-000000000011" },
+  { order: "variant", gate: "control", sessionId: "00000000-0000-4000-8000-000000000004" },
 ];
 
 /**
@@ -42,13 +54,14 @@ const SESSION_FIXTURES: ReadonlyArray<{ order: QuestionOrderArm; sessionId: stri
  * rather than silently running both "arms" against the same order — the failure mode
  * where a test keeps passing while measuring nothing.
  */
-for (const { order, sessionId } of SESSION_FIXTURES) {
+for (const { order, gate, sessionId } of SESSION_FIXTURES) {
   const actual = assignQuestionOrderArm(sessionId);
-  if (actual !== order) {
+  const actualGate = assignGateRevealArm(sessionId);
+  if (actual !== order || actualGate !== gate) {
     throw new Error(
-      `e2e/surveyArm.ts: the session fixture for order "${order}" now buckets as ` +
-        `"${actual}". Pick a new uuid for it — the survey specs are asserting the wrong ` +
-        "screens until you do."
+      `e2e/surveyArm.ts: the session fixture for order "${order}" and gate "${gate}" now ` +
+        `buckets as "${actual}" and "${actualGate}". Pick a new uuid for it — the survey ` +
+        "specs are asserting the wrong screens until you do."
     );
   }
 }
@@ -58,10 +71,16 @@ for (const { order, sessionId } of SESSION_FIXTURES) {
  * instead of minting one. Returns the id, which specs need to recompute the expected
  * option order.
  */
-export async function pinSurveySession(page: Page, arm: QuestionOrderArm): Promise<string> {
-  const fixture = SESSION_FIXTURES.find((f) => f.order === arm);
+export async function pinSurveySession(
+  page: Page,
+  arm: QuestionOrderArm,
+  gate?: GateRevealArm
+): Promise<string> {
+  const fixture = SESSION_FIXTURES.find((f) => f.order === arm && (!gate || f.gate === gate));
   if (!fixture) {
-    throw new Error(`e2e/surveyArm.ts: no session fixture for order "${arm}". Add one.`);
+    throw new Error(
+      `e2e/surveyArm.ts: no session fixture for order "${arm}"${gate ? ` and gate "${gate}"` : ""}. Add one.`
+    );
   }
   const { sessionId } = fixture;
   await page.addInitScript(

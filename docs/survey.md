@@ -57,6 +57,7 @@ Inside `SurveyEngine`, the completion path moves through three internal phases:
 | `loveiq-survey-session`            | `sessionStorage` | [`getSessionId()`](../features/survey/ui/hooks/surveySession.ts)            | Per-tab UUID reused across partial saves and behavior events.                     |
 | `loveiq-utm`                       | `localStorage`   | [`captureUtmFromUrl()`](../shared/url/utm.ts)                               | Current global UTM capture used by survey submission and partial-save flows.      |
 | `loveiq-survey-utm`                | `localStorage`   | [`captureUtmFromUrl()`](../shared/url/utm.ts)                               | Legacy survey UTM key kept for backward compatibility.                            |
+| `loveiq-survey-sheets`             | `localStorage`   | [`rememberSheetShown()`](../features/survey/surveySheets.ts)                | Which sheets between questions this run has seen (`{ run, shown }`).              |
 | `loveiq-survey-index`              | `localStorage`   | Legacy cleanup only                                                         | Cleared during reset, but not written by the current survey state implementation. |
 
 ## Network Behavior
@@ -254,6 +255,105 @@ email sheet on Next") adds a second ask after a No:
   `survey_optin_sheet_closed` with `outcome` `yes` counts the Yes given in the sheet itself.
 - **Phones and wider.** Mark drew it for phones (390 px). From 640 px it stays a bottom sheet, at
   most 480 px wide.
+
+### Sheets between questions
+
+Mark's "Survey & Report Components" (Claude Design `NGyoLVAex5vSW4voVs7Tcc`, page "Survey –
+Proposal 10.11.2026", posted 2026-11-11): six short cards at fixed points in the survey, each
+with a "Keep going" that carries on. The rules are in
+[`surveySheets.ts`](../features/survey/surveySheets.ts), the words in
+[`surveySheetsCopy.ts`](../features/survey/surveySheetsCopy.ts), the drawing in
+`features/survey/ui/sheets/`.
+
+| Sheet           | Opens                                         | Says                                                             |
+| --------------- | --------------------------------------------- | ---------------------------------------------------------------- |
+| Science         | after 02004 (where the best sex starts)       | more people love to respond (36%) than to start (12%)            |
+| Trustpilot      | after 03008                                   | the TrustScore and one real review, word for word                |
+| Expert quote    | before 01005, never within the first 10       | an expert's words                                                |
+| Halfway         | after 11003                                   | the steps ahead; the Core Archetype free, the Light Report €1.99 |
+| State of Desire | after 16005 (where the reader's sexuality is) | "only 15% … steady", the report, and a tick box for a €5 code    |
+| Report map      | after the question that leaves three to go    | the report's 6 parts and 17 chapters, and what is free or €1.99  |
+
+- **Placed by question, not by position.** C13 asks the questions in two orders, and the
+  reorder still to come moves them again. In today's control order 01005 is question 3, so the
+  expert's sheet stays shut there; re-key it when the reorder lands.
+- **When they open.** A sheet "after" a question holds the move: Next, Auto-advance, Enter,
+  ArrowRight and a swipe all go through `goNext`, which opens it instead. One "before" a
+  question rises over it as it arrives. Each opens once per run (`loveiq-survey-sheets`, keyed
+  by the run's `startedAt`), never on Back, a resume or the jump menu, and one at most per move.
+  A jump in the staging menu makes the run forget which it has seen, the miss-out sheet too, so
+  a reviewer sees each again when passing its question (Fatih, 2026-11-15).
+- **Closing.** Keep going carries on (a "before" sheet leaves the reader on its question).
+  Tapping outside, Esc or a swipe down do the same: these sheets ask nothing. Back closes it and
+  steps back. The map is a full screen with Previous (back to the question) and Next.
+- **Switches.** One `system_flags` row per sheet (`survey_sheet_*`), read with the default off
+  ([`sheetSwitches.ts`](../features/survey/server/sheetSwitches.ts)); no row is seeded. On dev,
+  previews and staging `?sheets=all` (or `?sheets=science,halfway`) shows them without a
+  switch; production ignores it. A reader who paid before the survey never sees a sheet with a
+  price (Halfway, State of Desire, the map). The Trustpilot sheet needs the site's Trustpilot
+  switch and numbers, or it is skipped.
+- **Going live (Fatih, 2026-11-14).** Science, Trustpilot and State of Desire go on first: both
+  C13 orders meet them alike. The expert's sheet waits for the C13 check-in (2026-11-20): C13's
+  control order asks 01005 too early for it, so until then only one C13 half would see it.
+  Halfway and the map belong to Mark's 50/50 of his new €1.99 page
+  (`docs/runbooks/PRE_UNLOCK.md`), so they need its switch on as well as their own
+  (`GATE_TEST_SHEETS`). Both halves meet them, each in its page's words (Mark's write-up,
+  16 Nov): before his new page the Core Archetype is Free and the Light Report costs €1.99;
+  before today's page the halfway sheet has one locked step, "Unlock your Core Archetype for
+  €1.99", and the map puts the Core Archetype in the €1.99 with three reasons under the legend.
+  The arm is the run's session id (`shared/experiments/gateRevealArm.ts`). A `?sheets=` preview
+  shows them on staging; `?reveal=1` or `0` picks a half on dev and staging. The expert's words
+  need her written agreement.
+- **The State of Desire tick.** Mark, 13 Nov: "just record the tick for now"; he sends the study
+  by hand. A tick is kept for its run (`loveiq-survey-desire-tick`) and sent with the answers
+  (`stateOfDesireTicked`); the submission's #incoming-surveys message then says "State of
+  Desire: ticked (send the study)", and /admin has the address by submission. It is not a
+  database field yet: storing it there, with its consent wording, is a migration still to do.
+- **The numbers.** Sheet 1's shares (respond 36%, start 12%, naturally 44%, plan 6%) and sheet
+  5's 15% are measured on finished surveys without the team's own runs, rounded down; the
+  queries sit beside the copy. The design's "Most people love to respond" was not true (most
+  say it happens naturally), so the sheet says "More people love to respond", with 36% against
+  12% in the line under it. It is one message for every reader (Mark's review, 12 Nov); the
+  answer-by-answer headlines are gone.
+- **Measuring them.** PostHog and GA4 get `survey_sheet_shown` and `survey_sheet_closed`
+  (`sheet`, `question_id`); how it closed, how long it was open and the tick go to PostHog only.
+  AP-Analytics' question funnel shows the drop-off right after each sheet, before and after its
+  switch goes on.
+
+#### Their motion
+
+Researched 2026-11-12 (NN/g on durations, Material 3 and Carbon motion, WCAG 2.2 2.3.3, the
+goal-gradient and endowed-progress studies of 2006, web.dev on animation cost):
+
+- Content fades up 8px over 240ms on the house curve `cubic-bezier(0.16, 1, 0.3, 1)`, groups
+  50ms apart from 120ms. Each sheet has one moment of its own: the share counting up (Science,
+  and State of Desire's 15%), "Excellent" and the stars arriving one after another
+  (Trustpilot), the three steps arriving one after another (Halfway), a phrase turning to the
+  brand gradient (Expert), the map building part by part.
+- Mark's review (12 Nov) slowed the moments down: numbers count up over 1.2s from 400ms, the
+  halfway steps arrive 320ms apart over 420ms each, the stars 110ms apart. The slowest sheet has
+  settled by about 1.7s, and no single animation runs longer than 450ms. Keep going works from
+  the first frame; the only guard is the 400ms that keeps a double tap on Next from skipping a
+  sheet unseen.
+- His second review (13 Nov) asked for slower again on Trustpilot, Halfway and the map: those
+  three run at `--sheet-tempo: 1.5`, every duration and delay multiplied, so their order and
+  spacing hold (no animation past 700ms; the slowest sheet settles by about 2.2s). Science's
+  12% now counts up too, at the same speed, once the 36% is halfway. The expert's card lost its
+  own entrance ("no need for an animation of the image"): the whole card slides up over 0.75s
+  instead of 0.45s, and its phrase turns once it has landed. State of Desire stays as it was.
+- His third review (15 Nov), "so that the user actually sees it appear": every sheet rises over
+  1s (it was 0.45s, most of its travel in the first 100ms; the expert card's 0.75s still felt
+  fast to Fatih). The map runs at `--sheet-tempo: 2.25` and its screen fades in over 0.45s
+  ("slow down all the animations"). Trustpilot's quote arrives once the last star has landed
+  and fades in over 0.75s on ease-out ("a bit later and fade in slower"). No CSS animation
+  runs longer than 1s (the numbers still count over 1.2s); the slowest sheet, Trustpilot,
+  settles by about 2.7s.
+- Only transform and opacity move, plus a check's stroke and one phrase's color. Nothing loops,
+  nothing overshoots, no confetti, no countdowns, and nothing moves on a price or a lock.
+  Trustpilot's stars keep their shape, colors and fill (its brand rules): they only arrive.
+- Under reduced motion nothing moves: numbers stand at their value and the check is drawn. The
+  rules are a test (`features/survey/tests/sheetsMotion.test.tsx`); the end-to-end spec
+  (`e2e/survey-sheets.spec.ts`) checks the timings in a real browser.
 
 ### Measuring CTA click-through by urgency band
 

@@ -562,7 +562,7 @@ describe("the compact incoming-survey layout", () => {
     const types = (message.blocks as Array<{ type: string }>).map((b) => b.type);
     expect(types).toContain("header");
     expect(types).toContain("context");
-    // The landing test (round 3) is live, so the buyer's landing version is listed.
+    // The landing test (round 4) is live, so the buyer's landing version is listed.
     expect(JSON.stringify(message.blocks)).toContain("Experiments they were in");
     // And no dwell line leaked across.
     expect(JSON.stringify(message.blocks)).not.toContain("Report time");
@@ -581,7 +581,7 @@ describe("pricing arm — the Pricing 3.0 test", () => {
       buildJourneyMessage(
         journey({
           // A live landing arm, so "retired arm" below can only be the pricing one.
-          arms: { landing: "white_card", survey: "white", pricing, paywall: null },
+          arms: { landing: "video", survey: "white", pricing, paywall: null },
           money: { plan: "all_reports", amount: 39.99, currency: "EUR" },
           milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" },
         }),
@@ -619,12 +619,12 @@ describe("pricing arm — the Pricing 3.0 test", () => {
   });
 });
 
-describe("landing arm — round 3 of the landing test", () => {
+describe("landing arm — round 4 of the landing test", () => {
   /**
-   * The landing test is live again (V2's question card vs V3's hero video), and a
-   * purchase is where it pays off, so the buyer's message says which version they came
-   * through. Round 2 left this message when it concluded on 2026-09-19; round 3 put it
-   * back. A stamp from before round 3 still reads, marked as retired.
+   * The landing test is live (V3's video page vs V4's pain-point page), and a purchase is
+   * where it pays off, so the buyer's message says which version they came through. Round
+   * 2 left this message when it concluded on 2026-09-19; round 3 put it back. A stamp from
+   * an earlier round still reads, marked as retired.
    */
   const purchase = (landing: string | null, pricing: string | null = "B3") =>
     JSON.stringify(
@@ -644,19 +644,23 @@ describe("landing arm — round 3 of the landing test", () => {
     );
 
   it("names the version a buyer came through, above the pricing arm", () => {
-    const video = purchase("white_video");
-    expect(video).toContain("*Landing page design*\\nLanding Page V3 (Video in Hero)");
-    expect(video).not.toContain("retired arm");
-    expect(video.indexOf("Landing page design")).toBeLessThan(video.indexOf("Report pricing"));
-    expect(purchase("white_card")).toContain(
-      "*Landing page design*\\nLanding Page V2 (Survey in Hero)"
+    const painPoint = purchase("pain_point");
+    expect(painPoint).toContain("*Landing page design*\\nLanding Page V4 (Pain Points)");
+    expect(painPoint).not.toContain("retired arm");
+    expect(painPoint.indexOf("Landing page design")).toBeLessThan(
+      painPoint.indexOf("Report pricing")
     );
+    expect(purchase("video")).toContain("*Landing page design*\\nLanding Page V3 (Video in Hero)");
+    expect(purchase("video")).not.toContain("retired arm");
   });
 
   it("keeps the row when nothing was recorded, and marks an earlier round's stamp", () => {
     expect(purchase(null)).toContain("*Landing page design*\\nNot recorded");
     expect(purchase("white")).toContain(
       "Landing Page V2 (Survey in Hero, before V3) _(retired arm)_"
+    );
+    expect(purchase("white_video")).toContain(
+      "Landing Page V3 (Video in Hero, before V4) _(retired arm)_"
     );
   });
 });
@@ -1355,5 +1359,24 @@ describe("session-recording link", () => {
     expect(buttons(message.blocks)).toHaveLength(0);
     // The amount and plan are in the header, so the message still stands alone.
     expect(JSON.stringify(message.blocks)).toContain("EUR 39.99");
+  });
+});
+
+// Mark, 13 Nov: "lets just record the tick for now… maybe add it to the incoming-survey data".
+// The State of Desire sheet's tick shows on the survey's message, so whoever sends the study
+// by hand sees who asked for it (the address stays masked; /admin has it by submission).
+describe("the State of Desire tick on the survey's message", () => {
+  it("says the reader ticked the box", () => {
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 58,
+      stateOfDesireTicked: true,
+    });
+    expect(JSON.stringify(message.blocks)).toContain("State of Desire: *ticked*");
+  });
+
+  it("says nothing when they did not", () => {
+    const message = buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: 58 });
+    expect(JSON.stringify(message.blocks)).not.toContain("State of Desire");
   });
 });

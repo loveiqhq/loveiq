@@ -2,6 +2,9 @@
 
 import Image from "next/image";
 import type { FC } from "react";
+import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
+import { REPORT_MAP_COPY } from "@features/survey/surveySheetsCopy";
+import { euros } from "./gate/gateContent";
 import { useIsV4 } from "./v3/V3Chapter";
 
 /**
@@ -31,8 +34,13 @@ import { useIsV4 } from "./v3/V3Chapter";
  * inherits `currentColor` and renders identically across platforms — the emoji
  * picked up Segoe UI Emoji's colour glyph on Windows and a flat one elsewhere.
  * 961:333's closed padlock is this same drawing in the same grey.
+ *
+ * Two more, only while the tour runs before Mark's new EUR 1.99 page (Mark, 13 Nov: the menu
+ * must name the offer as the survey's report map does, logic/lightReportMap.ts):
+ * - `free_pill`  — the Core Archetype, which that page shows for free: the map's green Free.
+ * - `price_pill` — a Light Report chapter: the map's violet chip with the EUR 1.99 price.
  */
-export type ReportNavAccess = "free" | "locked" | "unlocked";
+export type ReportNavAccess = "free" | "locked" | "unlocked" | "free_pill" | "price_pill";
 
 /**
  * Shackle + body. `open` swings the shackle up and to the right.
@@ -65,6 +73,20 @@ const ReportNavBadge: FC<{ access: ReportNavAccess }> = ({ access }) => {
 
   if (access === "free") {
     return <span className="report-nav-badge report-nav-badge--free">In full</span>;
+  }
+
+  if (access === "free_pill") {
+    return (
+      <span className="report-nav-badge report-nav-badge--free-pill">{REPORT_MAP_COPY.free}</span>
+    );
+  }
+
+  if (access === "price_pill") {
+    return (
+      <span className="report-nav-badge report-nav-badge--price-pill">
+        {euros(INITIAL_UNLOCK_PRICE_CENTS)}
+      </span>
+    );
   }
 
   if (access === "unlocked") {

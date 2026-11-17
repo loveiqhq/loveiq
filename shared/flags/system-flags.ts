@@ -21,6 +21,8 @@
  *                              the gate's non-payers (20261020090000; read default OFF)
  *   email_*                    — the email journeys' switches, one per new or redesigned email
  *                              (20261108230000; read default OFF: features/email-journeys)
+ *   survey_sheet_*             — the sheets between survey questions, one per sheet (read
+ *                              default OFF, no row needed: features/survey/server/sheetSwitches.ts)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -55,7 +57,16 @@ export type SystemFlagKey =
   | "email_r2"
   | "email_c2"
   | "email_s3_s5"
-  | "email_pts_reminders";
+  | "email_pts_reminders"
+  // The sheets between survey questions (Mark, 11 Nov 2026): one switch per sheet, all off.
+  | "survey_sheet_science"
+  | "survey_sheet_trustpilot"
+  | "survey_sheet_expert"
+  | "survey_sheet_halfway"
+  | "survey_sheet_desire"
+  | "survey_sheet_report_map"
+  // Mark's redesigned EUR 1.99 page (12 Nov 2026): the Core Archetype shown on the gate. Off.
+  | "report_gate_archetype_reveal";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;
@@ -91,6 +102,27 @@ async function fetchFlagRows(key: SystemFlagKey): Promise<Array<{ enabled: boole
     );
     if (!res.ok) return null;
     return (await res.json()) as Array<{ enabled: boolean }>;
+  });
+}
+
+/** Several flags' rows in one request, or null when Supabase answered with an error. Throws when unreachable. */
+async function fetchFlagRowsFor(
+  keys: readonly SystemFlagKey[]
+): Promise<Array<{ key: string; enabled: boolean }> | null> {
+  const { url, serviceRoleKey } = getSupabaseConfig();
+  return getBreaker("supabase").fire(async () => {
+    const res = await fetchWithTimeout(
+      `${url}/rest/v1/system_flags?key=in.(${keys.map(encodeURIComponent).join(",")})&select=key,enabled`,
+      {
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        timeoutMs: FETCH_TIMEOUT_MS,
+      }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as Array<{ key: string; enabled: boolean }>;
   });
 }
 
@@ -136,6 +168,45 @@ export async function isFeatureEnabled(
     });
     return defaultWhenMissing;
   }
+}
+
+/**
+ * isFeatureEnabled for several flags with one request, into the same cache. The survey page reads
+ * its seven sheet switches on every render, and at our traffic their 30 s cache has usually run
+ * out, so seven reads meant seven connections: about 0.2 s more before the page's first byte on
+ * staging (17 Nov 2026). Each answer is isFeatureEnabled's: an environment override, the cached
+ * value, the row's value, or `defaultWhenMissing` for no row, an error answer or no answer.
+ */
+export async function areFeaturesEnabled(
+  keys: readonly SystemFlagKey[],
+  defaultWhenMissing = true
+): Promise<boolean[]> {
+  const now = Date.now();
+  const toRead = keys.filter((key) => {
+    const envOverride = process.env[`SYSTEM_FLAG_${key}`];
+    if (envOverride === "true" || envOverride === "false") return false;
+    const cached = cache.get(key);
+    return !(cached && cached.expiresAt > now);
+  });
+  if (toRead.length > 0) {
+    try {
+      const rows = await fetchFlagRowsFor(toRead);
+      const stored = new Map((rows ?? []).map((row) => [row.key, row.enabled]));
+      for (const key of toRead) {
+        cache.set(key, {
+          enabled: stored.get(key) ?? defaultWhenMissing,
+          expiresAt: now + CACHE_TTL_MS,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, keys: toRead }, "system_flags fetch failed - failing to default");
+      for (const key of toRead) {
+        cache.set(key, { enabled: defaultWhenMissing, expiresAt: now + FAIL_OPEN_TTL_MS });
+      }
+    }
+  }
+  // Every key is now cached or overridden, so these read no further.
+  return Promise.all(keys.map((key) => isFeatureEnabled(key, defaultWhenMissing)));
 }
 
 /** What readFeatureFlag read: the row's value, or null for no row. Failures are not kept. */

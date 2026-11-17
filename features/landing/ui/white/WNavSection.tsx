@@ -20,12 +20,21 @@ export interface WNavCta {
   onPress?: () => void;
 }
 
+/**
+ * The bar's dress. `default` is every page's; `painpoint` is the new landing page's
+ * (round 4's `pain_point`, Claude Design board Hero 3): the links sit between the logo and
+ * the button instead of centred on the page, the button is a white pill with a gradient
+ * edge, and the menu button is a bare three-line icon. Behaviour is the same.
+ */
+export type WNavAppearance = "default" | "painpoint";
+
 interface WNavSectionProps {
   /** Defaults to the free survey, counted as the landing's `cta_click` from "nav". */
   cta?: WNavCta;
   onNavigate?: (item: WNavItem, place: "bar" | "menu") => void;
   /** The bar's inner width: the landing's `content-shell` unless the page has its own grid. */
   shellClassName?: string;
+  appearance?: WNavAppearance;
 }
 
 const SURVEY_CTA: WNavCta = { href: "/survey", onPress: () => trackStartSurvey("nav") };
@@ -133,7 +142,9 @@ const WNavSection: FC<WNavSectionProps> = ({
   cta = SURVEY_CTA,
   onNavigate,
   shellClassName = "content-shell",
+  appearance = "default",
 }) => {
+  const painpoint = appearance === "painpoint";
   const [menuOpen, setMenuOpen] = useState(false);
   const { isHidden, isMobile } = useScrollDirection();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -249,11 +260,20 @@ const WNavSection: FC<WNavSectionProps> = ({
               }}
             >
               <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} priority />
-              <LoveIQWordmark className="text-xl" loveClassName="text-gray-900" />
+              <LoveIQWordmark
+                className="text-xl"
+                loveClassName={painpoint ? "text-[#161021]" : "text-gray-900"}
+              />
             </Link>
 
             {/* Center links (desktop) */}
-            <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-9 lg:flex">
+            <div
+              className={
+                painpoint
+                  ? "hidden items-center gap-9 lg:flex"
+                  : "absolute left-1/2 hidden -translate-x-1/2 items-center gap-9 lg:flex"
+              }
+            >
               {navLinks.map((item) => (
                 <Link
                   key={item.href}
@@ -271,13 +291,17 @@ const WNavSection: FC<WNavSectionProps> = ({
               <CtaLink
                 href={cta.href}
                 ariaLabel="Start test now - navigation"
-                className="focus-visible-ring group inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
+                className={
+                  painpoint
+                    ? "focus-visible-ring group box-border inline-flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-full border-[1.5px] border-solid border-transparent px-3 py-2 text-[13px] font-bold leading-5 text-[#3a2a55] transition-[background,box-shadow] duration-[250ms] [background:linear-gradient(#ffffff,#ffffff)_padding-box,linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)_border-box] hover:shadow-[0_8px_20px_-12px_rgba(191,102,217,0.7)] hover:[background:linear-gradient(#f8f0fc,#f8f0fc)_padding-box,linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)_border-box] lg:gap-2 lg:px-[18px] lg:text-[14px]"
+                    : "focus-visible-ring group inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
+                }
                 onClick={(event) => pressCta("bar", event)}
               >
                 <span>Start test now</span>
                 <svg
                   aria-hidden
-                  className="h-4 w-4"
+                  className={painpoint ? "block h-3.5 w-3.5 lg:h-4 lg:w-4" : "h-4 w-4"}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -290,16 +314,34 @@ const WNavSection: FC<WNavSectionProps> = ({
               </CtaLink>
               <button
                 type="button"
-                className={`focus-visible-ring flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.03] text-gray-700 transition-colors hover:border-black/20 hover:text-black sm:hidden ${menuOpen ? "hamburger-open" : ""}`}
+                className={
+                  painpoint
+                    ? "focus-visible-ring flex h-11 w-11 cursor-pointer items-center justify-center border-0 bg-transparent p-0 sm:hidden"
+                    : `focus-visible-ring flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.03] text-gray-700 transition-colors hover:border-black/20 hover:text-black sm:hidden ${menuOpen ? "hamburger-open" : ""}`
+                }
                 aria-label={menuOpen ? "Close menu" : "Open menu"}
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((prev) => !prev)}
               >
-                <div className="flex h-4 w-[18px] flex-col gap-[5px]">
-                  <span className="hamburger-line" />
-                  <span className="hamburger-line" />
-                  <span className="hamburger-line" />
-                </div>
+                {painpoint ? (
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#161021"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    className="h-[22px] w-[22px]"
+                  >
+                    <path d={menuOpen ? "M6 6l12 12M18 6 6 18" : "M4 7h16M4 12h16M4 17h16"} />
+                  </svg>
+                ) : (
+                  <div className="flex h-4 w-[18px] flex-col gap-[5px]">
+                    <span className="hamburger-line" />
+                    <span className="hamburger-line" />
+                    <span className="hamburger-line" />
+                  </div>
+                )}
               </button>
             </div>
           </nav>

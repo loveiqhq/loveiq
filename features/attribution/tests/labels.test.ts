@@ -15,11 +15,21 @@ describe("arm labels", () => {
     // Marketing's own convention (2026-08-27), so "V2" in a meeting and
     // "Landing Page V2" in Slack are unambiguously the same arm, and the
     // parenthetical says which is which without the reader knowing dates.
-    // Round 3: V2 itself (white_card) against V3, the presenter video in the hero.
+    // Round 4: V3 itself (video) against V4, Marcus's new pain-point page.
+    expect(armLabel("landing", "video").long).toBe("Landing Page V3: video in the hero");
+    expect(armLabel("landing", "video").short).toBe("Landing Page V3 (Video in Hero)");
+    expect(armLabel("landing", "pain_point").long).toBe("Landing Page V4: the pain-point page");
+    expect(armLabel("landing", "pain_point").short).toBe("Landing Page V4 (Pain Points)");
+    // Round 3: V2 itself (white_card) against V3, the presenter video in the hero. Its V3
+    // (white_video) is named apart from round 4's, so the two never pool under one name.
     expect(armLabel("landing", "white_card").long).toBe("Landing Page V2: survey in the hero");
     expect(armLabel("landing", "white_card").short).toBe("Landing Page V2 (Survey in Hero)");
-    expect(armLabel("landing", "white_video").long).toBe("Landing Page V3: video in the hero");
-    expect(armLabel("landing", "white_video").short).toBe("Landing Page V3 (Video in Hero)");
+    expect(armLabel("landing", "white_video").long).toBe(
+      "Landing Page V3: video in the hero, before the V4 test"
+    );
+    expect(armLabel("landing", "white_video").short).toBe(
+      "Landing Page V3 (Video in Hero, before V4)"
+    );
     // `white` is V2 before round 3, named apart so it never pools with white_card.
     expect(armLabel("landing", "white").long).toBe(
       "Landing Page V2: survey in the hero, before the V3 test"
@@ -31,7 +41,15 @@ describe("arm labels", () => {
     expect(armLabel("landing", "control").short).not.toMatch(/\bV1\b(?! *\))/);
     expect(armLabel("landing", "control").short.toLowerCase()).not.toContain("first");
     // "homepage" is not the term the team uses; every landing label says so.
-    for (const arm of ["white_card", "white_video", "white", "white_prev", "control"]) {
+    for (const arm of [
+      "video",
+      "pain_point",
+      "white_card",
+      "white_video",
+      "white",
+      "white_prev",
+      "control",
+    ]) {
       expect(armLabel("landing", arm).short.toLowerCase()).not.toContain("homepage");
       expect(armLabel("landing", arm).long.toLowerCase()).not.toContain("homepage");
     }
@@ -71,6 +89,8 @@ describe("arm labels", () => {
         "white_prev",
         "white_card",
         "white_video",
+        "video",
+        "pain_point",
         "control",
         "dark",
         "A",
@@ -81,7 +101,7 @@ describe("arm labels", () => {
       ]) {
         const label = armLabel(axis, arm);
         if (label.short === "Unknown") continue;
-        for (const code of ["white_prev", "white_card", "white_video"]) {
+        for (const code of ["white_prev", "white_card", "white_video", "pain_point"]) {
           expect(label.long).not.toContain(code);
           expect(label.short).not.toContain(code);
         }
@@ -110,9 +130,13 @@ describe("arm labels", () => {
   });
 
   it("excludes retired arms from the active set used for charts", () => {
-    // Round 3 assigns white_card and white_video. V1 retired 2026-09-19, and `white`
-    // (V2 before round 3) is no longer assigned to anyone.
-    expect(activeArms("landing")).toEqual(["white_card", "white_video"]);
+    // Round 4 assigns video and pain_point, in reading order (A, then B). Round 3's arms
+    // retired with it, V1 on 2026-09-19, and `white` (V2 before round 3) is no one's.
+    expect(activeArms("landing")).toEqual(["video", "pain_point"]);
+    for (const arm of ["white_card", "white_video"]) {
+      expect(armLabel("landing", arm).retired).toBe(true);
+      expect(isKnownArm("landing", arm)).toBe(true);
+    }
     expect(armLabel("landing", "white").retired).toBe(true);
     expect(isKnownArm("landing", "white")).toBe(true);
     expect(armLabel("landing", "white_prev").retired).toBe(true);
@@ -205,11 +229,25 @@ describe("arm colours", () => {
     expect(armColor("landing", "white_card")).not.toBe(armColor("landing", "white_video"));
   });
 
+  it("keeps V3 blue in round 4 and gives V4 its own colour, apart from V1's, V2's and V3's", () => {
+    expect(armColor("landing", "video")).toBe(armColor("landing", "white_video")); // V3 stays blue
+    expect(armColor("landing", "pain_point")).toBe("#059669"); // V4, emerald
+    for (const arm of ["white_prev", "white", "white_card", "video"]) {
+      expect(armColor("landing", "pain_point")).not.toBe(armColor("landing", arm));
+    }
+  });
+
   it("names every landing arm differently, so no two pool under one name", () => {
     // The admin explorer groups by display name: two arms sharing one would merge.
-    const names = ["white_card", "white_video", "white", "white_prev", "control"].map(
-      (arm) => armLabel("landing", arm).short
-    );
+    const names = [
+      "video",
+      "pain_point",
+      "white_card",
+      "white_video",
+      "white",
+      "white_prev",
+      "control",
+    ].map((arm) => armLabel("landing", arm).short);
     expect(new Set(names).size).toBe(names.length);
   });
 

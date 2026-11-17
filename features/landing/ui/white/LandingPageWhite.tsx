@@ -26,10 +26,10 @@ const WStickyBar = dynamic(() => import("./WStickyBar"));
 /**
  * The live landing page (Figma node 8947-7360, "Landing E — workshop build").
  *
- * Both arms of the round-3 landing test render this page; only the hero's
- * right-hand slot differs. `white_video` puts the presenter video there (Figma
- * Report-3.0 `1503:12473`); every other value — `white_card`, and `white` for
- * crawlers and visitors without a cookie — keeps question 1.
+ * Round 4's control (`video`) renders this page with the presenter video in the hero's
+ * right-hand slot (Figma Report-3.0 `1503:12473`), as do round 3's `white_video` and
+ * crawlers (served `white_video`). `white_card` and `white` (no cookie, or a QA link) keep
+ * question 1 there. Round 4's other arm is features/landing/ui/painpoint/.
  *
  * Section order mirrors the Figma frame top to bottom. Sections the mock marks
  * "(live)" — nav, archetypes, field reports, FAQ, footer — are the existing
@@ -46,7 +46,7 @@ const LandingPageWhite: FC<{ variant: LandingVariant }> = ({ variant }) => {
       <LandingPageTracker variant={variant} />
       <LandingSectionsSeen />
       <WNavSection />
-      <WHero media={variant === "white_video" ? "video" : "card"} />
+      <WHero media={variant === "video" || variant === "white_video" ? "video" : "card"} />
       <WTrustStrip />
       <WDiscover />
       <WVocab />

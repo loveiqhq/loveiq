@@ -493,6 +493,38 @@ describe("V4 — the finalised nav (961:333)", () => {
     expect(shut.querySelector(".sr-only")?.textContent).toBe("Locked chapter");
   });
 
+  // Mark, 13 Nov: before his new EUR 1.99 page the menu names the offer as the survey's
+  // report map does (after Q59): the Core Archetype free, the Light Report at its price.
+  it("draws the new EUR 1.99 page's offer: a Free chip and the Light Report's price", async () => {
+    const LIGHT = new Map<string, ReportNavAccess>([
+      ["core_archetype", "free_pill"],
+      ["introduction", "price_pill"],
+      ["typical_beliefs", "unlocked"],
+      ["power_orientation", "locked"],
+    ]);
+    const { unmount } = await inV4(
+      <ReportDesktopSidebar activeSectionId="core_archetype" accessById={LIGHT} />
+    );
+    expect(row("core_archetype").querySelector(".report-nav-badge--free-pill")?.textContent).toBe(
+      "Free"
+    );
+    expect(row("introduction").querySelector(".report-nav-badge--price-pill")?.textContent).toBe(
+      "€1.99"
+    );
+    expect(row("core_archetype").dataset.access).toBe("free_pill");
+    expect(row("introduction").dataset.access).toBe("price_pill");
+    unmount();
+
+    await inV4(<ReportMobileNav activeSectionId="core_archetype" accessById={LIGHT} />);
+    fireEvent.click(screen.getByRole("button", { name: /^chapter:/i }));
+    expect(row("core_archetype").querySelector(".report-nav-badge--free-pill")?.textContent).toBe(
+      "Free"
+    );
+    expect(row("introduction").querySelector(".report-nav-badge--price-pill")?.textContent).toBe(
+      "€1.99"
+    );
+  });
+
   it("leaves V3's and V1's open chapters without a badge", async () => {
     const { unmount } = await inV3(
       <ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />

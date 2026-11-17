@@ -2,7 +2,10 @@ import { test, expect } from "@playwright/test";
 
 test.describe("FAQ accordion (landing page)", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    // The video page's FAQ (WFAQ), all answers closed. A bare "/" is a coin flip in a
+    // production build, and the new page opens its first answer by itself
+    // (landing-pain-point.spec.ts covers its FAQ).
+    await page.goto("/?variant=video");
     // Wait for React hydration — Safari (WebKit) hydrates slower than V8 and
     // clicks on non-hydrated elements don't trigger React onClick handlers.
     await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
@@ -55,7 +58,8 @@ test.describe("CTA buttons", () => {
 
 test.describe("Footer links", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    // The video page's footer; the new page's shorter one is in landing-pain-point.spec.ts.
+    await page.goto("/?variant=video");
   });
 
   test("Privacy Policy link has correct href", async ({ page }) => {

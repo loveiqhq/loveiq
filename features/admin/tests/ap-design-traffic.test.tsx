@@ -326,11 +326,22 @@ describe("the Traffic builder, as the design reads", () => {
     expect(tierOfCountryName("Country 1234")).toBe("default");
   });
 
-  it("names the live landing versions as the design does; retired ones keep their names", () => {
-    const names = traffic().breakdowns.landing.rows.map((r) => r.name);
-    expect(names).toContain("Hero · question card");
-    expect(names).toContain("Hero · presenter video");
-    expect(names.find((n) => n.startsWith("Landing Page V2"))).toBeTruthy();
+  it("names the live landing versions as the AP pages do; retired ones keep their names", () => {
+    const names = traffic({
+      facts: {
+        ...facts,
+        visits: [
+          ...facts.visits,
+          { day: "2026-10-16", arm: "video", src: null, n: 10 },
+          { day: "2026-10-16", arm: "pain_point", src: null, n: 10 },
+        ],
+      },
+    }).breakdowns.landing.rows.map((r) => r.name);
+    expect(names).toContain("Video page");
+    expect(names).toContain("Pain-point page");
+    // Round 3's versions retired with it: the shared labels' names.
+    expect(names).toContain("Landing Page V2: survey in the hero");
+    expect(names).toContain("Landing Page V3: video in the hero, before the V4 test");
   });
 
   it("orders the cohorts as drawn and writes the tests' notes in the design's style", () => {
@@ -341,7 +352,9 @@ describe("the Traffic builder, as the design reads", () => {
       "Direct / unattributed",
     ]);
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
-      "Landing hero: Since 14 Oct 2026 · live",
+      "New landing page: Since 18 Nov 2026 · live",
+      // Registry #6's days, written as an ended test is.
+      "Landing hero: 14 Oct – 11 Nov 2026 · ended",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",
       // Ended on 4 Nov 2026, written as the Payment page writes an ended test.
       "Email question: 9 Oct – 3 Nov 2026 · ended",

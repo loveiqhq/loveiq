@@ -50,6 +50,8 @@ import {
 } from "@features/admin/server/ap/posthog";
 import ApLanding from "@features/admin/ui/ap/ApLanding";
 import {
+  LANDING_HERO_LAST_DAY,
+  LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
@@ -99,16 +101,21 @@ const now = new Date("2026-10-13T12:00:00Z");
 
 describe("landing test windows", () => {
   it("runs a live test to yesterday, or today in a range running through today, and clips every test to the range", () => {
-    expect(testWindow(test("hero"), "2026-10-01", "2026-10-31", "2026-11-01")).toEqual({
+    expect(testWindow(test("pain-point"), "2026-11-01", "2026-11-30", "2026-12-01")).toEqual({
       from: LANDING_TEST_START_DAY,
-      to: "2026-10-31",
+      to: "2026-11-30",
     });
     // "Today" (or a range running through it) reads the test's visits of today too.
-    expect(testWindow(test("hero"), "2026-11-01", "2026-11-01", "2026-11-01")).toEqual({
-      from: "2026-11-01",
-      to: "2026-11-01",
+    expect(testWindow(test("pain-point"), "2026-12-01", "2026-12-01", "2026-12-01")).toEqual({
+      from: "2026-12-01",
+      to: "2026-12-01",
     });
     // An ended test keeps its own days: clipped to the range, or none outside it.
+    expect(testWindow(test("hero"), "2026-10-01", "2026-11-30", "2026-12-01")).toEqual({
+      from: LANDING_HERO_RESTART_DAY,
+      to: LANDING_HERO_LAST_DAY,
+    });
+    expect(testWindow(test("hero"), "2026-11-12", "2026-11-30", "2026-12-01")).toBeNull();
     expect(testWindow(test("hero-first-run"), "2026-10-10", "2026-10-31", "2026-11-01")).toEqual({
       from: "2026-10-10",
       to: "2026-10-13",
@@ -120,10 +127,26 @@ describe("landing test windows", () => {
     });
   });
 
-  it("reads PostHog per arm only for the round-3 runs", () => {
-    const keys = engagementWindows("2026-08-01", "2026-10-31", "2026-11-01").map((w) => w.key);
-    expect(keys).toEqual(["hero", "hero-first-run"]);
+  it("reads PostHog per arm only for the tests since round 3", () => {
+    const keys = engagementWindows("2026-08-01", "2026-11-30", "2026-12-01").map((w) => w.key);
+    expect(keys).toEqual(["pain-point", "hero", "hero-first-run"]);
     expect(test("hero-first-run").from).toBe(LANDING_HERO_VIDEO_LAUNCH_DAY);
+  });
+
+  it("lists round 4's test first, then #6, ended on its registry day with the video kept", () => {
+    expect(LANDING_TESTS.map((t) => [t.key, t.name, t.arms])).toEqual([
+      ["pain-point", "#10 · New landing page", ["video", "pain_point"]],
+      ["hero", "#6 · Landing hero", ["white_card", "white_video"]],
+      ["hero-first-run", "#6 · Landing hero · first run (7–13 Oct)", ["white_card", "white_video"]],
+    ]);
+    expect(test("pain-point")).toMatchObject({ from: LANDING_TEST_START_DAY, to: null });
+    // Registry #6 ran 14 Oct – 11 Nov 2026, and the 10 Nov sync kept the video.
+    expect(test("hero")).toMatchObject({
+      from: "2026-10-14",
+      to: "2026-11-11",
+      winner: "white_video",
+    });
+    expect(test("hero-first-run").to).toBe("2026-10-13");
   });
 
   it("reads the hero video from the first whole day PostHog recorded who saw it", () => {
@@ -338,6 +361,37 @@ describe("buildLanding", () => {
     expect(b).toMatchObject({ arm: "white_video", visits: 120, starts: 18, subs: 0, fullCvr: 0 });
     expect(a?.startCvr).toBeCloseTo(0.12);
     expect(a).toMatchObject({ bounce: null, cta: null, scroll: null });
+  });
+
+  it("names round 4's versions as the page does, A the video page and B the pain-point page", () => {
+    const p = buildLanding({
+      facts: factsFixture({
+        from: "2026-11-17",
+        to: "2026-11-23",
+        asOf: "2026-11-24",
+        visits: [
+          { day: "2026-11-18", arm: "video", src: null, n: 80 },
+          { day: "2026-11-18", arm: "pain_point", src: null, n: 90 },
+          // Round 3's arm B on a re-rolled browser's first page: in no row of #10.
+          { day: "2026-11-18", arm: "white_video", src: null, n: 5 },
+        ],
+        starts: [],
+        subs: [],
+      }),
+      previous: null,
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-17", to: "2026-11-23" },
+        "2026-11-24"
+      ),
+      today: "2026-11-24",
+      now: new Date("2026-11-24T12:00:00Z"),
+      armEngagement: {},
+      engagement: null,
+    });
+    expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
+      ["pain-point", "A · Video page", "Running", 80],
+      ["pain-point", "B · Pain-point page", "Running", 90],
+    ]);
   });
 
   it("counts a pre-unlock per visit, as its other rates are, once the EUR 1.99 is on sale", () => {
@@ -674,6 +728,9 @@ describe("PostHog's landing readers", () => {
     expect(q).toContain(
       "timestamp >= toDateTime('2026-10-13 22:00:00', 'UTC') AND timestamp < toDateTime('2026-10-28 23:00:00', 'UTC')"
     );
+    // The video page's film only (#6's version B, #10's version A): the new page plays the
+    // same film in a card of its own, which this block doesn't count.
+    expect(q).toContain("properties.landing_variant IN ('white_video', 'video')");
     // One row, asked for as one.
     expect(mockHogql.mock.calls[0]![1]).toBe(1);
   });

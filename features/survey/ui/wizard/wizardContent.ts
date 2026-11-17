@@ -1,4 +1,5 @@
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
+import { lightMapRowKind, type LightMapRowKind } from "@features/report/logic/lightReportMap";
 import {
   PAY_TO_START_INITIAL_WIZARD_SLIDES,
   PAY_TO_START_WIZARD_SLIDES,
@@ -59,7 +60,15 @@ export const WIZARD_PROOF_CARDS: readonly { title: string; body: string; icon: s
   },
 ];
 
-export type WizardDrawerBadge = "free" | "open" | "locked";
+export type WizardDrawerBadge = "free" | "open" | "locked" | "free_pill" | "price_pill";
+
+/**
+ * Which EUR 1.99 page the map describes, as the survey's report map did (Mark, 13 and 16 Nov):
+ * - `today`: no test runs, and the map is as before Mark's 50/50;
+ * - `light`: his new page, which shows the archetype before payment (the Core Archetype free);
+ * - `price`: today's page, in the other half of his 50/50 (the Core Archetype in the EUR 1.99).
+ */
+export type WizardMapOffer = "today" | "light" | "price";
 
 export interface WizardDrawerRow {
   /** The chapter's anchor in the report, as the report's own nav names it. */
@@ -68,10 +77,18 @@ export interface WizardDrawerRow {
   /**
    * The IN FULL chip (FREE until sync 26.10: the EUR 1.99 gate follows the map, so nothing
    * on it is free; the kind keeps its name), the brand-gradient open lock (the four deep
-   * dives), or the grey lock.
+   * dives), or the grey lock. Before the new page: the green Free pill on the Core Archetype
+   * and the EUR 1.99 pill on the Light Report's chapters, as the survey's report map.
    */
   badge: WizardDrawerBadge;
 }
+
+const LIGHT_BADGE: Record<LightMapRowKind, WizardDrawerBadge> = {
+  free: "free_pill",
+  priced: "price_pill",
+  featured: "open",
+  locked: "locked",
+};
 
 export interface WizardDrawerPart {
   part: string;
@@ -99,7 +116,9 @@ const DEEP_DIVE_IDS: ReadonlySet<string> = new Set(REPORT_DEEP_DIVES.map((d) => 
  * off (review 26.10), so a free reader's map draws it partly open, and a paid wizard's in
  * full. A EUR 1.99 buyer's map then reads as the gate's map: gateChapterCounts.test.ts.
  */
-function badgeOf(id: string, variant: WizardVariant): WizardDrawerBadge {
+function badgeOf(id: string, variant: WizardVariant, offer: WizardMapOffer): WizardDrawerBadge {
+  // Only a free reader meets the EUR 1.99 page; a reader who paid before the survey has none.
+  if (variant === "standard" && offer !== "today") return LIGHT_BADGE[lightMapRowKind(id, offer)];
   if (IN_FULL_ROWS.has(id)) return "free";
   if (id === CORE_ARCHETYPE_ROW) return variant === "standard" ? "open" : "free";
   return DEEP_DIVE_IDS.has(id) ? "open" : "locked";
@@ -175,10 +194,13 @@ const DRAWER_PARTS: ReadonlyArray<
 ];
 
 /** The drawer as a variant's reader sees it: the rows, each with its badge (badgeOf). */
-export function wizardDrawer(variant: WizardVariant): readonly WizardDrawerPart[] {
+export function wizardDrawer(
+  variant: WizardVariant,
+  offer: WizardMapOffer = "today"
+): readonly WizardDrawerPart[] {
   return DRAWER_PARTS.map((part) => ({
     ...part,
-    rows: part.rows.map((r) => ({ ...r, badge: badgeOf(r.id, variant) })),
+    rows: part.rows.map((r) => ({ ...r, badge: badgeOf(r.id, variant, offer) })),
   }));
 }
 

@@ -65,10 +65,11 @@
 
 ## Landing Page
 
-> The landing page is the white design at `features/landing/ui/white/`. Its hero is in
-> a 50/50 A/B (round 3, `shared/experiments/landingVariant.ts`): question 1 (arm A,
-> `white_card`) against the presenter video (arm B, `white_video`); every other section
-> is shared. `features/landing/ui/white-v1/` is the white landing from before the
+> The landing page is a 50/50 A/B (round 4, `shared/experiments/landingVariant.ts`): the
+> white design at `features/landing/ui/white/` with the presenter video in the hero (arm A,
+> `video`) against Marcus's new pain-point page at `features/landing/ui/painpoint/` (arm B,
+> `pain_point`). Round 3's question-card page (`white_card`) still renders for
+> `?variant=white_card`. `features/landing/ui/white-v1/` is the white landing from before the
 > 2026-08-10 rebuild, round 2's retired arm (round 1, white-vs-dark, concluded
 > 2026-06-19 and the dark sections were deleted). `S06Archetypes.tsx`
 > is kept outside `white/` because `WArchetypeCards` imports its `ArchetypeCard` +
@@ -76,7 +77,9 @@
 
 | Task                     | Files                                                                                                                                                          |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Landing page composition | `features/landing/ui/white/LandingPageWhite.tsx`                                                                                                               |
+| Landing page composition | `features/landing/ui/white/LandingPageWhite.tsx` (arm A), `features/landing/ui/painpoint/LandingPagePainPoint.tsx` (arm B)                                     |
+| New page (arm B)         | `features/landing/ui/painpoint/` (`P*.tsx`; copy `painPointContent.ts`, classes `ppStyles.ts`, button `PCta.tsx`; image `public/images/painpoint/`)            |
+| Shared landing logic     | `features/landing/logic/landingPick.ts` (question 1's pick), `liveTakers.ts` (the live number), `faqHash.ts` (`faq_expanded`'s key)                            |
 | Navigation               | `features/landing/ui/white/WNavSection.tsx`                                                                                                                    |
 | Footer                   | `features/landing/ui/white/WFooterSection.tsx`                                                                                                                 |
 | Scroll animations        | `features/landing/ui/ScrollAnimator.tsx`                                                                                                                       |

@@ -29,7 +29,13 @@ function prefersReducedMotion(): boolean {
  * (persona walks 24.10: a bare arrow said nothing). Its analytics event keeps its first name,
  * recorded once a gate, and not for a new tab, which opens the exit page there instead.
  */
-export const GateHero: FC = () => {
+export const GateHero: FC<{
+  /**
+   * False on Mark's redesigned page (GateReveal), whose archetype is the page's heading: the
+   * way out and the badge stay, "Find Out Your Sexual Archetypes" goes.
+   */
+  headline?: boolean;
+}> = ({ headline = true }) => {
   const [reducedMotion] = useState(prefersReducedMotion);
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -80,10 +86,12 @@ export const GateHero: FC = () => {
             {GATE_COPY.badge}
           </p>
         </div>
-        <h1 className="iug-hero__title">
-          <span className="iug-hero__lead">{GATE_COPY.headline.lead}</span>{" "}
-          <em className="iug-hero__emph">{GATE_COPY.headline.emph}</em>
-        </h1>
+        {headline ? (
+          <h1 className="iug-hero__title">
+            <span className="iug-hero__lead">{GATE_COPY.headline.lead}</span>{" "}
+            <em className="iug-hero__emph">{GATE_COPY.headline.emph}</em>
+          </h1>
+        ) : null}
       </div>
     </>
   );

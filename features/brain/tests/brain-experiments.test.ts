@@ -136,15 +136,16 @@ beforeEach(() => {
 afterEach(() => mockSupabaseFetch.mockClear());
 
 describe("experiments: the registry, read", () => {
-  it("times an unregistered landing test's pace from its restart, as /admin counts it", async () => {
-    // 70 readers per arm before the restart at the condensed phone hero and 70 after.
+  it("times an unregistered landing test's pace from its start, as /admin counts it", async () => {
+    // 70 readers per arm before round 4's start (18 Nov) and 70 after, as in round 3's
+    // restart case (14 Oct), so the pace reads as it did then.
     const at = (day: string, arm: string, i: number) => ({
       id: i,
       created_date_time: `${day}T10:00:00Z`,
       utm_tracker: JSON.stringify({ landing_variant: arm }),
     });
-    const submissions = (["2026-10-08", "2026-10-17"] as const).flatMap((day, d) =>
-      (["white_card", "white_video"] as const).flatMap((arm, a) =>
+    const submissions = (["2026-11-11", "2026-11-20"] as const).flatMap((day, d) =>
+      (["video", "pain_point"] as const).flatMap((arm, a) =>
         Array.from({ length: 70 }, (_, i) => at(day, arm, d * 1000 + a * 100 + i + 1))
       )
     );
@@ -158,8 +159,8 @@ describe("experiments: the registry, read", () => {
       ),
       truncated: false,
     }));
-    const text = await listExperiments(Date.parse("2026-10-20T09:00:00Z"), load);
-    // 70 a side in the 2.96 days since 17 Oct; from 8 Oct's readers it would read 5.9.
+    const text = await listExperiments(Date.parse("2026-11-23T09:00:00Z"), load);
+    // 70 a side in the 2.96 days since 20 Nov; from 11 Nov's readers it would read 5.9.
     expect(text).toContain("At 23.7 a day per arm");
     expect(text).not.toContain("At 5.9 a day per arm");
   });
@@ -188,10 +189,10 @@ describe("experiments: the registry, read", () => {
 
   it("reads a running test live from its own start, in /admin's words", async () => {
     rows = [row()];
-    // Round 3's arm A: a live arm, so the live readout counts it.
+    // Round 4's arm A: a live arm, so the live readout counts it.
     const arms: Array<[string, boolean]> = [
-      ...Array.from({ length: 40 }, (): [string, boolean] => ["white_card", false]),
-      ...Array.from({ length: 5 }, (): [string, boolean] => ["white_card", true]),
+      ...Array.from({ length: 40 }, (): [string, boolean] => ["video", false]),
+      ...Array.from({ length: 5 }, (): [string, boolean] => ["video", true]),
     ];
     const load = vi.fn(async () => outcomes(arms));
     const text = await listExperiments(NOW, load);
@@ -395,11 +396,11 @@ describe("experiments: the registry, read", () => {
   });
 
   describe("how many people a running test needs, and when it gets them", () => {
-    /** `n` people in each landing arm of round 3, `card` and `video` of them bought. */
-    const split = (n: number, card: number, video: number) =>
+    /** `n` people in each landing arm of round 4, `a` and `b` of them bought. */
+    const split = (n: number, a: number, b: number) =>
       outcomes([
-        ...Array.from({ length: n }, (_, i): [string, boolean] => ["white_card", i < card]),
-        ...Array.from({ length: n }, (_, i): [string, boolean] => ["white_video", i < video]),
+        ...Array.from({ length: n }, (_, i): [string, boolean] => ["video", i < a]),
+        ...Array.from({ length: n }, (_, i): [string, boolean] => ["pain_point", i < b]),
       ]);
     const needed = async (o: ArmOutcomes) => {
       rows = [row()];
@@ -435,7 +436,7 @@ describe("experiments: the registry, read", () => {
       expect(line).not.toContain("Both have enough");
       expect(line).toContain(
         "The people are there, but the readout needs 5 buyers in every arm before it judges, " +
-          "and Landing Page V3 (Video in Hero) has 0."
+          "and Landing Page V4 (Pain Points) has 0."
       );
       // Short of people too: the date, then the buyers.
       expect(await needed(split(60, 6, 0))).toMatch(

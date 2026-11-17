@@ -103,25 +103,27 @@ const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
 const CSRF_TOKEN_LENGTH = 32;
 
-// Crawlers are pinned to arm A's page ("white") and never given a landing cookie (see
-// the cookie-mint block): the index keeps one canonical landing, and no crawler visit is
-// counted in either arm of the test. The regex is shared with /api/survey.
+// Crawlers are pinned to the video page as "white_video" (no longer a live arm) and never
+// given a landing cookie (see the cookie-mint block): the index keeps one canonical landing,
+// the one half of all visitors see, and no crawler visit is counted in either arm of the
+// test. The regex is shared with /api/survey.
 const LANDING_BOT_UA_REGEX = BOT_UA_REGEX;
 
 /**
- * Landing variant for a `/` request. **Round 3: a 50/50 split between "white_card"
- * (question 1 in the hero) and "white_video" (the presenter video in its place).**
- * See shared/experiments/landingVariant.ts for all three rounds.
+ * Landing variant for a `/` request. **Round 4: a 50/50 split between "video" (round 3's
+ * video page, the control) and "pain_point" (Marcus's new pain-point page).**
+ * See shared/experiments/landingVariant.ts for all four rounds.
  *
  * Order matters:
- *   - crawlers get "white" — arm A's page, but not an arm — so the index keeps one
- *     canonical landing and no crawler is counted in either arm;
+ *   - crawlers get "white_video" — the video page, but no longer an arm — so the index
+ *     keeps one canonical landing (the one half of all visitors see) and no crawler is
+ *     counted in either arm;
  *   - `?variant=` is a QA override for any valid value (it also re-stamps the cookie
  *     below, so the arm sticks for the rest of the session);
  *   - an existing cookie wins only when it holds a LIVE arm, so a returning visitor
- *     keeps theirs. "white", "white_prev" and "control" belong to earlier rounds and
- *     are re-rolled. "white" is the one that matters: every visitor from 2026-09-19 to
- *     this round's launch holds it, and keeping it sticky would have parked them all in A;
+ *     keeps theirs. "white_card", "white_video", "white", "white_prev" and "control"
+ *     belong to earlier rounds and are re-rolled: round 3's two are the ones that matter,
+ *     since kept sticky they would have parked every returning round-3 visitor;
  *   - otherwise a coin flip from crypto, not Math.random.
  *
  * Round 2 (V2 "white" vs V1 "white_prev"), for the record:
@@ -141,7 +143,7 @@ const LANDING_BOT_UA_REGEX = BOT_UA_REGEX;
  */
 function resolveLandingVariant(request: NextRequest): LandingVariant {
   const ua = request.headers.get("user-agent") || "";
-  if (LANDING_BOT_UA_REGEX.test(ua)) return "white";
+  if (LANDING_BOT_UA_REGEX.test(ua)) return "white_video";
 
   const override = request.nextUrl.searchParams.get("variant");
   if (isLandingVariant(override)) return override;
@@ -151,7 +153,7 @@ function resolveLandingVariant(request: NextRequest): LandingVariant {
 
   const buf = new Uint8Array(1);
   crypto.getRandomValues(buf);
-  return (buf[0]! & 1) === 0 ? "white_card" : "white_video";
+  return (buf[0]! & 1) === 0 ? "video" : "pain_point";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the

@@ -101,8 +101,11 @@ test.describe("Survey: the opt-in's miss-out sheet", () => {
     await expect(page.getByRole("button", { name: "Not now" })).toBeVisible();
     expect(run.payload()).toBeNull();
 
-    // Let the slide finish, then measure it against the board.
-    await page.waitForTimeout(600);
+    // Let the slide finish (1s since Mark's third review, 15 Nov), then measure it against the
+    // board.
+    await dialog.evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((a) => a.finished));
+    });
     const viewport = page.viewportSize()!;
     const box = (await dialog.boundingBox())!;
     expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(1);
