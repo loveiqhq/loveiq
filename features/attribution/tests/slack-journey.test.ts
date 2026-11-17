@@ -1379,4 +1379,14 @@ describe("the State of Desire tick on the survey's message", () => {
     const message = buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: 58 });
     expect(JSON.stringify(message.blocks)).not.toContain("State of Desire");
   });
+
+  // Every later edit (report opened, reading time, paid) rebuilds the message with no
+  // options, so the line has to come off the row's stamp or it is gone within minutes.
+  it("keeps saying so on every later edit, off the row's stamp", () => {
+    const message = buildJourneyMessage(journey({ stateOfDesireTicked: true }), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    expect(JSON.stringify(message.blocks)).toContain("State of Desire: *ticked*");
+  });
 });

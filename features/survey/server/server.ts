@@ -10,6 +10,7 @@ import {
 import type { SurveyAnswers } from "./types";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
 import { OPT_IN_SHEET_COPY_VERSION, type MarketingOptInVia } from "@features/survey/optInSheet";
+import { DESIRE_SHEET_COPY_VERSION } from "@features/survey/surveySheetsCopy";
 
 const SUPABASE_TIMEOUT_MS = 8000;
 /** The submit writes every answer, so it gets longer than a lookup; the browser waits 30 s. */
@@ -103,6 +104,12 @@ export interface SurveySubmissionPayload {
    * answer is Yes.
    */
   marketingOptInVia?: MarketingOptInVia | null;
+  /**
+   * The State of Desire sheet's box was ticked ("Email me a 5€ off code"). Stamps
+   * `state_of_desire_opt_in_at` and `state_of_desire_opt_in_version` (the box's words,
+   * DESIRE_SHEET_COPY_VERSION). Anything but `true` stamps nothing.
+   */
+  stateOfDesireTicked?: boolean | null;
 }
 
 export interface SurveyScoringSummary {
@@ -355,6 +362,42 @@ export async function submitSurveyOnce(
       { err, submissionId, termsVersion: CONSENT_TERMS_VERSION },
       "Audit M2 / T-11: failed to stamp consent fields"
     );
+  }
+
+  /**
+   * The State of Desire tick's own consent record (Eman's switch note: "the tick is kept with
+   * its own consent"): when the box was ticked and under which words. Mark sends the EUR 5 code
+   * by hand from #incoming-surveys, whose message reads the tick off this row.
+   *
+   * ITS OWN PATCH, never a key on the consent PATCH above: PostgREST refuses a whole body that
+   * names a missing column (see the option_order note), so a deploy that beats its migration
+   * would take consent_at and terms_version down with it. Here it costs only this stamp, logged.
+   * Best-effort like the rest: the submission already stands.
+   */
+  if (payload.stateOfDesireTicked === true) {
+    try {
+      const response = await supabaseServiceFetch(
+        `/rest/v1/survey_submission?id=eq.${submissionId}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({
+            state_of_desire_opt_in_at: new Date().toISOString(),
+            state_of_desire_opt_in_version: DESIRE_SHEET_COPY_VERSION,
+          }),
+          timeoutMs: 3000,
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        logger.warn(
+          { submissionId, status: response.status, detail: detail.slice(0, 200) },
+          "State of Desire tick: consent stamp rejected (migration not applied?)"
+        );
+      }
+    } catch (err) {
+      logger.warn({ err, submissionId }, "State of Desire tick: failed to stamp its consent");
+    }
   }
 
   return { submissionId, isExisting: false };

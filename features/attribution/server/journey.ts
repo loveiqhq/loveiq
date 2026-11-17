@@ -154,6 +154,11 @@ export interface SubmissionJourney {
    * as "no recording", not as an error.
    */
   recordingSessionId: string | null;
+  /**
+   * They ticked the State of Desire sheet's box ("Email me a 5€ off code"), off the row's
+   * consent stamp, so every rebuild of the message keeps saying so. Absent means no.
+   */
+  stateOfDesireTicked?: boolean;
 }
 
 interface SubmissionRow {
@@ -165,6 +170,8 @@ interface SubmissionRow {
   duration_ms: number | null;
   utm_tracker: string | null;
   posthog_session_id: string | null;
+  /** When the State of Desire box was ticked; absent on rows read before its migration. */
+  state_of_desire_opt_in_at?: string | null;
   app_user: {
     email: string | null;
     first_name: string | null;
@@ -475,7 +482,7 @@ export async function buildSubmissionJourney(
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
-        `posthog_session_id,` +
+        `posthog_session_id,state_of_desire_opt_in_at,` +
         `app_user!fk_survey_submission_user(email,first_name,user_profile(location_primary))`,
       "survey_submission"
     ),
@@ -719,6 +726,7 @@ export async function buildSubmissionJourney(
     paid,
     freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
     emailReturns: backByEmail,
+    ...(sub.state_of_desire_opt_in_at ? { stateOfDesireTicked: true } : {}),
   };
 }
 

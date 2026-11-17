@@ -78,6 +78,7 @@ import {
   SUBMIT_WORST_CASE_MS,
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
+import { DESIRE_SHEET_COPY_VERSION } from "@features/survey/surveySheetsCopy";
 import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 // --- Helpers ---
@@ -774,6 +775,75 @@ describe("POST /api/survey", () => {
     it("drops an unknown source instead of refusing the submission", async () => {
       await submitOptIn(YES, { marketingOptInVia: "popup" });
       expect(consentPatch().marketing_opt_in_terms_version).toBe(MARKETING_OPT_IN_TERMS_VERSION);
+    });
+  });
+
+  // Eman's switch note on the State of Desire sheet: the tick is kept with its own consent.
+  // Mark sends the EUR 5 code by hand (17 Nov), so the record is all the server keeps.
+  describe("the State of Desire tick's own consent record", () => {
+    async function submit(extra: Record<string, unknown> = {}) {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+      const res = await POST(makeRequest({ ...validBody(), ...extra }));
+      expect(res.status).toBe(200);
+    }
+
+    const submissionPatches = () =>
+      mockFetchWithTimeout.mock.calls
+        .map((c) => ({
+          url: c[0] as string,
+          method: ((c[1] as { method?: string })?.method || "GET").toUpperCase(),
+          body: (c[1] as { body?: string })?.body ?? "",
+        }))
+        .filter((c) => c.url.includes("/rest/v1/survey_submission") && c.method === "PATCH")
+        .map((c) => JSON.parse(c.body) as Record<string, unknown>);
+    const tickPatch = () => submissionPatches().find((b) => "state_of_desire_opt_in_at" in b);
+
+    it("stamps when the box was ticked and under which words", async () => {
+      await submit({ stateOfDesireTicked: true });
+      expect(tickPatch()).toEqual({
+        state_of_desire_opt_in_at: expect.any(String),
+        state_of_desire_opt_in_version: DESIRE_SHEET_COPY_VERSION,
+      });
+      expect(DESIRE_SHEET_COPY_VERSION).toBe("2026-11-12");
+    });
+
+    it("keeps it out of the consent PATCH, which a missing column would otherwise refuse", async () => {
+      await submit({ stateOfDesireTicked: true });
+      const consent = submissionPatches().find((b) => "terms_version" in b);
+      expect(consent).toBeDefined();
+      expect(consent).not.toHaveProperty("state_of_desire_opt_in_at");
+      expect(consent).not.toHaveProperty("state_of_desire_opt_in_version");
+    });
+
+    it.each([
+      ["no tick", {}],
+      ["anything but true", { stateOfDesireTicked: "yes" }],
+    ])("stamps nothing for %s", async (_what, extra) => {
+      await submit(extra);
+      expect(tickPatch()).toBeUndefined();
+    });
+
+    it("still answers 200 when the stamp is refused (migration not applied)", async () => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+      mockFetchWithTimeout.mockImplementation(async (url: string, init?: { body?: string }) =>
+        (init?.body ?? "").includes("state_of_desire_opt_in_at")
+          ? {
+              ok: false,
+              status: 400,
+              text: async () => '{"code":"PGRST204","message":"Could not find the column"}',
+            }
+          : { ok: true, json: async () => [], text: async () => "" }
+      );
+      const res = await POST(makeRequest({ ...validBody(), stateOfDesireTicked: true }));
+      expect(res.status).toBe(200);
+      expect(tickPatch()).toBeDefined();
+      expect(submissionPatches().find((b) => "terms_version" in b)).toBeDefined();
     });
   });
 
