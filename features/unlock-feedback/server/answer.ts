@@ -1,6 +1,8 @@
 import { isTablet } from "@shared/http/tablet";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { noteReaderReturn } from "@features/attribution/server/return-ping";
+import { EMAIL_LINKS } from "@shared/emails/email-link";
 import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/fulfillment";
 import { getReportReturnHref } from "@features/checkout/server/reportPurchase";
 import { getDeviceTypeFromUserAgent } from "@features/pricing/logic/reportPricing";
@@ -144,6 +146,10 @@ export async function recordAnswer({
   // the free full report (the grant's payment row) now, once.
   if (first) {
     scheduleAfterResponse("journey-feedback-refresh", () => refreshJourneyDetail(submissionId));
+    // And a "Came back" reply in its thread, once a day (return-ping.ts).
+    scheduleAfterResponse("reader-return-answer", () =>
+      noteReaderReturn({ submissionId, source: "answer", via: EMAIL_LINKS.unlockFeedback.campaign })
+    );
   }
 
   return {

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { Redis } from "@upstash/redis";
+import { noteReaderReturn } from "@features/attribution/server/return-ping";
 import { addToSuppression } from "@shared/emails/suppression";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
@@ -221,7 +223,12 @@ async function recordMessageEvent(
   payload: {
     type?: unknown;
     created_at?: unknown;
-    data?: { email_id?: unknown; tags?: unknown };
+    data?: {
+      email_id?: unknown;
+      tags?: unknown;
+      created_at?: unknown;
+      click?: { link?: unknown; userAgent?: unknown };
+    };
   },
   recipient: string | undefined
 ): Promise<void> {
@@ -282,6 +289,23 @@ async function recordMessageEvent(
     }
   } catch (err) {
     logger.warn({ err, stage, eventType }, "email message event failed");
+  }
+  // A click is the reader coming back: their #incoming-surveys thread hears of it, once a day,
+  // after this answers (return-ping.ts). Not the unsubscribe link: that is leaving. The send
+  // time and the click's user agent tell a link scanner from a reader. Both the link and the
+  // user agent are only looked at, never kept.
+  const click = payload.data?.click;
+  const link = click?.link;
+  if (eventType === "clicked" && !(typeof link === "string" && link.includes("/api/unsubscribe"))) {
+    const signal = {
+      submissionId: Number(sub),
+      source: "email" as const,
+      at: new Date(Number.isFinite(at) ? at : Date.now()),
+      via: stage,
+      sentAt: typeof payload.data?.created_at === "string" ? payload.data.created_at : null,
+      userAgent: typeof click?.userAgent === "string" ? click.userAgent : null,
+    };
+    scheduleAfterResponse("reader-return-click", () => noteReaderReturn(signal));
   }
 }
 

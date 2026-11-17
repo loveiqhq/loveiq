@@ -41,6 +41,10 @@ const mockRefreshJourneyDetail = vi.fn();
 vi.mock("@features/attribution/server/journey-message", () => ({
   refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
 }));
+const mockNoteReaderReturn = vi.fn();
+vi.mock("@features/attribution/server/return-ping", () => ({
+  noteReaderReturn: (...args: unknown[]) => mockNoteReaderReturn(...args),
+}));
 
 const { createFakeDb, READER } = await import("./fakeDb");
 const { GET: open } = await import("@/app/api/unlock-feedback/open/route");
@@ -215,6 +219,10 @@ describe("POST /api/unlock-feedback/answer", () => {
     expect(state.db.grants()).toHaveLength(1);
     // The #incoming-surveys message names the return and the free report, on the first answer.
     expect(mockRefreshJourneyDetail.mock.calls).toEqual([[READER.submissionId]]);
+    // And its thread hears they came back, once, through the unlock-feedback email.
+    expect(mockNoteReaderReturn.mock.calls).toEqual([
+      [{ submissionId: READER.submissionId, source: "answer", via: "unlock_feedback" }],
+    ]);
   });
 
   it("two posts at the same instant: one first answer, one grant, both counted", async () => {
