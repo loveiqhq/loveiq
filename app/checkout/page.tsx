@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getReportReturnHref, isReportAccessToken } from "@features/checkout/server/reportPurchase";
+import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
 export const metadata: Metadata = {
   title: "Checkout | LoveIQ",
-  robots: { index: false, follow: false },
+  ...PRIVATE_PAGE_METADATA,
 };
 
 interface Props {

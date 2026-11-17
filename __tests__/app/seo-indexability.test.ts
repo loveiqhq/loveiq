@@ -3,7 +3,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import sitemap from "@/app/sitemap";
 
-const NOINDEX = /robots:\s*\{[^}]*index:\s*false/;
+// Noindex written out, or through the shared private-page metadata (shared/seo/private-page.ts;
+// __tests__/app/private-pages.test.ts checks what those pages actually export).
+const NOINDEX = /robots:\s*\{[^}]*index:\s*false|\.\.\.PRIVATE_PAGE_METADATA\b/;
 const read = (route: string) =>
   readFileSync(path.join(process.cwd(), "app", route, "page.tsx"), "utf8");
 
