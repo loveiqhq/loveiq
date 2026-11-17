@@ -62,6 +62,7 @@ import {
 } from "./metrics";
 import { genderShort, relationshipShort } from "./traffic";
 import { buildPaygateExits, type ExitEventRow, type PaygateExitsBlock } from "./paygate-exits";
+import { buildGateTest, type GateTestBlock, type GateTestRow } from "./gate-reveal-test";
 
 export interface OverTimeRow {
   label: string;
@@ -248,6 +249,8 @@ export interface PaymentPayload extends PageHead {
   elasticity: Elasticity;
   /** The paygate's exit pages (paygate-exits.ts): reached, why not, pressed, paid after. */
   exits: PaygateExitsBlock;
+  /** #11, Mark's new EUR 1.99 page against today's (gate-reveal-test.ts), per half. */
+  gateTest: GateTestBlock;
 }
 
 /** The per-visitor price switch, as system_flags holds it; null when it couldn't be read. */
@@ -476,6 +479,8 @@ export function buildPayment(input: {
   exitRows?: ExitEventRow[] | null;
   /** The surveys whose report saw the EUR 1.99 page (readGateSeen); null when unreadable. */
   gateSeen?: ReadonlySet<number> | null;
+  /** #11's surveys with their session and tracker (readGateTestRows); null when unreadable. */
+  gateRows?: GateTestRow[] | null;
 }): PaymentPayload {
   const { facts, filters: f, today, now, uplift } = input;
   const scope: Scope = assessmentScope(f);
@@ -1197,6 +1202,15 @@ export function buildPayment(input: {
       gateSeen: input.gateSeen ?? null,
       blocked: tablet,
       to: facts.to,
+    }),
+    gateTest: buildGateTest({
+      subs,
+      rows: input.gateRows ?? null,
+      gateSeen: input.gateSeen ?? null,
+      blocked: tablet,
+      from: facts.from,
+      to: facts.to,
+      today,
     }),
   };
 }

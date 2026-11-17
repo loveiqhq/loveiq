@@ -33,6 +33,7 @@ import { GET as paymentGet } from "@/app/api/admin/ap/payment/route";
 import { GET as reportGet } from "@/app/api/admin/ap/report/route";
 import { GET as surveyGet } from "@/app/api/admin/ap/survey/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
+import type { GateTestBlock } from "@features/admin/server/ap/gate-reveal-test";
 import type { PaygateExitsBlock } from "@features/admin/server/ap/paygate-exits";
 
 const json = (body: unknown, status = 200) => ({
@@ -349,5 +350,75 @@ describe("GET /api/admin/ap/payment: how readers reached the €1.99 page's exit
     const block = await exits(null);
     expect(block.why).toBeNull();
     expect(block.pages[0]!.came).toEqual({ notReady: 1, browserBack: 1, sawGate: null });
+  });
+});
+
+// #11, Mark's new €1.99 page as a 50/50: its halves are read from the switch-on.
+describe("GET /api/admin/ap/payment: the €1.99 page test (#11)", () => {
+  const DAY = "2026-11-17";
+  const after = (minutes: number) =>
+    new Date(Date.parse("2026-11-17T09:01:50Z") + minutes * 60_000).toISOString();
+  const surveyRead = () =>
+    mockFetchAllRows.mock.calls
+      .map(([p]) => p as string)
+      .filter((p) => p.startsWith("/rest/v1/survey_submission?"));
+
+  const gateTest = async (from: string, to: string) => {
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
+      const { p_from } = JSON.parse(init?.body ?? "{}") as { p_from?: string };
+      if (path === "/rest/v1/rpc/ap_facts")
+        return json(
+          facts(
+            p_from === from
+              ? [
+                  // Finished before the switch-on: not in the test.
+                  { ...finisher(1, DAY), at: "2026-11-17T08:00:00Z" },
+                  { ...finisher(2, DAY), at: after(5) },
+                  {
+                    ...finisher(3, DAY),
+                    at: after(9),
+                    pays: [[Math.floor(Date.parse(after(30)) / 1000), 1.99, "initial"]],
+                  },
+                ]
+              : []
+          )
+        );
+      return json(null, 404);
+    });
+    mockFetchAllRows.mockImplementation(async (path: string) => {
+      if (path.startsWith("/rest/v1/survey_submission?status=eq.completed"))
+        return [1, 2, 3].map((id) => ({
+          id,
+          session_id: null,
+          utm_tracker: JSON.stringify({ gate_reveal_arm: id === 3 ? "reveal" : "control" }),
+        }));
+      if (path.startsWith("/rest/v1/personal_report?initial_gate_seen_at="))
+        return [{ survey_submission_id: 3 }];
+      return [];
+    });
+    const res = await paymentGet(
+      new Request(`http://localhost/api/admin/ap/payment?period=custom&from=${from}&to=${to}`)
+    );
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { gateTest: GateTestBlock }).gateTest;
+  };
+
+  it("reads who is in which half from the switch-on, and counts each half's finishers", async () => {
+    const block = await gateTest(DAY, DAY);
+    expect(surveyRead()).toHaveLength(1);
+    expect(block.why).toBeNull();
+    expect(
+      block.arms.map((a) => [a.arm, a.finishers, a.reached, a.paid, a.paidReached, a.full])
+    ).toEqual([
+      ["control", 1, 0, 0, 0, 0],
+      ["reveal", 1, 1, 1, 1, 0],
+    ]);
+  });
+
+  it("doesn't read the halves for a range before the test, and says why", async () => {
+    const block = await gateTest("2026-11-10", "2026-11-16");
+    expect(surveyRead()).toEqual([]);
+    expect(block.arms).toEqual([]);
+    expect(block.why).toMatch(/^Not running in this range/);
   });
 });
