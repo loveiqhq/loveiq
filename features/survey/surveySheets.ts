@@ -6,7 +6,7 @@
  * Six short cards open at fixed points in the survey: a research stat, a Trustpilot rating, an
  * expert's quote, a halfway marker, a State of Desire promotion and a map of the report. Each
  * has a "Keep going" that carries on, opens once per run, and sits behind its own switch
- * (features/survey/logic/sheetSwitches.ts), so staging can show them while production does
+ * (features/survey/server/sheetSwitches.ts), so staging can show them while production does
  * not. SurveyEngine opens and closes them; features/survey/ui/sheets draws them. Their words
  * are in features/survey/surveySheetsCopy.ts.
  *

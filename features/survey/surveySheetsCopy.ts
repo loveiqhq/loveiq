@@ -106,9 +106,10 @@ export const HALFWAY_SHEET_COPY = {
  * Sheet 5, after 16005. "15%" is true: "Steady — Sex feels normal and good in my life" is
  * 15.5% of finished surveys, the team's own runs left out (production, 12 Nov 2026, 403 of
  * 2,605; the query above, with '16005'). The board's "+2.500 participants" is the report's
- * 2,369. The tick box records nothing yet: what it promises waits on Marcus (the link, and
- * the EUR 5 code), and keeping it needs its own consent. Its switch stays off in production
- * until both exist.
+ * 2,369. The tick is not kept in the database yet: it goes on the submission's
+ * #incoming-surveys message only (Mark, 13 Nov: "just record the tick for now"; he sends the
+ * study by hand). Nothing sends the EUR 5 code it promises, which waits on Marcus, and keeping
+ * the tick needs its own consent. Its switch stays off in production until both exist.
  */
 export const DESIRE_SHEET_COPY = {
   eyebrow: "Did you know?",

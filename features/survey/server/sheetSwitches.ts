@@ -10,7 +10,7 @@
  * Mark 16 Nov).
  */
 
-import { isFeatureEnabled, type SystemFlagKey } from "@shared/flags/system-flags";
+import { areFeaturesEnabled, type SystemFlagKey } from "@shared/flags/system-flags";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import {
   GATE_TEST_SHEETS,
@@ -34,12 +34,14 @@ export const SURVEY_SHEET_SWITCHES = {
  * `report_gate_archetype_reveal`, whatever their own say: they run with the test, never alone.
  */
 export async function enabledSurveySheets(): Promise<SurveySheetId[]> {
-  const [on, revealOn] = await Promise.all([
-    Promise.all(SURVEY_SHEET_IDS.map((id) => isFeatureEnabled(SURVEY_SHEET_SWITCHES[id], false))),
-    isFeatureEnabled("report_gate_archetype_reveal", false),
-  ]);
+  // One read for the seven switches, not seven (areFeaturesEnabled).
+  const on = await areFeaturesEnabled(
+    [...SURVEY_SHEET_IDS.map((id) => SURVEY_SHEET_SWITCHES[id]), "report_gate_archetype_reveal"],
+    false
+  );
+  const revealOn = on[SURVEY_SHEET_IDS.length] === true;
   return SURVEY_SHEET_IDS.filter(
-    (id, i) => on[i] === true && (revealOn === true || !GATE_TEST_SHEETS.has(id))
+    (id, i) => on[i] === true && (revealOn || !GATE_TEST_SHEETS.has(id))
   );
 }
 
