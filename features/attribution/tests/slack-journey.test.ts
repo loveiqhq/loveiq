@@ -1380,3 +1380,58 @@ describe("the State of Desire tick on the survey's message", () => {
     expect(JSON.stringify(message.blocks)).not.toContain("State of Desire");
   });
 });
+
+// Mark, 17 Nov: "do we show the 50/50 test split? … whether the Core Archetype was shown or
+// not". The half rides on the journey, read off the survey's own stamp, so the line survives
+// every edit of the message (report opened, paid), not only the first post.
+describe("the EUR 1.99 page's 50/50 on the survey's message", () => {
+  const lines = (over: Partial<SubmissionJourney>) =>
+    (
+      (
+        buildJourneyMessage(journey(over), { kind: "survey_completed", questionCount: 58 })
+          .blocks as Array<{ type: string; text?: { text?: string } }>
+      ).find((b) => b.type === "section")?.text?.text ?? ""
+    ).split("\n");
+  const half = (over: Partial<SubmissionJourney>) =>
+    lines(over).find((l) => l.startsWith("€1.99 page:"));
+
+  it("says the new page showed the Core Archetype", () => {
+    expect(half({ gateCohort: true, gateRevealArm: "reveal" })).toBe(
+      "€1.99 page: *Core Archetype shown* (new page)"
+    );
+  });
+
+  it("says today's page did not", () => {
+    expect(half({ gateCohort: true, gateRevealArm: "control" })).toBe(
+      "€1.99 page: *Core Archetype not shown* (today's page)"
+    );
+  });
+
+  it("sits with the test arms, under the landing line, above the rail", () => {
+    const all = lines({ gateCohort: true, gateRevealArm: "reveal" });
+    const at = all.findIndex((l) => l.startsWith("€1.99 page:"));
+    expect(at).toBe(all.findIndex((l) => l.startsWith("Landing page design:")) + 1);
+  });
+
+  it("stays after they paid, when the message is edited", () => {
+    expect(
+      half({
+        gateCohort: true,
+        gateRevealArm: "control",
+        paid: [{ amount: 1.99, currency: "EUR" }],
+        milestones: { ...journey().milestones, purchasedAt: "2026-11-17T20:00:00.000Z" },
+      })
+    ).toBe("€1.99 page: *Core Archetype not shown* (today's page)");
+  });
+
+  it("says nothing when no half was stamped (the switch was off)", () => {
+    expect(half({ gateCohort: true })).toBeUndefined();
+  });
+
+  it("says nothing for a reader who never meets the EUR 1.99 page", () => {
+    expect(half({ gateCohort: false, gateRevealArm: "reveal" })).toBeUndefined();
+    expect(half({ payToStart: true, payToStartOffer: "full", gateRevealArm: "reveal" })).toBe(
+      undefined
+    );
+  });
+});
