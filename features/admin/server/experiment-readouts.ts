@@ -7,6 +7,7 @@ import { computeRate } from "@features/admin/server/digest-metrics";
 import {
   formatSignalSummary,
   MIN_CELL_COUNT,
+  TINY_ARM,
   twoProportionSignal,
 } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -26,13 +27,6 @@ import logger from "@shared/observability/logger";
 
 /** Hard ceiling per collection, paged 1000 at a time. */
 const MAX_ROWS = 20_000;
-
-/**
- * Below this, an arm is reported as "too early to compare" regardless of what the
- * z-test says — a lopsided split (e.g. 828 vs 9) satisfies the combined-n>=50 rule
- * on the strength of the large arm alone.
- */
-const TINY_ARM = 30;
 
 const QUOTE_COLUMNS = [
   "survey_submission_id",

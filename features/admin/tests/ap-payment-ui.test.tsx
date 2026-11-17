@@ -352,6 +352,39 @@ const payload: PaymentPayload = {
       },
     ],
   },
+  // 20 of 200 against 40 of 200: callable, and credible.
+  gateTest: {
+    test: "#11 · New €1.99 page",
+    note: "Since 17 Nov 2026 · live",
+    arms: [
+      {
+        arm: "control",
+        name: "Today's €1.99 page",
+        control: true,
+        finishers: 200,
+        reached: 180,
+        paid: 20,
+        paidReached: 19,
+        full: 2,
+      },
+      {
+        arm: "reveal",
+        name: "New page: Core Archetype shown",
+        control: false,
+        finishers: 200,
+        reached: 190,
+        paid: 40,
+        paidReached: 38,
+        full: 3,
+      },
+    ],
+    lift: 1,
+    confidence: 0.99,
+    liftWhy: null,
+    verdict:
+      "New page: Core Archetype shown is genuinely ahead: 20.0% vs 10.0% (+10pp · 95% CI +3.63 to +16.37pp).",
+    why: null,
+  },
 };
 
 afterEach(() => {
@@ -391,6 +424,7 @@ describe("the Payment page as drawn", () => {
       "Their words",
       "Why not today · After the full report's plans",
       "Who pays",
+      "€1.99 page test",
       "Pricing tests",
       "Personal price multipliers in Pricing 3.0",
       "Price elasticity prediction",
@@ -403,6 +437,7 @@ describe("the Payment page as drawn", () => {
       "Checkout & methods",
       "Paygate exits",
       "Segments",
+      "€1.99 page test",
       "Pricing tests",
       "Price elasticity",
     ]);
@@ -411,6 +446,7 @@ describe("the Payment page as drawn", () => {
       "#checkout",
       "#exits",
       "#segments",
+      "#gate-test",
       "#experiments",
       "#elasticity",
     ]);
@@ -669,6 +705,80 @@ describe("the Payment page as drawn", () => {
     expect(within(table).getAllByRole("row")[2]!.className).toContain("border-dashed");
   });
 
+  it("€1.99 page test: each half's funnel, the decider in bold, the lift once it can be called, and the verdict", () => {
+    render(<ApPayment />);
+    const table = screen.getByRole("table", { name: "€1.99 page test" });
+    const [c, r] = rows(table).map((x) => texts(within(x).getAllByRole("cell")));
+    expect(c).toEqual([
+      "#11 · New €1.99 pageSince 17 Nov 2026 · live",
+      "Today's €1.99 pageControl",
+      "200",
+      "180",
+      "20",
+      "10.0%",
+      "10.6%",
+      "2",
+      "—",
+    ]);
+    expect(r).toEqual([
+      "",
+      "New page: Core Archetype shown",
+      "200",
+      "190",
+      "40",
+      "20.0%",
+      "20.0%",
+      "3",
+      "+100.0%99% confidence · credible",
+    ]);
+    const cell = (row: number, col: number) =>
+      within(rows(table)[row]!).getAllByRole("cell")[col]!.className;
+    expect(cell(0, 5)).toContain("font-bold");
+    expect(cell(1, 8)).toContain("text-ap-good-ink");
+    expect(within(region("€1.99 page test")).getByText(payload.gateTest.verdict)).toBeTruthy();
+  });
+
+  it("€1.99 page test: a lift it can't call is blank with why, an uncertain one never green, and a read that failed says so", () => {
+    const gate = (over: Partial<PaymentPayload["gateTest"]>) => ({
+      ...payload,
+      gateTest: { ...payload.gateTest, ...over },
+    });
+    const liftCell = () =>
+      within(rows(screen.getByRole("table", { name: "€1.99 page test" }))[1]!).getAllByRole(
+        "cell"
+      )[8]!;
+    view.payload = gate({
+      lift: null,
+      confidence: null,
+      liftWhy: "Too early to compare",
+      verdict:
+        "Too early to compare: New page: Core Archetype shown has only 25 finishers so far. Ignore the difference until that grows.",
+    });
+    render(<ApPayment />);
+    expect(liftCell().textContent).toBe("—Too early to compare");
+    expect(screen.getByText(/^Too early to compare: New page/)).toBeTruthy();
+    cleanup();
+
+    view.payload = gate({ lift: 0.3, confidence: 0.49 });
+    render(<ApPayment />);
+    expect(liftCell().textContent).toBe("+30.0%49% confidence · not significant yet");
+    expect(liftCell().className).not.toContain("text-ap-good-ink");
+    cleanup();
+
+    view.payload = gate({
+      arms: [],
+      verdict: "",
+      why: "Who is in which half could not be read just now.",
+    });
+    render(<ApPayment />);
+    expect(screen.queryByRole("table", { name: "€1.99 page test" })).toBeNull();
+    expect(
+      within(region("€1.99 page test")).getByText(
+        "Who is in which half could not be read just now."
+      )
+    ).toBeTruthy();
+  });
+
   it("the multipliers' sentence follows the price switch: off, on, or unread", () => {
     render(<ApPayment />);
     expect(
@@ -791,9 +901,21 @@ describe("the Payment page as drawn", () => {
       "Paygate exits · how they reached it",
       "Paygate exits · why not today",
       "Who pays · Country",
+      "€1.99 page test",
       "Pricing tests",
     ]);
     const section = (name: string) => exported.sections.find((s) => s.name === name)!.table;
+    // Each half's counts and rates, the lift and its confidence on the new page's row only.
+    expect(section("€1.99 page test").rows).toEqual([
+      {
+        label: "#11 · New €1.99 page · Today's €1.99 page (control)",
+        values: ["Since 17 Nov 2026 · live", 200, 180, 20, 0.1, 19 / 180, 2, null, null],
+      },
+      {
+        label: "#11 · New €1.99 page · New page: Core Archetype shown",
+        values: ["Since 17 Nov 2026 · live", 200, 190, 40, 0.2, 0.2, 3, 1, 0.99],
+      },
+    ]);
     // The segment in full, every country.
     expect(section("Who pays · Country").rows).toHaveLength(14);
     expect(section("Paygate exits").rows[0]).toEqual({
