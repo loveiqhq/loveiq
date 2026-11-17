@@ -32,7 +32,6 @@ import {
   sectionTitle,
   shell,
   signOff,
-  smallNote,
   steps,
   textFooter,
   textSteps,
@@ -317,6 +316,7 @@ export function inviteReminderOneEmail({
         body: "They get their own report. Yours stays private: they don’t see what it says.",
         href: inviteUrl,
         cta: "Invite a friend",
+        pasteLink: true,
       }),
       tiles(siteUrl, "What you’ll find inside", INSIDE_TILES),
       signOff(),
@@ -363,8 +363,8 @@ export function inviteReminderTwoEmail({
         body: "They take the test on their own. Your answers and your report stay yours.",
         href: inviteUrl,
         cta: "Invite a friend",
+        pasteLink: true,
       }),
-      smallNote("This is the last reminder we send about invites."),
       signOff(),
     ],
   });
@@ -376,7 +376,6 @@ export function inviteReminderTwoEmail({
       "One invite, their own report. They take the test on their own. Your answers and your report stay yours.",
       inviteUrl,
     ],
-    "This is the last reminder we send about invites.",
     textFooter(FULL_REASON, unsubscribeUrl),
   ]);
   return { subject, html, text };

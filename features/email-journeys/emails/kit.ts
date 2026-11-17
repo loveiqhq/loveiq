@@ -131,9 +131,7 @@ export function button({ href, label, notes = [], pasteLink = true }: ButtonOpti
         `<p style="margin:12px 0 0; text-align:center; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.muted};">${n}</p>`
     )
     .join("");
-  const paste = pasteLink
-    ? `<p style="margin:12px auto 0; max-width:440px; text-align:center; font-family:${SANS}; font-size:11px; line-height:16px; color:${C.faint}; word-break:break-all;">Or paste this link into your browser: <a href="${url}" style="color:${C.faint}; text-decoration:underline;">${e(href)}</a></p>`
-    : "";
+  const paste = pasteLink ? pasteLine(href, "center") : "";
   return row(`
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
   <tr>
@@ -151,6 +149,15 @@ export function button({ href, label, notes = [], pasteLink = true }: ButtonOpti
   </tr>
 </table>
 ${notesHtml}${paste}`);
+}
+
+/** The "Or paste this link into your browser" line, for mail apps that block buttons. */
+function pasteLine(href: string, align: "center" | "left"): string {
+  const box =
+    align === "center"
+      ? "margin:12px auto 0; max-width:440px; text-align:center;"
+      : "margin:12px 0 0;";
+  return `<p style="${box} font-family:${SANS}; font-size:11px; line-height:16px; color:${C.faint}; word-break:break-all;">Or paste this link into your browser: <a href="${e(href)}" style="color:${C.faint}; text-decoration:underline;">${e(href)}</a></p>`;
 }
 
 /** An outlined button inside a panel (share, invite). Outlook draws it square, still a link. */
@@ -342,6 +349,8 @@ export function panel(
     body: string;
     href: string;
     cta: string;
+    /** When the panel's button is the email's main one (C3, C4): the paste-this-link line. */
+    pasteLink?: boolean;
   }
 ): string {
   return row(`
@@ -355,7 +364,7 @@ export function panel(
     <div style="font-family:${SERIF}; font-size:20px; line-height:26px; font-weight:500; color:${C.ink};">${e(opts.title)}</div>
     <div style="height:8px; line-height:8px; font-size:0;">&nbsp;</div>
     <div style="font-family:${SANS}; font-size:15px; line-height:24px; color:${C.body};">${e(opts.body)}</div>
-    ${outlineButton(opts.href, opts.cta)}
+    ${outlineButton(opts.href, opts.cta)}${opts.pasteLink ? pasteLine(opts.href, "left") : ""}
   </td></tr>
 </table>`);
 }
