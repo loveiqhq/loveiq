@@ -51,7 +51,7 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             Your thumbs up or down on an answer, your feedback, and a random id for this browser
-            that counts your free replies.
+            that counts your free conversations.
           </li>
         </ul>
 
