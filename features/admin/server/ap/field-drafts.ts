@@ -39,6 +39,9 @@ export const DRAFTS: Record<string, TableDraft> = {
       hotjar_user_id: "Hotjar's visitor id: nothing new since Hotjar was removed on 10 Aug 2026.",
       option_order:
         "The order answer options were shown in, for questions that shuffle them (from 11 Sep 2026).",
+      state_of_desire_opt_in_at:
+        "When the person ticked the State of Desire box (email me a 5€ off code); empty when not.",
+      state_of_desire_opt_in_version: "The version of the box's words that tick was given under.",
       updated_date_time: "Last change to the row.",
     },
   },

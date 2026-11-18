@@ -345,8 +345,9 @@ const surveySchema = z.object({
   marketingOptInVia: z.enum(["sheet"]).optional().nullable().catch(null),
   /**
    * The State of Desire sheet's box was ticked (Mark, 13 Nov: "just record the tick for now").
-   * It goes on the submission's #incoming-surveys message; Mark sends the study by hand.
-   * Anything but `true` is dropped, never refused.
+   * Kept on the submission with its consent record (submitSurveyOnce) and named on its
+   * #incoming-surveys message; Mark sends the code by hand. Anything but `true` is dropped,
+   * never refused.
    */
   stateOfDesireTicked: z.literal(true).optional().nullable().catch(null),
   website: z.string().max(0).optional().nullable(),
@@ -713,6 +714,7 @@ export async function POST(request: Request) {
       optionOrder,
       marketingOptIn,
       marketingOptInVia,
+      stateOfDesireTicked: stateOfDesireTicked === true,
     });
     const tSubmit = performance.now();
 
