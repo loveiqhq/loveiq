@@ -94,6 +94,25 @@ describe("buildSubmissionJourney", () => {
     });
   });
 
+  // The State of Desire tick, off its consent stamp, so a message rebuilt on a later step
+  // (no options then) still says it. Mark sends the code from that line.
+  it("reads the State of Desire tick off the row, for every rebuild", async () => {
+    route({ sub: [{ ...SUBMISSION, state_of_desire_opt_in_at: "2026-08-24T10:12:00.500Z" }] });
+    const journey = await buildSubmissionJourney(1296);
+    expect(queryFor("/survey_submission?")).toContain("state_of_desire_opt_in_at");
+    expect(journey?.stateOfDesireTicked).toBe(true);
+    const section = buildJourneyMessage(journey!, {
+      kind: "survey_completed",
+      questionCount: 61,
+    }).blocks.find((b) => b.type === "section") as { text: { text: string } };
+    expect(section.text.text).toContain("State of Desire: *ticked* (send the study)");
+  });
+
+  it("carries no tick when the row has none", async () => {
+    route({ sub: [{ ...SUBMISSION, state_of_desire_opt_in_at: null }] });
+    expect(await buildSubmissionJourney(1296)).not.toHaveProperty("stateOfDesireTicked");
+  });
+
   it("fetches its seven sources concurrently, not sequentially", async () => {
     route({ quotes: [QUOTE_PURCHASED] });
     await buildSubmissionJourney(1296);
@@ -459,6 +478,30 @@ describe("buildSubmissionJourney", () => {
       );
       route({});
       expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
+    });
+
+    // Mark, 17 Nov: the 50/50 of the EUR 1.99 page in #incoming-surveys. Off the row, so a
+    // message rebuilt on a later step (report opened, paid) still names the half.
+    it("reads the EUR 1.99 page's half off the survey's stamp, for every rebuild", async () => {
+      const tracker = JSON.parse(SUBMISSION.utm_tracker) as Record<string, unknown>;
+      route({
+        sub: [
+          { ...SUBMISSION, utm_tracker: JSON.stringify({ ...tracker, gate_reveal_arm: "reveal" }) },
+        ],
+        reports: [{ initial_gate_cohort_at: "2026-08-24T10:12:01.000Z" }],
+      });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.gateRevealArm).toBe("reveal");
+      const section = buildJourneyMessage(journey!, {
+        kind: "survey_completed",
+        questionCount: 61,
+      }).blocks.find((b) => b.type === "section") as { text: { text: string } };
+      expect(section.text.text).toContain("€1.99 page: *Core Archetype shown* (new page)");
+    });
+
+    it("carries no half when the survey stamped none", async () => {
+      route({ reports: [{ initial_gate_cohort_at: "2026-08-24T10:12:01.000Z" }] });
+      expect(await buildSubmissionJourney(1296)).not.toHaveProperty("gateRevealArm");
     });
 
     it("lists every payment that took money, oldest first, and none that did not", async () => {

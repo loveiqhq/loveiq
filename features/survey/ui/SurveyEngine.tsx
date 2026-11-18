@@ -982,8 +982,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // Closed without the button (the scrim, Esc, a swipe down). These sheets ask nothing, so it
   // carries on as Keep going does.
   const handleSheetDismiss = useCallback(
-    (via: SheetDismissVia) => {
-      const id = closeSheet(via);
+    (via: SheetDismissVia, extra?: { ticked?: boolean }) => {
+      const id = closeSheet(via, extra);
       if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
     },
     [closeSheet]

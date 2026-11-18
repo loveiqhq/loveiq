@@ -22,7 +22,8 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
-import { classifyTraffic, readStampedArms, type TrafficInfo } from "./traffic";
+import { classifyTraffic, readGateRevealStamp, readStampedArms, type TrafficInfo } from "./traffic";
+import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
 import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
@@ -136,6 +137,12 @@ export interface SubmissionJourney {
    * so it is there at post time.
    */
   gateCohort?: boolean;
+  /**
+   * The reader's half of Mark's 50/50 of the EUR 1.99 page, off the survey's own stamp
+   * (readGateRevealStamp): `reveal` meets his page with the Core Archetype, `control` today's
+   * page. Absent when nothing is stamped. Read from the row, so every edit of the message keeps it.
+   */
+  gateRevealArm?: GateRevealArm;
   /** The money taken, one entry per succeeded payment above EUR 0 that is no test, oldest first. */
   paid?: Array<{ amount: number; currency: string }>;
   /** The EUR 0 unlocks on the report, when nothing was paid, each kind once. */
@@ -154,6 +161,11 @@ export interface SubmissionJourney {
    * as "no recording", not as an error.
    */
   recordingSessionId: string | null;
+  /**
+   * They ticked the State of Desire sheet's box ("Email me a 5€ off code"), off the row's
+   * consent stamp, so every rebuild of the message keeps saying so. Absent means no.
+   */
+  stateOfDesireTicked?: boolean;
 }
 
 interface SubmissionRow {
@@ -165,6 +177,8 @@ interface SubmissionRow {
   duration_ms: number | null;
   utm_tracker: string | null;
   posthog_session_id: string | null;
+  /** When the State of Desire box was ticked; absent on rows read before its migration. */
+  state_of_desire_opt_in_at?: string | null;
   app_user: {
     email: string | null;
     first_name: string | null;
@@ -475,7 +489,7 @@ export async function buildSubmissionJourney(
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
-        `posthog_session_id,` +
+        `posthog_session_id,state_of_desire_opt_in_at,` +
         `app_user!fk_survey_submission_user(email,first_name,user_profile(location_primary))`,
       "survey_submission"
     ),
@@ -575,6 +589,7 @@ export async function buildSubmissionJourney(
   const events = [...eventsDesc].sort((a, b) => a.event_time.localeCompare(b.event_time));
 
   const stamped = readStampedArms(sub.utm_tracker);
+  const gateRevealArm = readGateRevealStamp(sub.utm_tracker);
 
   // Any quote carries the person's pricing arm and their resolved device/country —
   // they are frozen per reader, not per plan. Prefer a purchased quote so the
@@ -716,9 +731,11 @@ export async function buildSubmissionJourney(
       : {}),
     ...ptsOffer,
     gateCohort: stampedAtSubmit(sub.created_date_time, reports[0]?.initial_gate_cohort_at),
+    ...(gateRevealArm ? { gateRevealArm } : {}),
     paid,
     freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
     emailReturns: backByEmail,
+    ...(sub.state_of_desire_opt_in_at ? { stateOfDesireTicked: true } : {}),
   };
 }
 

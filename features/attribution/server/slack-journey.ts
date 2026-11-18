@@ -12,7 +12,13 @@
  * asterisk broke the layout.
  */
 
-import { armLabel, AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
+import {
+  armLabel,
+  AXIS_TITLES,
+  GATE_REVEAL_LABELS,
+  GATE_REVEAL_TITLE,
+  type ExperimentAxis,
+} from "@features/attribution/server/labels";
 import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
 import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
@@ -569,6 +575,13 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
     );
   }
 
+  // Mark's 50/50 of the EUR 1.99 page (17 Nov: "whether the Core Archetype was shown or
+  // not"), for a reader whose report waits behind that page. No line when nothing is
+  // stamped: the switch was off, and a "Not recorded" on every message would be noise.
+  if (journey.gateCohort && journey.gateRevealArm) {
+    lines.push(`${GATE_REVEAL_TITLE}: ${boldArmName(GATE_REVEAL_LABELS[journey.gateRevealArm])}`);
+  }
+
   // Omitted when unknown rather than falling back to the pricing band — a band
   // is not an answer to "where are they from".
   if (journey.country) {
@@ -738,8 +751,12 @@ export function buildJourneyMessage(
     text = `:memo: Survey submission #${journey.submissionId} — ${describeQuestionCount(options.questionCount)}${surveyTime ? ` in ${surveyTime}` : ""}`;
     const lines = compactSurveyLines(journey, options.reachedFloor);
     // Mark, 13 Nov: "just record the tick for now"; he sends the study by hand, so the
-    // message that announces the submission says who asked for it.
-    if (options.stateOfDesireTicked) lines.push("State of Desire: *ticked* (send the study)");
+    // message that announces the submission says who asked for it. Off the row's consent
+    // stamp too, as every later edit of the message (report opened, paid) carries no options:
+    // the first post alone used to lose it within minutes.
+    if (options.stateOfDesireTicked || journey.stateOfDesireTicked) {
+      lines.push("State of Desire: *ticked* (send the study)");
+    }
     blocks.push(section(lines.join("\n")));
   }
 
