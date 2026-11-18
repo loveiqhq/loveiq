@@ -172,7 +172,10 @@ export default function MiraChat({
       ]);
       window.history.replaceState(null, "", `/mira?chat=${res.data.chatId}`);
     }
-    if (left === 0) setGate(true);
+    if (left === 0) {
+      setGate(true);
+      void miraApi("/api/mira/event", { body: { type: "track", name: "gate_shown" } });
+    }
   }
 
   async function rate(index: number, rating: 1 | -1) {
