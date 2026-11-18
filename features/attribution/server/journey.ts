@@ -22,7 +22,8 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
-import { classifyTraffic, readStampedArms, type TrafficInfo } from "./traffic";
+import { classifyTraffic, readGateRevealStamp, readStampedArms, type TrafficInfo } from "./traffic";
+import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
 import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
@@ -136,6 +137,12 @@ export interface SubmissionJourney {
    * so it is there at post time.
    */
   gateCohort?: boolean;
+  /**
+   * The reader's half of Mark's 50/50 of the EUR 1.99 page, off the survey's own stamp
+   * (readGateRevealStamp): `reveal` meets his page with the Core Archetype, `control` today's
+   * page. Absent when nothing is stamped. Read from the row, so every edit of the message keeps it.
+   */
+  gateRevealArm?: GateRevealArm;
   /** The money taken, one entry per succeeded payment above EUR 0 that is no test, oldest first. */
   paid?: Array<{ amount: number; currency: string }>;
   /** The EUR 0 unlocks on the report, when nothing was paid, each kind once. */
@@ -575,6 +582,7 @@ export async function buildSubmissionJourney(
   const events = [...eventsDesc].sort((a, b) => a.event_time.localeCompare(b.event_time));
 
   const stamped = readStampedArms(sub.utm_tracker);
+  const gateRevealArm = readGateRevealStamp(sub.utm_tracker);
 
   // Any quote carries the person's pricing arm and their resolved device/country —
   // they are frozen per reader, not per plan. Prefer a purchased quote so the
@@ -716,6 +724,7 @@ export async function buildSubmissionJourney(
       : {}),
     ...ptsOffer,
     gateCohort: stampedAtSubmit(sub.created_date_time, reports[0]?.initial_gate_cohort_at),
+    ...(gateRevealArm ? { gateRevealArm } : {}),
     paid,
     freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
     emailReturns: backByEmail,

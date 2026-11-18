@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyTraffic,
   LANDING_PATH_TRACKER_KEY,
+  readGateRevealStamp,
   readStampedArms,
 } from "@features/attribution/server/traffic";
 
@@ -77,5 +78,34 @@ describe("readStampedArms", () => {
 
   it("trims surrounding whitespace on a stamped arm", () => {
     expect(readStampedArms(JSON.stringify({ landing_variant: "  white  " })).landing).toBe("white");
+  });
+});
+
+describe("readGateRevealStamp — the EUR 1.99 page's half", () => {
+  it("reads the half the survey's submit stamped, as production writes it", () => {
+    const tracker = JSON.stringify({
+      utm_source: "google",
+      landing_variant: "video",
+      question_order_arm: "variant",
+      gate_reveal_arm: "reveal",
+    });
+    expect(readGateRevealStamp(tracker)).toBe("reveal");
+    expect(readGateRevealStamp(JSON.stringify({ gate_reveal_arm: "control" }))).toBe("control");
+  });
+
+  it("is null when nothing real is stamped", () => {
+    for (const input of [
+      null,
+      "",
+      "not json",
+      "[]",
+      "null",
+      JSON.stringify({ utm_source: "google" }),
+      JSON.stringify({ gate_reveal_arm: "Reveal" }),
+      JSON.stringify({ gate_reveal_arm: " reveal " }),
+      JSON.stringify({ gate_reveal_arm: 1 }),
+    ]) {
+      expect(readGateRevealStamp(input)).toBeNull();
+    }
   });
 });
