@@ -18,6 +18,7 @@ vi.mock("@features/mira/server/session", () => ({
 vi.mock("@features/mira/server/sign-in", () => ({
   SIGN_IN_CODE: /^\d{6,10}$/,
   sendSignInCode: vi.fn().mockResolvedValue(true),
+  voidOutstandingCode: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([1, 2]),
@@ -27,7 +28,7 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import { POST } from "@/app/api/mira/auth/route";
-import { sendSignInCode } from "@features/mira/server/sign-in";
+import { sendSignInCode, voidOutstandingCode } from "@features/mira/server/sign-in";
 import { addMessages, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
@@ -85,15 +86,30 @@ describe("POST /api/mira/auth", () => {
     expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", "mira-2026-11-18");
   });
 
-  it("caps guesses per address, whatever the IP", async () => {
+  it("voids the code after too many wrong guesses for an address, whatever the IP", async () => {
+    verifyOtp.mockResolvedValue({
+      data: { user: null },
+      error: { message: "Token has expired or is invalid" },
+    });
     vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
-      cfg.bucket === "mira-verify"
+      cfg.bucket === "mira-verify-fail"
         ? { allowed: false, remaining: 0, resetAt: new Date() }
         : { allowed: true, remaining: 9, resetAt: new Date() }
     );
     const res = await post({ action: "verify", email: "lea@example.com", code: "12345678" });
     expect(res.status).toBe(429);
-    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(voidOutstandingCode).toHaveBeenCalledWith("lea@example.com");
+  });
+
+  it("never blocks a correct code, however many wrong ones came before", async () => {
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
+      cfg.bucket === "mira-verify-fail"
+        ? { allowed: false, remaining: 0, resetAt: new Date() }
+        : { allowed: true, remaining: 9, resetAt: new Date() }
+    );
+    const res = await post({ action: "verify", email: "lea@example.com", code: "12345678" });
+    expect(res.status).toBe(200);
+    expect(voidOutstandingCode).not.toHaveBeenCalled();
   });
 
   it("refuses a wrong code without signing in", async () => {

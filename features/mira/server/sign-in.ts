@@ -24,6 +24,28 @@ function neutralFrom(): string {
   return `Applied Psychometrics <${address}>`;
 }
 
+/** The reply-to address, only when it is one (a pulled env file holds "[SENSITIVE]" instead). */
+function replyTo(): string | null {
+  const v = process.env.RESEND_REPLY_TO?.trim();
+  return v && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(v) ? v : null;
+}
+
+/**
+ * Voids a person's outstanding code after too many wrong guesses: minting a recovery token
+ * replaces the magic-link one (Supabase keeps one per user), so the guessed-at code stops
+ * working and the person simply asks for a new one. A recovery link is never minted for an
+ * address without an account (404), so no account is created here. Nothing is emailed.
+ */
+export async function voidOutstandingCode(email: string): Promise<void> {
+  const res = await supabaseFetch("/auth/v1/admin/generate_link", {
+    method: "POST",
+    body: JSON.stringify({ type: "recovery", email }),
+  });
+  if (!res.ok && res.status !== 404) {
+    logger.warn({ status: res.status }, "mira: could not void a guessed-at sign-in code");
+  }
+}
+
 export function signInCodeEmail(code: string) {
   const subject = `Your sign-in code: ${code}`;
   const text =
@@ -74,7 +96,7 @@ export async function sendSignInCode(email: string): Promise<boolean> {
       subject,
       html,
       text,
-      ...(process.env.RESEND_REPLY_TO ? { replyTo: process.env.RESEND_REPLY_TO } : {}),
+      ...(replyTo() ? { replyTo: replyTo()! } : {}),
     }),
     new Promise<{ error: Error }>((resolve) =>
       setTimeout(() => resolve({ error: new Error("Resend timeout") }), 8_000)
