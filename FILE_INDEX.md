@@ -181,6 +181,18 @@
 | Supabase admin REST helper         | `features/admin/server/supabase.ts`        |
 | Restore the database from a backup | `docs/runbooks/DISASTER_RECOVERY.md` (§1)  |
 
+## Mira (AI coach, beta)
+
+| Task                                 | Files                                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| Change what Mira says or may not say | `features/mira/content/system-prompt.ts`, `features/mira/content/mira-config.json` |
+| Add or fix an evidence card          | `features/mira/content/evidence-cards.json`, `features/mira/server/cards.ts`       |
+| Support lines by country             | `features/mira/content/crisis-lines.json`, `features/mira/server/crisis.ts`        |
+| Free replies, model, consent version | `features/mira/server/config.ts`                                                   |
+| The chat, sign-up, home, settings    | `features/mira/ui/`, `app/mira/`                                                   |
+| Mira's API routes                    | `app/api/mira/`                                                                    |
+| Mira's tables                        | `supabase/migrations/20261118120000_mira_mvp.sql`                                  |
+
 ## Company Brain
 
 | Task                            | Files                                                                                                                    |

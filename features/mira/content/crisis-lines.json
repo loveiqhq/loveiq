@@ -1,0 +1,190 @@
+{
+  "source": "Sanjin's briefing page 'Coach Mira overview: body confidence in sex' (https://claude.ai/artifact/WaNAdZPiMjNkhvZtENjrwk), section 1.6 'Crisis lines', table 'The draft, country by country'. The page names data workbook v1.5 as its source. The workbook's Crisis resources tab itself could not be reached, so check every number against it before launch. Hours and URLs are not in the source and are left null.",
+  "status": "Draft. Blocks launch: team review and country coverage. Canada and Australia need a final check on the services' own sites.",
+  "rules": [
+    "Emergency number first if there’s any danger",
+    "Ask the country once if it’s unknown",
+    "Never promise confidentiality or say what a service will do",
+    "Re-check every 3 months"
+  ],
+  "countries": [
+    {
+      "code": "US",
+      "name": "United States",
+      "emergency": "911",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": null,
+          "phone": "988",
+          "label": "988 (call or text)"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "RAINN",
+          "phone": "800-656-4673",
+          "label": "RAINN 800-656-4673"
+        }
+      ]
+    },
+    {
+      "code": "CA",
+      "name": "Canada",
+      "emergency": "911",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": null,
+          "phone": "988",
+          "label": "988 (call or text)"
+        }
+      ]
+    },
+    {
+      "code": "GB",
+      "name": "United Kingdom",
+      "emergency": "999 or 112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Samaritans",
+          "phone": "116 123",
+          "label": "Samaritans 116 123"
+        },
+        {
+          "type": "crisis",
+          "name": null,
+          "phone": "85258",
+          "label": "text SHOUT 85258"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Rape Crisis",
+          "phone": "0808 500 2222",
+          "label": "Rape Crisis 0808 500 2222"
+        }
+      ]
+    },
+    {
+      "code": "IE",
+      "name": "Ireland",
+      "emergency": "999 or 112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Samaritans",
+          "phone": "116 123",
+          "label": "Samaritans 116 123"
+        },
+        {
+          "type": "crisis",
+          "name": null,
+          "phone": "50808",
+          "label": "text HELLO 50808"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Rape Crisis",
+          "phone": "1800 77 8888",
+          "label": "Rape Crisis 1800 77 8888"
+        }
+      ]
+    },
+    {
+      "code": "AU",
+      "name": "Australia",
+      "emergency": "000",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Lifeline",
+          "phone": "13 11 14",
+          "label": "Lifeline 13 11 14"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "1800RESPECT",
+          "phone": "1800 737 732",
+          "label": "1800RESPECT 1800 737 732"
+        }
+      ]
+    },
+    {
+      "code": "NZ",
+      "name": "New Zealand",
+      "emergency": "111",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": null,
+          "phone": "1737",
+          "label": "1737 (call or text)"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Safe to talk",
+          "phone": "0800 044 334",
+          "label": "Safe to talk 0800 044 334"
+        }
+      ]
+    },
+    {
+      "code": "DE",
+      "name": "Germany",
+      "emergency": "112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "TelefonSeelsorge",
+          "phone": "0800 111 0 111",
+          "label": "TelefonSeelsorge 0800 111 0 111"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Hilfetelefon",
+          "phone": "116 016",
+          "label": "Hilfetelefon 116 016"
+        }
+      ]
+    },
+    {
+      "code": "AT",
+      "name": "Austria",
+      "emergency": "112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "TelefonSeelsorge",
+          "phone": "142",
+          "label": "TelefonSeelsorge 142"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Frauenhelpline",
+          "phone": "0800 222 555",
+          "label": "Frauenhelpline 0800 222 555"
+        }
+      ]
+    },
+    {
+      "code": "CH",
+      "name": "Switzerland",
+      "emergency": "112 or 144",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Die Dargebotene Hand",
+          "phone": "143",
+          "label": "Die Dargebotene Hand 143"
+        }
+      ]
+    }
+  ],
+  "fallback": {
+    "code": "OTHER",
+    "name": "Somewhere else",
+    "emergency": "your local emergency number",
+    "lines": [],
+    "note": "Not defined in Sanjin's sources. Open decision on his briefing page: 'The 9 drafted · where our users are · plus a fallback for others' (proposal: 'where our users are, plus a fallback'). Until it is decided, Mira asks the country once."
+  }
+}

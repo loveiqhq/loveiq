@@ -28,6 +28,7 @@
 | `pricing/`        | report pricing math + quote snapshots                                               |
 | `scoring/`        | V4+V5 archetype scoring engine                                                      |
 | `invite/`         | partner invite UI + send/track + reminders                                          |
+| `mira/`           | Mira, the AI coach for body confidence (beta): chat, sign-up, home, settings        |
 | `contact/`        | `/contact` form pipeline                                                            |
 | `cron/`           | scheduled jobs (invite reminders, fulfillment sweep, discount email, survey-paused) |
 | `email-journeys/` | the reworked emails (phase 1): one design kit, a switch per email, the hourly job   |
