@@ -66,8 +66,12 @@ const account = (id: string, email: string, at: string, over: Partial<MiraUserRo
   ...over,
 });
 
-const data = (users: MiraUserRow[], events: MiraEventRow[], withResult: string[] = []) =>
-  ({ users, events, withResult: new Set(withResult) }) satisfies MiraData;
+const data = (
+  users: MiraUserRow[],
+  events: MiraEventRow[],
+  withResult: string[] = [],
+  nudges: MiraData["nudges"] = []
+) => ({ users, events, nudges, withResult: new Set(withResult) }) satisfies MiraData;
 
 const page = (d: MiraData, from: string, to: string) =>
   buildMiraPage({
@@ -265,6 +269,57 @@ describe("buildMiraPage", () => {
     expect(page(d, "2026-11-01", "2026-11-07").notes.join(" ")).toMatch(/pick a range from then/);
   });
 
+  it("counts nudges by kind: sent, clicked, and a message within 24 h of the click", () => {
+    const d = data(
+      [
+        account("u1", "a@example.com", "2026-11-02T09:00:00Z"),
+        account("s1", "eman@loveiq.org", "2026-11-02T09:00:00Z"),
+      ],
+      [
+        ...chat({ user: "u1" }, "2026-11-10T10:00:00Z"),
+        ev("nudge_stopped", { user: "u1" }, "2026-11-12T08:00:00Z"),
+      ],
+      [],
+      [
+        {
+          user_id: "u1",
+          type: "agreement",
+          sent_at: "2026-11-10T07:00:00Z",
+          clicked_at: "2026-11-10T09:30:00Z",
+        },
+        {
+          user_id: "u1",
+          type: "share",
+          sent_at: "2026-11-11T07:00:00Z",
+          clicked_at: "2026-11-11T08:00:00Z",
+        },
+        { user_id: "u1", type: "share", sent_at: "2026-11-20T07:00:00Z", clicked_at: null },
+        {
+          user_id: "s1",
+          type: "share",
+          sent_at: "2026-11-10T07:00:00Z",
+          clicked_at: "2026-11-10T07:05:00Z",
+        },
+      ]
+    );
+    const p = page(d, "2026-11-09", "2026-11-15");
+    expect(p.tiles.nudgesSent!.value).toBe(2);
+    expect(p.tiles.nudgeCtr!.value).toBe(1);
+    expect(p.tiles.nudgeStarted!.value).toBe(0.5);
+    expect(p.tiles.nudgeUnsub!.value).toBe(0.5);
+    expect(p.nudgeTypes.find((t) => t.type === "agreement")).toMatchObject({
+      sent: 1,
+      clicked: 1,
+      started: 1,
+    });
+    expect(p.nudgeTypes.find((t) => t.type === "share")).toMatchObject({
+      sent: 1,
+      clicked: 1,
+      started: 0,
+    });
+    expect(p.tiles.nudgeOpen!.blocked).toMatch(/Not measured yet/);
+  });
+
   it("marks what nothing records yet as not measured, never as a number", () => {
     const p = page(PEOPLE, "2026-11-02", "2026-11-15");
     for (const k of ["nps", "timeSpent", "bodyImage", "profileDepth", "subscription", "churn"]) {
@@ -287,6 +342,7 @@ describe("fetchMira", () => {
         ];
       if (path.startsWith("/rest/v1/mira_event")) return [];
       if (path.startsWith("/rest/v1/app_user")) return [{ email: "a+b@example.com" }];
+      if (path.startsWith("/rest/v1/mira_nudge")) return [];
       return null;
     });
     const out = await fetchMira();
