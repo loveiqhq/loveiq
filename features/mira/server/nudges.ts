@@ -40,20 +40,24 @@ const HISTORY = 16;
 
 // ── Tokens: stateless links in the email (no sign-in needed to stop or change nudges) ──────────
 
-/** The same fallback chain as the share-recipient cookies: a dedicated secret, else derived. */
-function secret(): string | null {
+/**
+ * The key for the links in a nudge, derived for this one use (HMAC of the base secret with a fixed
+ * label), so it never equals a key used anywhere else. The base is UNSUBSCRIBE_SECRET, else
+ * SHARE_VERIFY_SECRET, else the service-role key, like the share-recipient cookies.
+ */
+function secret(): Buffer | null {
   for (const v of [
     process.env.UNSUBSCRIBE_SECRET,
     process.env.SHARE_VERIFY_SECRET,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   ]) {
     const s = v?.trim();
-    if (s && s.length >= 16) return s;
+    if (s && s.length >= 16) return createHmac("sha256", s).update("mira-nudge-links/v1").digest();
   }
   return null;
 }
 
-function sign(purpose: "prefs" | "open", id: string, key: string): string {
+function sign(purpose: "prefs" | "open", id: string, key: Buffer): string {
   return createHmac("sha256", key).update(`mira-nudge:${purpose}:${id}`).digest("base64url");
 }
 
