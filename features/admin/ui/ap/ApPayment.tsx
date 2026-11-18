@@ -101,6 +101,7 @@ const SECTIONS = [
   { id: "checkout", label: "Checkout & methods" },
   { id: "exits", label: "Paygate exits" },
   { id: "segments", label: "Segments" },
+  { id: "gate-test", label: "€1.99 page test" },
   { id: "experiments", label: "Pricing tests" },
   { id: "elasticity", label: "Price elasticity" },
 ];
@@ -992,6 +993,83 @@ function Segments({
   );
 }
 
+const GATE_COLUMNS = "minmax(170px, 1.5fr) minmax(170px, 1.4fr) repeat(7, minmax(96px, 1fr))";
+
+/**
+ * #11's lift on the decider with its confidence, as the pricing tests' AOV lift is drawn; shaded
+ * only once credible, so a gap the test can't support never reads as a win.
+ */
+function gateLiftCell(t: PaymentPayload["gateTest"]): Cell {
+  if (t.lift === null) return { v: EMPTY, sub: t.liftWhy ?? "" };
+  const credible = t.confidence !== null && t.confidence >= 0.95;
+  return {
+    v: `${t.lift > 0 ? "+" : ""}${fmt("pct", t.lift)}`,
+    sub:
+      t.confidence === null
+        ? ""
+        : `${Math.round(t.confidence * 100)}% confidence · ${credible ? "credible" : "not significant yet"}`,
+    weight: "bold",
+    shade: !credible ? "plain" : t.lift > 0 ? "good" : t.lift < 0 ? "bad" : "plain",
+  };
+}
+
+/** #11: Mark's new €1.99 page against today's, per half, and what the numbers can say. */
+function GateTest({ d }: { d: PaymentPayload }) {
+  const t = d.gateTest;
+  return (
+    <Card id="gate-test" labelledBy="h-gate-test">
+      <SectionHead
+        id="h-gate-test"
+        title="€1.99 page test"
+        description="Mark's new €1.99 page, which shows the reader's Core Archetype before they pay, against today's page: half the free finishers each, by their survey's session. Who reached the page, who paid the €1.99 and who went on to the full report, so far. The share of free finishers who pay the €1.99 decides it."
+      />
+      {t.why ? (
+        <Why>{t.why}</Why>
+      ) : (
+        <>
+          <PayTable
+            label="€1.99 page test"
+            columns={GATE_COLUMNS}
+            minWidth={1120}
+            rowHeaders={false}
+            head={[
+              { label: "Test", left: true },
+              { label: "Arm", left: true, info: "payment.gt-arm" },
+              { label: "Free finishers", info: "payment.gt-finishers" },
+              { label: "Reached the €1.99 page", info: "payment.gt-reached" },
+              { label: "Paid €1.99", info: "payment.gt-paid" },
+              { label: "€1.99 per finisher", info: "payment.gt-rate" },
+              { label: "€1.99 per reacher", info: "payment.gt-rate-reached" },
+              { label: "Full report bought", info: "payment.gt-full" },
+              { label: "Lift · confidence", info: "payment.gt-lift" },
+            ]}
+            rows={t.arms.map((a, i) => ({
+              key: a.arm,
+              dashed: i > 0,
+              cells: [
+                i === 0
+                  ? { v: t.test, sub: t.note, left: true, weight: "bold" }
+                  : { v: "", left: true },
+                { v: a.name, sub: a.control ? "Control" : "", left: true, weight: "semibold" },
+                { v: fmt("count", a.finishers) },
+                a.reached === null
+                  ? { v: EMPTY, sub: "could not be read" }
+                  : { v: fmt("count", a.reached) },
+                { v: fmt("count", a.paid) },
+                { v: fmt("pct", ratio(a.paid, a.finishers)), weight: "bold" },
+                { v: fmt("pct", ratio(a.paidReached, a.reached)) },
+                { v: fmt("count", a.full) },
+                a.control ? { v: EMPTY } : gateLiftCell(t),
+              ],
+            }))}
+          />
+          <p className="m-0 text-[13px] leading-relaxed text-ap-ink">{t.verdict}</p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 const PRICING_COLUMNS = "minmax(170px, 1.5fr) minmax(130px, 1.2fr) repeat(9, minmax(86px, 1fr))";
 
 /** "€29.99 full · €39.99 all" as drawn: the price, then what it buys under it. */
@@ -1821,6 +1899,37 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
         ]
       : []),
     {
+      name: "€1.99 page test",
+      table: {
+        columns: [
+          col("Test · arm", "text"),
+          col("Note", "text"),
+          col("Free finishers", "count"),
+          col("Reached the €1.99 page", "count"),
+          col("Paid €1.99", "count"),
+          col("€1.99 per finisher", "pct"),
+          col("€1.99 per reacher", "pct"),
+          col("Full report bought", "count"),
+          col("Lift", "pct"),
+          col("Confidence", "pct"),
+        ],
+        rows: d.gateTest.arms.map((a) => ({
+          label: `${d.gateTest.test} · ${a.name}${a.control ? " (control)" : ""}`,
+          values: [
+            d.gateTest.note,
+            a.finishers,
+            a.reached,
+            a.paid,
+            ratio(a.paid, a.finishers),
+            ratio(a.paidReached, a.reached),
+            a.full,
+            a.control ? null : d.gateTest.lift,
+            a.control ? null : d.gateTest.confidence,
+          ],
+        })),
+      },
+    },
+    {
       name: "Pricing tests",
       table: {
         columns: [
@@ -1972,6 +2081,7 @@ export default function ApPayment() {
           <Checkout d={data} />
           <Exits d={data} />
           <Segments d={data} segKey={segKey} onSegKey={setSegKey} />
+          <GateTest d={data} />
           <Pricing d={data} />
           <Elasticity el={data.elasticity} />
         </Busy>

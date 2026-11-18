@@ -14,9 +14,11 @@ import {
   readGateSeen,
   readPaygateExitRows,
 } from "@features/admin/server/ap/paygate-exits";
+import { readGateTestRows } from "@features/admin/server/ap/gate-reveal-test";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { readInitialUnlockGateSwitch } from "@features/report/server/initialGateState";
+import { GATE_REVEAL_START_AT } from "@shared/experiments/gateRevealArm";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
@@ -60,7 +62,7 @@ export async function GET(request: Request) {
   const fit = peopleBlocked(filters, CHECKOUT_FROM) ? null : fitMonths(filters.to);
 
   try {
-    const [facts, uplift, fitFacts, gateOn, exitRows, gateSeen] = await Promise.all([
+    const [facts, uplift, fitFacts, gateOn, exitRows, gateSeen, gateRows] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       upliftFlag(),
       fit && fit.from < filters.from ? fetchFactsFor(fit.from, fit.to, filters) : null,
@@ -85,9 +87,27 @@ export async function GET(request: Request) {
             logger.warn({ err }, "AP payment: the EUR 1.99 page's viewers could not be read");
             return null;
           }),
+      // #11's halves, from the day it began: its section says so when this fails.
+      filters.to < reportingDay(new Date(GATE_REVEAL_START_AT))
+        ? null
+        : readGateTestRows(filters.from).catch((err: unknown) => {
+            logger.warn({ err }, "AP payment: #11's halves could not be read");
+            return null;
+          }),
     ]);
     return NextResponse.json(
-      buildPayment({ facts, filters, today, now, uplift, fitFacts, gateOn, exitRows, gateSeen }),
+      buildPayment({
+        facts,
+        filters,
+        today,
+        now,
+        uplift,
+        fitFacts,
+        gateOn,
+        exitRows,
+        gateSeen,
+        gateRows,
+      }),
       {
         headers: NO_STORE,
       }

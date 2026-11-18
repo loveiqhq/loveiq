@@ -38,6 +38,14 @@ export const GATE_REVEAL_EXPERIMENT = "gate_reveal_2026_11";
 /** The arm's key in `survey_submission.utm_tracker`. */
 export const GATE_REVEAL_ARM_KEY = "gate_reveal_arm";
 
+/**
+ * When the test began on production: `report_gate_archetype_reveal` and Mark's sheets were
+ * switched on together at 09:01:50 UTC on 17 Nov 2026 (10:01 Berlin). The code went out at
+ * 01:32 Berlin, but the page, the sheets that follow the arm and the arm's stamp all wait for
+ * the switch, so the readouts count the surveys finished from here.
+ */
+export const GATE_REVEAL_START_AT = "2026-11-17T09:01:50Z";
+
 export function isGateRevealArm(value: unknown): value is GateRevealArm {
   return value === "control" || value === "reveal";
 }

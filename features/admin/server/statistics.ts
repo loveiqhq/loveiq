@@ -43,6 +43,13 @@ export function normalCdf(z: number) {
  */
 export const MIN_CELL_COUNT = 5;
 
+/**
+ * Below this, an arm is reported as "too early to compare" regardless of what the
+ * z-test says — a lopsided split (e.g. 828 vs 9) satisfies the combined-n>=50 rule
+ * on the strength of the large arm alone.
+ */
+export const TINY_ARM = 30;
+
 export function twoProportionSignal(
   controlSampleSize: number,
   controlSuccessCount: number,
