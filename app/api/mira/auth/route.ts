@@ -13,11 +13,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CONSENT_VERSION, HISTORY_TURNS } from "@features/mira/server/config";
 import { createMiraSupabase } from "@features/mira/server/session";
-import { SIGN_IN_CODE, sendSignInCode, voidOutstandingCode } from "@features/mira/server/sign-in";
+import { SIGN_IN_CODE, sendSignInCode } from "@features/mira/server/sign-in";
 import {
   addMessages,
+  claimCodeAttempt,
+  consumeCode,
   createChat,
   logMiraEvent,
+  recordCodeIssued,
   upsertProfileAtSignIn,
 } from "@features/mira/server/store";
 import { anonId } from "@features/mira/server/anon";
@@ -94,14 +97,31 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+    try {
+      await recordCodeIssued(body.email);
+    } catch (err) {
+      // Fails closed: without the record the code is never checked, so ask for a new one.
+      logger.error({ err }, "mira: a sent code was not recorded");
+      return NextResponse.json(
+        { error: "We couldn't send the code. Please try again." },
+        { status: 500 }
+      );
+    }
     logMiraEvent("signup_code_sent", { anonId: await anonId() });
     return NextResponse.json({ success: true });
   }
 
-  // verify. Wrong codes are counted per address (whatever the IP): after 5 in 15 minutes the
-  // outstanding code is voided, so guesses spread over many IPs get 5 tries at 8 digits per
-  // code. Counting only failures, and voiding instead of blocking, means a stranger can never
-  // lock the real person out: a new code always works.
+  // verify. A code is checked only if Mira emailed it to this address within the hour and it
+  // has guesses left: one guess is reserved atomically BEFORE the check (5 per code), so
+  // parallel or spread-out guesses cannot pass the cap, and nobody can use this route to guess
+  // a code Mira did not send. A new code resets the count, so the real person is never locked
+  // out. Fails closed: no reserved guess, no check.
+  if (!(await claimCodeAttempt(body.email))) {
+    return NextResponse.json(
+      { error: "That code didn't work or has expired. Please send a new code." },
+      { status: 400 }
+    );
+  }
   const supabase = await createMiraSupabase();
   const { data, error } = await supabase.auth.verifyOtp({
     email: body.email,
@@ -110,23 +130,12 @@ export async function POST(request: Request) {
   });
   if (error || !data.user?.email) {
     logger.info({ reason: error?.message }, "mira: a sign-in code was refused");
-    const failures = await checkRateLimit(body.email, {
-      bucket: "mira-verify-fail",
-      limit: 5,
-      windowMs: 15 * 60_000,
-    });
-    if (!failures.allowed) {
-      await voidOutstandingCode(body.email);
-      return NextResponse.json(
-        { error: "Too many tries with that code. Please send a new code." },
-        { status: 429 }
-      );
-    }
     return NextResponse.json(
       { error: "That code didn't work. Check it, or send a new one." },
       { status: 400 }
     );
   }
+  await consumeCode(body.email).catch(() => undefined);
   // The session cookie was just set on this response; the user comes from the verify itself.
   const account = { id: data.user.id, email: data.user.email.toLowerCase() };
 

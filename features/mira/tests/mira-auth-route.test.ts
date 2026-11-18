@@ -18,18 +18,26 @@ vi.mock("@features/mira/server/session", () => ({
 vi.mock("@features/mira/server/sign-in", () => ({
   SIGN_IN_CODE: /^\d{6,10}$/,
   sendSignInCode: vi.fn().mockResolvedValue(true),
-  voidOutstandingCode: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([1, 2]),
   createChat: vi.fn().mockResolvedValue("6f2c4a1e-1111-4222-8333-944455556666"),
   logMiraEvent: vi.fn(),
+  recordCodeIssued: vi.fn().mockResolvedValue(undefined),
+  claimCodeAttempt: vi.fn().mockResolvedValue(true),
+  consumeCode: vi.fn().mockResolvedValue(undefined),
   upsertProfileAtSignIn: vi.fn().mockResolvedValue({ name: null, remember_chats: true }),
 }));
 
 import { POST } from "@/app/api/mira/auth/route";
-import { sendSignInCode, voidOutstandingCode } from "@features/mira/server/sign-in";
-import { addMessages, upsertProfileAtSignIn } from "@features/mira/server/store";
+import { sendSignInCode } from "@features/mira/server/sign-in";
+import {
+  addMessages,
+  claimCodeAttempt,
+  consumeCode,
+  recordCodeIssued,
+  upsertProfileAtSignIn,
+} from "@features/mira/server/store";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
 function post(body: unknown) {
@@ -86,30 +94,39 @@ describe("POST /api/mira/auth", () => {
     expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", "mira-2026-11-18");
   });
 
-  it("voids the code after too many wrong guesses for an address, whatever the IP", async () => {
-    verifyOtp.mockResolvedValue({
-      data: { user: null },
-      error: { message: "Token has expired or is invalid" },
-    });
-    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
-      cfg.bucket === "mira-verify-fail"
-        ? { allowed: false, remaining: 0, resetAt: new Date() }
-        : { allowed: true, remaining: 9, resetAt: new Date() }
-    );
+  it("checks no code when Mira has no guess left for the address (or never sent one)", async () => {
+    vi.mocked(claimCodeAttempt).mockResolvedValueOnce(false);
     const res = await post({ action: "verify", email: "lea@example.com", code: "12345678" });
-    expect(res.status).toBe(429);
-    expect(voidOutstandingCode).toHaveBeenCalledWith("lea@example.com");
+    expect(res.status).toBe(400);
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 
-  it("never blocks a correct code, however many wrong ones came before", async () => {
-    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
-      cfg.bucket === "mira-verify-fail"
-        ? { allowed: false, remaining: 0, resetAt: new Date() }
-        : { allowed: true, remaining: 9, resetAt: new Date() }
-    );
-    const res = await post({ action: "verify", email: "lea@example.com", code: "12345678" });
-    expect(res.status).toBe(200);
-    expect(voidOutstandingCode).not.toHaveBeenCalled();
+  it("records each sent code, so a new code resets the guesses", async () => {
+    await post({
+      action: "start",
+      email: "lea@example.com",
+      adult: true,
+      terms: true,
+      consent: true,
+    });
+    expect(recordCodeIssued).toHaveBeenCalledWith("lea@example.com");
+  });
+
+  it("fails closed when a sent code cannot be recorded", async () => {
+    vi.mocked(recordCodeIssued).mockRejectedValueOnce(new Error("db down"));
+    const res = await post({
+      action: "start",
+      email: "lea@example.com",
+      adult: true,
+      terms: true,
+      consent: true,
+    });
+    expect(res.status).toBe(500);
+  });
+
+  it("uses up the code once it signs the person in", async () => {
+    await post({ action: "verify", email: "lea@example.com", code: "12345678" });
+    expect(consumeCode).toHaveBeenCalledWith("lea@example.com");
   });
 
   it("refuses a wrong code without signing in", async () => {

@@ -30,22 +30,6 @@ function replyTo(): string | null {
   return v && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(v) ? v : null;
 }
 
-/**
- * Voids a person's outstanding code after too many wrong guesses: minting a recovery token
- * replaces the magic-link one (Supabase keeps one per user), so the guessed-at code stops
- * working and the person simply asks for a new one. A recovery link is never minted for an
- * address without an account (404), so no account is created here. Nothing is emailed.
- */
-export async function voidOutstandingCode(email: string): Promise<void> {
-  const res = await supabaseFetch("/auth/v1/admin/generate_link", {
-    method: "POST",
-    body: JSON.stringify({ type: "recovery", email }),
-  });
-  if (!res.ok && res.status !== 404) {
-    logger.warn({ status: res.status }, "mira: could not void a guessed-at sign-in code");
-  }
-}
-
 export function signInCodeEmail(code: string) {
   const subject = `Your sign-in code: ${code}`;
   const text =
