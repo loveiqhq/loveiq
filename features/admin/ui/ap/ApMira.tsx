@@ -94,9 +94,9 @@ export default function ApMira() {
           </Board>
           <p className={NOTE}>
             The team is left out: accounts with a team address (ADMIN_TEST_EMAIL_REGEX, @loveiq.org
-            by default) and the browsers they signed in from. An anonymous browser that never
-            signed in, and a deleted account (its events lose both links), can&rsquo;t be told
-            apart, so they are counted.
+            by default) and the browsers they signed in from. An anonymous browser that never signed
+            in, and a deleted account (its events lose both links), can&rsquo;t be told apart, so
+            they are counted.
           </p>
         </Busy>
       )}
