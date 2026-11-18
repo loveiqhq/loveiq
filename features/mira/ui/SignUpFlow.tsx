@@ -209,21 +209,21 @@ export default function SignUpFlow() {
                   Check your inbox
                 </h1>
                 <p className="mt-2 text-[15px] text-ap-body">
-                  We sent a 6-digit code to <strong>{email}</strong>. It works for an hour.
+                  We sent a sign-in code to <strong>{email}</strong>. It works for an hour.
                 </p>
               </div>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
-                6-digit code
+                Code from the email
                 <input
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  maxLength={6}
+                  maxLength={10}
                   value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
                   className="min-h-[56px] rounded-2xl border border-ap-line px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
                 />
               </label>
-              <GradientButton type="submit" disabled={busy || code.length !== 6}>
+              <GradientButton type="submit" disabled={busy || code.length < 6}>
                 {busy ? "Checking…" : "Verify and continue"}
               </GradientButton>
               <div className="flex justify-between gap-3 text-[14px] text-ap-muted">

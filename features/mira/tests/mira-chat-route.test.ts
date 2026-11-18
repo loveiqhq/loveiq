@@ -91,6 +91,28 @@ describe("POST /api/mira/chat", () => {
     expect(askModel).not.toHaveBeenCalled();
   });
 
+  it("shows the sign-up card when the network's free replies are used, even with a fresh browser id", async () => {
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
+      cfg.bucket === "mira-anon-ip"
+        ? { allowed: false, remaining: 0, resetAt: new Date() }
+        : { allowed: true, remaining: 9, resetAt: new Date() }
+    );
+    const res = await post({ message: "hi", consent: true });
+    expect(await res.json()).toEqual({ gate: true, freeLeft: 0 });
+    expect(askModel).not.toHaveBeenCalled();
+  });
+
+  it("refuses an oversized anonymous history", async () => {
+    const big = "x".repeat(4000);
+    const history = Array.from({ length: 7 }, (_, i) => ({
+      role: i % 2 ? "assistant" : "user",
+      content: big,
+    }));
+    const res = await post({ message: "hi", consent: true, history });
+    expect(res.status).toBe(400);
+    expect(askModel).not.toHaveBeenCalled();
+  });
+
   it("says Mira is off when no model key is set", async () => {
     vi.mocked(askModel).mockResolvedValueOnce({ ok: false, reason: "unconfigured" });
     const res = await post({ message: "hi", consent: true });
