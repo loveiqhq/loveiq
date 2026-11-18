@@ -121,7 +121,7 @@ export default function MiraHome() {
       <section className="mt-6 rounded-3xl border border-ap-line p-5">
         <h2 className="font-serif text-[20px] font-semibold">New coaches coming soon</h2>
         <p className="mt-1 text-[14px] text-ap-body">
-          Each one trained on a single challenge, like Mira.
+          Each one focused on a single challenge, like Mira.
         </p>
         <ul className="mt-3 flex flex-col gap-2">
           {NEXT_COACHES.map((coach) => (

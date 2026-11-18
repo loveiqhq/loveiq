@@ -137,7 +137,7 @@ export default function SignUpFlow() {
               <div>
                 <h1 className="font-serif text-[34px] font-medium leading-tight">
                   Create your free account{" "}
-                  <span className="align-middle rounded-full bg-ap-lilac px-3 py-1 font-sans text-[13px] font-semibold text-ap-plum">
+                  <span className="inline-block whitespace-nowrap align-middle rounded-full bg-ap-lilac px-3 py-1 font-sans text-[13px] font-semibold text-ap-plum">
                     Beta version
                   </span>
                 </h1>
