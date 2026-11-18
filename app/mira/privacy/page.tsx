@@ -59,6 +59,11 @@ export default function MiraPrivacyPage() {
         <ul>
           <li>To coach you: Mira needs your messages to answer them.</li>
           <li>
+            To send your daily nudge, if you have an account and Mira remembers your chats: the AI
+            writes one short email from your last chat, and it also appears in that chat. You can
+            change the time, pause or stop it in Settings or from any nudge.
+          </li>
+          <li>
             To improve Mira: we look at ratings, feedback and how people use her. Our analytics
             tools (PostHog and Microsoft Clarity) record what is typed on the page, as on the rest
             of our site.
@@ -87,7 +92,8 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             With an account, your chats are kept while &ldquo;Remember our conversations&rdquo; is
-            on, until you delete them or your account.
+            on, until you delete them or your account, and at most 12 months after the last message
+            you wrote.
           </li>
         </ul>
 

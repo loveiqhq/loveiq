@@ -21,7 +21,31 @@ type Profile = {
   style: Style;
   remember_chats: boolean;
   use_assessment: boolean;
+  nudges_on: boolean;
+  nudge_time: "08:00" | "19:00" | "21:30";
+  time_zone: string;
 };
+
+const NUDGE_TIMES = [
+  ["08:00", "Morning · 8:00"],
+  ["19:00", "Evening · 19:00"],
+  ["21:30", "Late · 21:30"],
+] as const;
+
+const TIME_ZONES = [
+  "Europe/Berlin",
+  "Europe/Vienna",
+  "Europe/Zurich",
+  "Europe/London",
+  "Europe/Dublin",
+  "Europe/Sarajevo",
+  "America/New_York",
+  "America/Chicago",
+  "America/Los_Angeles",
+  "America/Toronto",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+];
 
 export default function MiraSettings() {
   const router = useRouter();
@@ -50,6 +74,9 @@ export default function MiraSettings() {
         style: p.style,
         remember_chats: p.remember_chats,
         use_assessment: p.use_assessment,
+        nudges_on: p.nudges_on,
+        nudge_time: p.nudge_time,
+        time_zone: p.time_zone,
       },
     });
     if (r.ok) setSaved("Saved.");
@@ -157,6 +184,49 @@ export default function MiraSettings() {
                 How Mira handles your data
               </a>
             </p>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="font-serif text-[22px] font-medium">Notifications</h2>
+            <Switch
+              label="Daily nudges by email"
+              desc="A short thought from Mira that leads back into the chat. Neutral subject line."
+              checked={p.nudges_on}
+              onChange={(v) => set({ nudges_on: v })}
+            />
+            {p.nudges_on && !p.remember_chats ? (
+              <p className="text-[12px] text-ap-muted">
+                Nudges pick up on your last chat, so they need “Remember our conversations” on.
+              </p>
+            ) : null}
+            <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
+              Nudge time
+              <select
+                value={p.nudge_time}
+                onChange={(e) => set({ nudge_time: e.target.value as Profile["nudge_time"] })}
+                className="min-h-[44px] rounded-full border border-ap-line px-4 text-[16px] font-normal"
+              >
+                {NUDGE_TIMES.map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
+              Time zone
+              <select
+                value={p.time_zone}
+                onChange={(e) => set({ time_zone: e.target.value })}
+                className="min-h-[44px] rounded-full border border-ap-line px-4 text-[16px] font-normal"
+              >
+                {[...new Set([p.time_zone, ...TIME_ZONES])].map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
           </section>
 
           <div className="flex items-center gap-3">

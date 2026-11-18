@@ -125,6 +125,14 @@
     {
       "path": "/api/cron/file-invoices",
       "schedule": "40 6 3 * *"
+    },
+    {
+      "path": "/api/cron/mira-nudges",
+      "schedule": "5,35 * * * *"
+    },
+    {
+      "path": "/api/cron/mira-memory",
+      "schedule": "40 3 * * *"
     }
   ],
   "functions": {

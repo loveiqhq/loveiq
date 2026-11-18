@@ -85,12 +85,11 @@ export default function ApMira() {
             title="Daily nudge emails"
             description="How the daily nudges perform by type: opens, clicks, conversations they start, how deep those conversations go, and unsubscribes."
           >
-            <NotMeasured
-              id="nudge-figures"
-              title="Nudges sent, opened, clicked and unsubscribed"
-              description="Sent, open rate, CTR, conversations started, messages and minutes per conversation, unsubscribes, by nudge type."
-              why="The daily nudge emails aren’t built yet: this section fills in once they send."
+            <Tiles
+              data={data}
+              keys={["nudgesSent", "nudgeCtr", "nudgeStarted", "nudgeUnsub", "nudgeOpen"]}
             />
+            <NudgeTypes data={data} />
           </Board>
           <p className={NOTE}>
             The team is left out: accounts with a team address (ADMIN_TEST_EMAIL_REGEX, @loveiq.org
@@ -617,6 +616,58 @@ function Knows({ data }: { data: Data }) {
       <p className={NOTE}>
         Of today&rsquo;s {count(accounts)} signed-up accounts, whatever the range: an account keeps
         no history of these. Users can export or delete this data anytime.
+      </p>
+    </Card>
+  );
+}
+
+function NudgeTypes({ data }: { data: Data }) {
+  const pct = (a: number, b: number) => (b ? fmt("pct", a / b) : EMPTY);
+  const gtc = "minmax(200px,2fr) 90px 100px 150px";
+  return (
+    <Card id="nudge-types" labelledBy="h-nudge-types">
+      <SectionHead
+        id="h-nudge-types"
+        level={3}
+        title="Performance by nudge type"
+        description="Which nudges people click and turn into a conversation."
+      />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Performance by nudge type" style={{ minWidth: 560 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+            {["Nudge type", "Sent", "CTR", "Conv. started"].map((h, i) => (
+              <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
+                {h}
+              </span>
+            ))}
+          </div>
+          {data.nudgeTypes.map((r) => (
+            <div
+              key={r.type}
+              role="row"
+              className="grid items-center border-t border-ap-line"
+              style={{ gridTemplateColumns: gtc }}
+            >
+              <span role="rowheader" className="px-3 py-2.5 text-sm font-bold">
+                {r.title}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                {count(r.sent)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                {pct(r.clicked, r.sent)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                {pct(r.started, r.sent)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className={NOTE}>
+        CTR and conversations started are counted per nudge sent. A conversation counts when the
+        person writes to Mira within 24 hours of clicking. Opens, messages and minutes per
+        conversation aren&rsquo;t measured yet, and an unsubscribe isn&rsquo;t tied to one type.
       </p>
     </Card>
   );

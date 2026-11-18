@@ -13,6 +13,7 @@
  * the chat they started last. A request writes its events together after the reply, in any
  * order, so a message written up to 2 s before a start is that chat's first.
  */
+import nudgeConfig from "@features/mira/content/nudges.json";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
@@ -40,6 +41,7 @@ const EVENT_NAMES = [
   "signup_completed",
   "rating",
   "crisis_shown",
+  "nudge_stopped",
 ];
 
 export interface MiraUserRow {
@@ -59,9 +61,18 @@ export interface MiraEventRow {
   rating: string | null;
 }
 
+export interface MiraNudgeRow {
+  user_id: string;
+  type: string;
+  sent_at: string;
+  clicked_at: string | null;
+}
+
 export interface MiraData {
   users: MiraUserRow[];
   events: MiraEventRow[];
+  /** Nudge emails that went out (sent_at set). */
+  nudges: MiraNudgeRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
 }
@@ -72,7 +83,7 @@ export interface MiraData {
  * mira_event nears MAX_EVENTS (the read refuses past it rather than count part of it).
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events] = await Promise.all([
+  const [users, events, nudges] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment&order=id.asc"
     ),
@@ -81,11 +92,14 @@ export async function fetchMira(): Promise<MiraData> {
         "&select=name,anon_id,user_id,created_at,rating:props->>rating&order=id.asc",
       { maxRows: MAX_EVENTS + 1 }
     ),
+    fetchAllRows<MiraNudgeRow>(
+      "/rest/v1/mira_nudge?sent_at=not.is.null&select=user_id,type,sent_at,clicked_at&order=created_at.asc"
+    ),
   ]);
-  if (!users || !events) throw new Error("Mira's tables could not be read");
+  if (!users || !events || !nudges) throw new Error("Mira's tables could not be read");
   if (events.length > MAX_EVENTS) throw new Error("Too many Mira events to count in memory");
   const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email));
-  return { users, events, withResult: await withLoveIqResult(asked) };
+  return { users, events, nudges, withResult: await withLoveIqResult(asked) };
 }
 
 /** The accounts whose address has a finished LoveIQ survey: what Mira reads into the chat. */
@@ -130,6 +144,8 @@ export interface Prepared {
   accounts: MiraUserRow[];
   /** The day of Mira's first record, the team's included. */
   firstDay: string | null;
+  /** Nudges sent to accounts that are not the team's. */
+  nudges: Array<{ user: string; type: string; sent: number; clicked: number | null }>;
   withResult: Set<string>;
 }
 
@@ -186,6 +202,14 @@ export function prepare(data: MiraData): Prepared {
     accounts,
     firstDay: Number.isFinite(first) ? dayOf(first) : null,
     withResult: data.withResult,
+    nudges: (data.nudges ?? [])
+      .filter((n) => !staff.has(n.user_id))
+      .map((n) => ({
+        user: n.user_id,
+        type: n.type,
+        sent: Date.parse(n.sent_at),
+        clicked: n.clicked_at ? Date.parse(n.clicked_at) : null,
+      })),
   };
 }
 
@@ -256,6 +280,22 @@ export interface Figures {
   downs: number;
   crisis: number;
   weekFour: { returned: number; of: number };
+  /** Nudges sent in the range; of them clicked; of the clicked, a message within 24 h. */
+  nudge: { sent: number; clicked: number; started: number; stopped: number };
+}
+
+const NUDGE_REPLY_MS = 24 * HOUR_MS;
+
+/** A nudge "started a conversation" when its person wrote within 24 h of clicking it. */
+function nudgeCounts(prep: Prepared, w: Win, type?: string) {
+  const sent = prep.nudges.filter((n) => within(n.sent, w) && (!type || n.type === type));
+  const clicked = sent.filter((n) => n.clicked !== null);
+  const started = clicked.filter((n) =>
+    (prep.people.get(n.user)?.msgs ?? []).some(
+      (m) => m >= n.clicked! && m < n.clicked! + NUDGE_REPLY_MS
+    )
+  );
+  return { sent: sent.length, clicked: clicked.length, started: started.length };
 }
 
 /** Every tile's figure for one range: the range itself, the one before, or a trend point. */
@@ -285,6 +325,7 @@ export function figures(prep: Prepared, from: string, to: string, today: string)
     ups: count("rating", 1),
     downs: count("rating", -1),
     crisis: count("crisis_shown"),
+    nudge: { ...nudgeCounts(prep, w), stopped: count("nudge_stopped") },
     weekFour: {
       returned: fourth.reduce((n, c) => n + c.cells[4]!.active, 0),
       of: fourth.reduce((n, c) => n + c.users, 0),
@@ -386,6 +427,14 @@ export interface MiraPayload extends PageHead {
   /** Today's accounts, and what Mira knows of them. */
   knows: { accounts: number; style: number; result: number };
   safety: { conversations: number; crisis: number; notHelpful: number };
+  /** The nudge emails by kind, in the range (unsubscribes carry no kind). */
+  nudgeTypes: Array<{
+    type: string;
+    title: string;
+    sent: number;
+    clicked: number;
+    started: number;
+  }>;
 }
 
 export function buildMiraPage(input: {
@@ -494,6 +543,29 @@ export function buildMiraPage(input: {
       notYet("timeSpent", "Daily time spent", "Mira records messages, not time on the page."),
       notYet("bodyImage", "Body image improvement", "no body-image scale is asked yet."),
       notYet("profileDepth", "Profile depth", "2 of its 5 areas are recorded so far."),
+      tile("nudgesSent", "Nudges sent", "count", (x) => x.nudge.sent, "daily nudge emails"),
+      tile(
+        "nudgeCtr",
+        "CTR",
+        "pct",
+        (x) => ratio(x.nudge.clicked, x.nudge.sent),
+        of(cur.nudge.clicked, cur.nudge.sent, "nudges clicked")
+      ),
+      tile(
+        "nudgeStarted",
+        "Conversations started",
+        "pct",
+        (x) => ratio(x.nudge.started, x.nudge.sent),
+        of(cur.nudge.started, cur.nudge.sent, "led to a message within 24 h of the click")
+      ),
+      tile(
+        "nudgeUnsub",
+        "Unsubscribe",
+        "pct",
+        (x) => ratio(x.nudge.stopped, x.nudge.sent),
+        `${n(cur.nudge.stopped)} stopped all nudges`
+      ),
+      notYet("nudgeOpen", "Open rate", "opens aren't tracked (no tracking pixel)."),
       notYet("subscription", "Subscription rate", afterBeta),
       notYet("churn", "Subscriber churn", afterBeta),
     ].map((t) => [t.key, t])
@@ -544,5 +616,10 @@ export function buildMiraPage(input: {
       result: prep.accounts.filter((a) => prep.withResult.has(a.id)).length,
     },
     safety: { conversations: cur.conversations, crisis: cur.crisis, notHelpful: cur.downs },
+    nudgeTypes: nudgeConfig.types.map((k) => ({
+      type: k.id,
+      title: k.title,
+      ...nudgeCounts(prep, win(f.from, f.to), k.id),
+    })),
   };
 }

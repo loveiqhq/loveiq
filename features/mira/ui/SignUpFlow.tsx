@@ -74,7 +74,13 @@ export default function SignUpFlow() {
     setError(null);
     const res = await miraApi("/api/mira/me", {
       method: "PATCH",
-      body: { name: name.trim() || null, country: country || null, gender: gender.trim() || null },
+      body: {
+        name: name.trim() || null,
+        country: country || null,
+        gender: gender.trim() || null,
+        // For the daily nudge at the person's own 8:00 (Settings can change it).
+        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+      },
     });
     setBusy(false);
     if (!res.ok) return setError(res.data.error ?? "We couldn't save that. Please try again.");
@@ -302,6 +308,11 @@ export default function SignUpFlow() {
                   <option value="OTHER">Somewhere else</option>
                 </select>
               </label>
+              <p className="text-[13px] leading-relaxed text-ap-muted">
+                Mira sends a short daily nudge by email at 8:00 your time, picking up on your last
+                chat. You can change the time, pause or stop it anytime in Settings or from any
+                nudge.
+              </p>
               <GradientButton type="submit" disabled={busy}>
                 {busy ? "Saving…" : "Continue"}
               </GradientButton>

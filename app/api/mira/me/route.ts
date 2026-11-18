@@ -8,6 +8,7 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isValidTimeZone } from "@features/mira/server/nudges";
 import { getMiraAccount, createMiraSupabase } from "@features/mira/server/session";
 import {
   deleteAccount,
@@ -46,6 +47,9 @@ const patchSchema = z
       .optional(),
     remember_chats: z.boolean().optional(),
     use_assessment: z.boolean().optional(),
+    nudges_on: z.boolean().optional(),
+    nudge_time: z.enum(["08:00", "19:00", "21:30"]).optional(),
+    time_zone: z.string().max(64).refine(isValidTimeZone).optional(),
   })
   .strict();
 
@@ -94,8 +98,16 @@ export async function PATCH(request: Request) {
   const parsed = patchSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
-    await updateProfile(g.account.id, parsed.data);
-    logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(parsed.data) });
+    const data = parsed.data;
+    // The switch in Settings is the same stop as the email's: on again clears the stop.
+    const nudgeState =
+      data.nudges_on === undefined
+        ? {}
+        : data.nudges_on
+          ? { nudges_stopped_at: null, nudge_stop_reason: null }
+          : { nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
+    await updateProfile(g.account.id, { ...data, ...nudgeState });
+    logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(data) });
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "mira: could not save the account");

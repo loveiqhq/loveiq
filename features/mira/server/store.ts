@@ -21,6 +21,9 @@ export type MiraProfile = {
   use_assessment: boolean;
   consent_at: string;
   consent_version: string;
+  nudges_on: boolean;
+  nudge_time: "08:00" | "19:00" | "21:30";
+  time_zone: string;
 };
 
 export type ChatSummary = { id: string; title: string; updated_at: string };
@@ -42,7 +45,7 @@ async function rows<T>(path: string): Promise<T[]> {
 }
 
 const PROFILE_COLS =
-  "id,email,name,country,gender,style,remember_chats,use_assessment,consent_at,consent_version";
+  "id,email,name,country,gender,style,remember_chats,use_assessment,consent_at,consent_version,nudges_on,nudge_time,time_zone";
 
 export async function getProfile(id: string): Promise<MiraProfile | null> {
   const found = await rows<MiraProfile>(
@@ -74,7 +77,18 @@ export async function upsertProfileAtSignIn(
 }
 
 export type ProfilePatch = Partial<
-  Pick<MiraProfile, "name" | "country" | "gender" | "style" | "remember_chats" | "use_assessment">
+  Pick<
+    MiraProfile,
+    | "name"
+    | "country"
+    | "gender"
+    | "style"
+    | "remember_chats"
+    | "use_assessment"
+    | "nudges_on"
+    | "nudge_time"
+    | "time_zone"
+  > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null }
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<void> {
@@ -192,7 +206,12 @@ export type MiraEventName =
   | "notify_me"
   | "settings_saved"
   | "chats_deleted"
-  | "account_deleted";
+  | "account_deleted"
+  | "nudge_sent"
+  | "nudge_clicked"
+  | "nudge_prefs_saved"
+  | "nudge_stopped"
+  | "nudge_resumed";
 
 /** The KPI log. Written after the response, so it never slows a reply; a lost row is logged. */
 export function logMiraEvent(
