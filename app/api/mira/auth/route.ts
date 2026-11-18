@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CONSENT_VERSION, HISTORY_TURNS } from "@features/mira/server/config";
 import { createMiraSupabase } from "@features/mira/server/session";
-import { SIGN_IN_CODE, sendSignInCode } from "@features/mira/server/sign-in";
+import { SIGN_IN_CODE, sendSignInCode, voidOutstandingCode } from "@features/mira/server/sign-in";
 import {
   addMessages,
   createChat,
@@ -98,19 +98,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   }
 
-  // verify. Guesses are capped per address as well as per IP, so spreading them over many
-  // IPs cannot work through the code space within its hour (8 digits, 5 tries per 15 minutes).
-  const perAddress = await checkRateLimit(body.email, {
-    bucket: "mira-verify",
-    limit: 5,
-    windowMs: 15 * 60_000,
-  });
-  if (!perAddress.allowed) {
-    return NextResponse.json(
-      { error: "Too many tries. Please wait a few minutes, then send a new code." },
-      { status: 429 }
-    );
-  }
+  // verify. Wrong codes are counted per address (whatever the IP): after 5 in 15 minutes the
+  // outstanding code is voided, so guesses spread over many IPs get 5 tries at 8 digits per
+  // code. Counting only failures, and voiding instead of blocking, means a stranger can never
+  // lock the real person out: a new code always works.
   const supabase = await createMiraSupabase();
   const { data, error } = await supabase.auth.verifyOtp({
     email: body.email,
@@ -119,6 +110,18 @@ export async function POST(request: Request) {
   });
   if (error || !data.user?.email) {
     logger.info({ reason: error?.message }, "mira: a sign-in code was refused");
+    const failures = await checkRateLimit(body.email, {
+      bucket: "mira-verify-fail",
+      limit: 5,
+      windowMs: 15 * 60_000,
+    });
+    if (!failures.allowed) {
+      await voidOutstandingCode(body.email);
+      return NextResponse.json(
+        { error: "Too many tries with that code. Please send a new code." },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       { error: "That code didn't work. Check it, or send a new one." },
       { status: 400 }
