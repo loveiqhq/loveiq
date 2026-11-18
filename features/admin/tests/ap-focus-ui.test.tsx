@@ -298,7 +298,7 @@ describe("the Dashboard as drawn", () => {
     expect(within(rev).getByText("€0.00").className).toContain("text-ap-good");
     // 10% to 10.2% is a 2% rise: still written, but grey.
     const start = legend("Visitor → survey start", "Start CVR");
-    expect(start.textContent).toBe("9.02%↗ +2% trend");
+    expect(start.textContent).toBe("9.0%↗ +2% trend");
     expect(within(start).getByText("↗ +2% trend").className).toContain("text-ap-muted");
     expect(legend("Survey completion", "Completion CVR").textContent).toBe("42.8%→ flat");
     // Days 1, 3 and 7 fitted where they are drawn: −28%; as three equally spaced points, −40%.
@@ -351,9 +351,9 @@ describe("the Dashboard as drawn", () => {
     for (const t of ["0", "8", "16", "24", "32", "€0.00", "€0.75", "€1.50", "€2.25", "€3.00"])
       expect(within(subs).getAllByText(t).length).toBeGreaterThan(0);
     const completion = region("Survey completion");
-    for (const t of ["0%", "25%", "50%", "75%", "100%"])
+    for (const t of ["0.0%", "25.0%", "50.0%", "75.0%", "100.0%"])
       expect(within(completion).getAllByText(t).length).toBeGreaterThan(0);
-    // A rate under 10% writes a tenth; the unlock chart's euros are whole.
+    // Every rate writes a tenth, the axes too; the unlock chart's euros are whole.
     const full = region("Completion → full unlock");
     for (const t of ["0.0%", "0.6%", "1.2%", "1.8%", "2.4%", "€0", "€10", "€20", "€30", "€40"])
       expect(within(full).getAllByText(t).length).toBeGreaterThan(0);
@@ -415,7 +415,7 @@ describe("the Dashboard as drawn", () => {
       "13:56live",
       "2:48live",
       "462",
-      "0.00%",
+      "0.0%",
       "€0.00",
       "€2.51",
       "↗ +5% trend · 15 → 16 / day",

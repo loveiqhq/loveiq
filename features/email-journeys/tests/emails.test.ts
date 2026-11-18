@@ -2,12 +2,14 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
+import { minutesLeft as surveyScreenMinutes } from "@features/survey/ui/SurveyProgress";
+import { getOfferDefinition } from "@features/pay-to-start/logic/offer";
 import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnlock";
 import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
 import { QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import { EMAIL_IMAGES, buttonWidth } from "../emails/kit";
 import { CHAPTER_COUNT, PART_COUNT, initialReportMap } from "../emails/chapters";
-import { CREDIT, PRICE, eur, minutesLeft } from "../emails/facts";
+import { CREDIT, PRICE, SURVEY_MINUTES, eur, minutesLeft } from "../emails/facts";
 import {
   giftEmail,
   giftUnopenedEmail,
@@ -67,6 +69,7 @@ const ALL = {
       siteUrl: SITE,
       unsubscribeUrl: UNSUB,
       paidOffer: "pre",
+      paidCents: INITIAL_UNLOCK_PRICE_CENTS,
     }),
     link: CONTINUE,
   },
@@ -175,6 +178,23 @@ describe("the reworked emails", () => {
     }
   );
 
+  // C3/C4's only button sits in the panel; Marcus (5 Nov) wants the paste line under every
+  // main button. Mark took C4's "last reminder" line out on 9 Nov.
+  it.each(Object.entries(INVITES))(
+    "%s: the panel's button and its paste-this-link line carry the invite link",
+    (_name, email) => {
+      const href = escAttr(INVITE);
+      expect(email.html.split(`href="${href}"`)).toHaveLength(3);
+      expect(email.html).toContain(`Or paste this link into your browser: <a href="${href}"`);
+      expect(email.text).toContain(INVITE);
+    }
+  );
+
+  it("C4 no longer calls itself the last invite reminder", () => {
+    expect(INVITES.C4.html).not.toContain("last reminder");
+    expect(INVITES.C4.text).not.toContain("last reminder");
+  });
+
   it("names no archetype anywhere: the €1.99 step sells the name, and every card blurs it", () => {
     const names = archetypeNames();
     expect(names).toHaveLength(14);
@@ -203,7 +223,7 @@ describe("the reworked emails", () => {
 
   it("greets by the first name, or says Hi there when it is no name", () => {
     expect(ALL.I1.email.html).toContain("Hi Alex,");
-    expect(ALL.I1.email.subject).toBe("Alex, your Core Archetype is ready to open");
+    expect(ALL.I1.email.subject).toBe("Alex, your Core Archetype is ready");
     const initials = reportReadyEmail({ ...reader, firstName: "J" });
     expect(initials.subject).toBe("Your archetype is in");
     expect(initials.html).toContain("Hi there,");
@@ -294,6 +314,134 @@ describe("the reworked emails", () => {
     expect(buttonWidth("Go")).toBe(220);
     expect(buttonWidth("Open my Core Archetype for €1.99")).toBeGreaterThan(300);
   });
+
+  it("states the minutes the survey shows where the reader picks up (ceil, not the board's 6)", () => {
+    // The board's one example (37 of 62: "About 6 minutes") fits several rules that disagree
+    // elsewhere; the survey screen they land on says ~7 min there, so the emails keep its rule.
+    for (let answered = 0; answered < QUESTIONS_ASKED; answered++) {
+      expect(minutesLeft(answered)).toBe(
+        Math.max(1, surveyScreenMinutes(answered, QUESTIONS_ASKED))
+      );
+    }
+    expect(ALL.R1.email.html).toContain("About 7 minutes left");
+  });
+});
+
+describe("Mark's design edits of 9 Nov (Email overview canvas)", () => {
+  const stepsOf = (text: string) => /WHERE YOU ARE NOW(\n\d+\. [^\n]*)+/.exec(text)?.[0];
+  const fullPrice = eur(getOfferDefinition("full").defaultPriceCents);
+
+  it.each(everyEmail())("%s: closes with “we’ll sort it out”", (_name, email) => {
+    expect(email.html).toContain("hello@loveiq.org</a> and we&rsquo;ll sort it out.</p>");
+    expect(email.html).not.toContain("get you back in");
+  });
+
+  it("I1: the subject says the Core Archetype is ready", () => {
+    expect(ALL.I1.email.subject).toBe("Alex, your Core Archetype is ready");
+  });
+
+  it("I3 and I4: the gift is for free, worth the €1.99", () => {
+    expect(ALL.I3.email.subject).toBe("Alex, we unlocked your Core Archetype for you, for free");
+    expect(giftEmail({ ...reader, firstName: null }).subject).toBe(
+      "We unlocked your Core Archetype for you, for free"
+    );
+    const unlocked = `unlocked your Initial Report for you, for free (worth ${PRICE}), including your Core Archetype. No payment, no catch.`;
+    expect(ALL.I3.email.html).toContain(`So we’ve ${unlocked}`);
+    expect(ALL.I3.email.text).toContain(`So we've ${unlocked}`);
+    const opened = "Yesterday we opened your Initial Report for you, for free.";
+    expect(ALL.I4.email.html).toContain(opened);
+    expect(ALL.I4.email.text).toContain(opened);
+  });
+
+  it("R1: steps 3 and 4 are I1's: the €1.99 step, then the full report with €10 off", () => {
+    const { html, text } = ALL.R1.email;
+    expect(html).toContain(`${PRICE}, with a preview of every chapter`);
+    expect(html).toContain(`Every chapter in full, ${CREDIT} off with your Core Archetype`);
+    expect(html).toContain(`>${CREDIT} off</span>`);
+    expect(html).not.toContain("See your Core Archetype");
+    expect(stepsOf(text)).toBe(
+      [
+        "WHERE YOU ARE NOW",
+        "1. Start the survey (done)",
+        "2. Finish the survey (next): about 7 minutes, anonymous by default",
+        `3. Open your Core Archetype: ${PRICE}, with a preview of every chapter`,
+        `4. Unlock the full report: every chapter in full, ${CREDIT} off with your Core Archetype`,
+      ].join("\n")
+    );
+  });
+
+  it("R1 pay to start: €1.99 buyers get step 4; €29.99 buyers see what they paid and no price", () => {
+    const pre = ALL["R1 pay to start"].email;
+    expect(pre.html).toContain(`${PRICE} for the survey and your initial report`);
+    expect(stepsOf(pre.text)?.split("\n")).toHaveLength(5);
+    expect(pre.text).toContain(
+      `4. Unlock the full report: every chapter in full, ${CREDIT} off with your Core Archetype`
+    );
+    const paused = { firstName: "alex", answered: 37, resumeUrl: CONTINUE, siteUrl: SITE };
+    const full = surveyPausedEmail({
+      ...paused,
+      paidOffer: "full",
+      paidCents: getOfferDefinition("full").defaultPriceCents,
+    });
+    expect(full.html).toContain(`${fullPrice} for the survey and your full report`);
+    expect(full.html).not.toContain("Unlock the full report");
+    for (const price of [PRICE, CREDIT]) expect(full.html).not.toContain(price);
+    expect(stepsOf(full.text)?.split("\n")).toHaveLength(4);
+    // A 100% code paid nothing: no amount, never a price they did not pay.
+    const coded = surveyPausedEmail({ ...paused, paidOffer: "full", paidCents: 0 });
+    expect(coded.html).toContain("For the survey and your full report");
+    expect(coded.html).not.toContain("€0");
+    expect(coded.html).not.toContain(fullPrice);
+  });
+
+  it("C1: unlocked and waiting, the shorter keep line, two people to share with", () => {
+    for (const part of [ALL.C1.email.html, ALL.C1.email.text]) {
+      expect(part).toContain("Your full report is unlocked and waiting for you.");
+      expect(part).toContain("Keep this email. Your link brings you back to your report.");
+      expect(part).toContain("Share it with two people you trust");
+      expect(part).not.toContain("whenever you want it");
+      expect(part).not.toContain("up to two");
+    }
+  });
+
+  it("C2: three chapters to read, from the picks, and the shorter keep line", () => {
+    const { html, text } = ALL.C2.email;
+    const intro =
+      "Your full report is open. Readers say the following three chapters sound most like them.";
+    expect(html).toContain(intro);
+    expect(text).toContain(intro);
+    expect(backIntoReportPicks()).toHaveLength(3);
+    expect(html).toContain(">3 Chapters you should read</h2>");
+    expect(text).toContain("3 CHAPTERS YOU SHOULD READ\n1. Typical Beliefs:");
+    expect(html).toContain(
+      "<strong>Keep this email.</strong> Your link brings you back to your report."
+    );
+    expect(text).toContain("Keep this email. Your link brings you back to your report.");
+    expect(html + text).not.toContain("whenever you want it");
+    expect(html + text).not.toContain("Where readers find themselves");
+  });
+
+  it("S3: its preview and opening sell the Core Archetype; its steps are S2's, word for word", () => {
+    const preview = `About ${SURVEY_MINUTES} minutes to your Core Archetype: how desire, connection and attraction work for you.`;
+    for (const offer of ["pre", "full"] as const) {
+      const s3 = surveyWaitingEmail({ ...buyer, offer });
+      const s2 = paymentReceivedEmail({ ...buyer, offer });
+      expect(s3.html).toContain(preview);
+      expect(s3.html).not.toContain("You’ve paid");
+      expect(s3.text).toContain(
+        "You paid for your LoveIQ report yesterday. Your survey is ready to start."
+      );
+      expect(s3.text).toContain(
+        "At the end, your Core Archetype shows how desire, connection and attraction work for you."
+      );
+      expect(stepsOf(s3.text)).toBeDefined();
+      expect(stepsOf(s3.text)).toBe(stepsOf(s2.text));
+    }
+    expect(ALL.S3.email.html).toContain(`>${CREDIT} credit</span>`);
+    expect(stepsOf(ALL.S3.email.text)).toContain(
+      "3. Read your initial report: your Core Archetype, plus a preview of the full report"
+    );
+  });
 });
 
 describe("trial sends (scripts/email-trials.ts)", () => {
@@ -344,4 +492,40 @@ describe("what the chapter map's legend calls free", () => {
     const { html } = giftEmail({ ...reader, answeredYesterday: true });
     expect(html).toContain("free chapters");
   });
+});
+
+// Eman's calls on the questions sent to Mark with the trials (17 Nov 2026): U1's headline
+// drops "to read" (Mark's 9 Nov edit), C2's subject names the part, the copy follows the
+// Tone of Voice page's contractions, and the invite reminders keep their invite but carry
+// the share icon Mark asked for on every invite email.
+describe("the calls on Mark's open questions (17 Nov)", () => {
+  it("U1's headline is 'Your Core Archetype is ready'", () => {
+    const { html, text } = coreUnlockedEmail(reader);
+    expect(html).toContain("Your Core Archetype is ready<");
+    expect(text.startsWith("Your Core Archetype is ready\n")).toBe(true);
+    expect(html + text).not.toContain("ready to read");
+  });
+
+  it("C2's subject names the part about how you connect", () => {
+    expect(backIntoReportEmail(reader).subject).toBe(
+      "Have you read the part about how you connect yet?"
+    );
+  });
+
+  it("says you'll and you've, never 'you will' or 'you have unlocked'", () => {
+    for (const [name, email] of everyEmail()) {
+      for (const part of [email.subject, email.html, email.text]) {
+        expect(part, name).not.toMatch(/\byou will\b|\byou have unlocked\b/i);
+      }
+    }
+  });
+
+  it.each(Object.entries(INVITES))(
+    "%s keeps the invite and carries the share icon",
+    (_n, email) => {
+      expect(email.html).toContain(EMAIL_IMAGES.iconShare);
+      expect(email.html).not.toContain(EMAIL_IMAGES.iconRefer);
+      expect(email.html).toContain("Invite a friend&nbsp;&rarr;");
+    }
+  );
 });

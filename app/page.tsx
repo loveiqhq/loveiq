@@ -42,8 +42,8 @@ const softwareApplicationSchema = {
   browserRequirements: "Requires JavaScript. Runs in any modern browser.",
   inLanguage: "en-US",
   // The entry price, not 0 (free claims, 14 Nov): nothing personal opens before EUR 1.99, and
-  // engines read 0 as "the result is free". The full report's price varies per visitor
-  // (pricing_uplift_enabled), so only the fixed entry price is marked up.
+  // engines read 0 as "the result is free". The full report's price depends on the reader (the
+  // EUR 10 credit after the EUR 1.99 unlock), so only the fixed entry price is marked up.
   offers: {
     "@type": "Offer",
     price: ENTRY_PRICE_SCHEMA,

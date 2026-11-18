@@ -232,7 +232,7 @@ export interface HeroVideoBlock {
   notes: string[];
 }
 
-/** What the headline figures divide, for their info cards ("990 ÷ 10,086 = 9.82%"). */
+/** What the headline figures divide, for their info cards ("990 ÷ 10,086 = 9.8%"). */
 export interface LandingCounts {
   visits: number | null;
   starts: number | null;

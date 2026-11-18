@@ -22,6 +22,7 @@
  *         trim it at 180 days, but that purge is postponed and off)
  *       - report_section_feedback
  *       - email_message_event (exported; erased by its ON DELETE CASCADE from survey_submission)
+ *       - reader_return (the days they came back; exported, erased by its ON DELETE CASCADE)
  *       - unlock_feedback (the answer to "why didn't you unlock?" and the reader's own words)
  *       - personal_report
  *         - personal_report_section
@@ -287,6 +288,11 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   result.exportData!.email_message_event = await fetchRows(
     `/rest/v1/email_message_event?survey_submission_id=${subFilter}&select=*`,
     "eme"
+  );
+  // Each day they came back after their first visit, and what brought them.
+  result.exportData!.reader_return = await fetchRows(
+    `/rest/v1/reader_return?survey_submission_id=${subFilter}&select=*`,
+    "rr"
   );
   // The unlock-feedback email, its answer and the reader's own words on the follow-up.
   result.exportData!.unlock_feedback = await fetchRows(

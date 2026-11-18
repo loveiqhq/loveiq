@@ -24,6 +24,7 @@ import { COUNTRIES, COUNTRY_CODE_MAP } from "@/data/countries";
 
 import type { AdPreview, AdsResult, AdsLine } from "./ads";
 import { addDays, shortDate } from "./days";
+import { fmt } from "./format";
 import {
   classifySource,
   deviceClass,
@@ -1433,7 +1434,7 @@ export function buildTraffic(input: {
         key === "tablet"
           ? "PostHog counts iPads as Desktop, so tablet visitors aren't counted"
           : aud && !audWhy && share.all
-            ? `${Math.round(((share.by.get(key) ?? 0) / share.all) * 100)}% of PostHog's visits`
+            ? `${fmt("pct", (share.by.get(key) ?? 0) / share.all)} of PostHog's visits`
             : "",
         tabletEarly ? [] : mine,
         {

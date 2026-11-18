@@ -29,7 +29,7 @@
  * and cookies). Closed at the 2026-11-10 sync: the video stays (registry #6 ends on
  * LANDING_HERO_LAST_DAY).
  *
- * ROUND 4 (from the 2026-11-16 release; Marcus, #all-loveiq 2026-11-12, "it will replace
+ * ROUND 4 (from the 2026-11-17 release; Marcus, #all-loveiq 2026-11-12, "it will replace
  * the version without the video and run against the current video version 50/50"):
  *   - `"video"`      — arm A, the control: round 3's video page exactly (V3)
  *   - `"pain_point"` — arm B, Marcus's new page (Claude Design "LoveIQ landing page ·
@@ -93,18 +93,18 @@ export const LANDING_HERO_LAST_DAY = "2026-11-11";
  * restart is LANDING_HERO_RESTART_DAY.
  * The axis trend and the conversion digest's landing blocks and verdict start here, and
  * the /admin readout at LANDING_TEST_START_AT. The brain's experiments tool reads round 4
- * (registry #10) from its own start date. Set for a production deploy on Mon 2026-11-16:
+ * (registry #10) from its own start date. Set for the production deploy on Tue 2026-11-17:
  * if the release reaches production later, move this to the first whole day after its
  * deploy, and the moment below with it.
  */
-export const LANDING_TEST_START_DAY = "2026-11-17";
+export const LANDING_TEST_START_DAY = "2026-11-18";
 
 /**
  * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin (CET, UTC+1, in
  * November). Not the deploy's own moment, which is not known when this is written: a cut a
  * few hours late loses a few hours of readers, a cut too early would count round 3's.
  */
-export const LANDING_TEST_START_AT = "2026-11-16T23:00:00Z";
+export const LANDING_TEST_START_AT = "2026-11-17T23:00:00Z";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +

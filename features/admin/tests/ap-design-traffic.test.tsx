@@ -352,7 +352,7 @@ describe("the Traffic builder, as the design reads", () => {
       "Direct / unattributed",
     ]);
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
-      "New landing page: Since 17 Nov 2026 · live",
+      "New landing page: Since 18 Nov 2026 · live",
       // Registry #6's days, written as an ended test is.
       "Landing hero: 14 Oct – 11 Nov 2026 · ended",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",

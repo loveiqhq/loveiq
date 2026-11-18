@@ -234,10 +234,12 @@ email sheet on Next") adds a second ask after a No:
   submits. Back goes to the email question and the sheet closes with it, as the Pause dialog
   does. Taps in its first 400 ms are ignored and focus lands on the sheet, not on Yes, so a
   double tap on Next or a held Enter never gives consent.
-- **What is recorded.** A Yes given in the sheet is sent as `marketingOptInVia: "sheet"`
+- **What is recorded.** A Yes given once the sheet has been shown, in it or on the question
+  after closing it (also after a reload), is sent as `marketingOptInVia: "sheet"`
   ([API](api.md#post-apisurvey)) and stored with the consent version
   `2026-10-14+sheet-2026-11-10` (`MARKETING_OPT_IN_SHEET_TERMS_VERSION`): that reader saw the
-  question's words and the sheet's. A Yes on the question keeps `2026-10-14`. PostHog and GA4
+  question's words and the sheet's. A Yes from a reader who never saw the sheet keeps
+  `2026-10-14`. PostHog and GA4
   get `survey_optin_sheet_shown`, then `survey_optin_sheet_closed`, whose `outcome` (`yes`,
   `not_now`, `dismissed`) and `via` go to PostHog only.
 - **The copy** lives in [`optInSheet.ts`](../features/survey/optInSheet.ts). A change there is a
@@ -248,8 +250,9 @@ email sheet on Next") adds a second ask after a No:
   `optInSheet.ts`; run it again before changing the number.
 
 - **Measuring it.** From 2026-10-14 to 2026-11-10, 66 of 200 submissions opted in (33%). The
-  16015 answer split is on AP-Analytics' Survey page; the sheet's own Yes rows are those whose
-  `marketing_opt_in_terms_version` contains `+sheet-`.
+  16015 answer split is on AP-Analytics' Survey page; the Yes rows from readers who were shown
+  the sheet are those whose `marketing_opt_in_terms_version` contains `+sheet-`, and PostHog's
+  `survey_optin_sheet_closed` with `outcome` `yes` counts the Yes given in the sheet itself.
 - **Phones and wider.** Mark drew it for phones (390 px). From 640 px it stays a bottom sheet, at
   most 480 px wide.
 

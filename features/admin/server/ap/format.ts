@@ -27,7 +27,31 @@ const grouped = (v: number, digits = 0) =>
 /** Under a euro once rounded to a tenth of a cent: a sum "eur3" writes with three decimals. */
 const subEuro = (a: number) => Math.round(Math.abs(a) * 1000) < 1000;
 
-/** "12,608", "€1,199", "€29.00", "€0.002", "€2.39", "5.96%", "6:40", "0:02.9", "2.4 days". */
+/**
+ * A rate of zero or more in tenths of a percent, as it is written (0.6835 is 684: "68.4%"):
+ * rounded half up on the figure in decimals, not on its binary approximation, which toFixed
+ * rounds down ("68.3%"). For a highlight that must follow the figure shown.
+ */
+export function tenths(a: number): number {
+  return Math.round(Number((a * 1000).toPrecision(12)));
+}
+
+/**
+ * A rate with exactly one decimal, as Marcus asked for every conversion rate on 29–30 Oct 2026:
+ * "68.3%", "6.4%", "0.2%". A rate above nothing never reads "0.0%" ("<0.1%"), and one short of
+ * everyone never reads "100.0%" (">99.9%").
+ */
+function rate(a: number): string {
+  const t = tenths(a);
+  if (t === 0 && a > 1e-9) return "<0.1%";
+  if (t === 1000 && Number(a.toPrecision(12)) < 1) return ">99.9%";
+  return `${(t / 10).toFixed(1)}%`;
+}
+
+/**
+ * "12,608", "€1,199", "€29.00", "€0.002", "€2.39", "6.4%", "6:40", "0:02.9", "2.4 days".
+ * `digits` sets the decimals of every unit but "pct": a rate always has one.
+ */
 export function fmt(unit: Unit, v: number | null | undefined, digits?: number): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return EMPTY;
   const out = written(unit, Math.abs(v), digits);
@@ -45,7 +69,7 @@ function written(unit: Unit, a: number, digits?: number): string {
       // A tenth of a cent only under a euro, as drawn ("€0.058"); cents from one ("€2.39").
       return `€${grouped(a, digits ?? (subEuro(a) ? 3 : 2))}`;
     case "pct":
-      return `${(a * 100).toFixed(digits ?? (a * 100 >= 10 ? 1 : 2))}%`;
+      return rate(a);
     case "mmss": {
       // Whole seconds, as Marcus asked on 21 Oct 2026 ("seconds, no decimals"): "8 s" under a
       // minute, m:ss from one ("6:40"). Under half a second reads "<1 s", never a false "0 s".
@@ -88,11 +112,10 @@ export function delta(
         : "bad";
   const sign = diff > 0 ? "+" : diff < 0 ? MINUS : "±";
   if (unit === "pct") {
-    // A tenth of a point from one point, without a trailing ".0" ("−2.1 pt", "+3 pt"); a
-    // hundredth below ("+0.46 pt"), as the design writes them.
-    const pt = Math.abs(diff * 100);
-    const fine = pt.toFixed(2);
-    return { text: `${sign}${Number(fine) >= 1 ? Number(pt.toFixed(1)) : fine} pt`, tone };
+    // Points with one decimal, as the rates themselves ("−2.1 pt", "+3.0 pt", "+0.5 pt"); a
+    // change that rounds to nothing is "±0.0 pt", in grey.
+    const pt = (tenths(Math.abs(diff)) / 10).toFixed(1);
+    return pt === "0.0" ? { text: "±0.0 pt", tone: "flat" } : { text: `${sign}${pt} pt`, tone };
   }
   if (unit === "mmss") return { text: `${sign}${fmt("mmss", Math.abs(diff))}`, tone };
   // Cents once the change is ten cents or more, as the design writes them ("−€0.25"), or when

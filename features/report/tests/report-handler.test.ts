@@ -99,6 +99,14 @@ vi.mock("@features/report/server/shareVerify", async () => {
 vi.mock("@features/attribution/server/journey-message", () => ({
   refreshJourneyMessage: vi.fn(),
 }));
+// The "Came back" thread reply: which opens are noted, and how (the rules are its own tests').
+const mockNoteReaderReturn = vi.fn();
+vi.mock("@features/attribution/server/return-ping", async () => {
+  const actual = await vi.importActual<typeof import("@features/attribution/server/return-ping")>(
+    "@features/attribution/server/return-ping"
+  );
+  return { ...actual, noteReaderReturn: (...args: unknown[]) => mockNoteReaderReturn(...args) };
+});
 
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
@@ -1472,5 +1480,66 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     const json = await res.json();
     expect(json).not.toHaveProperty("gate");
     expect(json.viewMode).toBe("shared");
+  });
+
+  describe("the #incoming-surveys 'Came back' reply", () => {
+    const PAGE = `https://www.loveiq.org/report/${OWNER_TOKEN}`;
+    const open = (headers: Record<string, string> = {}, query = "&v4=1") =>
+      GET(
+        new Request(`http://localhost:3000/api/report?token=${OWNER_TOKEN}${query}`, { headers })
+      );
+
+    it("notes an owner's open, gated or not, with the email link it came through", async () => {
+      await open({
+        referer: `${PAGE}?utm_source=email&utm_medium=nurture&utm_campaign=initial_gift`,
+      });
+      mockGateEnabled.mockResolvedValue(false);
+      await open();
+      await flushAfterResponse();
+      const reader = {
+        finishedAt: "2026-10-20T08:00:00.000Z",
+        startedAt: null,
+        internal: false,
+        emailMasked: "a***@example.com",
+      };
+      expect(mockNoteReaderReturn.mock.calls).toEqual([
+        [{ submissionId: 55, source: "report", via: "initial_gift", reader }],
+        [{ submissionId: 55, source: "report", via: null, reader }],
+      ]);
+    });
+
+    it("leaves out a crawler, one of our probes and the gate's own follow-up request", async () => {
+      await open({ "user-agent": "AdsBot-Google (+http://www.google.com/adsbot.html)" });
+      // A link-scanning sandbox: AP-Analytics leaves headless browsers out of report sessions.
+      await open({
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/120.0",
+      });
+      await open({ cookie: "loveiq_probe=1" });
+      await meetGet();
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).not.toHaveBeenCalled();
+    });
+
+    it("leaves out a friend's shared view", async () => {
+      mockResolveShare.mockResolvedValue({
+        share: { id: 12, recipient_email: "friend@example.com", last_viewed_at: null },
+        submissionId: 55,
+        ownerFirstName: "Alice",
+        ownerEmail: "alice@example.com",
+      });
+      mockVerifyShareCookie.mockReturnValue(true);
+      await GET(new Request("http://localhost:3000/api/report?token=rpts_abcdefghijklmnopqrst"));
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).not.toHaveBeenCalled();
+    });
+
+    it("answers the reader whatever the reply does", async () => {
+      mockNoteReaderReturn.mockRejectedValue(new Error("slack down"));
+      mockGateEnabled.mockResolvedValue(false);
+      const res = await open();
+      expect(res.status).toBe(200);
+      await flushAfterResponse();
+      expect(mockNoteReaderReturn).toHaveBeenCalledTimes(1);
+    });
   });
 });

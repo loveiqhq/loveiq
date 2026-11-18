@@ -135,8 +135,8 @@ describe("the read-out's arithmetic", () => {
       dot("B", 4.75, 0.03846, 1, 124),
       dot("C", 0.7, 0, 0, 1627),
     ]);
-    // 0.000, 0.010, 0.020, 0.030 (not 0.000, 0.010, 0.019, 0.029).
-    expect(s.yTicks.map((t) => t.toFixed(3))).toEqual(["0.000", "0.010", "0.020", "0.030"]);
+    // Even steps of whole tenths of a point, each written exactly with one decimal.
+    expect(s.yTicks.map((t) => t.toFixed(3))).toEqual(["0.000", "0.100", "0.200", "0.300"]);
     expect(s.iso.length).toBeGreaterThan(0);
     for (const c of s.iso) {
       expect(c.spots[0]).toEqual([c.lx, c.ly]);
@@ -521,9 +521,9 @@ describe("Spark", () => {
     );
     sized(box());
     fireEvent.pointerMove(box(), { clientX: 1, clientY: 20, ...mouse });
-    expect(card()).toHaveTextContent("Open rate0.40%");
+    expect(card()).toHaveTextContent("Open rate0.4%");
     fireEvent.pointerMove(box(), { clientX: 199, clientY: 20, ...mouse });
-    expect(card()).toHaveTextContent("Open rate25%");
+    expect(card()).toHaveTextContent("Open rate25.0%");
     cleanup();
     render(
       <Spark

@@ -9,9 +9,9 @@ import { ENTRY_PRICE, SURVEY_FREE_LINE } from "@features/landing/logic/freeClaim
  * GEO/SEO phase 1, card 2 (promised at the 29 Oct sync): the site told Google and AI
  * assistants the result costs nothing, while nothing personal opens before EUR 1.99. Marcus,
  * 13 Nov: "The survey is free and your initial result. Deeper reports start at €1.99",
- * adapted to context, and "we shouldn't make claims we can't deliver on". Until Mark's new
- * EUR 1.99 page (which shows the archetype) wins its 50/50, only half the finishers get an
- * initial result for free, so the line stops at what is true for everyone.
+ * adapted to context, and "we shouldn't make claims we can't deliver on". Nothing personal
+ * opens before EUR 1.99 for everyone, so the line stops at what is true for everyone, and
+ * says "Reports", not "Deeper reports", so the EUR 1.99 result never reads as free.
  */
 const page = readFileSync(join(process.cwd(), "app/page.tsx"), "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, " ")
@@ -21,7 +21,7 @@ const answer = (question: string) => faqs.find((f) => f.question === question)?.
 describe("what the site says is free", () => {
   it("says the survey is free and reports start at the EUR 1.99 entry price", () => {
     expect(ENTRY_PRICE).toBe("€1.99");
-    expect(SURVEY_FREE_LINE).toBe("The survey is free. Deeper reports start at €1.99.");
+    expect(SURVEY_FREE_LINE).toBe("The survey is free. Reports start at €1.99.");
   });
 
   it("no longer tells search engines the result is free", () => {
@@ -33,7 +33,7 @@ describe("what the site says is free", () => {
 
   // Both answers passed Jarvis's copy gate (check_copy, 14 Nov): reading grade 5.8.
   it("answers 'Is it free?' with the same line", () => {
-    expect(answer("Is it free?")).toBe(`${SURVEY_FREE_LINE.slice(0, -1)}, paid once.`);
+    expect(answer("Is it free?")).toBe(`${SURVEY_FREE_LINE} One-time payments, no subscription.`);
   });
 
   it("promises no coach or paid session that does not exist", () => {

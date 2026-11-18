@@ -32,7 +32,6 @@ import {
   sectionTitle,
   shell,
   signOff,
-  smallNote,
   steps,
   textFooter,
   textSteps,
@@ -93,9 +92,9 @@ export function coreUnlockedEmail({
     reason: INITIAL_REASON,
     unsubscribeUrl,
     rows: [
-      heading("Your Core Archetype is ready to read"),
+      heading("Your Core Archetype is ready"),
       paragraphs([
-        `${e(hiLine(name))}<br>Thank you for your purchase. You have unlocked your Initial Report, including your Core Archetype.`,
+        `${e(hiLine(name))}<br>Thank you for your purchase. You’ve unlocked your Initial Report, including your Core Archetype.`,
         `We read the pattern in your answers and matched it to one of ${ARCHETYPES} archetypes. It describes how desire, connection and attraction tend to work for you.`,
         `To learn even more about your Sexual Personality, use the <strong style="color:#161021;">${CREDIT} credit</strong> to unlock the full report.`,
       ]),
@@ -108,9 +107,9 @@ export function coreUnlockedEmail({
     ],
   });
   const text = joinText([
-    "Your Core Archetype is ready to read",
+    "Your Core Archetype is ready",
     hiLine(name),
-    "Thank you for your purchase. You have unlocked your Initial Report, including your Core Archetype.",
+    "Thank you for your purchase. You’ve unlocked your Initial Report, including your Core Archetype.",
     `To learn even more about your Sexual Personality, use the ${CREDIT} credit to unlock the full report.`,
     ["Read my Core Archetype:", reportUrl],
     textSteps(U1_STEPS),
@@ -133,6 +132,11 @@ export interface FullUnlockedParams extends PurchaseEmailParams {
   shareUrl: string;
 }
 
+const THANKS =
+  "Thank you for trusting us with something this personal. Your full report is unlocked and waiting for you.";
+/** C1's and C2's line under the button. */
+const KEEP = "Keep this email. Your link brings you back to your report.";
+
 /** C1: a full-report purchase, or a EUR 29.99 pay-to-start buyer who finished the survey. */
 export function fullUnlockedEmail({
   firstName,
@@ -147,7 +151,6 @@ export function fullUnlockedEmail({
     : "Your full report is open. Here’s where to start";
   const previewText =
     "Every chapter is yours now. Three good places to begin, and two people you can share it with.";
-  const keep = "Keep this email. Your link brings you back to your report whenever you want it.";
   const html = shell({
     siteUrl,
     title: subject,
@@ -157,14 +160,14 @@ export function fullUnlockedEmail({
     rows: [
       heading("Every chapter is yours now"),
       paragraphs([
-        `${e(hiLine(name))}<br>Thank you for trusting us with something this personal. Your full report is open.`,
+        `${e(hiLine(name))}<br>${e(THANKS)}`,
         "It reads the patterns in your answers across every dimension we measure: your archetype mix, core motivation, relational stage, desire drivers, attachment style and more.",
       ]),
-      button({ href: reportUrl, label: "Open my full report", notes: [keep] }),
+      button({ href: reportUrl, label: "Open my full report", notes: [e(KEEP)] }),
       panel(siteUrl, {
         icon: "iconShare",
         kicker: "Share your report",
-        title: "Share it with up to two people you trust",
+        title: "Share it with two people you trust",
         body: "Some of the best conversations start with “this part sounds like me”.",
         href: shareUrl,
         cta: "Share my report",
@@ -176,12 +179,12 @@ export function fullUnlockedEmail({
   const text = joinText([
     "Every chapter is yours now",
     hiLine(name),
-    "Thank you for trusting us with something this personal. Your full report is open.",
+    THANKS,
     ["Open my full report:", reportUrl],
-    keep,
+    KEEP,
     [
       "SHARE YOUR REPORT",
-      "Share it with up to two people you trust. Some of the best conversations start with “this part sounds like me”.",
+      "Share it with two people you trust. Some of the best conversations start with “this part sounds like me”.",
       shareUrl,
     ],
     textFooter(FULL_REASON, unsubscribeUrl),
@@ -228,7 +231,7 @@ export function backIntoReportEmail({
   unsubscribeUrl,
 }: PurchaseEmailParams): KitEmail {
   const name = greetingName(firstName);
-  const subject = "Have you read the part about you yet?";
+  const subject = "Have you read the part about how you connect yet?";
   const previewText = "Three chapters readers come back to, and where to find them.";
   const picks = backIntoReportPicks();
   const cards = picks
@@ -246,8 +249,10 @@ export function backIntoReportEmail({
 </table>`
     )
     .join("");
-  const keep =
-    "<strong>Keep this email.</strong> Your link brings you back to your report whenever you want it.";
+  const keep = "<strong>Keep this email.</strong> Your link brings you back to your report.";
+  const intro =
+    "Your full report is open. Readers say the following three chapters sound most like them.";
+  const picksTitle = `${picks.length} Chapters you should read`;
   const html = shell({
     siteUrl,
     title: subject,
@@ -256,10 +261,8 @@ export function backIntoReportEmail({
     unsubscribeUrl,
     rows: [
       heading("Pick up where you left off"),
-      paragraphs([
-        `${e(hiLine(name))}<br>Your full report is open. These are the chapters readers say sound most like them.`,
-      ]),
-      row(`${sectionTitle("Where readers find themselves")}${cards}`),
+      paragraphs([`${e(hiLine(name))}<br>${e(intro)}`]),
+      row(`${sectionTitle(picksTitle)}${cards}`),
       button({ href: reportUrl, label: "Continue reading", notes: [keep] }),
       signOff(),
     ],
@@ -267,13 +270,10 @@ export function backIntoReportEmail({
   const text = joinText([
     "Pick up where you left off",
     hiLine(name),
-    "Your full report is open. These are the chapters readers say sound most like them.",
-    [
-      "WHERE READERS FIND THEMSELVES",
-      ...picks.map((p, i) => `${i + 1}. ${p.label}: ${p.question}`),
-    ],
+    intro,
+    [picksTitle.toUpperCase(), ...picks.map((p, i) => `${i + 1}. ${p.label}: ${p.question}`)],
     ["Continue reading:", reportUrl],
-    "Keep this email. Your link brings you back to your report whenever you want it.",
+    KEEP,
     textFooter(FULL_REASON, unsubscribeUrl),
   ]);
   return { subject, html, text };
@@ -310,12 +310,13 @@ export function inviteReminderOneEmail({
       heading(subject),
       paragraphs([`${e(hiLine(name))}<br>${e(intro)}`]),
       panel(siteUrl, {
-        icon: "iconRefer",
+        icon: "iconShare",
         kicker: "Refer a friend",
         title: "Invite a friend to take the test",
         body: "They get their own report. Yours stays private: they don’t see what it says.",
         href: inviteUrl,
         cta: "Invite a friend",
+        pasteLink: true,
       }),
       tiles(siteUrl, "What you’ll find inside", INSIDE_TILES),
       signOff(),
@@ -356,14 +357,14 @@ export function inviteReminderTwoEmail({
       heading(subject),
       paragraphs([`${e(hiLine(name))}<br>${e(intro)}`]),
       panel(siteUrl, {
-        icon: "iconRefer",
+        icon: "iconShare",
         kicker: "Refer a friend",
         title: "One invite, their own report",
         body: "They take the test on their own. Your answers and your report stay yours.",
         href: inviteUrl,
         cta: "Invite a friend",
+        pasteLink: true,
       }),
-      smallNote("This is the last reminder we send about invites."),
       signOff(),
     ],
   });
@@ -375,7 +376,6 @@ export function inviteReminderTwoEmail({
       "One invite, their own report. They take the test on their own. Your answers and your report stay yours.",
       inviteUrl,
     ],
-    "This is the last reminder we send about invites.",
     textFooter(FULL_REASON, unsubscribeUrl),
   ]);
   return { subject, html, text };

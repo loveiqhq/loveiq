@@ -67,7 +67,7 @@ function show(unit: Unit, v: number | null): string {
       // Three decimals, as the step cards; a figure above 0 never reads as nothing.
       return v > 0 && v < 0.0005 ? "<€0.001" : fmt("eur", v, 3);
     case "pct":
-      return v > 0 && v < 0.00005 ? "<0.01%" : fmt("pct", v, 2);
+      return fmt("pct", v);
     case "count":
       return fmt("count", v);
     case "x":
@@ -395,8 +395,8 @@ const MARKET: Array<{
   },
 ];
 
-/** A share as the cards write it: two decimals under 1%. */
-const pctOf = (v: number) => (v > 0 && v < 0.00005 ? "<0.01%" : fmt("pct", v, v < 0.01 ? 2 : 1));
+/** A share as the cards write it, with a tenth like every rate. */
+const pctOf = (v: number) => fmt("pct", v);
 
 /**
  * A band's width for a share of the funnel's visits: on a log scale, each tenth narrower by a
@@ -588,7 +588,7 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
 type Measure = "cac" | "cvr" | "roas";
 const MEASURES: Array<{ value: Measure; label: string; unit: Unit; step: number }> = [
   { value: "cac", label: "Cost per paying customer", unit: "eur0", step: 1 },
-  { value: "cvr", label: "Visit → paying customer", unit: "pct", step: 0.0001 },
+  { value: "cvr", label: "Visit → paying customer", unit: "pct", step: 0.001 },
   { value: "roas", label: "ROAS", unit: "x", step: 0.01 },
 ];
 

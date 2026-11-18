@@ -82,6 +82,22 @@ const tableRows = () =>
     .map((r) => within(r).getAllByRole("cell")[0]!.textContent);
 
 describe("the Emails page", () => {
+  it("writes the clicks axis in whole tenths of a point, each line exactly", () => {
+    // 5 of 100 is the highest weekly rate: the axis tops at 6.0%, a line every 1.5%.
+    const base = payload("overall") as ReturnType<typeof buildEmailsPage>;
+    view.payload = {
+      ...base,
+      weeks: [
+        { label: "Wk 1", from: "2026-10-05", to: "2026-10-11", sent: 100, clicked: 5 },
+        { label: "Wk 2", from: "2026-10-12", to: "2026-10-18", sent: 80, clicked: 2 },
+      ],
+    };
+    render(<ApEmails scope="overall" />);
+    const card = screen.getByRole("heading", { name: "Week by week" }).closest("section")!;
+    for (const t of ["0.0%", "1.5%", "3.0%", "4.5%", "6.0%"])
+      expect(within(card).getAllByText(t).length).toBeGreaterThan(0);
+  });
+
   it("reads its scope's page and shows the design's sections", () => {
     view.payload = payload("overall");
     render(<ApEmails scope="overall" />);

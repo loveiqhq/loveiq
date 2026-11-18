@@ -40,6 +40,8 @@ approved: off, today's email goes out (or none, for a new one).
 - **Every email stops when the reader converts**: a payment (any, a staff test one too), a started or
   finished survey, an opened report. Windows close: nobody gets an email days late.
 - **No archetype name in any email**: the €1.99 step sells it; the card is one blurred image.
+- **A price is what was paid**: pay to start's R1 names the buyer's `amount_cents`, and nothing
+  for a 100% code (€0), never a price they did not pay.
 - **The I3 gift test (80/20) is untouched**: the holdout never gets I4, and I2 goes to both arms.
 - Each email's links carry `utm_campaign` = its stage (or its existing tag for a redesign), so
   #incoming-surveys names it under "Came back by email"; `stage` + `sub` tags keep its send,

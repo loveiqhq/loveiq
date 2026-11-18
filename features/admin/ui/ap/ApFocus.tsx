@@ -102,9 +102,9 @@ function finite(series: ChartSeries[]): number[] {
   );
 }
 
-/** An axis label: counts whole, rates as drawn (a tenth under 10%), euros with cents. */
-function axisLabel(unit: Unit, v: number, top: number, wholeEuros: boolean): string {
-  if (unit === "pct") return `${v.toFixed(top < 10 ? 1 : 0)}%`;
+/** An axis label: counts whole, rates with a tenth, euros with cents. */
+function axisLabel(unit: Unit, v: number, wholeEuros: boolean): string {
+  if (unit === "pct") return fmt("pct", v / 100);
   if (unit === "eur") return fmt("eur", v, wholeEuros ? 0 : 2);
   if (unit === "ratio") return fmt("ratio", v, 2);
   return fmt("count", v);
@@ -387,14 +387,14 @@ function ChartCard({ chart, range }: { chart: FocusChart; range: { from: string;
                     className="absolute -left-12 w-[42px] translate-y-1/2 text-right text-[11px] tabular-nums"
                     style={{ bottom: `${f * 100}%`, color: axisColor(left) }}
                   >
-                    {axisLabel(lUnit, f * lTop, lTop, false)}
+                    {axisLabel(lUnit, f * lTop, false)}
                   </span>
                   {right.length > 0 && (
                     <span
                       className="absolute left-full ml-1.5 translate-y-1/2 whitespace-nowrap text-[11px] tabular-nums"
                       style={{ bottom: `${f * 100}%`, color: axisColor(right) }}
                     >
-                      {axisLabel(rUnit, f * rTop, rTop, wholeEuros)}
+                      {axisLabel(rUnit, f * rTop, wholeEuros)}
                     </span>
                   )}
                 </Fragment>
@@ -658,7 +658,7 @@ function Assessments({ a, from }: { a: FocusPayload["assessments"]; from: string
       left: false,
       k: "focus.paid-cvr",
       worked: live
-        ? worked(fmt("pct", live.paidCvr, 2), count(live.paid), count(live.submissions))
+        ? worked(fmt("pct", live.paidCvr), count(live.paid), count(live.submissions))
         : undefined,
     },
     {
@@ -741,7 +741,7 @@ function Assessments({ a, from }: { a: FocusPayload["assessments"]; from: string
               { v: minutes(r.surveyMedianMs), sub: r.live ? "live" : "" },
               { v: minutes(r.reportMedianMs), sub: r.reportSub },
               { v: fmt("count", r.submissions) },
-              { v: fmt("pct", r.paidCvr, 2) },
+              { v: fmt("pct", r.paidCvr) },
               { v: fmt("eur", r.revPerSub, 2), bold: r.live },
               { v: fmt("eur", r.costPerSub, 2) },
             ];
@@ -816,7 +816,7 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
     {
       label: "Visitor → paid",
       k: "focus.fc-v2p",
-      cell: (r) => fmt("pct", r.v2p, 2),
+      cell: (r) => fmt("pct", r.v2p),
       value: (r) => r.v2p,
       better: "high",
     },
@@ -844,7 +844,7 @@ function Funnels({ f }: { f: FocusPayload["funnels"] }) {
     {
       label: "Refund rate",
       k: "focus.fc-refund",
-      cell: (r) => fmt("pct", r.refundRate, 1),
+      cell: (r) => fmt("pct", r.refundRate),
       value: (r) => r.refundRate,
       better: "low",
     },

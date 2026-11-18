@@ -22,6 +22,8 @@ import { getScoringConfig } from "@features/scoring/logic";
 const FILES_STATING_COUNTS = [
   { file: "app/page.tsx", states: ["dimension", "archetype"] },
   { file: "features/survey/ui/SurveyConfirmation.tsx", states: ["dimension", "archetype"] },
+  // The FAQ's "21 measured dimensions" (its answer and the FAQ markup read data/faqs.ts).
+  { file: "data/faqs.ts", states: ["dimension"] },
 ] as const satisfies ReadonlyArray<{
   file: string;
   states: ReadonlyArray<"dimension" | "archetype">;
