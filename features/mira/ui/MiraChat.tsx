@@ -453,7 +453,7 @@ export default function MiraChat({
                     rows={1}
                     maxLength={2000}
                     placeholder="Type how it feels, in your own words…"
-                    className="min-h-[48px] flex-1 resize-none rounded-3xl border border-ap-line px-4 py-3 text-[16px] outline-none focus:border-ap-purple"
+                    className="min-h-[72px] flex-1 resize-none rounded-3xl sm:min-h-[48px] border border-ap-line px-4 py-3 text-[16px] outline-none focus:border-ap-purple"
                   />
                   <GradientButton
                     type="submit"
