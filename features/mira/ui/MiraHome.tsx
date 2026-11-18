@@ -92,6 +92,9 @@ export default function MiraHome() {
           <div className="flex-1">
             <h2 className="font-serif text-[20px] font-semibold">Mira</h2>
             <p className="text-[13px] text-ap-muted">Body confidence · your coach</p>
+            <p className="mt-1 text-[14px] text-ap-body">
+              Feel more at home in your body, in and out of the bedroom.
+            </p>
           </div>
           <Link
             href="/mira"

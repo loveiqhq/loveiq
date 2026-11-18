@@ -27,6 +27,9 @@ type CrisisCountry = {
 type ChatSummary = { id: string; title: string; updated_at: string };
 
 const CONSENT_VERSION = "mira-2026-11-18";
+/** Sanjin's intake invitation: Mira's own message after her first reply, with two reply buttons. */
+const isInvitation = (m: Turn) =>
+  m.role === "assistant" && m.content === miraConfig.intakeInvitation;
 
 export default function MiraChat({
   signedIn,
@@ -131,6 +134,7 @@ export default function MiraChat({
       messageId?: number | null;
       freeLeft?: number | null;
       gate?: boolean;
+      invitation?: string;
     }>("/api/mira/chat", {
       body: {
         message,
@@ -160,6 +164,9 @@ export default function MiraChat({
         sources: res.data.sources,
         messageId: res.data.messageId,
       },
+      ...(res.data.invitation
+        ? [{ role: "assistant" as const, content: res.data.invitation }]
+        : []),
     ];
     setMessages(withReply);
     const left = res.data.freeLeft ?? freeLeft;
@@ -305,7 +312,21 @@ export default function MiraChat({
             {messages.map((m, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <Bubble role={m.role} text={m.content} />
-                {m.role === "assistant" ? (
+                {isInvitation(m) && i === messages.length - 1 && !sending && !gate ? (
+                  <div className="flex flex-wrap gap-2 pl-1">
+                    {miraConfig.intakeReplyButtons.map((label) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => send(label)}
+                        className="min-h-[40px] rounded-full border border-ap-mist px-4 text-[13px] text-[#561dbd] hover:border-ap-purple"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {m.role === "assistant" && !isInvitation(m) ? (
                   <div className="flex flex-wrap items-center gap-3 pl-1 text-[12px] text-ap-muted">
                     {m.sources?.length ? (
                       <span>
