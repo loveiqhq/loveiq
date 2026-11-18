@@ -18,9 +18,30 @@ export function SupportPanel({
   highlight: Country | null;
   onClose: () => void;
 }) {
-  // Only a listed country moves to the top; "Somewhere else" already closes the list.
+  // A listed country moves to the top; anyone elsewhere sees "Somewhere else" first instead.
   const top = DATA.countries.find((c) => c.code === highlight?.code);
   const ordered = top ? [top, ...DATA.countries.filter((c) => c !== top)] : DATA.countries;
+  const elsewhereFirst = Boolean(highlight) && !top;
+  const elsewhere = (
+    <section aria-label={DATA.fallback.name}>
+      <h3 className="text-[14px] font-bold">{DATA.fallback.name}</h3>
+      <ul className="mt-1 flex flex-col gap-1 text-[14px] text-ap-body">
+        {DATA.fallback.lines.map((l) => (
+          <li key={l.name}>
+            {l.name}
+            {l.url ? (
+              <>
+                {" · "}
+                <a href={l.url} target="_blank" rel="noopener noreferrer" className="underline">
+                  website
+                </a>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
   return (
     <div
       role="dialog"
@@ -35,6 +56,7 @@ export function SupportPanel({
           also call one of these lines.
         </p>
         <div className="mt-4 flex flex-col gap-4">
+          {elsewhereFirst ? elsewhere : null}
           {ordered.map((c) => (
             <section key={c.code} aria-label={c.name}>
               <h3 className="text-[14px] font-bold">
@@ -77,29 +99,7 @@ export function SupportPanel({
               </ul>
             </section>
           ))}
-          <section aria-label={DATA.fallback.name}>
-            <h3 className="text-[14px] font-bold">{DATA.fallback.name}</h3>
-            <ul className="mt-1 flex flex-col gap-1 text-[14px] text-ap-body">
-              {DATA.fallback.lines.map((l) => (
-                <li key={l.name}>
-                  {l.name}
-                  {l.url ? (
-                    <>
-                      {" · "}
-                      <a
-                        href={l.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        website
-                      </a>
-                    </>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </section>
+          {elsewhereFirst ? null : elsewhere}
         </div>
         <div className="mt-5 flex justify-end">
           <button

@@ -184,7 +184,14 @@
     "code": "OTHER",
     "name": "Somewhere else",
     "emergency": "your local emergency number",
-    "lines": [],
-    "note": "Not defined in Sanjin's sources. Open decision on his briefing page: 'The 9 drafted · where our users are · plus a fallback for others' (proposal: 'where our users are, plus a fallback'). Until it is decided, Mira asks the country once."
+    "lines": [
+      {
+        "type": "directory",
+        "name": "Find A Helpline: free, confidential support lines, searchable by country",
+        "url": "https://findahelpline.com",
+        "label": "findahelpline.com"
+      }
+    ],
+    "note": "Not defined in Sanjin's sources. Open decision on his briefing page: 'The 9 drafted · where our users are · plus a fallback for others' (proposal: 'where our users are, plus a fallback'). Until it is decided, Mira asks the country once. Added 18 Nov 2026 for people outside the 9 countries, pending Sanjin's OK: Find A Helpline (findahelpline.com, run by ThroughLine), a free directory of verified helplines by country."
   }
 }
