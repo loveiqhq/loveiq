@@ -80,26 +80,90 @@ describe("POST /api/mira/chat", () => {
     expect(body.crisisLines.code).toBe("DE");
   });
 
-  it("shows the sign-up card once the free replies are used", async () => {
-    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
-      cfg.bucket === "mira-anon-replies"
-        ? { allowed: false, remaining: 0, resetAt: new Date() }
-        : { allowed: true, remaining: 9, resetAt: new Date() }
+  const limitHit = (bucket: string) =>
+    vi
+      .mocked(checkRateLimit)
+      .mockImplementation(async (_key, cfg) =>
+        cfg.bucket === bucket
+          ? { allowed: false, remaining: 0, resetAt: new Date() }
+          : { allowed: true, remaining: 9, resetAt: new Date() }
+      );
+  const openChat = [
+    { role: "user", content: "I hide during sex" },
+    { role: "assistant", content: "Tell me more." },
+  ];
+
+  it("counts a free conversation when a new chat starts and says how many are left", async () => {
+    const body = await (await post({ message: "hi", consent: true })).json();
+    expect(vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket)).toContain(
+      "mira-anon-chats"
     );
+    expect(body.freeLeft).toBe(7);
+  });
+
+  it("shows the sign-up card when an 11th conversation starts", async () => {
+    limitHit("mira-anon-chats");
     const res = await post({ message: "hi", consent: true });
     expect(await res.json()).toEqual({ gate: true, freeLeft: 0 });
     expect(askModel).not.toHaveBeenCalled();
   });
 
-  it("shows the sign-up card when the network's free replies are used, even with a fresh browser id", async () => {
-    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
-      cfg.bucket === "mira-anon-ip"
-        ? { allowed: false, remaining: 0, resetAt: new Date() }
-        : { allowed: true, remaining: 9, resetAt: new Date() }
+  it("keeps an open conversation going after the free conversations are used", async () => {
+    limitHit("mira-anon-chats");
+    const res = await post({ message: "and then?", consent: true, history: openChat });
+    const body = await res.json();
+    expect(body.reply).toBe("That makes sense.");
+    expect(body.freeLeft).toBeUndefined();
+    expect(vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket)).not.toContain(
+      "mira-anon-chats"
     );
-    const res = await post({ message: "hi", consent: true });
-    expect(await res.json()).toEqual({ gate: true, freeLeft: 0 });
-    expect(askModel).not.toHaveBeenCalled();
+  });
+
+  it("stops anonymous messages at the daily cap, per browser and per network", async () => {
+    for (const bucket of ["mira-anon-daily", "mira-anon-ip"]) {
+      vi.mocked(askModel).mockClear();
+      limitHit(bucket);
+      const res = await post({ message: "and then?", consent: true, history: openChat });
+      expect(res.status).toBe(429);
+      expect(askModel).not.toHaveBeenCalled();
+    }
+  });
+
+  it("answers a crisis message with the support lines even when every limit is used", async () => {
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) =>
+      cfg.bucket === "mira-chat"
+        ? { allowed: true, remaining: 9, resetAt: new Date() }
+        : { allowed: false, remaining: 0, resetAt: new Date() }
+    );
+    const body = await (
+      await post(
+        { message: "I want to kill myself", consent: true },
+        { "x-vercel-ip-country": "GB" }
+      )
+    ).json();
+    expect(body.gate).toBeUndefined();
+    expect(body.crisis).toBe(true);
+    expect(body.crisisLines.code).toBe("GB");
+  });
+
+  it("answers a signed-in crisis message even at the daily cap", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: "DE",
+      gender: null,
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-18",
+    });
+    limitHit("mira-daily");
+    const res = await post({ message: "I want to kill myself", consent: true });
+    expect(res.status).toBe(200);
+    expect((await res.json()).crisisLines.code).toBe("DE");
   });
 
   it("refuses an oversized anonymous history", async () => {

@@ -15,7 +15,7 @@
 **Calls taken for the beta (Eman delegated them, 18 Nov 2026):**
 
 - Anyone can open the chat, at `/mira` on loveiq.org, branded Applied Psychometrics. One domain keeps the sign-in simple; `app.appliedpsychometrics.org` can point here later.
-- The free account is asked for after 10 free replies (`ANON_REPLY_LIMIT`), about when the intake is done.
+- The free account is asked for when an anonymous person starts an 11th conversation (`ANON_FREE_CONVERSATIONS`, Marcus's "after 10 conversations"). Messages are capped at 50 a day per person (`DAILY_MESSAGES`; 300 a day per network for anonymous chats). A crisis message is never stopped by a limit.
 - Mira's privacy notice is drafted here; legal review before production.
 - EU-only processing is not required for the beta: Anthropic's API, `MIRA_LLM_KEY`, `MIRA_LLM_MODEL`.
 - Email code only (no Apple or Google), typing only (no spoken Talk), no nudge emails or session reminders yet, no admin screens (change `content/` instead).

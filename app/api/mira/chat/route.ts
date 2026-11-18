@@ -2,7 +2,8 @@
  * POST /api/mira/chat — one message to Mira, one reply back.
  *
  * Anonymous: the browser keeps the chat and sends the recent turns; nothing is stored here, and
- * the free replies are counted per browser id (ANON_REPLY_LIMIT, then the sign-up card).
+ * the free conversations are counted per browser id (ANON_FREE_CONVERSATIONS, then the sign-up
+ * card), with a daily message cap per browser and per network against cost and abuse.
  * Signed in: turns come from the account's stored chat, and the exchange is stored when
  * "Remember our conversations" is on. Both need the first-message consent (18+ and the
  * sensitive-data yes), sent with every message.
@@ -11,7 +12,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { anonId } from "@features/mira/server/anon";
-import { ANON_REPLY_LIMIT, HISTORY_TURNS, MAX_MESSAGE_CHARS } from "@features/mira/server/config";
+import {
+  ANON_FREE_CONVERSATIONS,
+  DAILY_MESSAGES,
+  HISTORY_TURNS,
+  MAX_MESSAGE_CHARS,
+} from "@features/mira/server/config";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
 import {
@@ -69,7 +75,6 @@ const schema = z.object({
 });
 
 /** A paying-attention daily ceiling per account: model cost and abuse, not a product limit. */
-const ACCOUNT_DAILY_MESSAGES = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function cleanHistory(history: MiraTurn[]): MiraTurn[] {
@@ -97,6 +102,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
   const { message, chatId: askedChatId, history, style: bodyStyle } = parsed.data;
+  // A crisis message always gets the support lines: no limit or sign-up card stands in front.
+  const crisisNow = isCrisisMessage(message);
 
   const account = await getMiraAccount();
   const anon = account ? null : await anonId();
@@ -116,12 +123,14 @@ export async function POST(request: Request) {
       if (!profile) {
         return NextResponse.json({ error: "Please sign in again.", signIn: true }, { status: 401 });
       }
-      const daily = await checkRateLimit(account.id, {
-        bucket: "mira-daily",
-        limit: ACCOUNT_DAILY_MESSAGES,
-        windowMs: DAY_MS,
-      });
-      if (!daily.allowed) {
+      const daily = crisisNow
+        ? null
+        : await checkRateLimit(account.id, {
+            bucket: "mira-daily",
+            limit: DAILY_MESSAGES,
+            windowMs: DAY_MS,
+          });
+      if (daily && !daily.allowed) {
         return NextResponse.json(
           { error: "That's today's limit for the beta. Mira is here again tomorrow." },
           { status: 429 }
@@ -148,24 +157,42 @@ export async function POST(request: Request) {
         turns = cleanHistory(history ?? []);
       }
     } else {
-      const free = await checkRateLimit(anon!, {
-        bucket: "mira-anon-replies",
-        limit: ANON_REPLY_LIMIT,
-        windowMs: 30 * DAY_MS,
-      });
-      // A cleared cookie is a new browser id, so the free replies are also capped per network
-      // (generous: a household or office shares one address).
-      const perNetwork = await checkRateLimit(ip, {
-        bucket: "mira-anon-ip",
-        limit: ANON_REPLY_LIMIT * 6,
-        windowMs: DAY_MS,
-      });
-      if (!free.allowed || !perNetwork.allowed) {
-        logMiraEvent("gate_shown", who, { limit: ANON_REPLY_LIMIT });
-        return NextResponse.json({ gate: true, freeLeft: 0 });
-      }
-      freeLeft = free.remaining;
       turns = cleanHistory(history ?? []);
+      if (!crisisNow) {
+        // Messages are capped per day per browser id and, because a cleared cookie is a new id,
+        // per network too (generous: a household or office shares one address).
+        const caps = await Promise.all([
+          checkRateLimit(anon!, {
+            bucket: "mira-anon-daily",
+            limit: DAILY_MESSAGES,
+            windowMs: DAY_MS,
+          }),
+          checkRateLimit(ip, {
+            bucket: "mira-anon-ip",
+            limit: DAILY_MESSAGES * 6,
+            windowMs: DAY_MS,
+          }),
+        ]);
+        if (caps.some((c) => !c.allowed)) {
+          return NextResponse.json(
+            { error: "That's today's limit for the beta. Mira is here again tomorrow." },
+            { status: 429 }
+          );
+        }
+        if (turns.length === 0) {
+          // A new conversation: the free ones are counted per browser id, then the sign-up card.
+          const free = await checkRateLimit(anon!, {
+            bucket: "mira-anon-chats",
+            limit: ANON_FREE_CONVERSATIONS,
+            windowMs: 30 * DAY_MS,
+          });
+          if (!free.allowed) {
+            logMiraEvent("gate_shown", who, { limit: ANON_FREE_CONVERSATIONS });
+            return NextResponse.json({ gate: true, freeLeft: 0 });
+          }
+          freeLeft = free.remaining;
+        }
+      }
     }
   } catch (err) {
     logger.error({ err }, "mira: could not load the conversation");
@@ -182,7 +209,7 @@ export async function POST(request: Request) {
   let sources: CitedSource[] = [];
   let crisis = false;
 
-  if (isCrisisMessage(message)) {
+  if (crisisNow) {
     reply = miraConfig.crisisMessage;
     crisis = true;
   } else {
@@ -232,6 +259,6 @@ export async function POST(request: Request) {
     crisisLines: crisis ? crisisFor(country) : undefined,
     chatId,
     messageId,
-    freeLeft,
+    ...(freeLeft === null ? {} : { freeLeft }),
   });
 }

@@ -54,9 +54,12 @@ function write(key: string, value: unknown): void {
   }
 }
 
+/** This browser's anonymous chat; `gate` is set once the free conversations are used. */
+type LocalChat = { turns: Turn[]; freeLeft: number | null; gate?: boolean };
+
 export const local = {
-  chat: () => read<{ turns: Turn[]; freeLeft: number | null }>(LOCAL_CHAT),
-  saveChat: (v: { turns: Turn[]; freeLeft: number | null } | null) => write(LOCAL_CHAT, v),
+  chat: () => read<LocalChat>(LOCAL_CHAT),
+  saveChat: (v: LocalChat | null) => write(LOCAL_CHAT, v),
   consent: () => read<string>(LOCAL_CONSENT),
   saveConsent: (version: string) => write(LOCAL_CONSENT, version),
   style: () => read<Record<string, number>>(LOCAL_STYLE),

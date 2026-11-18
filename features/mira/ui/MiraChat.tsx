@@ -12,7 +12,8 @@ import { local, miraApi, type Turn } from "./api";
  * Boards 01 (anonymous chat), 01b (free limit reached), 03 (coaching style) and 08a (chats,
  * signed in) as one screen. Decisions taken for Friday (18 Nov): typing only (spoken Talk comes
  * after), no invented numbers or quotes on the page, an 18+ and sensitive-data tick before the
- * first anonymous message, and the sign-up card after Mira's 10th free reply.
+ * first anonymous message, and the sign-up card when an anonymous person starts an 11th
+ * conversation (Marcus's 10 free conversations).
  */
 
 type Source = { id: string; label: string; link: string | null };
@@ -59,7 +60,7 @@ export default function MiraChat({
       if (saved) {
         setMessages(saved.turns);
         setFreeLeft(saved.freeLeft);
-        if (saved.freeLeft === 0) setGate(true);
+        if (saved.gate) setGate(true);
       }
       setConsented(local.consent() === CONSENT_VERSION);
       setStyle(local.style() ?? {});
@@ -97,11 +98,12 @@ export default function MiraChat({
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, sending]);
 
-  function persist(next: Message[], left: number | null) {
+  function persist(next: Message[], left: number | null, gated = false) {
     if (!signedIn)
       local.saveChat({
         turns: next.map(({ role, content }) => ({ role, content })),
         freeLeft: left,
+        ...(gated ? { gate: true } : {}),
       });
   }
 
@@ -141,7 +143,7 @@ export default function MiraChat({
     if (res.data.gate) {
       setGate(true);
       setFreeLeft(0);
-      persist(next, 0);
+      persist(next, 0, true);
       return;
     }
     if (!res.ok || !res.data.reply) {
@@ -160,7 +162,7 @@ export default function MiraChat({
       },
     ];
     setMessages(withReply);
-    const left = res.data.freeLeft ?? null;
+    const left = res.data.freeLeft ?? freeLeft;
     setFreeLeft(left);
     persist(withReply, left);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
@@ -171,10 +173,6 @@ export default function MiraChat({
         ...c,
       ]);
       window.history.replaceState(null, "", `/mira?chat=${res.data.chatId}`);
-    }
-    if (left === 0) {
-      setGate(true);
-      void miraApi("/api/mira/event", { body: { type: "track", name: "gate_shown" } });
     }
   }
 
@@ -194,7 +192,14 @@ export default function MiraChat({
     setChatId(null);
     setError(null);
     window.history.replaceState(null, "", "/mira");
-    if (!signedIn) persist([], freeLeft);
+    if (signedIn) return;
+    // The 10 free conversations are used: a new one needs the free account.
+    const gated = freeLeft === 0;
+    persist([], freeLeft, gated);
+    if (gated) {
+      setGate(true);
+      void miraApi("/api/mira/event", { body: { type: "track", name: "gate_shown" } });
+    }
   }
 
   async function saveStyle(next: Style) {
@@ -464,8 +469,9 @@ export default function MiraChat({
                 </form>
                 {freeLeft !== null && freeLeft <= 3 && !signedIn ? (
                   <p className="mt-2 text-[12px] text-ap-muted">
-                    {freeLeft} free {freeLeft === 1 ? "reply" : "replies"} left before you need a
-                    free account.
+                    {freeLeft === 0
+                      ? "This is your last free conversation before you need a free account."
+                      : `${freeLeft} more free ${freeLeft === 1 ? "conversation" : "conversations"} before you need a free account.`}
                   </p>
                 ) : null}
               </>
