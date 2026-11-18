@@ -50,14 +50,21 @@ const styleSchema = z
 
 const turnSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().max(8000),
+  content: z.string().max(4000),
 });
+
+/** What an anonymous browser may send back as history: Mira's own replies are far shorter. */
+const MAX_HISTORY_CHARS = 24_000;
 
 const schema = z.object({
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
   consent: z.literal(true),
   chatId: z.string().uuid().optional(),
-  history: z.array(turnSchema).max(HISTORY_TURNS).optional(),
+  history: z
+    .array(turnSchema)
+    .max(HISTORY_TURNS)
+    .refine((h) => h.reduce((n, t) => n + t.content.length, 0) <= MAX_HISTORY_CHARS)
+    .optional(),
   style: styleSchema.optional(),
 });
 
@@ -146,7 +153,14 @@ export async function POST(request: Request) {
         limit: ANON_REPLY_LIMIT,
         windowMs: 30 * DAY_MS,
       });
-      if (!free.allowed) {
+      // A cleared cookie is a new browser id, so the free replies are also capped per network
+      // (generous: a household or office shares one address).
+      const perNetwork = await checkRateLimit(ip, {
+        bucket: "mira-anon-ip",
+        limit: ANON_REPLY_LIMIT * 6,
+        windowMs: DAY_MS,
+      });
+      if (!free.allowed || !perNetwork.allowed) {
         logMiraEvent("gate_shown", who, { limit: ANON_REPLY_LIMIT });
         return NextResponse.json({ gate: true, freeLeft: 0 });
       }

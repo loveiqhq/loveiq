@@ -1,7 +1,7 @@
 /**
  * POST /api/mira/auth — the free account, by emailed code (boards 04 and 05).
  *
- *   { action: "start", email, adult: true, terms: true, consent: true } → emails a 6-digit code
+ *   { action: "start", email, adult: true, terms: true, consent: true } → emails a sign-in code
  *   { action: "verify", email, code, carry? }  → signs in (Mira's own cookie), records the
  *       consent, and moves the anonymous chat into the account ("your current chat comes with you")
  *   { action: "logout" }
@@ -98,7 +98,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   }
 
-  // verify
+  // verify. Guesses are capped per address as well as per IP, so spreading them over many
+  // IPs cannot work through the code space within its hour (8 digits, 5 tries per 15 minutes).
+  const perAddress = await checkRateLimit(body.email, {
+    bucket: "mira-verify",
+    limit: 5,
+    windowMs: 15 * 60_000,
+  });
+  if (!perAddress.allowed) {
+    return NextResponse.json(
+      { error: "Too many tries. Please wait a few minutes, then send a new code." },
+      { status: 429 }
+    );
+  }
   const supabase = await createMiraSupabase();
   const { data, error } = await supabase.auth.verifyOtp({
     email: body.email,

@@ -5,7 +5,7 @@ import logger from "@shared/observability/logger";
 
 /**
  * Sign-in by emailed code, the way Jarvis already does it (features/brain/server/connect.ts):
- * make sure a confirmed auth user exists, have Supabase mint a magic-link token (its 6-digit
+ * make sure a confirmed auth user exists, have Supabase mint a magic-link token (its numeric
  * `email_otp`), and send that code with Resend. The code is checked with verifyOtp in the
  * auth route. No password, no Supabase email template, no Supabase mail rate limit.
  *
@@ -13,7 +13,8 @@ import logger from "@shared/observability/logger";
  * inbox"): "Applied Psychometrics", "Your sign-in code".
  */
 
-export const SIGN_IN_CODE = /^\d{6}$/;
+/** Supabase mints 8 digits on our projects (mailer_otp_length); 6 to 10 is accepted, like Jarvis. */
+export const SIGN_IN_CODE = /^\d{6,10}$/;
 
 let resend: Resend | null = null;
 
