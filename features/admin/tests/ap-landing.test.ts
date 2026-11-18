@@ -865,7 +865,7 @@ describe("the landing page's screen", () => {
     ]);
     // A screen reader hears what the row's read-out adds: of those whose film started.
     const quarter = within(table).getByRole("row", { name: /Reached 25%/ });
-    expect(quarter.textContent).toContain("75% of those who started it");
+    expect(quarter.textContent).toContain("75.0% of those who started it");
     // No tap recorded while films started: said under the block.
     expect(block.textContent).toContain(TAP_NOTE);
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
@@ -898,7 +898,7 @@ describe("the landing page's screen", () => {
     expect(within(eng).getByText("All landing pages")).toBeTruthy();
     expect(within(eng).getByText("Every visit together · median time")).toBeTruthy();
     // The card's bounce 40%, the video's 25%; the average 95 of 260.
-    expect(within(eng).getByText("40%")).toBeTruthy();
+    expect(within(eng).getByText("40.0%")).toBeTruthy();
     expect(within(eng).getByText("36.5%")).toBeTruthy();
     // Gone in the design's update: the A/B compare, reviews and section time.
     expect(screen.queryByText("No test to compare")).toBeNull();

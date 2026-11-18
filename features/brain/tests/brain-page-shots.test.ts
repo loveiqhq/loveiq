@@ -4,7 +4,7 @@ import { listPageShots } from "@features/brain/server/see/pages";
 
 /**
  * show_page's list says which landing shots are the live test's arms, so a critique is of a
- * page visitors see. Round 4 (from the 2026-11-16 release) runs the video page against the
+ * page visitors see. Round 4 (from the 2026-11-17 release) runs the video page against the
  * new pain-point page; round 3's question-card page is no visitor's any more.
  */
 describe("show_page's landing shots", () => {

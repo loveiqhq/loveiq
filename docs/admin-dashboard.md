@@ -24,13 +24,13 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 
 ## Shell
 
-| Layer        | Backing file(s)                                                                                                                                | Notes                                                                                                                            |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Admin layout | [`app/admin/layout.tsx`](../app/admin/layout.tsx)                                                                                              | Draws nothing. It identifies the signed-in admin to PostHog from the `admin_posthog_distinct_id` cookie the callback sets.       |
-| AP shell     | [`app/admin/ap/layout.tsx`](../app/admin/ap/layout.tsx), [`features/admin/ui/ap/ApShell.tsx`](../features/admin/ui/ap/ApShell.tsx)             | The light frame around every `/admin/ap` page. It reads who is signed in and how fresh the sources are (`/api/admin/ap/status`). |
-| Sidebar      | [`features/admin/ui/ap/ApSidebar.tsx`](../features/admin/ui/ap/ApSidebar.tsx), [`features/admin/ui/ap/nav.ts`](../features/admin/ui/ap/nav.ts) | The page list (`NAV`), the active link and "Sign out". Links between report pages keep the filters.                              |
-| Filter bar   | [`features/admin/ui/ap/ApFilterBar.tsx`](../features/admin/ui/ap/ApFilterBar.tsx)                                                              | Period and narrowing on the report pages, with saved filters (`/api/admin/ap/saved-filters`).                                    |
-| Error box    | [`features/admin/ui/DashboardErrorBoundary.tsx`](../features/admin/ui/DashboardErrorBoundary.tsx)                                              | Wraps each page, so one failing page shows its own error in AP's colors instead of blanking the app.                             |
+| Layer        | Backing file(s)                                                                                                                                | Notes                                                                                                                                                                                                                                                                                            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Admin layout | [`app/admin/layout.tsx`](../app/admin/layout.tsx)                                                                                              | Draws nothing. It identifies the signed-in admin to PostHog from the `admin_posthog_distinct_id` cookie the callback sets.                                                                                                                                                                       |
+| AP shell     | [`app/admin/ap/layout.tsx`](../app/admin/ap/layout.tsx), [`features/admin/ui/ap/ApShell.tsx`](../features/admin/ui/ap/ApShell.tsx)             | The light frame around every `/admin/ap` page. It reads who is signed in and how fresh the sources are (`/api/admin/ap/status`). The page starts at the sidebar and takes the whole width, with no maximum (Marcus, 10 and 11 Nov 2026), where the design's boards draw a centred 1160px column. |
+| Sidebar      | [`features/admin/ui/ap/ApSidebar.tsx`](../features/admin/ui/ap/ApSidebar.tsx), [`features/admin/ui/ap/nav.ts`](../features/admin/ui/ap/nav.ts) | The page list (`NAV`), the active link and "Sign out". Links between report pages keep the filters.                                                                                                                                                                                              |
+| Filter bar   | [`features/admin/ui/ap/ApFilterBar.tsx`](../features/admin/ui/ap/ApFilterBar.tsx)                                                              | Period and narrowing on the report pages, with saved filters (`/api/admin/ap/saved-filters`).                                                                                                                                                                                                    |
+| Error box    | [`features/admin/ui/DashboardErrorBoundary.tsx`](../features/admin/ui/DashboardErrorBoundary.tsx)                                              | Wraps each page, so one failing page shows its own error in AP's colors instead of blanking the app.                                                                                                                                                                                             |
 
 ## Pages
 
@@ -73,6 +73,23 @@ inside `DashboardErrorBoundary`. The components load their data through
 "Assessment C" are in the sidebar as "soon", with no page yet, and so is "Promotional emails".
 
 Use [admin-api.md](admin-api.md) for each route's methods and roles.
+
+## How numbers are written
+
+Every rate on every AP page has exactly one decimal (Marcus, 29–30 Oct 2026): tiles, tables,
+charts, their axes and the info texts all go through `fmt("pct")` in
+[`features/admin/server/ap/format.ts`](../features/admin/server/ap/format.ts), which ignores any
+`digits` a caller passes.
+
+- Rounded half up on the figure as written, so 68.35% reads 68.4%.
+- A rate above zero never reads "0.0%" (it reads "<0.1%"), and one short of everyone never reads
+  "100.0%" (it reads ">99.9%").
+- Changes are points with one decimal ("+0.5 pt"); one that rounds to nothing reads "±0.0 pt",
+  in grey.
+- Highlights follow the figure shown (`tenths()`): the Survey page's "over 5%" flag, in its
+  charts and its funnel table, marks a drop-out that reads above 5.0%, so "5.0%" is not flagged.
+- Not rates, so unchanged: counts, euros, times, confidence, threshold labels ("Scroll 25%") and
+  the CSV exports, which keep two decimals for spreadsheets.
 
 ## What the admin no longer does
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
+  POSTGREST_MAX_ROWS: 1000,
 }));
 // The screen test draws a payload the builder made, without the network or the URL.
 const screenData = vi.hoisted(() => ({ payload: null as unknown }));
@@ -20,16 +21,20 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 
-import { parseFilters } from "@features/admin/server/ap/filters";
+import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
 import {
   buildReportPage,
+  fetchReaderReturns,
   fetchReportExtras,
   fetchReportTour,
-  twoFigures,
+  pingReturns,
+  RETURN_PINGS_FROM,
   wholeShares,
+  type ReaderReturn,
   type ReportExtras,
   type ReportTour,
 } from "@features/admin/server/ap/report-page";
+import { FIELDS } from "@features/admin/ui/ap/fields";
 import ApReport from "@features/admin/ui/ap/ApReport";
 
 import { factsFixture, sub } from "./ap-fixtures";
@@ -289,18 +294,7 @@ describe("report page", () => {
     expect(free(cur.subs, false).value).toBe(2 / 4);
   });
 
-  it("gives the headline rates two figures and the wizard's none, as the design writes them", () => {
-    // "34%", "14%", "2.1%", "0.21%"; 9.96% rounds to "10%", not "10.0%"; none at all is "0%".
-    expect([0.34, 0.14, 0.0996, 0.021, 0.00996, 0.0021, 0, null].map(twoFigures)).toEqual([
-      0,
-      0,
-      0,
-      1,
-      1,
-      2,
-      0,
-      undefined,
-    ]);
+  it("leaves the headline rates' and the wizard's decimals to fmt: one, as every rate", () => {
     const f = factsFixture({
       subs: [
         sub({ id: 1, returnedAt: "2026-10-03T10:00:00Z", visits: 2, wizardSlide: 5 }),
@@ -309,13 +303,9 @@ describe("report page", () => {
       ],
     });
     const p = page({ facts: f, benchmark: f });
-    const digits = (k: string) => p.tiles.find((t) => t.key === k)!.digits;
-    expect(digits("returned")).toBe(0);
-    expect(digits("rating")).toBe(0);
-    // A count and a time keep their own writing.
-    expect(digits("opened")).toBeUndefined();
-    expect(digits("read")).toBeUndefined();
-    expect(p.wizard.tiles.map((t) => t.digits)).toEqual([0, 0, 0, 0]);
+    // No tile carries decimals of its own: a rate is written "33.3%", a count "3".
+    for (const t of [...p.tiles, ...p.wizard.tiles]) expect(t, t.key).not.toHaveProperty("digits");
+    expect(p.tiles.find((t) => t.key === "returned")).toMatchObject({ unit: "pct" });
   });
 
   it("Full unlock rate counts the full plans only; Completed needs the report opened", () => {
@@ -673,7 +663,8 @@ describe("report page", () => {
     expect(box(p.time.boxes, "median")).toMatchObject({ value: 200_000, prev: 400_000 });
     expect(box(p.time.boxes, "session")).toMatchObject({ value: 200_000, prev: 200_000 });
     expect(box(p.time.boxes, "readers")).toMatchObject({ value: 1, prev: 1 });
-    expect(box(p.returns.boxes, "back")).toMatchObject({ value: 0, prev: 1, digits: 0 });
+    expect(box(p.returns.boxes, "back")).toMatchObject({ value: 0, prev: 1 });
+    expect(box(p.returns.boxes, "back")).not.toHaveProperty("digits");
     expect(box(p.returns.boxes, "days")).toMatchObject({ value: null, prev: 3, goodWhen: "down" });
     expect(box(p.returns.boxes, "visits")).toMatchObject({ value: 1, prev: 2 });
     for (const b of [...p.time.boxes, ...p.returns.boxes]) expect(b.note).toBeUndefined();
@@ -1232,15 +1223,15 @@ describe("report page, on screen", () => {
     expect(fb.getByText("Feedback log · 2 of 2")).toBeInTheDocument();
 
     const chapters = within(screen.getByRole("table", { name: "Chapters" }));
-    // Show more whole, as drawn (2 of 10, 1 of 30); the paywall to a tenth.
-    expect(chapters.getByText("20%").className).toContain("font-bold text-ap-good-ink");
-    expect(chapters.getByText("3%").className).toContain("text-ap-bad-ink");
+    // Show more (2 of 10, 1 of 30) and the paywall to a tenth, as every rate.
+    expect(chapters.getByText("20.0%").className).toContain("font-bold text-ap-good-ink");
+    expect(chapters.getByText("3.3%").className).toContain("text-ap-bad-ink");
     expect(chapters.getByText("10.0%").className).toContain("font-bold text-ap-good-ink");
   });
 
-  it("the wizard's whole percentages: a share too small for 1% reads <1%, not 0%", () => {
+  it("the wizard's percentages: a share too small for 0.1% reads <0.1%, not 0.0%", () => {
     const many = factsFixture({
-      subs: Array.from({ length: 300 }, (_, i) => sub({ id: i + 1, wizardSlide: 1 })),
+      subs: Array.from({ length: 2500 }, (_, i) => sub({ id: i + 1, wizardSlide: 1 })),
     });
     screenData.payload = page({
       facts: many,
@@ -1252,10 +1243,10 @@ describe("report page, on screen", () => {
     });
     render(createElement(ApReport));
     const table = within(screen.getByRole("table", { name: "Intro wizard slides" }));
-    // Slide 2: one of its 300 readers went back; none went on.
+    // Slide 2: one of its 2,500 readers went back; none went on.
     const cells = within(table.getAllByRole("row")[2]!).getAllByRole("cell");
-    expect(cells[5]!.textContent).toBe("<1%");
-    expect(cells[3]!.textContent).toBe("0%");
+    expect(cells[5]!.textContent).toBe("<0.1%");
+    expect(cells[3]!.textContent).toBe("0.0%");
   });
 
   it("reading time: the design's legend, every group's row, and the median or the average", () => {
@@ -1501,9 +1492,9 @@ describe("report page, on screen", () => {
     ]);
     fireEvent.click(table.getByRole("button", { name: "Sort by Skip intro" }));
     expect(rowNames("Intro wizard slides")[0]).toContain("Report parts & chapters");
-    // Whole percentages, as drawn; a skip of 11% or more in the design's red.
+    // To a tenth, as every rate; a skip of 11% or more in the design's red.
     const skip = within(table.getAllByRole("row")[1]!).getAllByRole("cell")[4]!;
-    expect(skip.textContent).toBe("33%");
+    expect(skip.textContent).toBe("33.3%");
     expect(skip.className).toContain("font-bold text-ap-bad");
     expect(
       screen.getByText(/before 6 Oct 2026 a skip counts as an exit/, { exact: false })
@@ -1571,14 +1562,14 @@ describe("report page, on screen", () => {
     expect(table.queryByText("2:30")).toBeNull();
     // The paywall rate, with how many clicked of how many saw it under it.
     expect(table.getByText("1 of 2")).toBeInTheDocument();
-    // Learn more and Exercise whole, as drawn: 1 and 2 of the chapter's 3 readers.
+    // Learn more and Exercise to a tenth, as every rate: 1 and 2 of the chapter's 3 readers.
     const beliefs = table.getByText("Typical Beliefs").closest<HTMLElement>("[role=row]")!;
     expect(
       within(beliefs)
         .getAllByRole("cell")
         .slice(-2)
         .map((c) => c.textContent)
-    ).toEqual(["33%", "67%"]);
+    ).toEqual(["33.3%", "66.7%"]);
     fireEvent.click(pills.getByRole("button", { name: "Paywall" }));
     expect(rowNames("Chapters").slice(0, 2)).toEqual([
       expect.stringContaining("Love Language"),
@@ -1688,17 +1679,17 @@ describe("report page, on screen", () => {
         .getAllByText(label)
         .map((e) => e.nextElementSibling)
         .find((v) => v?.className.includes("font-serif"))!.textContent;
-    // Headline rates to two figures: "34%", "2.0%", "0.50%".
-    expect(value("Returned")).toBe("34%");
+    // Every rate with one decimal: "34.0%", "2.0%", "0.5%".
+    expect(value("Returned")).toBe("34.0%");
     expect(value("Rating rate")).toBe("2.0%");
-    expect(value("Share rate")).toBe("0.50%");
-    // The wizard's whole: 68 of 200 continued through slide 6.
-    expect(value("Completed")).toBe("34%");
-    // The returns whole.
-    expect(value("Came back")).toBe("34%");
-    expect(value("Returned via email")).toBe("75%");
+    expect(value("Share rate")).toBe("0.5%");
+    // The wizard's: 68 of 200 continued through slide 6.
+    expect(value("Completed")).toBe("34.0%");
+    // The returns.
+    expect(value("Came back")).toBe("34.0%");
+    expect(value("Returned via email")).toBe("75.0%");
     const band = screen.getByText("1 day").parentElement!;
-    expect([...band.children].slice(2).map((c) => c.textContent)).toEqual(["34%", "34%"]);
+    expect([...band.children].slice(2).map((c) => c.textContent)).toEqual(["34.0%", "34.0%"]);
     // What brought readers back: each bar against the largest, email's 75% full width.
     const bar = (source: string) =>
       parseFloat(
@@ -1706,6 +1697,27 @@ describe("report page, on screen", () => {
       );
     expect(bar("Email campaign")).toBe(100);
     expect(bar("Bookmark / direct")).toBeCloseTo(33.33);
+  });
+
+  it("colours the chapters by the figure shown, to a tenth", () => {
+    // Show all is green from 18%: 17.6% isn't, 17.96% reads "18.0%" and is. The paywall's
+    // bold green from 5%: 4.6% isn't, 4.96% reads "5.0%" and is.
+    const [a, b] = payload.chapters;
+    screenData.payload = {
+      ...payload,
+      chapterReading: { ...payload.chapterReading, recorded: true },
+      chapters: [
+        { ...a!, showMore: 0.176, paywall: 0.046, paywallSeen: 500, paywallClicked: 23 },
+        { ...b!, showMore: 0.1796, paywall: 0.0496, paywallSeen: 500, paywallClicked: 25 },
+      ],
+    };
+    render(createElement(ApReport));
+    const table = within(screen.getByRole("table", { name: "Chapters" }));
+    const cellOf = (text: string) => table.getByText(text);
+    expect(cellOf("17.6%").className).not.toContain("text-ap-good-ink");
+    expect(cellOf("18.0%").className).toContain("font-bold text-ap-good-ink");
+    expect(cellOf("4.6%").className).not.toContain("text-ap-good-ink");
+    expect(cellOf("5.0%").className).toContain("font-bold text-ap-good-ink");
   });
 
   it("gives the feedback log's comment the room left, and names each chapter alone", () => {
@@ -1813,25 +1825,33 @@ describe("the guided tour", () => {
   const tileOf = (p: ReturnType<typeof page>, key: "free" | "paid" | "gate", k: string) =>
     audience(p, key).tiles.find((t) => t.key === k)!;
 
-  it("whole shares add up to 100, and a share that is not nothing never reads 0%", () => {
+  it("shares in tenths add up to 100.0%, and a share that is not nothing never reads 0.0%", () => {
     expect(wholeShares([0, 0, 0])).toBeNull();
-    expect(wholeShares([1, 1, 1])).toEqual([0.34, 0.33, 0.33]);
-    expect(wholeShares([2, 1, 0])).toEqual([0.67, 0.33, 0]);
-    // One skip in 400: 1%, taken from going on, not 0%.
-    expect(wholeShares([399, 1, 0])).toEqual([0.99, 0.01, 0]);
-    expect(wholeShares([998, 1, 1])).toEqual([0.98, 0.01, 0.01]);
-    for (let a = 0; a <= 25; a += 1)
-      for (let b = 0; b <= 25; b += 1)
-        for (let c = 0; c <= 25; c += 1) {
-          const shares = wholeShares([a, b, c]);
-          if (a + b + c === 0) continue;
-          const points = shares!.map((x) => Math.round(x * 100));
-          expect(
-            points.reduce((x, y) => x + y, 0),
-            `${a}/${b}/${c}`
-          ).toBe(100);
-          [a, b, c].forEach((n, i) => expect(points[i]! > 0, `${a}/${b}/${c}`).toBe(n > 0));
-        }
+    expect(wholeShares([1, 1, 1])).toEqual([0.334, 0.333, 0.333]);
+    expect(wholeShares([2, 1, 0])).toEqual([0.667, 0.333, 0]);
+    expect(wholeShares([399, 1, 0])).toEqual([0.998, 0.002, 0]);
+    // One skip in 4,000: 0.1%, not 0.0%; and taken back from the largest when over 100.0%.
+    expect(wholeShares([3999, 1, 0])).toEqual([0.999, 0.001, 0]);
+    expect(wholeShares([9998, 1, 1])).toEqual([0.998, 0.001, 0.001]);
+    for (const [a, b, c] of [
+      ...Array.from({ length: 26 ** 3 }, (_, i) => [
+        i % 26,
+        Math.floor(i / 26) % 26,
+        Math.floor(i / 676),
+      ]),
+      [9997, 2, 1],
+      [19999, 1, 0],
+      [3, 4000, 7],
+    ]) {
+      const shares = wholeShares([a!, b!, c!]);
+      if (a! + b! + c! === 0) continue;
+      const tenths = shares!.map((x) => Math.round(x * 1000));
+      expect(
+        tenths.reduce((x, y) => x + y, 0),
+        `${a}/${b}/${c}`
+      ).toBe(1000);
+      [a, b, c].forEach((n, i) => expect(tenths[i]! > 0, `${a}/${b}/${c}`).toBe(n! > 0));
+    }
   });
 
   // Tour first (30.10): the tour before the EUR 1.99 gate is stored as `gate`, four stops with
@@ -1907,12 +1927,12 @@ describe("the guided tour", () => {
     ).toEqual([
       // The first stop has no Back.
       ["chapter_menu", 1, 1, 0, 0, null, 5_200],
-      ["show_all", 1, 0.67, 0.33, 0, 1 / 3, 4_100],
+      ["show_all", 1, 0.667, 0.333, 0, 1 / 3, 4_100],
       ["chapter_toggle", 2 / 3, 0.5, 0, 0.5, 0, 3_000],
       ["try_this", 1 / 3, 1, 0, 0, 0, 6_000],
       ["unlock", 1 / 3, 1, 0, 0, 0, 7_000],
     ]);
-    // Three ways out of a stop, a third each: still 100 in whole percentages.
+    // Three ways out of a stop, a third each: still 100.0% in tenths.
     const thirds = tourPage({
       tour: {
         ...tourData,
@@ -1920,7 +1940,7 @@ describe("the guided tour", () => {
       },
     });
     const first = audience(thirds, "free").stops[0]!;
-    expect([first.next, first.skip, first.exit]).toEqual([0.34, 0.33, 0.33]);
+    expect([first.next, first.skip, first.exit]).toEqual([0.334, 0.333, 0.333]);
   });
 
   it("tiles: readers who got it of those who opened, and how the runs ended", () => {
@@ -1938,13 +1958,13 @@ describe("the guided tour", () => {
     });
     // The tile shows only its change, as drawn; its share of the openers is in the section note.
     expect(tileOf(p, "free", "tour-started").share).toBeUndefined();
-    expect(audience(p, "free").share).toBe("75% of the 4 readers who opened their report");
+    expect(audience(p, "free").share).toBe("75.0% of the 4 readers who opened their report");
     // Four runs: one completed, one skipped, one left the page, one with no end at all.
     expect(tileOf(p, "free", "tour-completed")).toMatchObject({ value: 0.25, goodWhen: "up" });
     expect(tileOf(p, "free", "tour-skipped")).toMatchObject({ value: 0.25, goodWhen: "down" });
     expect(tileOf(p, "free", "tour-left")).toMatchObject({ value: 0.5, goodWhen: "down" });
     expect(tileOf(p, "paid", "tour-started").value).toBe(1);
-    expect(audience(p, "paid").share).toBe("25% of the 4 readers who opened their report");
+    expect(audience(p, "paid").share).toBe("25.0% of the 4 readers who opened their report");
     expect(tileOf(p, "paid", "tour-completed").value).toBe(1);
     // A line per day of the week, each day's own runs.
     expect(tileOf(p, "free", "tour-started").spark).toEqual([1, 1, 1, 0, 0, 0, 0]);
@@ -1954,7 +1974,7 @@ describe("the guided tour", () => {
   it("an empty week reads zero readers and blank shares, not a failure", () => {
     const p = tourPage({ tour: { days: [], stops: [], placed: [] } });
     expect(tileOf(p, "free", "tour-started")).toMatchObject({ value: 0, blocked: null });
-    expect(audience(p, "free").share).toBe("0% of the 4 readers who opened their report");
+    expect(audience(p, "free").share).toBe("0.0% of the 4 readers who opened their report");
     expect(tileOf(p, "free", "tour-completed").value).toBeNull();
     for (const s of audience(p, "free").stops) {
       expect([s.reached, s.reachedShare, s.next, s.skip, s.exit, s.medianMs]).toEqual([
@@ -2100,7 +2120,7 @@ describe("the guided tour", () => {
       const section = within(document.getElementById("tour")!);
       expect(section.getByRole("heading", { name: "Guided tour" })).toBeInTheDocument();
       expect(document.getElementById("tour")!.textContent).toContain(
-        "Tour started: the range’s readers who got the tour, on this tab 75% of the 4 readers who opened their report, free and paid together"
+        "Tour started: the range’s readers who got the tour, on this tab 75.0% of the 4 readers who opened their report, free and paid together"
       );
       expect(document.getElementById("wizard")!.nextElementSibling).toBe(
         document.getElementById("tour")
@@ -2132,9 +2152,9 @@ describe("the guided tour", () => {
           .getAllByRole("cell")
           .map((c) => c.textContent);
       // # · Time · Reached · Next · Back · Skip tour · Exit
-      expect(cells(rows[0]!)).toEqual(["1", "5 s", "100%", "100%", "—", "—", "0%"]);
-      expect(cells(rows[1]!)).toEqual(["2", "4 s", "100%", "67%", "33%", "33%", "0%"]);
-      expect(cells(rows[4]!)).toEqual(["5", "7 s", "33%", "Finish 100%", "0%", "—", "0%"]);
+      expect(cells(rows[0]!)).toEqual(["1", "5 s", "100.0%", "100.0%", "—", "—", "0.0%"]);
+      expect(cells(rows[1]!)).toEqual(["2", "4 s", "100.0%", "66.7%", "33.3%", "33.3%", "0.0%"]);
+      expect(cells(rows[4]!)).toEqual(["5", "7 s", "33.3%", "Finish 100.0%", "0.0%", "—", "0.0%"]);
       expect(within(rows[0]!).getByText(/^Spotlight: Chapter menu/)).toBeInTheDocument();
       // Skip tour from 8%, Exit from 4%: bold red.
       expect(within(rows[1]!).getAllByRole("cell")[5]).toHaveClass("font-bold", "text-ap-bad");
@@ -2206,5 +2226,168 @@ describe("maskContacts: a reader's words as the feedback log shows them", () => 
       "5 of 10",
     ])
       expect(maskContacts(kept), kept).toBe(kept);
+  });
+});
+
+describe("Came back within 7 days, any way (the #incoming-surveys 'Came back' replies)", () => {
+  // Finished 18, 19 and 20 Nov; the 20th's week is not over on the 26th.
+  const NOW = new Date("2026-11-26T12:00:00Z");
+  const finished = (id: number, at: string) => sub({ id, day: at.slice(0, 10), at });
+  const SUBS = [
+    finished(1, "2026-11-18T09:00:00Z"),
+    finished(2, "2026-11-18T20:00:00Z"),
+    finished(3, "2026-11-19T08:00:00Z"),
+    finished(4, "2026-11-20T15:00:00Z"),
+    // Before the replies were recorded: left out, whatever it has.
+    finished(5, "2026-11-17T09:00:00Z"),
+  ];
+  const back = (sid: number, at: string, source: string, via: string | null): ReaderReturn => ({
+    sid,
+    at,
+    source,
+    via,
+  });
+  const ROWS = [
+    // 1: the gift email, then its report on a later day: the first way back is what counts.
+    back(1, "2026-11-19T07:00:00Z", "email", "initial_gift"),
+    back(1, "2026-11-21T07:00:00Z", "report", null),
+    // 2: back only after its 7 days: not within them.
+    back(2, "2026-11-26T08:00:00Z", "report", null),
+    // 3: its report link, no email.
+    back(3, "2026-11-20T18:00:00Z", "report", null),
+    // 4: inside its week still, so waiting; 5: before the start.
+    back(4, "2026-11-21T10:00:00Z", "answer", "unlock_feedback"),
+    back(5, "2026-11-18T10:00:00Z", "report", null),
+  ];
+
+  it("counts the surveys whose week is over, by what brought each back first", () => {
+    expect(pingReturns(SUBS, ROWS, NOW)).toEqual({
+      from: "18 Nov 2026",
+      finished: 3,
+      cameBack: 2,
+      share: 2 / 3,
+      waiting: 1,
+      ways: [
+        { way: "Their report link, no email", readers: 1 },
+        { way: "Your Core Archetype, unlocked as a gift", readers: 1 },
+      ],
+    });
+  });
+
+  it("names a way back by AP › Emails, then the message's name, then plainly", () => {
+    const one = (r: ReaderReturn) =>
+      pingReturns([finished(1, "2026-11-18T09:00:00Z")], [r], NOW)!.ways[0]!.way;
+    expect(one(back(1, "2026-11-19T07:00:00Z", "answer", "unlock_feedback"))).toBe(
+      "Why didn’t you unlock?"
+    );
+    // A receipt's link campaign is no stage: the message's name for it.
+    expect(one(back(1, "2026-11-19T07:00:00Z", "report", "receipt"))).toBe("receipt email");
+    expect(one(back(1, "2026-11-19T07:00:00Z", "report", "email"))).toBe("An email link");
+    expect(one(back(1, "2026-11-19T07:00:00Z", "draft", null))).toBe(
+      "A survey begun on an earlier day"
+    );
+  });
+
+  it("is null when the rows could not be read, and none before the start", () => {
+    expect(pingReturns(SUBS, null, NOW)).toBeNull();
+    expect(pingReturns([finished(5, "2026-11-17T09:00:00Z")], [], NOW)).toMatchObject({
+      finished: 0,
+      cameBack: 0,
+      share: null,
+      waiting: 0,
+    });
+  });
+
+  it("reads the rows that can fall within 7 days of the range, page by page, in Berlin days", async () => {
+    const full = Array.from({ length: 1000 }, (_, i) => ({
+      survey_submission_id: i + 1,
+      returned_at: "2026-11-19T07:00:00Z",
+      source: "report",
+      via: null,
+    }));
+    mockSupabaseFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => full })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            survey_submission_id: 7,
+            returned_at: "2026-11-20T07:00:00Z",
+            source: "email",
+            via: "initial_gift",
+          },
+        ],
+      });
+    const rows = await fetchReaderReturns("2026-11-18", "2026-11-21");
+    expect(rows).toHaveLength(1001);
+    expect(rows[1000]).toEqual({
+      sid: 7,
+      at: "2026-11-20T07:00:00Z",
+      source: "email",
+      via: "initial_gift",
+    });
+    const [first, second] = mockSupabaseFetch.mock.calls
+      .slice(-2)
+      .map(([p]) => new URL(`https://x${p}`));
+    expect(first!.pathname).toBe("/rest/v1/reader_return");
+    // From the range's first Berlin midnight to the one 8 days after its last.
+    expect(first!.searchParams.getAll("returned_at")).toEqual([
+      "gte.2026-11-17T23:00:00.000Z",
+      "lt.2026-11-28T23:00:00.000Z",
+    ]);
+    expect(second!.searchParams.get("offset")).toBe("1000");
+  });
+
+  it("fails loudly when the table cannot be read, so the route can say so", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 404, json: async () => [] });
+    await expect(fetchReaderReturns("2026-11-18", "2026-11-21")).rejects.toThrow(
+      "reader_return failed (404)"
+    );
+  });
+
+  it("its info card starts on the same day as the page, in its query and in its words", () => {
+    const card = FIELDS["report.ping_returns"]!;
+    expect(card.query.text).toContain(`DATE '${RETURN_PINGS_FROM}'`);
+    // Moving the release day must move every sentence that names it.
+    const day = rangeLabel(RETURN_PINGS_FROM, RETURN_PINGS_FROM);
+    expect(card.formula.den).toContain(day);
+    expect(card.caveat).toContain(day);
+    expect(card.tables.find((t) => t.table === "reader_return")!.watch).toContain(day);
+  });
+
+  describe("on screen", () => {
+    const screenFilters = parseFilters(
+      { period: "custom", from: "2026-11-18", to: "2026-11-20" },
+      "2026-11-26"
+    );
+    const draw = (pings: ReaderReturn[] | null) => {
+      const f = factsFixture({ from: "2026-11-18", to: "2026-11-20", subs: SUBS.slice(0, 4) });
+      screenData.payload = page({
+        facts: f,
+        benchmark: f,
+        filters: screenFilters,
+        today: "2026-11-26",
+        now: NOW,
+        pings,
+      });
+      render(createElement(ApReport));
+    };
+
+    afterEach(() => cleanup());
+
+    it("draws the share, its count and the ways back", () => {
+      draw(ROWS);
+      expect(screen.getByText("Came back within 7 days, any way")).toBeInTheDocument();
+      // One decimal, as every rate on AP-Analytics (#734).
+      expect(screen.getByText("66.7%")).toBeInTheDocument();
+      expect(screen.getByText("2 of 3 who finished the survey")).toBeInTheDocument();
+      expect(screen.getByText("Your Core Archetype, unlocked as a gift")).toBeInTheDocument();
+      expect(screen.getByText(/1 more are counted once theirs are/)).toBeInTheDocument();
+    });
+
+    it("says when it could not be read", () => {
+      draw(null);
+      expect(screen.getByText(/Could not be read just now/)).toBeInTheDocument();
+    });
   });
 });

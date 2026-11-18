@@ -500,7 +500,6 @@ function afterRows(free: AfterUnlock[], paid: AfterUnlock[]): AfterRow[] {
       key: "opened",
       name: "Opened the full report",
       unit: "pct",
-      digits: 1,
       ...both((g) => ratio(g.filter((a) => readPastFirst(a) !== null).length, g.length)),
     },
     {
@@ -520,14 +519,12 @@ function afterRows(free: AfterUnlock[], paid: AfterUnlock[]): AfterRow[] {
       key: "thumbs",
       name: "Thumbs up on chapters",
       unit: "pct",
-      digits: 0,
       ...both((g) => ratio(sum(g.map((a) => a.ups)), sum(g.map((a) => a.ups + a.downs)))),
     },
     {
       key: "shared",
       name: "Shared or invited a partner",
       unit: "pct",
-      digits: 1,
       ...both((g) => ratio(g.filter((a) => a.shared).length, g.length)),
     },
   ];
@@ -580,7 +577,7 @@ export function buildUnlockFeedbackPage(input: {
   const caption = bucketCaption(f.from, f.to);
   const points = trendBuckets(f.from, f.to);
   const n = (v: number) => v.toLocaleString("en-US");
-  const of = (a: number, b: number) => fmt("pct", ratio(a, b), 1);
+  const of = (a: number, b: number) => fmt("pct", ratio(a, b));
   const tile = (
     key: string,
     label: string,

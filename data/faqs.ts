@@ -57,7 +57,7 @@ export const faqs: Faq[] = [
   // paid sessions that do not exist. Bring it back with the offer, not before.
   {
     question: "Is it free?",
-    answer: `${SURVEY_FREE_LINE.slice(0, -1)}, paid once.`,
+    answer: `${SURVEY_FREE_LINE} One-time payments, no subscription.`,
   },
   {
     question: "How long does the first assessment take?",

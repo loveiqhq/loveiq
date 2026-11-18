@@ -37,6 +37,7 @@ import {
   surveyPausedEmail,
   surveyStillSavedEmail,
 } from "@features/email-journeys/emails/survey-reminders";
+import { getOfferDefinition } from "@features/pay-to-start/logic/offer";
 import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 import { escapeHtml } from "@shared/format/html-escape";
 
@@ -152,6 +153,7 @@ export const TRIALS: Trial[] = [
         siteUrl: SITE,
         unsubscribeUrl: UNSUB,
         paidOffer: "pre",
+        paidCents: getOfferDefinition("pre").defaultPriceCents,
       }),
   },
   {

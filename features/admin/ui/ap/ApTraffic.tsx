@@ -12,7 +12,7 @@ import {
 } from "react";
 
 import { type Grain } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt, lowerFirst } from "@features/admin/server/ap/format";
+import { EMPTY, fmt, lowerFirst, tenths } from "@features/admin/server/ap/format";
 import type {
   AdSeenRow,
   AudienceDim,
@@ -329,16 +329,16 @@ function Attribution({ attr }: { attr: TrafficPayload["attribution"] }) {
     {
       label: "Visitors with a source",
       info: "traffic.withSource",
-      value: fmt("pct", share, 1),
+      value: fmt("pct", share),
       worked:
         un && share !== null
           ? {
               num: `≈ ${fmt("count", un.of - un.n)}`,
               den: fmt("count", un.of),
-              value: fmt("pct", share, 1),
+              value: fmt("pct", share),
             }
           : undefined,
-      red: share !== null && share < 0.5,
+      red: share !== null && tenths(share) < 500,
     },
     {
       label: "Unattributed visitors",
@@ -433,21 +433,21 @@ function Scorecard({
       label: "Survey starts",
       info: "traffic.starts",
       v: fmt("count", c.starts),
-      step: `${fmt("pct", q(c.starts, c.visitors), 2)} start CVR`,
+      step: `${fmt("pct", q(c.starts, c.visitors))} start CVR`,
       sub: `${fmt("eur", q(c.spend, c.starts), 2)} per start`,
     },
     {
       label: "Completes",
       info: "traffic.completes",
       v: fmt("count", completes),
-      step: `${fmt("pct", q(completes, c.starts), 1)} completion`,
+      step: `${fmt("pct", q(completes, c.starts))} completion`,
       sub: `${fmt("eur", q(c.spend, completes), 2)} per complete`,
     },
     {
       label: "Buyers",
       info: "traffic.buyers",
       v: fmt("count", payers),
-      step: `${fmt("pct", q(payers, completes), 2)} purchase CVR`,
+      step: `${fmt("pct", q(payers, completes))} purchase CVR`,
       sub: `${known ? `${fmt("count", c.sales)} purchase${c.sales === 1 ? "" : "s"} · ` : ""}${fmt("eur", q(c.spend, payers), 0)} CAC`,
     },
     {
@@ -842,7 +842,7 @@ function StackFigure({
               const v = series[i]?.[w] ?? 0;
               return {
                 label: trend.channels[i]!.name,
-                value: `${fmt("count", v)} · ${total ? `${((v / total) * 100).toFixed(1)}%` : EMPTY}`,
+                value: `${fmt("count", v)} · ${total ? fmt("pct", v / total) : EMPTY}`,
                 color: colourOf(trend.channels[i]!.key).fill,
                 mark: "square",
                 muted: v === 0,
@@ -1384,7 +1384,7 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
                         className="min-w-11 flex-none text-[13px] font-bold tabular-nums"
                         style={{ color: r.muted ? MUTED.fg : againstAverage(x, m) }}
                       >
-                        {fmt("pct", x, s.digits)}
+                        {fmt("pct", x)}
                       </span>
                     </span>
                   );
@@ -1394,7 +1394,7 @@ function Leakage({ table, a }: { table: PerfTable; a: Assumptions }) {
                   className="flex items-center justify-end border-l border-ap-line px-4 py-3.5 text-right text-[13px] font-bold tabular-nums"
                   style={shadeStyle(tone)}
                 >
-                  {fmt("pct", v.v2p, 3)}
+                  {fmt("pct", v.v2p)}
                 </span>
               </div>
             );
@@ -1498,17 +1498,17 @@ function Intent({ intent }: { intent: TrafficPayload["intent"] }) {
                     <Cell header left bold text={r.name} sub={r.sub} />
                     <Cell text={fmt("eur", r.counts.spend, 0)} />
                     <Cell text={fmt("count", r.counts.clicks)} />
-                    <Cell text={fmt("pct", ctr[i] ?? null, 1)} shade={band(ctr, ctr[i] ?? null)} />
+                    <Cell text={fmt("pct", ctr[i] ?? null)} shade={band(ctr, ctr[i] ?? null)} />
                     <Cell
                       text={fmt("eur", cpc[i] ?? null, 2)}
                       shade={band(cpc, cpc[i] ?? null, true)}
                     />
                     <Cell
-                      text={fmt("pct", toComplete[i] ?? null, 1)}
+                      text={fmt("pct", toComplete[i] ?? null)}
                       shade={band(toComplete, toComplete[i] ?? null)}
                     />
                     <Cell
-                      text={fmt("pct", toPaid[i] ?? null, 2)}
+                      text={fmt("pct", toPaid[i] ?? null)}
                       shade={band(toPaid, toPaid[i] ?? null)}
                     />
                     <Cell
@@ -1648,7 +1648,7 @@ function AdsSeen({ ads }: { ads: TrafficPayload["adsSeen"] }) {
                         shade={band(cost, cost[i] ?? null, true)}
                       />
                       <Cell
-                        text={fmt("pct", paid[i] ?? null, 2)}
+                        text={fmt("pct", paid[i] ?? null)}
                         shade={band(paid, paid[i] ?? null)}
                       />
                       <Cell
@@ -1745,13 +1745,13 @@ function Cohorts({ cohorts }: { cohorts: TrafficPayload["cohorts"] }) {
                 />
               ))}
               <Cell pad="py-[9px]" text={times(r.growth)} shade={band(growth, r.growth)} />
-              <Cell pad="py-[9px]" text={fmt("pct", r.repeat, 1)} shade={band(repeat, r.repeat)} />
+              <Cell pad="py-[9px]" text={fmt("pct", r.repeat)} shade={band(repeat, r.repeat)} />
               <Cell
                 pad="py-[9px]"
-                text={fmt("pct", r.crossSell, 1)}
+                text={fmt("pct", r.crossSell)}
                 shade={band(cross, r.crossSell)}
               />
-              <Cell pad="py-[9px]" text={fmt("pct", r.refund, 1)} />
+              <Cell pad="py-[9px]" text={fmt("pct", r.refund)} />
             </div>
           ))}
         </Wide>
@@ -1830,9 +1830,9 @@ function Experiments({ experiments }: { experiments: TrafficPayload["experiments
                   )}
                 </span>
                 <Cell text={fmt("count", x.visitors)} />
-                <Cell text={fmt("pct", x.startCvr, 1)} />
+                <Cell text={fmt("pct", x.startCvr)} />
                 <Cell text={fmt("count", x.submissions)} />
-                <Cell text={fmt("pct", x.paymentCvr, 2)} />
+                <Cell text={fmt("pct", x.paymentCvr)} />
                 <Cell text={fmt("eur", x.revPerSub, 2)} />
                 <Cell text={fmt("eur", x.revPerVisitor, 4)} />
                 <Cell
@@ -1976,7 +1976,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
                 height={14}
                 track="#f5f6f8"
               />
-              <span className="text-right font-bold tabular-nums">{fmt("pct", v.share, 1)}</span>
+              <span className="text-right font-bold tabular-nums">{fmt("pct", v.share)}</span>
             </div>
           ))}
         </div>
@@ -2027,7 +2027,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
                     <Cell
                       key={s.source}
                       pad="py-[9px]"
-                      text={fmt("pct", share, 1)}
+                      text={fmt("pct", share)}
                       shade={r === null ? PLAIN : r >= 1.2 ? GOOD : r <= 0.8 ? BAD : PLAIN}
                     />
                   );
@@ -2067,18 +2067,14 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
               style={{ gridTemplateColumns: perfCols }}
             >
               <Cell header left pad="py-[9px]" text={p.label} />
-              <Cell pad="py-[9px]" text={fmt("pct", p.share, 1)} />
+              <Cell pad="py-[9px]" text={fmt("pct", p.share)} />
               <Cell
                 pad="py-[9px]"
-                text={fmt("pct", p.completeRate, 1)}
+                text={fmt("pct", p.completeRate)}
                 shade={band(complete, p.completeRate)}
               />
-              <Cell pad="py-[9px]" text={fmt("pct", p.preRate, 1)} shade={band(pre, p.preRate)} />
-              <Cell
-                pad="py-[9px]"
-                text={fmt("pct", p.fullRate, 1)}
-                shade={band(full, p.fullRate)}
-              />
+              <Cell pad="py-[9px]" text={fmt("pct", p.preRate)} shade={band(pre, p.preRate)} />
+              <Cell pad="py-[9px]" text={fmt("pct", p.fullRate)} shade={band(full, p.fullRate)} />
               <Cell pad="py-[9px]" text={fmt("mmss", p.readMs)} shade={band(read, p.readMs)} />
             </div>
           ))}
@@ -2298,7 +2294,7 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                   className="absolute -left-11 w-[38px] translate-y-1/2 text-right text-[11px] text-ap-muted"
                   style={{ bottom: `${s.yMax ? ((t / s.yMax) * 100).toFixed(1) : 0}%` }}
                 >
-                  {t.toFixed(3)}%
+                  {fmt("pct", t / 100)}
                 </span>
               ))}
             </div>
@@ -2316,7 +2312,7 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                       color: p.color,
                       mark: "dot",
                     },
-                    { label: "Click → paid", value: fmt("pct", p.d.clickToPaid, 3) },
+                    { label: "Click → paid", value: fmt("pct", p.d.clickToPaid) },
                     { label: "Clicks", value: fmt("count", p.d.clicks) },
                     { label: "Buyers", value: fmt("count", p.d.payers) },
                     { label: "Spend", value: fmt("eur", p.d.spend) },
@@ -2367,8 +2363,7 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                 />
                 <span>
                   <strong className="text-ap-ink">{p.name}</strong>: {fmt("eur", p.d.cpc, 2)} per
-                  click, {fmt("pct", p.d.clickToPaid, 3)} click to paid, {fmt("eur", p.d.spend)}{" "}
-                  spend
+                  click, {fmt("pct", p.d.clickToPaid)} click to paid, {fmt("eur", p.d.spend)} spend
                 </span>
               </li>
             ))}

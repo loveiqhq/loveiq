@@ -183,7 +183,7 @@ describe("a survey submitted without the cookie", () => {
         html: string;
         tags: Array<{ name: string; value: string }>;
       };
-      expect(payload.subject).toBe("Alice, your Core Archetype is ready to open");
+      expect(payload.subject).toBe("Alice, your Core Archetype is ready");
       expect(payload.html).toContain("Or paste this link into your browser");
       expect(payload.tags).toEqual([
         { name: "stage", value: "report_ready" },

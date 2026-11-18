@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import { shortDate } from "@features/admin/server/ap/days";
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { delta, deltaRel, EMPTY, fmt, type Tone } from "@features/admin/server/ap/format";
+import { delta, deltaRel, EMPTY, fmt, tenths, type Tone } from "@features/admin/server/ap/format";
 import type {
   ChangeBox,
   Parts,
@@ -51,24 +51,20 @@ const userHref = (id: number | string) =>
     filters: JSON.stringify([["user_id", "eq", String(id)]]),
   })}`;
 
-/** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
-const wholePct = (v: number | null) =>
-  v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
-
 /**
- * Continue, Skip intro and Exit in whole percents that add up to 100 (largest remainder), as the
- * note under the table promises; where Skip intro wasn't recorded, the others add up to their
- * own total. Equal shares read alike: the points left go to whole groups of equal shares, the
- * groups that fit with the most remainder; when none fit, plain largest remainder. A skip of
+ * Continue, Skip intro and Exit in tenths of a percent that add up to 100.0% (largest remainder),
+ * as the note under the table promises; where Skip intro wasn't recorded, the others add up to
+ * their own total. Equal shares read alike: the tenths left go to whole groups of equal shares,
+ * the groups that fit with the most remainder; when none fit, plain largest remainder. A skip of
  * none reads "—", as the design writes it.
  */
 export function wholeSplit(parts: Array<number | null>): string[] {
-  const pct = parts.map((p) => (p === null ? 0 : p * 100));
-  const whole = pct.map(Math.floor);
+  const t = parts.map((p) => (p === null ? 0 : p * 1000));
+  const whole = t.map(Math.floor);
   const known = parts.flatMap((p, i) => (p === null ? [] : [i]));
   const left =
-    Math.round(known.reduce((a, i) => a + pct[i]!, 0)) - known.reduce((a, i) => a + whole[i]!, 0);
-  const rem = (i: number) => pct[i]! - whole[i]!;
+    Math.round(known.reduce((a, i) => a + t[i]!, 0)) - known.reduce((a, i) => a + whole[i]!, 0);
+  const rem = (i: number) => t[i]! - whole[i]!;
   const groups = [...new Set(known.map((i) => parts[i]!))].map((v) =>
     known.filter((i) => parts[i] === v)
   );
@@ -84,14 +80,14 @@ export function wholeSplit(parts: Array<number | null>): string[] {
     best ? best.flat() : [...known].sort((a, b) => rem(b) - rem(a)).slice(0, Math.max(0, left))
   );
   return parts.map((p, i) => {
-    if (p === null) return wholePct(null);
+    if (p === null) return EMPTY;
     const v = whole[i]! + (up.has(i) ? 1 : 0);
-    return v === 0 && p > 0 ? "<1%" : `${v}%`;
+    return v === 0 && p > 0 ? "<0.1%" : `${(v / 10).toFixed(1)}%`;
   });
 }
 
-/** At least `pct` percent as the whole percentage shows it: the design's highlights. */
-const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 100) >= pct;
+/** At least `pct` percent as the figure shows it: the design's highlights. */
+const atLeast = (v: number | null, pct: number) => v !== null && tenths(v) >= pct * 10;
 
 /** "1 vote", "74 votes". */
 const votes = (n: number) => `${fmt("count", n)} vote${n === 1 ? "" : "s"}`;
@@ -158,20 +154,19 @@ const BOX_INFO: Record<string, { k: string }> = {
   visits: { k: "report.sessions_per_reader" },
 };
 
-/** The design's headline tile (KpiTileV2), at the tile's own decimals, with its info card. */
+/** The design's headline tile (KpiTileV2), with its info card. */
 function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: string; to: string } }) {
   const about = TILE_INFO[tile.key];
   return (
     <KpiTileV2
       tile={tile}
-      digits={tile.digits}
       titles={bucketTitles(range.from, range.to)}
       info={
         about && {
           k: about.k,
           worked: tile.blocked
             ? undefined
-            : workedOf(fmt(tile.unit, tile.value, tile.digits), tile.parts, tile.unit === "mmss"),
+            : workedOf(fmt(tile.unit, tile.value), tile.parts, tile.unit === "mmss"),
           trend: about.trend ? { route: "report", tile: tile.key, unit: tile.unit } : undefined,
         }
       }
@@ -185,10 +180,7 @@ function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: strin
  */
 function ChangeBoxView({ box }: { box: ChangeBox }) {
   const d = box.note === undefined ? deltaRel(box.value, box.prev, box.goodWhen) : null;
-  const shown =
-    box.unit === "pct" && box.digits === 0
-      ? wholePct(box.value)
-      : fmt(box.unit, box.value, box.digits);
+  const shown = fmt(box.unit, box.value);
   const about = BOX_INFO[box.key];
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-ap-ground p-3.5">
@@ -495,8 +487,8 @@ export default function ApReport() {
                         rows: [...data.time.boxes, ...data.returns.boxes].map((b) => ({
                           label: b.label,
                           values: [
-                            fmt(b.unit, b.value, b.digits),
-                            fmt(b.unit, b.prev, b.digits),
+                            fmt(b.unit, b.value),
+                            fmt(b.unit, b.prev),
                             b.note ?? deltaRel(b.value, b.prev, b.goodWhen)?.text ?? "",
                           ],
                         })),
@@ -562,6 +554,30 @@ export default function ApReport() {
                                 label: r.source,
                                 values: [r.sessions, r.share],
                               })),
+                            },
+                          },
+                        ]
+                      : []),
+                    ...(data.returns.pings
+                      ? [
+                          {
+                            name: "Came back within 7 days, any way",
+                            table: {
+                              columns: [
+                                { label: "First way back", unit: "text" as const },
+                                { label: "Finished surveys", unit: "count" as const },
+                              ],
+                              rows: [
+                                ...data.returns.pings.ways.map((w) => ({
+                                  label: w.way,
+                                  values: [w.readers],
+                                })),
+                                { label: "Came back", values: [data.returns.pings.cameBack] },
+                                {
+                                  label: "Finished, 7 days over",
+                                  values: [data.returns.pings.finished],
+                                },
+                              ],
                             },
                           },
                         ]
@@ -766,7 +782,7 @@ function WizardSection({ data }: { data: ReportPayload }) {
                       <Bar pct={s.reachedShare} height={8} />
                     </span>
                     <span className="text-xs font-bold tabular-nums">
-                      {fmt("pct", s.reachedShare, 0)}
+                      {fmt("pct", s.reachedShare)}
                     </span>
                   </span>
                   <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
@@ -783,7 +799,7 @@ function WizardSection({ data }: { data: ReportPayload }) {
                       ? "—"
                       : s.backShare === null
                         ? fmt("count", s.back)
-                        : wholePct(s.backShare)}
+                        : fmt("pct", s.backShare)}
                   </span>
                   <span
                     role="cell"
@@ -874,29 +890,27 @@ function TourSection({ data }: { data: ReportPayload }) {
                 <span className="flex-1">
                   <Bar pct={s.reachedShare} height={8} />
                 </span>
-                <span className="text-xs font-bold tabular-nums">
-                  {fmt("pct", s.reachedShare, 0)}
-                </span>
+                <span className="text-xs font-bold tabular-nums">{fmt("pct", s.reachedShare)}</span>
               </span>
-              {/* Next, Skip tour and Exit are whole shares that add up to 100% (wholeShares). */}
+              {/* Next, Skip tour and Exit are shares that add up to 100% (wholeShares). */}
               <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
                 {i === a.stops.length - 1 && s.next !== null ? "Finish " : ""}
-                {fmt("pct", s.next, 0)}
+                {fmt("pct", s.next)}
               </span>
               <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                {wholePct(s.back)}
+                {fmt("pct", s.back)}
               </span>
               <span
                 role="cell"
                 className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.skip, 8) ? "font-bold text-ap-bad" : ""}`}
               >
-                {s.skip === 0 ? EMPTY : fmt("pct", s.skip, 0)}
+                {s.skip === 0 ? EMPTY : fmt("pct", s.skip)}
               </span>
               <span
                 role="cell"
                 className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.exit, 4) ? "font-bold text-ap-bad" : ""}`}
               >
-                {fmt("pct", s.exit, 0)}
+                {fmt("pct", s.exit)}
               </span>
             </div>
           ))}
@@ -989,8 +1003,10 @@ function TimeSection({ data }: { data: ReportPayload }) {
                 className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 px-[5px]"
               >
                 <span className="text-xs font-bold">
-                  {fmt("pct", b.share, 0)}{" "}
-                  <span className="font-medium text-ap-muted">· {fmt("pct", b.bench, 0)}</span>
+                  {fmt("pct", b.share)}{" "}
+                  <span className="whitespace-nowrap font-medium text-ap-muted">
+                    · {fmt("pct", b.bench)}
+                  </span>
                 </span>
                 <span
                   className="w-full max-w-12 rounded-t-md rounded-b-sm bg-ap-purple"
@@ -1015,13 +1031,13 @@ function TimeSection({ data }: { data: ReportPayload }) {
                   rows: [
                     {
                       label: "This report",
-                      value: fmt("pct", b.share, 1),
+                      value: fmt("pct", b.share),
                       color: "#795fc8",
                       mark: "square",
                     },
                     {
                       label: "Benchmark · all reports",
-                      value: fmt("pct", b.bench, 1),
+                      value: fmt("pct", b.bench),
                       color: "#161021",
                       mark: "dashed",
                     },
@@ -1186,7 +1202,7 @@ function DepthChart({ data }: { data: ReportPayload }) {
                       const c = b.counts[k] ?? 0;
                       return {
                         label: g,
-                        value: `${fmt("count", c)} · ${total ? fmt("pct", c / total, 1) : EMPTY}`,
+                        value: `${fmt("count", c)} · ${total ? fmt("pct", c / total) : EMPTY}`,
                         color: DEPTH_COLOURS[k],
                         ...(k === 4 ? { outline: "#9c95a3" } : {}),
                         mark: "square" as const,
@@ -1361,11 +1377,69 @@ function CountAndRate({
       {fmt("count", n)}
       {n !== null && rate !== null && (
         <span className="text-xs text-ap-muted">
-          {fmt("pct", rate, 1)}
+          {fmt("pct", rate)}
           {of !== null && ` of ${fmt("count", of)} delivered`}
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * Came back within 7 days, any way: the "Came back" replies on #incoming-surveys (reader_return),
+ * the KPI of the card "Ping #incoming-surveys when a reader comes back".
+ */
+function PingReturns({ p }: { p: ReportPayload["returns"]["pings"] }) {
+  const top = Math.max(1, ...(p?.ways ?? []).map((w) => w.readers));
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="flex flex-col gap-1">
+        <span className="text-[15px] font-bold text-ap-ink">
+          Came back within 7 days, any way{" "}
+          <Info k="report.ping_returns" label="Came back within 7 days, any way" />
+        </span>
+        <span className="text-[13px] text-ap-muted">
+          Everyone who finished the survey, by whether a &ldquo;Came back&rdquo; reply reached their
+          #incoming-surveys thread within 7 days, and what brought them back first
+        </span>
+      </span>
+      {p === null ? (
+        <p className="m-0 text-sm text-ap-muted">
+          Could not be read just now. Try again in a minute.
+        </p>
+      ) : p.finished === 0 ? (
+        <p className="m-0 text-sm text-ap-muted">
+          Recorded from {p.from}. No survey in this range finished since has had its 7 days yet
+          {p.waiting ? ` (${fmt("count", p.waiting)} still inside them)` : ""}.
+        </p>
+      ) : (
+        <>
+          <span className="flex items-baseline gap-2 text-sm">
+            <strong className="text-[22px] tabular-nums">{fmt("pct", p.share)}</strong>
+            <span className="text-ap-muted">
+              {fmt("count", p.cameBack)} of {fmt("count", p.finished)} who finished the survey
+            </span>
+          </span>
+          {p.ways.map((w) => (
+            <div
+              key={w.way}
+              className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
+              style={{ gridTemplateColumns: "minmax(0,240px) minmax(0,1fr) 56px" }}
+            >
+              <span>{w.way}</span>
+              <Bar pct={w.readers / top} height={12} />
+              <span className="text-right font-bold tabular-nums">{fmt("count", w.readers)}</span>
+            </div>
+          ))}
+          <span className="text-xs leading-normal text-ap-muted">
+            Surveys finished from {p.from} whose 7 days are over
+            {p.waiting ? `; ${fmt("count", p.waiting)} more are counted once theirs are` : ""}. Four
+            ways back count: a report visit on a later day, a click in one of our emails, the unlock
+            question answered, a survey finished on a later day than it was begun.
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1446,9 +1520,9 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                   color={d.cumulative === null ? "#d6cff0" : "#795fc8"}
                   height={12}
                 />
-                <span className="text-right font-bold tabular-nums">{wholePct(d.share)}</span>
+                <span className="text-right font-bold tabular-nums">{fmt("pct", d.share)}</span>
                 <span className="text-right text-xs tabular-nums text-ap-muted">
-                  {wholePct(d.cumulative)}
+                  {fmt("pct", d.cumulative)}
                 </span>
               </div>
             ))}
@@ -1487,7 +1561,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                   rows: [
                     {
                       label: "Share",
-                      value: fmt("pct", s.share, 1),
+                      value: fmt("pct", s.share),
                       color: SOURCE_COLOURS[s.source] ?? "#795fc8",
                       mark: "square",
                     },
@@ -1504,11 +1578,12 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                   color={SOURCE_COLOURS[s.source] ?? "#795fc8"}
                   height={12}
                 />
-                <span className="text-right font-bold tabular-nums">{fmt("pct", s.share, 0)}</span>
+                <span className="text-right font-bold tabular-nums">{fmt("pct", s.share)}</span>
               </div>
             ))
           )}
         </div>
+        {!data.blocked && <PingReturns p={r.pings} />}
       </div>
       <div className="flex flex-col gap-2.5">
         <span className="flex flex-col gap-1">
@@ -1578,7 +1653,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                   {fmt("count", c.returned)}
                 </span>
                 <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                  {fmt("pct", c.returnRate, 1)}
+                  {fmt("pct", c.returnRate)}
                 </span>
                 <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
                   {fmt("count", c.purchased)}
@@ -1740,7 +1815,7 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                   <Bar pct={c.reach} height={8} />
                 </span>
                 <span className="min-w-[34px] text-right text-xs font-bold tabular-nums">
-                  {fmt("pct", c.reach, 0)}
+                  {fmt("pct", c.reach)}
                 </span>
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
@@ -1772,7 +1847,7 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                   </>
                 )}
               </span>
-              {/* Whole percentages, as drawn, and the highlights by the figure shown. */}
+              {/* The highlights by the figure shown. */}
               <span
                 role="cell"
                 className={`px-3 py-2 text-right text-[13px] tabular-nums ${
@@ -1785,17 +1860,13 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                         : ""
                 }`}
               >
-                {wholePct(c.showMore)}
+                {fmt("pct", c.showMore)}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
                 {reading.recorded ? (
                   <>
-                    <span
-                      className={
-                        c.paywall !== null && c.paywall >= 0.05 ? "font-bold text-ap-good-ink" : ""
-                      }
-                    >
-                      {fmt("pct", c.paywall, 1)}
+                    <span className={atLeast(c.paywall, 5) ? "font-bold text-ap-good-ink" : ""}>
+                      {fmt("pct", c.paywall)}
                     </span>
                     {c.paywallSeen > 0 && (
                       <span className="block text-[11px] text-ap-muted">
@@ -1810,10 +1881,10 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                 )}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {wholePct(c.learnMore)}
+                {fmt("pct", c.learnMore)}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {wholePct(c.exercise)}
+                {fmt("pct", c.exercise)}
               </span>
             </div>
           ))}
@@ -1917,7 +1988,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
         <div className="flex flex-col gap-3">
           <div className="flex items-baseline gap-2.5">
             <span className="font-serif text-[40px] font-semibold leading-none">
-              {fmt("pct", goodShare, 0)}
+              {fmt("pct", goodShare)}
             </span>
             <span className="text-[13px] text-ap-muted">
               good · {fb.good} good / {fb.bad} bad · {votes(fb.total)} (live, all time){" "}
@@ -1927,7 +1998,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 worked={{
                   num: fmt("count", fb.good),
                   den: fmt("count", fb.total),
-                  value: fmt("pct", goodShare, 0),
+                  value: fmt("pct", goodShare),
                 }}
               />
             </span>

@@ -17,6 +17,7 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import {
+  areFeaturesEnabled,
   isFeatureEnabled,
   readFeatureFlag,
   __resetSystemFlagsCacheForTests,
@@ -124,5 +125,80 @@ describe("readFeatureFlag: for a caller that must not guess", () => {
     await expect(isFeatureEnabled("report_initial_unlock_gate", false)).resolves.toBe(false);
     mockFetchWithTimeout.mockResolvedValueOnce({ ok: false, status: 503 });
     await expect(readFeatureFlag("report_initial_unlock_gate", false)).resolves.toBeNull();
+  });
+});
+
+describe("areFeaturesEnabled: several flags, one request", () => {
+  const KEYS = [
+    "survey_sheet_science",
+    "survey_sheet_desire",
+    "report_gate_archetype_reveal",
+  ] as const;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    __resetSystemFlagsCacheForTests();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    __resetSystemFlagsCacheForTests();
+  });
+
+  it("asks once for all of them, in order, a missing row read as the default", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { key: "survey_sheet_desire", enabled: true },
+        { key: "report_gate_archetype_reveal", enabled: false },
+      ],
+    });
+    await expect(areFeaturesEnabled(KEYS, false)).resolves.toEqual([false, true, false]);
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    const url = new URL(mockFetchWithTimeout.mock.calls[0]![0] as string);
+    expect(url.pathname).toBe("/rest/v1/system_flags");
+    expect(url.searchParams.get("key")).toBe(`in.(${KEYS.join(",")})`);
+  });
+
+  it("fills isFeatureEnabled's cache, so neither asks again within the TTL", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ key: "survey_sheet_science", enabled: true }],
+    });
+    await areFeaturesEnabled(KEYS, false);
+    await expect(areFeaturesEnabled(KEYS, false)).resolves.toEqual([true, false, false]);
+    await expect(isFeatureEnabled("survey_sheet_science", false)).resolves.toBe(true);
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks only for the flags it does not already hold", async () => {
+    __resetSystemFlagsCacheForTests({ survey_sheet_science: true });
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    await expect(areFeaturesEnabled(KEYS, false)).resolves.toEqual([true, false, false]);
+    const url = new URL(mockFetchWithTimeout.mock.calls[0]![0] as string);
+    expect(url.searchParams.get("key")).toBe(
+      "in.(survey_sheet_desire,report_gate_archetype_reveal)"
+    );
+  });
+
+  it("answers the default for every flag when Supabase errors or cannot be reached", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
+    await expect(areFeaturesEnabled(KEYS, false)).resolves.toEqual([false, false, false]);
+    __resetSystemFlagsCacheForTests();
+    mockFetchWithTimeout.mockRejectedValueOnce(new Error("timeout"));
+    await expect(areFeaturesEnabled(KEYS, true)).resolves.toEqual([true, true, true]);
+  });
+
+  it("honours an environment override without asking for it", async () => {
+    vi.stubEnv("SYSTEM_FLAG_survey_sheet_desire", "true");
+    mockFetchWithTimeout.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    await expect(areFeaturesEnabled(KEYS, false)).resolves.toEqual([false, true, false]);
+    const url = new URL(mockFetchWithTimeout.mock.calls[0]![0] as string);
+    expect(url.searchParams.get("key")).toBe(
+      "in.(survey_sheet_science,report_gate_archetype_reveal)"
+    );
   });
 });

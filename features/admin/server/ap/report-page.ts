@@ -8,9 +8,12 @@ import { TOUR_COPY } from "@features/report/ui/v3/guidedTourContent";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 import { RETIRED_NAMES } from "@features/admin/ui/ap/retired-chapters";
 import { POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
+import { EMAIL_NAMES } from "@features/attribution/server/slack-journey";
+import { reportingDayStart } from "@shared/time/reporting-day";
 
 import { assessmentScope } from "./assessment";
-import { shortDate } from "./days";
+import { addDays, shortDate } from "./days";
+import { EMAILS } from "./email-registry";
 import { PRE_ON_SALE_FROM, PRE_PLANS, preBuysOf, type Facts, type SubFact } from "./facts";
 import {
   activeNarrowing,
@@ -279,6 +282,112 @@ export async function fetchReportTour(from: string, to: string): Promise<ReportT
  */
 export const TOUR_TRACKING_FROM = "2026-10-23";
 
+/**
+ * The first whole Berlin day the "Came back" replies are recorded (reader_return): the day after
+ * their release. Readers who finished earlier may have come back unrecorded, so they are not
+ * counted. Correct it if the release moves; the info card's query holds the same day.
+ */
+export const RETURN_PINGS_FROM = "2026-11-18";
+
+/** A reader's day back (reader_return), as "Came back within 7 days" reads it. */
+export interface ReaderReturn {
+  sid: number;
+  at: string;
+  source: string;
+  via: string | null;
+}
+
+/**
+ * The "Came back" rows that can fall within 7 days of a survey finished in the range: from its
+ * first Berlin day to 8 days after its last. Paged, as PostgREST hands out 1,000 rows at most.
+ */
+export async function fetchReaderReturns(from: string, to: string): Promise<ReaderReturn[]> {
+  type Row = {
+    survey_submission_id: number;
+    returned_at: string;
+    source: string;
+    via: string | null;
+  };
+  const rows: Row[] = [];
+  for (let offset = 0; ; offset += POSTGREST_MAX_ROWS) {
+    const query = new URLSearchParams({
+      select: "survey_submission_id,returned_at,source,via",
+      order: "returned_at.asc,survey_submission_id.asc",
+      limit: String(POSTGREST_MAX_ROWS),
+      offset: String(offset),
+    });
+    query.append("returned_at", `gte.${reportingDayStart(from).toISOString()}`);
+    query.append("returned_at", `lt.${reportingDayStart(addDays(to, 8)).toISOString()}`);
+    const res = await supabaseFetch(`/rest/v1/reader_return?${query}`, { paginated: true });
+    if (!res.ok) throw new Error(`reader_return failed (${res.status})`);
+    const page = (await res.json()) as Row[];
+    rows.push(...page);
+    if (page.length < POSTGREST_MAX_ROWS) break;
+  }
+  return rows.map((r) => ({
+    sid: Number(r.survey_submission_id),
+    at: r.returned_at,
+    source: r.source,
+    via: r.via,
+  }));
+}
+
+/** What brought a reader back, as AP › Emails names the email; the parent message's name else. */
+function returnWay(r: ReaderReturn): string {
+  if (!r.via) {
+    return r.source === "draft"
+      ? "A survey begun on an earlier day"
+      : "Their report link, no email";
+  }
+  const via = r.via;
+  return (
+    EMAILS.find((e) => e.stages.includes(via))?.name ?? EMAIL_NAMES.get(via) ?? "An email link"
+  );
+}
+
+const WEEK_MS = 7 * 86_400_000;
+
+/**
+ * Came back within 7 days, any way: of the surveys finished from RETURN_PINGS_FROM whose 7 days are
+ * over, those with a "Came back" day within 7 days of finishing, and what brought each back first.
+ * Everyone who finished counts, not only AP's readers (a report opened): a reader the EUR 1.99
+ * gate stopped has not opened it, and coming back is what is measured. A survey still inside its
+ * week is counted once it ends (`waiting`). Null when the rows could not be read.
+ */
+export function pingReturns(
+  subs: SubFact[],
+  rows: ReaderReturn[] | null | undefined,
+  now: Date
+): ReportPayload["returns"]["pings"] {
+  if (!rows) return null;
+  const recorded = subs.filter((s) => s.day >= RETURN_PINGS_FROM);
+  const counted = recorded.filter((s) => Date.parse(s.at) + WEEK_MS <= now.getTime());
+  const first = new Map<number, ReaderReturn>();
+  for (const r of rows) {
+    const had = first.get(r.sid);
+    if (!had || Date.parse(r.at) < Date.parse(had.at)) first.set(r.sid, r);
+  }
+  const ways = new Map<string, number>();
+  let cameBack = 0;
+  for (const s of counted) {
+    const r = first.get(s.id);
+    if (!r || Date.parse(r.at) >= Date.parse(s.at) + WEEK_MS) continue;
+    cameBack += 1;
+    const way = returnWay(r);
+    ways.set(way, (ways.get(way) ?? 0) + 1);
+  }
+  return {
+    from: rangeLabel(RETURN_PINGS_FROM, RETURN_PINGS_FROM),
+    finished: counted.length,
+    cameBack,
+    share: ratio(cameBack, counted.length),
+    waiting: recorded.length - counted.length,
+    ways: [...ways]
+      .map(([way, readers]) => ({ way, readers }))
+      .sort((a, b) => b.readers - a.readers || a.way.localeCompare(b.way)),
+  };
+}
+
 /** What each stop's spotlight frames, as the reader sees it (ui/v3/guidedTourAnchors.ts). */
 const TOUR_TARGETS: Record<TourStepId, string> = {
   chapter_menu: "Chapter menu: the pill at the top, the sidebar from 1280px",
@@ -289,18 +398,19 @@ const TOUR_TARGETS: Record<TourStepId, string> = {
 };
 
 /**
- * Whole percentages of `counts` that add up to 100, as shares (0.34): each rounded down, then
- * the points still missing go to the largest remainders. A count that is not nothing keeps at
- * least 1%, taken back from the largest share, so a skip is never shown as none. Null for none.
+ * Shares of `counts` that make up the whole, in tenths of a percent as every rate is written
+ * (0.336), adding up to 100.0%: each rounded down, then the tenths still missing go to the
+ * largest remainders. A count that is not nothing keeps at least 0.1%, taken back from the
+ * largest share, so a skip is never shown as none. Null for none.
  */
 export function wholeShares(counts: number[]): number[] | null {
   const total = counts.reduce((a, c) => a + c, 0);
   if (total <= 0) return null;
   const parts = counts.map((c) => {
-    const exact = (c * 100) / total;
+    const exact = (c * 1000) / total;
     return { exact, whole: c > 0 ? Math.max(1, Math.floor(exact)) : 0 };
   });
-  for (let missing = 100 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0;) {
+  for (let missing = 1000 - parts.reduce((a, p) => a + p.whole, 0); missing !== 0;) {
     const step = Math.sign(missing);
     // Up: the largest remainder, the first of equals. Down: the largest share.
     const by = (p: (typeof parts)[number]) => (step > 0 ? p.exact - p.whole : p.whole);
@@ -308,7 +418,7 @@ export function wholeShares(counts: number[]): number[] | null {
     pick.whole += step;
     missing -= step;
   }
-  return parts.map((p) => p.whole / 100);
+  return parts.map((p) => p.whole / 1000);
 }
 
 /** A chapter vote (report_section_feedback), its comment already masked. */
@@ -525,24 +635,8 @@ export interface Parts {
   den: number;
 }
 
-/** A headline tile, with the design's decimals for its value (`digits`). */
-export type ReportTile = Tile & { digits?: number; parts?: Parts };
-
-/**
- * A headline rate's decimals, as the design writes them: two figures ("34%", "2.1%", "0.21%"),
- * and "0%" for none. Read off the rounded rate, so 9.96% is "10%", not "10.0%".
- */
-export function twoFigures(v: number | null): number | undefined {
-  if (v === null) return undefined;
-  const p = Math.abs(v) * 100;
-  return p >= 9.95 || p === 0 ? 0 : p >= 0.995 ? 1 : 2;
-}
-
-/**
- * Whole percentages, as the wizard's and the tour's tiles are drawn; a share under 1% keeps a
- * tenth, so a handful never reads 0%.
- */
-const wholeDigits = (v: number | null) => (v !== null && v > 0 && v < 0.01 ? 1 : 0);
+/** A headline tile, with the numbers its rate is worked out from (`parts`). */
+export type ReportTile = Tile & { parts?: Parts };
 
 /**
  * A box under Time in report or Returns: its value and the period before's at the same age,
@@ -555,7 +649,6 @@ export interface ChangeBox {
   value: number | null;
   prev: number | null;
   goodWhen: GoodWhen;
-  digits?: number;
   note?: string;
   parts?: Parts;
 }
@@ -572,7 +665,7 @@ export interface TourStopRow {
   reached: number;
   reachedShare: number | null;
   medianMs: number | null;
-  /** Whole-percent shares of the stop's runs, adding up to 1 (wholeShares); null with none. */
+  /** Shares of the stop's runs in tenths, adding up to 1 (wholeShares); null with none. */
   next: number | null;
   skip: number | null;
   exit: number | null;
@@ -722,6 +815,22 @@ export interface ReportPayload extends PageHead {
     emailEvents: string;
     /** What the table can't list for this range (the chapter nudges), or null. */
     campaignNote: string | null;
+    /**
+     * Came back within 7 days, any way (pingReturns): the #incoming-surveys "Came back"
+     * replies' record. Null when it could not be read.
+     */
+    pings: {
+      /** RETURN_PINGS_FROM, as the page writes it. */
+      from: string;
+      /** Surveys finished from `from` whose 7 days are over. */
+      finished: number;
+      cameBack: number;
+      share: number | null;
+      /** Surveys finished from `from` still inside their 7 days. */
+      waiting: number;
+      /** What brought each back first, most first. */
+      ways: Array<{ way: string; readers: number }>;
+    } | null;
   };
   /** What the wizard's slides can't see for this range, or null. */
   wizardNote: string | null;
@@ -868,6 +977,8 @@ export function buildReportPage(input: {
   votes?: Vote[] | null;
   /** The report's EUR 1.99 gate now, read under "Free survey" only; null when it couldn't be. */
   gateOn?: boolean | null;
+  /** The "Came back" rows (fetchReaderReturns); null when they could not be read. */
+  pings?: ReaderReturn[] | null;
   filters: ApFilters;
   today: string;
   now: Date;
@@ -939,8 +1050,6 @@ export function buildReportPage(input: {
     label,
     unit,
     value,
-    // The design's headline rates read "34%", "2.1%", "0.21%"; the wizard's are whole (below).
-    digits: unit === "pct" ? twoFigures(value) : undefined,
     prev,
     goodWhen: "up",
     spark: sp,
@@ -973,7 +1082,7 @@ export function buildReportPage(input: {
       "count",
       t.opened,
       p?.opened ?? null,
-      `${p ? `vs ${n(p.opened)} · ` : ""}${pct(ratio(t.opened, t.subs))} of submissions`,
+      `${p ? `vs ${n(p.opened)} · ` : ""}${fmt("pct", ratio(t.opened, t.subs))} of submissions`,
       trend(facts, scope, (x) => x.opened)
     ),
     {
@@ -1355,7 +1464,7 @@ export function buildReportPage(input: {
       // readers are not openers (the tour's report writes no report session).
       share:
         key !== "gate" && tour && tourOpeners > 0
-          ? `${fmt("pct", cur.readers / tourOpeners, 0)} of the ${n(tourOpeners)} ${
+          ? `${fmt("pct", cur.readers / tourOpeners)} of the ${n(tourOpeners)} ${
               tourOpeners === 1 ? "reader" : "readers"
             } who opened their report`
           : null,
@@ -1370,7 +1479,7 @@ export function buildReportPage(input: {
           (x) => ratio(x.left, x.runs),
           "down"
         ),
-      ].map((t) => ({ ...t, digits: wholeDigits(t.value) })),
+      ],
       stops: ids.map((id, i) => {
         const s = tour?.stops.find((x) => x.audience === key && x.id === id);
         const reached = s?.reached ?? 0;
@@ -1619,8 +1728,7 @@ export function buildReportPage(input: {
     value: number | null,
     prev: number | null,
     comparable: boolean,
-    goodWhen: GoodWhen = "up",
-    digits?: number
+    goodWhen: GoodWhen = "up"
   ): ChangeBox => ({
     key,
     label,
@@ -1628,7 +1736,6 @@ export function buildReportPage(input: {
     value,
     prev: previous && comparable ? prev : null,
     goodWhen,
-    ...(digits !== undefined ? { digits } : {}),
     ...(previous && !comparable && noCmp ? { note: noCmp } : {}),
   });
   const timeBoxes: ChangeBox[] = [
@@ -1673,9 +1780,7 @@ export function buildReportPage(input: {
         "pct",
         returnedShare(subs),
         returnedShare(prevSubs),
-        prevComparable,
-        "up",
-        0
+        prevComparable
       ),
       parts: tileParts.returned,
     },
@@ -1695,9 +1800,7 @@ export function buildReportPage(input: {
         "pct",
         viaEmail,
         emailShare(input.previousReturns ?? null),
-        true,
-        "up",
-        0
+        true
       ),
       // PostHog's own reading of the period before; blank when it was not read.
       ...(viaEmailParts ? { parts: viaEmailParts } : {}),
@@ -1729,7 +1832,6 @@ export function buildReportPage(input: {
     wizard: {
       tiles: wizardTiles.map((t) => ({
         ...t,
-        digits: wholeDigits(t.value),
         ...(wizardParts[t.key] ? { parts: wizardParts[t.key] } : {}),
       })),
       slides: tablet ? [] : slides,
@@ -1786,6 +1888,7 @@ export function buildReportPage(input: {
         f.from <= CHAPTER_NUDGES_UNTIL
           ? `The chapter nudges (a locked chapter emailed every other day, switched off on ${rangeLabel(CHAPTER_NUDGES_UNTIL, CHAPTER_NUDGES_UNTIL)}) aren't listed: only each reader's last one was dated, so they can't be put in a range.`
           : null,
+      pings: pingReturns(subs, input.pings, now),
     },
     wizardNote:
       f.from < EVENTS_COMPLETE_FROM
@@ -1841,8 +1944,4 @@ function emailEventsNote(opens: string | null, clicks: string | null): string {
   return opens === clicks
     ? `Opens and clicks are of the emails delivered since ${day(clicks)}, when recording began.`
     : `Clicks are of the emails delivered since ${day(clicks)}, and opens of those delivered since ${day(opens)}, when open tracking began.`;
-}
-
-function pct(v: number | null): string {
-  return v === null ? "—" : `${(v * 100).toFixed(v * 100 >= 10 ? 1 : 2)}%`;
 }

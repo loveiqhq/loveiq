@@ -491,6 +491,14 @@ const SESSIONS: FieldTable = {
   watch:
     "Bots and Google's ad crawler are left out by their user agent. Not every session records its end (a tab closed or put away sends none): about seven in ten did in the last 30 days, far fewer further back, and for everyone only from 18 Sep 2026.",
 };
+const RETURNS_T: FieldTable = {
+  source: "production",
+  table: "reader_return",
+  columns: "survey_submission_id, returned_at, source, via",
+  filters: "None of its own: each day back follows its reader's finished survey.",
+  watch:
+    'Written from 17 Nov 2026, the release of the #incoming-surveys "Came back" replies; counted from 18 Nov 2026, its first whole day. One row per reader per Berlin day back, written as the reply goes out; the team\'s own surveys, our probes and crawlers never get one.',
+};
 const REPORTS: FieldTable = {
   source: "production",
   table: "personal_report",
@@ -1461,6 +1469,42 @@ SELECT count(*) FILTER (WHERE returned_at IS NOT NULL) AS came_back, count(*) AS
     tables: [SUBS, SESSIONS, REPORTS],
     query: { lang: "SQL", text: RETURN_BANDS },
     related: ["report.return_band", "report.came_back"],
+  },
+  "report.ping_returns": {
+    label: "Came back within 7 days, any way",
+    what: 'Of everyone who finished the survey, the share who came back within 7 days of finishing, by what first brought them back: the "Came back" replies in their #incoming-surveys thread.',
+    good: "up",
+    stat: "Share",
+    per: "per finished survey",
+    formula: {
+      num: "Finished surveys with a day back within 7 days of finishing",
+      den: "Surveys finished from 18 Nov 2026 whose 7 days are over",
+      mult: "× 100",
+    },
+    caveat:
+      "A way back, half an hour or more after the first visit: a report visit on a later Berlin day than the survey and 3 hours or more after it (the €1.99 page too; a sitting that runs past midnight is still the first visit), a click in one of our emails (not one within 10 seconds of its send, nor a crawler's: link scanners), the unlock question answered, or a survey finished on a later day than it was begun and 3 hours or more after it. Crawlers (AdsBot-Google opens report links; headless browsers and plain HTTP clients, as the reading time leaves them out) and our probes are left out. Everyone who finished counts, not only readers who opened the report. Counted from 18 Nov 2026, the first whole day of the replies: earlier finishers are not counted, and a survey still inside its 7 days is counted once they are over. The query gives each way by its stored key (an email's campaign or stage, or report and draft); the page names them.",
+    tables: [SUBS, RETURNS_T],
+    query: {
+      lang: "SQL",
+      text: `WITH ${RANGE},
+${FINISHED},
+counted AS (
+  SELECT id, created_date_time FROM finished
+   WHERE (created_date_time AT TIME ZONE 'Europe/Berlin')::date >= DATE '2026-11-18'
+     AND created_date_time + interval '7 days' <= now()
+),
+first_back AS (
+  SELECT DISTINCT ON (c.id) c.id, r.source, r.via
+    FROM counted c
+    JOIN reader_return r ON r.survey_submission_id = c.id
+                        AND r.returned_at < c.created_date_time + interval '7 days'
+   ORDER BY c.id, r.returned_at
+)
+SELECT coalesce(via, source) AS way, count(*) AS came_back,
+       (SELECT count(*) FROM counted) AS finished
+  FROM first_back GROUP BY 1 ORDER BY 2 DESC;`,
+    },
+    related: ["report.came_back", "report.return_sources"],
   },
   "report.return_sources": {
     label: "What brought readers back",

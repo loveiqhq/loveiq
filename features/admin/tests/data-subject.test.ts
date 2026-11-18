@@ -96,6 +96,9 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
     if (path.includes("/email_message_event?survey_submission_id=in.(10)")) {
       return ok([{ resend_id: "e1", event_type: "opened", survey_submission_id: 10 }]);
     }
+    if (path.includes("/reader_return?survey_submission_id=in.(10)")) {
+      return ok([{ survey_submission_id: 10, day: "2026-11-18", source: "email" }]);
+    }
     if (path.includes("/unlock_feedback?survey_submission_id=in.(10)")) {
       return ok(
         [{ id: 3, reason: "too_expensive", note: "Half the price", survey_submission_id: 10 }],
@@ -127,6 +130,13 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
     const result = await exportDataSubject("a@x.com");
     expect(result.exportData?.email_message_event).toEqual([
       { resend_id: "e1", event_type: "opened", survey_submission_id: 10 },
+    ]);
+  });
+
+  it("exports the days they came back and what brought them (Art. 15)", async () => {
+    const result = await exportDataSubject("a@x.com");
+    expect(result.exportData?.reader_return).toEqual([
+      { survey_submission_id: 10, day: "2026-11-18", source: "email" },
     ]);
   });
 

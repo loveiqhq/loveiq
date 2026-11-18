@@ -121,7 +121,7 @@ describe("the Unlock feedback page", () => {
     const aside = screen.getByRole("complementary", { name: "Selected reason" });
     expect(within(aside).getByText("More than I wanted to pay")).toBeTruthy();
     expect(within(aside).getByText("What would have felt fair?")).toBeTruthy();
-    expect(within(aside).getByText("21 answers · 21 added detail (100%)")).toBeTruthy();
+    expect(within(aside).getByText("21 answers · 21 added detail (100.0%)")).toBeTruthy();
 
     const privacy = screen.getByRole("button", { name: /Paying felt too personal/ });
     expect(privacy.getAttribute("aria-pressed")).toBe("false");
@@ -145,10 +145,10 @@ describe("the Unlock feedback page", () => {
     }).parentElement!;
     const cells = within(row).getAllByRole("cell");
     // Mobile: 22 answers, 21 of them this reason, in the heat's purple.
-    expect(cells[0]!.textContent).toBe("95%");
+    expect(cells[0]!.textContent).toBe("95.5%");
     expect(cells[0]!.className).not.toMatch(/text-ap-quiet/);
     // Desktop: one answer, greyed.
-    expect(cells[1]!.textContent).toBe("0%");
+    expect(cells[1]!.textContent).toBe("0.0%");
     expect(cells[1]!.className).toMatch(/text-ap-quiet/);
   });
 

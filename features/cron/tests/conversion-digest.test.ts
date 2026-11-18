@@ -2114,7 +2114,7 @@ describe("conversion-digest handler", () => {
     });
 
     it("says when the test starts, not that nobody visited, on the morning before it does", async () => {
-      // 17 Nov's digest reports 16 Nov: a week of round 3's visits, all before the start.
+      // 18 Nov's digest reports 17 Nov: a week of visits, all before the start.
       const before = Array.from({ length: 7 }, (_, i) =>
         new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (7 - i) * 86_400_000)
           .toISOString()
@@ -2151,13 +2151,13 @@ describe("conversion-digest handler", () => {
           } as Parameters<typeof buildConversionDigest>[0])
         ).blocks
       );
-      expect(text).toContain(`the landing test starts on 17 Nov, ${card} against ${video}`);
-      expect(text).toContain("its first numbers arrive in the 18 Nov digest");
+      expect(text).toContain(`the landing test starts on 18 Nov, ${card} against ${video}`);
+      expect(text).toContain("its first numbers arrive in the 19 Nov digest");
       expect(text).not.toContain("no visits recorded");
     });
 
     it("shows the numbers from the morning after the start day", async () => {
-      // 18 Nov's digest reports 17 Nov, the start day itself: counts, not the notice.
+      // 19 Nov's digest reports 18 Nov, the start day itself: counts, not the notice.
       const day = LANDING_TEST_START_DAY;
       const text = blockText(
         (

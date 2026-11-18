@@ -54,7 +54,7 @@ export interface ChartSeries {
   dotted?: boolean;
   axis: "left" | "right";
   unit: Unit;
-  /** Decimals for its figures, where the design fixes them (Start CVR's 2). */
+  /** Decimals for its figures, where the design fixes them (cents); a rate always has one. */
   digits?: number;
   /** Its trend reads good going down (a cost). */
   lowerBetter?: boolean;
@@ -629,7 +629,6 @@ export function buildFocus(input: {
           color: "purple",
           axis: "left",
           unit: "pct",
-          digits: 2,
           num: (q) => tot(q).starts,
           den: (q) => tot(q).visits,
           ok: startsOk,
@@ -675,7 +674,6 @@ export function buildFocus(input: {
           color: "purple",
           axis: "left",
           unit: "pct",
-          digits: 2,
           num: (q) => preSales(q).buyers,
           den: (q) => tot(q).subs,
         },
@@ -706,7 +704,6 @@ export function buildFocus(input: {
           color: "purple",
           axis: "left",
           unit: "pct",
-          digits: 2,
           num: (q) => fullSales(q).buyers,
           den: (q) => tot(q).subs,
         },
@@ -846,7 +843,7 @@ export function buildFocus(input: {
             ? "Not asked yet."
             : votes === 0
               ? `Not asked yet. No chapter was rated in this range${allTraffic}.`
-              : `Not asked yet. ${Math.round((ratings.up / votes) * 100)}% of ${count(votes)} chapter rating${votes === 1 ? "" : "s"} say helpful${allTraffic}.`,
+              : `Not asked yet. ${fmt("pct", ratings.up / votes)} of ${count(votes)} chapter rating${votes === 1 ? "" : "s"} say helpful${allTraffic}.`,
         ratings: on && ratings && votes > 0 ? { up: ratings.up, votes } : null,
       },
       survey: {

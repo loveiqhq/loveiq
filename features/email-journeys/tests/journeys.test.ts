@@ -290,6 +290,7 @@ function seed(): void {
       status: "succeeded",
       is_test: false,
       customer_email: "paused-buyer@example.com",
+      amount_cents: 199,
       paid_at: iso(T0 - 2 * H),
       survey_started_at: iso(T0 - H),
       consumed_submission_id: null,
@@ -416,6 +417,19 @@ describe("the email journeys over eight days", () => {
     expect(html).toContain(
       "/sexual-archetype/continue?t=rpp_a&amp;utm_source=email&amp;utm_medium=nurture&amp;utm_campaign=pts_survey_waiting"
     );
+  });
+
+  it("names what the paused buyer paid in their R1, from the purchase", async () => {
+    switches.add("ptsReminders");
+    await runDays(1);
+    const r1 = (resend as { emails: { send: ReturnType<typeof vi.fn> } }).emails.send.mock.calls
+      .map(
+        (c) => c[0] as { to: string; html: string; tags: Array<{ name: string; value: string }> }
+      )
+      .filter((p) => p.to === "paused-buyer@example.com")
+      .at(-1)!;
+    expect(r1.tags).toContainEqual({ name: "stage", value: "pts_survey_paused" });
+    expect(r1.html).toContain("€1.99 for the survey and your initial report");
   });
 
   it("frees a claim Resend rate-limited (429) and sends it on the next run, once", async () => {
