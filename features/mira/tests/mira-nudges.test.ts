@@ -207,6 +207,8 @@ describe("runNudges", () => {
       type: "agreement",
       local_day: "2026-11-24",
     });
+    // The words live only in the chat, so they go when the chat goes.
+    expect(inserted[0]).not.toHaveProperty("body");
     expect(addMessages).toHaveBeenCalledWith(CHAT_ID, [
       { role: "assistant", content: "Hi Lea, we agreed on one soft lamp. Did you try it?" },
     ]);
