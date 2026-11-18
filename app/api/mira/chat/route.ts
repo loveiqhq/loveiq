@@ -78,10 +78,18 @@ const schema = z.object({
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function cleanHistory(history: MiraTurn[]): MiraTurn[] {
-  const turns = history.filter((t) => t.content.trim().length > 0);
+  const turns: MiraTurn[] = [];
+  for (const t of history) {
+    if (!t.content.trim()) continue;
+    const last = turns.at(-1);
+    // Mira's first reply and the intake invitation are two messages on screen, one turn here.
+    if (last?.role === t.role) last.content += `\n\n${t.content}`;
+    else turns.push({ role: t.role, content: t.content });
+  }
+  const recent = turns.slice(-HISTORY_TURNS);
   // The model's conversation must open with the person; Mira's greeting is UI, not history.
-  while (turns[0]?.role === "assistant") turns.shift();
-  return turns.slice(-HISTORY_TURNS);
+  while (recent[0]?.role === "assistant") recent.shift();
+  return recent;
 }
 
 export async function POST(request: Request) {
@@ -207,11 +215,12 @@ export async function POST(request: Request) {
   }
 
   const isFirst = turns.length === 0;
-  turns.push({ role: "user", content: message });
+  turns = cleanHistory([...turns, { role: "user", content: message }]);
 
   let reply: string;
   let sources: CitedSource[] = [];
   let crisis = false;
+  let refused = false;
 
   if (crisisNow) {
     reply = miraConfig.crisisMessage;
@@ -226,15 +235,19 @@ export async function POST(request: Request) {
           : "Mira is busy for a moment. Please try again.";
       return NextResponse.json({ error }, { status });
     }
-    if (result.refused || !result.text) {
+    const out = result.refused ? null : parseReply(result.text);
+    if (!out?.text) {
       reply = miraConfig.refusalMessage;
+      refused = true;
     } else {
-      const out = parseReply(result.text);
-      reply = out.text || miraConfig.refusalMessage;
+      reply = out.text;
       sources = out.sources;
       crisis = out.crisis;
     }
   }
+
+  // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
+  const invitation = isFirst && !crisis && !refused ? miraConfig.intakeInvitation : null;
 
   let messageId: number | null = null;
   if (account && remember && !overCap) {
@@ -243,6 +256,7 @@ export async function POST(request: Request) {
       const ids = await addMessages(chatId, [
         { role: "user", content: message },
         { role: "assistant", content: reply, sources },
+        ...(invitation ? [{ role: "assistant" as const, content: invitation }] : []),
       ]);
       messageId = ids[1] ?? null;
     } catch (err) {
@@ -263,6 +277,7 @@ export async function POST(request: Request) {
     crisisLines: crisis ? crisisFor(country) : undefined,
     chatId,
     messageId,
+    ...(invitation ? { invitation } : {}),
     ...(freeLeft === null ? {} : { freeLeft }),
   });
 }

@@ -1,7 +1,10 @@
 {
-  "openingMessage": "Hi, I’m Mira. I’m here to help you feel more at home in your body. What’s been on your mind?",
-  "intakeInvitation": "To really support you, I’d love to get to know you a little better. I have 12 short questions that matter most for helping you well, about 5–10 minutes in total. You can skip any of them. Shall we go through them together?",
-  "intakeReplyButtons": ["Yes, let’s do it", "Maybe later"],
+  "openingMessage": "Hi, I’m Mira, glad you’re here. Feeling unsure about your body during sex is common and nothing to be embarrassed about. I draw on research about body confidence, and we’ll go one gentle step at a time. Where would you like to start? Pick a prompt below or tell me in your own words.",
+  "intakeInvitation": "Before I give you any advice, I need to understand your situation. These 12 short questions are the key to support that really fits you, rather than generic tips. It takes about 5–10 minutes, and if a question isn’t clear, just ask me and I’ll explain. Shall we start?",
+  "intakeReplyButtons": [
+    "Yes, let’s do it",
+    "Maybe later"
+  ],
   "starterChips": [
     "What are body confidence root causes?",
     "How to solve body confidence issues?",
@@ -15,31 +18,53 @@
   "disclaimer": "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you’re struggling, please reach out to a qualified professional.",
   "intakeQuestions": [
     {
-      "id": "gender",
-      "question": "How do you describe your gender?",
+      "id": "age",
+      "question": "May I ask your age?",
       "answerType": "single",
-      "options": ["Woman", "Man", "Non-binary", "Self-describe", "Prefer not to say"],
-      "instruction": "Ask early, before personal advice"
+      "options": [
+        "18–24",
+        "25–34",
+        "35–44",
+        "45–54",
+        "55+",
+        "Prefer not to say"
+      ],
+      "instruction": "Ask early. 18+ is already confirmed"
     },
     {
       "id": "rel",
       "question": "Are you in a relationship right now?",
       "answerType": "single",
-      "options": ["Single", "Dating", "Partnered", "It’s complicated"],
+      "options": [
+        "Single",
+        "Dating",
+        "Partnered",
+        "It’s complicated"
+      ],
       "instruction": "Ask in the first chat"
     },
     {
       "id": "where",
       "question": "When do you feel it most?",
       "answerType": "multi",
-      "options": ["Mirror", "Intimacy", "Clothes", "Photos", "Sport", "Social"],
+      "options": [
+        "Mirror",
+        "Intimacy",
+        "Clothes",
+        "Photos",
+        "Sport",
+        "Social"
+      ],
       "instruction": "Skip “Intimacy” if single"
     },
     {
       "id": "severity",
       "question": "How much does this get in the way for you right now, in daily life or in sex?",
       "answerType": "likert",
-      "options": ["1 = Hardly at all", "7 = A great deal"],
+      "options": [
+        "1 = Not at all",
+        "7 = Completely"
+      ],
       "instruction": "Ask once the main concern is clear. 6–7: check current support before suggesting exercises"
     },
     {
@@ -88,7 +113,12 @@
       "id": "context",
       "question": "Does it feel different when you’re on your own than with a partner?",
       "answerType": "single",
-      "options": ["Mostly alone", "Mostly with a partner", "Both the same", "Not sure"],
+      "options": [
+        "Mostly alone",
+        "Mostly with a partner",
+        "Both the same",
+        "Not sure"
+      ],
       "instruction": "Ask if partnered or dating. If single, ask about solo moments only"
     },
     {
@@ -102,21 +132,35 @@
       "id": "support",
       "question": "Is a therapist or doctor helping you with this?",
       "answerType": "single",
-      "options": ["Yes", "No", "Prefer not to say"],
+      "options": [
+        "Yes",
+        "No",
+        "Prefer not to say"
+      ],
       "instruction": "Ask before suggesting exercises"
     },
     {
       "id": "weekly",
       "question": "Progress is all about commitment. How about a weekly 15-minute session with me?",
       "answerType": "slots",
-      "options": ["Mon 18:00", "Wed 12:30", "Thu 19:00", "Sun 10:00", "Not ready yet"],
-      "instruction": "End of first chat. On a slot, send a weekly invite. If not ready, ask again in a week"
+      "options": [
+        "Mon 18:00",
+        "Wed 12:30",
+        "Thu 19:00",
+        "Sun 10:00",
+        "Not ready yet"
+      ],
+      "instruction": "End of the first chat. If they pick a slot, note it and say you look forward to it; the beta can’t send invites or reminders yet, so don’t promise one. If not ready, ask again in a later chat"
     },
     {
       "id": "safety",
       "question": "Do food or exercise ever feel out of control?",
       "answerType": "single",
-      "options": ["Yes", "Sometimes", "No"],
+      "options": [
+        "Yes",
+        "Sometimes",
+        "No"
+      ],
       "instruction": "Only if food or exercise come up. Yes or Sometimes routes to support lines"
     }
   ],

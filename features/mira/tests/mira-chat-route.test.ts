@@ -167,6 +167,35 @@ describe("POST /api/mira/chat", () => {
     expect(addMessages).not.toHaveBeenCalled();
   });
 
+  it("follows Mira's first reply with the intake invitation, and only then", async () => {
+    const first = await (await post({ message: "I hide during sex", consent: true })).json();
+    expect(first.invitation).toBe(miraConfig.intakeInvitation);
+    const later = await (
+      await post({ message: "and then?", consent: true, history: openChat })
+    ).json();
+    expect(later.invitation).toBeUndefined();
+    vi.mocked(askModel).mockResolvedValueOnce({ ok: true, text: "", refused: true });
+    const refused = await (await post({ message: "hi", consent: true })).json();
+    expect(refused.invitation).toBeUndefined();
+    const crisis = await (await post({ message: "I want to kill myself", consent: true })).json();
+    expect(crisis.invitation).toBeUndefined();
+  });
+
+  it("sends the reply and the invitation to the model as one turn, after a yes", async () => {
+    await post({
+      message: "Yes, let’s do it",
+      consent: true,
+      history: [
+        { role: "user", content: "I hide during sex" },
+        { role: "assistant", content: "That sounds hard." },
+        { role: "assistant", content: miraConfig.intakeInvitation },
+      ],
+    });
+    const turns = vi.mocked(askModel).mock.calls[0]![2];
+    expect(turns.map((t) => t.role)).toEqual(["user", "assistant", "user"]);
+    expect(turns[1]!.content).toBe(`That sounds hard.\n\n${miraConfig.intakeInvitation}`);
+  });
+
   it("refuses an oversized anonymous history", async () => {
     const big = "x".repeat(4000);
     const history = Array.from({ length: 7 }, (_, i) => ({
@@ -228,10 +257,13 @@ describe("POST /api/mira/chat", () => {
     });
     const body = await (await post({ message: "I compare myself a lot", consent: true })).json();
     expect(addMessages).toHaveBeenCalledTimes(1);
+    // A first message: the reply, then Sanjin's intake invitation as its own message.
     expect(vi.mocked(addMessages).mock.calls[0]![1].map((m) => m.role)).toEqual([
       "user",
       "assistant",
+      "assistant",
     ]);
+    expect(vi.mocked(addMessages).mock.calls[0]![1][2]!.content).toBe(miraConfig.intakeInvitation);
     expect(body.messageId).toBe(12);
     expect(body.chatId).toBe("6f2c4a1e-1111-4222-8333-944455556666");
   });

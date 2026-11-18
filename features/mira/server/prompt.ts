@@ -36,7 +36,31 @@ export type PersonContext = {
   signedIn: boolean;
 };
 
+type IntakeQuestion = {
+  id: string;
+  question: string;
+  answerType: string;
+  options?: string[];
+  instruction?: string;
+};
+
+/** Sanjin's intake questions, as the model needs them: wording, answers and when to ask. */
+export function renderIntake(questions = miraConfig.intakeQuestions as IntakeQuestion[]): string {
+  return questions
+    .map((q) => {
+      const answers = q.options?.length ? ` Answers: ${q.options.join(" · ")}.` : "";
+      const when = q.instruction ? ` When: ${q.instruction}.` : "";
+      return `- ${q.question}${answers}${when}`;
+    })
+    .join("\n");
+}
+
 export const STABLE_INSTRUCTIONS = `${MIRA_SYSTEM_PROMPT.trim()}
+
+INTAKE QUESTIONS
+The app invites the person to these right after your first reply (the invitation and their answer are in the conversation). Ask them one per message, in your own words.
+
+${renderIntake()}
 
 EVIDENCE CARDS
 These are the only research sources you may draw on. Cite a card by its id in your Sources line.
