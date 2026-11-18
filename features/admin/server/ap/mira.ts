@@ -296,7 +296,11 @@ export function figures(prep: Prepared, from: string, to: string, today: string)
  * DAU % and WAU %: each day, the share of the accounts open by then that sent a message that
  * day, or in the 7 days to it; averaged over the range's days that had an account.
  */
-function active(prep: Prepared, from: string, to: string): { dau: number | null; wau: number | null } {
+function active(
+  prep: Prepared,
+  from: string,
+  to: string
+): { dau: number | null; wau: number | null } {
   const dau: number[] = [];
   const wau: number[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
@@ -311,8 +315,7 @@ function active(prep: Prepared, from: string, to: string): { dau: number | null;
   return { dau: mean(dau), wau: mean(wau) };
 }
 
-const monday = (day: string) =>
-  addDays(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
+const monday = (day: string) => addDays(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
 
 export interface CohortRow {
   /** The sign-up week's Monday. */
