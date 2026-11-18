@@ -114,6 +114,7 @@ export async function POST(request: Request) {
   let turns: MiraTurn[];
   let chatId: string | null = null;
   let remember = false;
+  let overCap = false;
   let freeLeft: number | null = null;
   let country = requestCountry(request);
 
@@ -123,14 +124,14 @@ export async function POST(request: Request) {
       if (!profile) {
         return NextResponse.json({ error: "Please sign in again.", signIn: true }, { status: 401 });
       }
-      const daily = crisisNow
-        ? null
-        : await checkRateLimit(account.id, {
-            bucket: "mira-daily",
-            limit: DAILY_MESSAGES,
-            windowMs: DAY_MS,
-          });
-      if (daily && !daily.allowed) {
+      const daily = await checkRateLimit(account.id, {
+        bucket: "mira-daily",
+        limit: DAILY_MESSAGES,
+        windowMs: DAY_MS,
+      });
+      // Past the cap a crisis message is still answered, just not stored (no DB growth by spam).
+      overCap = !daily.allowed;
+      if (overCap && !crisisNow) {
         return NextResponse.json(
           { error: "That's today's limit for the beta. Mira is here again tomorrow." },
           { status: 429 }
@@ -179,6 +180,9 @@ export async function POST(request: Request) {
             { status: 429 }
           );
         }
+        // ponytail: "new conversation" is read from the history the browser sends, so a crafted
+        // request can skip the count; no easier than clearing the cookie, and the daily caps above
+        // bound the cost. Upgrade: a server-signed conversation token if mira_event shows abuse.
         if (turns.length === 0) {
           // A new conversation: the free ones are counted per browser id, then the sign-up card.
           const free = await checkRateLimit(anon!, {
@@ -233,7 +237,7 @@ export async function POST(request: Request) {
   }
 
   let messageId: number | null = null;
-  if (account && remember) {
+  if (account && remember && !overCap) {
     try {
       chatId ??= await createChat(account.id, message.replace(/\s+/g, " ").slice(0, 80));
       const ids = await addMessages(chatId, [

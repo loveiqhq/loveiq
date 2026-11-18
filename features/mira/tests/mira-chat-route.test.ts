@@ -155,7 +155,7 @@ describe("POST /api/mira/chat", () => {
       country: "DE",
       gender: null,
       style: {},
-      remember_chats: false,
+      remember_chats: true,
       use_assessment: false,
       consent_at: "2026-11-18T10:00:00Z",
       consent_version: "mira-2026-11-18",
@@ -164,6 +164,7 @@ describe("POST /api/mira/chat", () => {
     const res = await post({ message: "I want to kill myself", consent: true });
     expect(res.status).toBe(200);
     expect((await res.json()).crisisLines.code).toBe("DE");
+    expect(addMessages).not.toHaveBeenCalled();
   });
 
   it("refuses an oversized anonymous history", async () => {
