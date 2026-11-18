@@ -246,3 +246,41 @@ export async function findAssessment(email: string): Promise<AssessmentResult | 
     reportPath: token ? `/report/${token.token}` : null,
   };
 }
+
+/** Guesses one emailed code gets, and how long it lives (Supabase's own code lifetime). */
+export const CODE_MAX_ATTEMPTS = 5;
+export const CODE_TTL_SECONDS = 3600;
+
+/**
+ * Written when Mira emails a code: a new code resets the guesses. Without this row the verify
+ * route checks no code at all, so it can never be used to guess a code Mira did not send
+ * (the admin panel and Jarvis share this Supabase project). See the migration
+ * 20261118130000_mira_sign_in_code.sql.
+ */
+export async function recordCodeIssued(email: string): Promise<void> {
+  const res = await supabaseFetch("/rest/v1/mira_sign_in_code?on_conflict=email", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({ email, issued_at: new Date().toISOString(), attempts: 0 }),
+  });
+  if (!res.ok) throw new Error(`mira code record failed (${res.status})`);
+}
+
+/** Reserves one guess for the address's current code, atomically, before it is checked. */
+export async function claimCodeAttempt(email: string): Promise<boolean> {
+  const res = await supabaseFetch("/rest/v1/rpc/mira_claim_code_attempt", {
+    method: "POST",
+    body: JSON.stringify({
+      p_email: email,
+      p_max: CODE_MAX_ATTEMPTS,
+      p_ttl_seconds: CODE_TTL_SECONDS,
+    }),
+  });
+  if (!res.ok) return false; // fail closed
+  return (await res.json()) === true;
+}
+
+/** A used code's row goes, so it cannot be guessed at again. */
+export async function consumeCode(email: string): Promise<void> {
+  await supabaseFetch(`/rest/v1/mira_sign_in_code?email=eq.${enc(email)}`, { method: "DELETE" });
+}

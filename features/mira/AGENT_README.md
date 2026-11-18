@@ -22,7 +22,7 @@
 
 **Safety:** a message plainly about suicide or self-harm gets Sanjin's message E and the support lines without a model call (`server/safety.ts`); the model ends a reply with `[[CRISIS]]` when a stop rail fires, which opens the panel. Rules never depend on the coaching style.
 
-**Accounts:** Supabase Auth in the same project as the admin panel and Jarvis, under Mira's own cookie (`mira-auth`). Safe because nothing trusts "any signed-in user": admin routes check `admin_users`, Jarvis checks its members, no table grants the `authenticated` role anything.
+**Accounts:** Supabase Auth in the same project as the admin panel and Jarvis, under Mira's own cookie (`mira-auth`). A code is checked only if Mira emailed it to that address within the hour, with 5 guesses per code reserved atomically before the check (`mira_sign_in_code`, `mira_claim_code_attempt`), so the route can't be used to guess anyone else's code and a new code always works. Safe because nothing trusts "any signed-in user": admin routes check `admin_users`, Jarvis checks its members, no table grants the `authenticated` role anything.
 
 **Open, before production:**
 
