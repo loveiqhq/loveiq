@@ -40,9 +40,17 @@ const HISTORY = 16;
 
 // ── Tokens: stateless links in the email (no sign-in needed to stop or change nudges) ──────────
 
+/** The same fallback chain as the share-recipient cookies: a dedicated secret, else derived. */
 function secret(): string | null {
-  const s = process.env.UNSUBSCRIBE_SECRET?.trim();
-  return s && s.length >= 16 ? s : null;
+  for (const v of [
+    process.env.UNSUBSCRIBE_SECRET,
+    process.env.SHARE_VERIFY_SECRET,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+  ]) {
+    const s = v?.trim();
+    if (s && s.length >= 16) return s;
+  }
+  return null;
 }
 
 function sign(purpose: "prefs" | "open", id: string, key: string): string {
@@ -436,7 +444,7 @@ export async function runNudges(
             user_id: user.id,
             type: nudge.type,
             subject,
-            body: nudge.body,
+
             local_day: local.day,
             chat_id: chat.id,
           }),
