@@ -18,8 +18,9 @@ export function SupportPanel({
   highlight: Country | null;
   onClose: () => void;
 }) {
-  const others = DATA.countries.filter((c) => c.code !== highlight?.code);
-  const ordered = highlight ? [highlight, ...others] : DATA.countries;
+  // Only a listed country moves to the top; "Somewhere else" already closes the list.
+  const top = DATA.countries.find((c) => c.code === highlight?.code);
+  const ordered = top ? [top, ...DATA.countries.filter((c) => c !== top)] : DATA.countries;
   return (
     <div
       role="dialog"
