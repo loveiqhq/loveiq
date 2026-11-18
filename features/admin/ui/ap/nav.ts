@@ -19,6 +19,7 @@ export interface NavGroup {
 
 export const AP_BASE = "/admin/ap";
 export const ASSESSMENT_A = `${AP_BASE}/assessment-a`;
+export const MIRA = `${AP_BASE}/mira`;
 
 export const NAV: NavGroup[] = [
   {
@@ -66,6 +67,29 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    // Marcus's "MVP success" boards, as sections of one page.
+    title: "AI coach",
+    items: [
+      { key: "mira", label: "Mira (beta)", href: MIRA, level: 1 },
+      { key: "mira-overview", label: "Overview", href: MIRA, anchor: "overview", level: 2 },
+      {
+        key: "mira-engagement",
+        label: "Engagement & retention",
+        href: MIRA,
+        anchor: "engagement",
+        level: 2,
+      },
+      {
+        key: "mira-outcomes",
+        label: "Outcomes & satisfaction",
+        href: MIRA,
+        anchor: "outcomes",
+        level: 2,
+      },
+      { key: "mira-nudges", label: "Nudge emails", href: MIRA, anchor: "nudges", level: 2 },
+    ],
+  },
+  {
     title: "Data sources",
     items: [
       { key: "sources", label: "Catalog", href: `${AP_BASE}/sources`, level: 1 },
@@ -97,6 +121,7 @@ export function activeKey(pathname: string): string {
   if (p === `${ASSESSMENT_A}/landing`) return "a-landing";
   if (p === `${ASSESSMENT_A}/survey`) return "a-survey";
   if (p === `${ASSESSMENT_A}/report`) return "a-report";
+  if (p === MIRA) return "mira";
   if (p === `${AP_BASE}/sources`) return "sources";
   if (p === `${AP_BASE}/explorer`) return "explorer";
   return "";
