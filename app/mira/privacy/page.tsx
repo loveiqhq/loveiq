@@ -8,17 +8,13 @@ export const metadata: Metadata = {
 };
 
 /**
- * Mira's privacy notice, in plain words. A DRAFT for the beta, written 18 Nov 2026 to match what
- * the code does; it needs legal review before Mira goes to production, together with the main
- * privacy policy it points to.
+ * Mira's privacy notice, in plain words, written 18 Nov 2026 to match what the code does and
+ * checked by Eman on 20 Nov 2026. Change it whenever what Mira stores or shares changes.
  */
 export default function MiraPrivacyPage() {
   return (
     <MiraFrame>
       <article className="max-w-[720px] text-[15px] leading-relaxed text-ap-body [&_h2]:mt-8 [&_h2]:font-serif [&_h2]:text-[22px] [&_h2]:font-medium [&_h2]:text-ap-ink [&_li]:mt-1 [&_ul]:list-disc [&_ul]:pl-5">
-        <p className="mb-4 rounded-2xl bg-[#fdf3dc] px-4 py-3 text-[14px]">
-          Draft for the beta, pending legal review.
-        </p>
         <h1 className="font-serif text-[34px] font-medium text-ap-ink">
           How Mira handles your data
         </h1>
