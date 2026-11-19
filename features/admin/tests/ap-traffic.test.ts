@@ -252,7 +252,7 @@ describe("Traffic page builder", () => {
       facts: factsFixture({ from: "2026-10-14", to: "2026-10-14" }),
       today: "2026-10-16",
     });
-    const hero = p.experiments.arms.filter((a) => a.test === "Landing hero");
+    const hero = p.experiments.arms.filter((a) => a.test === "Video page vs. question card");
     for (const a of hero)
       expect(a).toMatchObject({ visitors: null, startCvr: null, revPerVisitor: null });
     expect(hero[1]!.why).toBe("Visits don't record the device.");
@@ -279,17 +279,20 @@ describe("Traffic page builder", () => {
       }),
       today: "2026-11-19",
     });
-    const t = p.experiments.arms.filter((a) => a.test === "New landing page");
+    const t = p.experiments.arms.filter((a) => a.test === "Pain-point page vs. video page");
     expect(t.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
-      ["Video page", true, 40, "Since 17 Nov 2026 · live", false],
-      ["Pain-point page", false, 50, "Since 17 Nov 2026 · live", false],
+      ["Video page (V3)", true, 40, "Since 17 Nov 2026 · live", false],
+      ["Pain-point page (V4)", false, 50, "Since 17 Nov 2026 · live", false],
     ]);
-    const hero = p.experiments.arms.filter((a) => a.test === "Landing hero");
+    const hero = p.experiments.arms.filter((a) => a.test === "Video page vs. question card");
     expect(hero.map((a) => [a.note, a.visitors, a.ended])).toEqual([
       ["14 Oct – 11 Nov 2026 · ended", null, true],
       ["14 Oct – 11 Nov 2026 · ended", null, true],
     ]);
-    expect(hero[1]!.why).toBe("Ended on 11 Nov 2026: the video stays, as #10's version A");
+    expect(hero.map((a) => a.arm)).toEqual(["Question card (V2)", "Video page (V3)"]);
+    expect(hero[1]!.why).toBe(
+      "Ended on 11 Nov 2026: the video page stays, as version A of the pain-point page test"
+    );
   });
 
   it("reads the price test without readers who paid before the survey (pay to start)", () => {
@@ -369,10 +372,10 @@ describe("Traffic page builder", () => {
         .filter((a) => a.test !== "Email question")
         .map((a) => [a.test, a.ended ?? false])
     ).toEqual([
-      ["New landing page", false],
-      ["New landing page", false],
-      ["Landing hero", true],
-      ["Landing hero", true],
+      ["Pain-point page vs. video page", false],
+      ["Pain-point page vs. video page", false],
+      ["Video page vs. question card", true],
+      ["Video page vs. question card", true],
       ["Pricing 3.0", false],
       ["Pricing 3.0", false],
     ]);

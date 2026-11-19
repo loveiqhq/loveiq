@@ -352,14 +352,15 @@ const WEEK = "date_trunc(:grain, DAY)::date";
  * The tests the page reads, each arm in its window: from the test's first whole day (or the
  * range's), to the range's end or yesterday, or the test's last whole day once it ended (the
  * email question on 4 Nov 2026: from then every free run is asked, and stamped, anonymous; the
- * landing hero, #6, on 11 Nov 2026, the registry's last day). Both landing tests are read by
+ * video page vs. question card test, #6, on 11 Nov 2026, the registry's last day). The landing
+ * tests carry the Landing page's names (server/ap/landing.ts, LANDING_TESTS) and are read by
  * their visits and starts.
  */
 const EXP = `tests (test, arm, control, first_day, last_day) AS (VALUES
-  ('New landing page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date),
-  ('New landing page', 'pain_point', false, DATE '${LANDING_TEST_START_DAY}', NULL),
-  ('Landing hero', 'white_card', true, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
-  ('Landing hero', 'white_video', false, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
+  ('Pain-point page vs. video page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date),
+  ('Pain-point page vs. video page', 'pain_point', false, DATE '${LANDING_TEST_START_DAY}', NULL),
+  ('Video page vs. question card', 'white_card', true, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
+  ('Video page vs. question card', 'white_video', false, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
   ('Pricing 3.0', 'A3', true, DATE '2026-10-08', NULL),
   ('Pricing 3.0', 'B3', false, DATE '2026-10-08', NULL),
   ('Email question', 'control', true, DATE '2026-10-09', DATE '2026-11-03'),
@@ -390,7 +391,7 @@ arm_finishers AS (
     JOIN finishers f ON (f.created_date_time AT TIME ZONE 'Europe/Berlin')::date BETWEEN w.from_day AND w.to_day
     LEFT JOIN price_arm pa ON pa.sid = f.id
    WHERE CASE
-           WHEN w.test IN ('New landing page', 'Landing hero') THEN f.j->>'landing_variant' = w.arm
+           WHEN w.test IN ('Pain-point page vs. video page', 'Video page vs. question card') THEN f.j->>'landing_variant' = w.arm
            WHEN w.test = 'Email question' THEN f.j->>'contact_question_arm' = w.arm
            ELSE pa.arm = w.arm AND f.created_date_time >= timestamptz '2026-10-08 15:23:00+00' END
      -- A survey bought before it was taken (pay to start): no arm decided its sale.
@@ -402,7 +403,7 @@ arms AS (
   SELECT w.test, w.arm, w.control,
          -- The landing versions' visits (the visit log records the version).
          (SELECT count(*) FROM funnel_event fe
-           WHERE w.test IN ('New landing page', 'Landing hero') AND fe.event_type = 'unique_visitor'
+           WHERE w.test IN ('Pain-point page vs. video page', 'Video page vs. question card') AND fe.event_type = 'unique_visitor'
              AND fe.landing_variant = w.arm
              AND fe.day BETWEEN w.from_day AND w.to_day
              AND lower(trim(coalesce(fe.utm_source, ''))) NOT IN ${TEST_SOURCES}) AS visitors,
@@ -443,9 +444,9 @@ const EXP_STATS = sql(
   [FINISHERS, SALES, STARTS, EXP],
   `, rates AS (
   SELECT test, control,
-         CASE WHEN test IN ('New landing page', 'Landing hero') THEN starts
+         CASE WHEN test IN ('Pain-point page vs. video page', 'Video page vs. question card') THEN starts
               WHEN test = 'Pricing 3.0' THEN payers ELSE finished_after_email END AS k,
-         CASE WHEN test IN ('New landing page', 'Landing hero') THEN visitors
+         CASE WHEN test IN ('Pain-point page vs. video page', 'Video page vs. question card') THEN visitors
               WHEN test = 'Pricing 3.0' THEN submissions ELSE reached_email END AS n
     FROM arms
 ), ab AS (
