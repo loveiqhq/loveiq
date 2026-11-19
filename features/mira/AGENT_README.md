@@ -6,7 +6,7 @@
 
 - `app/mira/page.tsx` → `ui/MiraChat.tsx`: boards 01 (anonymous chat), 01b (free limit), 03 (coaching style) and 08a (chats, signed in).
 - `app/mira/start` → `ui/SignUpFlow.tsx`: boards 04, 05, 06 (email code; no WhatsApp step).
-- `app/mira/home` → `ui/MiraHome.tsx`: boards 08 and 08b. `app/mira/settings` → `ui/MiraSettings.tsx`: board 08c, cut for the beta. `app/mira/feedback` → `ui/MiraFeedback.tsx`: board 10. `app/mira/privacy`: Mira's privacy notice (draft).
+- `app/mira/home` → `ui/MiraHome.tsx`: boards 08 and 08b. `app/mira/settings` → `ui/MiraSettings.tsx`: board 08c, cut for the beta. `app/mira/feedback` → `ui/MiraFeedback.tsx`: board 10. `app/mira/privacy`: Mira's privacy notice.
 - API: `app/api/mira/chat`, `auth`, `me`, `chats/[id]`, `event` (see `docs/api.md`).
 - Tables: `mira_user`, `mira_chat`, `mira_message`, `mira_event` (`supabase/migrations/20261118120000_mira_mvp.sql`).
 
@@ -16,9 +16,9 @@
 
 - Anyone can open the chat, at `/mira` on loveiq.org, branded Applied Psychometrics. One domain keeps the sign-in simple; `app.appliedpsychometrics.org` can point here later.
 - The free account is asked for when an anonymous person starts an 11th conversation (`ANON_FREE_CONVERSATIONS`, Marcus's "after 10 conversations"). Messages are capped at 50 a day per person (`DAILY_MESSAGES`; 300 a day per network for anonymous chats). A crisis message is never stopped by a limit.
-- Mira's privacy notice is drafted here; legal review before production.
+- Mira's privacy notice lives here; Eman checked it on 20 Nov 2026.
 - Model: Claude Sonnet, with Claude Haiku when it is down (Sanjin's coach config, board 09, RFD 18 Nov): `MIRA_LLM_KEY`, `MIRA_LLM_MODEL`, `MIRA_LLM_FALLBACK_MODEL`. The board asked for EU-only processing, which Anthropic's own API doesn't offer; Eman decided on 19 Nov to run on Anthropic's API (the privacy page says messages may be processed outside the EU).
-- Sign-in by emailed code or with Google (`server/google.ts`, our own OAuth code flow with PKCE, scope `openid email`, trusted only for Gmail or Workspace addresses (`hd`) and never for `admin_users`, then the same Supabase user as the code; `MIRA_GOOGLE_CLIENT_ID` + `MIRA_GOOGLE_CLIENT_SECRET`). No Apple yet (it needs a paid Apple Developer account). Typing only (no spoken Talk), no nudge emails or session reminders yet, no admin screens (change `content/` instead).
+- Sign-in by emailed code or with Google (`server/google.ts`, our own OAuth code flow with PKCE, scope `openid email`, trusted only for Gmail or Workspace addresses (`hd`) and never for `admin_users`, then the same Supabase user as the code; `MIRA_GOOGLE_CLIENT_ID` + `MIRA_GOOGLE_CLIENT_SECRET`, from the "Mira web" client in the Google Cloud project `loveiq-mira`, consent screen "Mira", External, In production; the console never shows the secret again, a copy is in Eman's Keychain). No Apple yet (it needs a paid Apple Developer account). Typing only (no spoken Talk), no nudge emails or session reminders yet, no admin screens (change `content/` instead).
 
 **Safety:** a message plainly about suicide or self-harm gets Sanjin's message E and the support lines without a model call (`server/safety.ts`); the model ends a reply with `[[CRISIS]]` when a stop rail fires, which opens the panel. Rules never depend on the coaching style.
 
@@ -35,6 +35,6 @@
 - Weekly session invites and reminders: not built; Mira asks for a time but promises no invite.
 - Sanjin checks the evidence cards; the 4 core books (C24 to C27) and C15 are not in; a lawful-copy mark per source.
 - Crisis lines: team review of his 9 countries and of the Find A Helpline fallback.
-- Legal review of the consent wording, the privacy notice and the legal scope; the main privacy policy to name Mira.
+- Legal: Eman checked the consent wording, the privacy notice and the legal scope, and approved them on 20 Nov 2026. Still open: the main privacy policy to name Mira.
 
 **Does NOT belong:** the LoveIQ survey or report (Mira only reads the result, matched on the verified email), Jarvis (company brain).
