@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 /**
@@ -6,6 +7,12 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
  * run on our own server, so no Google script loads on the page and the CSP stays as it is.
  * Google only tells us the person's confirmed email address (scope `openid email`). The account
  * is then the same Supabase user the emailed code makes, so both ways reach one account.
+ *
+ * Google is trusted for an address only where Google runs it: Gmail, or a Google Workspace
+ * account on its own domain (the `hd` claim). A Google account can be opened on any address, and
+ * `email_verified` only says Google checked it once; whoever opened it may have lost that inbox
+ * since (an ex-partner, a former colleague). Those addresses, and staff addresses (admin_users,
+ * whose session would also open the admin panel), sign in by emailed code instead.
  *
  * Needs MIRA_GOOGLE_CLIENT_ID and MIRA_GOOGLE_CLIENT_SECRET: a "Web application" client in the
  * `loveiq-mira` Google Cloud project, with each origin below + CALLBACK as a redirect URI.
@@ -76,6 +83,13 @@ export function sameState(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/** True when Google runs this address: Gmail, or Workspace with `hd` naming its own domain. */
+export function googleRunsAddress(email: string, hd: unknown): boolean {
+  const domain = email.split("@")[1] ?? "";
+  if (domain === "gmail.com" || domain === "googlemail.com") return true;
+  return typeof hd === "string" && hd.toLowerCase() === domain;
+}
+
 /**
  * Checks the claims of Google's ID token and returns the confirmed email, or null. The token
  * comes straight from Google's token endpoint over TLS, in exchange for our client secret, so
@@ -86,7 +100,7 @@ export function checkIdToken(
   clientId: string,
   nonce: string,
   now = Date.now()
-): { email: string } | null {
+): { email: string; googleRuns: boolean } | null {
   const payload = idToken?.split(".")[1];
   if (!payload) return null;
   let c: Record<string, unknown>;
@@ -102,7 +116,21 @@ export function checkIdToken(
   if (c.email_verified !== true && c.email_verified !== "true") return null;
   const email = typeof c.email === "string" ? c.email.trim().toLowerCase() : "";
   if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  return { email };
+  return { email, googleRuns: googleRunsAddress(email, c.hd) };
+}
+
+/** Staff addresses never sign in with Google here. Fails closed: unsure counts as staff. */
+export async function isStaffEmail(email: string): Promise<boolean> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/admin_users?email=ilike.${encodeURIComponent(email)}&select=email&limit=1`
+    );
+    if (!res.ok) return true;
+    const rows = (await res.json()) as unknown[];
+    return !Array.isArray(rows) || rows.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 /** Swaps Google's one-time code for the person's confirmed email, or null. */
@@ -111,7 +139,7 @@ export async function exchangeCode(
   origin: string,
   code: string,
   s: GoogleStart
-): Promise<{ email: string } | null> {
+): Promise<{ email: string; googleRuns: boolean } | null> {
   const res = await fetchWithTimeout(TOKEN, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

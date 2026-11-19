@@ -25,6 +25,7 @@ const GOOGLE_ERRORS: Record<string, string> = {
   busy: "Too many tries. Please wait a minute, or use your email.",
   off: "Google sign-in isn't available right now. Please use your email.",
   ticks: "Please tick the three boxes first.",
+  other: "Please sign in with your email for this address. We'll send you a code.",
 };
 
 export default function SignUpFlow({

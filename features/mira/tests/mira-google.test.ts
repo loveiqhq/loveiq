@@ -8,6 +8,7 @@ vi.mock("@shared/http/ratelimit", () => ({
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 vi.mock("@shared/http/fetch-with-timeout", () => ({ fetchWithTimeout: vi.fn() }));
+vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch: vi.fn() }));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -34,6 +35,7 @@ import {
   unpackStart,
 } from "@features/mira/server/google";
 import { mintSignInCode } from "@features/mira/server/sign-in";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { logMiraEvent, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
@@ -54,13 +56,16 @@ const good = {
   aud: CLIENT,
   exp: NOW / 1000 + 3600,
   nonce: S.nonce,
-  email: "Lea@Example.com",
+  email: "Lea.K@Gmail.com",
   email_verified: true,
 };
 
 describe("Google's ID token", () => {
   it("gives the confirmed email only when every claim checks out", () => {
-    expect(checkIdToken(idToken(good), CLIENT, S.nonce, NOW)).toEqual({ email: "lea@example.com" });
+    expect(checkIdToken(idToken(good), CLIENT, S.nonce, NOW)).toEqual({
+      email: "lea.k@gmail.com",
+      googleRuns: true,
+    });
     for (const bad of [
       { aud: "someone-else.apps.googleusercontent.com" },
       { iss: "https://evil.example" },
@@ -73,6 +78,19 @@ describe("Google's ID token", () => {
     }
     expect(checkIdToken("garbage", CLIENT, S.nonce, NOW)).toBeNull();
     expect(checkIdToken(undefined, CLIENT, S.nonce, NOW)).toBeNull();
+  });
+});
+
+describe("which addresses Google may vouch for", () => {
+  it("Gmail and Workspace on its own domain only, never an address Google merely checked once", () => {
+    const runs = (email: string, hd?: string) =>
+      checkIdToken(idToken({ ...good, email, ...(hd ? { hd } : {}) }), CLIENT, S.nonce, NOW)
+        ?.googleRuns;
+    expect(runs("lea@googlemail.com")).toBe(true);
+    expect(runs("lea@acme.de", "acme.de")).toBe(true);
+    expect(runs("lea@acme.de")).toBe(false);
+    expect(runs("lea@acme.de", "other.de")).toBe(false);
+    expect(runs("lea@yahoo.com")).toBe(false);
   });
 });
 
@@ -138,13 +156,14 @@ describe("GET /api/mira/auth/google/callback", () => {
     process.env.MIRA_GOOGLE_CLIENT_SECRET = "secret";
     jar.get.mockReturnValue({ value: packStart(S) });
     vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
-    vi.mocked(fetchWithTimeout).mockResolvedValue(
-      new Response(JSON.stringify({ id_token: idToken(good) }), { status: 200 })
+    vi.mocked(fetchWithTimeout).mockImplementation(
+      async () => new Response(JSON.stringify({ id_token: idToken(good) }), { status: 200 })
     );
     verifyOtp.mockResolvedValue({
-      data: { user: { id: "u1", email: "lea@example.com" } },
+      data: { user: { id: "u1", email: "lea.k@gmail.com" } },
       error: null,
     });
+    vi.mocked(supabaseFetch).mockImplementation(async () => new Response("[]", { status: 200 }));
   });
 
   it("signs in with the confirmed email and asks 'About you' when there's no name yet", async () => {
@@ -152,13 +171,13 @@ describe("GET /api/mira/auth/google/callback", () => {
     expect(res.headers.get("location")).toBe(
       "https://www.loveiq.org/mira/start?google=done&about=1"
     );
-    expect(mintSignInCode).toHaveBeenCalledWith("lea@example.com");
+    expect(mintSignInCode).toHaveBeenCalledWith("lea.k@gmail.com");
     expect(verifyOtp).toHaveBeenCalledWith({
-      email: "lea@example.com",
+      email: "lea.k@gmail.com",
       token: "12345678",
       type: "email",
     });
-    expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", expect.any(String));
+    expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea.k@gmail.com", expect.any(String));
     expect(logMiraEvent).toHaveBeenCalledWith(
       "signup_completed",
       expect.objectContaining({ userId: "u1" }),
@@ -180,6 +199,24 @@ describe("GET /api/mira/auth/google/callback", () => {
       new Response(JSON.stringify({ id_token: idToken({ ...good, nonce: "x" }) }), { status: 200 })
     );
     expect(await at(`code=abc&state=${S.state}`)).toMatch(/google=failed$/);
+    expect(verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it("sends addresses Google doesn't run, and staff, to the emailed code", async () => {
+    const at = async () => (await back(`code=abc&state=${S.state}`)).headers.get("location");
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      new Response(JSON.stringify({ id_token: idToken({ ...good, email: "lea@yahoo.com" }) }), {
+        status: 200,
+      })
+    );
+    expect(await at()).toMatch(/google=other$/);
+    vi.mocked(supabaseFetch).mockResolvedValueOnce(
+      new Response(JSON.stringify([{ email: "lea.k@gmail.com" }]), { status: 200 })
+    );
+    expect(await at()).toMatch(/google=other$/);
+    vi.mocked(supabaseFetch).mockResolvedValueOnce(new Response("oops", { status: 500 }));
+    expect(await at()).toMatch(/google=other$/); // unsure counts as staff
+    expect(mintSignInCode).not.toHaveBeenCalled();
     expect(verifyOtp).not.toHaveBeenCalled();
   });
 });
