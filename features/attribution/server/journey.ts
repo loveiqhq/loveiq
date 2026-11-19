@@ -97,6 +97,12 @@ export interface SubmissionJourney {
      * who bounced.
      */
     reportDwellMs: number | null;
+    /**
+     * Time in the report since the moment asked for (`buildSubmissionJourney`'s
+     * `dwellSince`, a reactivation's return): see {@link measureReportDwellSinceMs}.
+     * Absent unless asked for; null means not recorded, as above.
+     */
+    dwellSinceMs?: number | null;
   };
   milestones: {
     reportViewedAt: string | null;
@@ -421,6 +427,46 @@ export function measureReportDwellMs(
 }
 
 /**
+ * The report route writes the visit's `report_session` row before its response, and the return
+ * is stamped after it: a session begun this little before the return is the visit that came back.
+ */
+const RETURN_STAMP_SKEW_MS = 60_000;
+
+/**
+ * Time in the report from a return on: a reactivation's "Report time spent"
+ * (#report-reactivations), not the reader's lifetime total.
+ *
+ * Filtered first, because {@link measureReportDwellMs} drops only the POINTS before its
+ * anchor. Its milestone floor reads every `report_engagement_*` row and any closed session
+ * counts as measured, so a reader who read ten minutes on the day of the survey would
+ * otherwise read "10 min" on the day they came back having read nothing.
+ *
+ * Anchored on the first report activity of the return, not on the return itself: a click in
+ * an email or the unlock-feedback answer can come minutes before the report opens, and that
+ * gap is no reading. The visit's own session counts though it began just before the return
+ * was stamped (RETURN_STAMP_SKEW_MS). Null until the report shows any activity.
+ */
+export function measureReportDwellSinceMs(
+  since: string,
+  events: Array<{ event_type: string; event_time: string | null | undefined }>,
+  sessions: Array<{ started_at: string | null; ended_at: string | null }> = []
+): number | null {
+  const from = Date.parse(since);
+  if (!Number.isFinite(from)) return null;
+  const ms = (time: string | null | undefined) => Date.parse(time ?? "");
+  const firstActivity = Math.min(
+    ...sessions.map((s) => ms(s.started_at)).filter((t) => t >= from - RETURN_STAMP_SKEW_MS),
+    ...events.map((e) => ms(e.event_time)).filter((t) => t >= from)
+  );
+  if (!Number.isFinite(firstActivity)) return null;
+  return measureReportDwellMs(
+    new Date(firstActivity).toISOString(),
+    events.filter((e) => ms(e.event_time) >= firstActivity),
+    sessions.filter((s) => ms(s.ended_at) >= firstActivity)
+  );
+}
+
+/**
  * The page a pay-to-start buyer paid on, from that payment, even after a later upgrade. A
  * row from before the offers (June) names none and reads as the full offer, as
  * `offerDefinitionOf` reads it everywhere else.
@@ -479,9 +525,13 @@ async function fetchJson<T>(path: string, what: string): Promise<T[]> {
 /**
  * Assemble the journey. Never throws and never rejects — every source degrades to
  * absent, because a Slack notification must still go out if one table is slow.
+ *
+ * `dwellSince`: also measure the time in the report from that moment on, into
+ * `timings.dwellSinceMs` (a reactivation's "Report time spent"), off the same rows.
  */
 export async function buildSubmissionJourney(
-  submissionId: number
+  submissionId: number,
+  options: { dwellSince?: string | null } = {}
 ): Promise<SubmissionJourney | null> {
   // Wave 1: everything keyed directly off the submission id, concurrently. The
   // existing admin timeline route does 13 of these sequentially; don't copy that.
@@ -696,6 +746,9 @@ export async function buildSubmissionJourney(
       msToPurchase: msBetween(sub.created_date_time, purchasedAt),
       msCheckoutHesitation: msBetween(checkoutStartedAt, purchasedAt),
       reportDwellMs,
+      ...(options.dwellSince
+        ? { dwellSinceMs: measureReportDwellSinceMs(options.dwellSince, events, reportSessions) }
+        : {}),
     },
     milestones: {
       reportViewedAt,

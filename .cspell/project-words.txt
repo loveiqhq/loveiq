@@ -120,6 +120,7 @@ randomisation
 randomise
 randomised
 randomising
+reactivations
 reauthenticates
 recaptcha
 recognisable

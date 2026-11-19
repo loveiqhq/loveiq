@@ -225,7 +225,7 @@ export type JourneyStep = (typeof JOURNEY_STEPS)[number];
  * appeared to advance. The route that just wrote `report_session` knows better
  * than the consent gate does.
  */
-function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): string {
+export function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): string {
   const floorIdx = reachedFloor ? JOURNEY_STEPS.indexOf(reachedFloor) : -1;
   const steps: Array<[string, boolean]> = [
     ["Survey done", Boolean(journey.timings.completedAt)],
@@ -328,7 +328,7 @@ function armFields(journey: SubmissionJourney): SlackBlock {
  * put a number in a channel people read to judge the funnel that is wrong in the
  * most flattering-to-nobody direction.
  */
-function formatReportDwell(ms: number | null | undefined): string {
+export function formatReportDwell(ms: number | null | undefined): string {
   // Guarded against more than null: a journey assembled by any path that
   // predates this field arrives with `undefined` here, and arithmetic on it is
   // NaN — which used to render as a confident "NaN+ min" rather than failing.
@@ -384,7 +384,7 @@ function funnelName(journey: SubmissionJourney): string {
  * when they buy again (a EUR 1.99 unlock, then the full report). A EUR 0 unlock reads
  * Free and says what it was.
  */
-function funnelLine(journey: SubmissionJourney): string {
+export function funnelLine(journey: SubmissionJourney): string {
   // The tracker's pay-to-start label with no payment yet and no gate stamp: the claim is
   // still settling (an unused token that bought nothing joins the gate's cohort instead).
   // Until a payment claims it, AP counts the survey as pay after the report, and so does
@@ -468,6 +468,37 @@ function boldArmName(short: string): string {
 }
 
 /**
+ * "*Google Ads* — performance_max (cross-network)": where they came from, the value of the
+ * survey message's "Came from" line and of the reactivation post's "Original acquisition".
+ *
+ * `|| "Not recorded"` because this is the one place a malformed journey can take the whole
+ * message down. `classifyTraffic` assigns a bucket on every branch, so the fallback is
+ * unreachable in production — but the previous layout passed the bucket through untouched
+ * and rendered a literal "undefined", where escaping it throws instead. A notification
+ * builder should never be the thing that throws: the survey route builds this message
+ * inside a fire-and-forget task, and the backfill cron turns any throw into a 500 that
+ * abandons the rest of the run.
+ */
+export function cameFromValue(journey: SubmissionJourney): string {
+  const traffic = trafficParts(journey);
+  return (
+    `*${escapeSlack(traffic.head || "Not recorded")}*` +
+    `${traffic.detail ? ` — ${traffic.detail}` : ""}`
+  );
+}
+
+/**
+ * "*Landing Page V4* (Pain Points)": the landing arm they came through, or the pay-to-start
+ * page they paid on. Kept even when unrecorded, which is the rule the fields version
+ * followed: a live arm that failed to stamp stays visible rather than quietly missing.
+ */
+export function landingValue(journey: SubmissionJourney): string {
+  if (journey.payToStart) return `*${payToStartPageLabel(journey)}*`;
+  const landing = armLabel("landing", journey.arms.landing);
+  return `${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`;
+}
+
+/**
  * The compact incoming-survey layout, as ONE section.
  *
  * Requested by Marcus in #all-loveiq on 2026-09-11 ("a bit more compact like
@@ -534,21 +565,9 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
       `  |  Report time: ${bold(formatReportDwell(journey.timings.reportDwellMs))}`
   );
 
-  const traffic = trafficParts(journey);
-  /**
-   * `|| "Not recorded"` because this line is the one place a malformed journey
-   * can take the whole message down. `classifyTraffic` assigns a bucket on every
-   * branch, so the fallback is unreachable in production — but the previous
-   * layout passed the bucket through untouched and rendered a literal
-   * "undefined", where escaping it throws instead. A notification builder should
-   * never be the thing that throws: the survey route builds this message inside
-   * a fire-and-forget task, and the backfill cron turns any throw into a 500
-   * that abandons the rest of the run.
-   */
-  lines.push(
-    `Came from: ${bold(escapeSlack(traffic.head || "Not recorded"))}` +
-      `${traffic.detail ? ` — ${traffic.detail}` : ""}`
-  );
+  // The value and its "Not recorded" guard live in cameFromValue, shared with the
+  // reactivation post's "Original acquisition".
+  lines.push(`Came from: ${cameFromValue(journey)}`);
   // The first page this browser opened (a glossary term, say): a path, so a code span,
   // where its `*` and `_` stay literal. Omitted when the survey did not carry it.
   if (journey.traffic.landingPath) {
@@ -557,14 +576,8 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
 
   if (journey.device) lines.push(`Device: ${bold(escapeSlack(journey.device))}`);
 
-  // Kept even when unrecorded, which is the rule the fields version followed: a
-  // live arm that failed to stamp stays visible rather than quietly missing.
-  const landing = armLabel("landing", journey.arms.landing);
-  lines.push(
-    journey.payToStart
-      ? `Landing page design: ${bold(payToStartPageLabel(journey))}`
-      : `Landing page design: ${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`
-  );
+  // Kept even when unrecorded (landingValue), shared with the reactivation post.
+  lines.push(`Landing page design: ${landingValue(journey)}`);
 
   // Pricing 3.0 is live; its arm is stamped when the report first quotes a price, so a
   // survey-completed message usually has none yet and shows the line only when set.
