@@ -76,7 +76,7 @@ import {
   type Scope,
 } from "./metrics";
 import { assessmentScope } from "./assessment";
-import { LANDING_TESTS } from "./landing";
+import { LANDING_ARM_NAMES, LANDING_TESTS } from "./landing";
 import {
   POSTHOG_FROM,
   type PostHogResult,
@@ -347,14 +347,13 @@ const CHANNEL_ROWS: Array<{ source: Source; name: string; sub: string }> = [
 ];
 
 /**
- * The landing test's two live versions as the AP pages name them (the 21 Oct 2026 call: the
- * labels didn't match): round 4's video page and Marcus's pain-point page. Retired versions,
- * round 3's question card and presenter video among them, keep the shared labels' names.
+ * The landing tests' versions take the Landing page's names (LANDING_ARM_NAMES: one name per
+ * page, the 21 Oct 2026 call and Marcus's 19 Nov 2026 card), so both AP pages call a page the
+ * same thing; the line under each says which test and which version. Versions older than those
+ * tests keep the shared labels' names.
  */
-const LIVE_LANDING_NAMES = new Map([
-  ["video", "Video page"],
-  ["pain_point", "Pain-point page"],
-]);
+const landingTestName = (key: string) => LANDING_TESTS.find((t) => t.key === key)?.name ?? key;
+const landingVersionName = (arm: string) => LANDING_ARM_NAMES.get(arm) ?? arm;
 
 /** The cohorts' rows, in the design's order: paid, organic search, owned, Direct, then the rest. */
 const COHORT_ORDER: Array<Source | "unknown"> = [
@@ -1314,7 +1313,7 @@ export function buildTraffic(input: {
       const mine = subs.filter((x) => x.arm === arm);
       return perfRow(
         arm,
-        LIVE_LANDING_NAMES.get(arm) ?? armLabel("landing", arm).long,
+        LANDING_ARM_NAMES.get(arm) ?? armLabel("landing", arm).long,
         test ? `${test.name} · ${test.arms[0] === arm ? "A" : "B"}` : "",
         mine,
         {
@@ -1905,24 +1904,24 @@ function buildExperiments(
   };
   // #10 · round 4: the video page (A) against Marcus's pain-point page (B).
   landingTest(
-    "New landing page",
+    landingTestName("pain-point"),
     [
-      ["video", "Video page"],
-      ["pain_point", "Pain-point page"],
+      ["video", landingVersionName("video")],
+      ["pain_point", landingVersionName("pain_point")],
     ],
     LANDING_TEST_START_DAY
   );
   // #6 · round 3, the landing hero: ended at the 10 Nov 2026 sync, which kept the video.
   landingTest(
-    "Landing hero",
+    landingTestName("hero"),
     [
-      ["white_card", "Question card"],
-      ["white_video", "Presenter video"],
+      ["white_card", landingVersionName("white_card")],
+      ["white_video", landingVersionName("white_video")],
     ],
     LANDING_HERO_RESTART_DAY,
     {
       lastDay: LANDING_HERO_LAST_DAY,
-      why: "Ended on 11 Nov 2026: the video stays, as #10's version A",
+      why: "Ended on 11 Nov 2026: the video page stays, as version A of the pain-point page test",
     }
   );
 
