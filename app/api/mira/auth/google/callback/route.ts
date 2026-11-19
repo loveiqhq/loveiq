@@ -16,6 +16,7 @@ import {
   GOOGLE_COOKIE_PATH,
   exchangeCode,
   googleClient,
+  isStaffEmail,
   returnOrigin,
   sameState,
   unpackStart,
@@ -63,6 +64,8 @@ export async function GET(request: Request) {
     logger.info("mira: Google sign-in was refused at the token step");
     return back("failed");
   }
+  // Only addresses Google runs, and never staff: everyone else gets the emailed code.
+  if (!who.googleRuns || (await isStaffEmail(who.email))) return back("other");
   const code = await mintSignInCode(who.email);
   if (!code) return back("failed");
   const supabase = await createMiraSupabase();
