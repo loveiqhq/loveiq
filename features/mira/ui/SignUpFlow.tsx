@@ -244,15 +244,16 @@ export default function SignUpFlow({
                     or
                     <span className="h-px flex-1 bg-ap-line" />
                   </div>
-                  {/* A plain link: Google sign-in is a full-page hand-over, not an app route. */}
+                  {/* A plain link: Google sign-in is a full-page hand-over, not an app route. Its href
+                      must not depend on state the click changes: React re-renders before the browser
+                      follows the link, so a click that cleared the href went nowhere. */}
                   <a
                     href={
-                      !busy && adult && terms && consent
+                      adult && terms && consent
                         ? "/api/mira/auth/google?adult=1&terms=1&consent=1"
                         : undefined
                     }
                     aria-disabled={busy || !adult || !terms || !consent}
-                    onClick={() => setBusy(true)}
                     className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple aria-disabled:pointer-events-none aria-disabled:opacity-50"
                   >
                     <GoogleG />
