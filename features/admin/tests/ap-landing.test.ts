@@ -135,9 +135,13 @@ describe("landing test windows", () => {
 
   it("lists round 4's test first, then #6, ended on its registry day with the video kept", () => {
     expect(LANDING_TESTS.map((t) => [t.key, t.name, t.arms])).toEqual([
-      ["pain-point", "#10 · New landing page", ["video", "pain_point"]],
-      ["hero", "#6 · Landing hero", ["white_card", "white_video"]],
-      ["hero-first-run", "#6 · Landing hero · first run (7–13 Oct)", ["white_card", "white_video"]],
+      ["pain-point", "Pain-point page vs. video page", ["video", "pain_point"]],
+      ["hero", "Video page vs. question card", ["white_card", "white_video"]],
+      [
+        "hero-first-run",
+        "Video page vs. question card · first run (7–13 Oct)",
+        ["white_card", "white_video"],
+      ],
     ]);
     expect(test("pain-point")).toMatchObject({ from: LANDING_TEST_START_DAY, to: null });
     // Registry #6 ran 14 Oct – 11 Nov 2026, and the 10 Nov sync kept the video.
@@ -389,8 +393,8 @@ describe("buildLanding", () => {
       engagement: null,
     });
     expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
-      ["pain-point", "A · Video page", "Running", 80],
-      ["pain-point", "B · Pain-point page", "Running", 90],
+      ["pain-point", "A · Video page (V3)", "Running", 80],
+      ["pain-point", "B · Pain-point page (V4)", "Running", 90],
     ]);
   });
 
@@ -524,7 +528,7 @@ describe("buildLanding", () => {
       engagement: failed,
     });
     expect(p.unread).toEqual([
-      `#6 · Landing hero: bounce, median time, CTA clicks and scroll are blank. ${failed.error}`,
+      `Video page vs. question card: bounce, median time, CTA clicks and scroll are blank. ${failed.error}`,
     ]);
     expect(p.rows.every((r) => r.bounce === null && r.cta === null)).toBe(true);
   });

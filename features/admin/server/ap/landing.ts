@@ -46,8 +46,9 @@ import {
 export interface LandingTest {
   key: string;
   /**
-   * The one name every line uses (both tables, the Traffic page's landing rows), with the
-   * registry number, as the design's "#6 · Landing hero".
+   * The one name every line uses (both tables, the Traffic page's landing rows and tests): the
+   * pages it compares, not its registry number, so a reader tells the tests apart by what they
+   * test (Marcus's card "lets improve naming of LP", 19 Nov 2026). The number stays in `code`.
    */
   name: string;
   /** The compare tab's few characters, as the design's "LP-07". */
@@ -64,15 +65,15 @@ export interface LandingTest {
 }
 
 /**
- * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), named
- * as the design names them (Traffic board: "#6 · Landing hero"). The rebuild test (V1 vs V2,
- * Aug–Sep 2026) was taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new
- * page against the video page, under the number the registry gives it at its release.
+ * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), each
+ * named by the pages it compares, new page first. The rebuild test (V1 vs V2, Aug–Sep 2026) was
+ * taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new page against the
+ * video page, under the number the registry gives it at its release.
  */
 export const LANDING_TESTS: LandingTest[] = [
   {
     key: "pain-point",
-    name: "#10 · New landing page",
+    name: "Pain-point page vs. video page",
     code: "#10",
     from: LANDING_TEST_START_DAY,
     to: null,
@@ -81,17 +82,18 @@ export const LANDING_TESTS: LandingTest[] = [
   },
   {
     key: "hero",
-    name: "#6 · Landing hero",
+    name: "Video page vs. question card",
     code: "#6",
     from: LANDING_HERO_RESTART_DAY,
     to: LANDING_HERO_LAST_DAY,
     winner: "white_video",
-    outcome: "Ended: the 10 Nov 2026 sync kept the presenter video, now version A of #10.",
+    outcome:
+      "Ended: the 10 Nov 2026 sync kept the video page, now version A of the pain-point page test.",
     arms: ["white_card", "white_video"],
   },
   {
     key: "hero-first-run",
-    name: "#6 · Landing hero · first run (7–13 Oct)",
+    name: "Video page vs. question card · first run (7–13 Oct)",
     code: "#6 · run 1",
     from: LANDING_HERO_VIDEO_LAUNCH_DAY,
     to: addDays(LANDING_HERO_RESTART_DAY, -1),
@@ -101,15 +103,19 @@ export const LANDING_TESTS: LandingTest[] = [
 ];
 
 /**
- * The versions' names on this page, as the design writes them. In #10, A is the video page and
- * B Marcus's pain-point page; in #6, A had question 1 in the hero and B the presenter video.
- * The Slack digest keeps its own names (attribution/server/labels.ts).
+ * Each tested version's one name across AP-Analytics (this page and the Traffic page): what the
+ * page is, then its version number as Slack's labels number it (attribution/server/labels.ts,
+ * "Landing Page V3 (Video in Hero)"). The video page is V3 in both tests: #6's version B and
+ * #10's version A are the same page, so they carry the same name (Marcus, 19 Nov 2026: the
+ * presenter video and the video page read as two pages). In #10, A is the video page and B
+ * Marcus's pain-point page; in #6, A had question 1 in the hero (the question card) and B the
+ * video.
  */
-const ARM_NAMES = new Map([
-  ["video", "Video page"],
-  ["pain_point", "Pain-point page"],
-  ["white_card", "Question card"],
-  ["white_video", "Presenter video"],
+export const LANDING_ARM_NAMES: ReadonlyMap<string, string> = new Map([
+  ["video", "Video page (V3)"],
+  ["pain_point", "Pain-point page (V4)"],
+  ["white_card", "Question card (V2)"],
+  ["white_video", "Video page (V3)"],
 ]);
 
 /**
@@ -357,7 +363,7 @@ function armRow(
   return {
     testKey: test.key,
     test: test.name,
-    label: `${letter} · ${ARM_NAMES.get(arm) ?? arm}`,
+    label: `${letter} · ${LANDING_ARM_NAMES.get(arm) ?? arm}`,
     arm,
     status: test.to === null ? "Running" : test.winner === arm ? "Winner" : "Ended",
     from: w.from,

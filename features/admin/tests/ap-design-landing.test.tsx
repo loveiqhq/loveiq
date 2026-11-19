@@ -143,16 +143,16 @@ function heroInput(): Parameters<typeof buildLanding>[0] {
 const heroWeek = () => buildLanding(heroInput());
 
 describe("the landing tests, as the design names them", () => {
-  it("shows #10 · New landing page, #6 · Landing hero and its first run, and no rebuild test", () => {
+  it("names each test by the pages it compares, not by its number, and shows no rebuild test", () => {
     expect(LANDING_TESTS.map((t) => t.name)).toEqual([
-      "#10 · New landing page",
-      "#6 · Landing hero",
-      "#6 · Landing hero · first run (7–13 Oct)",
+      "Pain-point page vs. video page",
+      "Video page vs. question card",
+      "Video page vs. question card · first run (7–13 Oct)",
     ]);
     expect(LANDING_TESTS.flatMap((t) => t.arms)).not.toContain("white_prev");
   });
 
-  it("names A the question card and B the presenter video, with no dates on the line", () => {
+  it("names A the question card (V2) and B the video page (V3), with no dates on the line", () => {
     screenData.payload = heroWeek();
     render(createElement(ApLanding));
     const table = screen.getByRole("table", { name: "Landing tests and variants" });
@@ -164,8 +164,8 @@ describe("the landing tests, as the design names them", () => {
         return [first.children[0]!.textContent, first.children[1]!.textContent];
       });
     expect(lines).toEqual([
-      ["#6 · Landing hero", "A · Question card"],
-      ["#6 · Landing hero", "B · Presenter video"],
+      ["Video page vs. question card", "A · Question card (V2)"],
+      ["Video page vs. question card", "B · Video page (V3)"],
     ]);
   });
 

@@ -326,7 +326,7 @@ describe("the Traffic builder, as the design reads", () => {
     expect(tierOfCountryName("Country 1234")).toBe("default");
   });
 
-  it("names the live landing versions as the AP pages do; retired ones keep their names", () => {
+  it("names each tested landing version as the Landing page does, its test and version under it", () => {
     const names = traffic({
       facts: {
         ...facts,
@@ -336,12 +336,17 @@ describe("the Traffic builder, as the design reads", () => {
           { day: "2026-10-16", arm: "pain_point", src: null, n: 10 },
         ],
       },
-    }).breakdowns.landing.rows.map((r) => r.name);
-    expect(names).toContain("Video page");
-    expect(names).toContain("Pain-point page");
-    // Round 3's versions retired with it: the shared labels' names.
-    expect(names).toContain("Landing Page V2: survey in the hero");
-    expect(names).toContain("Landing Page V3: video in the hero, before the V4 test");
+    }).breakdowns.landing.rows.map((r) => [r.key, r.name, r.sub]);
+    // One name per page, as the Landing page's table has it; the line under it says which test
+    // and which version, so round 3's video page and round 4's can't be taken for each other.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        ["video", "Video page (V3)", "Pain-point page vs. video page · A"],
+        ["pain_point", "Pain-point page (V4)", "Pain-point page vs. video page · B"],
+        ["white_card", "Question card (V2)", "Video page vs. question card · A"],
+        ["white_video", "Video page (V3)", "Video page vs. question card · B"],
+      ])
+    );
   });
 
   it("orders the cohorts as drawn and writes the tests' notes in the design's style", () => {
@@ -352,9 +357,9 @@ describe("the Traffic builder, as the design reads", () => {
       "Direct / unattributed",
     ]);
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
-      "New landing page: Since 17 Nov 2026 · live",
+      "Pain-point page vs. video page: Since 17 Nov 2026 · live",
       // Registry #6's days, written as an ended test is.
-      "Landing hero: 14 Oct – 11 Nov 2026 · ended",
+      "Video page vs. question card: 14 Oct – 11 Nov 2026 · ended",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",
       // Ended on 4 Nov 2026, written as the Payment page writes an ended test.
       "Email question: 9 Oct – 3 Nov 2026 · ended",
