@@ -4,6 +4,7 @@
  *   { action: "start", email, adult: true, terms: true, consent: true } → emails a sign-in code
  *   { action: "verify", email, code, carry? }  → signs in (Mira's own cookie), records the
  *       consent, and moves the anonymous chat into the account ("your current chat comes with you")
+ *   { action: "carry", carry } → after Google sign-in, moves the anonymous chat into the account
  *   { action: "logout" }
  *
  * "start" answers the same whether or not the address is new, so it can't be used to learn who
@@ -12,13 +13,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CONSENT_VERSION, HISTORY_TURNS } from "@features/mira/server/config";
-import { createMiraSupabase } from "@features/mira/server/session";
+import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
 import { SIGN_IN_CODE, sendSignInCode } from "@features/mira/server/sign-in";
 import {
   addMessages,
   claimCodeAttempt,
   consumeCode,
   createChat,
+  getProfile,
   logMiraEvent,
   recordCodeIssued,
   upsertProfileAtSignIn,
@@ -31,6 +33,9 @@ import logger from "@shared/observability/logger";
 export const dynamic = "force-dynamic";
 
 const email = z.string().trim().toLowerCase().email().max(320);
+const carrySchema = z
+  .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(8000) }))
+  .max(HISTORY_TURNS * 2);
 
 const schema = z.discriminatedUnion("action", [
   z.object({
@@ -44,13 +49,9 @@ const schema = z.discriminatedUnion("action", [
     action: z.literal("verify"),
     email,
     code: z.string().trim().regex(SIGN_IN_CODE),
-    carry: z
-      .array(
-        z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(8000) })
-      )
-      .max(HISTORY_TURNS * 2)
-      .optional(),
+    carry: carrySchema.optional(),
   }),
+  z.object({ action: z.literal("carry"), carry: carrySchema.min(1) }),
   z.object({ action: z.literal("logout") }),
 ]);
 
@@ -73,6 +74,26 @@ export async function POST(request: Request) {
     const supabase = await createMiraSupabase();
     await supabase.auth.signOut({ scope: "local" });
     return NextResponse.json({ success: true });
+  }
+
+  if (body.action === "carry") {
+    // Google sign-in ends on a redirect, so the browser sends its anonymous chat afterwards.
+    const account = await getMiraAccount();
+    if (!account) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+    try {
+      const profile = await getProfile(account.id);
+      const turns = body.carry.filter((t) => t.content.trim());
+      if (turns.length === 0 || profile?.remember_chats === false) {
+        return NextResponse.json({ success: true, chatId: null });
+      }
+      const firstUser = turns.find((t) => t.role === "user")?.content ?? "New chat";
+      const chatId = await createChat(account.id, firstUser.replace(/\s+/g, " ").slice(0, 80));
+      await addMessages(chatId, turns);
+      return NextResponse.json({ success: true, chatId });
+    } catch (err) {
+      logger.error({ err }, "mira: the chat was not carried into the account");
+      return NextResponse.json({ error: "We couldn't bring your chat along." }, { status: 500 });
+    }
   }
 
   if (body.action === "start") {
@@ -151,7 +172,7 @@ export async function POST(request: Request) {
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },
-      { carried: carry.length }
+      { carried: carry.length, method: "email" }
     );
     return NextResponse.json({ success: true, needsProfile: !profile?.name, chatId });
   } catch (err) {

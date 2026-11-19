@@ -45,12 +45,11 @@ export function signInCodeEmail(code: string) {
   return { subject, text, html };
 }
 
-/** Mint and email a code. False only when something broke; the caller answers the same either way. */
-export async function sendSignInCode(email: string): Promise<boolean> {
-  if (!process.env.RESEND_API_KEY) {
-    logger.error("mira: RESEND_API_KEY is not set, so no sign-in code can be sent");
-    return false;
-  }
+/**
+ * A one-time code for this address, making the confirmed auth user first if needed, or null.
+ * The emailed code uses it, and so does Google sign-in, which checks the code itself.
+ */
+export async function mintSignInCode(email: string): Promise<string | null> {
   // generate_link mints a usable code only for an existing, confirmed user (see the admin
   // login). 422 = the user already exists.
   const ensured = await supabaseFetch("/auth/v1/admin/users", {
@@ -68,11 +67,22 @@ export async function sendSignInCode(email: string): Promise<boolean> {
   const link = (await linkRes.json().catch(() => ({}))) as { email_otp?: string };
   if (!linkRes.ok || !SIGN_IN_CODE.test(link.email_otp ?? "")) {
     logger.error({ status: linkRes.status }, "mira: Supabase did not mint a sign-in code");
+    return null;
+  }
+  return link.email_otp!;
+}
+
+/** Mint and email a code. False only when something broke; the caller answers the same either way. */
+export async function sendSignInCode(email: string): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) {
+    logger.error("mira: RESEND_API_KEY is not set, so no sign-in code can be sent");
     return false;
   }
+  const code = await mintSignInCode(email);
+  if (!code) return false;
 
   resend ??= new Resend(process.env.RESEND_API_KEY);
-  const { subject, html, text } = signInCodeEmail(link.email_otp!);
+  const { subject, html, text } = signInCodeEmail(code);
   const sent = await Promise.race([
     resend.emails.send({
       from: neutralFrom(),

@@ -81,6 +81,10 @@ export default function MiraPrivacyPage() {
             Supabase, our database, in Switzerland; Vercel, which hosts the site; Resend, which
             sends your sign-in code.
           </li>
+          <li>
+            Google, only if you sign in with Google: it confirms your email address to us, and
+            nothing else.
+          </li>
           <li>PostHog and Microsoft Clarity, our analytics tools.</li>
         </ul>
 

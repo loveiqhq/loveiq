@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { GradientButton, Wordmark } from "./MiraShell";
 import { local, miraApi } from "./api";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
- * (out of the MVP) and with email code only (Apple and Google sign-in follow later).
+ * (out of the MVP). Sign-in by emailed code or with Google (Apple follows later).
  */
 
 type Step = "account" | "verify" | "about";
@@ -19,9 +19,26 @@ const STEPS: Array<{ key: Step; label: string }> = [
   { key: "about", label: "About you" },
 ];
 
-export default function SignUpFlow() {
+const GOOGLE_ERRORS: Record<string, string> = {
+  cancelled: "Google sign-in was cancelled. Try again, or use your email.",
+  failed: "Google sign-in didn't work. Please try again, or use your email.",
+  busy: "Too many tries. Please wait a minute, or use your email.",
+  off: "Google sign-in isn't available right now. Please use your email.",
+  ticks: "Please tick the three boxes first.",
+};
+
+export default function SignUpFlow({
+  googleEnabled = false,
+  googleResult = null,
+  needsAbout = false,
+}: {
+  googleEnabled?: boolean;
+  googleResult?: string | null;
+  needsAbout?: boolean;
+}) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("account");
+  const backFromGoogle = googleResult === "done";
+  const [step, setStep] = useState<Step>(backFromGoogle && needsAbout ? "about" : "account");
   const [email, setEmail] = useState("");
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -31,8 +48,27 @@ export default function SignUpFlow() {
   const [country, setCountry] = useState("");
   const [gender, setGender] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    googleResult && !backFromGoogle ? (GOOGLE_ERRORS[googleResult] ?? GOOGLE_ERRORS.failed!) : null
+  );
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Back from Google, signed in: the chat in this browser comes along, as with the emailed code.
+  useEffect(() => {
+    if (!backFromGoogle) return;
+    const carry = local.chat()?.turns ?? [];
+    void (async () => {
+      if (carry.length) {
+        const res = await miraApi("/api/mira/auth", {
+          body: { action: "carry", carry: carry.slice(-48) },
+        });
+        if (res.ok) local.saveChat(null);
+      }
+      if (!needsAbout) router.push("/mira/home");
+    })();
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function sendCode() {
     setBusy(true);
@@ -132,7 +168,11 @@ export default function SignUpFlow() {
         </nav>
 
         <div className="my-auto flex w-full max-w-[460px] flex-col gap-5 py-10">
-          {step === "account" ? (
+          {backFromGoogle && step === "account" ? (
+            <p className="text-[15px] text-ap-body">Signing you in…</p>
+          ) : null}
+
+          {step === "account" && !backFromGoogle ? (
             <form
               className="flex flex-col gap-5"
               onSubmit={(e) => {
@@ -196,6 +236,29 @@ export default function SignUpFlow() {
               >
                 {busy ? "Sending…" : "Send me a code"}
               </GradientButton>
+              {googleEnabled ? (
+                <>
+                  <div className="flex items-center gap-3 text-[13px] text-ap-muted">
+                    <span className="h-px flex-1 bg-ap-line" />
+                    or
+                    <span className="h-px flex-1 bg-ap-line" />
+                  </div>
+                  {/* A plain link: Google sign-in is a full-page hand-over, not an app route. */}
+                  <a
+                    href={
+                      !busy && adult && terms && consent
+                        ? "/api/mira/auth/google?adult=1&terms=1&consent=1"
+                        : undefined
+                    }
+                    aria-disabled={busy || !adult || !terms || !consent}
+                    onClick={() => setBusy(true)}
+                    className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                  >
+                    <GoogleG />
+                    Continue with Google
+                  </a>
+                </>
+              ) : null}
               <p className="text-[13px] text-ap-muted">
                 No password needed. Already have an account? Use the same form.
               </p>
@@ -335,6 +398,30 @@ export default function SignUpFlow() {
         </div>
       </main>
     </div>
+  );
+}
+
+/** Google's "G", as its sign-in branding asks. */
+function GoogleG() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 48">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
   );
 }
 
