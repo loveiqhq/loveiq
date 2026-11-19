@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { googleClient } from "@features/mira/server/google";
 import { getMiraAccount } from "@features/mira/server/session";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 
@@ -10,8 +11,22 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-/** Boards 04, 05 and 06: the free account by emailed code. */
-export default async function MiraStartPage() {
-  if (await getMiraAccount()) redirect("/mira/home");
-  return <SignUpFlow />;
+/** Boards 04, 05 and 06: the free account by emailed code or Google. */
+export default async function MiraStartPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string; about?: string }>;
+}) {
+  const { google, about } = await searchParams;
+  const signedIn = Boolean(await getMiraAccount());
+  // Back from Google, signed in: stay to bring the chat along and ask "About you".
+  if (signedIn && google !== "done") redirect("/mira/home");
+  const googleResult = google === "done" ? (signedIn ? "done" : "failed") : (google ?? null);
+  return (
+    <SignUpFlow
+      googleEnabled={googleClient() !== null}
+      googleResult={googleResult}
+      needsAbout={about === "1"}
+    />
+  );
 }

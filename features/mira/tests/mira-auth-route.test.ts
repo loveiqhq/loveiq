@@ -12,8 +12,10 @@ vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
 const verifyOtp = vi.fn();
+const getMiraAccount = vi.fn();
 vi.mock("@features/mira/server/session", () => ({
   createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut: vi.fn() } })),
+  getMiraAccount: () => getMiraAccount(),
 }));
 vi.mock("@features/mira/server/sign-in", () => ({
   SIGN_IN_CODE: /^\d{6,10}$/,
@@ -22,6 +24,7 @@ vi.mock("@features/mira/server/sign-in", () => ({
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([1, 2]),
   createChat: vi.fn().mockResolvedValue("6f2c4a1e-1111-4222-8333-944455556666"),
+  getProfile: vi.fn().mockResolvedValue({ name: "Lea", remember_chats: true }),
   logMiraEvent: vi.fn(),
   recordCodeIssued: vi.fn().mockResolvedValue(undefined),
   claimCodeAttempt: vi.fn().mockResolvedValue(true),
@@ -33,6 +36,8 @@ import { POST } from "@/app/api/mira/auth/route";
 import { sendSignInCode } from "@features/mira/server/sign-in";
 import {
   addMessages,
+  createChat,
+  getProfile,
   claimCodeAttempt,
   consumeCode,
   recordCodeIssued,
@@ -151,5 +156,28 @@ describe("POST /api/mira/auth", () => {
     });
     expect(addMessages).toHaveBeenCalledTimes(1);
     expect(vi.mocked(addMessages).mock.calls[0]![1]).toHaveLength(2);
+  });
+
+  it("after Google sign-in, brings the chat along only for a signed-in person who keeps chats", async () => {
+    const turns = [
+      { role: "user", content: "I avoid mirrors" },
+      { role: "assistant", content: "Since when?" },
+    ];
+    getMiraAccount.mockResolvedValueOnce(null);
+    expect((await post({ action: "carry", carry: turns })).status).toBe(401);
+    expect(createChat).not.toHaveBeenCalled();
+
+    getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    const res = await post({ action: "carry", carry: turns });
+    expect(await res.json()).toMatchObject({ success: true, chatId: expect.any(String) });
+    expect(createChat).toHaveBeenCalledWith("u1", "I avoid mirrors");
+    expect(vi.mocked(addMessages).mock.calls[0]![1]).toHaveLength(2);
+
+    vi.mocked(getProfile).mockResolvedValueOnce({ name: "Lea", remember_chats: false } as never);
+    vi.mocked(createChat).mockClear();
+    expect(await (await post({ action: "carry", carry: turns })).json()).toMatchObject({
+      chatId: null,
+    });
+    expect(createChat).not.toHaveBeenCalled();
   });
 });
