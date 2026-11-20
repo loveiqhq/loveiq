@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { logAdminAction } from "@features/admin/server/audit";
 import { getClientIp } from "@shared/http/ratelimit";
+import { TEAM_COOKIE, teamCookieOptions } from "@shared/http/team-cookie";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { ADMIN_HOME, safeAdminNext } from "@shared/url/admin-next";
@@ -168,6 +169,9 @@ export async function GET(request: NextRequest) {
     path: "/",
     maxAge: 7 * 24 * 60 * 60,
   });
+
+  // A teammate's browser: what it does on Mira stays out of the numbers (shared/http/team-cookie).
+  redirectToAdmin.cookies.set(TEAM_COOKIE, "1", teamCookieOptions());
 
   // R-03: rotate the CSRF cookie on privilege change. Clearing both prod and
   // dev names is a no-op for whichever one isn't present in the request. The

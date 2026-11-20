@@ -51,3 +51,10 @@ export const MIRA_AUTH_COOKIE = "mira-auth";
 
 /** A random browser id: counts free conversations and links anonymous events, nothing else. */
 export const ANON_COOKIE = "mira_anon";
+
+/**
+ * Where the visit came from (server/attribution.ts): the header every Mira call carries, and the
+ * cookie Google sign-in's link leaves for the Google routes. Here because both sides use them.
+ */
+export const SOURCE_HEADER = "x-mira-source";
+export const SOURCE_COOKIE = "mira_source";

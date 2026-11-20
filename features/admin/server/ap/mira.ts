@@ -6,8 +6,15 @@
  * Who is who: a person is their account (user_id) or, before signing in, their browser
  * (anon_id). A browser that signed in counts as that account throughout: signup_completed holds
  * both ids. The team is left out by its accounts' address (ADMIN_TEST_EMAIL_REGEX), with the
- * browsers they signed in from. An anonymous browser that never signed in, and a deleted
- * account's events (both links go with the account), can't be told apart: they are counted.
+ * browsers they signed in from, and, from 21 Nov 2026, by its browsers (loveiq_team=1 or
+ * loveiq_probe=1, shared/http/team-cookie.ts): an event from one carries props.team, an account
+ * created or signed in from one is_team, and such an account or browser is left out with all it
+ * did before. Anyone else's anonymous browser, and a deleted account's events (both links go
+ * with the account) that no team browser sent, can't be told apart: they are counted.
+ *
+ * Where people came from (21 Nov 2026): chat_opened, chat_started and signup_completed carry the
+ * visit's campaign tags or referring site (features/mira/server/attribution.ts); a person counts
+ * under the first one recorded for them.
  *
  * A conversation is the design's "session with 3 or more messages from the user": a person's
  * messages split wherever more than 30 minutes pass between two (SESSION_GAP_MS), each part with
@@ -82,6 +89,12 @@ const EVENT_NAMES = [
   "referred",
   "body_check_offered",
   "body_check_started",
+  // Logged by other streams from 21 Nov 2026: the "Keep this chat" card, and two safety stops.
+  "keep_card_shown",
+  "keep_card_keep",
+  "keep_card_not_now",
+  "reply_declined",
+  "minor_stop",
 ];
 
 export interface MiraUserRow {
@@ -90,7 +103,12 @@ export interface MiraUserRow {
   created_at: string;
   style: Record<string, unknown> | null;
   use_assessment: boolean;
+  /** Created or signed in from a team browser (20261121030000_mira_team_and_source.sql). */
+  is_team?: boolean;
 }
+
+/** An event's source when the visit had neither campaign tags nor a referring site. */
+export const DIRECT = "direct";
 
 export interface MiraEventRow {
   name: string;
@@ -105,6 +123,14 @@ export interface MiraEventRow {
    * choice ("pause", …); null on any other event.
    */
   detail: string | null;
+  /** Sent from a team browser (props.team); absent otherwise. */
+  team?: true;
+  /**
+   * Where the visit came from, on chat_opened, chat_started and signup_completed: the link's
+   * utm_source, else the referring site's host (no "www."), else DIRECT; absent where nothing
+   * was recorded (before 21 Nov 2026, or a page that sent nothing).
+   */
+  source?: string;
 }
 
 export interface MiraNudgeRow {
@@ -142,7 +168,7 @@ export interface MiraData {
 export async function fetchMira(): Promise<MiraData> {
   const [users, events, nudges, bodyChecks] = await Promise.all([
     fetchAllRows<MiraUserRow>(
-      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment&order=id.asc"
+      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
     ),
     fetchEvents(),
     fetchAllRows<MiraNudgeRow>(
@@ -155,7 +181,7 @@ export async function fetchMira(): Promise<MiraData> {
   if (!users || !events || !nudges || !bodyChecks) {
     throw new Error("Mira's tables could not be read");
   }
-  const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email));
+  const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email) && !u.is_team);
   return {
     users,
     events,
@@ -170,7 +196,8 @@ export async function fetchMira(): Promise<MiraData> {
  * (supabase/migrations/20261120040000_mira_ap_events_props.sql) groups them per person, name and
  * the prop read, each group's times in milliseconds, groups in the order of their first event (so
  * a browser's first sign-in still comes first). Paging through the rows a thousand at a time
- * stopped at 100,000 of them.
+ * stopped at 100,000 of them. From 20261121030000 each group also says whether a team browser
+ * sent it, and where the visit came from ('' for a recorded visit without tags).
  */
 async function fetchEvents(): Promise<MiraEventRow[] | null> {
   const res = await supabaseFetch("/rest/v1/rpc/mira_ap_events", {
@@ -180,11 +207,29 @@ async function fetchEvents(): Promise<MiraEventRow[] | null> {
   });
   if (!res.ok) return null;
   const groups = (await res.json()) as Array<
-    [name: string, anon: string | null, user: string | null, detail: string | null, at: number[]]
+    [
+      name: string,
+      anon: string | null,
+      user: string | null,
+      detail: string | null,
+      at: number[],
+      team?: boolean,
+      source?: string | null,
+      referrerHost?: string | null,
+    ]
   >;
-  return groups.flatMap(([name, anon_id, user_id, detail, times]) =>
-    times.map((at) => ({ name, anon_id, user_id, at, detail }))
-  );
+  return groups.flatMap(([name, anon_id, user_id, detail, times, team, source, ref]) => {
+    const from = typeof source === "string" ? source || ref?.replace(/^www\./, "") || DIRECT : null;
+    return times.map((at) => ({
+      name,
+      anon_id,
+      user_id,
+      at,
+      detail,
+      ...(team === true ? { team: true as const } : {}),
+      ...(from ? { source: from } : {}),
+    }));
+  });
 }
 
 /** The accounts whose address has a finished LoveIQ survey: what Mira reads into the chat. */
@@ -230,6 +275,12 @@ interface Person {
   /** When the body check was offered to them, and when they started it. */
   bodyOffers: number[];
   bodyStarts: number[];
+  /** When the "Keep this chat" card was shown to them, and when they tapped Keep or Not now. */
+  keepShown: number[];
+  keepKept: number[];
+  keepNotNow: number[];
+  /** The first source recorded for them (MiraEventRow.source), and when; null: none recorded. */
+  from: { at: number; source: string } | null;
 }
 
 interface Counted {
@@ -299,7 +350,17 @@ const sessionFrom = (msgs: number[], t: number): number[] =>
   sessions(msgs.filter((m) => m >= t))[0] ?? [];
 
 export function prepare(data: MiraData): Prepared {
-  const staff = new Set(data.users.filter((u) => isStaffEmail(u.email)).map((u) => u.id));
+  // The team: accounts with a team address or marked is_team, and the accounts and browsers
+  // that sent anything from a team browser, with all they did before it was marked.
+  const staff = new Set(
+    data.users.filter((u) => isStaffEmail(u.email) || u.is_team).map((u) => u.id)
+  );
+  const teamBrowsers = new Set<string>();
+  for (const e of data.events) {
+    if (!e.team) continue;
+    if (e.user_id) staff.add(e.user_id);
+    if (e.anon_id) teamBrowsers.add(e.anon_id);
+  }
   const accounts = data.users.filter((u) => !staff.has(u.id));
   const byId = new Map(accounts.map((u) => [u.id, u]));
   // A browser is the account it first signed in to; an account's method is its first sign-in's.
@@ -320,7 +381,9 @@ export function prepare(data: MiraData): Prepared {
     const { at } = e;
     first = Math.min(first, at);
     const user = e.user_id ?? (e.anon_id ? signedIn.get(e.anon_id) : undefined) ?? null;
-    if (user && staff.has(user)) continue;
+    if ((user && staff.has(user)) || e.team || (e.anon_id && teamBrowsers.has(e.anon_id))) {
+      continue;
+    }
     events.push({ name: e.name, at, detail: e.detail });
     if (
       user &&
@@ -346,9 +409,14 @@ export function prepare(data: MiraData): Prepared {
         refers: [],
         bodyOffers: [],
         bodyStarts: [],
+        keepShown: [],
+        keepKept: [],
+        keepNotNow: [],
+        from: null,
       };
       people.set(key, p);
     }
+    if (e.source && (!p.from || at < p.from.at)) p.from = { at, source: e.source };
     if (e.name === "chat_started") {
       const chip = e.detail === null ? null : Number(e.detail);
       p.starts.push({ at, chip: Number.isInteger(chip) ? chip : null, anon: e.user_id === null });
@@ -361,6 +429,9 @@ export function prepare(data: MiraData): Prepared {
     else if (e.name === "referred") p.refers.push(at);
     else if (e.name === "body_check_offered") p.bodyOffers.push(at);
     else if (e.name === "body_check_started") p.bodyStarts.push(at);
+    else if (e.name === "keep_card_shown") p.keepShown.push(at);
+    else if (e.name === "keep_card_keep") p.keepKept.push(at);
+    else if (e.name === "keep_card_not_now") p.keepNotNow.push(at);
   }
   for (const p of people.values()) {
     p.starts.sort((a, b) => a.at - b.at);
@@ -551,6 +622,9 @@ export interface Figures {
   ups: number;
   downs: number;
   crisis: number;
+  /** Replies Mira declined (support lines instead), and coaching stopped for someone under 18. */
+  declined: number;
+  minorStops: number;
   nps: Nps;
   weekFour: { returned: number; of: number };
   nudge: NudgeCounts;
@@ -638,6 +712,8 @@ export function figures(prep: Prepared, from: string, to: string, today: string)
     ups: count("rating", "1"),
     downs: count("rating", "-1"),
     crisis: count("crisis_shown"),
+    declined: count("reply_declined"),
+    minorStops: count("minor_stop"),
     nps: npsOf(inRange.filter((e) => e.name === "nps").map((e) => e.detail)),
     nudge: nudgeCounts(prep, w),
     reactivated: reactivated(prep, w),
@@ -854,6 +930,54 @@ function bodyFunnel(prep: Prepared, w: Win) {
   return { offered, started, baselines, followUps };
 }
 
+/**
+ * The "Keep this chat" card in the range: the people shown it; of them, those who tapped Keep,
+ * and of those, the ones whose account was created after their first tap, by the range's end
+ * (signing in to an older account is no new one); and those shown it who tapped Not now.
+ */
+function keepCardFunnel(prep: Prepared, w: Win) {
+  const out = { shown: 0, kept: 0, accounts: 0, notNow: 0 };
+  for (const p of prep.people.values()) {
+    if (!p.keepShown.some((at) => within(at, w))) continue;
+    out.shown++;
+    if (p.keepNotNow.some((at) => within(at, w))) out.notNow++;
+    const kept = p.keepKept.filter((at) => within(at, w));
+    if (!kept.length) continue;
+    out.kept++;
+    const created = p.account ? Date.parse(p.account.created_at) : NaN;
+    if (created > Math.min(...kept) && created < w.until) out.accounts++;
+  }
+  return out;
+}
+
+/**
+ * The people who opened Mira in the range, by where they first came from, and of them those who
+ * started a chat and created an account in the range. Most opened first, nothing recorded last.
+ */
+function sources(prep: Prepared, w: Win): SourceRow[] {
+  const rows = new Map<string | null, SourceRow>();
+  for (const p of prep.people.values()) {
+    if (!p.opens.some((at) => within(at, w))) continue;
+    const source = p.from?.source ?? null;
+    let r = rows.get(source);
+    if (!r) {
+      const label = source === null ? "Not recorded" : source === DIRECT ? "Direct" : source;
+      rows.set(source, (r = { source, label, opened: 0, started: 0, accounts: 0, rate: null }));
+    }
+    r.opened++;
+    if (p.starts.some((s) => within(s.at, w))) r.started++;
+    if (p.account && within(Date.parse(p.account.created_at), w)) r.accounts++;
+  }
+  return [...rows.values()]
+    .map((r) => ({ ...r, rate: ratio(r.accounts, r.opened) }))
+    .sort(
+      (a, b) =>
+        Number(a.source === null) - Number(b.source === null) ||
+        b.opened - a.opened ||
+        String(a.source).localeCompare(String(b.source))
+    );
+}
+
 const PER_USER = [
   { label: "1 conversation", min: 1, max: 1 },
   { label: "2–3", min: 2, max: 3 },
@@ -900,9 +1024,24 @@ export interface Knows {
   depth: number | null;
 }
 
+export interface SourceRow {
+  /** The link's utm_source, an untagged visit's referring site, DIRECT, or null: not recorded. */
+  source: string | null;
+  /** As the page writes it. */
+  label: string;
+  /** People who opened Mira in the range; of them, who started a chat and created an account. */
+  opened: number;
+  started: number;
+  accounts: number;
+  /** accounts ÷ opened. */
+  rate: number | null;
+}
+
 export interface MiraPayload extends PageHead {
   tiles: Record<string, Tile>;
   funnel: MiraStep[];
+  /** "Where people came from": the range's people who opened Mira, by their first source. */
+  sources: SourceRow[];
   /** People shown the free-account card in the range, each once however often it showed. */
   gate: number;
   /** The range's sign-ups by their first sign-in's method. */
@@ -911,7 +1050,16 @@ export interface MiraPayload extends PageHead {
   cohorts: CohortRow[];
   /** Today's accounts, and what Mira knows of them. */
   knows: Knows;
-  safety: { conversations: number; crisis: number; notHelpful: number; referred: number };
+  safety: {
+    conversations: number;
+    crisis: number;
+    declined: number;
+    minorStops: number;
+    notHelpful: number;
+    referred: number;
+  };
+  /** The "Keep this chat" card in the range (keepCardFunnel). */
+  keepCard: { shown: number; kept: number; accounts: number; notNow: number };
   chips: ChipRow[];
   topics: TopicRow[];
   /** New chats in the range opened in the person's own words that carry no topic. */
@@ -1163,6 +1311,7 @@ export function buildMiraPage(input: {
     narrowed: null,
     tiles,
     funnel,
+    sources: sources(prep, w),
     gate: [...prep.people.values()].filter((p) => p.gates.some((at) => within(at, w))).length,
     signupsBy: { email: by("email"), google: by("google") },
     perUser,
@@ -1173,7 +1322,10 @@ export function buildMiraPage(input: {
       crisis: cur.crisis,
       notHelpful: cur.downs,
       referred: cur.referred,
+      declined: cur.declined,
+      minorStops: cur.minorStops,
     },
+    keepCard: keepCardFunnel(prep, w),
     chips: chips(prep, w),
     ...topics(prep, w, compared && cmp ? win(cmp.from, cmp.to) : null),
     bodyCheck: { ...cur.body, ...bodyFunnel(prep, w), reliableChange: BODY_RELIABLE_CHANGE },
