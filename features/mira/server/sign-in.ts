@@ -16,6 +16,20 @@ import logger from "@shared/observability/logger";
 /** Supabase mints 8 digits on our projects (mailer_otp_length); 6 to 10 is accepted, like Jarvis. */
 export const SIGN_IN_CODE = /^\d{6,10}$/;
 
+/**
+ * The inbox an address reaches, as the per-address code limit counts it: lea+1@ and lea+2@ (any
+ * domain), and l.e.a@gmail.com or lea@googlemail.com, all reach lea's inbox and share one
+ * allowance. Only the limit's key: the account keeps the address as typed.
+ */
+export function addressKey(email: string): string {
+  const at = email.lastIndexOf("@");
+  const domain = email.slice(at + 1).toLowerCase();
+  let local = email.slice(0, at).toLowerCase().split("+")[0]!;
+  const gmail = domain === "gmail.com" || domain === "googlemail.com";
+  if (gmail) local = local.replaceAll(".", "");
+  return `${local}@${gmail ? "gmail.com" : domain}`;
+}
+
 let resend: Resend | null = null;
 
 function neutralFrom(): string {

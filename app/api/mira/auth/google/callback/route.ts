@@ -90,7 +90,10 @@ export async function GET(request: Request) {
     const next = `/mira/start?google=done${profile?.name ? "" : "&about=1"}`;
     return NextResponse.redirect(new URL(next, origin), 303);
   } catch (err) {
+    // Signed in without a profile is a dead end (/api/mira/me answers 401): sign out again, so
+    // the next try starts clean.
     logger.error({ err }, "mira: the profile was not saved at Google sign-in");
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
     return back("failed");
   }
 }

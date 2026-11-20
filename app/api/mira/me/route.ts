@@ -4,7 +4,8 @@
  *   GET            → profile, chats, the LoveIQ result matched on the verified email
  *   PATCH          → name, country, gender, coaching style, the two "What Mira may use" switches
  *   DELETE ?what=chats    → deletes every stored chat
- *   DELETE ?what=account  → deletes the account, its profile, chats and messages
+ *   DELETE ?what=account  → deletes the account, its profile, chats and messages (a staff or
+ *       Jarvis login stays: see deleteAccount)
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -52,6 +53,7 @@ const patchSchema = z
     time_zone: z.string().max(64).refine(isValidTimeZone).optional(),
   })
   .strict();
+const deleteSchema = z.object({ what: z.enum(["chats", "account"]) });
 
 async function guard(request: Request, write: boolean) {
   if (write && !(await verifyCsrfToken(request))) {
@@ -98,16 +100,19 @@ export async function PATCH(request: Request) {
   const parsed = patchSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
-    const data = parsed.data;
-    // The switch in Settings is the same stop as the email's: on again clears the stop.
+    const { nudges_on, ...rest } = parsed.data;
+    // The switch in Settings is the same stop as the email's: on again clears the stop. Settings
+    // sends nudges_on with every save, so only a real switch counts: the same value again must
+    // not re-stamp the stop or wipe the reason given for it.
+    const stored = nudges_on === undefined ? null : await getProfile(g.account.id);
     const nudgeState =
-      data.nudges_on === undefined
+      !stored || nudges_on === stored.nudges_on
         ? {}
-        : data.nudges_on
-          ? { nudges_stopped_at: null, nudge_stop_reason: null }
-          : { nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
-    await updateProfile(g.account.id, { ...data, ...nudgeState });
-    logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(data) });
+        : nudges_on
+          ? { nudges_on, nudges_stopped_at: null, nudge_stop_reason: null }
+          : { nudges_on, nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
+    await updateProfile(g.account.id, { ...rest, ...nudgeState });
+    logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(parsed.data) });
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "mira: could not save the account");
@@ -118,22 +123,20 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   const g = await guard(request, true);
   if ("error" in g) return g.error;
-  const what = new URL(request.url).searchParams.get("what");
+  const query = deleteSchema.safeParse({ what: new URL(request.url).searchParams.get("what") });
+  if (!query.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
-    if (what === "chats") {
+    if (query.data.what === "chats") {
       await deleteChats(g.account.id);
       logMiraEvent("chats_deleted", { userId: g.account.id });
       return NextResponse.json({ success: true });
     }
-    if (what === "account") {
-      // Logged before the delete: the event row keeps the count, its user link goes with the account.
-      logMiraEvent("account_deleted", {});
-      await deleteAccount(g.account.id);
-      const supabase = await createMiraSupabase();
-      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
-      return NextResponse.json({ success: true });
-    }
-    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    await deleteAccount(g.account);
+    // Only once it's gone, and with no link to the person: the row keeps the count.
+    logMiraEvent("account_deleted", {});
+    const supabase = await createMiraSupabase();
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+    return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "mira: a delete failed");
     return NextResponse.json(
