@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { googleClient } from "@features/mira/server/google";
 import { getMiraAccount } from "@features/mira/server/session";
+import { getProfile } from "@features/mira/server/store";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 
 export const metadata: Metadata = {
@@ -18,7 +19,10 @@ export default async function MiraStartPage({
   searchParams: Promise<{ google?: string; about?: string }>;
 }) {
   const { google, about } = await searchParams;
-  const signedIn = Boolean(await getMiraAccount());
+  const account = await getMiraAccount();
+  // Signed in counts only with a Mira profile. A session whose profile is missing (its save
+  // failed at sign-in) is sent here to sign in again; Home would only send it back (a loop).
+  const signedIn = Boolean(account && (await getProfile(account.id).catch(() => null)));
   // Back from Google, signed in: stay to bring the chat along and ask "About you".
   if (signedIn && google !== "done") redirect("/mira/home");
   const googleResult = google === "done" ? (signedIn ? "done" : "failed") : (google ?? null);

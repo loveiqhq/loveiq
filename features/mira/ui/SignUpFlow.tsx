@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { GradientButton, Wordmark } from "./MiraShell";
-import { local, miraApi } from "./api";
+import { local, miraApi, useReloadWhenRestored } from "./api";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
@@ -27,6 +27,24 @@ const GOOGLE_ERRORS: Record<string, string> = {
   ticks: "Please tick the three boxes first.",
   other: "Please sign in with your email for this address. We'll send you a code.",
 };
+
+/** A new account's zone until the browser's is sent (migration 20261118210000_mira_nudges_and_memory). */
+const DEFAULT_TIME_ZONE = "Europe/Berlin";
+const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+
+/** The daily nudge comes at the person's own 8:00: a profile still on the default zone gets this browser's. */
+async function keepTimeZone() {
+  const tz = browserTimeZone();
+  if (!tz || tz === DEFAULT_TIME_ZONE) return;
+  const me = await miraApi<{ profile?: { time_zone?: string } }>("/api/mira/me");
+  if (me.ok && me.data.profile?.time_zone === DEFAULT_TIME_ZONE) {
+    await miraApi("/api/mira/me", { method: "PATCH", body: { time_zone: tz } });
+  }
+}
+
+/** The anonymous chat as the sign-in carries it: role and words only. */
+const carriedChat = () =>
+  (local.chat()?.turns ?? []).map(({ role, content }) => ({ role, content })).slice(-48);
 
 export default function SignUpFlow({
   googleEnabled = false,
@@ -53,57 +71,78 @@ export default function SignUpFlow({
     googleResult && !backFromGoogle ? (GOOGLE_ERRORS[googleResult] ?? GOOGLE_ERRORS.failed!) : null
   );
   const [notice, setNotice] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shownStep = useRef(step);
+  useReloadWhenRestored();
+
+  // A new step moves focus to its heading, so keyboard and screen reader users start there.
+  useEffect(() => {
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    heading.current?.focus();
+  }, [step]);
+
+  /** Into the account. Replace: Back must not land on the sign-up again (it would forward here
+   *  once more). Refresh: no page the router kept from before the sign-in comes back signed out. */
+  function goHome() {
+    router.replace("/mira/home");
+    router.refresh();
+  }
 
   // Back from Google, signed in: the chat in this browser comes along, as with the emailed code.
   useEffect(() => {
     if (!backFromGoogle) return;
-    const carry = local.chat()?.turns ?? [];
+    const carry = carriedChat();
     void (async () => {
       if (carry.length) {
-        const res = await miraApi("/api/mira/auth", {
-          body: { action: "carry", carry: carry.slice(-48) },
-        });
+        const res = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
         if (res.ok) local.saveChat(null);
       }
-      if (!needsAbout) router.push("/mira/home");
+      if (needsAbout) return;
+      await keepTimeZone();
+      goHome();
     })();
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function sendCode() {
+  /** Emails a code; true when it went out. */
+  async function sendCode(): Promise<boolean> {
     setBusy(true);
     setError(null);
+    setNotice(null);
     const res = await miraApi("/api/mira/auth", {
       body: { action: "start", email, adult, terms, consent },
     });
     setBusy(false);
-    if (!res.ok) return setError(res.data.error ?? "We couldn't send the code. Please try again.");
-    setNotice(null);
+    if (!res.ok) {
+      setError(res.data.error ?? "We couldn't send the code. Please try again.");
+      return false;
+    }
     setStep("verify");
+    return true;
   }
 
+  // Each success below keeps `busy` on until the next page shows, so nothing can be sent twice.
   async function verify() {
     setBusy(true);
     setError(null);
-    const carry = local.chat()?.turns ?? [];
+    const carry = carriedChat();
     const res = await miraApi<{ needsProfile?: boolean; chatId?: string | null }>(
       "/api/mira/auth",
-      {
-        body: {
-          action: "verify",
-          email,
-          code,
-          ...(carry.length ? { carry: carry.slice(-48) } : {}),
-        },
-      }
+      { body: { action: "verify", email, code, ...(carry.length ? { carry } : {}) } }
     );
-    setBusy(false);
-    if (!res.ok)
+    if (!res.ok) {
+      setBusy(false);
       return setError(res.data.error ?? "That code didn't work. Check it, or send a new one.");
+    }
     local.saveChat(null);
-    if (res.data.needsProfile) setStep("about");
-    else router.push("/mira/home");
+    if (res.data.needsProfile) {
+      setBusy(false);
+      return setStep("about");
+    }
+    await keepTimeZone();
+    goHome();
   }
 
   async function saveAbout() {
@@ -116,12 +155,22 @@ export default function SignUpFlow({
         country: country || null,
         gender: gender.trim() || null,
         // For the daily nudge at the person's own 8:00 (Settings can change it).
-        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+        time_zone: browserTimeZone(),
       },
     });
-    setBusy(false);
-    if (!res.ok) return setError(res.data.error ?? "We couldn't save that. Please try again.");
-    router.push("/mira/home");
+    if (!res.ok) {
+      setBusy(false);
+      return setError(res.data.error ?? "We couldn't save that. Please try again.");
+    }
+    goHome();
+  }
+
+  async function skipAbout() {
+    setBusy(true);
+    setError(null);
+    // This step promises the nudge at "8:00 your time": the zone is kept even when it's skipped.
+    await keepTimeZone();
+    goHome();
   }
 
   const current = STEPS.findIndex((s) => s.key === step);
@@ -129,8 +178,11 @@ export default function SignUpFlow({
 
   return (
     <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
-      <aside className="flex flex-col gap-8 bg-ap-lilac p-6 sm:p-10 lg:w-[460px] lg:shrink-0">
-        <Wordmark />
+      {/* On phones the form comes first and this lilac panel follows it. */}
+      <aside className="order-last flex flex-col gap-8 bg-ap-lilac p-6 sm:p-10 md:order-none lg:w-[460px] lg:shrink-0">
+        <div className="hidden md:block">
+          <Wordmark />
+        </div>
         <div className="mt-auto flex flex-col gap-4">
           <p className="text-[14px] text-ap-body">
             <strong className="text-ap-ink">Mira</strong> · AI coach · Body confidence
@@ -153,6 +205,9 @@ export default function SignUpFlow({
       </aside>
 
       <main className="flex flex-1 flex-col px-4 py-8 sm:px-12 lg:px-20">
+        <div className="mb-8 md:hidden">
+          <Wordmark />
+        </div>
         <nav aria-label="Sign-up progress" className="grid grid-cols-3 gap-2">
           {STEPS.map((s, i) => (
             <div key={s.key} className="flex flex-col gap-2">
@@ -182,7 +237,11 @@ export default function SignUpFlow({
               }}
             >
               <div>
-                <h1 className="font-serif text-[34px] font-medium leading-tight">
+                <h1
+                  ref={heading}
+                  tabIndex={-1}
+                  className="font-serif text-[34px] font-medium leading-tight outline-none"
+                >
                   Create your free account{" "}
                   <span className="inline-block whitespace-nowrap align-middle rounded-full bg-ap-lilac px-3 py-1 font-sans text-[13px] font-semibold text-ap-plum">
                     Beta version
@@ -276,11 +335,17 @@ export default function SignUpFlow({
               }}
             >
               <div>
-                <h1 className="font-serif text-[34px] font-medium leading-tight">
+                <h1
+                  ref={heading}
+                  tabIndex={-1}
+                  className="font-serif text-[34px] font-medium leading-tight outline-none"
+                >
                   Check your inbox
                 </h1>
                 <p className="mt-2 text-[15px] text-ap-body">
-                  We sent a sign-in code to <strong>{email}</strong>. It works for an hour.
+                  We sent a sign-in code to{" "}
+                  <strong className="[overflow-wrap:anywhere]">{email}</strong>. It works for an
+                  hour.
                 </p>
               </div>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
@@ -300,10 +365,10 @@ export default function SignUpFlow({
               <div className="flex justify-between gap-3 text-[14px] text-ap-muted">
                 <button
                   type="button"
-                  className="underline"
+                  className="underline disabled:opacity-50"
+                  disabled={busy}
                   onClick={async () => {
-                    await sendCode();
-                    setNotice("A new code is on its way.");
+                    if (await sendCode()) setNotice("A new code is on its way.");
                   }}
                 >
                   Send a new code
@@ -330,7 +395,13 @@ export default function SignUpFlow({
                 void saveAbout();
               }}
             >
-              <h1 className="font-serif text-[34px] font-medium leading-tight">About you</h1>
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[34px] font-medium leading-tight outline-none"
+              >
+                About you
+              </h1>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
                 What should Mira call you?
                 <input
@@ -383,15 +454,20 @@ export default function SignUpFlow({
               </GradientButton>
               <button
                 type="button"
-                onClick={() => router.push("/mira/home")}
-                className="text-[14px] text-ap-muted underline"
+                disabled={busy}
+                onClick={() => void skipAbout()}
+                className="text-[14px] text-ap-muted underline disabled:opacity-50"
               >
                 Skip for now
               </button>
             </form>
           ) : null}
 
-          {notice ? <p className="text-[14px] text-ap-good-ink">{notice}</p> : null}
+          {notice ? (
+            <p role="status" className="text-[14px] text-ap-good-ink">
+              {notice}
+            </p>
+          ) : null}
           {error ? (
             <p role="alert" className="text-[14px] text-ap-bad-ink">
               {error}
