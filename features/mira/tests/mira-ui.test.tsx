@@ -295,13 +295,16 @@ describe("Body check", () => {
     await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
     typeAndSend("hello");
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    // The statements come in a dialog, one at a time.
+    expect(await screen.findByRole("dialog", { name: "Body check" })).toBeInTheDocument();
     const picks = [5, 4, 4, 3, 3, 2, 4, 5, 3, 4];
     const labels = ["Never", "Seldom", "Sometimes", "Often", "Always"];
     for (const [i, v] of picks.entries()) {
-      await screen.findByText(`Statement ${i + 1} of 10`);
+      await screen.findByText(`Body check · statement ${i + 1} of 10`);
       fireEvent.click(screen.getByRole("button", { name: labels[v - 1] }));
     }
     await screen.findByText("Thank you. I’ll ask again in four weeks.");
+    expect(screen.queryByRole("dialog", { name: "Body check" })).toBeNull();
     expect(calls("POST /api/mira/body-check")).toEqual([{ answers: picks }]);
     expect(events()).toEqual(expect.arrayContaining(["body_check_offered", "body_check_started"]));
   });
@@ -314,9 +317,9 @@ describe("Body check", () => {
     typeAndSend("hello");
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
     fireEvent.click(await screen.findByRole("button", { name: "Never" }));
-    await screen.findByText("Statement 2 of 10");
+    await screen.findByText("Body check · statement 2 of 10");
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    await screen.findByText("Statement 1 of 10");
+    await screen.findByText("Body check · statement 1 of 10");
     expect(screen.getByRole("button", { name: "Never" })).toHaveAttribute("aria-pressed", "true");
   });
 

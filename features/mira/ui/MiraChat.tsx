@@ -89,6 +89,8 @@ export default function MiraChat({
   const bodyOffered = useRef(false);
   const bodyStarted = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  /** The index of the reply that just arrived, for the scroll to its start. */
+  const replyAt = useRef<number | null>(null);
   useReloadWhenRestored();
 
   useEffect(() => {
@@ -143,9 +145,17 @@ export default function MiraChat({
   }, [signedIn, initialChatId]);
 
   // Only the message list scrolls, never the page: the composer stays where the person typed.
+  // A new reply of Mira's is shown from its start, so a long one (or a question with its answer
+  // buttons, on a small phone) is read from the top; anything else goes to the bottom.
   useEffect(() => {
     const list = listRef.current;
-    if (list && messages.length > 0) list.scrollTop = list.scrollHeight;
+    if (!list || messages.length === 0) return;
+    const reply =
+      replyAt.current === null ? null : list.querySelector(`[data-msg="${replyAt.current}"]`);
+    replyAt.current = null;
+    if (reply) {
+      list.scrollTop += reply.getBoundingClientRect().top - list.getBoundingClientRect().top - 8;
+    } else list.scrollTop = list.scrollHeight;
   }, [messages.length, sending]); // not on a rating: that rewrites a message, not adds one
 
   // The anonymous chat lives in this browser, with its sources and ratings, after every change
@@ -236,6 +246,7 @@ export default function MiraChat({
         ? [{ role: "assistant" as const, content: res.data.invitation }]
         : []),
     ];
+    replyAt.current = next.length;
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
@@ -455,7 +466,7 @@ export default function MiraChat({
               </div>
             ) : null}
             {messages.map((m, i) => (
-              <div key={i} className="flex flex-col gap-1">
+              <div key={i} data-msg={i} className="flex flex-col gap-1">
                 <Bubble role={m.role} text={m.content} />
                 {m.role === "assistant" &&
                 m.ask &&
