@@ -539,7 +539,10 @@ describe("buildMiraPage", () => {
     expect(p.tiles.nudgeUnsub).toMatchObject({
       value: 2 / 3,
       foot: "2 of 3 delivered were followed by a stop or pause",
+      // Fewer stops is better: a falling unsubscribe rate shows green, not red.
+      goodWhen: "down",
     });
+    expect(p.tiles.nudgeCtr!.goodWhen).toBe("up");
     const kind = (type: string) => p.nudgeTypes.find((t) => t.type === type);
     expect(kind("agreement")).toMatchObject({
       sent: 1,

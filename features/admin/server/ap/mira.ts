@@ -1112,14 +1112,15 @@ export function buildMiraPage(input: {
     label: string,
     unit: Tile["unit"],
     pick: (x: Figures) => number | null,
-    foot: string
+    foot: string,
+    goodWhen: Tile["goodWhen"] = "up"
   ): Tile => ({
     key,
     label,
     unit,
     value: pick(cur),
     prev: prev ? pick(prev) : null,
-    goodWhen: "up",
+    goodWhen,
     spark: points.map(pick),
     foot,
     blocked: null,
@@ -1257,7 +1258,8 @@ export function buildMiraPage(input: {
         "Unsubscribe",
         "pct",
         (x) => ratio(x.nudge.stopped, x.nudge.delivered),
-        of(cur.nudge.stopped, cur.nudge.delivered, "delivered were followed by a stop or pause")
+        of(cur.nudge.stopped, cur.nudge.delivered, "delivered were followed by a stop or pause"),
+        "down"
       ),
       tile(
         "reactivated",
