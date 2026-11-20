@@ -6,11 +6,11 @@
 
 - `app/mira/page.tsx` → `ui/MiraChat.tsx`: boards 01 (anonymous chat), 01b (free limit), 03 (coaching style) and 08a (chats, signed in).
 - `app/mira/start` → `ui/SignUpFlow.tsx`: boards 04, 05, 06 (email code; no WhatsApp step).
-- `app/mira/home` → `ui/MiraHome.tsx`: boards 08 and 08b. `app/mira/settings` → `ui/MiraSettings.tsx`: board 08c, cut for the beta. `app/mira/feedback` → `ui/MiraFeedback.tsx`: board 10. `app/mira/privacy`: Mira's privacy notice.
+- `app/mira/home` → `ui/MiraHome.tsx`: boards 08 and 08b. `app/mira/settings` → `ui/MiraSettings.tsx`: board 08c, cut for the beta. `app/mira/feedback` → `ui/MiraFeedback.tsx`: board 10. `app/mira/privacy`: Mira's privacy notice. `app/mira/guide`: the body confidence guide, open to everyone (text in `content/guide.ts`); Home's Guides tile links to it (`NEXT_PUBLIC_MIRA_GUIDE_URL` overrides).
 - API: `app/api/mira/chat`, `auth`, `me`, `chats/[id]`, `event` (see `docs/api.md`).
 - Tables: `mira_user`, `mira_chat`, `mira_message`, `mira_event` (`supabase/migrations/20261118120000_mira_mvp.sql`).
 
-**What Mira reads (`content/`):** `system-prompt.ts` (Sanjin's rules, voice, safety rails, compiled 18 Nov), `mira-config.json` (opening message, chips, intake questions, coaching-style scales, the fixed crisis and refusal messages), `evidence-cards.json` (the only research she may use), `crisis-lines.json` (Sanjin's 9 countries, every line checked on its operator's site on 20 Nov 2026; the support panel shows who each line is for, its hours, and text-only lines as text links with their keyword). The prompt and the cards are cached by the model provider; the person's own context (style, name, gender, country, LoveIQ result) is added per message and never logged.
+**What Mira reads (`content/`):** `system-prompt.ts` (Sanjin's rules, voice, safety rails, compiled 18 Nov), `mira-config.json` (opening message, chips, intake questions, coaching-style scales, the fixed crisis and refusal messages), `evidence-cards.json` (the only research she may use), `guide.ts` (the guide; its practices' steps are added to her cached instructions by `server/prompt.ts`, so she gives them as the guide writes them), `crisis-lines.json` (Sanjin's 9 countries, every line checked on its operator's site on 20 Nov 2026; the support panel shows who each line is for, its hours, and text-only lines as text links with their keyword). The prompt and the cards are cached by the model provider; the person's own context (style, name, gender, country, LoveIQ result) is added per message and never logged.
 
 **Calls taken for the beta (Eman delegated them, 18 Nov 2026):**
 
@@ -37,6 +37,7 @@
 - Weekly session invites and reminders: not built; Mira asks for a time but promises no invite.
 - Evidence cards: checked on 20 Nov 2026 against each source's public record and abstract (the open papers in full): 15 corrected (among them C10 High → Medium, C02 Measure → Low, C17's "two thirds", which no public source backs, removed), C01, C06 and C29 rewritten from their abstracts, C15 added (Alavi-Arjas et al. 2023). C24 to C27, four core books never bought, rest on free sources for the same practices and cite them, not the books: Brotto et al. 2022 (open trial, attention practices), Cornell Health 2019 (sensate focus handout), Centre for Clinical Interventions 2012 (CBT workbook), Neff's Self-Compassion Break page. Bought books can replace them later.
 - Crisis lines: re-check by 20 Feb 2027 (every 3 months).
+- The guide (built 20 Nov 2026 from Sanjin's draft "GUIDE1", his spec "Body Confidence Guide Prompt" and his Notion fixes; Mark's design and "Guide MVP v2" were not available): Sanjin to review the text, above all practice 1 (assembled from his own lines, as the draft had six practices) and practice 7 step 4 (our reading of "starts without talking"); Mark to review the page.
 - Legal: Eman checked the consent wording, the privacy notice and the legal scope, and approved them on 20 Nov 2026. The main privacy policy names Mira since 20 Nov 2026 (sections 3.5, 4, 6, 7.3, 7.9, 7.10, 9), and Mira's notice covers the body check, the labels and the nudges' opens.
 
 **Does NOT belong:** the LoveIQ survey or report (Mira only reads the result, matched on the verified email), Jarvis (company brain).

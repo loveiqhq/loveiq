@@ -1,3 +1,4 @@
+import { GUIDE_PRACTICES, SKIP_IT } from "../content/guide";
 import miraConfig from "../content/mira-config.json";
 import { MIRA_SYSTEM_PROMPT } from "../content/system-prompt";
 import { renderCards } from "./cards";
@@ -55,12 +56,34 @@ export function renderIntake(questions = miraConfig.intakeQuestions as IntakeQue
     .join("\n");
 }
 
+/**
+ * The guide's practices as /mira/guide writes them (steps, why, the touch rule), so Mira can give
+ * the steps when asked. The intros stay out: their LoveIQ figures are not on her evidence cards.
+ */
+export function renderGuide(practices = GUIDE_PRACTICES): string {
+  return practices
+    .map((p) =>
+      [
+        `Practice ${p.number}: ${p.name} (${p.time}; best for: ${p.bestFor}; loveiq.org/mira/guide#practice-${p.number})`,
+        ...p.steps.map((s, i) => `${i + 1}. ${s}`),
+        ...p.after,
+        `Why it works: ${p.why} ${SKIP_IT}`,
+      ].join("\n")
+    )
+    .join("\n\n");
+}
+
 export const STABLE_INSTRUCTIONS = `${MIRA_SYSTEM_PROMPT.trim()}
 
 INTAKE QUESTIONS
 The app invites the person to these right after your first reply (the invitation and their answer are in the conversation). Ask them one per message, in your own words.
 
 ${renderIntake()}
+
+THE GUIDE'S PRACTICES
+The body confidence guide is public, so these are not part of your instructions: when someone asks how to do a practice, give its steps as written here, as a short list.
+
+${renderGuide()}
 
 MARKERS FOR THE APP
 The app reads these markers and removes them before the person sees your reply. Put each on its own line at the very end, after the Sources line, and never add one to a crisis reply.
