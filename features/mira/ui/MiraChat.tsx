@@ -292,7 +292,8 @@ export default function MiraChat({
         <h1 className="font-serif text-[26px] font-medium leading-[1.15] sm:text-[44px]">
           Talk to <span className="text-[#d05976]">Mira</span> about your body confidence
         </h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-ap-body sm:mt-3 sm:text-[16px]">
+        {/* On very short screens the message box comes first; the composer repeats "not a therapist". */}
+        <p className="mt-2 text-[14px] leading-relaxed text-ap-body sm:mt-3 sm:text-[16px] [@media(max-height:620px)]:hidden">
           Her answers draw on research about body confidence. Mira is an AI coach, not a therapist.
         </p>
       </section>
