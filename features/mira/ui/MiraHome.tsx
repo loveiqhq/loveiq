@@ -67,6 +67,7 @@ export default function MiraHome() {
   }, [router]);
 
   async function notify(coach: string) {
+    setError(null);
     setNotified((n) => [...n, coach]);
     const r = await miraApi("/api/mira/event", { body: { type: "notify", coach } });
     if (!r.ok) {
@@ -78,6 +79,7 @@ export default function MiraHome() {
   async function toggleAssessment(on: boolean) {
     const setUse = (v: boolean) =>
       setMe((m) => (m ? { ...m, profile: { ...m.profile, use_assessment: v } } : m));
+    setError(null);
     setUse(on);
     const r = await miraApi("/api/mira/me", { method: "PATCH", body: { use_assessment: on } });
     if (!r.ok) {
@@ -88,8 +90,12 @@ export default function MiraHome() {
 
   return (
     <MiraAppFrame active="home" email={me?.profile.email} name={me?.profile.name}>
+      {/* Fixed at the bottom: the controls that fail sit far down the page. */}
       {error ? (
-        <p role="alert" className="text-ap-bad-ink">
+        <p
+          role="alert"
+          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-[480px] rounded-2xl border border-ap-line bg-white px-4 py-3 text-[14px] text-ap-bad-ink shadow-lg"
+        >
           {error}
         </p>
       ) : null}
@@ -99,14 +105,14 @@ export default function MiraHome() {
       </h1>
 
       <section className="mt-6 rounded-3xl border border-ap-line p-5">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span
             aria-hidden="true"
             className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] to-[#bf66d9] font-serif text-[18px] font-bold text-white"
           >
             M
           </span>
-          <div className="flex-1">
+          <div className="min-w-[180px] flex-1">
             <h2 className="font-serif text-[20px] font-semibold">Mira</h2>
             <p className="text-[13px] text-ap-muted">Body confidence · your coach</p>
             <p className="mt-1 text-[14px] text-ap-body">

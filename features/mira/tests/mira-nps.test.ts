@@ -28,6 +28,12 @@ describe("the NPS question", () => {
     expect(npsDue(false, [user, reply(), reply(miraConfig.intakeInvitation)], false)).toBe(false);
   });
 
+  it("never asks in a chat where a crisis reply came earlier", () => {
+    localStorage.setItem("mira.nps.v1", JSON.stringify({ convos: 5, asked: null }));
+    const afterCrisis = [user, reply(miraConfig.crisisMessage), user, reply()];
+    expect(npsDue(false, afterCrisis, false)).toBe(false);
+  });
+
   it("never asks right after a crisis reply, and at most once a month", () => {
     localStorage.setItem("mira.nps.v1", JSON.stringify({ convos: 5, asked: null }));
     expect(npsDue(false, twoReplies, true)).toBe(false);

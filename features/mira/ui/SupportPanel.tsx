@@ -13,6 +13,8 @@ const DATA = crisisJson as unknown as { countries: Country[]; fallback: Country 
  * the element marked data-autofocus (the heading) and goes back to the opener on close. Shown
  * while mounted: the parent unmounts it to close.
  */
+let openDialogs = 0;
+
 export function Modal({
   label,
   onClose,
@@ -27,16 +29,16 @@ export function Modal({
     const dialog = ref.current;
     if (!dialog) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // One lock for however many panels are open, released when the last one closes.
     const root = document.documentElement;
-    const overflow = root.style.overflow;
-    root.style.overflow = "hidden";
+    if (openDialogs++ === 0) root.style.overflow = "hidden";
     // A browser without showModal (Safari before 15.4) still shows the panel, just not modal.
     const modal = typeof dialog.showModal === "function";
     if (!modal) dialog.setAttribute("open", "");
     else if (!dialog.open) dialog.showModal();
     dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     return () => {
-      root.style.overflow = overflow;
+      if (--openDialogs === 0) root.style.overflow = "";
       if (modal && dialog.open) dialog.close();
       opener?.focus();
     };

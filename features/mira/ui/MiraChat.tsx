@@ -48,7 +48,11 @@ export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: bool
   const convos = seen.convos + (firstOfChat ? 1 : 0);
   const replies = turns.filter((t) => t.role === "assistant" && !isInvitation(t)).length;
   const due = seen.asked === null || now - seen.asked > 30 * 24 * 60 * 60 * 1000;
-  const ask = !crisisReply && convos >= 3 && replies >= 2 && due;
+  // Never in a chat where a stop rail fired, whether now or earlier in it.
+  const crisisInChat =
+    crisisReply ||
+    turns.some((t) => t.role === "assistant" && t.content === miraConfig.crisisMessage);
+  const ask = !crisisInChat && convos >= 3 && replies >= 2 && due;
   local.saveNps({ convos, asked: ask ? now : seen.asked });
   return ask;
 }
@@ -131,7 +135,7 @@ export default function MiraChat({
   useEffect(() => {
     const list = listRef.current;
     if (list && messages.length > 0) list.scrollTop = list.scrollHeight;
-  }, [messages, sending]);
+  }, [messages.length, sending]); // not on a rating: that rewrites a message, not adds one
 
   // The anonymous chat lives in this browser, with its sources and ratings, after every change
   // (nothing is written for a first visit until there is something to keep).
@@ -227,6 +231,7 @@ export default function MiraChat({
 
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
+    document.getElementById("mira-input")?.focus(); // the pressed button is about to go
     if (score === null) return setNps(null);
     setNps("thanks");
     window.setTimeout(() => setNps(null), 2500);
@@ -250,9 +255,11 @@ export default function MiraChat({
   }
 
   function newChat() {
+    if (sending) return; // a reply on its way belongs to this chat
     setMessages([]);
     setChatId(null);
     setError(null);
+    setNps(null);
     window.history.replaceState(null, "", "/mira");
     if (signedIn) return;
     // The 10 free conversations are used: a new one needs the free account.
@@ -305,7 +312,8 @@ export default function MiraChat({
           <button
             type="button"
             onClick={newChat}
-            className="min-h-[44px] rounded-full border border-ap-purple text-[14px] font-semibold text-[#561dbd]"
+            disabled={sending}
+            className="min-h-[44px] rounded-full border border-ap-purple text-[14px] font-semibold text-[#561dbd] disabled:opacity-50"
           >
             + New chat
           </button>
@@ -348,7 +356,8 @@ export default function MiraChat({
             <button
               type="button"
               onClick={newChat}
-              className="min-h-[44px] rounded-full border border-ap-purple px-3 text-[14px] font-semibold text-[#561dbd]"
+              disabled={sending}
+              className="min-h-[44px] rounded-full border border-ap-purple px-3 text-[14px] font-semibold text-[#561dbd] disabled:opacity-50"
             >
               New chat
             </button>
@@ -383,7 +392,8 @@ export default function MiraChat({
             <button
               type="button"
               onClick={() => setStyleOpen(true)}
-              className="min-h-[44px] rounded-full px-3 text-[13px] font-semibold text-ap-plum hover:bg-white"
+              disabled={!ready}
+              className="min-h-[44px] rounded-full px-3 text-[13px] font-semibold text-ap-plum hover:bg-white disabled:opacity-50"
             >
               How Mira coaches you
             </button>
