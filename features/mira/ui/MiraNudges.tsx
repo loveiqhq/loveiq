@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import nudgeConfig from "@features/mira/content/nudges.json";
-import { GradientButton, Wordmark } from "./MiraShell";
+import { GradientButton, LegalLinks, Wordmark } from "./MiraShell";
 import { miraApi } from "./api";
 
 /**
@@ -410,6 +410,7 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
             {error}
           </p>
         ) : null}
+        <LegalLinks className="mt-6" />
       </main>
     </div>
   );
