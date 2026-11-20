@@ -4,7 +4,7 @@ import type { MetadataRoute } from "next";
 // below. Without the trim, that one character would serve "Disallow: /" to every crawler.
 const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org").replace(/\/+$/, "");
 
-// Paths every crawler should skip:
+// Paths every crawler should skip, search engines excepted (see below):
 //   /api/      — server-side endpoints with no public content
 //   /admin     — internal, auth-gated dashboard (no public content, save crawl budget)
 //   /report    — per-user reports (token-protected, no SEO/training value)
@@ -13,6 +13,15 @@ const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org").r
 //   /login     — auth/staging gate, no SEO value
 //   /why       — one reader's answer to the unlock-feedback email, reached only from it
 const SHARED_DISALLOW = ["/api/", "/admin", "/report", "/survey", "/checkout", "/login", "/why"];
+
+// Google and Bing may fetch the private pages above, and only so they can read each page's
+// noindex. A page robots.txt blocks is never fetched, so its noindex is never seen, and Google
+// can still list the bare URL from a link ("Indexed, though blocked by robots.txt"). Every page
+// whose path starts with one of them (rules are prefixes: /report covers /report-v4-preview)
+// carries the noindex; __tests__/app/private-pages.test.ts holds them to it.
+// The report's data comes from /api/report, which stays closed, as does the dashboard.
+const SEARCH_ENGINE_USER_AGENTS = ["Googlebot", "Bingbot"];
+const SEARCH_ENGINE_DISALLOW = ["/api/", "/admin"];
 
 // Explicit allowlist for the major AI-training and AI-search crawlers, so
 // our policy toward them is intentional rather than defaulted-to via the `*`
@@ -40,6 +49,11 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       { userAgent: "*", allow: "/", disallow: SHARED_DISALLOW },
+      ...SEARCH_ENGINE_USER_AGENTS.map((userAgent) => ({
+        userAgent,
+        allow: "/",
+        disallow: SEARCH_ENGINE_DISALLOW,
+      })),
       ...AI_USER_AGENTS.map((userAgent) => ({
         userAgent,
         allow: "/",
