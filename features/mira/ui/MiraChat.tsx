@@ -6,7 +6,14 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { SupportPanel } from "./SupportPanel";
 import { DISCLAIMER, GradientButton, MiraFrame } from "./MiraShell";
-import { local, miraApi, type Turn } from "./api";
+import {
+  local,
+  miraApi,
+  useReloadWhenRestored,
+  type LocalTurn,
+  type Source,
+  type Turn,
+} from "./api";
 
 /**
  * Boards 01 (anonymous chat), 01b (free limit reached), 03 (coaching style) and 08a (chats,
@@ -16,8 +23,7 @@ import { local, miraApi, type Turn } from "./api";
  * conversation (Marcus's 10 free conversations).
  */
 
-type Source = { id: string; label: string; link: string | null };
-type Message = Turn & { sources?: Source[]; messageId?: number | null; rated?: 1 | -1 };
+type Message = LocalTurn & { messageId?: number | null };
 type CrisisCountry = {
   code: string;
   name: string;
@@ -41,18 +47,22 @@ export default function MiraChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const [gate, setGate] = useState(false);
   const [consented, setConsented] = useState(signedIn);
   const [tick, setTick] = useState(false);
+  // Until this browser's chat (or the opened one) is loaded, the consent tick and the starter
+  // prompts may not belong on screen: they are left out rather than flashed.
+  const [ready, setReady] = useState(signedIn && !initialChatId);
   const [style, setStyle] = useState<Style>({});
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useReloadWhenRestored();
 
   useEffect(() => {
     void miraApi("/api/mira/event", { body: { type: "track", name: "chat_opened" } });
@@ -67,6 +77,7 @@ export default function MiraChat({
       }
       setConsented(local.consent() === CONSENT_VERSION);
       setStyle(local.style() ?? {});
+      setReady(true);
       /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
@@ -94,21 +105,31 @@ export default function MiraChat({
           setChatId(null);
         }
       }
+      setReady(true);
     })();
   }, [signedIn, initialChatId]);
 
+  // Only the message list scrolls, never the page: the composer stays where the person typed.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const list = listRef.current;
+    if (list && messages.length > 0) list.scrollTop = list.scrollHeight;
   }, [messages, sending]);
 
-  function persist(next: Message[], left: number | null, gated = false) {
-    if (!signedIn)
-      local.saveChat({
-        turns: next.map(({ role, content }) => ({ role, content })),
-        freeLeft: left,
-        ...(gated ? { gate: true } : {}),
-      });
-  }
+  // The anonymous chat lives in this browser, with its sources and ratings, after every change
+  // (nothing is written for a first visit until there is something to keep).
+  useEffect(() => {
+    if (!ready || signedIn || (messages.length === 0 && !local.chat())) return;
+    local.saveChat({
+      turns: messages.map(({ role, content, sources, rated }) => ({
+        role,
+        content,
+        sources,
+        rated,
+      })),
+      freeLeft,
+      ...(gate ? { gate: true } : {}),
+    });
+  }, [ready, signedIn, messages, freeLeft, gate]);
 
   async function send(text: string) {
     const message = text.trim();
@@ -135,6 +156,7 @@ export default function MiraChat({
       freeLeft?: number | null;
       gate?: boolean;
       invitation?: string;
+      signIn?: boolean;
     }>("/api/mira/chat", {
       body: {
         message,
@@ -147,13 +169,15 @@ export default function MiraChat({
     if (res.data.gate) {
       setGate(true);
       setFreeLeft(0);
-      persist(next, 0, true);
       return;
     }
     if (!res.ok || !res.data.reply) {
       setMessages(messages);
       setInput(message);
-      setError(res.data.error ?? "Mira couldn't answer just now. Please try again.");
+      setError({
+        text: res.data.error ?? "Mira couldn't answer just now. Please try again.",
+        signIn: res.status === 401 && res.data.signIn === true,
+      });
       return;
     }
     const withReply: Message[] = [
@@ -169,9 +193,7 @@ export default function MiraChat({
         : []),
     ];
     setMessages(withReply);
-    const left = res.data.freeLeft ?? freeLeft;
-    setFreeLeft(left);
-    persist(withReply, left);
+    setFreeLeft(res.data.freeLeft ?? freeLeft);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
     if (res.data.chatId && res.data.chatId !== chatId) {
       setChatId(res.data.chatId);
@@ -183,15 +205,21 @@ export default function MiraChat({
     }
   }
 
-  async function rate(index: number, rating: 1 | -1) {
-    const m = messages[index];
-    if (!m || m.role !== "assistant" || m.rated) return;
-    setMessages((all) => all.map((x, i) => (i === index ? { ...x, rated: rating } : x)));
-    await miraApi("/api/mira/event", {
+  async function rate(m: Message, rating: 1 | -1) {
+    if (m.role !== "assistant" || m.rated) return;
+    const rated = { ...m, rated: rating };
+    const swap = (from: Message, to: Message) =>
+      setMessages((all) => all.map((x) => (x === from ? to : x)));
+    swap(m, rated);
+    const res = await miraApi("/api/mira/event", {
       body: m.messageId
         ? { type: "rating", rating, messageId: m.messageId }
         : { type: "rating", rating, reply: m.content.slice(0, 4000) },
     });
+    if (!res.ok) {
+      swap(rated, m);
+      setError({ text: res.data.error ?? "Your rating didn't go through. Please try again." });
+    }
   }
 
   function newChat() {
@@ -201,19 +229,20 @@ export default function MiraChat({
     window.history.replaceState(null, "", "/mira");
     if (signedIn) return;
     // The 10 free conversations are used: a new one needs the free account.
-    const gated = freeLeft === 0;
-    persist([], freeLeft, gated);
-    if (gated) {
+    if (freeLeft === 0) {
       setGate(true);
       void miraApi("/api/mira/event", { body: { type: "track", name: "gate_shown" } });
     }
   }
 
-  async function saveStyle(next: Style) {
+  async function saveStyle(next: Style): Promise<string | null> {
+    if (signedIn) {
+      const res = await miraApi("/api/mira/me", { method: "PATCH", body: { style: next } });
+      if (!res.ok) return res.data.error ?? "Unable to save. Please try again.";
+    } else local.saveStyle(next);
     setStyle(next);
     setStyleOpen(false);
-    if (signedIn) await miraApi("/api/mira/me", { method: "PATCH", body: { style: next } });
-    else local.saveStyle(next);
+    return null;
   }
 
   const started = messages.length > 0;
@@ -241,7 +270,9 @@ export default function MiraChat({
         </p>
       </section>
 
-      <div className="flex min-h-[620px] overflow-hidden rounded-[27px] border border-ap-line bg-white shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)]">
+      {/* As tall as the screen below the heading, so the composer is always in view; the
+          messages scroll inside. The minimum keeps a first visit's consent tick and composer whole. */}
+      <div className="flex h-[calc(100dvh-280px)] min-h-[min(520px,100dvh)] overflow-hidden rounded-[27px] border border-ap-line bg-white shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)]">
         <aside className="hidden w-[260px] shrink-0 flex-col gap-3 border-r border-ap-line bg-[#faf9fc] p-4 lg:flex">
           <button
             type="button"
@@ -284,6 +315,32 @@ export default function MiraChat({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* The sidebar's actions on phones and tablets, where the sidebar is hidden. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ap-line bg-[#faf9fc] px-3 py-2 lg:hidden">
+            <button
+              type="button"
+              onClick={newChat}
+              className="min-h-[44px] rounded-full border border-ap-purple px-3 text-[14px] font-semibold text-[#561dbd]"
+            >
+              New chat
+            </button>
+            {signedIn ? (
+              <Link
+                href="/mira/home"
+                className="inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-ap-plum"
+              >
+                Your chats
+              </Link>
+            ) : (
+              <Link
+                href="/mira/start"
+                className="inline-flex min-h-[44px] items-center rounded-full bg-black px-3 text-[13px] font-bold text-white"
+              >
+                Create free account
+              </Link>
+            )}
+          </div>
+
           <div className="flex items-center gap-3 bg-ap-lilac px-5 py-3">
             <span
               aria-hidden="true"
@@ -305,10 +362,26 @@ export default function MiraChat({
           </div>
 
           <div
-            className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6"
+            ref={listRef}
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-4 py-5 sm:px-6"
             aria-live="polite"
           >
             <Bubble role="assistant" text={miraConfig.openingMessage} />
+            {ready && !started && !gate ? (
+              <div aria-live="off" className="flex flex-wrap gap-2 pl-1">
+                {miraConfig.starterChips.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    disabled={!consented && !tick}
+                    onClick={() => send(chip)}
+                    className="min-h-[40px] rounded-full border border-ap-mist px-4 text-left text-[13px] text-[#561dbd] hover:border-ap-purple disabled:opacity-50"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {messages.map((m, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <Bubble role={m.role} text={m.content} />
@@ -329,7 +402,7 @@ export default function MiraChat({
                 {m.role === "assistant" && !isInvitation(m) ? (
                   <div className="flex flex-wrap items-center gap-3 pl-1 text-[12px] text-ap-muted">
                     {m.sources?.length ? (
-                      <span>
+                      <span className="[overflow-wrap:anywhere]">
                         Sources:{" "}
                         {m.sources.map((s, j) => (
                           <span key={s.id}>
@@ -354,8 +427,8 @@ export default function MiraChat({
                       type="button"
                       aria-label="Helpful"
                       aria-pressed={m.rated === 1}
-                      onClick={() => rate(i, 1)}
-                      className={`min-h-[32px] px-1 ${m.rated === 1 ? "text-ap-purple" : ""}`}
+                      onClick={() => rate(m, 1)}
+                      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${m.rated === 1 ? "text-ap-purple" : ""}`}
                     >
                       <svg
                         aria-hidden="true"
@@ -376,8 +449,8 @@ export default function MiraChat({
                       type="button"
                       aria-label="Not helpful"
                       aria-pressed={m.rated === -1}
-                      onClick={() => rate(i, -1)}
-                      className={`min-h-[32px] px-1 ${m.rated === -1 ? "text-ap-purple" : ""}`}
+                      onClick={() => rate(m, -1)}
+                      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${m.rated === -1 ? "text-ap-purple" : ""}`}
                     >
                       <svg
                         aria-hidden="true"
@@ -399,7 +472,6 @@ export default function MiraChat({
               </div>
             ))}
             {sending ? <p className="pl-1 text-[13px] text-ap-muted">Mira is writing…</p> : null}
-            <div ref={endRef} />
           </div>
 
           <div className="border-t border-ap-line px-4 py-4 sm:px-6">
@@ -423,22 +495,7 @@ export default function MiraChat({
               </div>
             ) : (
               <>
-                {!started ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {miraConfig.starterChips.map((chip) => (
-                      <button
-                        key={chip}
-                        type="button"
-                        disabled={!consented && !tick}
-                        onClick={() => send(chip)}
-                        className="min-h-[40px] rounded-full border border-ap-mist px-4 text-left text-[13px] text-[#561dbd] hover:border-ap-purple disabled:opacity-50"
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {!consented ? (
+                {ready && !consented ? (
                   <label className="mb-3 flex items-start gap-2 text-[13px] leading-snug text-ap-body">
                     <input
                       type="checkbox"
@@ -471,7 +528,9 @@ export default function MiraChat({
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
+                      // Enter that picks a word in an input method (Japanese, Chinese…) is not a send.
+                      const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+                      if (e.key === "Enter" && !e.shiftKey && !composing) {
                         e.preventDefault();
                         void send(input);
                       }
@@ -498,9 +557,25 @@ export default function MiraChat({
               </>
             )}
             {error ? (
-              <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
-                {error}
-              </p>
+              <>
+                <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
+                  {error.text}
+                  {error.signIn ? (
+                    <>
+                      {" "}
+                      <Link href="/mira/start" className="font-semibold underline">
+                        Sign in again
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
+                <p className="mt-1 text-[12px] text-ap-muted">
+                  If you&apos;re in danger right now, open{" "}
+                  <button type="button" onClick={() => setSupportOpen(true)} className="underline">
+                    Need support
+                  </button>
+                </p>
+              </>
             ) : null}
             <p className="mt-3 text-center text-[12px] text-ap-muted">
               Mira is an AI and can be wrong. She is not a therapist ·{" "}
@@ -515,12 +590,7 @@ export default function MiraChat({
       <p className="mt-6 max-w-[760px] text-[12px] leading-relaxed text-ap-muted">{DISCLAIMER}</p>
 
       {styleOpen ? (
-        <CoachingStylePanel
-          value={style}
-          signedIn={signedIn}
-          onClose={() => setStyleOpen(false)}
-          onSave={saveStyle}
-        />
+        <CoachingStylePanel value={style} onClose={() => setStyleOpen(false)} onSave={saveStyle} />
       ) : null}
       {supportOpen || crisis ? (
         <SupportPanel
@@ -537,11 +607,11 @@ export default function MiraChat({
 
 function Bubble({ role, text }: { role: "user" | "assistant"; text: string }) {
   return role === "user" ? (
-    <div className="ml-auto max-w-[80%] whitespace-pre-wrap rounded-3xl bg-ap-purple px-4 py-3 text-[15px] leading-relaxed text-white">
+    <div className="ml-auto max-w-[80%] whitespace-pre-wrap rounded-3xl bg-ap-purple px-4 py-3 text-[15px] leading-relaxed text-white [overflow-wrap:anywhere]">
       {text}
     </div>
   ) : (
-    <div className="max-w-[85%] whitespace-pre-wrap rounded-3xl bg-[#f4f2f7] px-4 py-3 text-[15px] leading-relaxed text-ap-ink">
+    <div className="max-w-[85%] whitespace-pre-wrap rounded-3xl bg-[#f4f2f7] px-4 py-3 text-[15px] leading-relaxed text-ap-ink [overflow-wrap:anywhere]">
       {text}
     </div>
   );

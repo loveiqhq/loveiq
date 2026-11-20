@@ -3,6 +3,7 @@
 import { useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { GradientButton } from "./MiraShell";
+import { Modal } from "./SupportPanel";
 
 export type Style = Partial<
   Record<"guidance" | "challenge" | "depth" | "practical" | "tone", number>
@@ -50,53 +51,69 @@ export function StyleScales({ value, onChange }: { value: Style; onChange: (v: S
   );
 }
 
+/** `onSave` resolves to an error to show (the panel stays open), or null once saved. */
 export function CoachingStylePanel({
   value,
-  signedIn,
   onClose,
   onSave,
 }: {
   value: Style;
-  signedIn: boolean;
   onClose: () => void;
-  onSave: (v: Style) => void;
+  onSave: (v: Style) => Promise<string | null>;
 }) {
   const [draft, setDraft] = useState<Style>(value);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="How Mira coaches you"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
-    >
-      <div className="max-h-[90vh] w-full max-w-[560px] overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-serif text-[24px] font-medium">How Mira coaches you</h2>
-          <button
-            type="button"
-            onClick={() => setDraft({})}
-            className="min-h-[44px] px-1 text-[13px] font-semibold text-ap-plum"
-          >
-            Reset
-          </button>
-        </div>
-        <p className="mb-3 mt-1 text-[14px] text-ap-body">
-          Pick a point on each line. The middle is balanced.
-        </p>
-        <StyleScales value={draft} onChange={setDraft} />
-        <div className="mt-5 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[44px] px-4 text-[15px] font-semibold text-ap-plum"
-          >
-            Cancel
-          </button>
-          <GradientButton onClick={() => onSave(draft)}>
-            {signedIn ? "Save" : "Save for this visit"}
-          </GradientButton>
-        </div>
+    <Modal label="How Mira coaches you" onClose={onClose}>
+      <div className="flex items-baseline justify-between">
+        <h2
+          data-autofocus
+          tabIndex={-1}
+          className="font-serif text-[24px] font-medium outline-none"
+        >
+          How Mira coaches you
+        </h2>
+        <button
+          type="button"
+          onClick={() => setDraft({})}
+          className="min-h-[44px] px-1 text-[13px] font-semibold text-ap-plum"
+        >
+          Reset
+        </button>
       </div>
-    </div>
+      <p className="mb-3 mt-1 text-[14px] text-ap-body">
+        Pick a point on each line. The middle is balanced.
+      </p>
+      <StyleScales value={draft} onChange={setDraft} />
+      {error ? (
+        <p role="alert" className="mt-3 text-[14px] text-ap-bad-ink">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-5 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-[44px] px-4 text-[15px] font-semibold text-ap-plum"
+        >
+          Cancel
+        </button>
+        <GradientButton
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            const failed = await onSave(draft);
+            if (failed) {
+              setError(failed);
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Saving…" : "Save"}
+        </GradientButton>
+      </div>
+    </Modal>
   );
 }
