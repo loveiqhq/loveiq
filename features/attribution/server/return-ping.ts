@@ -23,6 +23,9 @@
  * row stays whether or not a reply went out (no stored message, no bot, Slack refused it):
  * AP-Analytics' Report page counts it, "Came back within 7 days".
  *
+ * The same claim feeds #report-reactivations (reactivation-post.ts): every return but a draft
+ * also gets a top-level post there, which the team sees without opening threads.
+ *
  * Never throws. Every caller runs it after its response, and neither Slack nor the database may
  * touch the request that triggered it.
  */
@@ -30,6 +33,7 @@
 import { EMAILS } from "@features/admin/server/ap/email-registry";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { EMAIL_RETURN_AFTER_MS } from "@features/attribution/server/journey";
+import { postReactivation } from "@features/attribution/server/reactivation-post";
 import { EMAIL_NAMES } from "@features/attribution/server/slack-journey";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
@@ -227,6 +231,24 @@ export function buildReturnReply(
 
 const TABLE = "/rest/v1/reader_return";
 
+/**
+ * Whether the reader asked us to restrict processing (GDPR Art. 18, `app_user.processing_restricted_at`):
+ * then no thread reply and no #report-reactivations post, as the email crons and the team export
+ * already skip them. Unknown counts as restricted, so a failed read stays quiet.
+ */
+async function isRestricted(submissionId: number): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/survey_submission?id=eq.${submissionId}` +
+      "&select=app_user!fk_survey_submission_user" +
+      "(processing_restricted_at)&limit=1"
+  );
+  if (!res.ok) return true;
+  const rows = (await res.json()) as Array<{
+    app_user?: { processing_restricted_at?: string | null } | null;
+  }>;
+  return Boolean(rows[0]?.app_user?.processing_restricted_at);
+}
+
 async function readReader(submissionId: number): Promise<ReturnReader | null> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?id=eq.${submissionId}` +
@@ -282,6 +304,7 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     const reader = signal.reader ?? (await readReader(submissionId));
     const { sentAt, userAgent } = signal;
     if (!reader || !isReturn({ source, at, sentAt, userAgent }, reader)) return;
+    if (await isRestricted(submissionId)) return;
 
     const via = signal.via && VIA.test(signal.via) ? signal.via : null;
     const day = reportingDay(at);
@@ -303,22 +326,30 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     }
     if (((await claim.json()) as unknown[]).length === 0) return;
 
-    if (!isSlackBotConfigured()) return;
-    const message = await readMessage(submissionId);
-    if (!message) return;
-    const reply = buildReturnReply({ submissionId, source, at, via }, reader);
-    const posted = await postJourneyMessage({
-      ...reply,
-      channel: message.channel,
-      threadTs: message.message_ts,
-    });
-    if (!posted) return;
-    await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ slack_ts: posted.ts }),
-    });
-    logger.info({ submissionId, source }, "return ping: posted");
+    // Its own top-level post in #report-reactivations (every source but a draft), whether or
+    // not the reader has a thread here to reply in: alongside the reply, and awaited however
+    // the reply ends. Off without its channel; it never rejects.
+    const reactivation = postReactivation({ submissionId, source, via, at, day });
+    try {
+      if (!isSlackBotConfigured()) return;
+      const message = await readMessage(submissionId);
+      if (!message) return;
+      const reply = buildReturnReply({ submissionId, source, at, via }, reader);
+      const posted = await postJourneyMessage({
+        ...reply,
+        channel: message.channel,
+        threadTs: message.message_ts,
+      });
+      if (!posted) return;
+      await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ slack_ts: posted.ts }),
+      });
+      logger.info({ submissionId, source }, "return ping: posted");
+    } finally {
+      await reactivation;
+    }
   } catch (err) {
     logger.warn({ err, submissionId, source }, "return ping failed");
   }

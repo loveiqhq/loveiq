@@ -20,6 +20,13 @@ vi.mock("@features/attribution/server/journey", () => ({
   buildSubmissionJourney: (...args: unknown[]) => mockBuildSubmissionJourney(...args),
 }));
 
+// The #report-reactivations post redraws with these refreshes; its own behaviour is
+// reactivation-post.test.ts's. Mocked so it never takes a queued database answer here.
+const mockRefreshReactivation = vi.fn();
+vi.mock("@features/attribution/server/reactivation-post", () => ({
+  refreshReactivationPost: (...args: unknown[]) => mockRefreshReactivation(...args),
+}));
+
 import {
   isSlackBotConfigured,
   postJourneyMessage,
@@ -522,5 +529,26 @@ describe("refreshJourneyDetail", () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("report_opened"));
     mockBuildSubmissionJourney.mockRejectedValue(new Error("db down"));
     await expect(refreshJourneyDetail(1756)).resolves.toBeUndefined();
+  });
+});
+
+describe("the #report-reactivations post redraws with the journey", () => {
+  it("on a time update, even for a reader with no #incoming-surveys message", async () => {
+    mockSupabaseFetch.mockResolvedValue(json([]));
+    await refreshJourneyDetail(1756);
+    expect(mockRefreshReactivation).toHaveBeenCalledWith(1756);
+  });
+
+  it("on a step, with the step the caller witnessed, even when the message does not move", async () => {
+    mockSupabaseFetch.mockResolvedValue(json([]));
+    await refreshJourneyMessage(1756, "paywall");
+    expect(mockRefreshReactivation).toHaveBeenCalledWith(1756, "paywall");
+  });
+
+  it("not at all without the bot", async () => {
+    unconfigureBot();
+    await refreshJourneyDetail(1756);
+    await refreshJourneyMessage(1756, "paid");
+    expect(mockRefreshReactivation).not.toHaveBeenCalled();
   });
 });
