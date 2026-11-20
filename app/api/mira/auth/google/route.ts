@@ -25,6 +25,23 @@ export const dynamic = "force-dynamic";
 
 const ticks = z.object({ adult: z.literal("1"), terms: z.literal("1"), consent: z.literal("1") });
 
+/**
+ * The ticks (required and optional) count only when the click came from our own sign-up page,
+ * so another site's link can't tick them for someone: the browser's Sec-Fetch-Site, or the
+ * referrer where a browser doesn't send it. Anything else goes back to the form to tick there.
+ */
+function fromOurPage(request: Request, origin: string): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  const ref = request.headers.get("referer");
+  if (!ref) return false;
+  try {
+    return new URL(ref).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get("next"));
@@ -46,6 +63,7 @@ export async function GET(request: Request) {
   const client = googleClient();
   const origin = returnOrigin(request.url);
   if (!client || !origin) return back("off");
+  if (!fromOurPage(request, url.origin)) return back("ticks");
   if (!ticks.safeParse(Object.fromEntries(url.searchParams)).success) return back("ticks");
 
   const start = newGoogleStart();

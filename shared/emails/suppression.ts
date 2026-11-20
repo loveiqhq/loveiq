@@ -57,6 +57,33 @@ export async function suppressionState(email: string): Promise<SuppressionState>
   }
 }
 
+/**
+ * Whether a TRANSACTIONAL email (a sign-in code someone just asked for) must not go to this
+ * address: only when it bounced hard or its owner marked our mail as spam. An unsubscribe is
+ * from marketing, not from a code the person requested, and a failed lookup sends anyway, as
+ * `isEmailSuppressed` explains.
+ */
+export async function isUndeliverable(email: string): Promise<boolean> {
+  const supabaseUrl = supabaseRestUrl();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return false;
+  try {
+    const url =
+      `${supabaseUrl}/rest/v1/email_suppression?email=eq.${encodeURIComponent(email)}` +
+      "&reason=in.(hard_bounce,complaint)&select=email&limit=1";
+    const res = await fetchWithTimeout(url, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      timeoutMs: 3_000,
+    });
+    if (!res.ok) return false;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (err) {
+    logger.warn({ err, email }, "Undeliverable check failed");
+    return false;
+  }
+}
+
 export async function isEmailSuppressed(email: string): Promise<boolean> {
   // Unknown reads as not-suppressed here, deliberately: a transactional email that fails
   // to arrive because a lookup timed out is the worse outcome. See `suppressionState`.

@@ -75,6 +75,9 @@ const good = {
   email_verified: true,
 };
 
+/** A start request clicked on our own sign-up page (the browser says same-origin). */
+const own = (url: string) => new Request(url, { headers: { "sec-fetch-site": "same-origin" } });
+
 describe("Google's ID token", () => {
   it("gives the confirmed email only when every claim checks out", () => {
     expect(checkIdToken(idToken(good), CLIENT, S.nonce, NOW)).toEqual({
@@ -193,12 +196,34 @@ describe("GET /api/mira/auth/google", () => {
     process.env.MIRA_GOOGLE_CLIENT_SECRET = "secret";
   });
 
+  it("ignores ticks another site's link sets: back to the form, nothing kept", async () => {
+    const q = "adult=1&terms=1&consent=1&assessment=1&share=1";
+    for (const headers of [
+      { "sec-fetch-site": "cross-site" },
+      { referer: "https://evil.example/page" },
+      {} as Record<string, string>,
+    ]) {
+      const res = await start(
+        new Request(`https://www.loveiq.org/api/mira/auth/google?${q}`, { headers })
+      );
+      expect(res.headers.get("location")).toBe("https://www.loveiq.org/mira/start?google=ticks");
+    }
+    expect(jar.set).not.toHaveBeenCalled();
+    // A browser without Sec-Fetch-Site that came from our own page still goes on.
+    const ours = await start(
+      new Request(`https://www.loveiq.org/api/mira/auth/google?${q}`, {
+        headers: { referer: "https://www.loveiq.org/mira/start" },
+      })
+    );
+    expect(ours.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\/o\/oauth2/);
+  });
+
   it("needs the three ticks, then sends the person to Google with a one-use cookie", async () => {
     const noTicks = await start(new Request("https://www.loveiq.org/api/mira/auth/google"));
     expect(noTicks.headers.get("location")).toBe("https://www.loveiq.org/mira/start?google=ticks");
 
     const res = await start(
-      new Request("https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1")
+      own("https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1")
     );
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\/o\/oauth2/);
@@ -214,7 +239,7 @@ describe("GET /api/mira/auth/google", () => {
   it("keeps the optional ticks and a Mira page to return to, and nothing else, for the callback", async () => {
     const next = encodeURIComponent(`/mira?chat=${CHAT}`);
     await start(
-      new Request(
+      own(
         `https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1&assessment=1&share=1&next=${next}`
       )
     );
@@ -225,15 +250,13 @@ describe("GET /api/mira/auth/google", () => {
     });
     vi.mocked(jar.set).mockClear();
     await start(
-      new Request(
+      own(
         "https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1&assessment=yes&next=%2F%2Fevil.example"
       )
     );
     expect(unpackStart(vi.mocked(jar.set).mock.calls[0]![1])).toMatchObject(NONE);
     // A refusal keeps where the person was going, for the emailed code.
-    const ticks = await start(
-      new Request(`https://www.loveiq.org/api/mira/auth/google?next=${next}`)
-    );
+    const ticks = await start(own(`https://www.loveiq.org/api/mira/auth/google?next=${next}`));
     expect(ticks.headers.get("location")).toBe(
       `https://www.loveiq.org/mira/start?google=ticks&next=${next}`
     );
@@ -242,7 +265,7 @@ describe("GET /api/mira/auth/google", () => {
   it("stays hidden without the Google client", async () => {
     delete process.env.MIRA_GOOGLE_CLIENT_SECRET;
     const res = await start(
-      new Request("https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1")
+      own("https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1")
     );
     expect(res.headers.get("location")).toBe("https://www.loveiq.org/mira/start?google=off");
   });

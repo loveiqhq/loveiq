@@ -8,7 +8,7 @@ vi.mock("@shared/http/ratelimit", () => ({
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 vi.mock("@features/mira/server/alerts", () => ({ alertCodeCap: vi.fn() }));
-vi.mock("@shared/emails/suppression", () => ({ suppressionState: vi.fn() }));
+vi.mock("@shared/emails/suppression", () => ({ isUndeliverable: vi.fn() }));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -41,7 +41,7 @@ import { POST } from "@/app/api/mira/auth/route";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { alertCodeCap } from "@features/mira/server/alerts";
 import { addressKey, sendSignInCode } from "@features/mira/server/sign-in";
-import { suppressionState } from "@shared/emails/suppression";
+import { isUndeliverable } from "@shared/emails/suppression";
 import {
   addMessages,
   createChat,
@@ -95,7 +95,7 @@ describe("POST /api/mira/auth", () => {
       cooldowns.delete(`${bucket}:${key}`);
     });
     vi.mocked(getClientIp).mockReturnValue("127.0.0.1");
-    vi.mocked(suppressionState).mockResolvedValue("clear");
+    vi.mocked(isUndeliverable).mockResolvedValue(false);
     verifyOtp.mockResolvedValue({
       data: { user: { id: "u1", email: "Lea@Example.com" } },
       error: null,
@@ -296,21 +296,26 @@ describe("POST /api/mira/auth", () => {
       expect(alertCodeCap).toHaveBeenCalledWith(60);
     });
 
-    it("send nothing to a suppressed address, or when that can't be checked, and answer as if sent", async () => {
-      for (const state of ["suppressed", "unknown"] as const) {
-        vi.mocked(suppressionState).mockResolvedValueOnce(state);
-        const t0 = Date.now();
-        const res = await start(`${state}@example.com`);
-        // The same answer as a sent code, after about as long as a send takes.
-        expect(Date.now() - t0).toBeGreaterThanOrEqual(350);
-        expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ success: true });
-      }
-      expect(suppressionState).toHaveBeenCalledWith("suppressed@example.com");
+    it("send nothing to an address that bounced or complained, and answer as if sent", async () => {
+      vi.mocked(isUndeliverable).mockResolvedValueOnce(true);
+      const t0 = Date.now();
+      const res = await start("bounced@example.com");
+      // The same answer as a sent code, after about as long as a send takes.
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(350);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(isUndeliverable).toHaveBeenCalledWith("bounced@example.com");
       expect(sendSignInCode).not.toHaveBeenCalled();
       expect(recordCodeIssued).not.toHaveBeenCalled();
       // The allowance stays spent, as after a real code, so a second try can't tell either.
-      expect((await start("suppressed@example.com")).status).toBe(429);
+      expect((await start("bounced@example.com")).status).toBe(429);
+    });
+
+    it("still sends a code to someone who only unsubscribed from our marketing", async () => {
+      vi.mocked(isUndeliverable).mockResolvedValueOnce(false);
+      const res = await start("unsubscribed@example.com");
+      expect(res.status).toBe(200);
+      expect(sendSignInCode).toHaveBeenCalledWith("unsubscribed@example.com");
     });
 
     it("send nothing when the hidden field is filled, spending no allowance, and answer as if sent", async () => {
@@ -326,7 +331,7 @@ describe("POST /api/mira/auth", () => {
       expect(await res.json()).toEqual({ success: true });
       expect(sendSignInCode).not.toHaveBeenCalled();
       expect(checkCooldown).not.toHaveBeenCalled();
-      expect(suppressionState).not.toHaveBeenCalled();
+      expect(isUndeliverable).not.toHaveBeenCalled();
       // An empty field is a person.
       const person = await post({
         action: "start",

@@ -30,7 +30,7 @@ import {
 } from "@features/mira/server/store";
 import { alertCodeCap } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
-import { suppressionState } from "@shared/emails/suppression";
+import { isUndeliverable } from "@shared/emails/suppression";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import {
   checkCooldown,
@@ -230,12 +230,11 @@ export async function POST(request: Request) {
       alertCodeCap(CODES_PER_HOUR);
       return tryLater();
     }
-    // Never to a suppressed address (bounced, complained or unsubscribed), and fail closed when
-    // that can't be checked. The inbox's allowance stays spent, so a second try within ten
-    // minutes is answered as after a real code too.
-    const suppression = await suppressionState(body.email);
-    if (suppression !== "clear") {
-      logger.warn({ suppression }, "mira: no sign-in code sent (address suppressed or unchecked)");
+    // Never to an address that bounced hard or marked our mail as spam (an unsubscribe from
+    // marketing doesn't stop a code the person asked for). The inbox's allowance stays spent,
+    // so a second try within ten minutes is answered as after a real code too.
+    if (await isUndeliverable(body.email)) {
+      logger.warn("mira: no sign-in code sent (address bounced or complained)");
       return sentNothing();
     }
     const sent = await sendSignInCode(body.email);

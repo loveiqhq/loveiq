@@ -4,7 +4,7 @@ import Link from "next/link";
 import { MiraFrame } from "@features/mira/ui/MiraShell";
 
 export const metadata: Metadata = {
-  title: "How Mira handles your data | Applied Psychometrics",
+  title: "How Mira handles your data | LoveIQ",
   robots: { index: false, follow: false },
   ...miraLinkPreview("/mira/privacy"),
 };
