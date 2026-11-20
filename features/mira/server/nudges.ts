@@ -491,6 +491,8 @@ export async function runNudges(
           "List-Unsubscribe": `<${unsubscribeUrl}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
+        // The Resend webhook writes delivery and first open onto this row (opened_at).
+        tags: [{ name: "mira_nudge", value: id }],
       });
       if (mailed.error) {
         summary.errors++;
