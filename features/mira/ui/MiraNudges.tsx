@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import nudgeConfig from "@features/mira/content/nudges.json";
 import { GradientButton } from "./MiraShell";
 import { miraApi } from "./api";
@@ -60,6 +60,12 @@ export default function MiraNudges() {
   const [saved, setSaved] = useState<Choice | "resume">("twice_weekly");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // Each new screen moves focus to its heading, so a screen reader announces the change.
+  useEffect(() => {
+    if (screen !== "loading") heading.current?.focus();
+  }, [screen]);
 
   useEffect(() => {
     void (async () => {
@@ -104,7 +110,12 @@ export default function MiraNudges() {
       reason: withReason ? reason : null,
       note: withReason ? note.trim() || null : null,
     });
-    if (ok) setScreen("stopped");
+    if (!ok) return;
+    if (!withReason) {
+      setReason(null);
+      setNote("");
+    }
+    setScreen("stopped");
   }
 
   async function resume() {
@@ -127,7 +138,11 @@ export default function MiraNudges() {
 
         {screen === "invalid" ? (
           <>
-            <h1 className="font-serif text-[30px] font-semibold leading-tight">
+            <h1
+              ref={heading}
+              tabIndex={-1}
+              className="font-serif text-[30px] font-semibold leading-tight outline-none"
+            >
               This link doesn’t work anymore
             </h1>
             <p className="text-[15px] leading-relaxed text-ap-body">
@@ -143,7 +158,11 @@ export default function MiraNudges() {
         {screen === "choose" ? (
           <>
             <div className="flex flex-col gap-2">
-              <h1 className="font-serif text-[30px] font-semibold leading-tight">
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[30px] font-semibold leading-tight outline-none"
+              >
                 Fewer nudges, not none?
               </h1>
               <p className="text-[15px] leading-relaxed text-ap-body">
@@ -227,8 +246,20 @@ export default function MiraNudges() {
 
         {screen === "reason" ? (
           <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setScreen("choose")}
+              className="self-start text-[14px] font-bold text-ap-body"
+            >
+              <span aria-hidden="true">← </span>Back
+            </button>
             <div className="flex flex-col gap-2">
-              <h1 className="font-serif text-[30px] font-semibold leading-tight">
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[30px] font-semibold leading-tight outline-none"
+              >
                 What made you stop?
               </h1>
               <p className="text-[15px] leading-relaxed text-ap-body">
@@ -288,11 +319,16 @@ export default function MiraNudges() {
         {screen === "stopped" ? (
           <>
             <div className="flex flex-col gap-2 pt-4">
-              <h1 className="font-serif text-[30px] font-semibold leading-tight">
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[30px] font-semibold leading-tight outline-none"
+              >
                 Mira won’t email you anymore
               </h1>
               <p className="text-[15px] leading-relaxed text-ap-body">
-                You’ve stopped all nudges.{reason ? " Thank you for telling us why." : ""}
+                You’ve stopped all nudges.
+                {reason || note.trim() ? " Thank you for telling us why." : ""}
               </p>
             </div>
             <div className="flex flex-col gap-1.5 rounded-[20px] bg-ap-mist/40 p-[18px]">
@@ -306,7 +342,7 @@ export default function MiraNudges() {
               <span className="text-[13px] leading-normal text-ap-body">
                 Whenever you want to talk, open the chat. She’ll pick up where you left off.
               </span>
-              <Link href="/mira/home" className="pt-1 text-[14px] font-bold text-ap-plum">
+              <Link href="/mira" className="pt-1 text-[14px] font-bold text-ap-plum">
                 Talk to Mira
               </Link>
             </div>
@@ -324,7 +360,11 @@ export default function MiraNudges() {
         {screen === "saved" && prefs ? (
           <>
             <div className="flex flex-col gap-2 pt-4">
-              <h1 className="font-serif text-[30px] font-semibold leading-tight">
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[30px] font-semibold leading-tight outline-none"
+              >
                 {SAVED_COPY[saved].title}
               </h1>
               <p className="text-[15px] leading-relaxed text-ap-body">{SAVED_COPY[saved].line}</p>
