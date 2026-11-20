@@ -504,11 +504,21 @@ describe("refreshReactivationPost", () => {
   it("redraws a report reload at most once a minute", async () => {
     mockRateLimit.mockResolvedValue({ allowed: false });
     await refreshReactivationPost(4201, "report_opened");
-    expect(mockRateLimit).toHaveBeenCalledWith("4201", {
+    expect(mockRateLimit).toHaveBeenCalledWith("4201:report_opened", {
       bucket: "reactivation-redraw",
       limit: 1,
       windowMs: 60_000,
     });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("redraws a repeated paywall or checkout at most once a minute too, each in its own slot", async () => {
+    // Every page load pings the paywall and every Unlock click starts a checkout: unbounded,
+    // they would spend the bot's chat.update budget, which #incoming-surveys shares.
+    mockRateLimit.mockResolvedValue({ allowed: false });
+    await refreshReactivationPost(4201, "paywall");
+    await refreshReactivationPost(4201, "checkout");
+    expect(mockRateLimit.mock.calls.map(([key]) => key)).toEqual(["4201:paywall", "4201:checkout"]);
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
@@ -519,7 +529,7 @@ describe("refreshReactivationPost", () => {
     expect(mockUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("always redraws a new step on the rail, and keeps it green", async () => {
+  it("always redraws a payment, and keeps it green", async () => {
     mockRateLimit.mockResolvedValue({ allowed: false });
     await refreshReactivationPost(4201, "paid");
     expect(mockRateLimit).not.toHaveBeenCalled();

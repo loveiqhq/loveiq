@@ -273,9 +273,10 @@ interface ReactivationRow {
  * step a caller just saw server-side (the rail's floor, as for the survey message).
  *
  * Time updates (no `witnessed`) come deduped by their callers, as for the survey message: one a
- * minute for a session's close, one per five minutes or milestone for report events. A report
- * open (`report_opened`) fires on every page load, reloads included, so it redraws at most once
- * a minute. The paywall, the checkout and a payment always redraw. Never throws.
+ * minute for a session's close, one per five minutes or milestone for report events. A step
+ * repeats with every page load and click (a reload is `report_opened` again, the paywall ping
+ * comes once per load, every Unlock click starts a checkout), so each step redraws at most once
+ * a minute. A payment always redraws. Never throws.
  */
 export async function refreshReactivationPost(
   submissionId: number,
@@ -296,10 +297,14 @@ export async function refreshReactivationPost(
       return;
     }
 
-    // Reloads come in bursts. A time update is already deduped by its caller, and its last one
-    // (the session's close) must not be dropped; a new step on the rail never waits.
-    if (witnessed === "report_opened") {
-      const slot = await checkRateLimit(String(submissionId), {
+    // A step's first redraw already greens the rail; its repeats (reloads, paywall pings, Unlock
+    // clicks) would each cost a chat.update from the bot's budget, which the #incoming-surveys
+    // message shares, at the pace of anyone holding the report link. One a minute per step, each
+    // in its own slot so a new step never waits behind another. A payment always redraws (the
+    // funnel line takes it). A time update is already deduped by its caller, and its last one
+    // (the session's close) must not be dropped.
+    if (witnessed && witnessed !== "paid") {
+      const slot = await checkRateLimit(`${submissionId}:${witnessed}`, {
         bucket: "reactivation-redraw",
         limit: 1,
         windowMs: 60_000,
