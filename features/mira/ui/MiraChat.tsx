@@ -432,7 +432,11 @@ export default function MiraChat({
             </span>
             <div className="flex-1">
               <p className="font-serif text-[18px] font-semibold leading-tight">Mira</p>
-              <p className="text-[12px] text-ap-muted">AI coach · Body confidence · Beta</p>
+              {/* One line on phones, where every line of the chat's height counts. */}
+              <p className="text-[12px] text-ap-muted">
+                <span className="sm:hidden">AI coach · Beta</span>
+                <span className="hidden sm:inline">AI coach · Body confidence · Beta</span>
+              </p>
             </div>
             <button
               type="button"
