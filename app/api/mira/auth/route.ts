@@ -34,6 +34,7 @@ import {
   releaseCooldown,
 } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
 
 export const dynamic = "force-dynamic";
 
@@ -183,6 +184,21 @@ export async function POST(request: Request) {
     });
     if (!all.allowed) {
       await releaseCooldown(inbox, slot);
+      // Email sign-up is closed until the hour turns (Google still works), so ops hear of it,
+      // once an hour: either sign-ups took off or someone is pushing codes at strangers.
+      const alert = await checkRateLimit("all", {
+        bucket: "mira-code-all-alert",
+        limit: 1,
+        windowMs: HOUR_MS,
+      });
+      if (alert.allowed) {
+        await notifySlack({
+          channel: "ops",
+          kind: "mira_code_cap",
+          text: `:warning: Mira: ${CODES_PER_HOUR} sign-in code emails in the last hour, so email sign-up waits until the hour is over (Google sign-in still works). A launch spike, or someone sending codes to strangers: check mira_event signup_code_sent.`,
+          username: "ops_alerts",
+        }).catch(() => {});
+      }
       return tryLater();
     }
     const sent = await sendSignInCode(body.email);
