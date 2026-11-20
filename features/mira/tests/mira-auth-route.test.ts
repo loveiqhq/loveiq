@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@shared/http/csrf", () => ({ verifyCsrfToken: vi.fn().mockResolvedValue(true) }));
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 4, resetAt: new Date() }),
+  checkCooldown: vi.fn(),
+  releaseCooldown: vi.fn(),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 vi.mock("@shared/observability/logger", () => ({
@@ -12,13 +14,14 @@ vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
 const verifyOtp = vi.fn();
+const signOut = vi.fn().mockResolvedValue({ error: null });
 const getMiraAccount = vi.fn();
 vi.mock("@features/mira/server/session", () => ({
-  createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut: vi.fn() } })),
+  createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut } })),
   getMiraAccount: () => getMiraAccount(),
 }));
-vi.mock("@features/mira/server/sign-in", () => ({
-  SIGN_IN_CODE: /^\d{6,10}$/,
+vi.mock("@features/mira/server/sign-in", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/mira/server/sign-in")>()),
   sendSignInCode: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@features/mira/server/store", () => ({
@@ -33,7 +36,7 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import { POST } from "@/app/api/mira/auth/route";
-import { sendSignInCode } from "@features/mira/server/sign-in";
+import { addressKey, sendSignInCode } from "@features/mira/server/sign-in";
 import {
   addMessages,
   createChat,
@@ -43,7 +46,12 @@ import {
   recordCodeIssued,
   upsertProfileAtSignIn,
 } from "@features/mira/server/store";
-import { checkRateLimit } from "@shared/http/ratelimit";
+import {
+  checkCooldown,
+  checkRateLimit,
+  getClientIp,
+  releaseCooldown,
+} from "@shared/http/ratelimit";
 
 function post(body: unknown) {
   return POST(
@@ -55,14 +63,33 @@ function post(body: unknown) {
   );
 }
 
+const start = (email: string) =>
+  post({ action: "start", email, adult: true, terms: true, consent: true });
+
+/** Redis's cooldowns, in memory: a key is taken until it is released. */
+const cooldowns = new Set<string>();
+/** checkRateLimit refusing the named buckets. */
+const refuse = (...buckets: string[]) =>
+  vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) => ({
+    allowed: !buckets.includes(cfg.bucket),
+    remaining: 0,
+    resetAt: new Date(),
+  }));
+
 describe("POST /api/mira/auth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(checkRateLimit).mockResolvedValue({
-      allowed: true,
-      remaining: 4,
-      resetAt: new Date(),
+    cooldowns.clear();
+    refuse();
+    vi.mocked(checkCooldown).mockImplementation(async (key, bucket) => {
+      if (cooldowns.has(`${bucket}:${key}`)) return { allowed: false, retryAfterMs: 1 };
+      cooldowns.add(`${bucket}:${key}`);
+      return { allowed: true, retryAfterMs: 0 };
     });
+    vi.mocked(releaseCooldown).mockImplementation(async (key, bucket) => {
+      cooldowns.delete(`${bucket}:${key}`);
+    });
+    vi.mocked(getClientIp).mockReturnValue("127.0.0.1");
     verifyOtp.mockResolvedValue({
       data: { user: { id: "u1", email: "Lea@Example.com" } },
       error: null,
@@ -179,5 +206,112 @@ describe("POST /api/mira/auth", () => {
       chatId: null,
     });
     expect(createChat).not.toHaveBeenCalled();
+  });
+
+  describe("code emails", () => {
+    it("count one allowance per inbox, however the address is spelled", () => {
+      for (const spelling of ["lea+news@gmail.com", "l.e.a@googlemail.com", "Lea@Gmail.com"]) {
+        expect(addressKey(spelling)).toBe("lea@gmail.com");
+      }
+      expect(addressKey("jo.doe+x@acme.de")).toBe("jo.doe@acme.de"); // dots only on Gmail
+    });
+
+    it("send 3 codes per inbox per 10 minutes, the +tag and dotted spellings included", async () => {
+      for (const email of ["lea+1@gmail.com", "l.e.a@gmail.com", "lea+2@gmail.com"]) {
+        expect((await start(email)).status).toBe(200);
+      }
+      const fourth = await start("lea@gmail.com");
+      expect(fourth.status).toBe(429);
+      expect(sendSignInCode).toHaveBeenCalledTimes(3);
+      // The account keeps the address as typed; only the limit's key is normalised.
+      expect(sendSignInCode).toHaveBeenCalledWith("l.e.a@gmail.com");
+      expect(recordCodeIssued).toHaveBeenCalledWith("l.e.a@gmail.com");
+    });
+
+    it("give the inbox's allowance back when no code went out", async () => {
+      vi.mocked(sendSignInCode).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+      vi.mocked(recordCodeIssued).mockRejectedValueOnce(new Error("db down"));
+      for (let i = 0; i < 3; i++) expect((await start("lea@gmail.com")).status).toBe(500);
+      for (let i = 0; i < 3; i++) expect((await start("lea@gmail.com")).status).toBe(200);
+    });
+
+    it("stop at 15 an hour per network and 300 an hour in all, without spending the inbox's allowance", async () => {
+      refuse("mira-code-ip");
+      const perIp = await start("lea@gmail.com");
+      expect(perIp.status).toBe(429);
+      expect(await perIp.json()).toEqual({ error: "Please try again later." });
+      expect(checkCooldown).not.toHaveBeenCalled();
+
+      refuse("mira-code-all");
+      const global = await start("lea@gmail.com");
+      expect(await global.json()).toEqual({ error: "Please try again later." });
+      expect(sendSignInCode).not.toHaveBeenCalled();
+      expect(cooldowns.size).toBe(0);
+      const limits = vi
+        .mocked(checkRateLimit)
+        .mock.calls.map(([key, cfg]) => [cfg.bucket, key, cfg.limit, cfg.windowMs]);
+      expect(limits).toContainEqual(["mira-code-ip", "127.0.0.1", 15, 3_600_000]);
+      expect(limits).toContainEqual(["mira-code-all", "all", 300, 3_600_000]);
+    });
+  });
+
+  describe("code guesses", () => {
+    it("are limited per address and network before one of the code's guesses is used", async () => {
+      refuse("mira-code-guess");
+      const res = await post({ action: "verify", email: "lea@example.com", code: "00000000" });
+      expect(res.status).toBe(429);
+      expect(claimCodeAttempt).not.toHaveBeenCalled();
+      expect(verifyOtp).not.toHaveBeenCalled();
+      const [key, cfg] = vi.mocked(checkRateLimit).mock.calls.at(-1)!;
+      expect([key, cfg.limit, cfg.windowMs]).toEqual(["lea@example.com|127.0.0.1", 5, 600_000]);
+    });
+  });
+
+  it("signs out again when the profile can't be saved, so the next code starts clean", async () => {
+    vi.mocked(upsertProfileAtSignIn).mockRejectedValueOnce(new Error("db down"));
+    const res = await post({ action: "verify", email: "lea@example.com", code: "12345678" });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: "We couldn't finish signing you in. Please send a new code.",
+    });
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  describe("carrying the anonymous chat", () => {
+    const long = (role: "user" | "assistant", i: number) => ({
+      role,
+      content: `${i} ${"x".repeat(7000)}`,
+    });
+    const turns = Array.from({ length: 48 }, (_, i) => long(i % 2 ? "assistant" : "user", i));
+
+    it("keeps the chat's own limits: its newest 24 turns, user turns 2,000 characters, Mira's 4,000", async () => {
+      getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      expect((await post({ action: "carry", carry: turns })).status).toBe(200);
+      const kept = vi.mocked(addMessages).mock.calls[0]![1];
+      expect(kept).toHaveLength(24);
+      expect(kept[0]!.content.startsWith("24 ")).toBe(true);
+      expect(kept.map((t) => t.content.length)).toEqual(
+        kept.map((t) => (t.role === "user" ? 2000 : 4000))
+      );
+    });
+
+    it("at most 5 times a day per account", async () => {
+      getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      refuse("mira-carry");
+      expect((await post({ action: "carry", carry: turns })).status).toBe(429);
+      const verified = await post({
+        action: "verify",
+        email: "lea@example.com",
+        code: "12345678",
+        carry: turns,
+      });
+      // Signing in still works; only the copy is skipped.
+      expect(await verified.json()).toMatchObject({ success: true, chatId: null });
+      expect(createChat).not.toHaveBeenCalled();
+      const [key, cfg] = vi
+        .mocked(checkRateLimit)
+        .mock.calls.find(([, c]) => c.bucket === "mira-carry")!;
+      expect([key, cfg.limit, cfg.windowMs]).toEqual(["u1", 5, 86_400_000]);
+    });
   });
 });

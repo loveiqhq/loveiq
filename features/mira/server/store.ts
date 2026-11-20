@@ -1,6 +1,8 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { memberByEmail } from "@features/brain/server/sign-in";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
+import { isStaffEmail } from "./google";
 import type { CitedSource } from "./safety";
 import type { CoachingStyle } from "./prompt";
 
@@ -178,16 +180,69 @@ export async function rateMessage(
   return res.ok;
 }
 
+/**
+ * The person's own words that the KPI log keeps on their events: the text of a reply they rated
+ * when the reply itself wasn't stored, and with `all` their feedback (free text, and their
+ * address if they agreed to be emailed) and the note they gave when stopping nudges. What the
+ * staff page counts stays (a rating keeps its thumb). Run before the account goes: its events
+ * then lose their user link and can't be found any more.
+ */
+async function forgetEventText(userId: string, all: boolean): Promise<void> {
+  const mine = `/rest/v1/mira_event?user_id=eq.${enc(userId)}`;
+  const writes: Array<[string, string, unknown?]> = ([1, -1] as const).map((r) => [
+    "PATCH",
+    `${mine}&name=eq.rating&props->>rating=eq.${r}&props->>reply=not.is.null`,
+    { props: { rating: r } },
+  ]);
+  if (all) {
+    writes.push(
+      ["DELETE", `${mine}&name=eq.feedback`],
+      ["PATCH", `${mine}&name=eq.nudge_stopped&props->>reason=not.is.null`, { props: {} }]
+    );
+  }
+  for (const [method, path, body] of writes) {
+    const res = await supabaseFetch(path, {
+      method,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res.ok) throw new Error(`mira event cleanup failed (${res.status})`);
+  }
+}
+
+/** Deletes every stored chat (and so its messages), and the rated replies' text kept with them. */
 export async function deleteChats(userId: string): Promise<void> {
+  await forgetEventText(userId, false);
   const res = await supabaseFetch(`/rest/v1/mira_chat?user_id=eq.${enc(userId)}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(`mira chat delete failed (${res.status})`);
 }
 
-/** Deletes the auth user; the database cascades to the profile, chats and messages. */
-export async function deleteAccount(userId: string): Promise<void> {
-  const res = await supabaseFetch(`/auth/v1/admin/users/${enc(userId)}`, { method: "DELETE" });
+/**
+ * True when the login is also an admin panel or Jarvis login (admin_users, or an active member
+ * of Jarvis's people registry), or when that can't be checked.
+ */
+async function sharesLogin(email: string): Promise<boolean> {
+  if (await isStaffEmail(email)) return true; // fails closed itself
+  return memberByEmail(email).then(
+    (member) => member !== null,
+    () => true
+  );
+}
+
+/**
+ * Deletes the account: first what the KPI log and the sign-in codes keep about the person, then
+ * the account. Its login is a Supabase auth user, the same one the admin panel and Jarvis sign
+ * in with, so for staff and Jarvis members only Mira's row goes (cascading to the chats,
+ * messages and nudges) and the login stays. Everyone else's auth user goes, which cascades the
+ * same way.
+ */
+export async function deleteAccount(account: { id: string; email: string }): Promise<void> {
+  await forgetEventText(account.id, true);
+  await consumeCode(account.email);
+  const res = (await sharesLogin(account.email))
+    ? await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(account.id)}`, { method: "DELETE" })
+    : await supabaseFetch(`/auth/v1/admin/users/${enc(account.id)}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`mira account delete failed (${res.status})`);
 }
 
@@ -267,8 +322,13 @@ export async function findAssessment(email: string): Promise<AssessmentResult | 
   };
 }
 
-/** Guesses one emailed code gets, and how long it lives (Supabase's own code lifetime). */
-export const CODE_MAX_ATTEMPTS = 5;
+/**
+ * Guesses one emailed code gets, and how long it lives (Supabase's own code lifetime). 25 of
+ * 10^8 codes is still nothing to an attacker; the low cap that matters is per address AND
+ * network (the auth route's wrong-guess limit), so a stranger who knows the address can't burn
+ * the real person's guesses from elsewhere.
+ */
+export const CODE_MAX_ATTEMPTS = 25;
 export const CODE_TTL_SECONDS = 3600;
 
 /**
@@ -300,7 +360,10 @@ export async function claimCodeAttempt(email: string): Promise<boolean> {
   return (await res.json()) === true;
 }
 
-/** A used code's row goes, so it cannot be guessed at again. */
+/** A used code's row goes, so it cannot be guessed at again (and the address with it). */
 export async function consumeCode(email: string): Promise<void> {
-  await supabaseFetch(`/rest/v1/mira_sign_in_code?email=eq.${enc(email)}`, { method: "DELETE" });
+  const res = await supabaseFetch(`/rest/v1/mira_sign_in_code?email=eq.${enc(email)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`mira code delete failed (${res.status})`);
 }

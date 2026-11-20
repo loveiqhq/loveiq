@@ -14,8 +14,9 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 vi.mock("@features/mira/server/anon", () => ({ anonId: vi.fn().mockResolvedValue("anon_1") }));
 const verifyOtp = vi.fn();
+const signOut = vi.fn().mockResolvedValue({ error: null });
 vi.mock("@features/mira/server/session", () => ({
-  createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp } })),
+  createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut } })),
 }));
 vi.mock("@features/mira/server/sign-in", () => ({
   mintSignInCode: vi.fn().mockResolvedValue("12345678"),
@@ -218,5 +219,13 @@ describe("GET /api/mira/auth/google/callback", () => {
     expect(await at()).toMatch(/google=other$/); // unsure counts as staff
     expect(mintSignInCode).not.toHaveBeenCalled();
     expect(verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it("signs out again when the profile can't be saved, so the next try starts clean", async () => {
+    vi.mocked(upsertProfileAtSignIn).mockRejectedValueOnce(new Error("db down"));
+    const res = await back(`code=abc&state=${S.state}`);
+    expect(res.headers.get("location")).toMatch(/google=failed$/);
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(logMiraEvent).not.toHaveBeenCalled();
   });
 });
