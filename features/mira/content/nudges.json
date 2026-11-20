@@ -1,0 +1,62 @@
+{
+  "source": "Sanjin's coach config (board 09, Daily nudges by email) and Marcus's nudge unsubscribe boards, 18 Nov 2026",
+  "instructions": "Write a short, warm email (max. 3 sentences) that picks up on the last chat: the plan, exercise or feeling the user named. End with one open question the user can answer by clicking “Continue with Mira”, which opens the chat with this message already in it. Keep the subject neutral, never mention body, sex or weight in it.",
+  "senderName": "Mira",
+  "preheader": "A short note for you.",
+  "types": [
+    {
+      "id": "agreement",
+      "title": "Follow up on the agreement",
+      "when": "The day after a chat that ended with a small agreement",
+      "goal": "Turn the agreement into action and hear how it went",
+      "teaser": "About what we agreed…",
+      "button": "Tell Mira how it went",
+      "example": "Hi Lea, we agreed you’d leave one soft lamp on for the first minute. Did you get to try it? Either answer is completely fine."
+    },
+    {
+      "id": "progress",
+      "title": "Progress check",
+      "when": "Once a week, on the user’s chosen day",
+      "goal": "Make progress visible and keep the baseline up to date",
+      "teaser": "Your week, in one tap…",
+      "button": "Rate this week",
+      "example": "Quick check-in: compared to when we started, how at home have you felt in your body this week? Tap a number from 1 to 5."
+    },
+    {
+      "id": "heard_of",
+      "title": "Have you heard of…?",
+      "when": "A root cause is clear and no practice has been tried",
+      "goal": "Introduce one evidence-based practice, gently",
+      "teaser": "Have you ever heard of this…",
+      "button": "Show me",
+      "example": "Have you ever heard of body neutrality? It’s about noticing what your body does for you, not how it looks. Want me to show you a two-minute version?"
+    },
+    {
+      "id": "root_cause",
+      "title": "Root-cause question",
+      "when": "A possible root cause came up but isn’t explored yet",
+      "goal": "Deepen understanding between chats",
+      "teaser": "Something from our last chat stayed with me…",
+      "button": "Think it through with Mira",
+      "example": "Something from our last chat stayed with me: you said the feeling started around your first relationship. What do you remember about how your body was talked about back then?"
+    },
+    {
+      "id": "share",
+      "title": "A thought worth sharing?",
+      "when": "No chat for 2 days or more",
+      "goal": "Open the door without pressure",
+      "teaser": "Anything on your mind today…",
+      "button": "Share it with Mira",
+      "example": "Did anything come up today that’s worth sharing? A small moment, a thought, a feeling. Even one sentence is enough."
+    },
+    {
+      "id": "celebrate",
+      "title": "Celebrate progress",
+      "when": "After a streak or a better weekly rating",
+      "goal": "Reinforce the change and build confidence",
+      "teaser": "Something worth noticing…",
+      "button": "Reflect with Mira",
+      "example": "Three days in a row you tried your small step. That’s not nothing, that’s a pattern starting. What made it easier this time?"
+    }
+  ]
+}

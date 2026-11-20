@@ -46,6 +46,7 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 | Payment                | `/admin/ap/assessment-a/payment`         | [`ApPayment.tsx`](../features/admin/ui/ap/ApPayment.tsx)               | `GET /api/admin/ap/payment`                                                       |
 | Pay to start           | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
 | Unlock feedback        | `/admin/ap/assessment-a/unlock-feedback` | [`ApUnlockFeedback.tsx`](../features/admin/ui/ap/ApUnlockFeedback.tsx) | `GET /api/admin/ap/unlock-feedback`                                               |
+| Mira (beta)            | `/admin/ap/mira`                         | [`ApMira.tsx`](../features/admin/ui/ap/ApMira.tsx)                     | `GET /api/admin/ap/mira`                                                          |
 | Emails (Assessment A)  | `/admin/ap/assessment-a/emails`          | [`ApEmails.tsx`](../features/admin/ui/ap/ApEmails.tsx)                 | `GET /api/admin/ap/emails?scope=assessment`                                       |
 | Catalog (data sources) | `/admin/ap/sources`                      | [`ApSources.tsx`](../features/admin/ui/ap/ApSources.tsx)               | `GET`/`PUT /api/admin/ap/catalog`, `GET /api/admin/ap/catalog/rows`               |
 | Raw data explorer      | `/admin/ap/explorer`                     | [`ApExplorer.tsx`](../features/admin/ui/ap/ApExplorer.tsx)             | `GET /api/admin/ap/explorer`, `POST /api/admin/ap/explorer/unlock`, saved filters |
@@ -66,6 +67,17 @@ report emails count from `EMAIL_TAGS_FROM` (11 Nov 2026): before, their tallies 
 test emails, which reach production's webhook through the same Resend account. "Promotional
 emails" is in the sidebar as "soon" until the first campaign; a send under its own stage shows on
 Emails, under "Not tied to an assessment", from its first send.
+
+Mira (beta) lays out Marcus's four "MVP success" boards from Mira's own tables, with the
+design's definitions. A conversation is a person's messages split wherever more than 30 minutes
+pass between two, each part with 3 or more messages, counted when its 3rd is sent. The sign-up
+rate is of the people who chatted signed out, converted by an account created after that chat.
+Daily time spent adds the gaps of 5 minutes or less between an account's messages, per day.
+Nudge opens and unsubscribes are per delivered nudge (the Resend webhook fills
+`mira_nudge.delivered_at` and `opened_at`; Apple Mail's privacy opens are included), and an
+unsubscribe or pause counts against the person's last nudge before it. What nothing records yet
+(body image, three of profile depth's five areas, topics, referrals) says "Not measured yet"
+and why.
 
 Each page is a thin wrapper in `app/admin/ap/**/page.tsx` that renders its component
 inside `DashboardErrorBoundary`. The components load their data through

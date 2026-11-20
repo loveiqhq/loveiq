@@ -125,6 +125,14 @@
     {
       "path": "/api/cron/file-invoices",
       "schedule": "40 6 3 * *"
+    },
+    {
+      "path": "/api/cron/mira-nudges",
+      "schedule": "5,35 * * * *"
+    },
+    {
+      "path": "/api/cron/mira-memory",
+      "schedule": "40 3 * * *"
     }
   ],
   "functions": {
@@ -238,6 +246,9 @@
     },
     "app/api/cron/brain-reconcile/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/mira-nudges/route.ts": {
+      "maxDuration": 300
     }
   }
 }

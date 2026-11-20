@@ -50,6 +50,7 @@
     "IVFFlat",
     "oneline",
     "pgvector",
+    "PKCE",
     "TESTONLY",
     "unpdf",
     "WAHA",

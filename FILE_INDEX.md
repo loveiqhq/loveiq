@@ -181,6 +181,20 @@
 | Supabase admin REST helper         | `features/admin/server/supabase.ts`        |
 | Restore the database from a backup | `docs/runbooks/DISASTER_RECOVERY.md` (§1)  |
 
+## Mira (AI coach, beta)
+
+| Task                                 | Files                                                                                                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Change what Mira says or may not say | `features/mira/content/system-prompt.ts`, `features/mira/content/mira-config.json`                                                                                             |
+| Add or fix an evidence card          | `features/mira/content/evidence-cards.json`, `features/mira/server/cards.ts`                                                                                                   |
+| Support lines by country             | `features/mira/content/crisis-lines.json`, `features/mira/server/crisis.ts`                                                                                                    |
+| Free replies, model, consent version | `features/mira/server/config.ts`                                                                                                                                               |
+| Daily nudge emails and unsubscribe   | `features/mira/server/nudges.ts`, `features/mira/server/nudge-prefs.ts`, `features/mira/content/nudges.json`, `app/api/cron/mira-nudges/`, `app/mira/nudges/`                  |
+| 12-month memory limit                | `app/api/cron/mira-memory/`, `supabase/migrations/20261118210000_mira_nudges_and_memory.sql`                                                                                   |
+| The chat, sign-up, home, settings    | `features/mira/ui/`, `app/mira/`                                                                                                                                               |
+| Mira's API routes                    | `app/api/mira/`                                                                                                                                                                |
+| Mira's tables                        | `supabase/migrations/20261118120000_mira_mvp.sql`, `supabase/migrations/20261118130000_mira_sign_in_code.sql`, `supabase/migrations/20261118210000_mira_nudges_and_memory.sql` |
+
 ## Company Brain
 
 | Task                            | Files                                                                                                                    |
