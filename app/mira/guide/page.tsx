@@ -9,6 +9,7 @@ import {
 } from "@features/mira/content/guide";
 import { cardById, type EvidenceCard } from "@features/mira/server/cards";
 import { MiraFrame } from "@features/mira/ui/MiraShell";
+import GuideHashScroll from "@features/mira/ui/GuideHashScroll";
 import { miraLinkPreview } from "@features/mira/link-preview";
 
 const GUIDE_TITLE = "Body confidence guide | LoveIQ";
@@ -31,6 +32,7 @@ export default function MiraGuidePage() {
     .filter((c): c is EvidenceCard => Boolean(c));
   return (
     <MiraFrame>
+      <GuideHashScroll />
       <article className="max-w-[720px] text-[16px] leading-relaxed text-ap-body [&_h2]:mt-12 [&_h2]:font-serif [&_h2]:text-[26px] [&_h2]:font-medium [&_h2]:leading-tight [&_h2]:text-ap-ink [&_h3]:mt-8 [&_h3]:font-serif [&_h3]:text-[20px] [&_h3]:font-medium [&_h3]:text-ap-ink [&_p]:mt-3">
         <p className="text-[12px] uppercase tracking-[0.14em] text-ap-muted">{GUIDE.kicker}</p>
         <h1 className="mt-2 font-serif text-[34px] font-medium leading-tight text-ap-ink [overflow-wrap:anywhere]">
