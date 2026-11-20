@@ -22,9 +22,11 @@ const CRISIS_PATTERNS: RegExp[] = [
   /\bend(ing)? (my|my own) life\b/,
   /\bend(ing)? it all\b(?! with\b)/, // not a break-up: "end it all with him"
   // Not "take my life back" or "take my life in a new direction".
-  /\btak(e|ing) my (own )?life\b(?! (back|in|into|forward|over|to)\b)/,
-  /\b(want(ed)? to|wanna) die\b(?! of\b)/, // not "I wanted to die of embarrassment"
-  /\b(don'?t|do not) want to (live|be alive)\b/,
+  /\btak(e|ing) my (own )?life\b(?! (back|in|into|forward|over|to|more|less|seriously)\b)/,
+  // Not "I wanted to die of embarrassment", "…die from shame", "…die when he saw me".
+  /\b(want(ed)? to|wanna) die\b(?! (of|from|when|if|because|laughing)\b)/,
+  // Not "I don't want to live with this shame"; "live like this" stays a crisis.
+  /\b(don'?t|do not) want to (live|be alive)\b(?! (with|in|through|without|together)\b)/,
   // Only where the sentence ends there: not "I don't want to wake up next to him like this".
   /\b(don'?t|do not) want to wake up( again| anymore| tomorrow)?(?= ?[^ a-z0-9]|$)/,
   /\bbetter off dead\b/,
@@ -44,7 +46,7 @@ const CRISIS_PATTERNS: RegExp[] = [
   /\bselbstmord/,
   /\bsuizid/,
   // Spanish
-  /\bquiero morir/,
+  /\bquiero morir(me)?\b(?! de\b)/, // not "me quiero morir de vergüenza"
   /\bno quiero vivir\b/,
   /\b((quiero|voy a) matarme|me quiero matar)\b/,
   // French

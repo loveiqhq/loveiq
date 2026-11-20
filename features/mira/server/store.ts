@@ -189,16 +189,33 @@ export async function rateMessage(
  */
 async function forgetEventText(userId: string, all: boolean): Promise<void> {
   const mine = `/rest/v1/mira_event?user_id=eq.${enc(userId)}`;
-  const writes: Array<[string, string, unknown?]> = ([1, -1] as const).map((r) => [
-    "PATCH",
-    `${mine}&name=eq.rating&props->>rating=eq.${r}&props->>reply=not.is.null`,
-    { props: { rating: r } },
-  ]);
+  // The browsers the person signed up or in from: what they rated or wrote there before
+  // signing in was logged under the browser id only (sign-in links the two).
+  const linked = await supabaseFetch(`${mine}&name=eq.signup_completed&select=anon_id`);
+  if (!linked.ok) throw new Error(`mira event cleanup failed (${linked.status})`);
+  const anonIds = [
+    ...new Set(
+      ((await linked.json().catch(() => [])) as { anon_id: string | null }[])
+        .map((r) => r.anon_id)
+        .filter((id): id is string => typeof id === "string" && /^[\w-]{16,64}$/.test(id))
+    ),
+  ];
+  const owners = [mine];
+  if (anonIds.length) owners.push(`/rest/v1/mira_event?anon_id=in.(${anonIds.join(",")})`);
+  const writes: Array<[string, string, unknown?]> = owners.flatMap((who) =>
+    ([1, -1] as const).map((r): [string, string, unknown] => [
+      "PATCH",
+      `${who}&name=eq.rating&props->>rating=eq.${r}&props->>reply=not.is.null`,
+      { props: { rating: r } },
+    ])
+  );
   if (all) {
-    writes.push(
-      ["DELETE", `${mine}&name=eq.feedback`],
-      ["PATCH", `${mine}&name=eq.nudge_stopped&props->>reason=not.is.null`, { props: {} }]
-    );
+    for (const who of owners) writes.push(["DELETE", `${who}&name=eq.feedback`]);
+    writes.push([
+      "PATCH",
+      `${mine}&name=eq.nudge_stopped&props->>reason=not.is.null`,
+      { props: {} },
+    ]);
   }
   for (const [method, path, body] of writes) {
     const res = await supabaseFetch(path, {

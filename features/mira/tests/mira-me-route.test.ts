@@ -93,6 +93,7 @@ describe("PATCH /api/mira/me", () => {
     expect(vi.mocked(updateProfile).mock.calls[0]![1]).toEqual({
       nudges_on: true,
       nudges_stopped_at: null,
+      nudges_paused_until: null,
       nudge_stop_reason: null,
     });
 

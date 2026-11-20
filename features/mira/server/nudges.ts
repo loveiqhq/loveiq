@@ -309,8 +309,9 @@ export function nudgeEmail(input: {
     `<p style="${css({ margin: "0", color: "#b6aecb", "font-size": "12px" })}">Applied Psychometrics UG · Berlin</p>`,
     `</td></tr></table></body></html>`,
   ].join("\n");
+  // The neutral line first here too: a mail app that previews the text part shows that.
   const text =
-    `${input.body}\n\n${kind.button}: ${input.openUrl}\n\n` +
+    `${nudgeConfig.preheader}\n\n${input.body}\n\n${kind.button}: ${input.openUrl}\n\n` +
     `You get this because you turned on daily nudges from Mira. One email a day at most.\n` +
     `Fewer nudges, pause or unsubscribe: ${input.prefsUrl}\n\nApplied Psychometrics UG · Berlin`;
   return { subject, html, text };
@@ -481,35 +482,53 @@ export async function runNudges(
       const prefsUrl = `${site}/mira/nudges?t=${enc(makeToken("prefs", user.id)!)}`;
       const unsubscribeUrl = `${site}/api/mira/nudges/unsubscribe?t=${enc(makeToken("prefs", user.id)!)}`;
       const email = nudgeEmail({ type: nudge.type, body: nudge.body, openUrl, prefsUrl });
-      const mailed = await mail.emails.send({
-        from: from(),
-        to: user.email,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-        headers: {
-          "List-Unsubscribe": `<${unsubscribeUrl}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      const mailed = await mail.emails.send(
+        {
+          from: from(),
+          to: user.email,
+          subject: email.subject,
+          html: email.html,
+          text: email.text,
+          headers: {
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
+          // The Resend webhook writes delivery and first open onto this row (opened_at).
+          tags: [{ name: "mira_nudge", value: id }],
         },
-        // The Resend webhook writes delivery and first open onto this row (opened_at).
-        tags: [{ name: "mira_nudge", value: id }],
-      });
+        { idempotencyKey: `mira-nudge-${id}` }
+      ); // a retried call can't send it twice
       if (mailed.error) {
         summary.errors++;
         logger.error({ err: mailed.error.name }, "mira: a nudge email was not sent");
         return;
       }
       delivered = true;
-      // Only a nudge that went becomes Mira's latest message, where its button opens the chat.
-      const [messageId] = await addMessages(chat.id, [{ role: "assistant", content: nudge.body }]);
-      await supabaseFetch(claim, {
+      // The email went: record that first, whatever happens to the chat copy after.
+      const marked = await supabaseFetch(claim, {
         method: "PATCH",
         body: JSON.stringify({
-          message_id: messageId ?? null,
           resend_id: mailed.data?.id ?? null,
           sent_at: new Date().toISOString(),
         }),
       });
+      if (!marked.ok) {
+        summary.errors++;
+        logger.error({ status: marked.status }, "mira: a sent nudge was not marked as sent");
+      }
+      // Only a nudge that went becomes Mira's latest message, where its button opens the chat.
+      try {
+        const [messageId] = await addMessages(chat.id, [
+          { role: "assistant", content: nudge.body },
+        ]);
+        await supabaseFetch(claim, {
+          method: "PATCH",
+          body: JSON.stringify({ message_id: messageId ?? null }),
+        });
+      } catch (err) {
+        summary.errors++;
+        logger.error({ err }, "mira: a sent nudge was not added to the chat");
+      }
     } finally {
       // Not sent: give the day back, so the next run can send it.
       if (!delivered) await supabaseFetch(claim, { method: "DELETE" });

@@ -334,6 +334,37 @@ describe("POST /api/mira/chat", () => {
     expect(buckets).not.toContain("mira-global-day");
   });
 
+  it("doesn't spend a free conversation on a resting day", async () => {
+    limitHit("mira-global-day");
+    const res = await post({ message: "hi", consent: true });
+    expect(res.status).toBe(503);
+    const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    expect(buckets).not.toContain("mira-anon-chats");
+  });
+
+  it("refuses an absurdly large body before reading it for anything", async () => {
+    const res = await post({
+      message: "I want to kill myself " + "x".repeat(210_000),
+      consent: true,
+    });
+    expect(res.status).toBe(413);
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("past the day's crisis allowance per network, still answers but stores and logs nothing", async () => {
+    limitHit("mira-crisis-day");
+    const res = await post({ message: "I want to kill myself", consent: true });
+    expect((await res.json()).crisis).toBe(true);
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("gives the model only the time the function has left", async () => {
+    await post({ message: "hi", consent: true });
+    const until = vi.mocked(askModel).mock.calls[0]![3]!;
+    expect(until - Date.now()).toBeGreaterThan(60_000);
+    expect(until - Date.now()).toBeLessThanOrEqual(65_000);
+  });
+
   it("says Mira is off when no model key is set", async () => {
     vi.mocked(askModel).mockResolvedValueOnce({ ok: false, reason: "unconfigured" });
     const res = await post({ message: "hi", consent: true });

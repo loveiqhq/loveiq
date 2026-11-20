@@ -11,10 +11,17 @@ import { memberByEmail } from "@features/brain/server/sign-in";
 import { claimCodeAttempt, deleteAccount, deleteChats } from "@features/mira/server/store";
 
 const LEA = { id: "6f2c4a1e-1111-4222-8333-944455556666", email: "lea@example.com" };
+const BROWSER = "aBcD1234eFgH5678iJkL9012";
 
 /** Every call as "METHOD path", with its body; admin_users answers `staff`. */
 function database(staff: unknown[] | "down" = []) {
   vi.mocked(supabaseFetch).mockImplementation(async (path: string) => {
+    if (path.includes("name=eq.signup_completed&select=anon_id")) {
+      // Lea signed up from this browser; her pre-sign-up ratings and feedback carry only its id.
+      return new Response(JSON.stringify([{ anon_id: BROWSER }, { anon_id: BROWSER }]), {
+        status: 200,
+      });
+    }
     if (path.startsWith("/rest/v1/admin_users")) {
       return staff === "down"
         ? new Response("oops", { status: 503 })
@@ -77,6 +84,12 @@ describe("deleting a Mira account", () => {
         { props: { rating: -1 } },
       ],
       [`DELETE ${mine}&name=eq.feedback`, undefined],
+      // What she rated or wrote in her browser before signing up goes too.
+      [
+        `PATCH /rest/v1/mira_event?anon_id=in.(${BROWSER})&name=eq.rating&props->>rating=eq.1&props->>reply=not.is.null`,
+        { props: { rating: 1 } },
+      ],
+      [`DELETE /rest/v1/mira_event?anon_id=in.(${BROWSER})&name=eq.feedback`, undefined],
       [`PATCH ${mine}&name=eq.nudge_stopped&props->>reason=not.is.null`, { props: {} }],
       ["DELETE /rest/v1/mira_sign_in_code?email=eq.lea%40example.com", undefined],
     ] as const) {
