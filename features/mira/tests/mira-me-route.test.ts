@@ -104,6 +104,23 @@ describe("PATCH /api/mira/me", () => {
     });
   });
 
+  it("counts a Settings switch-off as a nudge stop, and a switch-on as a resume, once", async () => {
+    const nudgeEvents = () =>
+      vi
+        .mocked(logMiraEvent)
+        .mock.calls.filter(([name]) => name === "nudge_stopped" || name === "nudge_resumed")
+        .map(([name, , props]) => [name, props]);
+    vi.mocked(getProfile).mockResolvedValue({ nudges_on: true } as never);
+    await PATCH(call("PATCH", "", { nudges_on: false }));
+    vi.mocked(getProfile).mockResolvedValue(stopped as never);
+    await PATCH(call("PATCH", "", { nudges_on: false })); // the same value again: no event
+    await PATCH(call("PATCH", "", { nudges_on: true }));
+    expect(nudgeEvents()).toEqual([
+      ["nudge_stopped", { reason: null, source: "settings" }],
+      ["nudge_resumed", { source: "settings" }],
+    ]);
+  });
+
   it("doesn't read the profile when the switch isn't sent", async () => {
     await PATCH(call("PATCH", "", { name: "Lea" }));
     expect(getProfile).not.toHaveBeenCalled();

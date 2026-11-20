@@ -113,6 +113,14 @@ export async function PATCH(request: Request) {
           : { nudges_on, nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
     await updateProfile(g.account.id, { ...rest, ...nudgeState });
     logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(parsed.data) });
+    // The "Nudge emails" unsubscribe numbers count a stop wherever it happens, Settings included.
+    if ("nudges_on" in nudgeState) {
+      logMiraEvent(
+        nudgeState.nudges_on ? "nudge_resumed" : "nudge_stopped",
+        { userId: g.account.id },
+        nudgeState.nudges_on ? { source: "settings" } : { reason: null, source: "settings" }
+      );
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "mira: could not save the account");
