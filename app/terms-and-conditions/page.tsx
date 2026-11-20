@@ -181,15 +181,18 @@ export default function TermsAndConditionsPage() {
             {/* Section 11 */}
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">11. Liability</h2>
-              <p className="mb-4">We are liable only for:</p>
-              <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>intent</li>
-                <li>gross negligence</li>
-                <li>injury to life, body or health</li>
-              </ul>
-              <p>
-                For slight negligence, liability is limited to foreseeable, typical damage. We are
-                not liable for decisions you make based on LoveIQ outputs.
+              <p className="mb-4">
+                We are liable without limitation for intent and gross negligence, for injury to
+                life, body or health caused by our fault, under the German Product Liability Act
+                (Produkthaftungsgesetz) and where we have given a guarantee.
+              </p>
+              <p className="mb-4">
+                For slight negligence, we are liable only if we breach an essential contractual
+                obligation, meaning one that makes the proper use of LoveIQ possible in the first
+                place and on which you may regularly rely. In that case, our liability is limited to
+                the damage that is typical and foreseeable for this kind of contract. Otherwise, our
+                liability is excluded. These rules also apply to the personal liability of our
+                employees, representatives and agents.
               </p>
             </section>
 
@@ -247,7 +250,12 @@ export default function TermsAndConditionsPage() {
             {/* Section 14 */}
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">14. Governing Law</h2>
-              <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
+              <p className="mb-4">
+                These Terms are governed by the law of the Federal Republic of Germany. The UN
+                Convention on Contracts for the International Sale of Goods (CISG) does not apply.
+                If you are a consumer, this choice of law does not take away the protection of the
+                mandatory rules of the country where you usually live (Art. 6(2) Rome I Regulation).
+              </p>
             </section>
 
             {/* Section 15 */}

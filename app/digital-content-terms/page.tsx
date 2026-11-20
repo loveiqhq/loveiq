@@ -202,7 +202,12 @@ export default function DigitalContentTermsPage() {
             {/* Section 11 */}
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">11. Governing Law</h2>
-              <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
+              <p className="mb-4">
+                These Terms are governed by the law of the Federal Republic of Germany. The UN
+                Convention on Contracts for the International Sale of Goods (CISG) does not apply.
+                If you are a consumer, this choice of law does not take away the protection of the
+                mandatory rules of the country where you usually live (Art. 6(2) Rome I Regulation).
+              </p>
             </section>
           </div>
         </article>

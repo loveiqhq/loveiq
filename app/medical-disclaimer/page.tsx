@@ -177,16 +177,16 @@ export default function MedicalDisclaimerPage() {
             {/* Section 7 */}
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">7. Limitation of Liability</h2>
-              <p className="mb-4">Applied Psychometrics UG shall not be liable for:</p>
-              <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>emotional impact</li>
-                <li>relational consequences</li>
-                <li>distress</li>
-                <li>misunderstandings</li>
-                <li>incorrect self-interpretations</li>
-                <li>personal decisions</li>
-              </ul>
-              <p>arising from LoveIQ use.</p>
+              <p className="mb-4">
+                LoveIQ&apos;s results are information, not advice. You decide what to do with them,
+                and you are responsible for your own personal and relationship decisions.
+              </p>
+              <p>
+                Applied Psychometrics UG (haftungsbeschränkt) is liable as our Terms of Use set out:
+                without limitation for intent, gross negligence, injury to life, body or health and
+                under the German Product Liability Act; for slight negligence only for breach of an
+                essential contractual obligation and limited to typical, foreseeable damage.
+              </p>
             </section>
 
             {/* Section 8 */}
@@ -215,7 +215,12 @@ export default function MedicalDisclaimerPage() {
             {/* Section 10 */}
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">10. Governing Law</h2>
-              <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
+              <p className="mb-4">
+                This disclaimer is governed by the law of the Federal Republic of Germany. The UN
+                Convention on Contracts for the International Sale of Goods (CISG) does not apply.
+                If you are a consumer, this choice of law does not take away the protection of the
+                mandatory rules of the country where you usually live (Art. 6(2) Rome I Regulation).
+              </p>
             </section>
           </div>
         </article>
