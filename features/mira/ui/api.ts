@@ -53,6 +53,7 @@ export function useReloadWhenRestored(): void {
 const LOCAL_CHAT = "mira.chat.v1";
 const LOCAL_CONSENT = "mira.consent.v1";
 const LOCAL_STYLE = "mira.style.v1";
+const LOCAL_NPS = "mira.nps.v1";
 
 function read<T>(key: string): T | null {
   try {
@@ -82,4 +83,8 @@ export const local = {
   saveConsent: (version: string) => write(LOCAL_CONSENT, version),
   style: () => read<Record<string, number>>(LOCAL_STYLE),
   saveStyle: (v: Record<string, number> | null) => write(LOCAL_STYLE, v),
+  /** For the NPS question: conversations this browser started, and when it last asked. */
+  nps: () =>
+    read<{ convos: number; asked: number | null }>(LOCAL_NPS) ?? { convos: 0, asked: null },
+  saveNps: (v: { convos: number; asked: number | null }) => write(LOCAL_NPS, v),
 };

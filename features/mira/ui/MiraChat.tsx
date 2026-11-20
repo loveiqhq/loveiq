@@ -37,6 +37,22 @@ const CONSENT_VERSION = "mira-2026-11-18";
 const isInvitation = (m: Turn) =>
   m.role === "assistant" && m.content === miraConfig.intakeInvitation;
 
+/**
+ * The NPS question (Marcus's MVP success board) after the 3rd conversation, then at most
+ * monthly: once this browser has started 3 chats and Mira has answered twice in this one, never
+ * right after a crisis reply. Counts the chat and notes the asking in this browser.
+ */
+export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: boolean): boolean {
+  const seen = local.nps();
+  const now = Date.now();
+  const convos = seen.convos + (firstOfChat ? 1 : 0);
+  const replies = turns.filter((t) => t.role === "assistant" && !isInvitation(t)).length;
+  const due = seen.asked === null || now - seen.asked > 30 * 24 * 60 * 60 * 1000;
+  const ask = !crisisReply && convos >= 3 && replies >= 2 && due;
+  local.saveNps({ convos, asked: ask ? now : seen.asked });
+  return ask;
+}
+
 export default function MiraChat({
   signedIn,
   initialChatId,
@@ -61,6 +77,8 @@ export default function MiraChat({
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  // The NPS question (Marcus's MVP success board): "ask" while open, "thanks" once answered.
+  const [nps, setNps] = useState<"ask" | "thanks" | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   useReloadWhenRestored();
 
@@ -141,6 +159,7 @@ export default function MiraChat({
       void miraApi("/api/mira/event", { body: { type: "track", name: "consent_given" } });
     }
     setError(null);
+    const firstOfChat = !chatId && messages.length === 0;
     const history = messages.map(({ role, content }) => ({ role, content })).slice(-24);
     const next: Message[] = [...messages, { role: "user", content: message }];
     setMessages(next);
@@ -195,6 +214,7 @@ export default function MiraChat({
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
+    if (npsDue(firstOfChat, withReply, Boolean(res.data.crisis))) setNps("ask");
     if (res.data.chatId && res.data.chatId !== chatId) {
       setChatId(res.data.chatId);
       setChats((c) => [
@@ -203,6 +223,13 @@ export default function MiraChat({
       ]);
       window.history.replaceState(null, "", `/mira?chat=${res.data.chatId}`);
     }
+  }
+
+  function answerNps(score: number | null) {
+    void miraApi("/api/mira/event", { body: { type: "nps", score } });
+    if (score === null) return setNps(null);
+    setNps("thanks");
+    window.setTimeout(() => setNps(null), 2500);
   }
 
   async function rate(m: Message, rating: 1 | -1) {
@@ -261,18 +288,18 @@ export default function MiraChat({
         )
       }
     >
-      <section className="mb-6 mt-2 max-w-[720px]">
-        <h1 className="font-serif text-[34px] font-medium leading-[1.15] sm:text-[44px]">
+      <section className="mb-4 max-w-[720px] sm:mb-6 sm:mt-2">
+        <h1 className="font-serif text-[26px] font-medium leading-[1.15] sm:text-[44px]">
           Talk to <span className="text-[#d05976]">Mira</span> about your body confidence
         </h1>
-        <p className="mt-3 text-[16px] leading-relaxed text-ap-body">
+        <p className="mt-2 text-[14px] leading-relaxed text-ap-body sm:mt-3 sm:text-[16px]">
           Her answers draw on research about body confidence. Mira is an AI coach, not a therapist.
         </p>
       </section>
 
       {/* As tall as the screen below the heading, so the composer is always in view; the
           messages scroll inside. The minimum keeps a first visit's consent tick and composer whole. */}
-      <div className="flex h-[calc(100dvh-280px)] min-h-[min(520px,100dvh)] overflow-hidden rounded-[27px] border border-ap-line bg-white shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)]">
+      <div className="flex h-[calc(100dvh-200px)] min-h-[400px] overflow-hidden sm:h-[calc(100dvh-280px)] sm:min-h-[min(520px,100dvh)] rounded-[27px] border border-ap-line bg-white shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)]">
         <aside className="hidden w-[260px] shrink-0 flex-col gap-3 border-r border-ap-line bg-[#faf9fc] p-4 lg:flex">
           <button
             type="button"
@@ -471,6 +498,45 @@ export default function MiraChat({
                 ) : null}
               </div>
             ))}
+            {nps ? (
+              <div className="rounded-2xl border border-ap-line bg-[#faf9fc] p-4">
+                {nps === "thanks" ? (
+                  <p role="status" className="text-[14px] text-ap-body">
+                    Thank you, that helps us a lot.
+                  </p>
+                ) : (
+                  <fieldset>
+                    <legend className="text-[14px] font-semibold">
+                      Quick question: how likely are you to recommend Mira to a friend?
+                    </legend>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {Array.from({ length: 11 }, (_, n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => answerNps(n)}
+                          aria-label={`${n} out of 10`}
+                          className="min-h-[44px] min-w-[44px] rounded-full border border-ap-line bg-white text-[14px] hover:border-ap-purple"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex justify-between text-[12px] text-ap-muted">
+                      <span>0 = not at all likely</span>
+                      <span>10 = extremely likely</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => answerNps(null)}
+                      className="mt-1 min-h-[44px] text-[13px] text-ap-muted underline"
+                    >
+                      Not now
+                    </button>
+                  </fieldset>
+                )}
+              </div>
+            ) : null}
             {sending ? <p className="pl-1 text-[13px] text-ap-muted">Mira is writing…</p> : null}
           </div>
 
