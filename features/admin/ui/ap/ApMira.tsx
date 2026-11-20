@@ -16,7 +16,6 @@ import {
   Failed,
   KpiTileV2,
   Loading,
-  NotTracked,
   PageHeader,
   RangeLine,
   SectionHead,
@@ -160,31 +159,6 @@ function Tiles({ data, keys }: { data: Data; keys: string[] }) {
         );
       })}
     </TileGrid>
-  );
-}
-
-function NotMeasured({
-  id,
-  title,
-  description,
-  why,
-}: {
-  id: string;
-  title: string;
-  description: string;
-  why: string;
-}) {
-  return (
-    <Card id={id} labelledBy={`h-${id}`}>
-      <SectionHead
-        id={`h-${id}`}
-        level={3}
-        title={title}
-        description={description}
-        right={<NotTracked>Not measured yet</NotTracked>}
-      />
-      <p className={NOTE}>{why}</p>
-    </Card>
   );
 }
 
@@ -589,18 +563,8 @@ function Outcomes({ data }: { data: Data }) {
         signed in or not; most replies are never rated.
       </p>
       <Chips data={data} />
-      <NotMeasured
-        id="prompts"
-        title="Most common prompts"
-        description="What people bring to Mira in their own words, grouped into topics."
-        why="Nothing groups first messages into topics yet, and anonymous chats aren’t stored to group."
-      />
-      <NotMeasured
-        id="therapeutic"
-        title="Therapeutic success"
-        description="Body image after 4 weeks with Mira, compared with each user’s own baseline."
-        why="No body-image scale is asked in the chat yet (the design asks one at week 0 and week 4, with consent)."
-      />
+      <Topics data={data} />
+      <Therapeutic data={data} />
       <Satisfaction data={data} />
       <Knows data={data} />
       <Safety data={data} />
@@ -665,6 +629,137 @@ function Chips({ data }: { data: Data }) {
   );
 }
 
+function Topics({ data }: { data: Data }) {
+  const gtc = "minmax(240px,2.2fr) 100px 110px 90px";
+  const arrow = (now: number | null, before: number | null) => {
+    if (now === null || before === null) return { sign: EMPTY, label: "no earlier period" };
+    const d = now - before;
+    if (Math.abs(d) < 0.02) return { sign: "→", label: "about the same as before" };
+    return d > 0 ? { sign: "↗", label: "up on before" } : { sign: "↘", label: "down on before" };
+  };
+  return (
+    <Card id="prompts" labelledBy="h-prompts">
+      <SectionHead
+        id="h-prompts"
+        level={3}
+        title="Most common prompts"
+        description="What people bring to Mira in their own words, grouped into topics."
+      />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Most common prompts" style={{ minWidth: 600 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+            {["Topic", "New chats", "Share", "Trend"].map((h, i) => (
+              <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
+                {h}
+              </span>
+            ))}
+          </div>
+          {data.topics.map((t) => {
+            const a = arrow(t.share, t.prevShare);
+            return (
+              <div
+                key={t.id}
+                role="row"
+                className="grid items-center border-t border-ap-line"
+                style={{ gridTemplateColumns: gtc }}
+              >
+                <span role="rowheader" className="flex flex-col px-3 py-2.5">
+                  <span className="text-sm font-bold">{t.label}</span>
+                  {t.example ? (
+                    <span className="text-xs text-ap-muted">&ldquo;{t.example}&rdquo;</span>
+                  ) : null}
+                </span>
+                <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                  {count(t.chats)}
+                </span>
+                <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                  {pct(t.share)}
+                </span>
+                <span
+                  role="cell"
+                  aria-label={a.label}
+                  title={a.label}
+                  className="px-3 py-2.5 text-right text-sm"
+                >
+                  {a.sign}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className={NOTE}>
+        The range&rsquo;s new chats opened in the person&rsquo;s own words (a starter chip is in the
+        table above), by the topic Mira gave the first message; only the topic is kept, never the
+        words. The quotes are the design&rsquo;s paraphrased examples, not anyone&rsquo;s message.
+        The trend compares each share with the period before, when the page compares; weight and
+        shape topics route through Mira&rsquo;s safety rules.{" "}
+        {data.untopical
+          ? `${count(data.untopical)} own-words ${data.untopical === 1 ? "chat has" : "chats have"} no topic: a crisis first message, a reply without one, or a chat from before 20 Nov 2026.`
+          : null}
+      </p>
+    </Card>
+  );
+}
+
+function Therapeutic({ data }: { data: Data }) {
+  const b = data.bodyCheck;
+  const rows: Array<[string, number, string]> = [
+    ["Improved", b.improved, `Up ${fmt("count", b.reliableChange, 1)} points or more`],
+    ["No clear change", b.pairs - b.improved - b.worse, "Within the scale’s noise"],
+    [
+      "Worse",
+      b.worse,
+      `Down ${fmt("count", b.reliableChange, 1)} points or more, reviewed monthly`,
+    ],
+  ];
+  return (
+    <Card id="therapeutic" labelledBy="h-therapeutic">
+      <SectionHead
+        id="h-therapeutic"
+        level={3}
+        title="Therapeutic success"
+        description="Body image after 4 weeks with Mira, compared with each user’s own baseline."
+        right={
+          <span className="font-serif text-[24px] font-semibold tabular-nums">
+            {b.change === null
+              ? EMPTY
+              : `${b.change >= 0 ? "+" : "−"}${fmt("count", Math.abs(b.change), 2)} avg.`}
+          </span>
+        }
+      />
+      <div className="flex max-w-[860px] flex-col gap-3">
+        {rows.map(([label, k, note]) => (
+          <div
+            key={label}
+            className="grid items-center gap-3"
+            style={{ gridTemplateColumns: "minmax(150px,220px) minmax(0,1fr) 110px" }}
+          >
+            <span className="flex flex-col">
+              <span className="text-sm font-semibold">{label}</span>
+              <span className="text-xs leading-snug text-ap-muted">{note}</span>
+            </span>
+            <Bar pct={share(k, b.pairs)} />
+            <span className="text-right text-sm font-bold tabular-nums">
+              {pct(share(k, b.pairs))} ({count(k)})
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className={NOTE}>
+        The body check is the Body Appreciation Scale-2 (Tylka &amp; Wood-Barcalow, 2015): ten
+        statements, scored 1 to 5, offered in the chat to signed-up users, only if they start it.
+        Counted here: the four-week checks finished in the range ({count(b.pairs)}), each against
+        the person&rsquo;s first. A change of {fmt("count", b.reliableChange, 1)} points or more is
+        beyond the scale&rsquo;s noise (the reliable change index from its published SD and
+        test&ndash;retest reliability). Without a control group this shows change, not cause. In the
+        range: offered to {count(b.offered)}, started by {count(b.started)}; first checks{" "}
+        {count(b.baselines)}, four-week checks {count(b.followUps)}.
+      </p>
+    </Card>
+  );
+}
+
 function Satisfaction({ data }: { data: Data }) {
   const { answers, notNow, promoters, detractors, score } = data.nps;
   const rows: Array<[string, number]> = [
@@ -710,11 +805,15 @@ function Satisfaction({ data }: { data: Data }) {
 }
 
 function Knows({ data }: { data: Data }) {
-  const { accounts, style, result } = data.knows;
+  const { accounts, style, result, rootCause, baseline, goals } = data.knows;
   const rows: Array<[string, number | null, string]> = [
-    ["Root-cause screen", null, "No screen asks it yet"],
-    ["Baseline scales", null, "No screen asks them yet"],
-    ["Goals", null, "No screen asks them yet"],
+    [
+      "Root-cause screen",
+      rootCause,
+      "Answered where it shows up and when it started (Mira’s intake questions)",
+    ],
+    ["Baseline scales", baseline, "Did the first body check (Body Appreciation Scale-2)"],
+    ["Goals", goals, "Said what they would do if it felt easier (the intake’s goal question)"],
     ["Preferences", style, "A coaching style saved"],
     [
       "Other LoveIQ assessments",
@@ -754,7 +853,10 @@ function Knows({ data }: { data: Data }) {
       </div>
       <p className={NOTE}>
         Of today&rsquo;s {count(accounts)} signed-up accounts, whatever the range: an account keeps
-        no history of these. Users can export or delete this data anytime.
+        no history of these. An intake answer counts whether it was tapped or typed, signed in or
+        before signing up; only which question was answered is kept, never the answer. Profile depth
+        is the average share of the five areas Mira knows per account. Users can export or delete
+        this data anytime.
       </p>
     </Card>
   );
@@ -828,15 +930,11 @@ function NudgeTypes({ data }: { data: Data }) {
 }
 
 function Safety({ data }: { data: Data }) {
-  const { conversations, crisis, notHelpful } = data.safety;
+  const { conversations, crisis, notHelpful, referred } = data.safety;
   const per = (k: number) => (conversations ? fmt("count", (k / conversations) * 1000, 1) : EMPTY);
   const rows: Array<[string, number | null, string]> = [
     ["Stopped coaching", crisis, "Crisis or support lines shown, the team reviews each case"],
-    [
-      "Referred on",
-      null,
-      "Not measured yet: replies don’t record a doctor or therapist suggestion",
-    ],
+    ["Referred on", referred, "Doctor or therapist suggested, coaching continues"],
     ["Handed over", null, "Not measured yet: other coaches start after the beta"],
     ["Answers rated not helpful", notHelpful, "Sampled weekly to improve prompts and sources"],
   ];
@@ -887,8 +985,9 @@ function Safety({ data }: { data: Data }) {
       </div>
       <p className={NOTE}>
         Stopped coaching: the support lines shown in the range (a crisis message, or a reply that
-        raised the stop rail). Per 1,000 of the range&rsquo;s conversations (3 or more messages with
-        no gap of more than 30 minutes).
+        raised the stop rail). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor
+        or other professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000
+        of the range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
       </p>
     </Card>
   );

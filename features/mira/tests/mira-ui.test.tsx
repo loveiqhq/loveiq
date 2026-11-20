@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -205,5 +205,152 @@ describe("Chat", () => {
         rated: 1,
       })
     );
+  });
+});
+
+describe("Intake answers", () => {
+  const consent = () => localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+
+  it("offers the asked question's answers as buttons, and says which question was answered", async () => {
+    consent();
+    replies["POST /api/mira/chat"] = (b) =>
+      b.message === "hi"
+        ? { body: { reply: "Has this always been there, or is it more recent?", ask: "onset" } }
+        : { body: { reply: "Thank you." } };
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    fireEvent.click(await screen.findByRole("button", { name: "A few years" }));
+    await screen.findByText("Thank you.");
+    expect(calls("POST /api/mira/chat")[1]).toMatchObject({
+      message: "A few years",
+      answering: "onset",
+    });
+    // The buttons belong to the newest reply only.
+    expect(screen.queryByRole("button", { name: "A few years" })).toBeNull();
+    // The asked question survives a reload with this browser's chat.
+    expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns[1].ask).toBe("onset");
+  });
+
+  it("counts a typed answer too, but not a skip", async () => {
+    consent();
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "When do you feel it most?", ask: "where" },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByRole("group", { name: "Your answer: pick any" });
+    typeAndSend("mostly in the mirror");
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    expect(calls("POST /api/mira/chat")[1]).toMatchObject({ answering: "where" });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip this one" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(3));
+    expect(calls("POST /api/mira/chat")[2]!.answering).toBeUndefined();
+  });
+
+  it("sends several picks at once, and a 1 to 7 rating in words", async () => {
+    consent();
+    let n = 0;
+    replies["POST /api/mira/chat"] = () => {
+      n += 1;
+      return n === 1
+        ? { body: { reply: "When do you feel it most?", ask: "where" } }
+        : { body: { reply: "How much does it get in the way?", ask: "severity" } };
+    };
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    fireEvent.click(await screen.findByRole("button", { name: "Clothes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+    const group = screen.getByRole("group", { name: "Your answer: pick any" });
+    fireEvent.click(within(group).getByRole("button", { name: "Send answer" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    // In the question's own order, whatever order they were tapped in.
+    expect(calls("POST /api/mira/chat")[1]!.message).toBe("Mirror, Clothes");
+    fireEvent.click(await screen.findByRole("button", { name: "5 of 7" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(3));
+    expect(calls("POST /api/mira/chat")[2]).toMatchObject({
+      message: "5 of 7",
+      answering: "severity",
+    });
+  });
+});
+
+describe("Body check", () => {
+  const signedInDue = (due: "baseline" | "week4" | null) => {
+    replies["GET /api/mira/me"] = () => ({
+      body: { profile: { style: {} }, chats: [], bodyCheck: { due } },
+    });
+  };
+  const reply = (extra: Record<string, unknown> = {}) => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Tell me more.", ...extra } });
+  };
+  const events = () =>
+    calls("POST /api/mira/event")
+      .filter((b) => b.type === "track")
+      .map((b) => b.name);
+
+  it("is offered after a reply when due, and saves the ten answers in order", async () => {
+    signedInDue("baseline");
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    const picks = [5, 4, 4, 3, 3, 2, 4, 5, 3, 4];
+    const labels = ["Never", "Seldom", "Sometimes", "Often", "Always"];
+    for (const [i, v] of picks.entries()) {
+      await screen.findByText(`Statement ${i + 1} of 10`);
+      fireEvent.click(screen.getByRole("button", { name: labels[v - 1] }));
+    }
+    await screen.findByText("Thank you. I’ll ask again in four weeks.");
+    expect(calls("POST /api/mira/body-check")).toEqual([{ answers: picks }]);
+    expect(events()).toEqual(expect.arrayContaining(["body_check_offered", "body_check_started"]));
+  });
+
+  it("lets a statement be changed with Back", async () => {
+    signedInDue("baseline");
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Never" }));
+    await screen.findByText("Statement 2 of 10");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await screen.findByText("Statement 1 of 10");
+    expect(screen.getByRole("button", { name: "Never" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("waits three days after Not now, and isn't offered beside a question or when not due", async () => {
+    signedInDue("baseline");
+    reply();
+    const { unmount } = render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    unmount();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(2));
+    typeAndSend("hello again");
+    await screen.findAllByText("Tell me more.");
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+  });
+
+  it("isn't offered with a reply that asks an intake question, or when nothing is due", async () => {
+    signedInDue("baseline");
+    reply({ ask: "onset" });
+    const first = render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    await screen.findByText("Tell me more.");
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    first.unmount();
+    signedInDue(null);
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(2));
+    typeAndSend("hello");
+    await screen.findByText("Tell me more.");
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   });
 });

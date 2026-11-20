@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
+import { IntakeAnswers } from "./IntakeAnswers";
 import { SupportPanel } from "./SupportPanel";
 import { DISCLAIMER, GradientButton, MiraFrame } from "./MiraShell";
 import {
@@ -24,6 +26,7 @@ import {
  */
 
 type Message = LocalTurn & { messageId?: number | null };
+type BodyDue = "baseline" | "week4" | null;
 type CrisisCountry = {
   code: string;
   name: string;
@@ -36,6 +39,10 @@ const CONSENT_VERSION = "mira-2026-11-18";
 /** Sanjin's intake invitation: Mira's own message after her first reply, with two reply buttons. */
 const isInvitation = (m: Turn) =>
   m.role === "assistant" && m.content === miraConfig.intakeInvitation;
+/** A stop rail fired in this chat: no questions of ours follow it. */
+const crisisIn = (turns: Turn[]) =>
+  turns.some((t) => t.role === "assistant" && t.content === miraConfig.crisisMessage);
+const SKIP_ANSWER = "I’d rather skip this one.";
 
 /**
  * The NPS question (Marcus's MVP success board) after the 3rd conversation, then at most
@@ -49,9 +56,7 @@ export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: bool
   const replies = turns.filter((t) => t.role === "assistant" && !isInvitation(t)).length;
   const due = seen.asked === null || now - seen.asked > 30 * 24 * 60 * 60 * 1000;
   // Never in a chat where a stop rail fired, whether now or earlier in it.
-  const crisisInChat =
-    crisisReply ||
-    turns.some((t) => t.role === "assistant" && t.content === miraConfig.crisisMessage);
+  const crisisInChat = crisisReply || crisisIn(turns);
   const ask = !crisisInChat && convos >= 3 && replies >= 2 && due;
   local.saveNps({ convos, asked: ask ? now : seen.asked });
   return ask;
@@ -83,6 +88,11 @@ export default function MiraChat({
   const [styleOpen, setStyleOpen] = useState(false);
   // The NPS question (Marcus's MVP success board): "ask" while open, "thanks" once answered.
   const [nps, setNps] = useState<"ask" | "thanks" | null>(null);
+  // The body check (Marcus's MVP success board): due from the account, offered once a page view.
+  const [bodyDue, setBodyDue] = useState<BodyDue>(null);
+  const [bodyOpen, setBodyOpen] = useState(false);
+  const bodyOffered = useRef(false);
+  const bodyStarted = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   useReloadWhenRestored();
 
@@ -104,14 +114,19 @@ export default function MiraChat({
       return;
     }
     void (async () => {
-      const me = await miraApi<{ chats: ChatSummary[]; profile: { style: Style } }>("/api/mira/me");
+      const me = await miraApi<{
+        chats: ChatSummary[];
+        profile: { style: Style };
+        bodyCheck?: { due: BodyDue };
+      }>("/api/mira/me");
       if (me.ok) {
         setChats(me.data.chats);
         setStyle(me.data.profile.style ?? {});
+        setBodyDue(me.data.bodyCheck?.due ?? null);
       }
       if (initialChatId) {
         const chat = await miraApi<{
-          messages: Array<Message & { id: number; rating: number | null }>;
+          messages: Array<Message & { id: number; rating: number | null; ask: string | null }>;
         }>(`/api/mira/chats/${initialChatId}`);
         if (chat.ok) {
           setMessages(
@@ -121,6 +136,7 @@ export default function MiraChat({
               sources: m.sources ?? undefined,
               messageId: m.id,
               rated: m.rating === 1 || m.rating === -1 ? m.rating : undefined,
+              ask: m.ask ?? undefined,
             }))
           );
         } else {
@@ -142,20 +158,27 @@ export default function MiraChat({
   useEffect(() => {
     if (!ready || signedIn || (messages.length === 0 && !local.chat())) return;
     local.saveChat({
-      turns: messages.map(({ role, content, sources, rated }) => ({
+      turns: messages.map(({ role, content, sources, rated, ask }) => ({
         role,
         content,
         sources,
         rated,
+        ask,
       })),
       freeLeft,
       ...(gate ? { gate: true } : {}),
     });
   }, [ready, signedIn, messages, freeLeft, gate]);
 
-  async function send(text: string) {
+  async function send(text: string, opts: { skip?: boolean } = {}) {
     const message = text.trim();
     if (!message || sending || gate) return;
+    // A message right after Mira asked an intake question answers it, tapped or typed; a skip
+    // doesn't. Only the question's id is sent, for the "how well Mira knows you" figures.
+    const last = messages.at(-1);
+    const answering = !opts.skip && last?.role === "assistant" ? last.ask : null;
+    // An offer nobody started gives way to the conversation; a check in progress stays.
+    if (bodyOpen && !bodyStarted.current) setBodyOpen(false);
     if (!consented) {
       if (!tick) return;
       local.saveConsent(CONSENT_VERSION);
@@ -179,6 +202,7 @@ export default function MiraChat({
       freeLeft?: number | null;
       gate?: boolean;
       invitation?: string;
+      ask?: string;
       signIn?: boolean;
     }>("/api/mira/chat", {
       body: {
@@ -186,6 +210,7 @@ export default function MiraChat({
         consent: true,
         ...(chatId ? { chatId } : { history }),
         ...(signedIn ? {} : { style }),
+        ...(answering ? { answering } : {}),
       },
     });
     setSending(false);
@@ -210,6 +235,7 @@ export default function MiraChat({
         content: res.data.reply,
         sources: res.data.sources,
         messageId: res.data.messageId,
+        ask: res.data.ask ?? undefined,
       },
       ...(res.data.invitation
         ? [{ role: "assistant" as const, content: res.data.invitation }]
@@ -219,6 +245,19 @@ export default function MiraChat({
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
     if (npsDue(firstOfChat, withReply, Boolean(res.data.crisis))) setNps("ask");
+    else if (
+      bodyDue &&
+      !bodyOffered.current &&
+      !res.data.crisis &&
+      !res.data.invitation &&
+      !res.data.ask &&
+      !crisisIn(withReply) &&
+      !local.bodyCheckSnoozed()
+    ) {
+      bodyOffered.current = true;
+      setBodyOpen(true);
+      void miraApi("/api/mira/event", { body: { type: "track", name: "body_check_offered" } });
+    }
     if (res.data.chatId && res.data.chatId !== chatId) {
       setChatId(res.data.chatId);
       setChats((c) => [
@@ -423,6 +462,17 @@ export default function MiraChat({
             {messages.map((m, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <Bubble role={m.role} text={m.content} />
+                {m.role === "assistant" &&
+                m.ask &&
+                i === messages.length - 1 &&
+                !sending &&
+                !gate ? (
+                  <IntakeAnswers
+                    questionId={m.ask}
+                    onAnswer={(answer) => void send(answer)}
+                    onSkip={() => void send(SKIP_ANSWER, { skip: true })}
+                  />
+                ) : null}
                 {isInvitation(m) && i === messages.length - 1 && !sending && !gate ? (
                   <div className="flex flex-wrap gap-2 pl-1">
                     {miraConfig.intakeReplyButtons.map((label) => (
@@ -547,6 +597,20 @@ export default function MiraChat({
                   </fieldset>
                 )}
               </div>
+            ) : null}
+            {bodyOpen && bodyDue ? (
+              <BodyCheck
+                due={bodyDue}
+                onStart={() => {
+                  bodyStarted.current = true;
+                }}
+                onClose={(done) => {
+                  setBodyOpen(false);
+                  bodyStarted.current = false;
+                  if (done) setBodyDue(null);
+                  else local.snoozeBodyCheck();
+                }}
+              />
             ) : null}
             {sending ? <p className="pl-1 text-[13px] text-ap-muted">Mira is writing…</p> : null}
           </div>
