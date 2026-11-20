@@ -3,9 +3,12 @@ import cardsJson from "../content/evidence-cards.json";
 /**
  * The evidence cards: the only research Mira reads. One card per source of Sanjin's evidence
  * library, in our own words, with the labels from the team's proposal ("Mira: how each source
- * is labelled and used"). For the beta: the 27 core sources we may use (C24 to C27 are books we
- * have not bought). Each card was checked on 20 Nov 2026 against its public record and abstract
- * (the open papers in full): citation, figures, who was studied and the evidence level. Only a
+ * is labelled and used"). For the beta: all 31 core sources. C24 to C27 were four books we have
+ * not bought, so each rests on a free source for the same practice instead (an open trial, a
+ * university handout, a health service's workbook, the author's own exercise page) and cites
+ * that source, not the book. Each card was checked on 20 Nov 2026 against its public record and
+ * abstract (the open papers and free sources in full): citation, figures, who was studied and
+ * the evidence level. Only a
  * card marked quoteAllowed (an open CC BY paper) may be quoted; every other card is used in
  * Mira's own words.
  *
