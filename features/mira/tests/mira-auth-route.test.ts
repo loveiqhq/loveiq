@@ -7,6 +7,10 @@ vi.mock("@shared/http/ratelimit", () => ({
   releaseCooldown: vi.fn(),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
+const notifySlack = vi.fn().mockResolvedValue(undefined);
+vi.mock("@shared/observability/slack", () => ({
+  notifySlack: (...a: unknown[]) => notifySlack(...a),
+}));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -252,6 +256,11 @@ describe("POST /api/mira/auth", () => {
         .mock.calls.map(([key, cfg]) => [cfg.bucket, key, cfg.limit, cfg.windowMs]);
       expect(limits).toContainEqual(["mira-code-ip", "127.0.0.1", 15, 3_600_000]);
       expect(limits).toContainEqual(["mira-code-all", "all", 300, 3_600_000]);
+      // Ops hear about it, once an hour.
+      expect(notifySlack).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: "ops", kind: "mira_code_cap" })
+      );
+      expect(limits).toContainEqual(["mira-code-all-alert", "all", 1, 3_600_000]);
     });
   });
 
