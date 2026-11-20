@@ -229,8 +229,10 @@ describe("the crons", () => {
   });
 
   it("apply the 12-month memory limit daily, and drop sign-in codes older than a day", async () => {
+    // Nothing else to forget (mira-memory-cron.test.ts covers the events and the sign-ups).
+    vi.mocked(supabaseFetch).mockImplementation(async () => json([]));
     vi.mocked(supabaseFetch).mockResolvedValueOnce(json(3)).mockResolvedValueOnce(json([]));
-    expect(await (await memoryCron(cron())).json()).toEqual({ ok: true, chatsDeleted: 3 });
+    expect(await (await memoryCron(cron())).json()).toMatchObject({ ok: true, chatsDeleted: 3 });
     const [path, init] = vi.mocked(supabaseFetch).mock.calls[0]!;
     expect(path).toBe("/rest/v1/rpc/mira_forget_old_memory");
     expect(JSON.parse(String(init!.body))).toEqual({ p_months: 12 });

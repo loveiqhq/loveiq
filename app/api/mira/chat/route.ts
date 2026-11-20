@@ -23,6 +23,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
@@ -106,18 +107,22 @@ const RESTING = () =>
     { status: 503 }
   );
 /**
- * Everyone's model calls together. Checked after the person's own daily caps (so someone at
- * their cap can't spend everyone's) and before an anonymous free message is counted (so a
- * resting day doesn't use one of their ten).
+ * Everyone's model calls together, per UTC day (so resting ends at midnight UTC; the team is
+ * alerted once that day). Checked after the person's own daily caps (so someone at their cap
+ * can't spend everyone's) and before an anonymous free message is counted (so a resting day
+ * doesn't use one of their ten).
  */
-const everyoneMayAsk = async () =>
-  (
-    await checkRateLimit("all", {
+const everyoneMayAsk = async () => {
+  const allowed = (
+    await checkRateLimit(`all:${new Date().toISOString().slice(0, 10)}`, {
       bucket: "mira-global-day",
       limit: GLOBAL_DAILY_MESSAGES,
       windowMs: DAY_MS,
     })
   ).allowed;
+  if (!allowed) alertDailyCeiling();
+  return allowed;
+};
 /** Crisis exchanges stored and counted a day per network: the reply itself is never limited. */
 const CRISIS_LOGGED_PER_DAY = 50;
 /** A paying-attention daily ceiling per account: model cost and abuse, not a product limit. */
@@ -354,6 +359,8 @@ export async function POST(request: Request) {
     started + ROUTE_BUDGET_MS
   );
   if (!result.ok) {
+    // The AI budget is used up (model.ts alerted the team): the resting answer, not "busy".
+    if (result.reason === "budget_exhausted") return RESTING();
     const status = result.reason === "unconfigured" ? 503 : result.reason === "error" ? 502 : 503;
     const error =
       result.reason === "unconfigured"

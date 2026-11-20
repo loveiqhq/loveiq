@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { alertBudgetUsedUp, recordUsage, type Usage } from "./alerts";
 import {
   DEFAULT_FALLBACK_MODEL,
   DEFAULT_MODEL,
@@ -20,6 +21,8 @@ import {
  * (overloaded, rate limited, failing, unreachable or slower than MODEL_FIRST_TRY_MS) the fallback
  * model answers instead, within MODEL_BUDGET_MS for both. On models that support it, a safety
  * decline is retried server-side on another model; a decline that stands comes back as `refused`.
+ * When the AI budget is used up (`budget_exhausted`) the team is alerted and no fallback is tried;
+ * every reply's token use is counted for the month's budget alerts (alerts.ts).
  *
  * Never logs the key, the prompt or the conversation: they hold what people say about their
  * sex lives.
@@ -30,7 +33,10 @@ export type MiraTurn = { role: "user" | "assistant"; content: string };
 export type ModelResult =
   /** `category`: the safety classifier's reason for a refusal ("general_harms"…), when given. */
   | { ok: true; text: string; refused: boolean; category?: string }
-  | { ok: false; reason: "unconfigured" | "rate_limited" | "overloaded" | "error" };
+  | {
+      ok: false;
+      reason: "unconfigured" | "rate_limited" | "overloaded" | "budget_exhausted" | "error";
+    };
 
 /** Anthropic's API, or MIRA_LLM_BASE_URL (a gateway, or a stand-in model for a local walk). */
 function apiUrl(): string {
@@ -62,6 +68,27 @@ export function hasServerFallback(model: string): boolean {
 
 type ContentBlock = { type: string; text?: string };
 type Attempt = ModelResult & { retry?: boolean };
+type ApiError = { error?: { type?: string; message?: string; details?: { error_code?: string } } };
+
+/**
+ * Anthropic's answers when the money is used up (platform.claude.com/docs/en/api/errors and
+ * /api/rate-limits, read 20 Nov 2026): a spend limit set on the organisation or the workspace is
+ * a 400 invalid_request_error "You have reached your specified (workspace) API usage limits",
+ * the usage tier's monthly cap a 429 with error.details.error_code "enforced_spend_limit_reached"
+ * (no retry-after), no credit left "Your credit balance is too low", a billing problem a 402
+ * billing_error. Each message says when access resumes.
+ */
+export function isBudgetExhausted(status: number, body: ApiError): boolean {
+  const e = body.error;
+  return (
+    status === 402 ||
+    e?.type === "billing_error" ||
+    e?.details?.error_code === "enforced_spend_limit_reached" ||
+    /reached your (specified )?(workspace )?API usage limits|credit balance is too low/i.test(
+      e?.message ?? ""
+    )
+  );
+}
 
 async function callModel(
   key: string,
@@ -100,12 +127,18 @@ async function callModel(
     return { ok: false, reason: "error", retry: true };
   }
 
-  // Each model has its own rate limit, so a 429 is worth one try on the other model.
-  if (res.status === 429) return { ok: false, reason: "rate_limited", retry: true };
-  if (res.status === 529 || res.status === 503)
-    return { ok: false, reason: "overloaded", retry: true };
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: { type?: string } };
+    const body = (await res.json().catch(() => ({}))) as ApiError;
+    // The fallback model bills the same workspace, so it is not tried.
+    if (isBudgetExhausted(res.status, body)) {
+      logger.warn({ status: res.status, model }, "mira: the AI budget is used up");
+      alertBudgetUsedUp(body.error?.message || `HTTP ${res.status}`);
+      return { ok: false, reason: "budget_exhausted", retry: false };
+    }
+    // Each model has its own rate limit, so a 429 is worth one try on the other model.
+    if (res.status === 429) return { ok: false, reason: "rate_limited", retry: true };
+    if (res.status === 529 || res.status === 503)
+      return { ok: false, reason: "overloaded", retry: true };
     logger.error(
       { status: res.status, type: body.error?.type, model },
       "mira: the model refused the call"
@@ -117,8 +150,11 @@ async function callModel(
     content?: ContentBlock[];
     stop_reason?: string;
     stop_details?: { category?: unknown } | null;
+    usage?: Usage;
   } | null;
   if (!data) return { ok: false, reason: "error", retry: true };
+  // Every reply is billed, a refused one too: counted for the month's budget alerts.
+  if (data.usage) recordUsage(model, data.usage);
 
   const text = (data.content ?? [])
     .filter((b) => b.type === "text" && typeof b.text === "string")

@@ -60,6 +60,13 @@ export function signInCodeEmail(code: string) {
 }
 
 /**
+ * Marks the logins Mira's sign-in creates (app_metadata, which only the service role can
+ * write), so the daily cleanup in app/api/cron/mira-memory removes only those whose sign-up
+ * never finished. A login that already existed (admin, Jarvis) is never marked.
+ */
+export const MIRA_CREATED = { created_by: "mira" } as const;
+
+/**
  * A one-time code for this address, making the confirmed auth user first if needed, or null.
  * The emailed code uses it, and so does Google sign-in, which checks the code itself.
  */
@@ -68,7 +75,7 @@ export async function mintSignInCode(email: string): Promise<string | null> {
   // login). 422 = the user already exists.
   const ensured = await supabaseFetch("/auth/v1/admin/users", {
     method: "POST",
-    body: JSON.stringify({ email, email_confirm: true }),
+    body: JSON.stringify({ email, email_confirm: true, app_metadata: MIRA_CREATED }),
   });
   if (!ensured.ok && ensured.status !== 422) {
     logger.warn({ status: ensured.status }, "mira: could not create the auth user");

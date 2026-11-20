@@ -1,7 +1,8 @@
 /**
  * POST /api/mira/auth — the free account, by emailed code (boards 04 and 05).
  *
- *   { action: "start", email, adult: true, terms: true, consent: true } → emails a sign-in code
+ *   { action: "start", email, adult: true, terms: true, consent: true, website? } → emails a
+ *       sign-in code (`website` is a hidden field only a bot fills)
  *   { action: "verify", email, code, carry?, useAssessment?, shareRated? }  → signs in (Mira's
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
  *       true), and moves the anonymous chat into the account ("your current chat comes with you")
@@ -9,7 +10,8 @@
  *   { action: "logout" }
  *
  * "start" answers the same whether or not the address is new, so it can't be used to learn who
- * has an account.
+ * has an account; and the same when it sends nothing (the hidden `website` field filled, or the
+ * address suppressed or not checkable), so it can't be used to learn who is suppressed either.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -26,7 +28,9 @@ import {
   recordCodeIssued,
   upsertProfileAtSignIn,
 } from "@features/mira/server/store";
+import { alertCodeCap } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
+import { suppressionState } from "@shared/emails/suppression";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import {
   checkCooldown,
@@ -35,16 +39,20 @@ import {
   releaseCooldown,
 } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
-import { notifySlack } from "@shared/observability/slack";
 
 export const dynamic = "force-dynamic";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
-/** Codes per inbox per 10 minutes; code emails per network per hour, and in all per hour. */
-const CODES_PER_ADDRESS = 3;
-const CODES_PER_IP_HOUR = 15;
-const CODES_PER_HOUR = 300;
+const DAY_MS = 24 * HOUR_MS;
+/**
+ * Code emails go through the Resend account that sends all LoveIQ mail, with no bot check: one
+ * per inbox per 10 minutes and five a day, ten an hour per network, sixty an hour in all.
+ */
+const CODE_WAIT = "mira-code-wait";
+const CODES_PER_ADDRESS_DAY = 5;
+const CODES_PER_IP_HOUR = 10;
+const CODES_PER_HOUR = 60;
 /** Code guesses per address and network per 10 minutes. */
 const GUESSES_PER_ADDRESS_AND_IP = 5;
 /** A carried reply is as long as the chat route takes a turn; a carried user turn, a message. */
@@ -64,6 +72,8 @@ const schema = z.discriminatedUnion("action", [
     adult: z.literal(true),
     terms: z.literal(true),
     consent: z.literal(true),
+    /** A field people never see: a bot that fills it is answered as if a code went out. */
+    website: z.string().max(2000).optional(),
   }),
   z.object({
     action: z.literal("verify"),
@@ -80,16 +90,28 @@ const schema = z.discriminatedUnion("action", [
 type Turn = z.infer<typeof carrySchema>[number];
 
 const tryLater = () => NextResponse.json({ error: "Please try again later." }, { status: 429 });
+const codeSent = () => NextResponse.json({ success: true });
 
 /**
- * One of the inbox's codes for the next 10 minutes, or null when they're used. One cooldown per
- * code rather than a counter, so a code that never went out is given back (a counter can't be).
- * ponytail: without Redis (local, staging) cooldowns always pass, so only the per-IP caps hold.
+ * The answer to a code request that sends nothing: a sent code's, after about as long as a send
+ * takes (Supabase twice, then Resend), so neither the answer nor its timing tells them apart.
+ * ponytail: a rough random delay; a fixed floor under every send if timing ever matters more.
  */
-async function claimCodeSlot(inbox: string): Promise<string | null> {
-  for (let i = 1; i <= CODES_PER_ADDRESS; i++) {
-    const bucket = `mira-code-${i}`;
-    if ((await checkCooldown(inbox, bucket, 10 * MINUTE_MS)).allowed) return bucket;
+async function sentNothing(): Promise<NextResponse> {
+  await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 600));
+  return codeSent();
+}
+
+/**
+ * One of the inbox's five codes for the next 24 hours, or null when they're used. One cooldown
+ * per code rather than a counter, so a code that never went out is given back (a counter can't
+ * be). ponytail: without Redis (local, staging) cooldowns always pass, so only the per-IP caps
+ * hold.
+ */
+async function claimDaySlot(inbox: string): Promise<string | null> {
+  for (let i = 1; i <= CODES_PER_ADDRESS_DAY; i++) {
+    const bucket = `mira-code-day-${i}`;
+    if ((await checkCooldown(inbox, bucket, DAY_MS)).allowed) return bucket;
   }
   return null;
 }
@@ -160,9 +182,12 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "start") {
+    // The hidden field is filled: a bot. Nothing is sent and no allowance is spent.
+    if (body.website?.trim()) return sentNothing();
     // A code email costs us mail and makes an auth user for any address, so it has caps of its
     // own: per network per hour, and all of them per hour. The inbox's allowance is spent last
-    // and only by a code that went out, so a refused or failed request never uses it up.
+    // and only by a code that went out (or was withheld, which must look the same), so a
+    // refused or failed request never uses it up.
     const perIp = await checkRateLimit(ip, {
       bucket: "mira-code-ip",
       limit: CODES_PER_IP_HOUR,
@@ -170,8 +195,7 @@ export async function POST(request: Request) {
     });
     if (!perIp.allowed) return tryLater();
     const inbox = addressKey(body.email);
-    const slot = await claimCodeSlot(inbox);
-    if (!slot) {
+    if (!(await checkCooldown(inbox, CODE_WAIT, 10 * MINUTE_MS)).allowed) {
       return NextResponse.json(
         {
           error:
@@ -180,33 +204,43 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
+    const daySlot = await claimDaySlot(inbox);
+    if (!daySlot) {
+      await releaseCooldown(inbox, CODE_WAIT);
+      return NextResponse.json(
+        {
+          error:
+            "We've sent you several codes today. Check your inbox and spam, or try again tomorrow.",
+        },
+        { status: 429 }
+      );
+    }
+    const giveBack = async () => {
+      await releaseCooldown(inbox, CODE_WAIT);
+      await releaseCooldown(inbox, daySlot);
+    };
     const all = await checkRateLimit("all", {
       bucket: "mira-code-all",
       limit: CODES_PER_HOUR,
       windowMs: HOUR_MS,
     });
     if (!all.allowed) {
-      await releaseCooldown(inbox, slot);
-      // Email sign-up is closed until the hour turns (Google still works), so ops hear of it,
-      // once an hour: either sign-ups took off or someone is pushing codes at strangers.
-      const alert = await checkRateLimit("all", {
-        bucket: "mira-code-all-alert",
-        limit: 1,
-        windowMs: HOUR_MS,
-      });
-      if (alert.allowed) {
-        await notifySlack({
-          channel: "ops",
-          kind: "mira_code_cap",
-          text: `:warning: Mira: ${CODES_PER_HOUR} sign-in code emails in the last hour, so email sign-up waits until the hour is over (Google sign-in still works). A launch spike, or someone sending codes to strangers: check mira_event signup_code_sent.`,
-          username: "ops_alerts",
-        }).catch(() => {});
-      }
+      await giveBack();
+      // Email sign-up waits until the hour is over (Google still works), and the owner hears.
+      alertCodeCap(CODES_PER_HOUR);
       return tryLater();
+    }
+    // Never to a suppressed address (bounced, complained or unsubscribed), and fail closed when
+    // that can't be checked. The inbox's allowance stays spent, so a second try within ten
+    // minutes is answered as after a real code too.
+    const suppression = await suppressionState(body.email);
+    if (suppression !== "clear") {
+      logger.warn({ suppression }, "mira: no sign-in code sent (address suppressed or unchecked)");
+      return sentNothing();
     }
     const sent = await sendSignInCode(body.email);
     if (!sent) {
-      await releaseCooldown(inbox, slot);
+      await giveBack();
       return NextResponse.json(
         { error: "We couldn't send the code. Please try again." },
         { status: 500 }
@@ -217,14 +251,14 @@ export async function POST(request: Request) {
     } catch (err) {
       // Fails closed: without the record the code is never checked, so ask for a new one.
       logger.error({ err }, "mira: a sent code was not recorded");
-      await releaseCooldown(inbox, slot);
+      await giveBack();
       return NextResponse.json(
         { error: "We couldn't send the code. Please try again." },
         { status: 500 }
       );
     }
     logMiraEvent("signup_code_sent", { anonId: await anonId() });
-    return NextResponse.json({ success: true });
+    return codeSent();
   }
 
   // verify. A code is checked only if Mira emailed it to this address within the hour and it
