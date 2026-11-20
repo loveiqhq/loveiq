@@ -727,3 +727,68 @@ describe("resend webhook: each nurture email's own events", () => {
     expect((await POST(request())).status).toBe(200);
   });
 });
+
+describe("resend webhook: Mira nudge delivery and opens", () => {
+  const NUDGE = "3f2b6c1e-8d4a-4b7e-9a10-2c5d6e7f8a9b";
+  const nudgeCall = () =>
+    mockFetch.mock.calls.find((c) => String(c[0]).includes("/rest/v1/mira_nudge?"));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockAddToSuppression.mockResolvedValue(true);
+  });
+
+  it("fills the first open on the nudge's own row, once", async () => {
+    mockVerify.mockReturnValue({
+      type: "email.opened",
+      created_at: "2026-11-20T07:05:00.000Z",
+      data: { to: ["a@example.com"], tags: [{ name: "mira_nudge", value: NUDGE }] },
+    });
+    await POST(request());
+    const call = nudgeCall();
+    expect(call?.[0]).toBe(
+      `https://test.supabase.co/rest/v1/mira_nudge?id=eq.${NUDGE}&opened_at=is.null`
+    );
+    expect(JSON.parse((call?.[1] as { body: string }).body)).toEqual({
+      opened_at: "2026-11-20T07:05:00.000Z",
+    });
+  });
+
+  it("fills delivered_at for a delivery", async () => {
+    mockVerify.mockReturnValue({
+      type: "email.delivered",
+      data: { to: ["a@example.com"], tags: { mira_nudge: NUDGE } },
+    });
+    await POST(request());
+    expect(String(nudgeCall()?.[0])).toContain("&delivered_at=is.null");
+  });
+
+  it("ignores other events, other emails and a tag that isn't a row id", async () => {
+    for (const payload of [
+      { type: "email.clicked", data: { to: ["a@example.com"], tags: { mira_nudge: NUDGE } } },
+      { type: "email.opened", data: { to: ["a@example.com"], tags: { sub: "1" } } },
+      { type: "email.opened", data: { to: ["a@example.com"], tags: { mira_nudge: "x&id=gt.0" } } },
+    ]) {
+      mockVerify.mockReturnValue(payload);
+      await POST(request());
+    }
+    expect(nudgeCall()).toBeUndefined();
+  });
+
+  it("still answers 200 when the row can't be written", async () => {
+    mockFetch.mockImplementation(async (url: string) =>
+      String(url).includes("mira_nudge")
+        ? { ok: false, status: 500, headers: new Headers() }
+        : { ok: true, status: 201, headers: new Headers() }
+    );
+    mockVerify.mockReturnValue({
+      type: "email.opened",
+      data: { to: ["a@example.com"], tags: { mira_nudge: NUDGE } },
+    });
+    expect((await POST(request())).status).toBe(200);
+  });
+});

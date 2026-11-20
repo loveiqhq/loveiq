@@ -63,6 +63,57 @@ function getEngagementRedis(): Redis | null {
   return _engagementRedis;
 }
 
+/** Which mira_nudge column each Resend event fills, the first time only. */
+const NUDGE_COLUMNS: Record<string, string> = {
+  "email.delivered": "delivered_at",
+  "email.opened": "opened_at",
+};
+
+/**
+ * A Mira nudge email carries its mira_nudge row id as the `mira_nudge` tag
+ * (features/mira/server/nudges.ts), so its delivery and first open land on that row for the
+ * "Nudge emails" numbers. Only an empty column is filled, so a retry or a second open changes
+ * nothing; staging mail that reaches this webhook names a row that doesn't exist and updates
+ * nothing. Best effort: a failed write costs one open in the counts, never the webhook.
+ */
+async function recordNudgeEvent(payload: {
+  type: string;
+  created_at?: unknown;
+  data: { tags?: unknown };
+}): Promise<void> {
+  const column = NUDGE_COLUMNS[payload.type];
+  const id = readTags(payload.data?.tags).get("mira_nudge");
+  if (
+    !column ||
+    !id ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  ) {
+    return;
+  }
+  const url = supabaseRestUrl();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  const when = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
+  try {
+    const res = await fetchWithTimeout(`${url}/rest/v1/mira_nudge?id=eq.${id}&${column}=is.null`, {
+      method: "PATCH",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        [column]: new Date(Number.isNaN(when) ? Date.now() : when).toISOString(),
+      }),
+      timeoutMs: 3000,
+    });
+    if (!res.ok) logger.warn({ status: res.status }, "mira: a nudge email event was not recorded");
+  } catch (err) {
+    logger.warn({ err }, "mira: a nudge email event was not recorded");
+  }
+}
+
 /**
  * The tags the email was sent with, which Resend echoes back on every webhook. Resend sends
  * them either as [{name,value}] or as a plain object, depending on the API version that
@@ -418,6 +469,8 @@ export async function POST(request: Request) {
   }
   // Keyed per email and kind, so a retry adds nothing: no certain claim needed.
   await recordMessageEvent(payload, email);
+  // A Mira nudge's first delivery and first open, on its own row: also retry-safe.
+  await recordNudgeEvent(payload);
 
   if (!email) {
     return NextResponse.json({ ok: true });

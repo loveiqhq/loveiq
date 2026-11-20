@@ -328,6 +328,8 @@ describe("runNudges", () => {
     expect(mail.from).toMatch(/^Mira </);
     expect(mail.headers["List-Unsubscribe"]).toContain("/api/mira/nudges/unsubscribe?t=");
     expect(mail.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+    // The row id rides along, so the Resend webhook can record delivery and the first open.
+    expect(mail.tags).toEqual([{ name: "mira_nudge", value: expect.stringMatching(/^aaaaaaaa-/) }]);
     // Email links never point at staging (getEmailSiteUrl), only at the live site.
     expect(mail.html).toMatch(/https:\/\/www\.loveiq\.org\/api\/mira\/nudge\?t=/);
     expect(patched[0]).toMatchObject({ message_id: 501, resend_id: "re_1" });
