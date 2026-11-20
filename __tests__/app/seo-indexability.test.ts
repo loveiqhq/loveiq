@@ -36,6 +36,14 @@ const PRIVATE_ROUTES = [
   "sexual-archetype/initial",
   "sexual-archetype/checkout",
   "why",
+  // Mira, the AI coach (beta): noindex on purpose, with link previews of their own.
+  "mira",
+  "mira/start",
+  "mira/home",
+  "mira/settings",
+  "mira/feedback",
+  "mira/nudges",
+  "mira/privacy",
 ];
 
 describe("legal pages are indexable", () => {

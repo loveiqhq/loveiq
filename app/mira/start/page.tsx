@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { miraLinkPreview } from "@features/mira/link-preview";
 import { redirect } from "next/navigation";
 import { googleClient } from "@features/mira/server/google";
 import { getMiraAccount } from "@features/mira/server/session";
@@ -8,6 +9,7 @@ import SignUpFlow from "@features/mira/ui/SignUpFlow";
 export const metadata: Metadata = {
   title: "Create your free account | Applied Psychometrics",
   robots: { index: false, follow: false },
+  ...miraLinkPreview("/mira/start"),
 };
 
 export const dynamic = "force-dynamic";

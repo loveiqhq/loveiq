@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { MIRA_TITLE, miraLinkPreview } from "@features/mira/link-preview";
 import { getMiraAccount } from "@features/mira/server/session";
 import MiraChat from "@features/mira/ui/MiraChat";
 
 export const metadata: Metadata = {
-  title: "Talk to Mira | Applied Psychometrics",
-  description: "Mira is an AI coach for body confidence. Her answers draw on research. Beta.",
+  title: MIRA_TITLE,
   robots: { index: false, follow: false },
+  ...miraLinkPreview("/mira"),
 };
 
 export const dynamic = "force-dynamic";

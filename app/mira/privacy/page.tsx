@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { miraLinkPreview } from "@features/mira/link-preview";
 import Link from "next/link";
 import { MiraFrame } from "@features/mira/ui/MiraShell";
 
 export const metadata: Metadata = {
   title: "How Mira handles your data | Applied Psychometrics",
   robots: { index: false, follow: false },
+  ...miraLinkPreview("/mira/privacy"),
 };
 
 /**
