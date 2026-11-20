@@ -112,6 +112,16 @@ describe("POST /api/mira/chat", () => {
     expect(body.freeLeft).toBe(7);
   });
 
+  it("records which starter chip opened a chat, as its index and never as text", async () => {
+    const started = () =>
+      vi.mocked(logMiraEvent).mock.calls.find(([name]) => name === "chat_started")?.[2];
+    await post({ message: miraConfig.starterChips[2], consent: true });
+    expect(started()).toEqual({ signedIn: false, chip: 2 });
+    vi.mocked(logMiraEvent).mockClear();
+    await post({ message: "my own words", consent: true });
+    expect(started()).toEqual({ signedIn: false, chip: -1 });
+  });
+
   it("shows the sign-up card when an 11th conversation starts", async () => {
     limitHit("mira-anon-chats");
     const res = await post({ message: "hi", consent: true });
