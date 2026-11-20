@@ -393,7 +393,8 @@ export async function POST(request: Request) {
 
   if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
   if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
-  if (answering && INTAKE_IDS.has(answering)) logMiraEvent("intake_answered", who, { q: answering });
+  if (answering && INTAKE_IDS.has(answering))
+    logMiraEvent("intake_answered", who, { q: answering });
   // A reply that was only markers gets the refusal message: it referred nobody.
   if (out?.refer && !refused) logMiraEvent("referred", who);
   logMiraEvent("message_sent", who, { signedIn: Boolean(account), chars: message.length });
