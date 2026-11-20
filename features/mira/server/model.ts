@@ -1,17 +1,25 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
-import { DEFAULT_FALLBACK_MODEL, DEFAULT_MODEL, MODEL_EFFORT, MODEL_MAX_TOKENS } from "./config";
+import {
+  DEFAULT_FALLBACK_MODEL,
+  DEFAULT_MODEL,
+  MODEL_BUDGET_MS,
+  MODEL_EFFORT,
+  MODEL_FIRST_TRY_MS,
+  MODEL_MAX_TOKENS,
+} from "./config";
 
 /**
  * One reply from Mira's model: Anthropic's Messages API, one POST, no SDK (the same choice as
  * the brain's `features/brain/server/llm.ts`). Model-agnostic in the way the team asked for:
  * MIRA_LLM_MODEL names any Claude model without a deploy.
  *
- * The stable instructions (rules, voice, evidence cards) go first and are cached, so each
- * message pays a fraction for them; the person's own context (style, name, result) follows,
- * uncached. When the main model is down (overloaded, failing or unreachable) the fallback model
- * answers instead. On models that support it, a safety decline is retried server-side on another
- * model; a decline that stands comes back as `refused`.
+ * The stable instructions (rules, voice, evidence cards) go first and are cached for an hour
+ * (beta traffic is often more than 5 minutes apart), so each message pays a fraction for them;
+ * the person's own context (style, name, result) follows, uncached. When the main model is down
+ * (overloaded, rate limited, failing, unreachable or slower than MODEL_FIRST_TRY_MS) the fallback
+ * model answers instead, within MODEL_BUDGET_MS for both. On models that support it, a safety
+ * decline is retried server-side on another model; a decline that stands comes back as `refused`.
  *
  * Never logs the key, the prompt or the conversation: they hold what people say about their
  * sex lives.
@@ -29,7 +37,6 @@ function apiUrl(): string {
     process.env.MIRA_LLM_BASE_URL?.trim().replace(/\/+$/, "") || "https://api.anthropic.com";
   return `${base}/v1/messages`;
 }
-const TIMEOUT_MS = 60_000;
 
 export function isModelConfigured(): boolean {
   return Boolean(process.env.MIRA_LLM_KEY);
@@ -39,7 +46,7 @@ export function modelName(): string {
   return process.env.MIRA_LLM_MODEL?.trim() || DEFAULT_MODEL;
 }
 
-/** The model that answers when the main one is down (overloaded, failing or unreachable). */
+/** The model that answers when the main one is down (overloaded, rate limited, failing, slow). */
 export function fallbackModelName(): string {
   return process.env.MIRA_LLM_FALLBACK_MODEL?.trim() || DEFAULT_FALLBACK_MODEL;
 }
@@ -60,7 +67,8 @@ async function callModel(
   model: string,
   stable: string,
   personal: string,
-  turns: MiraTurn[]
+  turns: MiraTurn[],
+  timeoutMs: number
 ): Promise<Attempt> {
   const serverFallback = hasServerFallback(model);
   let res: Response;
@@ -77,21 +85,22 @@ async function callModel(
         model,
         max_tokens: MODEL_MAX_TOKENS,
         system: [
-          { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+          { type: "text", text: stable, cache_control: { type: "ephemeral", ttl: "1h" } },
           { type: "text", text: personal },
         ],
         messages: turns,
         output_config: { effort: MODEL_EFFORT },
         ...(serverFallback ? { fallbacks: "default" } : {}),
       }),
-      timeoutMs: TIMEOUT_MS,
+      timeoutMs,
     });
   } catch (err) {
     logger.error({ err: (err as Error)?.name, model }, "mira: the model request failed");
     return { ok: false, reason: "error", retry: true };
   }
 
-  if (res.status === 429) return { ok: false, reason: "rate_limited" };
+  // Each model has its own rate limit, so a 429 is worth one try on the other model.
+  if (res.status === 429) return { ok: false, reason: "rate_limited", retry: true };
   if (res.status === 529 || res.status === 503)
     return { ok: false, reason: "overloaded", retry: true };
   if (!res.ok) {
@@ -124,15 +133,16 @@ export async function askModel(
 ): Promise<ModelResult> {
   const key = process.env.MIRA_LLM_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
+  const deadline = Date.now() + MODEL_BUDGET_MS;
   const main = modelName();
-  const first = await callModel(key, main, stable, personal, turns);
+  const first = await callModel(key, main, stable, personal, turns, MODEL_FIRST_TRY_MS);
   const fallback = fallbackModelName();
   if (first.ok || !first.retry || fallback === main) return strip(first);
   logger.warn(
-    { model: main, fallback },
+    { model: main, fallback, reason: first.reason },
     "mira: the main model is down, answering with the fallback"
   );
-  return strip(await callModel(key, fallback, stable, personal, turns));
+  return strip(await callModel(key, fallback, stable, personal, turns, deadline - Date.now()));
 }
 
 function strip({ retry: _retry, ...result }: Attempt): ModelResult {

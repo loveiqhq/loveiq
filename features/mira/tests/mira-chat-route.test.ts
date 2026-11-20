@@ -26,7 +26,8 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
-import { POST } from "@/app/api/mira/chat/route";
+import { POST, maxDuration } from "@/app/api/mira/chat/route";
+import { MODEL_BUDGET_MS, MODEL_FIRST_TRY_MS } from "@features/mira/server/config";
 import { askModel } from "@features/mira/server/model";
 import { getMiraAccount } from "@features/mira/server/session";
 import { addMessages, getProfile } from "@features/mira/server/store";
@@ -54,6 +55,11 @@ describe("POST /api/mira/chat", () => {
       resetAt: new Date(),
     });
     vi.mocked(askModel).mockResolvedValue({ ok: true, text: "That makes sense.", refused: false });
+  });
+
+  it("lives long enough for both models and still answers (Vercel kills it at maxDuration)", () => {
+    expect(MODEL_FIRST_TRY_MS).toBeLessThan(MODEL_BUDGET_MS);
+    expect(maxDuration * 1000 - MODEL_BUDGET_MS).toBeGreaterThanOrEqual(20_000);
   });
 
   it("refuses without the CSRF token", async () => {

@@ -41,7 +41,9 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// The model gets at most MODEL_BUDGET_MS (50 s, the fallback included); the rest is for loading
+// and storing the chat. A literal, because Next reads it statically.
+export const maxDuration = 75;
 
 const scale = z.number().int().min(1).max(5);
 const styleSchema = z
