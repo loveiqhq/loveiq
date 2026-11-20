@@ -18,7 +18,7 @@ import { addMessages, logMiraEvent } from "./store";
  * 20 Nov 2026: the sign-up page promises a neutral sender name and subject line). Once the
  * email has gone, the nudge becomes Mira's latest message in that chat, so the button opens the
  * chat with it in place. Nudges stop only when the person stops them (or pauses them, or the
- * address is suppressed).
+ * address is suppressed, or they said they are under 18).
  */
 
 export type NudgeType =
@@ -247,6 +247,10 @@ function from(): string {
   return `${nudgeConfig.senderName} <${address}>`;
 }
 
+/** The legal entity under every nudge, as in the imprint (the sign-in code email has the same). */
+const COMPANY_LINE =
+  "Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner";
+
 export function nudgeEmail(input: {
   type: NudgeType;
   body: string;
@@ -304,16 +308,16 @@ export function nudgeEmail(input: {
     `<a href="${input.openUrl}" style="${button}">${escapeHtml(kind.button)}</a></td></tr>`,
     `<tr><td style="${footer}">`,
     `<p style="${css({ margin: "0 0 12px", "font-size": "18px", "font-weight": "700" })}">Applied Psychometrics</p>`,
-    `<p style="${css({ margin: "0 0 12px" })}">You get this because you turned on <b>daily nudges from Mira</b>. One email a day at most.</p>`,
+    `<p style="${css({ margin: "0 0 12px" })}"><b>Daily nudges from Mira</b> come with your free account. One email a day at most.</p>`,
     `<p style="${css({ margin: "0 0 12px" })}">${footerLink("Fewer nudges")}${footerLink("Pause")}${footerLink("Unsubscribe")}</p>`,
-    `<p style="${css({ margin: "0", color: "#b6aecb", "font-size": "12px" })}">Applied Psychometrics UG · Berlin</p>`,
+    `<p style="${css({ margin: "0", color: "#b6aecb", "font-size": "12px" })}">${COMPANY_LINE}</p>`,
     `</td></tr></table></body></html>`,
   ].join("\n");
   // The neutral line first here too: a mail app that previews the text part shows that.
   const text =
     `${nudgeConfig.preheader}\n\n${input.body}\n\n${kind.button}: ${input.openUrl}\n\n` +
-    `You get this because you turned on daily nudges from Mira. One email a day at most.\n` +
-    `Fewer nudges, pause or unsubscribe: ${input.prefsUrl}\n\nApplied Psychometrics UG · Berlin`;
+    `Daily nudges from Mira come with your free account. One email a day at most.\n` +
+    `Fewer nudges, pause or unsubscribe: ${input.prefsUrl}\n\n${COMPANY_LINE}`;
   return { subject, html, text };
 }
 
@@ -330,10 +334,13 @@ async function rows<T>(path: string): Promise<T[]> {
 const USER_COLS =
   "id,email,name,created_at,nudge_time,time_zone,nudge_frequency,nudge_types,nudges_paused_until";
 
-/** Every candidate, page by page: one read stops at PostgREST's 1,000 rows, leaving the newest out. */
+/**
+ * Every candidate, page by page: one read stops at PostgREST's 1,000 rows, leaving the newest out.
+ * Never anyone who said they are under 18 (minor_at, server/minor.ts), whatever their settings.
+ */
 export async function nudgeCandidates(): Promise<NudgeUser[]> {
   const users = await fetchAllRows<NudgeUser>(
-    `/rest/v1/mira_user?nudges_on=is.true&nudges_stopped_at=is.null&remember_chats=is.true&select=${USER_COLS}&order=created_at.asc,id.asc`
+    `/rest/v1/mira_user?nudges_on=is.true&nudges_stopped_at=is.null&remember_chats=is.true&minor_at=is.null&select=${USER_COLS}&order=created_at.asc,id.asc`
   );
   if (!users) throw new Error("mira nudge candidates read failed");
   return users;

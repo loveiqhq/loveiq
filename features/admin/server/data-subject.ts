@@ -30,6 +30,11 @@
  *         - report_share (+ report_share_view via cascade)
  *         - report_price_quote
  *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
+ *   - Mira, the AI coach (features/mira): mira_user (by email; the account), its mira_chat +
+ *     mira_message, mira_body_check, mira_nudge and mira_event rows (by user_id), and a pending
+ *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
+ *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
+ *     the login goes too unless it is also an admin or Jarvis login.
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
@@ -39,7 +44,8 @@
 
 import { createHash } from "crypto";
 import { Resend } from "resend";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
+import { deleteAccount } from "@features/mira/server/store";
 import logger from "@shared/observability/logger";
 
 export type DsrAction = "export" | "delete";
@@ -180,6 +186,84 @@ interface PersonalReportRow {
   id: number;
 }
 
+/** The person's Mira accounts (mira_user, by email), or null when they could not be read. */
+async function miraAccounts(
+  emailNorm: string,
+  result: DsrResult
+): Promise<Array<{ id: string; email: string }> | null> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/mira_user?email=eq.${encodeURIComponent(emailNorm)}&select=*`
+    );
+    if (res.ok) return (await res.json()) as Array<{ id: string; email: string }>;
+  } catch (err) {
+    logger.warn({ err }, "DSR: Mira accounts lookup threw");
+  }
+  result.ok = false;
+  result.warnings.push("mira_user: could not be read; run the request again");
+  return null;
+}
+
+/** Mira: the account and everything it holds, every row (paged past PostgREST's cap). */
+async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
+  result.exportData!.mira_sign_in_code = await fetchRows(
+    `/rest/v1/mira_sign_in_code?email=eq.${encodeURIComponent(emailNorm)}&select=*`,
+    "mira-code"
+  );
+  const accounts = await miraAccounts(emailNorm, result);
+  if (!accounts) return;
+  result.exportData!.mira_user = accounts;
+  result.rowsAffected.mira_user = accounts.length;
+  if (accounts.length === 0) return;
+  const ids = `in.(${accounts.map((a) => a.id).join(",")})`;
+  const byUser: Array<[string, string]> = [
+    ["mira_chat", `/rest/v1/mira_chat?user_id=${ids}&select=*&order=id.asc`],
+    // Messages carry no user_id: found through their chat.
+    [
+      "mira_message",
+      `/rest/v1/mira_message?select=*,mira_chat!inner(user_id)&mira_chat.user_id=${ids}&order=id.asc`,
+    ],
+    ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
+  ];
+  for (const [table, path] of byUser) {
+    const rows = await fetchAllRows<unknown>(path);
+    if (rows === null) {
+      result.ok = false;
+      result.warnings.push(`${table}: could not be read in full; run the export again`);
+    }
+    // eslint-disable-next-line security/detect-object-injection -- one of the five names above.
+    result.exportData![table] = rows ?? [];
+  }
+}
+
+/**
+ * Mira: each account goes through Mira's own account deletion (features/mira/server/store.ts
+ * deleteAccount), which also keeps the login of staff and Jarvis members; a code still waiting
+ * to be used goes too.
+ */
+async function deleteMira(emailNorm: string, result: DsrResult): Promise<void> {
+  result.rowsAffected.mira_sign_in_code = await deleteWhere(
+    `/rest/v1/mira_sign_in_code?email=eq.${encodeURIComponent(emailNorm)}`,
+    "mira-code",
+    result
+  );
+  const accounts = await miraAccounts(emailNorm, result);
+  let deleted = 0;
+  for (const account of accounts ?? []) {
+    try {
+      await deleteAccount(account);
+      deleted++;
+    } catch (err) {
+      logger.warn({ err }, "DSR: a Mira account was not deleted");
+      result.ok = false;
+      result.warnings.push("mira_user: an account was not deleted; run the deletion again");
+    }
+  }
+  result.rowsAffected.mira_user = deleted;
+}
+
 export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   const result: DsrResult = { ok: true, rowsAffected: {}, exportData: {}, warnings: [] };
   const enc = encodeURIComponent;
@@ -218,6 +302,8 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   );
   result.exportData!.prepaid_report_access = prepaid;
   result.rowsAffected.prepaid_report_access = prepaid.length;
+
+  await exportMira(emailNorm, result);
 
   const users = await fetchRows<AppUserRow>(
     `/rest/v1/app_user?email=eq.${enc(emailNorm)}&select=*`,
@@ -390,6 +476,7 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
     "prepaid",
     result
   );
+  await deleteMira(emailNorm, result);
 
   // Tier 2: app_user-rooted cascade.
   const users = await fetchRows<AppUserRow>(

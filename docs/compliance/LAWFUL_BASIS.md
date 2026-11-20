@@ -17,8 +17,8 @@ LoveIQ relies on three of the six Art. 6(1) bases:
 
 | Basis                       | Used for                                                                                                                                                                                                    | Notes                                                                                                                                                                         |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **(a) Consent**             | Survey participation, marketing emails (Q16015), analytics + tracking cookies                                                                                                                               | Each instance has explicit opt-in. Marketing consent is versioned (`marketing_opt_in_terms_version`, T-11). Analytics cookies gated on CookieYes "analytics" category (T-02). |
-| **(b) Contract**            | Report delivery, payment processing, transactional emails (confirmation, share-link, password-reset adjacent flows)                                                                                         | Lawful basis is "necessary for the performance of a contract" because the user requested + paid for the deliverable.                                                          |
+| **(a) Consent**             | Survey participation, marketing emails (Q16015), analytics + tracking cookies, Mira coaching and a rated reply's text (with Art. 9(2)(a); A16, A18)                                                         | Each instance has explicit opt-in. Marketing consent is versioned (`marketing_opt_in_terms_version`, T-11). Analytics cookies gated on CookieYes "analytics" category (T-02). |
+| **(b) Contract**            | Report delivery, payment processing, transactional emails (confirmation, share-link, password-reset adjacent flows), Mira's account, sign-in and emails (A17)                                               | Lawful basis is "necessary for the performance of a contract" because the user requested + paid for the deliverable.                                                          |
 | **(f) Legitimate interest** | Operational forensics (admin_action_log), abuse detection (rate limits, CSRF storm counters), email-bounce suppression, payment-fraud monitoring (Stripe Radar), each nurture email's opens and clicks (A6) | Balancing test documented per activity below. No marketing under legitimate interest — we use consent (but see the A6 correction).                                            |
 
 Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyond what Stripe handles), (d) vital interests, (e) public task.
@@ -134,6 +134,40 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: with the submission: erased by a DSAR delete and by the cascade. Not in the retention purge (an answer, like report feedback, not telemetry)
 - **Withdraw**: the one-click unsubscribe in the email, or a DSAR delete; Art. 21 objection by email
 
+### A16 — Mira coaching (beta, from 2026-11-20)
+
+- **Data**: what the person writes about their sex life and health, Mira's replies, the chats saved for account holders while "Remember our conversations" is on, the coaching style, for account holders their name, gender and country as context, the LoveIQ result only if they tick "Use my LoveIQ test result to tailor my coaching" (off by default), body check answers (Body Appreciation Scale-2), and labels from Mira's replies (intake question answered, a new chat's topic, a referral, the support panel shown with the country)
+- **Basis**: (a) consent with Art. 9(2)(a) explicit consent. Before a first message without an account, a required tick: "I'm 18 or older, and I agree that Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps. Our analytics tools also see what I type." At sign-up a required "Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps", beside "I accept the terms of use and I have read the privacy notice". The wording's version is stored with each consent. Open: whether "to coach me" also covers counting the labels and comparing body check scores across everyone ([DPIA.md](DPIA.md) §7.9)
+- **Retention**: [DPIA.md](DPIA.md) §7.6. With "Remember our conversations" off, no new chats are saved; earlier ones stay until deleted or 12 months after the person's last message
+- **Withdraw**: stop chatting; delete the chats or the account in Settings; without an account, a new chat or clearing the browser; or a data request. Anyone who says they are under 18 is stopped for good (DPIA M2)
+
+### A17 — Mira account, sign-in and service emails
+
+- **Data**: email, profile, settings, consents, sign-in code rows; the sign-in code email; the daily nudge emails (on by default for new accounts)
+- **Basis**: (b) contract: the free account and the emails that come with it ("Daily nudges from Mira come with your free account"). A nudge's words come from the last chat, so they also rest on the A16 consent. Each nudge's delivery and first open: (f) legitimate interest, as in A6, an owner's accepted risk; the ePrivacy question in DPIA §6 applies here too
+- **Retention**: until the account is deleted; sign-in codes when used, otherwise after a day; sign-ins that never finished sign-up after 24 hours
+- **Stop**: pause or one-click stop in every nudge, or in Settings; the account can be deleted in Settings
+
+### A18 — Mira ratings, feedback and the log of steps
+
+- **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id), and a rated reply's text with consent
+- **Basis**: (f) legitimate interest for steps, thumbs, feedback and scores: improving Mira. Balancing: no words in the log except a rated reply's text with consent and the person's own feedback, team browsers left out, kept 12 months, objection by email. A rated reply's text: (a) consent with Art. 9(2)(a), the optional box, not ticked by default, "Mira's team may read replies I rate, to improve Mira." at the chat start and at sign-up; without it only the thumbs are kept
+- **Retention**: 12 months; a rated reply's text also goes when the chats are deleted; deleting the account deletes the words and unlinks the rest
+- **Withdraw**: delete the chats or the account, or ask; an Art. 21 objection by email
+
+### A19 — Analytics on Mira's pages
+
+- **Data**: as A8 and A9. PostHog, Microsoft Clarity, Google Analytics, Google Ads and Tag Manager, and CookieYes load on `/mira` as on every page; PostHog and Clarity record the chat as it appears on screen
+- **Basis, as the privacy policy states it**: (f) legitimate interest for measurement that does not depend on the cookie choice (privacy policy §7.4); Google cookies and identifiers on (a) consent; PostHog and Clarity are "loaded on all visits" (owner decisions, A8; Clarity without consent since 2026-08-10, kept for Mira on 2026-11-20). The chat's consent tick tells people: "Our analytics tools also see what I type."
+- **Gap, an owner's accepted risk**: (f) is not an Art. 9(2) condition for the chat text these tools see ([DPIA.md](DPIA.md) §7.5, M5)
+
+### A20 — The team's Slack posts about sign-ups and returns
+
+- **Data**: per finished survey (`#incoming-surveys`) the masked email, the funnel, where the visit came from, the first page, the landing page design, the device type, the self-reported country, the progress so far and the time each step took; when a reader comes back to their report, what brought them back and how long they read. Never the answers
+- **Basis**: (f) legitimate interest: the team follows sign-ups and returns to improve the service (privacy policy §7.7). Balancing: the email is masked, no answers, read by the team only; readers who asked us to restrict processing (T-09) are left out
+- **Retention**: as long as the Slack workspace keeps messages (its retention setting: to confirm)
+- **Objection**: Art. 21 by email; a restriction request (T-09) also takes the reader out of these posts
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
@@ -146,8 +180,11 @@ For activities under basis (a):
 | A8 analytics   | Art. 21 objection (privacy policy §1, §7.4); CookieYes preference centre for cookies and identifiers | Declining: `__liq_vid` and GA4 cookies are not set; funnel_event rows use a page-only id, GA4 receives cookieless events (consent mode), our own tables continue (legitimate interest) |
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
+| A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
+| A18 rated text | Delete the chats or the account; a data request                                                      | The rated replies' text is deleted; the thumbs stay as counts                                                                                                                          |
 
 ## Outstanding work
 
+- **Mira (A16 to A19)**: the open points in [DPIA.md](DPIA.md) §7.9, the consent scope among them.
 - **Admin UI for `processing_restricted_at` (T-09 follow-up)**: a tiny admin button "Freeze processing for this user" needs to land. Out of this round per the no-UI-changes constraint.
 - **Cookies banner first-load timing**: CookieYes script loads `lazyOnload`. The banner appears AFTER hydration. A first-visit user has ~200ms of HTML rendering before the banner mounts. Strictly speaking the visitor ID cookie (T-02) waits for consent, but session recording (Microsoft Clarity), GA4 and Google Ads all load before the banner is dismissed — Clarity by explicit owner decision on 2026-08-10, the Google tags by the pre-existing `next/script` gap (measured on production the same day). Clarity additionally records unmasked Art. 9 survey answers, which is not reconcilable with the Art. 9(2)(a) explicit-consent basis claimed above. See DPIA §6 and ROPA §"Consent".

@@ -1,19 +1,21 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
-/** The Applied Psychometrics wordmark with the beta mark, as on the sign-up and home boards. */
+/**
+ * The site's LoveIQ logo with the beta mark (brand decision, 18 Nov 2026: "Mira, the AI coach by
+ * LoveIQ"; the company's legal name stays in legal texts and footers).
+ */
 export function Wordmark() {
   return (
     <Link
       href="/mira"
-      aria-label="Applied Psychometrics, beta"
-      className="relative inline-flex flex-col font-serif text-[22px] font-bold leading-[1.05] text-ap-ink no-underline"
+      aria-label="LoveIQ, beta"
+      className="inline-flex items-center gap-2 text-ap-ink no-underline"
     >
-      <span>Applied</span>
-      <span className="bg-gradient-to-r from-[#d05976] via-[#c167cf] to-[#8887f6] bg-clip-text text-transparent">
-        Psychometrics
-      </span>
-      <span className="absolute right-0 top-[3px] font-sans text-[10px] font-normal tracking-[0.14em] text-ap-quiet">
+      <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
+      <LoveIQWordmark className="text-[22px] tracking-[-0.01em]" loveClassName="text-ap-ink" />
+      <span className="self-start font-sans text-[10px] font-normal tracking-[0.14em] text-ap-quiet">
         BETA
       </span>
     </Link>
@@ -21,7 +23,7 @@ export function Wordmark() {
 }
 
 export const DISCLAIMER =
-  "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you're struggling, please reach out to a qualified professional.";
+  "Mira is an AI coach by LoveIQ, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you're struggling, please reach out to a qualified professional.";
 
 export function MiraFrame({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (

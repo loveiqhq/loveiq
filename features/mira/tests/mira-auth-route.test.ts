@@ -7,10 +7,8 @@ vi.mock("@shared/http/ratelimit", () => ({
   releaseCooldown: vi.fn(),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
-const notifySlack = vi.fn().mockResolvedValue(undefined);
-vi.mock("@shared/observability/slack", () => ({
-  notifySlack: (...a: unknown[]) => notifySlack(...a),
-}));
+vi.mock("@features/mira/server/alerts", () => ({ alertCodeCap: vi.fn() }));
+vi.mock("@shared/emails/suppression", () => ({ isUndeliverable: vi.fn() }));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -40,7 +38,10 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import { POST } from "@/app/api/mira/auth/route";
+import { CONSENT_VERSION } from "@features/mira/server/config";
+import { alertCodeCap } from "@features/mira/server/alerts";
 import { addressKey, sendSignInCode } from "@features/mira/server/sign-in";
+import { isUndeliverable } from "@shared/emails/suppression";
 import {
   addMessages,
   createChat,
@@ -94,6 +95,7 @@ describe("POST /api/mira/auth", () => {
       cooldowns.delete(`${bucket}:${key}`);
     });
     vi.mocked(getClientIp).mockReturnValue("127.0.0.1");
+    vi.mocked(isUndeliverable).mockResolvedValue(false);
     verifyOtp.mockResolvedValue({
       data: { user: { id: "u1", email: "Lea@Example.com" } },
       error: null,
@@ -127,7 +129,23 @@ describe("POST /api/mira/auth", () => {
       token: "12345678",
       type: "email",
     });
-    expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", "mira-2026-11-18");
+    expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", CONSENT_VERSION, {
+      useAssessment: false,
+      shareRated: false,
+    });
+  });
+
+  it("records the form's two optional ticks with the consent, off unless ticked", async () => {
+    const verify = (ticks: Record<string, unknown>) =>
+      post({ action: "verify", email: "lea@example.com", code: "12345678", ...ticks });
+    await verify({ useAssessment: true, shareRated: true });
+    await verify({ useAssessment: false, shareRated: true });
+    expect(vi.mocked(upsertProfileAtSignIn).mock.calls.map((c) => c[3])).toEqual([
+      { useAssessment: true, shareRated: true },
+      { useAssessment: false, shareRated: true },
+    ]);
+    expect((await verify({ useAssessment: "yes" })).status).toBe(400);
+    expect(CONSENT_VERSION).not.toBe("mira-2026-11-18"); // the reworded ticks are asked again
   });
 
   it("checks no code when Mira has no guess left for the address (or never sent one)", async () => {
@@ -220,26 +238,44 @@ describe("POST /api/mira/auth", () => {
       expect(addressKey("jo.doe+x@acme.de")).toBe("jo.doe@acme.de"); // dots only on Gmail
     });
 
-    it("send 3 codes per inbox per 10 minutes, the +tag and dotted spellings included", async () => {
-      for (const email of ["lea+1@gmail.com", "l.e.a@gmail.com", "lea+2@gmail.com"]) {
-        expect((await start(email)).status).toBe(200);
+    it("send 1 code per inbox per 10 minutes, the +tag and dotted spellings included", async () => {
+      expect((await start("l.e.a@gmail.com")).status).toBe(200);
+      for (const email of ["lea+1@gmail.com", "lea@googlemail.com"]) {
+        const again = await start(email);
+        expect(again.status).toBe(429);
+        expect((await again.json()).error).toMatch(/We just sent you a code/);
       }
-      const fourth = await start("lea@gmail.com");
-      expect(fourth.status).toBe(429);
-      expect(sendSignInCode).toHaveBeenCalledTimes(3);
+      expect(sendSignInCode).toHaveBeenCalledTimes(1);
       // The account keeps the address as typed; only the limit's key is normalised.
       expect(sendSignInCode).toHaveBeenCalledWith("l.e.a@gmail.com");
       expect(recordCodeIssued).toHaveBeenCalledWith("l.e.a@gmail.com");
+      expect(checkCooldown).toHaveBeenCalledWith("lea@gmail.com", "mira-code-wait", 600_000);
+    });
+
+    it("send 5 codes per inbox a day", async () => {
+      for (let i = 0; i < 5; i++) {
+        expect((await start("lea@gmail.com")).status).toBe(200);
+        cooldowns.delete("mira-code-wait:lea@gmail.com"); // the 10 minutes pass
+      }
+      const sixth = await start("lea@gmail.com");
+      expect(sixth.status).toBe(429);
+      expect((await sixth.json()).error).toMatch(/try again tomorrow/);
+      expect(sendSignInCode).toHaveBeenCalledTimes(5);
+      expect(checkCooldown).toHaveBeenCalledWith("lea@gmail.com", "mira-code-day-5", 86_400_000);
+      // The refused sixth gives its 10 minutes back: tomorrow is the next try either way.
+      expect(cooldowns.has("mira-code-wait:lea@gmail.com")).toBe(false);
     });
 
     it("give the inbox's allowance back when no code went out", async () => {
       vi.mocked(sendSignInCode).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
       vi.mocked(recordCodeIssued).mockRejectedValueOnce(new Error("db down"));
       for (let i = 0; i < 3; i++) expect((await start("lea@gmail.com")).status).toBe(500);
-      for (let i = 0; i < 3; i++) expect((await start("lea@gmail.com")).status).toBe(200);
+      expect(cooldowns.size).toBe(0);
+      expect((await start("lea@gmail.com")).status).toBe(200);
+      expect((await start("lea@gmail.com")).status).toBe(429);
     });
 
-    it("stop at 15 an hour per network and 300 an hour in all, without spending the inbox's allowance", async () => {
+    it("stop at 10 an hour per network and 60 an hour in all, without spending the inbox's allowance", async () => {
       refuse("mira-code-ip");
       const perIp = await start("lea@gmail.com");
       expect(perIp.status).toBe(429);
@@ -254,13 +290,59 @@ describe("POST /api/mira/auth", () => {
       const limits = vi
         .mocked(checkRateLimit)
         .mock.calls.map(([key, cfg]) => [cfg.bucket, key, cfg.limit, cfg.windowMs]);
-      expect(limits).toContainEqual(["mira-code-ip", "127.0.0.1", 15, 3_600_000]);
-      expect(limits).toContainEqual(["mira-code-all", "all", 300, 3_600_000]);
-      // Ops hear about it, once an hour.
-      expect(notifySlack).toHaveBeenCalledWith(
-        expect.objectContaining({ channel: "ops", kind: "mira_code_cap" })
-      );
-      expect(limits).toContainEqual(["mira-code-all-alert", "all", 1, 3_600_000]);
+      expect(limits).toContainEqual(["mira-code-ip", "127.0.0.1", 10, 3_600_000]);
+      expect(limits).toContainEqual(["mira-code-all", "all", 60, 3_600_000]);
+      // The owner hears of it (alerts.ts sends it at most once a day).
+      expect(alertCodeCap).toHaveBeenCalledWith(60);
+    });
+
+    it("send nothing to an address that bounced or complained, and answer as if sent", async () => {
+      vi.mocked(isUndeliverable).mockResolvedValueOnce(true);
+      const t0 = Date.now();
+      const res = await start("bounced@example.com");
+      // The same answer as a sent code, after about as long as a send takes.
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(350);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(isUndeliverable).toHaveBeenCalledWith("bounced@example.com");
+      expect(sendSignInCode).not.toHaveBeenCalled();
+      expect(recordCodeIssued).not.toHaveBeenCalled();
+      // The allowance stays spent, as after a real code, so a second try can't tell either.
+      expect((await start("bounced@example.com")).status).toBe(429);
+    });
+
+    it("still sends a code to someone who only unsubscribed from our marketing", async () => {
+      vi.mocked(isUndeliverable).mockResolvedValueOnce(false);
+      const res = await start("unsubscribed@example.com");
+      expect(res.status).toBe(200);
+      expect(sendSignInCode).toHaveBeenCalledWith("unsubscribed@example.com");
+    });
+
+    it("send nothing when the hidden field is filled, spending no allowance, and answer as if sent", async () => {
+      const res = await post({
+        action: "start",
+        email: "lea@example.com",
+        adult: true,
+        terms: true,
+        consent: true,
+        website: "https://spam.example",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(sendSignInCode).not.toHaveBeenCalled();
+      expect(checkCooldown).not.toHaveBeenCalled();
+      expect(isUndeliverable).not.toHaveBeenCalled();
+      // An empty field is a person.
+      const person = await post({
+        action: "start",
+        email: "lea@example.com",
+        adult: true,
+        terms: true,
+        consent: true,
+        website: "",
+      });
+      expect(person.status).toBe(200);
+      expect(sendSignInCode).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -107,4 +107,39 @@ describe("POST /api/mira/event", () => {
     }
     expect(logMiraEvent).not.toHaveBeenCalled();
   });
+
+  it("logs the 'Keep this chat' card: shown, kept, or Not now", async () => {
+    for (const name of ["keep_card_shown", "keep_card_keep", "keep_card_not_now"]) {
+      expect((await post({ type: "track", name })).status).toBe(200);
+    }
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([n]) => n)).toEqual([
+      "keep_card_shown",
+      "keep_card_keep",
+      "keep_card_not_now",
+    ]);
+  });
+
+  it("logs the consent with its wording's version and the rating tick, and only so", async () => {
+    await post({ type: "consent", version: "mira-2026-11-21", shareRated: true });
+    expect(vi.mocked(logMiraEvent).mock.calls).toEqual([
+      [
+        "consent_given",
+        { anonId: "anon_test_123456789" },
+        { version: "mira-2026-11-21", shareRated: true },
+      ],
+    ]);
+    for (const bad of [
+      { type: "track", name: "consent_given" }, // a consent without its version
+      { type: "consent", version: "mira-2026-11-21" },
+      { type: "consent", version: "anything at all", shareRated: false },
+    ]) {
+      expect((await post(bad)).status).toBe(400);
+    }
+    expect(logMiraEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the thumbs only when an anonymous rating comes without the reply's words", async () => {
+    await post({ type: "rating", rating: 1 });
+    expect(loggedProps()).toEqual({ rating: 1, reply: null });
+  });
 });

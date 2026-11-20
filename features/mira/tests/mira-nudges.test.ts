@@ -447,6 +447,11 @@ describe("runNudges", () => {
     expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toMatch(/order=created_at\.asc,id\.asc$/);
   });
 
+  it("never reads in anyone who said they are under 18, even with nudges on again", async () => {
+    await runNudges(TUESDAY_0810);
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain("&minor_at=is.null&");
+  });
+
   it("nudges four people at a time", async () => {
     users = Array.from({ length: 8 }, (_, i) =>
       user({ id: `11111111-2222-4333-8444-${String(i).padStart(12, "0")}` })
