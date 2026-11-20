@@ -48,13 +48,15 @@ export function signInCodeEmail(code: string) {
   const subject = `Your sign-in code: ${code}`;
   const text =
     `Your sign-in code is ${code}.\n\nType it on the page you just came from. It works once, ` +
-    `for an hour.\n\nIf you did not ask for this, you can ignore this email.\n\nApplied Psychometrics`;
+    `for an hour.\n\nIf you did not ask for this, you can ignore this email.\n\n` +
+    `Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner`;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
     <p style="margin:0 0 16px 0;">Your sign-in code is</p>
     <p style="margin:0 0 20px 0; font-size:32px; font-weight:700; letter-spacing:6px;">${escapeHtml(code)}</p>
     <p style="margin:0 0 16px 0;">Type it on the page you just came from. It works once, for an hour.</p>
-    <p style="margin:0; font-size:13px; color:#6b6678;">If you did not ask for this, you can ignore this email. Applied Psychometrics</p>
+    <p style="margin:0 0 12px 0; font-size:13px; color:#6b6678;">If you did not ask for this, you can ignore this email.</p>
+    <p style="margin:0; font-size:12px; color:#6b6678;">Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner</p>
   </div>`;
   return { subject, text, html };
 }

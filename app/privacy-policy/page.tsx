@@ -29,7 +29,9 @@ export default function PrivacyPolicyPage() {
           >
             {/* Section 1 */}
             <section>
-              <h2 className="text-gray-900 font-semibold mb-4">1. Controller</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">
+                1. Controller and Data Protection Officer
+              </h2>
               <p className="mb-4">
                 Applied Psychometrics UG (haftungsbeschränkt)
                 <br />
@@ -50,7 +52,18 @@ export default function PrivacyPolicyPage() {
                   hello@loveiq.org
                 </a>
               </p>
-              <p>(&quot;LoveIQ&quot;, &quot;we&quot;, &quot;us&quot;)</p>
+              <p className="mb-4">(&quot;LoveIQ&quot;, &quot;we&quot;, &quot;us&quot;)</p>
+              <h3 className="text-gray-900 font-medium mb-2">Data protection officer</h3>
+              <p>
+                Eman Čičkušić, reachable at{" "}
+                <a
+                  href="mailto:ec@loveiq.org"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
+                >
+                  ec@loveiq.org
+                </a>{" "}
+                or by post to the address above, marked &quot;Data protection officer&quot;.
+              </p>
             </section>
 
             {/* Section 2 */}
@@ -114,11 +127,16 @@ export default function PrivacyPolicyPage() {
                 3.5 Mira, our AI coach for body confidence (beta)
               </h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>What you write to Mira, which concerns your sex life</li>
+                <li>What you write to Mira, which concerns your sex life and often your health</li>
                 <li>
                   With a free Mira account: your email address, the name, gender and country you
-                  give, your coaching style and settings, and your chats while &quot;Remember our
+                  give, your coaching style, settings and time zone, the consents you gave with
+                  their date and wording, and the chats Mira saves while &quot;Remember our
                   conversations&quot; is on
+                </li>
+                <li>
+                  Your LoveIQ test result, only if you choose to let Mira use it to tailor your
+                  coaching
                 </li>
                 <li>
                   If you choose to take it, your answers to Mira&apos;s body check (ten statements
@@ -126,14 +144,25 @@ export default function PrivacyPolicyPage() {
                 </li>
                 <li>
                   Your ratings and feedback, and labels about your chats that never contain your
-                  words: which of Mira&apos;s questions you answered, a new chat&apos;s topic and
-                  when Mira suggested a doctor or therapist
+                  words: which of Mira&apos;s questions you answered, a new chat&apos;s topic, when
+                  Mira suggested a doctor or therapist and when she showed support lines
+                </li>
+                <li>
+                  The text of a reply you rate, only if you allow Mira&apos;s team to read the
+                  replies you rate
                 </li>
               </ul>
+              <p className="mb-4">
+                What you share with Mira about your sex life and health is a special category of
+                personal data under Art. 9 GDPR, which we process only with your explicit consent.
+                On Mira&apos;s pages, our analytics tools (section 7.4) also see what you write in
+                the chat.
+              </p>
               <p>
-                What you share with Mira about your sex life is a special category of personal data
-                under Art. 9 GDPR, which we process only with your explicit consent. The details are
-                in{" "}
+                Mira is only for adults. If you tell Mira you are under 18, she stops coaching for
+                good on that account or in that browser, turns her emails off and deletes the chats
+                saved in that account. In a browser without an account, the chat there is cleared.
+                Everything about Mira, including who receives what, is in{" "}
                 <a
                   href="/mira/privacy"
                   className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
@@ -181,6 +210,12 @@ export default function PrivacyPolicyPage() {
                   Processing of sensitive psychometric, sexual and relationship data: Art. 9(2)(a)
                   GDPR (explicit consent)
                 </li>
+                <li>
+                  Mira: coaching on what you share about your sex life and health, and keeping the
+                  text of replies you rate if you allow it: Art. 6(1)(a) and Art. 9(2)(a) GDPR
+                  (explicit consent); your Mira account, sign-in and Mira&apos;s emails: Art.
+                  6(1)(b) GDPR (contract)
+                </li>
                 <li>Legal compliance: Art. 6(1)(c) GDPR</li>
               </ul>
               <p>You may withdraw consent at any time with effect for the future.</p>
@@ -213,7 +248,7 @@ export default function PrivacyPolicyPage() {
               <h2 className="text-gray-900 font-semibold mb-4">7. Recipients of Data</h2>
               <p className="mb-4">
                 We disclose your personal data to the following categories of recipients. With the
-                exceptions noted in sections 7.4 and 7.10, all recipients act as our processors
+                exceptions noted in sections 7.4, 7.5 and 7.10, all recipients act as our processors
                 under data-processing agreements in accordance with Art. 28 GDPR.
               </p>
 
@@ -221,7 +256,9 @@ export default function PrivacyPolicyPage() {
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Vercel Inc. (USA / EU) - application hosting and edge delivery</li>
                 <li>
-                  Supabase Inc. (USA / EU) - managed Postgres database and authentication backend
+                  Supabase Inc. - managed Postgres database and authentication backend. Our database
+                  is hosted in Zurich, Switzerland, for which the European Commission has issued an
+                  adequacy decision.
                 </li>
                 <li>Upstash Inc. (USA / EU) - Redis-compatible key-value store (rate-limiting)</li>
               </ul>
@@ -246,13 +283,15 @@ export default function PrivacyPolicyPage() {
                 clicked, and when, and it is linked to your survey submission. Our record does not
                 include your IP address, your device or which link you clicked. We use it to see
                 which emails are useful and to make them better. Our legal basis is our legitimate
-                interest (Art. 6(1)(f) GDPR). For Mira&apos;s daily emails we record the same way
-                whether each email was delivered and first opened, linked to your Mira account, to
-                see which kinds of email help. Some email apps load images by themselves, so an
-                email can count as opened without being read. To avoid tracking, turn off image
-                loading in your email app. You can also visit our website directly instead of
-                clicking a link, or unsubscribe with the link in our emails. You may object under
-                Art. 21 GDPR using the contact details in section 1.
+                interest (Art. 6(1)(f) GDPR). Mira&apos;s daily emails come with a free Mira
+                account, at most one a day; you can pause or stop them with the link in each email
+                or in Mira&apos;s settings. For them we record the same way whether each email was
+                delivered and first opened, linked to your Mira account, to see which kinds of email
+                help. Some email apps load images by themselves, so an email can count as opened
+                without being read. To avoid tracking, turn off image loading in your email app. You
+                can also visit our website directly instead of clicking a link, or unsubscribe with
+                the link in our emails. You may object under Art. 21 GDPR using the contact details
+                in section 1.
               </p>
               <p className="mb-4">
                 If you do not unlock your full report, we may email you once to ask why, usually a
@@ -297,6 +336,13 @@ export default function PrivacyPolicyPage() {
                 and therefore does not depend on your cookie choice. You may object to this
                 processing at any time under Art. 21 GDPR using the contact details in section 1.
               </p>
+              <p className="mb-4">
+                These tools also run on the pages of Mira, our AI coach. There, PostHog and
+                Microsoft Clarity also see what you and Mira write in the chat, as it appears on the
+                page. Mira&apos;s notice says so, and so does the tick before a first chat without
+                an account. Mira also keeps her own log of steps; without an account, a random id in
+                a cookie on your browser links it and counts your free messages.
+              </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.5 Advertising and attribution</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
@@ -305,7 +351,7 @@ export default function PrivacyPolicyPage() {
                   every purchase; without your consent it is sent without cookies or identifiers
                   (Google&apos;s consent mode). The Google Ads tag itself loads on every visit and
                   may set a measurement cookie (<code>_gcl_au</code>) before you answer the cookie
-                  banner.
+                  banner. For Google Ads, Google acts as an independent controller.
                 </li>
               </ul>
 
@@ -319,10 +365,21 @@ export default function PrivacyPolicyPage() {
               <h3 className="text-gray-900 font-medium mb-2">7.7 Internal operations</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
-                  Slack Technologies Ltd. (IE) - internal incident-response notifications. Personal
-                  data is minimized (e.g. email addresses are masked) before being sent.
+                  Slack Technologies Ltd. (IE) - our team&apos;s messaging. It receives alerts about
+                  technical problems, and posts that let the team follow sign-ups and returns: one
+                  for each finished survey, and a note when a reader comes back to their report.
                 </li>
               </ul>
+              <p className="mb-4">
+                These posts show your email address masked (for example a***@example.com), where
+                your visit came from, the landing page you saw, your device type, the country you
+                chose, how far you got and how long each step took. A note about a return also shows
+                what brought you back and how long you read. They never contain your answers. If you
+                have asked us to restrict the processing of your data, you are left out of them.
+                Purchases, contact requests and feedback on a report also reach the team in Slack,
+                with your email address masked. Our legal basis is our legitimate interest in
+                following and improving our service (Art. 6(1)(f) GDPR).
+              </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.8 Reviews and social proof</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
@@ -335,8 +392,14 @@ export default function PrivacyPolicyPage() {
               <h3 className="text-gray-900 font-medium mb-2">7.9 AI model</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
-                  Anthropic PBC (USA) - the AI model that writes Mira&apos;s replies and daily
-                  emails; it receives what you write to Mira and may process it outside the EU
+                  Anthropic Ireland, Limited (IE) and Anthropic, PBC (USA) - the AI model (Claude)
+                  that writes Mira&apos;s replies and daily emails. It receives what you write to
+                  Mira and the context she needs: your coaching style and, with an account, your
+                  name, gender, country and, if you allow it, your LoveIQ result. Anthropic stores
+                  this data in the USA and may process it in the USA, Europe, Asia or Australia,
+                  under the EU Standard Contractual Clauses. It deletes the data within 30 days. If
+                  its automated safety systems flag a conversation, it may keep it for up to 2
+                  years. Anthropic may not use the data to train its models.
                 </li>
               </ul>
 
@@ -344,8 +407,8 @@ export default function PrivacyPolicyPage() {
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
                   Google Ireland Ltd. - &quot;Continue with Google&quot; for a Mira account, only if
-                  you choose it: Google confirms your email address to us. For your Google account,
-                  Google is an independent controller.
+                  you choose it: Google confirms your email address to us, and so learns that you
+                  signed in to Mira. For your Google account, Google is an independent controller.
                 </li>
               </ul>
 
@@ -370,6 +433,11 @@ export default function PrivacyPolicyPage() {
                 ensure protection through:
               </p>
               <ul className="list-disc list-inside space-y-1">
+                <li>
+                  Adequacy decisions of the European Commission, for example for Switzerland (where
+                  our database is), the United Kingdom, and US companies certified under the EU-US
+                  Data Privacy Framework
+                </li>
                 <li>EU Standard Contractual Clauses</li>
                 <li>Additional technical and organizational safeguards</li>
               </ul>
@@ -385,11 +453,17 @@ export default function PrivacyPolicyPage() {
                 <li>Longer if required by tax or commercial law</li>
               </ul>
               <p className="mb-4">Pseudonymized statistical data may be stored longer.</p>
+              <p className="mb-4">
+                Mira: without an account, your chat stays in your browser. With an account, Mira
+                saves your chats while &quot;Remember our conversations&quot; is on. If you turn it
+                off, she stops saving new chats. Saved chats stay until you delete them or your
+                account, and at most 12 months after the last message you wrote. Body check answers
+                stay until you delete your Mira account.
+              </p>
               <p>
-                Mira: without an account, your chat stays in your browser. With an account, your
-                chats are kept while &quot;Remember our conversations&quot; is on, until you delete
-                them or your account, and at most 12 months after the last message you wrote; body
-                check answers until you delete your Mira account.
+                Mira&apos;s log of labels, ratings, feedback and the text of replies you let us read
+                is deleted after 12 months. A Mira sign-in whose sign-up was never finished is
+                deleted after 24 hours. Copies in our database backups are kept for up to 30 days.
               </p>
             </section>
 
@@ -413,7 +487,16 @@ export default function PrivacyPolicyPage() {
                   className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
+                </a>{" "}
+                or to our data protection officer at{" "}
+                <a
+                  href="mailto:ec@loveiq.org"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
+                >
+                  ec@loveiq.org
                 </a>
+                . A request for access, a copy or deletion covers all your data, including your Mira
+                data.
               </p>
             </section>
 
@@ -441,7 +524,8 @@ export default function PrivacyPolicyPage() {
               </h2>
               <p className="mb-4">
                 Because LoveIQ processes sensitive psychological, sexual and relational data using
-                automated analysis, we have conducted a Data Protection Impact Assessment (DPIA).
+                automated analysis, we have conducted a Data Protection Impact Assessment (DPIA),
+                with its own part for Mira.
               </p>
               <p className="mb-4">The DPIA includes:</p>
               <ul className="list-disc list-inside space-y-1">

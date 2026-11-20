@@ -11,6 +11,7 @@
 # These are legitimate words (not typos). Add new terms as needed.
 Ajna
 Börner
+Čičkušić
 Clickjacking
 Contentsquare
 DPIA
