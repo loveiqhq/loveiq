@@ -44,6 +44,22 @@ export async function createMiraSupabase() {
 
 export type MiraAccount = { id: string; email: string };
 
+/** Mira's own signed-in pages, spelt exactly, and a chat by its id (`/mira?chat=<id>`). */
+const NEXT_PAGES = new Set(["/mira", "/mira/home", "/mira/settings", "/mira/feedback"]);
+const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
+
+/**
+ * Where a sign-in may send the person on to (`next`, e.g. the chat a nudge opened while they
+ * were signed out), or null for Home. Only those exact paths, so `next` can never lead off the
+ * site (`//host`, `/\host`, a scheme), up a level (`..`) or anywhere but Mira.
+ */
+export function safeNext(next: unknown): string | null {
+  if (typeof next !== "string") return null;
+  if (NEXT_PAGES.has(next)) return next;
+  const chat = next.startsWith("/mira?chat=") ? next.slice("/mira?chat=".length) : "";
+  return CHAT_ID.test(chat) ? next : null;
+}
+
 /** The signed-in Mira account, checked with Supabase Auth (not just the cookie), or null. */
 export async function getMiraAccount(): Promise<MiraAccount | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)

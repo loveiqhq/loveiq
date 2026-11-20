@@ -4,7 +4,7 @@ import { getMiraAccount } from "@features/mira/server/session";
 import MiraSettings from "@features/mira/ui/MiraSettings";
 
 export const metadata: Metadata = {
-  title: "Settings | Applied Psychometrics",
+  title: "Settings | LoveIQ",
   robots: { index: false, follow: false },
 };
 

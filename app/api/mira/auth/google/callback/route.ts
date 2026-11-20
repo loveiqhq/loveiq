@@ -3,8 +3,9 @@
  *
  * Checks the state against the start cookie, swaps the code for the person's confirmed email,
  * then signs in exactly as a verified emailed code does: Mira's own session cookie, and the
- * consent recorded (the start route checked the ticks). The page then brings the chat along
- * ("your current chat comes with you") and asks the "About you" questions if they're new.
+ * consent recorded with the form's optional ticks (the start route checked the ticks and kept
+ * them in the cookie). The page then brings the chat along ("your current chat comes with you"),
+ * asks the "About you" questions if they're new, and goes on to `next` (checked again here).
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -21,7 +22,7 @@ import {
   sameState,
   unpackStart,
 } from "@features/mira/server/google";
-import { createMiraSupabase } from "@features/mira/server/session";
+import { createMiraSupabase, safeNext } from "@features/mira/server/session";
 import { mintSignInCode } from "@features/mira/server/sign-in";
 import { logMiraEvent, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -40,8 +41,10 @@ export async function GET(request: Request) {
   const jar = await cookies();
   const start = unpackStart(jar.get(GOOGLE_COOKIE)?.value);
   jar.delete({ name: GOOGLE_COOKIE, path: GOOGLE_COOKIE_PATH }); // one use only
+  const next = safeNext(start?.next);
+  const andNext = next ? `&next=${encodeURIComponent(next)}` : "";
   const back = (why: string) =>
-    NextResponse.redirect(new URL(`/mira/start?google=${why}`, url.origin), 303);
+    NextResponse.redirect(new URL(`/mira/start?google=${why}${andNext}`, url.origin), 303);
 
   const rate = await checkRateLimit(getClientIp(request), {
     bucket: "mira-google",
@@ -81,14 +84,17 @@ export async function GET(request: Request) {
 
   const account = { id: data.user.id, email: data.user.email.toLowerCase() };
   try {
-    const profile = await upsertProfileAtSignIn(account.id, account.email, CONSENT_VERSION);
+    const profile = await upsertProfileAtSignIn(account.id, account.email, CONSENT_VERSION, {
+      useAssessment: start.useAssessment,
+      shareRated: start.shareRated,
+    });
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },
       { method: "google" }
     );
-    const next = `/mira/start?google=done${profile?.name ? "" : "&about=1"}`;
-    return NextResponse.redirect(new URL(next, origin), 303);
+    const done = `/mira/start?google=done${profile?.name ? "" : "&about=1"}${andNext}`;
+    return NextResponse.redirect(new URL(done, origin), 303);
   } catch (err) {
     // Signed in without a profile is a dead end (/api/mira/me answers 401): sign out again, so
     // the next try starts clean.

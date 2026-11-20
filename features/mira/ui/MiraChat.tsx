@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { IntakeAnswers } from "./IntakeAnswers";
@@ -21,8 +22,9 @@ import {
  * Boards 01 (anonymous chat), 01b (free limit reached), 03 (coaching style) and 08a (chats,
  * signed in) as one screen. Decisions taken for Friday (18 Nov): typing only (spoken Talk comes
  * after), no invented numbers or quotes on the page, an 18+ and sensitive-data tick before the
- * first anonymous message, and the sign-up card when an anonymous person starts an 11th
- * conversation (Marcus's 10 free conversations).
+ * first anonymous message, and the sign-up card once an anonymous person's 10 free messages are
+ * answered (the 11th needs the free account). Board "01 Anonymous chat (embed) copy": the "Keep
+ * this chat" card after Mira's first reply to an anonymous person.
  */
 
 type Message = LocalTurn & { messageId?: number | null };
@@ -30,13 +32,15 @@ type BodyDue = "baseline" | "week4" | null;
 type CrisisCountry = SupportCountry;
 type ChatSummary = { id: string; title: string; updated_at: string };
 
-const CONSENT_VERSION = "mira-2026-11-18";
 /** Sanjin's intake invitation: Mira's own message after her first reply, with two reply buttons. */
 const isInvitation = (m: Turn) =>
   m.role === "assistant" && m.content === miraConfig.intakeInvitation;
-/** A stop rail fired in this chat: no questions of ours follow it. */
-const crisisIn = (turns: Turn[]) =>
-  turns.some((t) => t.role === "assistant" && t.content === miraConfig.crisisMessage);
+/** A stop rail fired in this chat (the fixed message, or a reply the model marked): no questions
+ *  or cards of ours follow it. */
+const crisisIn = (turns: LocalTurn[]) =>
+  turns.some(
+    (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
+  );
 const SKIP_ANSWER = "I’d rather skip this one.";
 
 /**
@@ -72,6 +76,11 @@ export default function MiraChat({
   const [gate, setGate] = useState(false);
   const [consented, setConsented] = useState(signedIn);
   const [tick, setTick] = useState(false);
+  // "Mira's team may read replies I rate": the optional box, then the choice it recorded.
+  const [share, setShare] = useState(false);
+  // "Not now" on the "Keep this chat" card: away for this chat (kept with it in this browser).
+  const [keepOff, setKeepOff] = useState(false);
+  const keepLogged = useRef(false);
   // Until this browser's chat (or the opened one) is loaded, the consent tick and the starter
   // prompts may not belong on screen: they are left out rather than flashed.
   const [ready, setReady] = useState(signedIn && !initialChatId);
@@ -105,8 +114,11 @@ export default function MiraChat({
         setMessages(saved.turns);
         setFreeLeft(saved.freeLeft);
         if (saved.gate) setGate(true);
+        if (saved.keepOff) setKeepOff(true);
       }
-      setConsented(local.consent() === CONSENT_VERSION);
+      const given = local.consent();
+      setConsented(given?.version === CONSENT_VERSION);
+      setShare(given?.version === CONSENT_VERSION && given.shareRated === true);
       setStyle(local.style() ?? {});
       setReady(true);
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -165,17 +177,19 @@ export default function MiraChat({
   useEffect(() => {
     if (!ready || signedIn || minor || (messages.length === 0 && !local.chat())) return;
     local.saveChat({
-      turns: messages.map(({ role, content, sources, rated, ask }) => ({
+      turns: messages.map(({ role, content, sources, rated, ask, crisis }) => ({
         role,
         content,
         sources,
         rated,
         ask,
+        crisis,
       })),
       freeLeft,
       ...(gate ? { gate: true } : {}),
+      ...(keepOff ? { keepOff: true } : {}),
     });
-  }, [ready, signedIn, minor, messages, freeLeft, gate]);
+  }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
 
   async function send(text: string, opts: { skip?: boolean } = {}) {
     const message = text.trim();
@@ -188,9 +202,11 @@ export default function MiraChat({
     if (bodyOpen && !bodyStarted.current) setBodyOpen(false);
     if (!consented) {
       if (!tick) return;
-      local.saveConsent(CONSENT_VERSION);
+      local.saveConsent({ version: CONSENT_VERSION, shareRated: share });
       setConsented(true);
-      void miraApi("/api/mira/event", { body: { type: "track", name: "consent_given" } });
+      void miraApi("/api/mira/event", {
+        body: { type: "consent", version: CONSENT_VERSION, shareRated: share },
+      });
     }
     setError(null);
     const firstOfChat = !chatId && messages.length === 0;
@@ -244,6 +260,7 @@ export default function MiraChat({
         sources: res.data.sources,
         messageId: res.data.messageId,
         ask: res.data.ask ?? undefined,
+        ...(res.data.crisis ? { crisis: true } : {}),
       },
       ...(res.data.invitation
         ? [{ role: "assistant" as const, content: res.data.invitation }]
@@ -252,6 +269,9 @@ export default function MiraChat({
     replyAt.current = next.length;
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
+    // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
+    // composer stays, and the server answers a crisis message whatever the limits.
+    if (res.data.freeLeft === 0 && !res.data.crisis) setGate(true);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
     if (res.data.minor) {
       // Under 18 (rail 15): the reply stays on screen, but this browser forgets the chat and the
@@ -302,9 +322,14 @@ export default function MiraChat({
       setMessages((all) => all.map((x) => (x === from ? to : x)));
     swap(m, rated);
     const res = await miraApi("/api/mira/event", {
-      body: m.messageId
-        ? { type: "rating", rating, messageId: m.messageId }
-        : { type: "rating", rating, reply: m.content.slice(0, 4000) },
+      body: {
+        type: "rating",
+        rating,
+        ...(m.messageId ? { messageId: m.messageId } : {}),
+        // The reply's words go along only when this browser ticked "Mira's team may read
+        // replies I rate"; otherwise the thumbs only. A signed-in rating never sends them.
+        ...(!signedIn && share ? { reply: m.content.slice(0, 4000) } : {}),
+      },
     });
     if (!res.ok) {
       swap(rated, m);
@@ -312,15 +337,18 @@ export default function MiraChat({
     }
   }
 
+  /** Off while the sign-up card shows, so the chat it promises to bring along isn't wiped. */
   function newChat() {
     if (sending) return; // a reply on its way belongs to this chat
     setMessages([]);
     setChatId(null);
     setError(null);
     setNps(null);
+    setKeepOff(false); // a new chat may be kept again
+    keepLogged.current = false;
     window.history.replaceState(null, "", "/mira");
     if (signedIn) return;
-    // The 10 free conversations are used: a new one needs the free account.
+    // The free messages are used: a new chat needs the free account too.
     if (freeLeft === 0) {
       setGate(true);
       void miraApi("/api/mira/event", { body: { type: "track", name: "gate_shown" } });
@@ -338,6 +366,32 @@ export default function MiraChat({
   }
 
   const started = messages.length > 0;
+  const last = messages.at(-1);
+  // "Keep this chat" (board 01 copy): once Mira has replied to an anonymous person, but never
+  // beside her intake invitation (it comes first; the card follows the next reply), the NPS
+  // question or a crisis in this chat, and not while a reply is on its way.
+  const showKeep =
+    !signedIn &&
+    ready &&
+    !gate &&
+    !keepOff &&
+    !sending &&
+    !nps &&
+    last?.role === "assistant" &&
+    !isInvitation(last) &&
+    !crisisIn(messages);
+
+  useEffect(() => {
+    if (!showKeep || keepLogged.current) return;
+    keepLogged.current = true; // once a chat, per page view
+    void miraApi("/api/mira/event", { body: { type: "track", name: "keep_card_shown" } });
+  }, [showKeep]);
+
+  function keepNotNow() {
+    setKeepOff(true);
+    void miraApi("/api/mira/event", { body: { type: "track", name: "keep_card_not_now" } });
+    document.getElementById("mira-input")?.focus(); // the pressed button is about to go
+  }
 
   return (
     <MiraFrame
@@ -370,7 +424,7 @@ export default function MiraChat({
           <button
             type="button"
             onClick={newChat}
-            disabled={sending}
+            disabled={sending || gate}
             className="min-h-[44px] rounded-full border border-ap-purple text-[14px] font-semibold text-[#561dbd] disabled:opacity-50"
           >
             + New chat
@@ -414,7 +468,7 @@ export default function MiraChat({
             <button
               type="button"
               onClick={newChat}
-              disabled={sending}
+              disabled={sending || gate}
               className="min-h-[44px] rounded-full border border-ap-purple px-3 text-[14px] font-semibold text-[#561dbd] disabled:opacity-50"
             >
               New chat
@@ -582,6 +636,51 @@ export default function MiraChat({
                 ) : null}
               </div>
             ))}
+            {showKeep ? (
+              <div className="mt-1.5 flex flex-col gap-3 rounded-[20px] bg-ap-lilac px-5 py-[18px] sm:flex-row sm:items-center sm:gap-4">
+                <div className="flex flex-1 items-start gap-3 sm:items-center sm:gap-4">
+                  <svg
+                    aria-hidden="true"
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="shrink-0 text-ap-purple"
+                  >
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <p className="text-[15px] leading-normal text-ap-body">
+                    Would you like Mira to remember this conversation next time? Sign in and she can
+                    also gently tailor things to your LoveIQ result.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={keepNotNow}
+                    className="min-h-[44px] px-3.5 text-[14px] font-semibold text-ap-plum"
+                  >
+                    Not now
+                  </button>
+                  {/* This browser's chat goes into the new account at sign-up. */}
+                  <Link
+                    href="/mira/start"
+                    onClick={() =>
+                      void miraApi("/api/mira/event", {
+                        body: { type: "track", name: "keep_card_keep" },
+                      })
+                    }
+                    className="inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] to-[#958ef6] px-5 text-[14px] font-bold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)]"
+                  >
+                    Keep this chat
+                  </Link>
+                </div>
+              </div>
+            ) : null}
             {nps ? (
               <div className="rounded-2xl border border-ap-line bg-[#faf9fc] p-4">
                 {nps === "thanks" ? (
@@ -646,8 +745,9 @@ export default function MiraChat({
                     Keep talking with Mira, for free
                   </p>
                   <p className="mt-1 text-[14px] text-ap-body">
-                    Create a free account so Mira can remember your answers. Your chat comes with
-                    you.
+                    You&apos;ve had your {ANON_FREE_MESSAGES} free messages with Mira. Create a free
+                    account to carry on. She&apos;ll remember where you left off, and this chat
+                    comes with you.
                   </p>
                 </div>
                 <Link
@@ -660,22 +760,34 @@ export default function MiraChat({
             ) : (
               <>
                 {ready && !consented ? (
-                  <label className="mb-3 flex items-start gap-2 text-[13px] leading-snug text-ap-body">
-                    <input
-                      type="checkbox"
-                      checked={tick}
-                      onChange={(e) => setTick(e.target.checked)}
-                      className="mt-[2px] h-4 w-4 accent-[#795fc8]"
-                    />
-                    <span>
-                      I&apos;m 18 or older, and I agree that Mira may process what I share about my
-                      sex life to coach me and to improve Mira. Our analytics tools also see what I
-                      type.{" "}
-                      <Link href="/mira/privacy" className="underline">
-                        How Mira handles your data
-                      </Link>
-                    </span>
-                  </label>
+                  <div className="mb-3 flex flex-col gap-2 text-[13px] leading-snug text-ap-body">
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={tick}
+                        onChange={(e) => setTick(e.target.checked)}
+                        className="mt-[2px] h-4 w-4 accent-[#795fc8]"
+                      />
+                      <span>
+                        I&apos;m 18 or older, and I agree that Mira may process what I share about
+                        my sex life and health to coach me. Our analytics tools also see what I
+                        type.{" "}
+                        <Link href="/mira/privacy" className="underline">
+                          How Mira handles your data
+                        </Link>
+                      </span>
+                    </label>
+                    {/* Optional and unticked: only with it does a rated reply keep its words. */}
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={share}
+                        onChange={(e) => setShare(e.target.checked)}
+                        className="mt-[2px] h-4 w-4 accent-[#795fc8]"
+                      />
+                      <span>Mira&apos;s team may read replies I rate, to improve Mira.</span>
+                    </label>
+                  </div>
                 ) : null}
                 <form
                   className="flex gap-2"
@@ -714,8 +826,8 @@ export default function MiraChat({
                 {freeLeft !== null && freeLeft <= 3 && !signedIn ? (
                   <p className="mt-2 text-[12px] text-ap-muted">
                     {freeLeft === 0
-                      ? "This is your last free conversation before you need a free account."
-                      : `${freeLeft} more free ${freeLeft === 1 ? "conversation" : "conversations"} before you need a free account.`}
+                      ? "That was your last free message: the next one needs a free account."
+                      : `${freeLeft} more free ${freeLeft === 1 ? "message" : "messages"} before you need a free account.`}
                   </p>
                 ) : null}
               </>

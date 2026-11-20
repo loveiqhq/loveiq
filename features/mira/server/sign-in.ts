@@ -10,7 +10,7 @@ import logger from "@shared/observability/logger";
  * auth route. No password, no Supabase email template, no Supabase mail rate limit.
  *
  * Sender and subject are neutral on purpose (board 05: "nothing about your chats shows in your
- * inbox"): "Applied Psychometrics", "Your sign-in code".
+ * inbox"): "LoveIQ" (the brand, 18 Nov 2026), "Your sign-in code".
  */
 
 /** Supabase mints 8 digits on our projects (mailer_otp_length); 6 to 10 is accepted, like Jarvis. */
@@ -35,7 +35,7 @@ let resend: Resend | null = null;
 function neutralFrom(): string {
   const configured = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
   const address = /<([^>]+)>/.exec(configured)?.[1] ?? configured;
-  return `Applied Psychometrics <${address}>`;
+  return `LoveIQ <${address}>`;
 }
 
 /** The reply-to address, only when it is one (a pulled env file holds "[SENSITIVE]" instead). */

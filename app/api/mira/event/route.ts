@@ -4,16 +4,20 @@
  *   { type: "rating", rating: 1 | -1, messageId? , reply? } thumbs on one reply. A signed-in
  *       person's stored reply gets the rating on its row, and their reply text is never kept
  *       here (it lives only in their chat, and only while Mira may remember it); an anonymous
- *       rating keeps the rated reply's first 2,000 characters (covered by the first-message
- *       consent), so we can see what went wrong.
+ *       rating keeps the rated reply's first 2,000 characters only when the person ticked
+ *       "Mira's team may read replies I rate" (the browser sends the text only then), so we can
+ *       see what went wrong. Without the tick: the thumbs only.
+ *   { type: "consent", version, shareRated }  the first-message consent, logged as
+ *       consent_given with its wording's version and the optional rating tick
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach
  *   { type: "nps", score }        "How likely are you to recommend Mira to a friend?" 0 to 10,
  *       asked after the 3rd conversation and then monthly (Marcus's MVP success board); null is
  *       "Not now", so the response rate is known too
- *   { type: "track", name }        chat opened, consent given, gate shown (on "New chat", which
- *       the server never sees), the body check offered and started (its finish is the server's);
- *       only these names, so the server's own KPI events can't be sent
+ *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
+ *       sees), the body check offered and started (its finish is the server's), the "Keep this
+ *       chat" card shown, kept or put off; only these names, so the server's own KPI events
+ *       can't be sent
  *
  * At most DAILY_EVENTS a day per person (account or browser id) and six times that per network
  * (a cleared cookie is a new id), so mira_event can't be flooded or the counts inflated.
@@ -49,13 +53,20 @@ const schema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("notify"), coach: z.string().max(60) }),
   z.object({ type: z.literal("nps"), score: z.number().int().min(0).max(10).nullable() }),
   z.object({
+    type: z.literal("consent"),
+    version: z.string().regex(/^mira-\d{4}-\d{2}-\d{2}$/),
+    shareRated: z.boolean(),
+  }),
+  z.object({
     type: z.literal("track"),
     name: z.enum([
       "chat_opened",
-      "consent_given",
       "gate_shown",
       "body_check_offered",
       "body_check_started",
+      "keep_card_shown",
+      "keep_card_keep",
+      "keep_card_not_now",
     ]),
   }),
 ]);
@@ -122,6 +133,9 @@ export async function POST(request: Request) {
       break;
     case "nps":
       logMiraEvent("nps", who, { score: body.score });
+      break;
+    case "consent":
+      logMiraEvent("consent_given", who, { version: body.version, shareRated: body.shareRated });
       break;
     case "track":
       logMiraEvent(body.name, who);

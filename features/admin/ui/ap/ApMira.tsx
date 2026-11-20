@@ -321,7 +321,7 @@ function Funnel({ data }: { data: Data }) {
             label: "Shown the sign-up card",
             unit: "count",
             value: data.gate,
-            note: "People, each once: signed out, with their free chats used up",
+            note: "People, each once: signed out, with their free messages used up",
           }}
         />
         <StatBox

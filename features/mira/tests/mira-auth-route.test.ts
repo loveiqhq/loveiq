@@ -40,6 +40,7 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import { POST } from "@/app/api/mira/auth/route";
+import { CONSENT_VERSION } from "@features/mira/server/config";
 import { addressKey, sendSignInCode } from "@features/mira/server/sign-in";
 import {
   addMessages,
@@ -127,7 +128,23 @@ describe("POST /api/mira/auth", () => {
       token: "12345678",
       type: "email",
     });
-    expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", "mira-2026-11-18");
+    expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", CONSENT_VERSION, {
+      useAssessment: false,
+      shareRated: false,
+    });
+  });
+
+  it("records the form's two optional ticks with the consent, off unless ticked", async () => {
+    const verify = (ticks: Record<string, unknown>) =>
+      post({ action: "verify", email: "lea@example.com", code: "12345678", ...ticks });
+    await verify({ useAssessment: true, shareRated: true });
+    await verify({ useAssessment: false, shareRated: true });
+    expect(vi.mocked(upsertProfileAtSignIn).mock.calls.map((c) => c[3])).toEqual([
+      { useAssessment: true, shareRated: true },
+      { useAssessment: false, shareRated: true },
+    ]);
+    expect((await verify({ useAssessment: "yes" })).status).toBe(400);
+    expect(CONSENT_VERSION).not.toBe("mira-2026-11-18"); // the reworded ticks are asked again
   });
 
   it("checks no code when Mira has no guess left for the address (or never sent one)", async () => {

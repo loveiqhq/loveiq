@@ -58,11 +58,15 @@ export async function getProfile(id: string): Promise<MiraProfile | null> {
   return found[0] ?? null;
 }
 
-/** Created (or its consent renewed) at every sign-in; the rest of the profile is kept. */
+/**
+ * Created (or its consent renewed) at every sign-in, with the form's two optional ticks as given
+ * that time (the LoveIQ result; the team reading rated replies); the rest of the profile is kept.
+ */
 export async function upsertProfileAtSignIn(
   id: string,
   email: string,
-  consentVersion: string
+  consentVersion: string,
+  choices: { useAssessment: boolean; shareRated: boolean }
 ): Promise<MiraProfile | null> {
   const res = await supabaseFetch("/rest/v1/mira_user?on_conflict=id", {
     method: "POST",
@@ -72,6 +76,8 @@ export async function upsertProfileAtSignIn(
       email,
       consent_at: new Date().toISOString(),
       consent_version: consentVersion,
+      use_assessment: choices.useAssessment,
+      share_rated_replies: choices.shareRated,
       updated_at: new Date().toISOString(),
     }),
   });
@@ -300,7 +306,10 @@ export type MiraEventName =
   | "minor_stop"
   | "body_check_offered"
   | "body_check_started"
-  | "body_check_done";
+  | "body_check_done"
+  | "keep_card_shown"
+  | "keep_card_keep"
+  | "keep_card_not_now";
 
 /** The KPI log. Written after the response, so it never slows a reply; a lost row is logged. */
 export function logMiraEvent(

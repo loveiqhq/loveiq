@@ -34,6 +34,11 @@ const ORIGINS = new Set([
 
 export type GoogleClient = { id: string; secret: string };
 export type GoogleStart = { state: string; verifier: string; nonce: string };
+/**
+ * What the sign-up form chose, carried through Google beside the start values: its two optional
+ * ticks, and where to go after (raw here: the routes check it with safeNext both ways).
+ */
+export type SignUpChoices = { useAssessment: boolean; shareRated: boolean; next: string | null };
 
 export function googleClient(): GoogleClient | null {
   const id = process.env.MIRA_GOOGLE_CLIENT_ID?.trim();
@@ -67,14 +72,33 @@ export function authorizeUrl(clientId: string, origin: string, s: GoogleStart): 
   return `${AUTHORIZE}?${q}`;
 }
 
-/** The start values ride in one short-lived httpOnly cookie (base64url never holds a dot). */
-export const packStart = (s: GoogleStart) => [s.state, s.verifier, s.nonce].join(".");
+/**
+ * The start values and the form's choices ride in one short-lived httpOnly cookie, the choices
+ * as base64url JSON (base64url never holds a dot).
+ */
+export const packStart = (s: GoogleStart, c: SignUpChoices) =>
+  [s.state, s.verifier, s.nonce, Buffer.from(JSON.stringify(c)).toString("base64url")].join(".");
 
-export function unpackStart(value: string | undefined): GoogleStart | null {
+export function unpackStart(value: string | undefined): (GoogleStart & SignUpChoices) | null {
   const parts = (value ?? "").split(".");
-  if (parts.length !== 3 || parts.some((p) => !/^[\w-]{16,}$/.test(p))) return null;
-  const [state, verifier, nonce] = parts as [string, string, string];
-  return { state, verifier, nonce };
+  if (parts.length !== 4 || parts.slice(0, 3).some((p) => !/^[\w-]{16,}$/.test(p))) return null;
+  const [state, verifier, nonce, packed] = parts as [string, string, string, string];
+  let c: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(packed, "base64url").toString("utf8"));
+    if (!parsed || typeof parsed !== "object") return null;
+    c = parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  return {
+    state,
+    verifier,
+    nonce,
+    useAssessment: c.useAssessment === true,
+    shareRated: c.shareRated === true,
+    next: typeof c.next === "string" ? c.next : null,
+  };
 }
 
 export function sameState(a: string, b: string): boolean {

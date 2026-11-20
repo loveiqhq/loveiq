@@ -5,7 +5,7 @@ import { ANON_COOKIE } from "./config";
 const VALID = /^[A-Za-z0-9_-]{16,64}$/;
 
 /**
- * The anonymous visitor's random id (a cookie, a year). It counts the free conversations and links
+ * The anonymous visitor's random id (a cookie, a year). It counts the free messages and links
  * anonymous KPI events; it carries no IP, address or chat text. Set here on first use.
  */
 export async function anonId(): Promise<string> {

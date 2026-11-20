@@ -2,8 +2,8 @@
  * POST /api/mira/chat — one message to Mira, one reply back.
  *
  * Anonymous: the browser keeps the chat and sends the recent turns; nothing is stored here, and
- * the free conversations are counted per browser id (ANON_FREE_CONVERSATIONS, then the sign-up
- * card), with a daily message cap per browser and per network against cost and abuse.
+ * every message is counted per browser id (ANON_FREE_MESSAGES, then the sign-up card), with a
+ * daily message cap per browser and per network against cost and abuse.
  * Signed in: turns come from the account's stored chat, and the exchange is stored when
  * "Remember our conversations" is on. Both need the first-message consent (18+ and the
  * sensitive-data yes), sent with every message. Over everyone together, GLOBAL_DAILY_MESSAGES
@@ -25,7 +25,7 @@ import { z } from "zod";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { anonId } from "@features/mira/server/anon";
 import {
-  ANON_FREE_CONVERSATIONS,
+  ANON_FREE_MESSAGES,
   DAILY_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   HISTORY_TURNS,
@@ -107,7 +107,7 @@ const RESTING = () =>
   );
 /**
  * Everyone's model calls together. Checked after the person's own daily caps (so someone at
- * their cap can't spend everyone's) and before an anonymous free conversation is counted (so a
+ * their cap can't spend everyone's) and before an anonymous free message is counted (so a
  * resting day doesn't use one of their ten).
  */
 const everyoneMayAsk = async () =>
@@ -314,22 +314,19 @@ export async function POST(request: Request) {
         );
       }
       if (!(await everyoneMayAsk())) return RESTING();
-      // ponytail: "new conversation" is read from the history the browser sends, so a crafted
-      // request can skip the count; no easier than clearing the cookie, and the daily caps above
-      // bound the cost. Upgrade: a server-signed conversation token if mira_event shows abuse.
-      if (turns.length === 0) {
-        // A new conversation: the free ones are counted per browser id, then the sign-up card.
-        const free = await checkRateLimit(anon!, {
-          bucket: "mira-anon-chats",
-          limit: ANON_FREE_CONVERSATIONS,
-          windowMs: 30 * DAY_MS,
-        });
-        if (!free.allowed) {
-          logMiraEvent("gate_shown", who, { limit: ANON_FREE_CONVERSATIONS });
-          return NextResponse.json({ gate: true, freeLeft: 0 });
-        }
-        freeLeft = free.remaining;
+      // Every message is counted per browser id, then the sign-up card. ponytail: a cleared
+      // cookie is a new id with ten more (the per-network daily cap above bounds that), and a
+      // reply the model then fails to write still used one. Upgrade: count after the reply.
+      const free = await checkRateLimit(anon!, {
+        bucket: "mira-anon-messages",
+        limit: ANON_FREE_MESSAGES,
+        windowMs: 30 * DAY_MS,
+      });
+      if (!free.allowed) {
+        logMiraEvent("gate_shown", who, { limit: ANON_FREE_MESSAGES });
+        return NextResponse.json({ gate: true, freeLeft: 0 });
       }
+      freeLeft = free.remaining;
     }
   } catch (err) {
     logger.error({ err }, "mira: could not load the conversation");
@@ -422,9 +419,13 @@ export async function POST(request: Request) {
     logMiraEvent("reply_declined", who, { why, category: result.category ?? null });
   }
   if (minor) logMiraEvent("minor_stop", who, { signedIn: Boolean(account) });
-
   // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
   const lines = crisis || refused;
+  // The reply that used the last free message brings the sign-up card, never beside the support
+  // lines or an under-18 stop.
+  if (freeLeft === 0 && !lines && !minor) {
+    logMiraEvent("gate_shown", who, { limit: ANON_FREE_MESSAGES });
+  }
   return NextResponse.json({
     reply,
     sources,
