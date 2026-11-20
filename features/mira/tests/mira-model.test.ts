@@ -108,6 +108,29 @@ describe("askModel", () => {
     expect(fetchWithTimeout).toHaveBeenCalledTimes(2);
   });
 
+  it("passes on a refusal's category for the event log, never its explanation", async () => {
+    const refusal = (category: unknown) =>
+      new Response(
+        JSON.stringify({
+          content: [],
+          stop_reason: "refusal",
+          stop_details: { type: "refusal", category, explanation: "The person wrote about…" },
+        }),
+        { status: 200 }
+      );
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(refusal("general_harms"));
+    expect(await ask()).toStrictEqual({
+      ok: true,
+      text: "",
+      refused: true,
+      category: "general_harms",
+    });
+    for (const odd of ["Not <an> id", null, 7]) {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(refusal(odd));
+      expect(await ask()).toStrictEqual({ ok: true, text: "", refused: true });
+    }
+  });
+
   it("does not switch models on a bad request", async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(new Response("{}", { status: 400 }));
     const result = await ask();

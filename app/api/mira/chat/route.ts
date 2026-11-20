@@ -11,6 +11,9 @@
  *
  * A crisis message is read before anything can stop it: whatever the limits, the rest of the
  * body or the database say, it gets Sanjin's message E and the support lines (crisisReply).
+ * A reply the model declines (or leaves empty) is a short fixed line with the support lines too,
+ * counted as reply_declined, not as a crisis. Once a person says they are under 18 ([[MINOR]]),
+ * their browser and account get message G from then on, without the model (server/minor.ts).
  *
  * For the MVP success board, the reply's markers (safety.ts parseReply) are logged as events,
  * never with the person's words: which intake question a message answered (`answering`, sent
@@ -29,6 +32,7 @@ import {
   MAX_MESSAGE_CHARS,
 } from "@features/mira/server/config";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
+import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
 import {
   STABLE_INSTRUCTIONS,
@@ -250,6 +254,10 @@ export async function POST(request: Request) {
   let country = requestCountry(request);
 
   try {
+    // Under 18 (rail 15): message G from then on, whatever the limits; crisis words came first.
+    if (await isMinor(account?.id ?? null)) {
+      return NextResponse.json({ reply: miraConfig.minorMessage, sources: [], minor: true });
+    }
     if (account) {
       const profile = await getProfile(account.id);
       if (!profile) {
@@ -357,12 +365,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status });
   }
   const out = result.refused ? null : parseReply(result.text);
+  const minor = Boolean(out?.minor);
   if (out?.crisis && !out.text) {
     // A stop rail fired and the reply held nothing else (the token, perhaps a Sources line):
     // the fixed message, so the support panel still opens.
     reply = miraConfig.crisisMessage;
     crisis = true;
+  } else if (minor && !out?.crisis) {
+    reply = miraConfig.minorMessage; // Sanjin's message G, whatever the model wrote
   } else if (!out?.text) {
+    // Declined or empty: a neutral line, and the support panel opens in case something happened.
     reply = miraConfig.refusalMessage;
     refused = true;
   } else {
@@ -373,10 +385,14 @@ export async function POST(request: Request) {
   }
 
   // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
-  const invitation = isFirst && !crisis && !refused ? miraConfig.intakeInvitation : null;
+  const invitation = isFirst && !crisis && !refused && !minor ? miraConfig.intakeInvitation : null;
 
   let messageId: number | null = null;
-  if (account && remember) {
+  if (minor) {
+    // An under-18 stop keeps nothing: stopForMinor deletes the account's chats, this one too.
+    chatId = null;
+    await stopForMinor(account?.id ?? null);
+  } else if (account && remember) {
     try {
       chatId ??= await createChat(account.id, message.replace(/\s+/g, " ").slice(0, 80));
       const ids = await addMessages(chatId, [
@@ -400,14 +416,23 @@ export async function POST(request: Request) {
   logMiraEvent("message_sent", who, { signedIn: Boolean(account), chars: message.length });
   logMiraEvent("reply_shown", who, { sources: sources.map((s) => s.id), crisis });
   if (crisis) logMiraEvent("crisis_shown", who, { country });
+  if (refused) {
+    // Apart from crisis_shown, so the crisis count stays true. The category's id, never text.
+    const why = result.refused ? "refusal" : "empty";
+    logMiraEvent("reply_declined", who, { why, category: result.category ?? null });
+  }
+  if (minor) logMiraEvent("minor_stop", who, { signedIn: Boolean(account) });
 
+  // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
+  const lines = crisis || refused;
   return NextResponse.json({
     reply,
     sources,
-    crisis,
-    crisisLines: crisis ? crisisFor(country) : undefined,
+    crisis: lines,
+    crisisLines: lines ? crisisFor(country) : undefined,
     chatId,
     messageId,
+    ...(minor ? { minor: true } : {}),
     ...(ask ? { ask } : {}),
     ...(invitation ? { invitation } : {}),
     ...(freeLeft === null ? {} : { freeLeft }),

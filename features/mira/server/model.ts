@@ -28,7 +28,8 @@ import {
 export type MiraTurn = { role: "user" | "assistant"; content: string };
 
 export type ModelResult =
-  | { ok: true; text: string; refused: boolean }
+  /** `category`: the safety classifier's reason for a refusal ("general_harms"…), when given. */
+  | { ok: true; text: string; refused: boolean; category?: string }
   | { ok: false; reason: "unconfigured" | "rate_limited" | "overloaded" | "error" };
 
 /** Anthropic's API, or MIRA_LLM_BASE_URL (a gateway, or a stand-in model for a local walk). */
@@ -115,6 +116,7 @@ async function callModel(
   const data = (await res.json().catch(() => null)) as {
     content?: ContentBlock[];
     stop_reason?: string;
+    stop_details?: { category?: unknown } | null;
   } | null;
   if (!data) return { ok: false, reason: "error", retry: true };
 
@@ -123,7 +125,17 @@ async function callModel(
     .map((b) => b.text)
     .join("")
     .trim();
-  return { ok: true, text, refused: data.stop_reason === "refusal" };
+  const refused = data.stop_reason === "refusal";
+  // Only the category's id, for the event log; never the explanation, which may quote the chat.
+  const category = data.stop_details?.category;
+  return {
+    ok: true,
+    text,
+    refused,
+    ...(refused && typeof category === "string" && /^[a-z_]{1,40}$/.test(category)
+      ? { category }
+      : {}),
+  };
 }
 
 export async function askModel(

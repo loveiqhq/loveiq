@@ -166,6 +166,19 @@ describe("Chat", () => {
     expect(screen.getByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
   });
 
+  it("forgets this browser's chat and the 18+ tick once the person says they are under 18", async () => {
+    localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "I can only talk about this with adults.", sources: [], minor: true },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("I'm 15");
+    await screen.findByText("I can only talk about this with adults.");
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull();
+    expect(localStorage.getItem("mira.consent.v1")).toBeNull();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  });
+
   it("doesn't send on the Enter that ends an input-method composition", async () => {
     render(<MiraChat signedIn initialChatId={null} />);
     const box = screen.getByLabelText("Message Mira");

@@ -57,6 +57,82 @@ describe("isCrisisMessage", () => {
     expect(isCrisisMessage(text)).toBe(true);
   });
 
+  // Phrasings that must stop even when the model is never reached (sign-up card, daily limits,
+  // the model down): slang, typos and the languages people write in.
+  it.each([
+    "i want to kms",
+    "kms",
+    "honestly gonna kms lol",
+    "I want to unalive myself",
+    "I almost unalived myself last year",
+    "I want to kil myself",
+    "I want to kill myslef",
+    "I keep thinking about suicde",
+    "sucide feels like the only way out",
+    "suiside",
+    "thinking about sewerslide",
+    "I took all my pills",
+    "I swallowed all of my sleeping pills",
+    "I'm going to take all my pills tonight",
+    "I want to overdose",
+    "I overdosed last year",
+    "I've been cutting again",
+    "I’ve been cutting.",
+    "I started cutting my arms",
+    "I'm going to end it tonight",
+    "I’ll end it tonight",
+    "I want to end my life",
+    "Everyone would be better off without me",
+    "I just want to go to sleep and never wake up",
+    "There's no reason to keep living",
+    "there is no point in living",
+    "I don't want to be here anymore",
+    "I dont want to be around any more",
+    "Ich will nicht mehr.",
+    "ich will einfach nicht mehr",
+    "Ich will sterben",
+    "Ich will tot sein",
+    "Ich wäre besser tot",
+    "Ich will mir das Leben nehmen",
+    "Ich ritze mich wieder",
+    "Ich habe mich wieder geritzt",
+    "Je veux mourir",
+    "J’ai envie d’en finir",
+    "je veux en finir avec la vie",
+    "Je vais me tuer",
+    "Je me scarifie",
+    "No quiero seguir viviendo",
+    "Quiero suicidarme",
+    "Voy a matarme",
+    "Voglio morire",
+    "Voglio uccidermi",
+    "Penso di suicidarmi",
+    "Voglio farla finita",
+    "Quero morrer",
+    "Vou me matar",
+    "Penso em me suicidar",
+    "Ik wil dood",
+    "Ik denk aan zelfmoord",
+    "Chcę umrzeć",
+    "Chcę się zabić",
+    "Myślę o samobójstwie",
+    "Ölmek istiyorum",
+    "İntihar etmeyi düşünüyorum",
+    "Kendimi öldürmek istiyorum",
+    "Я хочу умереть",
+    "Хочу покончить с собой",
+    "У меня суицидальные мысли",
+    "Я убью себя",
+    "أريد أن أموت",
+    "أفكر في الانتحار",
+    "Ubit ću se",
+    "Mislim na samoubojstvo",
+    "Sečem se",
+    "Režem se opet",
+  ])("stops for %j too", (text) => {
+    expect(isCrisisMessage(text)).toBe(true);
+  });
+
   it.each([
     "I only feel okay with the lights off",
     "This kills the mood every time",
@@ -76,6 +152,33 @@ describe("isCrisisMessage", () => {
     "I need to take my life more seriously",
     "me quiero morir de vergüenza",
     "I walked 10 kms today",
+    "I'm dying to try this",
+    "This position kills my back",
+    "I could die laughing",
+    "You're killing it",
+    "The last few kms were the hardest",
+    "We drove 300 kms to see his family",
+    "He lives kms away",
+    "I took all my pills on time this month",
+    "I overdosed on chocolate last night",
+    "I've been cutting carbs",
+    "I've been cutting back on sugar",
+    "I've been cutting my hair shorter",
+    "I'm going to end it with him tonight",
+    "I'm going to end it tonight with him",
+    "I don't want to be around him anymore",
+    "There's no point in living with him anymore",
+    "Ich will nicht mehr warten",
+    "J’ai envie de mourir de honte",
+    "Je veux en finir avec ce régime",
+    "No quiero vivir con esta vergüenza",
+    "Mi mamá va a matarme",
+    "Voglio morire dalla vergogna",
+    "Voglio farla finita con lui",
+    "Quero morrer de vergonha",
+    "Minha mãe vai me matar",
+    "Chcę umrzeć ze wstydu",
+    "Хочу умереть от стыда",
   ])("does not stop for %j", (text) => {
     expect(isCrisisMessage(text)).toBe(false);
   });
@@ -106,6 +209,21 @@ describe("parseReply", () => {
       ask: null,
       refer: false,
       topic: null,
+      minor: false,
+    });
+  });
+
+  it("reads the under-18 marker, hides it, and keeps nothing of a coaching step", () => {
+    const out = parseReply(
+      "I can only talk about this with adults.\n[[ASK:age]]\n[[TOPIC:hiding]]\n[[ minor ]]"
+    );
+    expect(out).toMatchObject({ minor: true, crisis: false, ask: null, refer: false, topic: null });
+    expect(out.text).toBe("I can only talk about this with adults.");
+    expect(
+      parseReply(`Please call your local emergency number.\n[[MINOR]]\n${CRISIS_TOKEN}`)
+    ).toMatchObject({
+      minor: true,
+      crisis: true,
     });
   });
 
@@ -183,6 +301,13 @@ describe("Mira's instructions", () => {
     expect(STABLE_INSTRUCTIONS).toContain("[[ASK:onset]]");
     expect(STABLE_INSTRUCTIONS).toContain("[[REFER]]");
     expect(STABLE_INSTRUCTIONS).toContain("never add one to a crisis reply");
+  });
+
+  it("ask for [[MINOR]] at rail 15, and the app's fixed under-18 reply is Sanjin's message G", () => {
+    const rail15 = STABLE_INSTRUCTIONS.split("\n").find((l) => l.startsWith("15. "));
+    expect(rail15).toContain("[[MINOR]]");
+    expect(STABLE_INSTRUCTIONS).toMatch(/- When the person says or clearly shows .*\[\[MINOR\]\]/);
+    expect(STABLE_INSTRUCTIONS).toContain(miraConfig.minorMessage.replace(/’/g, "'"));
   });
 
   it("ask for a topic only with a new chat's first message in the person's own words", () => {

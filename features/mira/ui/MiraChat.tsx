@@ -79,6 +79,8 @@ export default function MiraChat({
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
+  // Said they are under 18: nothing of this chat is kept in the browser any more.
+  const [minor, setMinor] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   // The NPS question (Marcus's MVP success board): "ask" while open, "thanks" once answered.
@@ -161,7 +163,7 @@ export default function MiraChat({
   // The anonymous chat lives in this browser, with its sources and ratings, after every change
   // (nothing is written for a first visit until there is something to keep).
   useEffect(() => {
-    if (!ready || signedIn || (messages.length === 0 && !local.chat())) return;
+    if (!ready || signedIn || minor || (messages.length === 0 && !local.chat())) return;
     local.saveChat({
       turns: messages.map(({ role, content, sources, rated, ask }) => ({
         role,
@@ -173,7 +175,7 @@ export default function MiraChat({
       freeLeft,
       ...(gate ? { gate: true } : {}),
     });
-  }, [ready, signedIn, messages, freeLeft, gate]);
+  }, [ready, signedIn, minor, messages, freeLeft, gate]);
 
   async function send(text: string, opts: { skip?: boolean } = {}) {
     const message = text.trim();
@@ -209,6 +211,7 @@ export default function MiraChat({
       invitation?: string;
       ask?: string;
       signIn?: boolean;
+      minor?: boolean;
     }>("/api/mira/chat", {
       body: {
         message,
@@ -250,6 +253,16 @@ export default function MiraChat({
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
+    if (res.data.minor) {
+      // Under 18 (rail 15): the reply stays on screen, but this browser forgets the chat and the
+      // 18+ tick, and no question of ours follows. An account's chats are gone on the server.
+      local.forget();
+      setMinor(true);
+      setConsented(false);
+      setTick(false);
+      setChats([]);
+      return;
+    }
     if (npsDue(firstOfChat, withReply, Boolean(res.data.crisis))) setNps("ask");
     else if (
       bodyDue &&
