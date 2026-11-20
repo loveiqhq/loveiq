@@ -453,7 +453,7 @@ describe("the team data export", () => {
     expect(files.at(-1)!.body).toContain("| payment.csv | 2 |");
   });
 
-  it("exports every customer table, and not Jarvis's index, the plumbing or the deletion log", () => {
+  it("exports every customer table, and not Jarvis's index, Mira's chats, the plumbing or the deletion log", () => {
     for (const table of ["app_user", "funnel_event", "report_session", "admin_users"]) {
       expect(isExported(table), table).toBe(true);
     }
@@ -465,6 +465,9 @@ describe("the team data export", () => {
       "rate_limits",
       "system_flags",
       "data_subject_request_log",
+      "mira_message",
+      "mira_event",
+      "mira_user",
     ]) {
       expect(isExported(table), table).toBe(false);
     }
