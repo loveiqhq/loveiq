@@ -27,7 +27,15 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     // that Lenis's wheel hijacking breaks. R-14: also disable when the
     // user prefers reduced motion. We re-run the effect when the user
     // toggles the preference live so the disable is reactive.
-    if (isTouchDevice() || pathname.startsWith("/admin") || prefersReducedMotion()) return;
+    // Mira's pages too (21 Nov 2026): the chat scrolls inside its own box, and desktop Safari
+    // opened the guide's #practice-N links in the wrong place under Lenis.
+    if (
+      isTouchDevice() ||
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/mira") ||
+      prefersReducedMotion()
+    )
+      return;
 
     // The running instance is published for the body-scroll lock, which stops it while
     // an overlay holds the page and re-measures it after (smooth-scroll-registry.ts).

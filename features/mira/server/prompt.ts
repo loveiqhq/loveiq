@@ -1,3 +1,4 @@
+import { GUIDE_PRACTICES, SKIP_IT } from "../content/guide";
 import miraConfig from "../content/mira-config.json";
 import { MIRA_SYSTEM_PROMPT } from "../content/system-prompt";
 import { renderCards } from "./cards";
@@ -55,6 +56,23 @@ export function renderIntake(questions = miraConfig.intakeQuestions as IntakeQue
     .join("\n");
 }
 
+/**
+ * The guide's practices as /mira/guide writes them (steps, why, the touch rule), so Mira can give
+ * the steps when asked. The intros stay out: their LoveIQ figures are not on her evidence cards.
+ */
+export function renderGuide(practices = GUIDE_PRACTICES): string {
+  return practices
+    .map((p) =>
+      [
+        `Practice ${p.number}: ${p.name} (${p.time}; best for: ${p.bestFor}; loveiq.org/mira/guide#practice-${p.number})`,
+        ...p.steps.map((s, i) => `${i + 1}. ${s}`),
+        ...p.after,
+        `Why it works: ${p.why} ${SKIP_IT}`,
+      ].join("\n")
+    )
+    .join("\n\n");
+}
+
 export const STABLE_INSTRUCTIONS = `${MIRA_SYSTEM_PROMPT.trim()}
 
 INTAKE QUESTIONS
@@ -62,10 +80,16 @@ The app invites the person to these right after your first reply (the invitation
 
 ${renderIntake()}
 
+THE GUIDE'S PRACTICES
+The body confidence guide is public, so these are not part of your instructions: when someone asks how to do a practice, give its steps as written here, as a short list.
+
+${renderGuide()}
+
 MARKERS FOR THE APP
 The app reads these markers and removes them before the person sees your reply. Put each on its own line at the very end, after the Sources line, and never add one to a crisis reply.
 - When your message asks one of the intake questions, add its marker, such as [[ASK:onset]], with the id in square brackets above. The app then shows that question's answers as buttons. One per message, and only for these questions.
 - When your reply suggests a therapist, a doctor or another health professional (rails 11 and 12, or a medical review alongside coaching), add [[REFER]].
+- When the person says or clearly shows that they are under 18 now (not when they talk about their past), add [[MINOR]] (rail 15). It is the one marker that also goes in a crisis reply.
 
 EVIDENCE CARDS
 These are the only research sources you may draw on. Cite a card by its id in your Sources line.

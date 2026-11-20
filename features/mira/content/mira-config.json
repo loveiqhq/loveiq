@@ -12,7 +12,7 @@
     "I don’t know where to start",
     "I’m not sure how to put it"
   ],
-  "disclaimer": "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you’re struggling, please reach out to a qualified professional.",
+  "disclaimer": "Mira is an AI coach by LoveIQ, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you’re struggling, please reach out to a qualified professional.",
   "intakeQuestions": [
     {
       "id": "age",
@@ -163,7 +163,8 @@
     }
   ],
   "crisisMessage": "I’m really glad you told me. This is something to share with the right person, who can give you the support you need. It can help to reach out soon, even just to talk it through. If you’re in immediate danger, please call your local emergency number. You can also reach the crisis line for your country, any time. I’m still here with you while you reach out.",
-  "refusalMessage": "I can’t help with that one here. If you’d like, tell me a little more about what’s on your mind about your body and intimacy, and we can start from there.",
+  "minorMessage": "Thanks for reaching out. I can only talk about this with adults, but what you’re feeling matters. A trusted adult, a school counsellor or a doctor can help, and if you ever feel unsafe, please call your local emergency number.",
+  "refusalMessage": "I can’t help with that part here. If something has happened to you or you don’t feel safe, the people at these lines can listen and help.",
   "topics": [
     {
       "id": "hiding",

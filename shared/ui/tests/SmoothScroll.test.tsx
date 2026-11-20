@@ -22,7 +22,8 @@ vi.mock("lenis", () => ({
     }
   },
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/report" }));
+let path = "/report";
+vi.mock("next/navigation", () => ({ usePathname: () => path }));
 
 const media = (coarse: boolean) =>
   vi.fn((query: string) => ({
@@ -35,6 +36,7 @@ const media = (coarse: boolean) =>
 describe("SmoothScroll", () => {
   beforeEach(() => {
     instances.length = 0;
+    path = "/report";
   });
 
   afterEach(() => {
@@ -66,5 +68,17 @@ describe("SmoothScroll", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(instances).toHaveLength(0);
     expect(getSmoothScroll()).toBeNull();
+  });
+
+  it("doesn't run on Mira's pages, whose chat scrolls in its own box", async () => {
+    vi.stubGlobal("matchMedia", media(false));
+    path = "/mira/guide";
+    render(
+      <SmoothScroll>
+        <p>page</p>
+      </SmoothScroll>
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(instances).toHaveLength(0);
   });
 });

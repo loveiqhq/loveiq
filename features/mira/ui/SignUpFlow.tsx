@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { GradientButton, LegalLinks, Wordmark } from "./MiraShell";
-import { local, miraApi, useReloadWhenRestored } from "./api";
+import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
@@ -50,10 +50,13 @@ export default function SignUpFlow({
   googleEnabled = false,
   googleResult = null,
   needsAbout = false,
+  next = null,
 }: {
   googleEnabled?: boolean;
   googleResult?: string | null;
   needsAbout?: boolean;
+  /** Where to go once signed in (the page checked it: a Mira page only); else Home. */
+  next?: string | null;
 }) {
   const router = useRouter();
   const backFromGoogle = googleResult === "done";
@@ -62,6 +65,11 @@ export default function SignUpFlow({
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
   const [consent, setConsent] = useState(false);
+  // Optional, unticked: the LoveIQ result (use_assessment) and the team reading rated replies.
+  const [useAssessment, setUseAssessment] = useState(false);
+  const [shareRated, setShareRated] = useState(false);
+  // The honeypot's value: people never see the field, so only a bot fills it.
+  const [website, setWebsite] = useState("");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [country, setCountry] = useState("");
@@ -82,10 +90,11 @@ export default function SignUpFlow({
     heading.current?.focus();
   }, [step]);
 
-  /** Into the account. Replace: Back must not land on the sign-up again (it would forward here
-   *  once more). Refresh: no page the router kept from before the sign-in comes back signed out. */
+  /** Into the account (or back to the chat a nudge opened). Replace: Back must not land on the
+   *  sign-up again (it would forward here once more). Refresh: no page the router kept from
+   *  before the sign-in comes back signed out. */
   function goHome() {
-    router.replace("/mira/home");
+    router.replace(next ?? "/mira/home");
     router.refresh();
   }
 
@@ -112,7 +121,7 @@ export default function SignUpFlow({
     setError(null);
     setNotice(null);
     const res = await miraApi("/api/mira/auth", {
-      body: { action: "start", email, adult, terms, consent },
+      body: { action: "start", email, adult, terms, consent, website },
     });
     setBusy(false);
     if (!res.ok) {
@@ -131,7 +140,16 @@ export default function SignUpFlow({
     const carry = carriedChat();
     const res = await miraApi<{ needsProfile?: boolean; chatId?: string | null }>(
       "/api/mira/auth",
-      { body: { action: "verify", email, code, ...(carry.length ? { carry } : {}) } }
+      {
+        body: {
+          action: "verify",
+          email,
+          code,
+          useAssessment,
+          shareRated,
+          ...(carry.length ? { carry } : {}),
+        },
+      }
     );
     if (!res.ok) {
       setBusy(false);
@@ -176,6 +194,12 @@ export default function SignUpFlow({
 
   const current = STEPS.findIndex((s) => s.key === step);
   const emailOk = /^\S+@\S+\.\S+$/.test(email.trim());
+  // Google sign-in leaves the page, so the optional ticks and `next` ride along on the link.
+  const googleHref =
+    "/api/mira/auth/google?adult=1&terms=1&consent=1" +
+    (useAssessment ? "&assessment=1" : "") +
+    (shareRated ? "&share=1" : "") +
+    (next ? `&next=${encodeURIComponent(next)}` : "");
 
   return (
     <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
@@ -263,6 +287,18 @@ export default function SignUpFlow({
                   className="min-h-[48px] rounded-2xl border border-ap-line px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
+              {/* A honeypot: hidden from people and screen readers and out of the tab order, so
+                  only a bot fills it; the code request carries it and the server drops those. */}
+              <input
+                type="text"
+                name="website"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                className="sr-only"
+              />
               <p className="-mt-2 text-[13px] text-ap-muted">
                 Took the LoveIQ test already? Use the same email and we&apos;ll connect your result.
               </p>
@@ -270,26 +306,29 @@ export default function SignUpFlow({
                 I confirm that I am 18 years of age or older.
               </Tick>
               <Tick checked={terms} onChange={setTerms}>
-                I agree to the{" "}
+                I accept the{" "}
                 <a href="/terms-of-use" target="_blank" className="underline">
-                  Terms of Use
-                </a>
-                , the{" "}
-                <a href="/privacy-policy" target="_blank" className="underline">
-                  Privacy Policy
+                  terms of use
                 </a>{" "}
-                and the{" "}
-                <a href="/medical-disclaimer" target="_blank" className="underline">
-                  Medical &amp; Psychological Disclaimer
+                and I have read the{" "}
+                <a href="/privacy-policy" target="_blank" className="underline">
+                  privacy notice
                 </a>
                 .
               </Tick>
               <Tick checked={consent} onChange={setConsent}>
-                I agree that Mira may use what I share about my sex life, and my test result if I
-                allow it, to coach me and to improve Mira.{" "}
+                Mira may process what I share about my sex life and health to coach me, and to
+                count, without my words, how Mira is used and whether she helps.{" "}
                 <Link href="/mira/privacy" target="_blank" className="underline">
                   How Mira handles your data
                 </Link>
+              </Tick>
+              <p className="-mb-2 text-[13px] text-ap-muted">Optional</p>
+              <Tick checked={useAssessment} onChange={setUseAssessment}>
+                Use my LoveIQ test result to tailor my coaching.
+              </Tick>
+              <Tick checked={shareRated} onChange={setShareRated}>
+                Mira&apos;s team may read replies I rate, to improve Mira.
               </Tick>
               <GradientButton
                 type="submit"
@@ -308,12 +347,9 @@ export default function SignUpFlow({
                       must not depend on state the click changes: React re-renders before the browser
                       follows the link, so a click that cleared the href went nowhere. */}
                   <a
-                    href={
-                      adult && terms && consent
-                        ? "/api/mira/auth/google?adult=1&terms=1&consent=1"
-                        : undefined
-                    }
+                    href={adult && terms && consent ? googleHref : undefined}
                     aria-disabled={busy || !adult || !terms || !consent}
+                    onClick={rememberSourceForGoogle}
                     className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple aria-disabled:pointer-events-none aria-disabled:opacity-50"
                   >
                     <GoogleG />

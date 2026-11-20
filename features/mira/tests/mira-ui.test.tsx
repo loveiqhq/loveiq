@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
+import miraConfig from "@features/mira/content/mira-config.json";
+import { CONSENT_VERSION } from "@features/mira/server/config";
 import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
@@ -46,6 +48,14 @@ const typeAndSend = (text: string) => {
   fireEvent.change(screen.getByLabelText("Message Mira"), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 };
+/** This browser already gave the first-message consent, in the current wording. */
+const giveConsent = (shareRated = false) =>
+  localStorage.setItem("mira.consent.v1", JSON.stringify({ version: CONSENT_VERSION, shareRated }));
+/** The track events the page sent, by name. */
+const tracked = () =>
+  calls("POST /api/mira/event")
+    .filter((b) => b.type === "track")
+    .map((b) => b.name);
 
 describe("Home greeting", () => {
   it("follows the hours: 05-11 morning, 12-17 afternoon, otherwise evening", () => {
@@ -166,6 +176,20 @@ describe("Chat", () => {
     expect(screen.getByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
   });
 
+  it("forgets this browser's chat and the 18+ tick once the person says they are under 18", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "I can only talk about this with adults.", sources: [], minor: true },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("I'm 15");
+    await screen.findByText("I can only talk about this with adults.");
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull();
+    expect(localStorage.getItem("mira.consent.v1")).toBeNull();
+    for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(screen.queryByRole("link", { name: "Keep this chat" })).toBeNull();
+  });
+
   it("doesn't send on the Enter that ends an input-method composition", async () => {
     render(<MiraChat signedIn initialChatId={null} />);
     const box = screen.getByLabelText("Message Mira");
@@ -178,7 +202,7 @@ describe("Chat", () => {
   });
 
   it("keeps an anonymous reply's sources and rating, and undoes a rating that failed", async () => {
-    localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+    giveConsent();
     const sources = [{ id: "C1", label: "Smith 2020", link: null }];
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", sources } });
     render(<MiraChat signedIn={false} initialChatId={null} />);
@@ -209,7 +233,7 @@ describe("Chat", () => {
 });
 
 describe("Intake answers", () => {
-  const consent = () => localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+  const consent = () => giveConsent();
 
   it("offers the asked question's answers as buttons, and says which question was answered", async () => {
     consent();
@@ -355,5 +379,260 @@ describe("Body check", () => {
     typeAndSend("hello");
     await screen.findByText("Tell me more.");
     expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+  });
+});
+
+describe("First-message consent (wording of 21 Nov 2026)", () => {
+  const required = () => screen.getByRole("checkbox", { name: /18 or older/ });
+  const optional = () => screen.getByRole("checkbox", { name: /team may read replies I rate/ });
+  const consentEvents = () => calls("POST /api/mira/event").filter((b) => b.type === "consent");
+  const ratings = () => calls("POST /api/mira/event").filter((b) => b.type === "rating");
+
+  it("needs the 18+ and sex-life tick; the rating box is optional, unticked, and kept with the version", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await waitFor(() => expect(optional()).not.toBeChecked());
+    expect(required()).not.toBeChecked();
+    fireEvent.change(screen.getByLabelText("Message Mira"), { target: { value: "hi" } });
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.click(required());
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Try this.");
+    expect(consentEvents()).toEqual([
+      { type: "consent", version: CONSENT_VERSION, shareRated: false },
+    ]);
+    expect(JSON.parse(localStorage.getItem("mira.consent.v1")!)).toEqual({
+      version: CONSENT_VERSION,
+      shareRated: false,
+    });
+  });
+
+  it("asks again in a browser that ticked an older wording", async () => {
+    localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await waitFor(() => expect(required()).not.toBeChecked());
+  });
+
+  it("sends a rated reply's words only when the rating box was ticked, else the thumbs only", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    giveConsent(false);
+    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    fireEvent.click(await screen.findByRole("button", { name: "Helpful" }));
+    await waitFor(() => expect(ratings()).toEqual([{ type: "rating", rating: 1 }]));
+    first.unmount();
+    localStorage.clear();
+    fetchMock.mockClear();
+
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await waitFor(() => expect(optional()).not.toBeChecked());
+    fireEvent.click(required());
+    fireEvent.click(optional());
+    typeAndSend("hi");
+    fireEvent.click(await screen.findByRole("button", { name: "Not helpful" }));
+    await waitFor(() =>
+      expect(ratings()).toEqual([{ type: "rating", rating: -1, reply: "Try this." }])
+    );
+    expect(consentEvents()).toEqual([
+      { type: "consent", version: CONSENT_VERSION, shareRated: true },
+    ]);
+  });
+});
+
+describe("Free messages", () => {
+  it("shows the sign-up card once the last free message is answered, and keeps the chat", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", freeLeft: 0 } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Keep talking with Mira, for free");
+    expect(screen.getByText(/had your 10 free messages with Mira/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Message Mira")).toBeNull();
+    expect(screen.getByText("Try this.")).toBeInTheDocument();
+    // New chat would wipe the chat the card promises to bring along.
+    for (const b of screen.getAllByRole("button", { name: /New chat/ })) expect(b).toBeDisabled();
+    expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({
+      gate: true,
+      freeLeft: 0,
+    });
+  });
+
+  it("isn't put beside a crisis reply: the person can still write", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "Please reach out now.", crisis: true, freeLeft: 0 },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("everything feels dark");
+    await screen.findByText("Please reach out now.");
+    expect(screen.queryByText("Keep talking with Mira, for free")).toBeNull();
+    expect(screen.getByLabelText("Message Mira")).toBeInTheDocument();
+  });
+
+  it("counts the last three down in messages", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", freeLeft: 3 } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    expect(
+      await screen.findByText("3 more free messages before you need a free account.")
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Keep this chat (board 01 copy)", () => {
+  const card = () => screen.queryByText(/remember this conversation next time/);
+
+  it("follows Mira's first reply to an anonymous person, and Keep goes to the sign-up", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    expect(card()).toBeNull();
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    expect(card()).toHaveTextContent(
+      "Would you like Mira to remember this conversation next time? Sign in and she can also gently tailor things to your LoveIQ result."
+    );
+    const keep = screen.getByRole("link", { name: "Keep this chat" });
+    expect(keep).toHaveAttribute("href", "/mira/start");
+    await waitFor(() => expect(tracked()).toEqual(["chat_opened", "keep_card_shown"]));
+    fireEvent.click(keep);
+    expect(tracked()).toContain("keep_card_keep");
+  });
+
+  it("waits for the reply after the intake invitation instead of standing beside it", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = (b) =>
+      b.message === "hi"
+        ? { body: { reply: "Tell me more.", invitation: miraConfig.intakeInvitation } }
+        : { body: { reply: "First question, then." } };
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Tell me more.");
+    expect(card()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: miraConfig.intakeReplyButtons[0] }));
+    await screen.findByText("First question, then.");
+    expect(card()).not.toBeNull();
+  });
+
+  it("never comes with a crisis reply or later in that chat, nor for a signed-in person", async () => {
+    giveConsent();
+    let n = 0;
+    replies["POST /api/mira/chat"] = () =>
+      ++n === 1
+        ? { body: { reply: "Please reach out now.", crisis: true } }
+        : { body: { reply: "I am here with you." } };
+    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("everything feels dark");
+    await screen.findByText("Please reach out now.");
+    expect(card()).toBeNull();
+    typeAndSend("thank you");
+    await screen.findByText("I am here with you.");
+    expect(card()).toBeNull();
+    first.unmount();
+    render(<MiraChat signedIn={false} initialChatId={null} />); // the crisis is kept with the chat
+    await screen.findByText("I am here with you.");
+    expect(card()).toBeNull();
+    cleanup();
+
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    expect(card()).toBeNull();
+    expect(tracked()).not.toContain("keep_card_shown");
+  });
+
+  it("Not now puts it away for this chat, after a reload too; a new chat may offer it again", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(card()).toBeNull();
+    expect(tracked()).toContain("keep_card_not_now");
+    first.unmount();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await screen.findByText("Try this.");
+    expect(card()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    typeAndSend("hello again");
+    await screen.findByText("Try this.");
+    expect(card()).not.toBeNull();
+  });
+});
+
+describe("Sign-up ticks, honeypot and where it ends", () => {
+  const box = (name: RegExp) => screen.getByRole("checkbox", { name });
+  const signIn = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+  };
+
+  it("needs three ticks; the LoveIQ result and rating ones start unticked and go with the code check", async () => {
+    render(<SignUpFlow />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    const send = screen.getByRole("button", { name: "Send me a code" });
+    const assessment = box(/Use my LoveIQ test result to tailor my coaching/);
+    expect(assessment).not.toBeChecked();
+    expect(box(/team may read replies I rate/)).not.toBeChecked();
+    fireEvent.click(box(/18 years of age or older/));
+    fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
+    expect(send).toBeDisabled();
+    fireEvent.click(box(/sex life and health to coach me/));
+    expect(send).toBeEnabled();
+    expect(screen.getByRole("link", { name: "terms of use" })).toHaveAttribute(
+      "href",
+      "/terms-of-use"
+    );
+    expect(screen.getByRole("link", { name: "privacy notice" })).toHaveAttribute(
+      "href",
+      "/privacy-policy"
+    );
+    fireEvent.click(assessment);
+    await signIn();
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/home"));
+    expect(calls("POST /api/mira/auth")[1]).toMatchObject({
+      action: "verify",
+      useAssessment: true,
+      shareRated: false,
+    });
+  });
+
+  it("has a honeypot people never see or reach, sent with the code request", async () => {
+    render(<SignUpFlow />);
+    const trap = document.querySelector<HTMLInputElement>('input[name="website"]')!;
+    expect(trap).toHaveAttribute("aria-hidden", "true");
+    expect(trap).toHaveAttribute("tabindex", "-1");
+    expect(trap).toHaveAttribute("autocomplete", "off");
+    expect(screen.getAllByRole("textbox")).toEqual([screen.getByLabelText("Email")]);
+    fireEvent.change(trap, { target: { value: "https://spam.example" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    screen.getAllByRole("checkbox").forEach((b) => fireEvent.click(b));
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await waitFor(() =>
+      expect(calls("POST /api/mira/auth")[0]).toMatchObject({
+        action: "start",
+        website: "https://spam.example",
+      })
+    );
+  });
+
+  it("goes on to the Mira page it was given once signed in, by code or with Google", async () => {
+    const next = "/mira?chat=6f2c4a1e-1111-4222-8333-944455556666";
+    render(<SignUpFlow googleEnabled next={next} />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    screen.getAllByRole("checkbox").forEach((b) => fireEvent.click(b));
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+      "href",
+      `/api/mira/auth/google?adult=1&terms=1&consent=1&assessment=1&share=1&next=${encodeURIComponent(next)}`
+    );
+    await signIn();
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith(next));
   });
 });

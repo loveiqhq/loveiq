@@ -186,6 +186,7 @@
 | Task                                 | Files                                                                                                                                                                          |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Change what Mira says or may not say | `features/mira/content/system-prompt.ts`, `features/mira/content/mira-config.json`                                                                                             |
+| The body confidence guide            | `features/mira/content/guide.ts`, `app/mira/guide/`                                                                                                                            |
 | Add or fix an evidence card          | `features/mira/content/evidence-cards.json`, `features/mira/server/cards.ts`                                                                                                   |
 | Support lines by country             | `features/mira/content/crisis-lines.json`, `features/mira/server/crisis.ts`                                                                                                    |
 | Free replies, model, consent version | `features/mira/server/config.ts`                                                                                                                                               |

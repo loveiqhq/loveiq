@@ -2,8 +2,8 @@
  * POST /api/mira/chat — one message to Mira, one reply back.
  *
  * Anonymous: the browser keeps the chat and sends the recent turns; nothing is stored here, and
- * the free conversations are counted per browser id (ANON_FREE_CONVERSATIONS, then the sign-up
- * card), with a daily message cap per browser and per network against cost and abuse.
+ * every message is counted per browser id (ANON_FREE_MESSAGES, then the sign-up card), with a
+ * daily message cap per browser and per network against cost and abuse.
  * Signed in: turns come from the account's stored chat, and the exchange is stored when
  * "Remember our conversations" is on. Both need the first-message consent (18+ and the
  * sensitive-data yes), sent with every message. Over everyone together, GLOBAL_DAILY_MESSAGES
@@ -11,6 +11,9 @@
  *
  * A crisis message is read before anything can stop it: whatever the limits, the rest of the
  * body or the database say, it gets Sanjin's message E and the support lines (crisisReply).
+ * A reply the model declines (or leaves empty) is a short fixed line with the support lines too,
+ * counted as reply_declined, not as a crisis. Once a person says they are under 18 ([[MINOR]]),
+ * their browser and account get message G from then on, without the model (server/minor.ts).
  *
  * For the MVP success board, the reply's markers (safety.ts parseReply) are logged as events,
  * never with the person's words: which intake question a message answered (`answering`, sent
@@ -20,15 +23,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
-  ANON_FREE_CONVERSATIONS,
+  ANON_FREE_MESSAGES,
   DAILY_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   HISTORY_TURNS,
   MAX_MESSAGE_CHARS,
 } from "@features/mira/server/config";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
+import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
 import {
   STABLE_INSTRUCTIONS,
@@ -102,18 +107,22 @@ const RESTING = () =>
     { status: 503 }
   );
 /**
- * Everyone's model calls together. Checked after the person's own daily caps (so someone at
- * their cap can't spend everyone's) and before an anonymous free conversation is counted (so a
- * resting day doesn't use one of their ten).
+ * Everyone's model calls together, per UTC day (so resting ends at midnight UTC; the team is
+ * alerted once that day). Checked after the person's own daily caps (so someone at their cap
+ * can't spend everyone's) and before an anonymous free message is counted (so a resting day
+ * doesn't use one of their ten).
  */
-const everyoneMayAsk = async () =>
-  (
-    await checkRateLimit("all", {
+const everyoneMayAsk = async () => {
+  const allowed = (
+    await checkRateLimit(`all:${new Date().toISOString().slice(0, 10)}`, {
       bucket: "mira-global-day",
       limit: GLOBAL_DAILY_MESSAGES,
       windowMs: DAY_MS,
     })
   ).allowed;
+  if (!allowed) alertDailyCeiling();
+  return allowed;
+};
 /** Crisis exchanges stored and counted a day per network: the reply itself is never limited. */
 const CRISIS_LOGGED_PER_DAY = 50;
 /** A paying-attention daily ceiling per account: model cost and abuse, not a product limit. */
@@ -250,6 +259,10 @@ export async function POST(request: Request) {
   let country = requestCountry(request);
 
   try {
+    // Under 18 (rail 15): message G from then on, whatever the limits; crisis words came first.
+    if (await isMinor(account?.id ?? null)) {
+      return NextResponse.json({ reply: miraConfig.minorMessage, sources: [], minor: true });
+    }
     if (account) {
       const profile = await getProfile(account.id);
       if (!profile) {
@@ -306,22 +319,19 @@ export async function POST(request: Request) {
         );
       }
       if (!(await everyoneMayAsk())) return RESTING();
-      // ponytail: "new conversation" is read from the history the browser sends, so a crafted
-      // request can skip the count; no easier than clearing the cookie, and the daily caps above
-      // bound the cost. Upgrade: a server-signed conversation token if mira_event shows abuse.
-      if (turns.length === 0) {
-        // A new conversation: the free ones are counted per browser id, then the sign-up card.
-        const free = await checkRateLimit(anon!, {
-          bucket: "mira-anon-chats",
-          limit: ANON_FREE_CONVERSATIONS,
-          windowMs: 30 * DAY_MS,
-        });
-        if (!free.allowed) {
-          logMiraEvent("gate_shown", who, { limit: ANON_FREE_CONVERSATIONS });
-          return NextResponse.json({ gate: true, freeLeft: 0 });
-        }
-        freeLeft = free.remaining;
+      // Every message is counted per browser id, then the sign-up card. ponytail: a cleared
+      // cookie is a new id with ten more (the per-network daily cap above bounds that), and a
+      // reply the model then fails to write still used one. Upgrade: count after the reply.
+      const free = await checkRateLimit(anon!, {
+        bucket: "mira-anon-messages",
+        limit: ANON_FREE_MESSAGES,
+        windowMs: 30 * DAY_MS,
+      });
+      if (!free.allowed) {
+        logMiraEvent("gate_shown", who, { limit: ANON_FREE_MESSAGES });
+        return NextResponse.json({ gate: true, freeLeft: 0 });
       }
+      freeLeft = free.remaining;
     }
   } catch (err) {
     logger.error({ err }, "mira: could not load the conversation");
@@ -349,6 +359,8 @@ export async function POST(request: Request) {
     started + ROUTE_BUDGET_MS
   );
   if (!result.ok) {
+    // The AI budget is used up (model.ts alerted the team): the resting answer, not "busy".
+    if (result.reason === "budget_exhausted") return RESTING();
     const status = result.reason === "unconfigured" ? 503 : result.reason === "error" ? 502 : 503;
     const error =
       result.reason === "unconfigured"
@@ -357,12 +369,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status });
   }
   const out = result.refused ? null : parseReply(result.text);
+  const minor = Boolean(out?.minor);
   if (out?.crisis && !out.text) {
     // A stop rail fired and the reply held nothing else (the token, perhaps a Sources line):
     // the fixed message, so the support panel still opens.
     reply = miraConfig.crisisMessage;
     crisis = true;
+  } else if (minor && !out?.crisis) {
+    reply = miraConfig.minorMessage; // Sanjin's message G, whatever the model wrote
   } else if (!out?.text) {
+    // Declined or empty: a neutral line, and the support panel opens in case something happened.
     reply = miraConfig.refusalMessage;
     refused = true;
   } else {
@@ -373,10 +389,16 @@ export async function POST(request: Request) {
   }
 
   // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
-  const invitation = isFirst && !crisis && !refused ? miraConfig.intakeInvitation : null;
+  // Not when her first reply already asked an intake question: that question's buttons come first.
+  const invitation =
+    isFirst && !crisis && !refused && !minor && !ask ? miraConfig.intakeInvitation : null;
 
   let messageId: number | null = null;
-  if (account && remember) {
+  if (minor) {
+    // An under-18 stop keeps nothing: stopForMinor deletes the account's chats, this one too.
+    chatId = null;
+    await stopForMinor(account?.id ?? null);
+  } else if (account && remember) {
     try {
       chatId ??= await createChat(account.id, message.replace(/\s+/g, " ").slice(0, 80));
       const ids = await addMessages(chatId, [
@@ -400,14 +422,27 @@ export async function POST(request: Request) {
   logMiraEvent("message_sent", who, { signedIn: Boolean(account), chars: message.length });
   logMiraEvent("reply_shown", who, { sources: sources.map((s) => s.id), crisis });
   if (crisis) logMiraEvent("crisis_shown", who, { country });
-
+  if (refused) {
+    // Apart from crisis_shown, so the crisis count stays true. The category's id, never text.
+    const why = result.refused ? "refusal" : "empty";
+    logMiraEvent("reply_declined", who, { why, category: result.category ?? null });
+  }
+  if (minor) logMiraEvent("minor_stop", who, { signedIn: Boolean(account) });
+  // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
+  const lines = crisis || refused;
+  // The reply that used the last free message brings the sign-up card, never beside the support
+  // lines or an under-18 stop.
+  if (freeLeft === 0 && !lines && !minor) {
+    logMiraEvent("gate_shown", who, { limit: ANON_FREE_MESSAGES });
+  }
   return NextResponse.json({
     reply,
     sources,
-    crisis,
-    crisisLines: crisis ? crisisFor(country) : undefined,
+    crisis: lines,
+    crisisLines: lines ? crisisFor(country) : undefined,
     chatId,
     messageId,
+    ...(minor ? { minor: true } : {}),
     ...(ask ? { ask } : {}),
     ...(invitation ? { invitation } : {}),
     ...(freeLeft === null ? {} : { freeLeft }),

@@ -306,7 +306,14 @@ describe("buildMiraPage", () => {
     );
     const p = page(d, "2026-11-02", "2026-11-15");
     expect(p.tiles.helpful).toMatchObject({ value: 0.75, foot: "3 of 4 thumbs were up" });
-    expect(p.safety).toEqual({ conversations: 0, crisis: 1, notHelpful: 1, referred: 0 });
+    expect(p.safety).toEqual({
+      conversations: 0,
+      crisis: 1,
+      declined: 0,
+      minorStops: 0,
+      notHelpful: 1,
+      referred: 0,
+    });
   });
 
   it("reads NPS from the scores given, and how often “Not now” was tapped", () => {
@@ -532,7 +539,10 @@ describe("buildMiraPage", () => {
     expect(p.tiles.nudgeUnsub).toMatchObject({
       value: 2 / 3,
       foot: "2 of 3 delivered were followed by a stop or pause",
+      // Fewer stops is better: a falling unsubscribe rate shows green, not red.
+      goodWhen: "down",
     });
+    expect(p.tiles.nudgeCtr!.goodWhen).toBe("up");
     const kind = (type: string) => p.nudgeTypes.find((t) => t.type === type);
     expect(kind("agreement")).toMatchObject({
       sent: 1,
@@ -846,6 +856,11 @@ describe("fetchMira", () => {
       "referred",
       "body_check_offered",
       "body_check_started",
+      "keep_card_shown",
+      "keep_card_keep",
+      "keep_card_not_now",
+      "reply_declined",
+      "minor_stop",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
