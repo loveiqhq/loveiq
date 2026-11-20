@@ -191,6 +191,11 @@ describe("the month's AI spend", () => {
     ]);
     expect(emails()[0]!.text).toMatch(/an estimated \$9\.00 of \$10/);
     expect(emails()[1]!.text).toMatch(/an estimated \$12\.00 of \$10/);
+    // A day later the once-a-day gate is open again, and still nothing repeats this month.
+    for (const key of fake.store.keys()) if (key.startsWith("rl:")) fake.store.delete(key);
+    recordUsage("claude-sonnet-5-5", { output_tokens: 300_000 });
+    await flushAfterResponse();
+    expect(fake.send).toHaveBeenCalledTimes(2);
   });
 
   it("loses only the count when Upstash is down", async () => {
