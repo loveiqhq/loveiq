@@ -14,19 +14,63 @@ import { cardById, type EvidenceCard } from "./cards";
  * cards. It becomes the source tags under her answer, linked to each paper's public page.
  */
 
+// Matched against normalise(text): lower case, straight apostrophes, single spaces, no accents.
 const CRISIS_PATTERNS: RegExp[] = [
-  /\bkill(ing)? my ?self\b/i,
-  /\bsuicid(e|al)\b/i,
-  /\bend(ing)? (my|it all|my own) life\b/i,
-  /\b(want|wanted|going) to die\b/i,
-  /\bdon'?t want to (live|be alive)\b/i,
-  /\bself[- ]?harm/i,
-  /\b(hurt|harm|cut|cutting) my ?self\b/i,
-  /\boverdos(e|ing)\b/i,
+  // English. "I could kill myself" may be a joke, but the words are too plain to risk.
+  /\bkill(ing)? my ?self\b/,
+  /\bsuicid/, // suicide, suicidal; also Spanish suicidarme, suicidio and French me suicider
+  /\bend(ing)? (my|my own) life\b/,
+  /\bend(ing)? it all\b/,
+  /\btak(e|ing) my (own )?life\b(?! back)/,
+  /\b(want(ed)? to|wanna) die\b(?! of\b)/, // not "I wanted to die of embarrassment"
+  /\b(don'?t|do not) want to (live|be alive)\b/,
+  // Only where the sentence ends there: not "I don't want to wake up next to him like this".
+  /\b(don'?t|do not) want to wake up( again| anymore| tomorrow)?(?= ?[^ a-z0-9]|$)/,
+  /\bbetter off dead\b/,
+  /\bwish i (was|were) dead\b/,
+  /\b(no reason to live|nothing (left )?to live for)\b/,
+  /\b(want(ed)? to|wanna|wish i could) disappear forever\b/, // never "disappear" alone
+  /\bself[- ]?harm/,
+  /\b(hurt|hurting|harm|harming|cut|cutting) my ?self\b/,
+  // An overdose taken or of pills, never the word alone ("an overdose of romance").
+  /\b(take|took|taking|taken) an overdose\b/,
+  /\boverdos(e|ed|ing) on\b.{0,20}\b(pills|meds|medication|tablets|painkillers)\b/,
+  // German
+  /\b(will|mochte|mag) nicht mehr leben\b/,
+  /\b(will|mochte) sterben\b/,
+  /\bmich (umbringen|toten)\b/,
+  /\bbringe? mich um\b/,
+  /\bselbstmord/,
+  /\bsuizid/,
+  // Spanish
+  /\bquiero morir/,
+  /\bno quiero vivir\b/,
+  /\b((quiero|voy a) matarme|me quiero matar)\b/,
+  // French
+  /\b(envie de|veux) mourir\b/,
+  /\b(ne veux plus|plus envie de) vivre\b/,
+  /\b(vais|veux|envie de) me tuer\b/,
+  // Bosnian, Croatian, Serbian (often typed without č, ć, š, ž)
+  /\b(ubiti se|se ubiti|da se ubijem|ubit cu se|ubicu se)\b/,
+  /\b(zelim|hocu) (da )?umr(ij)?e(ti|m)\b/,
+  /\bsamoub(istv|ojstv)/,
+  /\bne zelim (vise )?(zivjeti|ziveti|da zivim)\b/,
 ];
 
+/** So "I don’t  want to Live" and "ne zelim zivjeti" match like their tidy spellings. */
+function normalise(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function isCrisisMessage(text: string): boolean {
-  return CRISIS_PATTERNS.some((re) => re.test(text));
+  const plain = normalise(text);
+  return CRISIS_PATTERNS.some((re) => re.test(plain));
 }
 
 export const CRISIS_TOKEN = "[[CRISIS]]";

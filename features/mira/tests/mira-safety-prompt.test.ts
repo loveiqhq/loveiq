@@ -10,10 +10,40 @@ import { CRISIS_TOKEN, isCrisisMessage, parseReply } from "@features/mira/server
 describe("isCrisisMessage", () => {
   it.each([
     "I want to kill myself",
+    "I could kill myself", // maybe a joke, but too plain to risk
     "sometimes I think about suicide",
     "I don't want to live anymore",
+    "I don’t want to live anymore", // a phone's curly apostrophe
+    "I  WANT TO\nKILL   MYSELF",
     "I've been self-harming again",
     "I cut myself last night",
+    "I just want to end it all",
+    "I keep thinking about ending it all.",
+    "I want to take my own life",
+    "Sometimes I think I'll take my life",
+    "I'd be better off dead",
+    "I wish I was dead",
+    "I wish I were dead",
+    "There's no reason to live",
+    "i wanna die",
+    "I don't want to wake up tomorrow",
+    "Some nights I don’t want to wake up.",
+    "I want to disappear forever",
+    "I took an overdose last year",
+    "I've thought about overdosing on my sleeping pills",
+    "Ich will nicht mehr leben",
+    "Ich möchte mich umbringen",
+    "Ich denke an Selbstmord",
+    "Ich habe Suizidgedanken",
+    "Quiero morir",
+    "Pienso en suicidarme",
+    "Je veux me suicider",
+    "J’ai envie de mourir",
+    "Želim se ubiti",
+    "hocu da se ubijem",
+    "Mislim na samoubistvo",
+    "Ne želim više živjeti",
+    "ne zelim zivjeti",
   ])("stops for %j", (text) => {
     expect(isCrisisMessage(text)).toBe(true);
   });
@@ -23,6 +53,13 @@ describe("isCrisisMessage", () => {
     "This kills the mood every time",
     "I'm dying to feel relaxed in bed",
     "I hide during sex",
+    "I'm going to die of embarrassment if he sees me naked",
+    "I wanted to die of embarrassment",
+    "That film was an overdose of romance",
+    "I want to disappear under the covers when he looks at me",
+    "I don't want to wake up next to him without makeup",
+    "I want to take my life back",
+    "I walked 10 kms today",
   ])("does not stop for %j", (text) => {
     expect(isCrisisMessage(text)).toBe(false);
   });
