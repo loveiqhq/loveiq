@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { DISCLAIMER, Wordmark } from "./MiraShell";
 import { SupportPanel } from "./SupportPanel";
+import { useReloadWhenRestored } from "./api";
 
 /** The signed-in frame of boards 08 to 10: menu on the left, beta note, the page on the right. */
 export function MiraAppFrame({
@@ -18,6 +19,7 @@ export function MiraAppFrame({
   children: ReactNode;
 }) {
   const [support, setSupport] = useState(false);
+  useReloadWhenRestored();
   const item = (href: string, label: string, key?: string) => (
     <Link
       href={href}
@@ -53,7 +55,7 @@ export function MiraAppFrame({
           Need support right now?
         </button>
         {email ? (
-          <p className="text-[12px] text-ap-muted">
+          <p className="text-[12px] text-ap-muted [overflow-wrap:anywhere]">
             {name ? <strong className="block text-ap-ink">{name}</strong> : null}
             {email}
           </p>

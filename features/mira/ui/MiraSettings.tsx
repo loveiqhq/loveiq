@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { GradientButton } from "./MiraShell";
@@ -47,52 +47,88 @@ const TIME_ZONES = [
   "Pacific/Auckland",
 ];
 
+/** What Save sends, as the server keeps it, so only real changes go out. */
+const saveable = (x: Profile) => ({
+  name: x.name?.trim() || null,
+  country: x.country || null,
+  gender: x.gender?.trim() || null,
+  style: x.style ?? {},
+  remember_chats: x.remember_chats,
+  use_assessment: x.use_assessment,
+  nudges_on: x.nudges_on,
+  nudge_time: x.nudge_time,
+  time_zone: x.time_zone,
+});
+
+/** The fields of `now` that differ from `was`. */
+export function changedFields(now: Profile, was: Profile | null): Record<string, unknown> {
+  const before: Record<string, unknown> = was ? saveable(was) : {};
+  return Object.fromEntries(
+    Object.entries(saveable(now)).filter(
+      ([k, v]) => JSON.stringify(v) !== JSON.stringify(before[k])
+    )
+  );
+}
+
 export default function MiraSettings() {
   const router = useRouter();
   const [p, setP] = useState<Profile | null>(null);
+  // The profile as the server has it, after the load and after each save.
+  const stored = useRef<Profile | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
 
   useEffect(() => {
     void miraApi<{ profile: Profile }>("/api/mira/me").then((r) => {
       if (r.status === 401) router.replace("/mira/start");
-      else if (r.ok) setP(r.data.profile);
-      else setError(r.data.error ?? "Unable to load your settings.");
+      else if (r.ok) {
+        stored.current = r.data.profile;
+        setP(r.data.profile);
+      } else setError(r.data.error ?? "Unable to load your settings.");
     });
   }, [router]);
 
   async function save() {
     if (!p) return;
     setError(null);
-    const r = await miraApi("/api/mira/me", {
-      method: "PATCH",
-      body: {
-        name: p.name?.trim() || null,
-        country: p.country || null,
-        gender: p.gender?.trim() || null,
-        style: p.style,
-        remember_chats: p.remember_chats,
-        use_assessment: p.use_assessment,
-        nudges_on: p.nudges_on,
-        nudge_time: p.nudge_time,
-        time_zone: p.time_zone,
-      },
-    });
-    if (r.ok) setSaved("Saved.");
-    else setError(r.data.error ?? "Unable to save.");
+    const body = changedFields(p, stored.current);
+    if (Object.keys(body).length === 0) return setSaved("Saved.");
+    setBusy(true);
+    const r = await miraApi("/api/mira/me", { method: "PATCH", body });
+    setBusy(false);
+    if (r.ok) {
+      stored.current = p;
+      setSaved("Saved.");
+    } else setError(r.data.error ?? "Unable to save.");
   }
 
   async function remove(what: "chats" | "account") {
+    setBusy(true);
     const r = await miraApi(`/api/mira/me?what=${what}`, { method: "DELETE" });
     setConfirm(null);
-    if (!r.ok) return setError(r.data.error ?? "Unable to delete right now.");
-    if (what === "account") router.replace("/mira");
-    else setSaved("All your chats are deleted.");
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.data.error ?? "Unable to delete right now.");
+    }
+    if (what === "account") {
+      router.replace("/mira");
+      router.refresh();
+      return;
+    }
+    setBusy(false);
+    setSaved("All your chats are deleted.");
   }
 
   async function signOut() {
-    await miraApi("/api/mira/auth", { body: { action: "logout" } });
+    setBusy(true);
+    setError(null);
+    const r = await miraApi("/api/mira/auth", { body: { action: "logout" } });
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.data.error ?? "Unable to sign out. Please try again.");
+    }
     router.replace("/mira");
     router.refresh();
   }
@@ -105,7 +141,7 @@ export default function MiraSettings() {
   return (
     <MiraAppFrame active="settings" email={p?.email} name={p?.name}>
       <h1 className="font-serif text-[34px] font-medium">Settings</h1>
-      {error ? (
+      {error && !p ? (
         <p role="alert" className="mt-2 text-ap-bad-ink">
           {error}
         </p>
@@ -125,7 +161,7 @@ export default function MiraSettings() {
             </label>
             <p className="text-[14px]">
               <span className="font-semibold">Email</span>{" "}
-              <span className="text-ap-body">{p.email}</span>
+              <span className="text-ap-body [overflow-wrap:anywhere]">{p.email}</span>
             </p>
             <label className="flex flex-col gap-2 text-[14px] font-semibold">
               Gender <span className="font-normal text-ap-muted">Optional</span>
@@ -229,9 +265,19 @@ export default function MiraSettings() {
             </label>
           </section>
 
-          <div className="flex items-center gap-3">
-            <GradientButton onClick={save}>Save</GradientButton>
-            {saved ? <span className="text-[14px] text-ap-good-ink">{saved}</span> : null}
+          {/* Save, delete and sign-out errors show here, next to the buttons that caused them. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <GradientButton onClick={save} disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </GradientButton>
+            <span role="status" className="text-[14px] text-ap-good-ink">
+              {saved}
+            </span>
+            {error ? (
+              <p role="alert" className="text-[14px] text-ap-bad-ink">
+                {error}
+              </p>
+            ) : null}
           </div>
 
           <section className="flex flex-col gap-3 border-t border-ap-line pt-6">
@@ -253,8 +299,9 @@ export default function MiraSettings() {
                 <div className="mt-3 flex gap-3">
                   <button
                     type="button"
+                    disabled={busy}
                     onClick={() => remove(confirm)}
-                    className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white"
+                    className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
                   >
                     Delete
                   </button>
@@ -291,8 +338,9 @@ export default function MiraSettings() {
             </p>
             <button
               type="button"
+              disabled={busy}
               onClick={signOut}
-              className="w-fit text-[14px] font-semibold text-ap-plum underline"
+              className="w-fit text-[14px] font-semibold text-ap-plum underline disabled:opacity-50"
             >
               Sign out
             </button>

@@ -28,9 +28,13 @@ const COMING_SOON = [
 ];
 const NEXT_COACHES = ["Libido challenges", "Saying what you want"];
 
-function greeting(): string {
-  const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+/** 05–11 morning, 12–17 afternoon, otherwise evening (00:44 is not "morning"). */
+export function greeting(hour: number): string {
+  return hour >= 5 && hour < 12
+    ? "Good morning"
+    : hour >= 12 && hour < 18
+      ? "Good afternoon"
+      : "Good evening";
 }
 
 function when(iso: string): string {
@@ -47,12 +51,15 @@ function when(iso: string): string {
 export default function MiraHome() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
+  // Neutral on the server (its clock is UTC); the browser's hour comes in with the account.
+  const [hello, setHello] = useState("Hello");
   const [error, setError] = useState<string | null>(null);
   const [notified, setNotified] = useState<string[]>([]);
   const guideUrl = process.env.NEXT_PUBLIC_MIRA_GUIDE_URL;
 
   useEffect(() => {
     void miraApi<Me>("/api/mira/me").then((r) => {
+      setHello(greeting(new Date().getHours()));
       if (r.status === 401) router.replace("/mira/start");
       else if (r.ok) setMe(r.data);
       else setError(r.data.error ?? "Unable to load your account.");
@@ -61,12 +68,22 @@ export default function MiraHome() {
 
   async function notify(coach: string) {
     setNotified((n) => [...n, coach]);
-    await miraApi("/api/mira/event", { body: { type: "notify", coach } });
+    const r = await miraApi("/api/mira/event", { body: { type: "notify", coach } });
+    if (!r.ok) {
+      setNotified((n) => n.filter((c) => c !== coach));
+      setError(r.data.error ?? "That didn't go through. Please try again.");
+    }
   }
 
   async function toggleAssessment(on: boolean) {
-    setMe((m) => (m ? { ...m, profile: { ...m.profile, use_assessment: on } } : m));
-    await miraApi("/api/mira/me", { method: "PATCH", body: { use_assessment: on } });
+    const setUse = (v: boolean) =>
+      setMe((m) => (m ? { ...m, profile: { ...m.profile, use_assessment: v } } : m));
+    setUse(on);
+    const r = await miraApi("/api/mira/me", { method: "PATCH", body: { use_assessment: on } });
+    if (!r.ok) {
+      setUse(!on);
+      setError(r.data.error ?? "Unable to save. Please try again.");
+    }
   }
 
   return (
@@ -76,8 +93,8 @@ export default function MiraHome() {
           {error}
         </p>
       ) : null}
-      <h1 className="font-serif text-[34px] font-medium">
-        {greeting()}
+      <h1 className="font-serif text-[34px] font-medium [overflow-wrap:anywhere]">
+        {hello}
         {me?.profile.name ? `, ${me.profile.name}` : ""}
       </h1>
 
