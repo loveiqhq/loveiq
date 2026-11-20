@@ -83,11 +83,18 @@ export default function ApMira() {
           <Board
             id="nudges"
             title="Daily nudge emails"
-            description="How the daily nudges perform by type: clicks, the conversations they start, and unsubscribes. Opens aren’t tracked."
+            description="How the daily nudges perform by type: opens, clicks, the conversations they start, how many messages those have, and unsubscribes."
           >
             <Tiles
               data={data}
-              keys={["nudgesSent", "nudgeCtr", "nudgeStarted", "nudgeUnsub", "nudgeOpen"]}
+              keys={[
+                "nudgesSent",
+                "nudgeOpen",
+                "nudgeCtr",
+                "nudgeStarted",
+                "nudgeMessages",
+                "nudgeUnsub",
+              ]}
             />
             <NudgeTypes data={data} />
           </Board>
@@ -95,7 +102,8 @@ export default function ApMira() {
             The team is left out: accounts with a team address (ADMIN_TEST_EMAIL_REGEX, @loveiq.org
             by default) and the browsers they signed in from. An anonymous browser that never signed
             in, and a deleted account (its events lose both links), can&rsquo;t be told apart, so
-            they are counted.
+            they are counted; a deleted account&rsquo;s own messages belong to nobody any more, so
+            they make no conversation.
           </p>
         </Busy>
       )}
@@ -147,7 +155,7 @@ function Tiles({ data, keys }: { data: Data; keys: string[] }) {
             tile={t}
             foot
             titles={titles}
-            digits={t.unit === "ratio" ? 2 : undefined}
+            digits={k === "stickiness" ? 2 : undefined}
           />
         );
       })}
@@ -189,11 +197,13 @@ function Overview({ data }: { data: Data }) {
     >
       <Tiles data={data} keys={["conversations", "passTen", "signups", "signupRate", "nps"]} />
       <p className={NOTE}>
-        Conversations: chats started in the range (a new chat&rsquo;s first message), signed in or
-        not. Pass 10 conversations and the CVR are of the people who started a conversation in the
-        range: the share with 10 or more conversations since the beta began, and the share with a
-        free account by the range&rsquo;s last day. Signed-up users: free accounts created in the
-        range; a deleted account drops out.
+        Conversations: a person&rsquo;s messages split wherever more than 30 minutes pass between
+        two; each part with 3 or more messages is a conversation, counted when its 3rd message is
+        sent, signed in or not. Pass 10 conversations: of the people with a conversation in the
+        range, the share with 10 or more since the beta began. CVR: of the people who started a chat
+        signed out in the range, the share who created a free account after it, by the range&rsquo;s
+        last day. Signed-up users: free accounts created in the range; a deleted account drops out.
+        NPS: the share of 9&ndash;10 answers minus the share of 0&ndash;6, from &minus;100 to +100.
       </p>
       <Scorecard data={data} />
       <Funnel data={data} />
@@ -275,6 +285,7 @@ function Scorecard({ data }: { data: Data }) {
 
 function Funnel({ data }: { data: Data }) {
   const gtc = "minmax(200px,1.4fr) minmax(180px,2fr) 130px 100px";
+  const signups = data.tiles.signups?.value ?? 0;
   return (
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
@@ -327,12 +338,42 @@ function Funnel({ data }: { data: Data }) {
           ))}
         </div>
       </div>
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{
+            label: "Shown the sign-up card",
+            unit: "count",
+            value: data.gate,
+            note: "People, each once: signed out, with their free chats used up",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Signed up with email",
+            unit: "count",
+            value: data.signupsBy.email,
+            note: `of ${count(signups)} sign-ups in the range`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Signed up with Google",
+            unit: "count",
+            value: data.signupsBy.google,
+            note: `of ${count(signups)} sign-ups in the range`,
+          }}
+        />
+      </div>
       <p className={NOTE}>
         People: an account, or a browser before it signs in (one that signs in counts as its
-        account). Each step counts the people who also passed every step above it in the range. A
-        real conversation is a chat started in the range with 3 or more messages from the person:
-        messages carry no chat id, so each counts in the chat its person started last. Subscribed:
-        paid plans start after the beta.
+        account). Each step counts the people who also passed every step above it in the range. Gave
+        consent: ticked the first-message consent in the range or before, or has an account (signing
+        up asks for it). A real conversation: 3 or more messages with no gap of more than 30
+        minutes, the 3rd sent in the range. Subscribed: paid plans start after the beta. A
+        sign-up&rsquo;s method is that of the account&rsquo;s first sign-in.
       </p>
     </Card>
   );
@@ -340,18 +381,21 @@ function Funnel({ data }: { data: Data }) {
 
 function Engagement({ data }: { data: Data }) {
   const week4 = data.tiles.weekFour!;
-  const fromNudges = data.tiles.nudgeStarted!;
+  const fromNudges = data.tiles.reactivated!;
   return (
     <Board
       id="engagement"
       title="Engagement & retention"
-      description="Whether people build a habit with Mira and keep coming back: active users, the 10-conversation mark and sign-up cohorts."
+      description="Whether people build a habit with Mira and keep coming back: active users, time spent, the 10-conversation mark and sign-up cohorts."
     >
       <Tiles data={data} keys={["dau", "wau", "stickiness", "timeSpent", "passTen"]} />
       <p className={NOTE}>
         DAU % and WAU %: each day, the share of the accounts open by then that sent a message that
         day, or in the 7 days to it, averaged over the range&rsquo;s days. Stickiness: DAU % ÷ WAU
-        %. Each tile&rsquo;s line is its figure per point of the range (hover a line to read it).
+        %. Daily time spent: each day, an account&rsquo;s time between its messages, counting only
+        gaps of 5 minutes or less (a single message counts no time), averaged over the accounts that
+        wrote that day, then over the range&rsquo;s days. Each tile&rsquo;s line is its figure per
+        point of the range (hover a line to read it).
       </p>
       <PerUser data={data} />
       <Cohorts
@@ -363,7 +407,7 @@ function Engagement({ data }: { data: Data }) {
           const avg = c.convos / users;
           return [Math.min(1, avg / 10), fmt("ratio", avg)];
         }}
-        note="Average conversations per user so far (every conversation since the beta began, anonymous ones before signing up too), by the end of each week. Weeks run Monday to Sunday, Berlin time; a week shows once it is over."
+        note="Average conversations per user so far (3 or more messages with no gap of more than 30 minutes; every one since the beta began, anonymous ones before signing up too), by the end of each week. Weeks run Monday to Sunday, Berlin time; a week shows once it is over."
       />
       <Cohorts
         id="retention"
@@ -415,8 +459,8 @@ function Engagement({ data }: { data: Data }) {
         <p className={NOTE}>
           Week-4 return rate: of the accounts whose sign-up week&rsquo;s week 4 is over by the
           range&rsquo;s last day, the share who sent a message in it. Reactivated by nudges: of the
-          nudges sent in the range, the share whose person wrote to Mira within 24 hours of clicking
-          it.
+          people a nudge sent in the range reached after 7 or more days without a message, the share
+          who wrote to Mira within 48 hours of it.
         </p>
       </Card>
     </Board>
@@ -430,7 +474,7 @@ function PerUser({ data }: { data: Data }) {
         id="h-per-user"
         level={3}
         title="Conversations per user"
-        description="How far the people who chatted in the range have got with Mira, since the beta began."
+        description="How far the people with a conversation in the range have got with Mira, since the beta began."
       />
       <div className="flex max-w-[860px] flex-col gap-2.5">
         {data.perUser.map((b) => (
@@ -544,17 +588,12 @@ function Outcomes({ data }: { data: Data }) {
         Helpful answers: thumbs up of all the thumbs given on Mira&rsquo;s replies in the range,
         signed in or not; most replies are never rated.
       </p>
-      <NotMeasured
-        id="starter-chips"
-        title="Most used starter chips"
-        description="Which suggested prompts people tap to start a chat, and which lead to a real conversation."
-        why="A chat doesn’t record whether it began with a starter chip (chat_started holds only whether the person was signed in), and anonymous chats aren’t stored."
-      />
+      <Chips data={data} />
       <NotMeasured
         id="prompts"
         title="Most common prompts"
         description="What people bring to Mira in their own words, grouped into topics."
-        why="Grouping first messages into topics isn’t built yet."
+        why="Nothing groups first messages into topics yet, and anonymous chats aren’t stored to group."
       />
       <NotMeasured
         id="therapeutic"
@@ -562,15 +601,111 @@ function Outcomes({ data }: { data: Data }) {
         description="Body image after 4 weeks with Mira, compared with each user’s own baseline."
         why="No body-image scale is asked in the chat yet (the design asks one at week 0 and week 4, with consent)."
       />
-      <NotMeasured
-        id="satisfaction"
-        title="Satisfaction"
-        description="Net Promoter Score, asked after the 3rd conversation and then monthly."
-        why="No screen asks the NPS question yet."
-      />
+      <Satisfaction data={data} />
       <Knows data={data} />
       <Safety data={data} />
     </Board>
+  );
+}
+
+function Chips({ data }: { data: Data }) {
+  const gtc = "minmax(220px,2fr) 110px 140px 190px";
+  return (
+    <Card id="starter-chips" labelledBy="h-starter-chips">
+      <SectionHead
+        id="h-starter-chips"
+        level={3}
+        title="Most used starter chips"
+        description="Which suggested prompts people tap to start a chat, and which lead to a real conversation."
+      />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Most used starter chips" style={{ minWidth: 660 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+            {[
+              "Starter chip",
+              "Chats opened",
+              "Share of new chats",
+              "Became a real conversation",
+            ].map((h, i) => (
+              <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
+                {h}
+              </span>
+            ))}
+          </div>
+          {data.chips.map((c) => (
+            <div
+              key={c.label}
+              role="row"
+              className="grid items-center border-t border-ap-line"
+              style={{ gridTemplateColumns: gtc }}
+            >
+              <span role="rowheader" className="px-3 py-2.5 text-sm font-bold">
+                {c.label}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                {count(c.chats)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                {pct(c.share)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                {pct(c.real)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className={NOTE}>
+        The range&rsquo;s new chats by their first message: a starter chip, or the person&rsquo;s
+        own words. A real conversation: 3 or more messages before a gap of more than 30 minutes. A
+        chat whose first message was a crisis message records no chip, nor do chats before 20 Nov
+        2026: both are left out.
+      </p>
+    </Card>
+  );
+}
+
+function Satisfaction({ data }: { data: Data }) {
+  const { answers, notNow, promoters, detractors, score } = data.nps;
+  const rows: Array<[string, number]> = [
+    ["Promoters (9–10)", promoters],
+    ["Passives (7–8)", answers - promoters - detractors],
+    ["Detractors (0–6)", detractors],
+  ];
+  return (
+    <Card id="satisfaction" labelledBy="h-satisfaction">
+      <SectionHead
+        id="h-satisfaction"
+        level={3}
+        title="Satisfaction"
+        description="Net Promoter Score, asked after the 3rd conversation and then monthly."
+        right={
+          <span className="font-serif text-[24px] font-semibold tabular-nums">
+            NPS {fmt("count", score)}
+          </span>
+        }
+      />
+      <div className="flex max-w-[860px] flex-col gap-3">
+        {rows.map(([label, k]) => (
+          <div
+            key={label}
+            className="grid items-center gap-3"
+            style={{ gridTemplateColumns: "minmax(150px,220px) minmax(0,1fr) 110px" }}
+          >
+            <span className="text-sm font-semibold">{label}</span>
+            <Bar pct={share(k, answers)} />
+            <span className="text-right text-sm font-bold tabular-nums">
+              {pct(share(k, answers))} ({count(k)})
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className={NOTE}>
+        From {count(answers)} scores in the range: the share of promoters minus the share of
+        detractors, from &minus;100 to +100. &ldquo;Not now&rdquo; gives no score: it was{" "}
+        {pct(share(notNow, answers + notNow))} of the {count(answers + notNow)} replies.
+      </p>
+    </Card>
   );
 }
 
@@ -626,20 +761,28 @@ function Knows({ data }: { data: Data }) {
 }
 
 function NudgeTypes({ data }: { data: Data }) {
-  const pct = (a: number, b: number) => (b ? fmt("pct", a / b) : EMPTY);
-  const gtc = "minmax(200px,2fr) 90px 100px 150px";
+  const rate = (a: number, b: number) => (b ? fmt("pct", a / b) : EMPTY);
+  const gtc = "minmax(200px,2fr) 80px 100px 90px 120px 150px 120px";
   return (
     <Card id="nudge-types" labelledBy="h-nudge-types">
       <SectionHead
         id="h-nudge-types"
         level={3}
         title="Performance by nudge type"
-        description="Which nudges people click and turn into a conversation."
+        description="Which nudges people open, click and turn into a conversation, and which make them unsubscribe."
       />
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Performance by nudge type" style={{ minWidth: 560 }}>
+        <div role="table" aria-label="Performance by nudge type" style={{ minWidth: 880 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
-            {["Nudge type", "Sent", "CTR", "Conv. started"].map((h, i) => (
+            {[
+              "Nudge type",
+              "Sent",
+              "Open rate",
+              "CTR",
+              "Conv. started",
+              "Avg. messages / conv.",
+              "Unsubscribe",
+            ].map((h, i) => (
               <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
                 {h}
               </span>
@@ -655,24 +798,30 @@ function NudgeTypes({ data }: { data: Data }) {
               <span role="rowheader" className="px-3 py-2.5 text-sm font-bold">
                 {r.title}
               </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
-                {count(r.sent)}
-              </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
-                {pct(r.clicked, r.sent)}
-              </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
-                {pct(r.started, r.sent)}
-              </span>
+              {[
+                count(r.sent),
+                rate(r.opened, r.delivered),
+                rate(r.clicked, r.sent),
+                rate(r.started, r.sent),
+                r.started ? fmt("ratio", r.messages / r.started) : EMPTY,
+                rate(r.stopped, r.delivered),
+              ].map((v, i) => (
+                <span key={i} role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                  {v}
+                </span>
+              ))}
             </div>
           ))}
         </div>
       </div>
       <p className={NOTE}>
-        CTR and conversations started are counted per nudge sent. A conversation counts when the
-        person writes to Mira within 24 hours of clicking. Opens aren&rsquo;t tracked (the emails
-        carry no tracking pixel), messages and minutes per conversation aren&rsquo;t measured yet,
-        and an unsubscribe isn&rsquo;t tied to one type.
+        Open rate and unsubscribes are counted per nudge delivered, CTR and conversations started
+        per nudge sent. Deliveries and opens come from the email provider; Apple Mail opens every
+        email it receives to protect its users&rsquo; privacy, and those opens are included, so the
+        open rate reads high. A conversation counts when the person writes to Mira within 24 hours
+        of clicking; its messages are theirs from then until a gap of more than 30 minutes. An
+        unsubscribe is a stop (from the email, its page or Settings) or a pause, counted against the
+        last nudge the person got before it. Minutes per conversation aren&rsquo;t measured yet.
       </p>
     </Card>
   );
@@ -738,7 +887,8 @@ function Safety({ data }: { data: Data }) {
       </div>
       <p className={NOTE}>
         Stopped coaching: the support lines shown in the range (a crisis message, or a reply that
-        raised the stop rail). Per 1,000 of the range&rsquo;s conversations.
+        raised the stop rail). Per 1,000 of the range&rsquo;s conversations (3 or more messages with
+        no gap of more than 30 minutes).
       </p>
     </Card>
   );
