@@ -87,6 +87,11 @@ export const local = {
   saveChat: (v: LocalChat | null) => write(LOCAL_CHAT, v),
   consent: () => read<string>(LOCAL_CONSENT),
   saveConsent: (version: string) => write(LOCAL_CONSENT, version),
+  /** Under 18 (the chat's `minor`): this browser forgets its chat and its 18+ tick. */
+  forget: () => {
+    write(LOCAL_CHAT, null);
+    write(LOCAL_CONSENT, null);
+  },
   style: () => read<Record<string, number>>(LOCAL_STYLE),
   saveStyle: (v: Record<string, number> | null) => write(LOCAL_STYLE, v),
   /** For the NPS question: conversations this browser started, and when it last asked. */

@@ -51,3 +51,6 @@ export const MIRA_AUTH_COOKIE = "mira-auth";
 
 /** A random browser id: counts free conversations and links anonymous events, nothing else. */
 export const ANON_COOKIE = "mira_anon";
+
+/** Set once a person in this browser said they are under 18 (rail 15, server/minor.ts). */
+export const MINOR_COOKIE = "mira_minor";

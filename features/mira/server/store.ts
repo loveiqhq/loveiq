@@ -92,7 +92,7 @@ export type ProfilePatch = Partial<
     | "nudges_on"
     | "nudge_time"
     | "time_zone"
-  > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null }
+  > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null; minor_at: string }
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<void> {
@@ -296,6 +296,8 @@ export type MiraEventName =
   | "intake_answered"
   | "chat_topic"
   | "referred"
+  | "reply_declined"
+  | "minor_stop"
   | "body_check_offered"
   | "body_check_started"
   | "body_check_done";
