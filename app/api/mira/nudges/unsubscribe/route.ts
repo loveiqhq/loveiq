@@ -13,9 +13,11 @@ import logger from "@shared/observability/logger";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  // Mail providers post these from shared servers, so one address carries many people's
+  // unsubscribes; the signed token is the real gate, and this only stops a flood.
   const r = await checkRateLimit(getClientIp(request), {
     bucket: "mira-nudge-unsubscribe",
-    limit: 20,
+    limit: 600,
     windowMs: 60_000,
   });
   if (!r.allowed) return new NextResponse("Too many requests", { status: 429 });

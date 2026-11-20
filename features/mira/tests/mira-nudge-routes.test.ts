@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch: vi.fn() }));
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: vi.fn(),
+  fetchAllRows: vi.fn(),
+}));
 vi.mock("@features/mira/server/store", () => ({ logMiraEvent: vi.fn(), addMessages: vi.fn() }));
 vi.mock("@shared/http/csrf", () => ({ verifyCsrfToken: vi.fn().mockResolvedValue(true) }));
 vi.mock("@shared/http/ratelimit", () => ({
@@ -27,6 +30,9 @@ import { makeToken, runNudges } from "@features/mira/server/nudges";
 import { logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { checkRateLimit } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
+import { recordCronRun } from "@shared/observability/slack-alert-dedup";
 import { GET as openNudge } from "@/app/api/mira/nudge/route";
 import { GET as getPrefs, POST as postPrefs } from "@/app/api/mira/nudges/preferences/route";
 import { GET as visitUnsub, POST as oneClick } from "@/app/api/mira/nudges/unsubscribe/route";
@@ -133,6 +139,17 @@ describe("nudge preference routes", () => {
     );
     expect(forged.status).toBe(403);
   });
+
+  it("one-click unsubscribe allows a mail provider's shared servers many people a minute", async () => {
+    await oneClick(
+      new Request(`http://localhost/api/mira/nudges/unsubscribe?t=${encodeURIComponent(t())}`, {
+        method: "POST",
+      })
+    );
+    const [, opts] = vi.mocked(checkRateLimit).mock.calls[0]!;
+    expect(opts).toMatchObject({ bucket: "mira-nudge-unsubscribe" });
+    expect(opts!.limit).toBeGreaterThanOrEqual(600);
+  });
 });
 
 describe("the nudge button", () => {
@@ -180,13 +197,71 @@ describe("the crons", () => {
     expect(await (await nudgeCron(cron())).json()).toMatchObject({ reason: "non-prod-cron-host" });
     expect(runNudges).not.toHaveBeenCalled();
     expect(await (await nudgeCron(cron())).json()).toMatchObject({ ok: true, sent: 1 });
+    expect(recordCronRun).toHaveBeenLastCalledWith(
+      "mira-nudges",
+      expect.any(Number),
+      "success",
+      undefined
+    );
   });
 
-  it("apply the 12-month memory limit daily", async () => {
-    vi.mocked(supabaseFetch).mockResolvedValueOnce(json(3));
+  it("give the run a time budget, and record people left out or failed as an error", async () => {
+    process.env.MIRA_NUDGES_ENABLED = "true";
+    const summary = { candidates: 9, due: 9, sent: 5, skipped: {}, errors: 0, stoppedEarly: true };
+    vi.mocked(runNudges).mockResolvedValueOnce(summary);
+    expect((await nudgeCron(cron())).status).toBe(200);
+    expect(vi.mocked(runNudges).mock.calls[0]![1]?.outOfTime?.()).toBe(false);
+    expect(recordCronRun).toHaveBeenLastCalledWith(
+      "mira-nudges",
+      expect.any(Number),
+      "error",
+      expect.stringContaining("stopped at the time budget")
+    );
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    vi.mocked(runNudges).mockResolvedValueOnce({ ...summary, stoppedEarly: false, errors: 2 });
+    await nudgeCron(cron());
+    expect(recordCronRun).toHaveBeenLastCalledWith(
+      "mira-nudges",
+      expect.any(Number),
+      "error",
+      expect.stringContaining("2 failed")
+    );
+  });
+
+  it("apply the 12-month memory limit daily, and drop sign-in codes older than a day", async () => {
+    vi.mocked(supabaseFetch).mockResolvedValueOnce(json(3)).mockResolvedValueOnce(json([]));
     expect(await (await memoryCron(cron())).json()).toEqual({ ok: true, chatsDeleted: 3 });
     const [path, init] = vi.mocked(supabaseFetch).mock.calls[0]!;
     expect(path).toBe("/rest/v1/rpc/mira_forget_old_memory");
     expect(JSON.parse(String(init!.body))).toEqual({ p_months: 12 });
+    const [codes, del] = vi.mocked(supabaseFetch).mock.calls[1]!;
+    expect(del?.method).toBe("DELETE");
+    const before = decodeURIComponent(
+      /^\/rest\/v1\/mira_sign_in_code\?issued_at=lt\.(.+)$/.exec(codes)![1]!
+    );
+    expect(Math.abs(Date.now() - 86_400_000 - Date.parse(before))).toBeLessThan(60_000);
+    expect(recordCronRun).toHaveBeenLastCalledWith("mira-memory", expect.any(Number), "success");
+  });
+
+  it("record a memory run that failed or threw, instead of crashing", async () => {
+    vi.mocked(supabaseFetch).mockRejectedValueOnce(new Error("fetch failed"));
+    const res = await memoryCron(cron());
+    expect(res.status).toBe(500);
+    expect(recordCronRun).toHaveBeenLastCalledWith(
+      "mira-memory",
+      expect.any(Number),
+      "error",
+      "fetch failed"
+    );
+    vi.mocked(supabaseFetch)
+      .mockResolvedValueOnce(json(0))
+      .mockResolvedValueOnce(new Response("{}", { status: 500 }));
+    expect((await memoryCron(cron())).status).toBe(500);
+    expect(recordCronRun).toHaveBeenLastCalledWith(
+      "mira-memory",
+      expect.any(Number),
+      "error",
+      expect.stringContaining("sign-in codes")
+    );
   });
 });

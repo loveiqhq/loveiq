@@ -246,6 +246,9 @@
     },
     "app/api/cron/brain-reconcile/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/mira-nudges/route.ts": {
+      "maxDuration": 300
     }
   }
 }

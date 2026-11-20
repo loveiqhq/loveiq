@@ -1,8 +1,9 @@
 /**
  * GET /api/cron/mira-memory: Mira's memory limit (Sanjin's coach config: "Memory kept for 12
  * months after last chat"). Daily, it deletes a person's chats once the last message they wrote
- * is more than 12 months old (supabase function mira_forget_old_memory). Production host only.
- * Protected by `Authorization: Bearer ${CRON_SECRET}`.
+ * is more than 12 months old (supabase function mira_forget_old_memory), and sign-in codes
+ * issued more than a day ago (a code lives an hour; an unused one would keep the address it was
+ * sent to for good). Production host only. Protected by `Authorization: Bearer ${CRON_SECRET}`.
  */
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
@@ -34,16 +35,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
   const startMs = Date.now();
-  const res = await supabaseFetch("/rest/v1/rpc/mira_forget_old_memory", {
-    method: "POST",
-    body: JSON.stringify({ p_months: MEMORY_MONTHS }),
-  });
-  if (!res.ok) {
-    logger.error({ status: res.status }, "mira-memory cron failed");
-    await recordCronRun("mira-memory", startMs, "error", `status ${res.status}`);
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/mira_forget_old_memory", {
+      method: "POST",
+      body: JSON.stringify({ p_months: MEMORY_MONTHS }),
+    });
+    if (!res.ok) throw new Error(`memory limit: status ${res.status}`);
+    const deleted = (await res.json()) as number;
+    const dayAgo = new Date(startMs - 86_400_000).toISOString();
+    const codes = await supabaseFetch(
+      `/rest/v1/mira_sign_in_code?issued_at=lt.${encodeURIComponent(dayAgo)}`,
+      { method: "DELETE" }
+    );
+    if (!codes.ok) throw new Error(`old sign-in codes: status ${codes.status}`);
+    await recordCronRun("mira-memory", startMs, "success");
+    return NextResponse.json({ ok: true, chatsDeleted: deleted });
+  } catch (err) {
+    const reason = (err as Error)?.message;
+    logger.error({ err, reason }, "mira-memory cron failed");
+    await recordCronRun("mira-memory", startMs, "error", reason);
     return NextResponse.json({ error: "Unable to apply the memory limit." }, { status: 500 });
   }
-  const deleted = (await res.json()) as number;
-  await recordCronRun("mira-memory", startMs, "success");
-  return NextResponse.json({ ok: true, chatsDeleted: deleted });
 }
