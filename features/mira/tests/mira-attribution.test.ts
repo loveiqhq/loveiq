@@ -145,9 +145,15 @@ describe("the KPI log and the account", () => {
       async () => new Response(JSON.stringify([{ id: "u1" }]), { status: 201 })
     );
     request({ cookie: "mira_anon=x" });
-    await upsertProfileAtSignIn("u1", "lea@gmail.com", "v1");
+    await upsertProfileAtSignIn("u1", "lea@gmail.com", "v1", {
+      useAssessment: false,
+      shareRated: false,
+    });
     request({ cookie: "mira_anon=x; loveiq_team=1" });
-    await upsertProfileAtSignIn("u1", "lea@gmail.com", "v1");
+    await upsertProfileAtSignIn("u1", "lea@gmail.com", "v1", {
+      useAssessment: false,
+      shareRated: false,
+    });
     const [plain, team] = written();
     expect(plain).not.toHaveProperty("is_team");
     expect(team).toMatchObject({ id: "u1", email: "lea@gmail.com", is_team: true });
