@@ -8,8 +8,12 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@features/mira/ui/api", () => ({ miraApi: vi.fn() }));
 
+import NudgesPage from "@/app/mira/nudges/page";
+import { makeToken } from "@features/mira/server/nudges";
 import { miraApi } from "@features/mira/ui/api";
 import MiraNudges from "@features/mira/ui/MiraNudges";
+
+process.env.UNSUBSCRIBE_SECRET = "test-secret-for-mira-nudges-0123456789";
 
 const PREFS = {
   frequency: "Every day",
@@ -30,6 +34,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the nudge preferences page (boards 2 to 4b)", () => {
+  it("shows a link we did not sign as broken at once, with no request that could only fail", async () => {
+    const open = async (t: string) =>
+      render(await NudgesPage({ searchParams: Promise.resolve({ t }) }));
+    await open("11111111-2222-4333-8444-555555555555.forged");
+    expect(screen.getByRole("heading", { name: "This link doesn’t work anymore" })).toBeVisible();
+    expect(miraApi).not.toHaveBeenCalled();
+    cleanup();
+    await open(makeToken("prefs", "11111111-2222-4333-8444-555555555555")!);
+    expect(await screen.findByRole("heading", { name: "Fewer nudges, not none?" })).toBeVisible();
+    expect(miraApi).toHaveBeenCalledTimes(1);
+  });
+
   it("moves focus to each new screen's heading, and the reason screen has a way back", async () => {
     const user = userEvent.setup();
     render(<MiraNudges />);
