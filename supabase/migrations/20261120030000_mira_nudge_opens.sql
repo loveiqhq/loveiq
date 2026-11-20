@@ -1,7 +1,7 @@
 -- When a Mira nudge email was delivered and first opened, for the "Nudge emails" numbers (Marcus's
 -- MVP success board: open rate = opened / delivered). The send tags the email with the row id and
 -- the Resend webhook (app/api/resend/webhook/route.ts) fills each column the first time only.
--- Follows 20261118220000. Rollback: supabase/rollbacks/20261120020000_mira_nudge_opens_down.sql
+-- Follows 20261120020000. Rollback: supabase/rollbacks/20261120030000_mira_nudge_opens_down.sql
 
 BEGIN;
 
