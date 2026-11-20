@@ -10,6 +10,7 @@ vi.mock("@shared/observability/logger", () => ({
 
 import { GET } from "@/app/api/cron/mira-memory/route";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { mintSignInCode } from "@features/mira/server/sign-in";
 import { deleteAccount } from "@features/mira/server/store";
 import { recordCronRun } from "@shared/observability/slack-alert-dedup";
 
@@ -139,6 +140,20 @@ describe("mira-memory: logins Mira made for a sign-up that never finished", () =
     ];
     accounts = ["u-done"]; // finished sign-up: has a mira_user row
     codes = ["coding@example.com"]; // a code went out in the last day: still signing up
+  });
+
+  it("are the ones Mira's sign-in marks when it creates them (service-role app_metadata)", async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path) =>
+      path === "/auth/v1/admin/users" ? json({ id: "u-new" }) : json({ email_otp: "12345678" })
+    );
+    expect(await mintSignInCode("new@example.com")).toBe("12345678");
+    const [path, init] = vi.mocked(supabaseFetch).mock.calls[0]!;
+    expect(path).toBe("/auth/v1/admin/users");
+    expect(JSON.parse(String(init!.body))).toEqual({
+      email: "new@example.com",
+      email_confirm: true,
+      app_metadata: { created_by: "mira" },
+    });
   });
 
   it("deletes only Mira's logins over a day old with no account and no code from the last day", async () => {
