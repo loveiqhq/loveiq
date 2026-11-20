@@ -24,16 +24,21 @@ export function MiraAppFrame({
     <Link
       href={href}
       aria-current={key === active ? "page" : undefined}
-      className={`rounded-xl px-3 py-2 text-[14px] ${key === active ? "bg-ap-lilac font-semibold" : "text-ap-body hover:bg-ap-track"}`}
+      className={`whitespace-nowrap rounded-xl px-3 py-2 text-[14px] ${key === active ? "bg-ap-lilac font-semibold" : "text-ap-body hover:bg-ap-track"}`}
     >
       {label}
     </Link>
   );
   return (
     <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
-      <aside className="flex flex-col gap-4 border-b border-ap-line bg-[#faf9fc] p-5 lg:w-[250px] lg:shrink-0 lg:border-b-0 lg:border-r">
+      {/* On phones and tablets: one compact row of the four pages, so the page itself is on the
+          first screen; the coming-soon items and the account line show from lg up. */}
+      <aside className="flex flex-col gap-3 border-b border-ap-line bg-[#faf9fc] p-4 lg:w-[250px] lg:shrink-0 lg:gap-4 lg:border-b-0 lg:border-r lg:p-5">
         <Wordmark />
-        <nav aria-label="Mira" className="flex flex-wrap gap-1 lg:flex-col">
+        <nav
+          aria-label="Mira"
+          className="-mx-1 flex gap-1 overflow-x-auto px-1 lg:flex-col lg:overflow-visible"
+        >
           {item("/mira/home", "Home", "home")}
           {item("/mira", "Coach & chats")}
           {item("/mira/home#assessments", "Assessments")}
@@ -41,7 +46,7 @@ export function MiraAppFrame({
           {["Challenges & goals", "Daily journal", "Session recordings"].map((t) => (
             <span
               key={t}
-              className="flex items-center justify-between rounded-xl px-3 py-2 text-[14px] text-ap-quiet"
+              className="hidden items-center justify-between rounded-xl px-3 py-2 text-[14px] text-ap-quiet lg:flex"
             >
               {t} <span className="ml-2 text-[11px]">Soon</span>
             </span>
@@ -55,7 +60,7 @@ export function MiraAppFrame({
           Need support right now?
         </button>
         {email ? (
-          <p className="text-[12px] text-ap-muted [overflow-wrap:anywhere]">
+          <p className="hidden text-[12px] text-ap-muted [overflow-wrap:anywhere] lg:block">
             {name ? <strong className="block text-ap-ink">{name}</strong> : null}
             {email}
           </p>
