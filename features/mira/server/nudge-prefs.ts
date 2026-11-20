@@ -11,17 +11,27 @@ export type NudgePrefs = {
   nudge_types: NudgeType[] | null;
   nudges_paused_until: string | null;
   nudges_stopped_at: string | null;
+  /** The local day of the last nudge that went, so "Next nudge" skips a day that had one. */
+  last_sent_day?: string | null;
 };
 
 const COLS =
   "nudges_on,nudge_time,time_zone,nudge_frequency,nudge_types,nudges_paused_until,nudges_stopped_at";
 
 export async function getNudgePrefs(userId: string): Promise<NudgePrefs | null> {
-  const res = await supabaseFetch(
-    `/rest/v1/mira_user?id=eq.${encodeURIComponent(userId)}&select=${COLS}&limit=1`
-  );
+  const id = encodeURIComponent(userId);
+  const [res, last] = await Promise.all([
+    supabaseFetch(`/rest/v1/mira_user?id=eq.${id}&select=${COLS}&limit=1`),
+    supabaseFetch(
+      `/rest/v1/mira_nudge?user_id=eq.${id}&sent_at=not.is.null&select=local_day&order=created_at.desc&limit=1`
+    ),
+  ]);
   if (!res.ok) throw new Error(`mira nudge prefs read failed (${res.status})`);
-  return ((await res.json()) as NudgePrefs[])[0] ?? null;
+  const prefs = ((await res.json()) as NudgePrefs[])[0];
+  if (!prefs) return null;
+  // Only for the "saved" screen's next date, so a failed read just leaves today in.
+  const sent = last.ok ? ((await last.json()) as Array<{ local_day?: string }>)[0] : undefined;
+  return { ...prefs, last_sent_day: sent?.local_day ?? null };
 }
 
 async function patch(userId: string, body: Record<string, unknown>): Promise<void> {
@@ -76,7 +86,7 @@ export async function resumeNudges(userId: string): Promise<void> {
 
 /** What the "saved" screen shows: how often, which kinds, when, and the next one. */
 export function describePrefs(p: NudgePrefs, now = new Date()) {
-  const next = nextNudgeAt(p, now);
+  const next = nextNudgeAt(p, now, p.last_sent_day ?? null);
   const weekday = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     timeZone: p.time_zone,

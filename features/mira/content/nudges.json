@@ -2,8 +2,7 @@
   "source": "Sanjin's coach config (board 09, Daily nudges by email) and Marcus's nudge unsubscribe boards, 18 Nov 2026",
   "instructions": "Write a short, warm email (max. 3 sentences) that picks up on the last chat: the plan, exercise or feeling the user named. End with one open question the user can answer by clicking “Continue with Mira”, which opens the chat with this message already in it. Keep the subject neutral, never mention body, sex or weight in it.",
   "senderName": "Mira",
-  "subjectSuffix": " – Mira, your body confidence coach",
-  "quietHours": "21:30–8:00",
+  "preheader": "A short note for you.",
   "types": [
     {
       "id": "agreement",
