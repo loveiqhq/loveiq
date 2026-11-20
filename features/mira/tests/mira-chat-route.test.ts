@@ -15,6 +15,7 @@ vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
 vi.mock("@features/mira/server/model", () => ({ askModel: vi.fn() }));
+vi.mock("@features/mira/server/alerts", () => ({ alertDailyCeiling: vi.fn() }));
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([11, 12]),
   createChat: vi.fn().mockResolvedValue("6f2c4a1e-1111-4222-8333-944455556666"),
@@ -27,6 +28,7 @@ vi.mock("@features/mira/server/store", () => ({
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { POST, maxDuration } from "@/app/api/mira/chat/route";
+import { alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   GLOBAL_DAILY_MESSAGES,
@@ -321,17 +323,30 @@ describe("POST /api/mira/chat", () => {
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe("Mira is resting for today. Please come back tomorrow.");
     expect(askModel).not.toHaveBeenCalled();
-    expect(checkRateLimit).toHaveBeenCalledWith("all", {
+    // Counted per UTC day, so resting ends at midnight UTC; the team hears of it.
+    expect(checkRateLimit).toHaveBeenCalledWith(`all:${new Date().toISOString().slice(0, 10)}`, {
       bucket: "mira-global-day",
       limit: GLOBAL_DAILY_MESSAGES,
       windowMs: 24 * 60 * 60 * 1000,
     });
+    expect(alertDailyCeiling).toHaveBeenCalledTimes(1);
     // A crisis message is never counted, and never stopped.
     vi.mocked(checkRateLimit).mockClear();
     const crisis = await post({ message: "I want to kill myself", consent: true });
     expect((await crisis.json()).crisis).toBe(true);
     const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
     expect(buckets).not.toContain("mira-global-day");
+  });
+
+  it("rests when the AI budget is used up, and still answers a crisis", async () => {
+    vi.mocked(askModel).mockResolvedValue({ ok: false, reason: "budget_exhausted" });
+    const res = await post({ message: "and then?", consent: true, history: openChat });
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("Mira is resting for today. Please come back tomorrow.");
+    expect(alertDailyCeiling).not.toHaveBeenCalled();
+    const crisis = await post({ message: "I want to kill myself", consent: true });
+    expect(await crisis.json()).toMatchObject({ crisis: true, reply: miraConfig.crisisMessage });
+    expect(askModel).toHaveBeenCalledTimes(1);
   });
 
   it("doesn't spend a free conversation on a resting day", async () => {
