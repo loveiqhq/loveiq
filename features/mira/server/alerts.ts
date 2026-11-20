@@ -18,11 +18,19 @@ export type Alert = { key: string; subject: string; text: string };
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Keys this server instance already alerted (or saw alerted) today. The rate limiter's own
+ * in-memory fallback forgets every hit after 5 minutes, so without this, staging (no Upstash,
+ * but production's Resend) or an Upstash outage could email the owner every few minutes.
+ */
+const alertedHere = new Map<string, number>();
+
 export async function alertTeam({ key, subject, text }: Alert): Promise<void> {
   try {
-    // Once per key a day, counted in Upstash (shared/http/ratelimit). Without Upstash (local,
-    // staging) it counts per server instance; when Upstash errors the alert goes anyway. The
-    // rate limiter logs both.
+    if (Date.now() - (alertedHere.get(key) ?? -Infinity) < DAY_MS) return;
+    alertedHere.set(key, Date.now());
+    // Once per key a day for every instance together, counted in Upstash
+    // (shared/http/ratelimit). When Upstash errors the alert goes anyway, and the limiter logs it.
     const once = await checkRateLimit(key, { bucket: "mira-alert", limit: 1, windowMs: DAY_MS });
     if (!once.allowed) return;
     const where = `Sent by ${process.env.NEXT_PUBLIC_SITE_URL || "a local server"}.`;

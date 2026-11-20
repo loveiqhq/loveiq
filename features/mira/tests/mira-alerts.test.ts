@@ -48,6 +48,7 @@ import { flushAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 
 const emails = () => fake.send.mock.calls.map(([e]) => e as Record<string, string>);
+const DAY = 86_400_000;
 
 describe("alertTeam", () => {
   beforeEach(() => {
@@ -85,20 +86,25 @@ describe("alertTeam", () => {
     expect(emails()[0]!.to).toBe("ops@example.com");
   });
 
-  it("alerts at most once per key a day, counted in Upstash", async () => {
+  it("alerts at most once per key a day, on one server and across servers (Upstash)", async () => {
     await alertTeam({ key: "same", subject: "s", text: "t" });
     await alertTeam({ key: "same", subject: "s", text: "t" });
     await alertTeam({ key: "other", subject: "s", text: "t" });
     expect(fake.send).toHaveBeenCalledTimes(2);
     expect(fake.slack).toHaveBeenCalledTimes(2);
+    // Another server instance (fresh module state) asks Upstash, which already saw it today.
+    vi.resetModules();
+    const elsewhere = await import("@features/mira/server/alerts");
+    await elsewhere.alertTeam({ key: "same", subject: "s", text: "t" });
+    expect(fake.send).toHaveBeenCalledTimes(2);
     expect(fake.store.get("rl:mira-alert:same")).toBe(2);
   });
 
-  it("still alerts when Upstash is down, and logs it", async () => {
+  it("still alerts when Upstash is down, logs it, and repeats nothing from that server", async () => {
     fake.down = true;
-    await alertTeam({ key: "same", subject: "s", text: "t" });
-    await alertTeam({ key: "same", subject: "s", text: "t" });
-    expect(fake.send).toHaveBeenCalledTimes(2);
+    await alertTeam({ key: "down", subject: "s", text: "t" });
+    await alertTeam({ key: "down", subject: "s", text: "t" });
+    expect(fake.send).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.anything(),
       "[ratelimit] Redis error, allowing request (fail-open)"
@@ -135,7 +141,7 @@ describe("alertTeam", () => {
       /^60 sign-in code emails/
     );
     const day = new Date().toISOString().slice(0, 10);
-    expect(fake.store.get(`rl:mira-alert:daily-ceiling:${day}`)).toBe(2);
+    expect(fake.store.get(`rl:mira-alert:daily-ceiling:${day}`)).toBe(1);
   });
 });
 
@@ -191,10 +197,13 @@ describe("the month's AI spend", () => {
     ]);
     expect(emails()[0]!.text).toMatch(/an estimated \$9\.00 of \$10/);
     expect(emails()[1]!.text).toMatch(/an estimated \$12\.00 of \$10/);
-    // A day later the once-a-day gate is open again, and still nothing repeats this month.
+    // A day later the once-a-day gates are open again, and still nothing repeats this month.
     for (const key of fake.store.keys()) if (key.startsWith("rl:")) fake.store.delete(key);
+    const tomorrow = Date.now() + DAY + 60_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => tomorrow);
     recordUsage("claude-sonnet-5-5", { output_tokens: 300_000 });
     await flushAfterResponse();
+    clock.mockRestore();
     expect(fake.send).toHaveBeenCalledTimes(2);
   });
 
