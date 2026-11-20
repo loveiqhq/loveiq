@@ -140,6 +140,8 @@ describe("parseReply", () => {
     const card = (id: string) => EVIDENCE_CARDS.find((c) => c.id === id)!;
     expect(sourceLabel(card("C01"))).toBe("Fredrickson et al. (1997)");
     expect(sourceLabel(card("C08"))).toBe("van den Brink et al. (2018)");
+    expect(sourceLabel(card("C25"))).toBe("Cornell Health (2019)");
+    expect(sourceLabel(card("C27"))).toBe("Neff (2024)");
     for (const c of EVIDENCE_CARDS) expect(sourceLabel(c)).not.toMatch(/^(van|de|von) et al/);
   });
 

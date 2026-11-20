@@ -112,8 +112,10 @@ function markerOf(inside: string): [kind: string, value: string | null] {
 export function sourceLabel(card: EvidenceCard): string {
   const first = card.authors.split(",")[0]?.trim() || card.title;
   const words = first.split(/\s+/);
-  // The last word is the initials ("BL", "T-A"), unless the name is a single word.
-  const surname = words.length > 1 ? words.slice(0, -1).join(" ") : first;
+  // The last word is the initials ("BL", "T-A"); a one-word name or an organisation
+  // ("Cornell Health") has none.
+  const initials = words.length > 1 && /^[A-Z][A-Z-]{0,5}$/.test(words[words.length - 1]!);
+  const surname = initials ? words.slice(0, -1).join(" ") : first;
   const etAl = card.authors.includes(",") ? " et al." : "";
   return `${surname}${etAl} (${card.year})`;
 }
