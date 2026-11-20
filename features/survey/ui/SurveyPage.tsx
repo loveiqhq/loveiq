@@ -1139,7 +1139,7 @@ const ConsentScreen: FC<{
               </svg>
             </div>
             <span className="text-[15px] font-medium leading-[24px] text-white/90 sm:text-[16px]">
-              I have read and agree to the{" "}
+              I have read the{" "}
               <Link
                 href="/privacy-policy"
                 target="_blank"
@@ -1147,8 +1147,8 @@ const ConsentScreen: FC<{
                 className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Privacy Policy
-              </Link>
-              ,{" "}
+              </Link>{" "}
+              and agree to the{" "}
               <Link
                 href="/terms-and-conditions"
                 target="_blank"
