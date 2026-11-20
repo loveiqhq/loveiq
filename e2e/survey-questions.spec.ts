@@ -6,6 +6,7 @@ import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
 import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
 import { applyEmailQuestionArm } from "../features/survey/anonymousEmail";
 import { EMAIL_QUESTION_WINNER } from "../shared/experiments/emailQuestionArm";
+import { QUESTION_ORDER_WINNER } from "../shared/experiments/questionOrderArm";
 import { instantScroll } from "./fixtures/instant-scroll";
 import { pinSurveySession } from "./surveyArm";
 import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
@@ -28,13 +29,12 @@ import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
  */
 
 /**
- * The arm this walk runs in. C13 picks the question order from the session id, so without
- * pinning it this spec would get the variant opening in about half its runs and fail at
- * question three with a failure that does not reproduce. Control is the right arm here:
- * what this spec covers (option randomisation, selection caps, the priced question) is
- * identical in both, and `survey-c13-opening.spec.ts` walks the variant opening.
+ * The order this walk runs in: the new one, which every fresh run is asked since the C13
+ * test ended (20 Nov 2026), whatever its session id drew. The session is still pinned, for
+ * the option shuffle it seeds. What this spec covers (option randomisation, selection caps,
+ * the priced question) is identical in both orders.
  */
-const ARM = "control" as const;
+const ARM = QUESTION_ORDER_WINNER;
 
 // The email question as every free run is asked it since its test ended (4 Nov 2026).
 const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM)

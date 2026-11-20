@@ -8,13 +8,16 @@ import {
 import { assignGateRevealArm, type GateRevealArm } from "../shared/experiments/gateRevealArm";
 
 /**
- * Pin a survey session id so the C13 arm — and therefore the question order — is chosen
- * by the test rather than by a coin flip.
+ * Pin a survey session id, so what it decides is chosen by the test rather than by a coin
+ * flip: the option shuffle and the half of the EUR 1.99 page's 50/50 below.
  *
- * WHY THIS IS NEEDED AT ALL. C13 derives the arm from the survey session id, which the
- * engine mints fresh on every run. A spec that walks the survey by index would then get
- * the variant opening in roughly half of its runs and fail on question three, with a
- * failure that does not reproduce.
+ * THE QUESTION ORDER IS NO LONGER ONE OF THEM. While C13 ran it derived the arm from the
+ * session id, and a spec walking the survey by index got the variant opening in about half
+ * of its runs. The test ended on 20 Nov 2026 (QUESTION_ORDER_TEST_END) and the variant won:
+ * every fresh run is asked it, whatever arm its id drew, so `order` here only picks which
+ * fixture is used. A spec that needs the old order seeds a draft that records it
+ * (`orderArm: "control"`, as survey-sheets.spec.ts does), or one with progress and no arm,
+ * which reopens in the old order like a draft from before C13.
  *
  * WHY NOT `?order=control`. That preview override exists, but it is gated behind
  * `isNonProdDeploy()`, which is FALSE here: `playwright.config.ts` serves

@@ -2,10 +2,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import {
-  assignQuestionOrderArm,
-  QUESTION_ORDER_ARM_KEY,
-} from "@shared/experiments/questionOrderArm";
+import { QUESTION_ORDER_ARM_KEY, questionOrderArmAt } from "@shared/experiments/questionOrderArm";
 import {
   EMAIL_QUESTION_ARM_KEY,
   EMAIL_QUESTION_WINNER,
@@ -559,10 +556,11 @@ export async function POST(request: Request) {
    */
   /**
    * The C13 opening-order arm is DERIVED here rather than sent by the client.
-   * `assignQuestionOrderArm` is pure and deterministic over the session id, and
-   * the session id is already in this payload — so recomputing it server-side
-   * agrees with what the respondent actually saw, and a client cannot misreport
-   * its arm.
+   * `questionOrderArmAt` is pure and deterministic over the session id and the run's
+   * start, both already in this payload — so recomputing it server-side agrees with
+   * what the respondent actually saw, and a client cannot misreport its arm. A run
+   * begun during the test gets the arm its session id drew; one begun from the test's
+   * end (QUESTION_ORDER_TEST_END, 20 Nov 2026) gets the new order, as every run is asked.
    *
    * ONE EXCEPTION, and it is not production. `?order=control|variant` previews
    * either arm on dev and staging; a previewer whose session hashes the other way
@@ -583,7 +581,7 @@ export async function POST(request: Request) {
    * "no session, no stamp" rule the landing arm follows: a crawler or a direct
    * hit still produces no utm_tracker at all rather than a bare {} .
    */
-  const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
+  const questionOrderArm = sessionId ? questionOrderArmAt(sessionId, Date.parse(startedAt)) : null;
   /**
    * Mark's 50/50 of his new EUR 1.99 page (gateRevealArm.ts), while its switch is on: from the
    * same session id, so it is the half the browser's sheets followed and the report's gate will

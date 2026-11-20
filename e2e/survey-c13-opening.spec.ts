@@ -6,7 +6,9 @@ import { C13_OPENING, orderAskedQuestions } from "../features/survey/ui/question
 import { pinSurveySession } from "./surveyArm";
 
 /**
- * C13 — the variant opening, in a real browser.
+ * C13 — the variant opening, in a real browser. The test ended (QUESTION_ORDER_TEST_END,
+ * 20 Nov 2026) and the variant won, so every fresh run is asked it, whatever arm its session
+ * id drew: both of the e2e session fixtures are walked.
  *
  * The unit suite proves `orderC13Opening` returns the right array. It cannot prove the
  * ENGINE renders that array: the arm is resolved from the session id on first render, the
@@ -59,62 +61,66 @@ async function enterEngine(page: Page) {
 test.describe("Survey — C13 opening order", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test("the variant arm renders the promoted opening, and 01006 is not in it", async ({ page }) => {
-    test.setTimeout(90_000);
-    for (const pattern of WRITE_ROUTES) {
-      await page.route(pattern, (route) =>
-        route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
-      );
-    }
-
-    // The arms must actually differ, or walking one of them proves nothing. This is the
-    // assertion that fails if C13 is ever reduced to a no-op — for instance by a spec
-    // change that leaves `C13_OPENING` equal to the generated order.
-    expect(
-      OPENING.map((q) => q.qId),
-      "the variant opening must differ from control, or this spec measures nothing"
-    ).not.toEqual(CONTROL_OPENING.map((q) => q.qId));
-    expect(CONTROL_OPENING.map((q) => q.qId)).toContain("01006");
-    expect(
-      OPENING.map((q) => q.qId),
-      "01006 is the question C13 exists to demote — it must not open the variant"
-    ).not.toContain("01006");
-
-    const pinnedSessionId = await pinSurveySession(page, "variant");
-    await enterEngine(page);
-
-    const sessionId = await page.evaluate(() =>
-      window.sessionStorage.getItem("loveiq-survey-session")
-    );
-    expect(sessionId, "the pinned session id is what puts this run in the variant arm").toBe(
-      pinnedSessionId
-    );
-
-    for (let i = 0; i < OPENING.length; i += 1) {
-      const q = OPENING[i]!;
-      await expect(
-        page.getByRole("heading", { name: q.question, exact: true }),
-        `variant slot ${i + 1} must be ${q.qId}`
-      ).toBeVisible({ timeout: 15_000 });
-
-      if (i === OPENING.length - 1) break;
-      const next = page.getByRole("heading", { name: OPENING[i + 1]!.question, exact: true });
-
-      if (q.answerType === "open") {
-        const boxes = page.getByRole("textbox");
-        for (let b = 0, n = await boxes.count(); b < n; b += 1) await boxes.nth(b).fill("C13");
-        await page.getByRole("button", { name: /next/i }).click();
-      } else {
-        // Every other question in the variant opening is a 1-7 scale, which may
-        // auto-advance depending on the respondent's stored preference.
-        await page.getByRole("button", { name: "4 of 7" }).click();
-        try {
-          await next.waitFor({ state: "visible", timeout: 1500 });
-        } catch {
-          await page.getByRole("button", { name: /next/i }).click();
-        }
+  for (const drew of ["variant", "control"] as const) {
+    test(`a fresh run renders the promoted opening, without 01006 (session drew ${drew})`, async ({
+      page,
+    }) => {
+      test.setTimeout(90_000);
+      for (const pattern of WRITE_ROUTES) {
+        await page.route(pattern, (route) =>
+          route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+        );
       }
-      await next.waitFor({ state: "visible", timeout: 15_000 });
-    }
-  });
+
+      // The arms must actually differ, or walking one of them proves nothing. This is the
+      // assertion that fails if C13 is ever reduced to a no-op — for instance by a spec
+      // change that leaves `C13_OPENING` equal to the generated order.
+      expect(
+        OPENING.map((q) => q.qId),
+        "the variant opening must differ from control, or this spec measures nothing"
+      ).not.toEqual(CONTROL_OPENING.map((q) => q.qId));
+      expect(CONTROL_OPENING.map((q) => q.qId)).toContain("01006");
+      expect(
+        OPENING.map((q) => q.qId),
+        "01006 is the question C13 exists to demote — it must not open the variant"
+      ).not.toContain("01006");
+
+      const pinnedSessionId = await pinSurveySession(page, drew);
+      await enterEngine(page);
+
+      const sessionId = await page.evaluate(() =>
+        window.sessionStorage.getItem("loveiq-survey-session")
+      );
+      expect(sessionId, `the pinned session id (it drew ${drew}) is the one the engine used`).toBe(
+        pinnedSessionId
+      );
+
+      for (let i = 0; i < OPENING.length; i += 1) {
+        const q = OPENING[i]!;
+        await expect(
+          page.getByRole("heading", { name: q.question, exact: true }),
+          `variant slot ${i + 1} must be ${q.qId}`
+        ).toBeVisible({ timeout: 15_000 });
+
+        if (i === OPENING.length - 1) break;
+        const next = page.getByRole("heading", { name: OPENING[i + 1]!.question, exact: true });
+
+        if (q.answerType === "open") {
+          const boxes = page.getByRole("textbox");
+          for (let b = 0, n = await boxes.count(); b < n; b += 1) await boxes.nth(b).fill("C13");
+          await page.getByRole("button", { name: /next/i }).click();
+        } else {
+          // Every other question in the variant opening is a 1-7 scale, which may
+          // auto-advance depending on the respondent's stored preference.
+          await page.getByRole("button", { name: "4 of 7" }).click();
+          try {
+            await next.waitFor({ state: "visible", timeout: 1500 });
+          } catch {
+            await page.getByRole("button", { name: /next/i }).click();
+          }
+        }
+        await next.waitFor({ state: "visible", timeout: 15_000 });
+      }
+    });
+  }
 });

@@ -23,7 +23,8 @@ const run = (sessionId: string, startedAt: string, reached: string[]): DropoffRu
 // The range's first two runs went through to the end before 16019 was asked; the last one had
 // it: 16014 is reached by three, 16019 (next in today's order) by one, a fall to a third, but
 // 16019 was added in the range. The third run left on question 1, so 01002 really loses one.
-const every = askedQuestions(400).map((q) => q.qId);
+// In the old order: the runs began before the opening order test ended.
+const every = askedQuestions(400, "control").map((q) => q.qId);
 const before16019 = every.filter((id) => id !== "16019");
 const questions = buildSurveyQuestions(
   [

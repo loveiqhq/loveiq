@@ -30,7 +30,10 @@ import {
   EMAIL_QUESTION_TEST_END,
   EMAIL_QUESTION_TEST_START,
 } from "@shared/experiments/emailQuestionArm";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import {
+  assignQuestionOrderArm,
+  QUESTION_ORDER_TEST_END,
+} from "@shared/experiments/questionOrderArm";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
 
@@ -91,8 +94,8 @@ export const SURVEY_TESTS = [
   {
     name: "Opening order test",
     launch: Date.parse("2026-10-06T18:18:00Z"),
-    end: null as number | null,
-    outcome: null as string | null,
+    end: Date.parse(QUESTION_ORDER_TEST_END) as number | null,
+    outcome: "the team chose the new order, which everyone gets now" as string | null,
     segmentOf: (sessionId: string): Segment =>
       assignQuestionOrderArm(sessionId) === "variant"
         ? "Opening order: new"
@@ -395,7 +398,11 @@ function addDays(day: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-function readout(
+/**
+ * One test's readout from its arms' counts. Exported for its tests: both survey tests have
+ * ended, so only a test run on as one that has not shows the pacing it gives a running test.
+ */
+export function readout(
   test: (typeof SURVEY_TESTS)[number],
   measure: string,
   arms: [TestArmReadout, TestArmReadout],

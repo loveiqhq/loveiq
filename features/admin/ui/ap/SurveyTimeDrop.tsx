@@ -129,7 +129,7 @@ export default function TimeDropSection({
       <SectionHead
         id="h-td"
         title="Time and drop-out per question"
-        description={`Every question in ${order === "test" ? "the test's order (C13)" : "survey order"}. Hover a bar to see the question; click it to open it in Question detail.`}
+        description={`Every question in ${order === "test" ? "the new order (C13)" : "the old order"}. Hover a bar to see the question; click it to open it in Question detail.`}
       />
       {order && q?.test && (
         <div className="flex flex-wrap items-center gap-2">
@@ -138,8 +138,8 @@ export default function TimeDropSection({
             value={order}
             onChange={onOrder}
             options={[
-              { value: "survey", label: `Survey order · ${fmt("count", q.people)} runs` },
-              { value: "test", label: `Test order (C13) · ${fmt("count", q.test.people)} runs` },
+              { value: "survey", label: `Old order · ${fmt("count", q.people)} runs` },
+              { value: "test", label: `New order (C13) · ${fmt("count", q.test.people)} runs` },
             ]}
           />
           <Info k="survey.order" />

@@ -274,9 +274,11 @@ with a "Keep going" that carries on. The rules are in
 | State of Desire | after 16005 (where the reader's sexuality is) | "only 15% … steady", the report, and a tick box for a €5 code    |
 | Report map      | after the question that leaves three to go    | the report's 6 parts and 17 chapters, and what is free or €1.99  |
 
-- **Placed by question, not by position.** C13 asks the questions in two orders, and the
-  reorder still to come moves them again. In today's control order 01005 is question 3, so the
-  expert's sheet stays shut there; re-key it when the reorder lands.
+- **Placed by question, not by position.** C13 asked the questions in two orders, and the
+  reorder still to come moves them again. In C13's control order 01005 is question 3, so the
+  expert's sheet stayed shut there. Since the test ended (2026-11-20) every new run is asked
+  the new order, where it opens; a draft resumed in the old order still skips it. Re-key it
+  when the reorder lands.
 - **When they open.** A sheet "after" a question holds the move: Next, Auto-advance, Enter,
   ArrowRight and a swipe all go through `goNext`, which opens it instead. One "before" a
   question rises over it as it arrives. Each opens once per run (`loveiq-survey-sheets`, keyed
@@ -293,8 +295,9 @@ with a "Keep going" that carries on. The rules are in
   price (Halfway, State of Desire, the map). The Trustpilot sheet needs the site's Trustpilot
   switch and numbers, or it is skipped.
 - **Going live (Fatih, 2026-11-14).** Science, Trustpilot and State of Desire go on first: both
-  C13 orders meet them alike. The expert's sheet waits for the C13 check-in (2026-11-20): C13's
-  control order asks 01005 too early for it, so until then only one C13 half would see it.
+  C13 orders meet them alike. The expert's sheet waited for the C13 check-in (2026-11-20): C13's
+  control order asks 01005 too early for it, so only one C13 half saw it. Fatih and Mark called
+  C13 for the new order that day, so every new run is asked it now.
   Halfway and the map belong to Mark's 50/50 of his new €1.99 page
   (`docs/runbooks/PRE_UNLOCK.md`), so they need its switch on as well as their own
   (`GATE_TEST_SHEETS`). Both halves meet them, each in its page's words (Mark's write-up,

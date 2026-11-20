@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SurveyAnswerValue } from "@features/survey/server/types";
 import {
+  QUESTION_ORDER_WINNER,
   resolveDraftQuestionOrderArm,
   resolveQuestionOrderOverride,
   type QuestionOrderArm,
@@ -12,7 +13,6 @@ import {
   clearPersistedSurveyState,
   loadPendingCompletion,
 } from "./surveyStorage";
-import { getSessionId } from "./surveySession";
 
 export type AnswerValue = SurveyAnswerValue;
 
@@ -53,14 +53,15 @@ function readDraftExtras(): Pick<Draft, "prefilled" | "orderArm"> {
 
 /**
  * C13's arm for a run: `?order=` where previews are allowed (never production), else
- * what the draft says. Without a window (server render) there is no session, so control.
+ * what the draft says, and the new order for a fresh run since the test ended. Without a
+ * window (server render) there is no draft, so a fresh run's order.
  */
 function orderArmFor(draft: Draft): QuestionOrderArm {
-  if (typeof window === "undefined") return "control";
+  if (typeof window === "undefined") return QUESTION_ORDER_WINNER;
   const preview = resolveQuestionOrderOverride(
     new URLSearchParams(window.location.search).get("order")
   );
-  return preview ?? resolveDraftQuestionOrderArm(getSessionId(), draft);
+  return preview ?? resolveDraftQuestionOrderArm(draft);
 }
 
 function loadState(): SurveyState {

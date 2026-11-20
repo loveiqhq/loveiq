@@ -5,6 +5,7 @@ import { isHidden } from "../features/survey/questionFlags";
 import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionOrder";
 import { applyEmailQuestionArm } from "../features/survey/anonymousEmail";
 import { EMAIL_QUESTION_WINNER } from "../shared/experiments/emailQuestionArm";
+import { QUESTION_ORDER_WINNER } from "../shared/experiments/questionOrderArm";
 import { instantScroll } from "./fixtures/instant-scroll";
 import { pinSurveySession } from "./surveyArm";
 import { openFirstCategory } from "./surveyGroups";
@@ -35,12 +36,11 @@ import { openFirstCategory } from "./surveyGroups";
  */
 
 /**
- * Control. The tail this spec is about is identical in both C13 arms — the experiment
- * only reorders the opening — but the arm is derived from a freshly minted session id, so
- * leaving it unpinned would give the variant OPENING in half the runs and desynchronise
- * the index walk long before it reaches the last question.
+ * The new order. The tail this spec is about is identical in both C13 orders — the test
+ * only reorders the opening — and every fresh run is asked the new one since the test
+ * ended (20 Nov 2026), whatever its session id drew, so the index walk follows it.
  */
-const ARM = "control" as const;
+const ARM = QUESTION_ORDER_WINNER;
 
 // The email question as every free run is asked it since its test ended (4 Nov 2026).
 const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM)

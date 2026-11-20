@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 
+import { QUESTION_ORDER_WINNER } from "../shared/experiments/questionOrderArm";
 import { pinSurveySession } from "./surveyArm";
 
 test.describe("Survey — Intro screen", () => {
@@ -296,11 +297,10 @@ test.describe("Survey — Consent screen", () => {
 
 test.describe("Survey — Full happy path", () => {
   test("intro → slides 1-4 → consent → agree → questions", async ({ page }) => {
-    // Pin the C13 arm. The two questions this test asserts happen to open both arms, so
-    // it passes either way TODAY — but that is a coincidence of the current variant, not
-    // a property, and an unpinned arm turns any future change to C13's opening into a
-    // 50%-flaky failure in a spec that has nothing to do with the experiment.
-    await pinSurveySession(page, "control");
+    // Pin the session. The two questions this test asserts open both C13 orders, and every
+    // fresh run is asked the new one since the test ended (20 Nov 2026), whatever its id drew;
+    // the pin keeps the option shuffle and the EUR 1.99 page's half fixed.
+    await pinSurveySession(page, QUESTION_ORDER_WINNER);
     page.on("pageerror", (err) => {
       if (err.message.toLowerCase().includes("cookieyes")) return;
     });

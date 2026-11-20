@@ -4,6 +4,8 @@
  * production for 21 Sep – 20 Oct 2026 and gave the page's own figures for "Last 30 days"
  * (the intro's skip, back and exit columns, recorded from 17 Oct 2026, for 17 – 20 Oct).
  */
+import { QUESTION_ORDER_TEST_END } from "@shared/experiments/questionOrderArm";
+
 import type { FieldDef, FieldRegistry, FieldTable } from "./types";
 
 /** The two orders the questions are asked in (the survey code's; stored nowhere else). */
@@ -12,11 +14,20 @@ const ORDERS = `orders (arm, qs) AS (VALUES
   ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015'])
 )`;
 
+/** The day the opening-order test ended and everyone got the new order, as the page writes it. */
+const ORDER_TEST_END_DAY = new Date(QUESTION_ORDER_TEST_END).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Europe/Berlin",
+});
+
 /** Shared by the queries below. */
 const FUNNEL = `-- The question funnel, in one question order: per question, the survey runs (sessions) that
 -- reached it, and those whose last step it was and who never finished (exits). 'control' is
--- the survey's own order (every run before the opening-order test, and the test's control
--- half); 'variant' is the test's order (C13). The range's Berlin days are written in.
+-- the survey's old order (every run before the opening-order test, and the test's control
+-- half); 'variant' is the test's order (C13), which every run begun since the test's end
+-- (${QUESTION_ORDER_TEST_END}) is asked. The range's Berlin days are written in.
 WITH b AS (
   SELECT (:from::date::timestamp AT TIME ZONE 'Europe/Berlin') AS since_ts,
          ((:to::date + 1)::timestamp AT TIME ZONE 'Europe/Berlin') AS until_ts
@@ -96,7 +107,8 @@ runs AS (
 -- Which order each run was asked in. Runs begun before the test (6 Oct 2026, 18:40 UTC) were
 -- asked the survey's. A later run: the order its first six questions (by their place on its
 -- screen) follow with the fewest questions passed over; a tie (it left within the shared
--- opening) goes to the order its session was dealt (c13_arm).
+-- opening) goes to the order its session was dealt (c13_arm) while the test ran, and to the
+-- new order once it had ended.
 firsts AS (
   SELECT f.session_id, (array_agg(f.q_id ORDER BY f.first_idx, f.first_at, f.q_id))[1:6] AS qs
     FROM reached f
@@ -117,11 +129,14 @@ fit AS (
 ),
 arms AS (
   SELECT r.session_id, r.started_at, r.last_at, r.left_at,
-         CASE WHEN fr.session_id IS NULL THEN 'control'
+         CASE WHEN fr.session_id IS NULL
+                   THEN CASE WHEN r.started_at >= TIMESTAMPTZ '${QUESTION_ORDER_TEST_END}'
+                             THEN 'variant' ELSE 'control' END
               WHEN v.passed_over IS NULL AND c.passed_over IS NOT NULL THEN 'control'
               WHEN c.passed_over IS NULL AND v.passed_over IS NOT NULL THEN 'variant'
               WHEN c.passed_over < v.passed_over THEN 'control'
               WHEN c.passed_over > v.passed_over THEN 'variant'
+              WHEN r.started_at >= TIMESTAMPTZ '${QUESTION_ORDER_TEST_END}' THEN 'variant'
               ELSE c13_arm(r.session_id::text) END AS arm
     FROM runs r
     LEFT JOIN firsts fr ON fr.session_id = r.session_id
@@ -966,13 +981,12 @@ export const fields: FieldRegistry = {
     related: ["survey.reached", "survey.exits", "survey.ofPrev", "survey.order"],
   },
   "survey.order": {
-    label: "Survey order and test order (C13)",
-    what: "Since 6 Oct 2026 half of the new survey runs are asked five later questions first (the opening-order test, C13). Each order has its own funnel; the number beside it is how many runs were asked that way.",
+    label: "Old order and new order (C13)",
+    what: `From 6 Oct 2026 half of the new survey runs were asked five later questions first (the opening-order test, C13). The new order won, and every run begun since ${ORDER_TEST_END_DAY} is asked it. Each order has its own funnel; the number beside it is how many runs were asked that way.`,
     stat: "Count",
     per: "per survey run",
     formula: { num: "Survey runs begun in the range, by the order they were asked in" },
-    caveat:
-      "A run's order is read from its first six questions: the order they follow with the fewest questions passed over. A run that left within the opening both orders share goes to the half its session was dealt. Runs begun before the test (6 Oct 2026, evening) were all asked the survey's order. The team's runs are left out.",
+    caveat: `A run's order is read from its first six questions: the order they follow with the fewest questions passed over. A run that left within the opening both orders share goes to the half its session was dealt during the test, and to the new order from ${ORDER_TEST_END_DAY}. Runs begun before the test (6 Oct 2026, evening) were all asked the old order, and a draft begun in it keeps it when resumed. The team's runs are left out.`,
     tables: FUNNEL_TABLES,
     query: { lang: "SQL", text: ORDER_RUNS },
     related: ["survey.funnel", "survey.firstStep"],
