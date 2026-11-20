@@ -49,9 +49,10 @@ const SAVED_COPY: Record<Choice | "resume", { title: string; line: string }> = {
   resume: { title: "Nudges are back on.", line: "Mira will write again at your chosen time." },
 };
 
-export default function MiraNudges() {
+/** `invalid`: the page found the link was not one we signed, so nothing is asked of the API. */
+export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
   const token = useSearchParams().get("t") ?? "";
-  const [screen, setScreen] = useState<Screen>("loading");
+  const [screen, setScreen] = useState<Screen>(invalid ? "invalid" : "loading");
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [choice, setChoice] = useState<Choice>("twice_weekly");
   const [kept, setKept] = useState<string[]>(nudgeConfig.types.map((t) => t.id));
@@ -68,6 +69,7 @@ export default function MiraNudges() {
   }, [screen]);
 
   useEffect(() => {
+    if (invalid) return;
     void (async () => {
       const res = await miraApi<{ prefs: Prefs; types: string[] | null }>(
         `/api/mira/nudges/preferences?t=${encodeURIComponent(token)}`
@@ -77,7 +79,7 @@ export default function MiraNudges() {
       if (res.data.types?.length) setKept(res.data.types);
       setScreen(res.data.prefs.stopped ? "stopped" : "choose");
     })();
-  }, [token]);
+  }, [token, invalid]);
 
   async function post(body: Record<string, unknown>): Promise<boolean> {
     setBusy(true);
