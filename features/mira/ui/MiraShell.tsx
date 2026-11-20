@@ -57,7 +57,13 @@ export function LegalLinks({ className = "" }: { className?: string }) {
     >
       <span className="inline-flex min-h-[32px] items-center">Applied Psychometrics</span>
       {LEGAL_LINKS.map(([href, label]) => (
-        <Link key={href} href={href} className="inline-flex min-h-[32px] items-center underline">
+        // No prefetch: rarely followed, and Safari reports a cancelled prefetch as an error.
+        <Link
+          key={href}
+          href={href}
+          prefetch={false}
+          className="inline-flex min-h-[32px] items-center underline"
+        >
           {label}
         </Link>
       ))}
