@@ -8,6 +8,9 @@
  *       consent), so we can see what went wrong.
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach
+ *   { type: "nps", score }        "How likely are you to recommend Mira to a friend?" 0 to 10,
+ *       asked after the 3rd conversation and then monthly (Marcus's MVP success board); null is
+ *       "Not now", so the response rate is known too
  *   { type: "track", name }        chat opened, consent given, gate shown (on "New chat", which
  *       the server never sees); only these names, so the server's own KPI events can't be sent
  *
@@ -43,6 +46,7 @@ const schema = z.discriminatedUnion("type", [
     mayEmail: z.boolean(),
   }),
   z.object({ type: z.literal("notify"), coach: z.string().max(60) }),
+  z.object({ type: z.literal("nps"), score: z.number().int().min(0).max(10).nullable() }),
   z.object({
     type: z.literal("track"),
     name: z.enum(["chat_opened", "consent_given", "gate_shown"]),
@@ -108,6 +112,9 @@ export async function POST(request: Request) {
       break;
     case "notify":
       logMiraEvent("notify_me", who, { coach: body.coach });
+      break;
+    case "nps":
+      logMiraEvent("nps", who, { score: body.score });
       break;
     case "track":
       logMiraEvent(body.name, who);

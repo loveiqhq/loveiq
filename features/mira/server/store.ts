@@ -211,7 +211,8 @@ export type MiraEventName =
   | "nudge_clicked"
   | "nudge_prefs_saved"
   | "nudge_stopped"
-  | "nudge_resumed";
+  | "nudge_resumed"
+  | "nps";
 
 /** The KPI log. Written after the response, so it never slows a reply; a lost row is logged. */
 export function logMiraEvent(

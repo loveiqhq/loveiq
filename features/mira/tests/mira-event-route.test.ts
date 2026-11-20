@@ -89,6 +89,18 @@ describe("POST /api/mira/event", () => {
     expect(keys).toEqual([`a:${id}`, `u:${id}`]);
   });
 
+  it("records an NPS answer or a 'Not now', and nothing outside 0 to 10", async () => {
+    await post({ type: "nps", score: 9 });
+    await post({ type: "nps", score: null });
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([n, , p]) => [n, p])).toEqual([
+      ["nps", { score: 9 }],
+      ["nps", { score: null }],
+    ]);
+    for (const score of [11, -1, 4.5, "9"]) {
+      expect((await post({ type: "nps", score })).status).toBe(400);
+    }
+  });
+
   it("takes only the moments the browser sees, never the server's own KPI events", async () => {
     for (const name of ["chat_started", "message_sent", "crisis_shown", "signup_completed"]) {
       expect((await post({ type: "track", name })).status).toBe(400);
