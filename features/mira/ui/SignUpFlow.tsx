@@ -127,6 +127,7 @@ export default function SignUpFlow({
   async function verify() {
     setBusy(true);
     setError(null);
+    setNotice(null);
     const carry = carriedChat();
     const res = await miraApi<{ needsProfile?: boolean; chatId?: string | null }>(
       "/api/mira/auth",
