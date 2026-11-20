@@ -17,6 +17,13 @@
 export const ANON_FREE_CONVERSATIONS = 10;
 export const DAILY_MESSAGES = 50;
 
+/**
+ * Every cap above is per browser, network or account; this one is everyone's together, so a busy
+ * or abusive day can't spend the month's API budget ($500, about $16 a day; a message costs
+ * roughly $0.01 to $0.06). It counts model calls only: a crisis message is never counted or stopped.
+ */
+export const GLOBAL_DAILY_MESSAGES = 800;
+
 /** One message, as typed. Longer is refused, not cut, so nothing is silently lost. */
 export const MAX_MESSAGE_CHARS = 2000;
 
@@ -30,6 +37,14 @@ export const DEFAULT_MODEL = "claude-sonnet-5-5";
 export const DEFAULT_FALLBACK_MODEL = "claude-haiku-5-5";
 export const MODEL_EFFORT = "low";
 export const MODEL_MAX_TOKENS = 2000;
+
+/**
+ * The model's time, inside the chat route's 75 s (its maxDuration): the main model gets at most
+ * 30 s, the fallback whatever is left of 50 s, so a hung main model still leaves the fallback 20 s
+ * and the route time to store and answer. A low-effort reply of at most 250 words takes seconds.
+ */
+export const MODEL_FIRST_TRY_MS = 30_000;
+export const MODEL_BUDGET_MS = 50_000;
 
 /** The cookie holding a signed-in Mira session; separate from the admin and Jarvis sign-in. */
 export const MIRA_AUTH_COOKIE = "mira-auth";
