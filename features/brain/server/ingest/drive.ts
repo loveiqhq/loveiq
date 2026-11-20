@@ -209,6 +209,29 @@ const SKIP_FILE_IDS = new Set([
   "1XVHkrtsCPQTQap0rujC7n02PElqqqE5s", // sibling project, 5 chunks
   "1aBr687qwORqJrHmju18eNLAwo-R6tl6Y", // sibling project, 7 chunks
   "1wTYYD4it-lnlVJ0pUOMWvOu6hNHe7wh5", // sibling project, 5 chunks
+
+  //
+  // THE MIRA LIBRARY'S BOOKS FOLDER, 15 files (about 2,500 parts), indexed 12-13 Nov 2026.
+  // Sanjin's library README asks to keep this folder out of every tool: they are
+  // shadow-library copies, held only until bought copies replace them (the folder is
+  // named "books (replace with bought copies)"). Ids, as above; the sweep removes what was
+  // already indexed.
+  //
+  "1cucCLZCAUX97Wcq8J907H8C0QiaszvS1", // K11_Thompson-1999_Exacting-Beauty.pdf
+  "1qz96N-jAkmR_19eyNhI1ZHi0ST9Qc7Ds", // K13_Gilbert-2010_Compassion-Focused-Therapy.pdf
+  "1Gd51GCdXFwQ8KOEgUHZuozLw7hxUy23d", // K14_Hall-Binik-2014_Principles-Sex-Therapy-5th-ed.pdf
+  "1J3AI0fdIzPWGiLfltwKooOmwfw-yOmLw", // K15_Sandoz-DuFrene-2013_Living-with-Your-Body.pdf
+  "1mAmFFVu7crQGhjcK3rYJecTGGqk3kT0B", // K16_Pearson-2010_ACT-for-Body-Image.pdf
+  "12v4CkBH91w0o5fes25vJgj37a0H1O1Q4", // K17_Germer-Neff-2019_Teaching-MSC.pdf
+  "1_WHgD03nVHJXkZ3xLfzE5PtIaW3xmv87", // K07_Tylka-Piran-2019_Handbook-Positive-Body-Image.pdf
+  "1O0jBJU_4V6qShsk1Uyyuf0PbvXAr7Tzz", // K05_Heiman-LoPiccolo_Becoming-Orgasmic.pdf
+  "1YCZeR5BlgOwqIm-mX1hLKNW6grFvS3Hi", // K10_Cash-Smolak-2011.pdf
+  "11NfEI0gyqzHdjZbLol5qmYSVVaHJNbYl", // K09_Neff-Germer-2018.pdf
+  "1QiqRvuhXerNgr0N2XH5BCFuYCD7MULye", // C27_Neff-2011.pdf
+  "1Do3INehNbQSMuIB7ZMtKbS9Y4PSTXrgn", // C26_Cash-2008.pdf
+  "1EQMdi9hBBoKS0KoA7HhDRNIdR1fyTdxk", // C25_Weiner-2017.pdf
+  "1tCIZPmj6a0NcmJeoYEey1s7Xtye4YoGe", // C24_Brotto-2018.pdf
+  "1KpeqFkAzRsESlensfYI5nBJ5D2rKyHPm", // C24_Brotto-Workbook.pdf
 ]);
 /* eslint-enable no-secrets/no-secrets */
 
