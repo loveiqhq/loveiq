@@ -11,7 +11,7 @@ Use this file as the canonical source for pinned framework, runtime, and test-to
 | Key           | Value    | Source of truth            | Notes                                     |
 | ------------- | -------- | -------------------------- | ----------------------------------------- |
 | `node`        | `22`     | `.github/workflows/ci.yml` | CI baseline and recommended local runtime |
-| `next`        | `16.4.2` | `package.json`             | App Router runtime                        |
+| `next`        | `16.4.5` | `package.json`             | App Router runtime                        |
 | `react`       | `19.3.1` | `package.json`             | UI runtime                                |
 | `react-dom`   | `19.3.1` | `package.json`             | UI runtime                                |
 | `typescript`  | `6.0.3`  | `package.json`             | Type-checking baseline                    |
