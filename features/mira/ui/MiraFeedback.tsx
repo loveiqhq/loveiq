@@ -23,11 +23,15 @@ export default function MiraFeedback() {
   const [picked, setPicked] = useState<string[]>([]);
   const [wish, setWish] = useState("");
   const [other, setOther] = useState("");
-  const [mayEmail, setMayEmail] = useState(true);
+  // Unticked until the person says yes (GDPR: no pre-ticked consent).
+  const [mayEmail, setMayEmail] = useState(false);
   const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
+    if (busy) return;
+    setBusy(true);
     setError(null);
     const r = await miraApi("/api/mira/event", {
       body: {
@@ -38,8 +42,9 @@ export default function MiraFeedback() {
         mayEmail,
       },
     });
-    if (r.ok) setSent(true);
-    else setError(r.data.error ?? "We couldn't send that. Please try again.");
+    if (r.ok) return setSent(true);
+    setBusy(false);
+    setError(r.data.error ?? "We couldn't send that. Please try again.");
   }
 
   return (
@@ -51,11 +56,15 @@ export default function MiraFeedback() {
       <p className="mt-1 text-[15px] text-ap-body">
         Two minutes, all optional. Every answer is read by our team.
       </p>
-      {sent ? (
-        <p className="mt-8 text-[16px] text-ap-good-ink">
-          Thank you. Your feedback is with the team.
-        </p>
-      ) : (
+      {/* Always in the page, so screen readers announce the thank-you when it appears. */}
+      <div role="status">
+        {sent ? (
+          <p className="mt-8 text-[16px] text-ap-good-ink">
+            Thank you. Your feedback is with the team.
+          </p>
+        ) : null}
+      </div>
+      {sent ? null : (
         <form
           className="mt-6 flex flex-col gap-6"
           onSubmit={(e) => {
@@ -115,7 +124,9 @@ export default function MiraFeedback() {
             You may email me with a follow-up question about my feedback
           </label>
           <div className="flex items-center gap-4">
-            <GradientButton type="submit">Send feedback</GradientButton>
+            <GradientButton type="submit" disabled={busy}>
+              {busy ? "Sending…" : "Send feedback"}
+            </GradientButton>
             <span className="text-[13px] text-ap-muted">
               Please don&apos;t include anything you wouldn&apos;t want our team to read.
             </span>
