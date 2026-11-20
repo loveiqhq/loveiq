@@ -6,7 +6,7 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { IntakeAnswers } from "./IntakeAnswers";
-import { SupportPanel } from "./SupportPanel";
+import { SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, GradientButton, MiraFrame } from "./MiraShell";
 import {
   local,
@@ -27,12 +27,7 @@ import {
 
 type Message = LocalTurn & { messageId?: number | null };
 type BodyDue = "baseline" | "week4" | null;
-type CrisisCountry = {
-  code: string;
-  name: string;
-  lines: { name: string; phone?: string; url?: string; hours?: string }[];
-  emergency?: string;
-};
+type CrisisCountry = SupportCountry;
 type ChatSummary = { id: string; title: string; updated_at: string };
 
 const CONSENT_VERSION = "mira-2026-11-18";
