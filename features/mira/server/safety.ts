@@ -20,8 +20,9 @@ const CRISIS_PATTERNS: RegExp[] = [
   /\bkill(ing)? my ?self\b/,
   /\bsuicid/, // suicide, suicidal; also Spanish suicidarme, suicidio and French me suicider
   /\bend(ing)? (my|my own) life\b/,
-  /\bend(ing)? it all\b/,
-  /\btak(e|ing) my (own )?life\b(?! back)/,
+  /\bend(ing)? it all\b(?! with\b)/, // not a break-up: "end it all with him"
+  // Not "take my life back" or "take my life in a new direction".
+  /\btak(e|ing) my (own )?life\b(?! (back|in|into|forward|over|to)\b)/,
   /\b(want(ed)? to|wanna) die\b(?! of\b)/, // not "I wanted to die of embarrassment"
   /\b(don'?t|do not) want to (live|be alive)\b/,
   // Only where the sentence ends there: not "I don't want to wake up next to him like this".

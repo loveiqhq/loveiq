@@ -59,6 +59,8 @@ describe("isCrisisMessage", () => {
     "I want to disappear under the covers when he looks at me",
     "I don't want to wake up next to him without makeup",
     "I want to take my life back",
+    "I need to take my life in a new direction",
+    "I want to end it all with him and move on",
     "I walked 10 kms today",
   ])("does not stop for %j", (text) => {
     expect(isCrisisMessage(text)).toBe(false);
