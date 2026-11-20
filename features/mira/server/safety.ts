@@ -108,9 +108,12 @@ function markerOf(inside: string): [kind: string, value: string | null] {
   return [kind.toUpperCase(), value ? value.toLowerCase() : null];
 }
 
-function sourceLabel(card: EvidenceCard): string {
+/** "Fredrickson BL, Roberts T-A" → "Fredrickson et al."; "van den Brink F" → "van den Brink". */
+export function sourceLabel(card: EvidenceCard): string {
   const first = card.authors.split(",")[0]?.trim() || card.title;
-  const surname = first.split(/\s+/)[0] ?? first;
+  const words = first.split(/\s+/);
+  // The last word is the initials ("BL", "T-A"), unless the name is a single word.
+  const surname = words.length > 1 ? words.slice(0, -1).join(" ") : first;
   const etAl = card.authors.includes(",") ? " et al." : "";
   return `${surname}${etAl} (${card.year})`;
 }

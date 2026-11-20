@@ -7,7 +7,12 @@ import {
   styleInstructions,
   topicInstruction,
 } from "@features/mira/server/prompt";
-import { CRISIS_TOKEN, isCrisisMessage, parseReply } from "@features/mira/server/safety";
+import {
+  CRISIS_TOKEN,
+  isCrisisMessage,
+  parseReply,
+  sourceLabel,
+} from "@features/mira/server/safety";
 
 describe("isCrisisMessage", () => {
   it.each([
@@ -129,6 +134,13 @@ describe("parseReply", () => {
     const out = parseReply(`Please reach out now.\n[[ASK:support]]\n[[REFER]]\n${CRISIS_TOKEN}`);
     expect(out).toMatchObject({ crisis: true, ask: null, refer: false });
     expect(out.text).toBe("Please reach out now.");
+  });
+
+  it("labels a source by its first author's whole surname", () => {
+    const card = (id: string) => EVIDENCE_CARDS.find((c) => c.id === id)!;
+    expect(sourceLabel(card("C01"))).toBe("Fredrickson et al. (1997)");
+    expect(sourceLabel(card("C08"))).toBe("van den Brink et al. (2018)");
+    for (const c of EVIDENCE_CARDS) expect(sourceLabel(c)).not.toMatch(/^(van|de|von) et al/);
   });
 
   it("knows every intake question and topic id the instructions name", () => {

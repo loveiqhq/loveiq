@@ -10,7 +10,7 @@
 - API: `app/api/mira/chat`, `auth`, `me`, `chats/[id]`, `event` (see `docs/api.md`).
 - Tables: `mira_user`, `mira_chat`, `mira_message`, `mira_event` (`supabase/migrations/20261118120000_mira_mvp.sql`).
 
-**What Mira reads (`content/`):** `system-prompt.ts` (Sanjin's rules, voice, safety rails, compiled 18 Nov), `mira-config.json` (opening message, chips, intake questions, coaching-style scales, the fixed crisis and refusal messages), `evidence-cards.json` (the only research she may use), `crisis-lines.json` (Sanjin's draft for 9 countries). The prompt and the cards are cached by the model provider; the person's own context (style, name, gender, country, LoveIQ result) is added per message and never logged.
+**What Mira reads (`content/`):** `system-prompt.ts` (Sanjin's rules, voice, safety rails, compiled 18 Nov), `mira-config.json` (opening message, chips, intake questions, coaching-style scales, the fixed crisis and refusal messages), `evidence-cards.json` (the only research she may use), `crisis-lines.json` (Sanjin's 9 countries, every line checked on its operator's site on 20 Nov 2026; the support panel shows who each line is for, its hours, and text-only lines as text links with their keyword). The prompt and the cards are cached by the model provider; the person's own context (style, name, gender, country, LoveIQ result) is added per message and never logged.
 
 **Calls taken for the beta (Eman delegated them, 18 Nov 2026):**
 
@@ -35,8 +35,8 @@
 - `MIRA_LLM_KEY` is set on both Vercel projects since 19 Nov (Claude Console workspace "Mira", paid by the Team plan's monthly API credits, workspace cap $500 a month). On loveiq-staging it is a Preview variable for the `staging` branch, because staging.loveiq.org is a preview deployment.
 - Nudges: switch on with `MIRA_NUDGES_ENABLED=true` once the key is in; check the first day's sends in AP › Mira (beta) › Nudge emails. Legal check: nudges are on by default for new accounts (a service email with an easy stop in every email), told on the About you step.
 - Weekly session invites and reminders: not built; Mira asks for a time but promises no invite.
-- Sanjin checks the evidence cards; the 4 core books (C24 to C27) and C15 are not in; a lawful-copy mark per source.
-- Crisis lines: team review of his 9 countries and of the Find A Helpline fallback.
+- Evidence cards: checked on 20 Nov 2026 against each source's public record and abstract (the open papers in full): 15 corrected (among them C10 High → Medium, C02 Measure → Low, C17's "two thirds", which no public source backs, removed), C01, C06 and C29 rewritten from their abstracts, C15 added (Alavi-Arjas et al. 2023). The 4 core books (C24 to C27) stay out until bought.
+- Crisis lines: re-check by 20 Feb 2027 (every 3 months).
 - Legal: Eman checked the consent wording, the privacy notice and the legal scope, and approved them on 20 Nov 2026. The main privacy policy names Mira since 20 Nov 2026 (sections 3.5, 4, 6, 7.3, 7.9, 7.10, 9), and Mira's notice covers the body check, the labels and the nudges' opens.
 
 **Does NOT belong:** the LoveIQ survey or report (Mira only reads the result, matched on the verified email), Jarvis (company brain).
