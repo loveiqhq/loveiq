@@ -162,13 +162,22 @@ describe("askModel", () => {
           "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
         ),
     ],
+    [
+      "the monthly cap, whatever its wording",
+      () =>
+        error(429, "rate_limit_error", "Usage paused.", {
+          error_code: "enforced_spend_limit_reached",
+        }),
+    ],
     ["a billing problem", () => error(402, "billing_error", "There's an issue with your billing.")],
   ])("treats %s as the budget used up: no fallback (same workspace), one alert", async (_, res) => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(res());
     expect(await ask()).toEqual({ ok: false, reason: "budget_exhausted" });
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+    // The alert quotes Anthropic, whose message says when access resumes.
+    const said = ((await res().json()) as { error: { message: string } }).error.message;
     expect(alertBudgetUsedUp).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(alertBudgetUsedUp).mock.calls[0]![0]).toMatch(/limit|credit|billing/i);
+    expect(alertBudgetUsedUp).toHaveBeenCalledWith(said);
   });
 
   it("still tries Haiku on a plain rate limit, without alerting", async () => {

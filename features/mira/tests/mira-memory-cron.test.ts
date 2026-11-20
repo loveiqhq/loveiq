@@ -98,6 +98,18 @@ describe("mira-memory: the KPI log keeps an event 12 months", () => {
     expect(deletes().some((p) => p.startsWith("/rest/v1/mira_event"))).toBe(false);
   });
 
+  it("stops when a batch deletes nothing, instead of asking again and again", async () => {
+    events = [{ id: 1, created_at: ago(400 * DAY) }];
+    const base = vi.mocked(supabaseFetch).getMockImplementation()!;
+    vi.mocked(supabaseFetch).mockImplementation(async (path, init) =>
+      path.startsWith("/rest/v1/mira_event?id=lt.")
+        ? json(null, { "content-range": "*/0" }) // the database disagrees: nothing deleted
+        : base(path, init)
+    );
+    expect(await (await run()).json()).toMatchObject({ eventsDeleted: 0, stoppedEarly: false });
+    expect(deletes().filter((p) => p.startsWith("/rest/v1/mira_event"))).toHaveLength(1);
+  });
+
   it("starts nothing new after its time budget, and records the run as an error", async () => {
     events = Array.from({ length: 3 }, (_, i) => ({
       id: 1 + i * 5_000,
