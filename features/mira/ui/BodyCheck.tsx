@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { miraApi } from "./api";
+import { Modal } from "./SupportPanel";
 
 const { items, answers: LABELS, directions } = miraConfig.bodyCheck;
 
 /**
- * The body check card in the chat (Marcus's MVP success board, "Therapeutic success"): the
- * Body Appreciation Scale-2, one statement at a time, at the start and again after four weeks.
+ * The body check in the chat (Marcus's MVP success board, "Therapeutic success"): offered as a
+ * card under Mira's reply, then the Body Appreciation Scale-2 one statement at a time in a dialog
+ * (on a small phone the chat's message area is too short to show a statement and its answers),
+ * at the start and again after four weeks.
  * Only with consent: it is offered, and nothing is kept unless the person starts and finishes
  * it. The statements, the answers and the directions are the scale's own, word for word; its
  * authors ask that they are not changed. No score is shown: it measures, it doesn't judge.
@@ -107,46 +110,49 @@ export function BodyCheck({
 
   const index = step === "saving" ? items.length - 1 : step;
   return (
-    <div className={card}>
+    <Modal label="Body check" onClose={() => onClose(false)}>
       <fieldset disabled={step === "saving"}>
         <legend className="text-[12px] font-semibold uppercase tracking-wide text-ap-muted">
-          Statement {index + 1} of {items.length}
+          Body check · statement {index + 1} of {items.length}
         </legend>
-        <p className="mt-1 text-[12px] text-ap-muted">{directions}</p>
+        <p className="mt-1 text-[13px] text-ap-muted">{directions}</p>
         <p
           ref={statementRef}
+          data-autofocus
           tabIndex={-1}
-          className="mt-3 text-[16px] font-semibold leading-snug outline-none"
+          className="mt-4 font-serif text-[22px] font-medium leading-snug outline-none"
         >
           {items[index]}
         </p>
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-5">
           {LABELS.map((label, i) => (
             <button
               key={label}
               type="button"
               aria-pressed={picked[index] === i + 1}
               onClick={() => answer(i + 1)}
-              className={`min-h-[44px] rounded-full border px-4 text-[14px] hover:border-ap-purple ${picked[index] === i + 1 ? "border-ap-purple bg-ap-lilac font-semibold" : "border-ap-line bg-white"}`}
+              className={`min-h-[48px] rounded-full border px-4 text-[15px] hover:border-ap-purple ${picked[index] === i + 1 ? "border-ap-purple bg-ap-lilac font-semibold" : "border-ap-line bg-white"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="mt-2 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap justify-between gap-3">
           {index > 0 ? (
             <button
               type="button"
               onClick={() => setStep(index - 1)}
-              className="min-h-[44px] text-[13px] text-ap-plum underline"
+              className="min-h-[44px] text-[14px] text-ap-plum underline"
             >
               Back
             </button>
-          ) : null}
+          ) : (
+            <span />
+          )}
           <button
             type="button"
             onClick={() => onClose(false)}
-            className="min-h-[44px] text-[13px] text-ap-muted underline"
+            className="min-h-[44px] text-[14px] text-ap-muted underline"
           >
             Stop for now
           </button>
@@ -165,6 +171,6 @@ export function BodyCheck({
           </p>
         ) : null}
       </fieldset>
-    </div>
+    </Modal>
   );
 }
