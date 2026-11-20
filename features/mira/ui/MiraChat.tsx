@@ -280,6 +280,7 @@ export default function MiraChat({
       setMinor(true);
       setConsented(false);
       setTick(false);
+      setShare(false);
       setChats([]);
       return;
     }
@@ -379,6 +380,8 @@ export default function MiraChat({
     !nps &&
     last?.role === "assistant" &&
     !isInvitation(last) &&
+    !last.ask &&
+    !minor &&
     !crisisIn(messages);
 
   useEffect(() => {
@@ -408,11 +411,11 @@ export default function MiraChat({
       }
     >
       <section className="mb-4 max-w-[720px] sm:mb-6 sm:mt-2">
-        <h1 className="font-serif text-[26px] font-medium leading-[1.15] sm:text-[44px]">
+        <h1 className="font-serif text-[26px] font-medium leading-[1.15] sm:text-[44px] [@media(max-height:760px)]:text-[22px]">
           Talk to <span className="text-[#d05976]">Mira</span> about your body confidence
         </h1>
         {/* On very short screens the message box comes first; the composer repeats "not a therapist". */}
-        <p className="mt-2 text-[14px] leading-relaxed text-ap-body sm:mt-3 sm:text-[16px] [@media(max-height:620px)]:hidden">
+        <p className="mt-2 text-[14px] leading-relaxed text-ap-body sm:mt-3 sm:text-[16px] [@media(max-height:760px)]:hidden">
           Her answers draw on research about body confidence. Mira is an AI coach, not a therapist.
         </p>
       </section>
@@ -760,7 +763,7 @@ export default function MiraChat({
             ) : (
               <>
                 {ready && !consented ? (
-                  <div className="mb-3 flex flex-col gap-2 text-[13px] leading-snug text-ap-body">
+                  <div className="mb-3 flex flex-col gap-2 text-[13px] leading-snug text-ap-body [@media(max-height:760px)]:mb-2 [@media(max-height:760px)]:gap-1 [@media(max-height:760px)]:text-[12px]">
                     <label className="flex items-start gap-2">
                       <input
                         type="checkbox"

@@ -187,6 +187,7 @@ describe("Chat", () => {
     expect(localStorage.getItem("mira.chat.v1")).toBeNull();
     expect(localStorage.getItem("mira.consent.v1")).toBeNull();
     for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(screen.queryByRole("link", { name: "Keep this chat" })).toBeNull();
   });
 
   it("doesn't send on the Enter that ends an input-method composition", async () => {

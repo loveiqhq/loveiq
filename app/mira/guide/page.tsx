@@ -9,12 +9,16 @@ import {
 } from "@features/mira/content/guide";
 import { cardById, type EvidenceCard } from "@features/mira/server/cards";
 import { MiraFrame } from "@features/mira/ui/MiraShell";
+import { miraLinkPreview } from "@features/mira/link-preview";
+
+const GUIDE_TITLE = "Body confidence guide | LoveIQ";
+const GUIDE_DESCRIPTION =
+  "How to stop feeling self-conscious during sex: why it happens, and seven short practices to get out of your head and back into what you feel.";
 
 export const metadata: Metadata = {
-  title: "Body confidence guide | LoveIQ",
-  description:
-    "How to stop feeling self-conscious during sex: why it happens, and seven short practices to get out of your head and back into what you feel.",
+  title: GUIDE_TITLE,
   robots: { index: false, follow: false },
+  ...miraLinkPreview("/mira/guide", GUIDE_TITLE, GUIDE_DESCRIPTION),
 };
 
 /**

@@ -14,20 +14,24 @@ export const MIRA_IMAGE_ALT = "Mira, your AI coach for body confidence in sex, b
  * the image too: app/mira/opengraph-image.tsx, served at /mira/opengraph-image. Twitter takes the
  * image from openGraph. The pages stay noindex (their own `robots`).
  */
-export function miraLinkPreview(path: `/mira${string}`): Metadata {
+export function miraLinkPreview(
+  path: `/mira${string}`,
+  title: string = MIRA_TITLE,
+  description: string = MIRA_DESCRIPTION
+): Metadata {
   const url = `${siteUrl}${path}`;
   return {
-    description: MIRA_DESCRIPTION,
+    description,
     alternates: { canonical: url },
     openGraph: {
-      title: MIRA_TITLE,
-      description: MIRA_DESCRIPTION,
+      title,
+      description,
       url,
       siteName: "LoveIQ",
       type: "website",
       locale: "en_US",
       images: [{ url: "/mira/opengraph-image", width: 1200, height: 630, alt: MIRA_IMAGE_ALT }],
     },
-    twitter: { card: "summary_large_image", title: MIRA_TITLE, description: MIRA_DESCRIPTION },
+    twitter: { card: "summary_large_image", title, description },
   };
 }

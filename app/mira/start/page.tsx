@@ -9,7 +9,7 @@ import SignUpFlow from "@features/mira/ui/SignUpFlow";
 export const metadata: Metadata = {
   title: "Create your free account | LoveIQ",
   robots: { index: false, follow: false },
-  ...miraLinkPreview("/mira/start"),
+  ...miraLinkPreview("/mira/start", "Create your free Mira account | LoveIQ"),
 };
 
 export const dynamic = "force-dynamic";

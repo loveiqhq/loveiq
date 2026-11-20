@@ -389,7 +389,9 @@ export async function POST(request: Request) {
   }
 
   // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
-  const invitation = isFirst && !crisis && !refused && !minor ? miraConfig.intakeInvitation : null;
+  // Not when her first reply already asked an intake question: that question's buttons come first.
+  const invitation =
+    isFirst && !crisis && !refused && !minor && !ask ? miraConfig.intakeInvitation : null;
 
   let messageId: number | null = null;
   if (minor) {
