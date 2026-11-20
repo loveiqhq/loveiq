@@ -2,8 +2,41 @@
 
 import { useEffect } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { captureUtmFromUrl, getStoredUtm } from "@shared/url/utm";
+import { SOURCE_COOKIE, SOURCE_HEADER } from "../server/config";
 
 export type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } };
+
+/**
+ * Where this browser's visit came from, from the site's campaign tracker (shared/url/utm.ts):
+ * the link's utm_source, utm_medium and utm_campaign or, untagged, the referring site; `{}` for
+ * neither. URI-encoded JSON, so any character fits a header or a cookie. Mira's KPI events
+ * record it (server/attribution.ts).
+ */
+export function miraSource(): string {
+  captureUtmFromUrl(); // this page's own tags, should Mira call before the site-wide capture ran
+  let tracker: Record<string, unknown> = {};
+  try {
+    const v: unknown = JSON.parse(getStoredUtm() ?? "{}");
+    if (v && typeof v === "object" && !Array.isArray(v)) tracker = v as Record<string, unknown>;
+  } catch {
+    // Not JSON: nothing known.
+  }
+  const s = (k: string) => (typeof tracker[k] === "string" ? (tracker[k] as string) : undefined);
+  const tags = { source: s("utm_source"), medium: s("utm_medium"), campaign: s("utm_campaign") };
+  const sent =
+    tags.source || tags.medium || tags.campaign ? tags : { referrer_host: s("referrer_host") };
+  return encodeURIComponent(JSON.stringify(sent));
+}
+
+/**
+ * Google sign-in is a full-page hand-over that carries no header, so its link leaves the source
+ * in a cookie only the Google routes receive, for 10 minutes; the callback's sign-up event reads it.
+ */
+export function rememberSourceForGoogle(): void {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${SOURCE_COOKIE}=${miraSource()}; Path=/api/mira/auth/google; Max-Age=600; SameSite=Lax${secure}`;
+}
 
 /** JSON call to a Mira API route, with the CSRF header every write needs. */
 export async function miraApi<T = Record<string, unknown>>(
@@ -13,7 +46,11 @@ export async function miraApi<T = Record<string, unknown>>(
   try {
     const res = await fetch(url, {
       method: init.method ?? (init.body === undefined ? "GET" : "POST"),
-      headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() },
+      headers: {
+        "Content-Type": "application/json",
+        "x-csrf-token": getCsrfToken(),
+        [SOURCE_HEADER]: miraSource(),
+      },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       credentials: "same-origin",
     });

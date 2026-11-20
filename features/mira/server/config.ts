@@ -57,3 +57,9 @@ export const ANON_COOKIE = "mira_anon";
 
 /** Set once a person in this browser said they are under 18 (rail 15, server/minor.ts). */
 export const MINOR_COOKIE = "mira_minor";
+/**
+ * Where the visit came from (server/attribution.ts): the header every Mira call carries, and the
+ * cookie Google sign-in's link leaves for the Google routes. Here because both sides use them.
+ */
+export const SOURCE_HEADER = "x-mira-source";
+export const SOURCE_COOKIE = "mira_source";

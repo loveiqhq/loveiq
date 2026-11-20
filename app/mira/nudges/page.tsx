@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { miraLinkPreview } from "@features/mira/link-preview";
 import { Suspense } from "react";
 import { readToken } from "@features/mira/server/nudges";
 import MiraNudges from "@features/mira/ui/MiraNudges";
@@ -6,6 +7,7 @@ import MiraNudges from "@features/mira/ui/MiraNudges";
 export const metadata: Metadata = {
   title: "Email preferences | LoveIQ",
   robots: { index: false, follow: false },
+  ...miraLinkPreview("/mira/nudges"),
 };
 
 export const dynamic = "force-dynamic";

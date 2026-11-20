@@ -1,11 +1,12 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { shortDate } from "@features/admin/server/ap/days";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { CohortRow, MiraPayload } from "@features/admin/server/ap/mira";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
 import { bucketTitles } from "./hover";
@@ -99,14 +100,64 @@ export default function ApMira() {
           </Board>
           <p className={NOTE}>
             The team is left out: accounts with a team address (ADMIN_TEST_EMAIL_REGEX, @loveiq.org
-            by default) and the browsers they signed in from. An anonymous browser that never signed
-            in, and a deleted account (its events lose both links), can&rsquo;t be told apart, so
-            they are counted; a deleted account&rsquo;s own messages belong to nobody any more, so
-            they make no conversation.
+            by default) and the browsers they signed in from, and, from 21 Nov 2026, team browsers
+            (one signed in to AP, marked below, or one of our probes) with every account created or
+            signed in from them and all they did before. Anyone else&rsquo;s anonymous browser, and
+            a deleted account (its events lose both links), can&rsquo;t be told apart, so they are
+            counted; a deleted account&rsquo;s own messages belong to nobody any more, so they make
+            no conversation.
           </p>
+          <TeamBrowser />
         </Busy>
       )}
     </>
+  );
+}
+
+/**
+ * "This browser counts as team": its Mira events and accounts stay out of the numbers
+ * (shared/http/team-cookie.ts). The cookie is httpOnly, so the server reads and sets it.
+ */
+function TeamBrowser() {
+  const url = "/api/admin/ap/team-browser";
+  const { data } = useAdminFetch<{ team?: boolean }>(url);
+  const [saved, setSaved] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const team = saved ?? data?.team === true;
+  const toggle = async () => {
+    setBusy(true);
+    setFailed(false);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() },
+      body: JSON.stringify({ team: !team }),
+    }).catch(() => null);
+    const body = res?.ok
+      ? ((await res.json().catch(() => null)) as { team?: boolean } | null)
+      : null;
+    if (typeof body?.team === "boolean") setSaved(body.team);
+    else setFailed(true);
+    setBusy(false);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="flex items-center gap-2 text-sm font-semibold text-ap-ink">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-ap-purple"
+          checked={team}
+          disabled={!data || busy}
+          onChange={() => void toggle()}
+        />
+        This browser counts as team
+      </label>
+      <p className={NOTE}>
+        {failed
+          ? "Not saved. Please try again."
+          : "Its Mira chats and accounts stay out of these numbers. Every AP sign-in turns it on; turn it off on a browser someone outside the team uses."}
+      </p>
+    </div>
   );
 }
 
@@ -181,7 +232,113 @@ function Overview({ data }: { data: Data }) {
       </p>
       <Scorecard data={data} />
       <Funnel data={data} />
+      <KeepCard data={data} />
+      <Sources data={data} />
     </Board>
+  );
+}
+
+/** The "Keep this chat" card: shown, Keep, an account after it, and Not now. */
+function KeepCard({ data }: { data: Data }) {
+  const { shown, kept, accounts, notNow } = data.keepCard;
+  const rows: Array<[string, number, string]> = [
+    ["Shown the card", shown, "People who saw “Keep this chat” in the range"],
+    ["Tapped Keep", kept, "Of those shown it, in the range"],
+    ["Created an account after it", accounts, "Of those who tapped Keep, by the range’s last day"],
+    ["Tapped Not now", notNow, "Of those shown it, in the range"],
+  ];
+  return (
+    <Card id="keep-card" labelledBy="h-keep-card">
+      <SectionHead
+        id="h-keep-card"
+        level={3}
+        title="“Keep this chat” card"
+        description="How many people the card reaches, and how many keep their chat by creating an account."
+      />
+      <div className="flex max-w-[860px] flex-col gap-3">
+        {rows.map(([label, n, note]) => (
+          <div
+            key={label}
+            className="grid items-center gap-3"
+            style={{ gridTemplateColumns: "minmax(150px,240px) minmax(0,1fr) 110px" }}
+          >
+            <span className="flex flex-col">
+              <span className="text-sm font-semibold">{label}</span>
+              <span className="text-xs leading-snug text-ap-muted">{note}</span>
+            </span>
+            <Bar pct={share(n, shown)} color={PURPLE} />
+            <span className="text-right text-sm font-bold tabular-nums">
+              {count(n)} <span className="font-medium text-ap-muted">({pct(share(n, shown))})</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className={NOTE}>
+        People: an account, or a browser before it signs in. Bars and shares are of the people shown
+        the card in the range. An account counts when it was created after the person&rsquo;s first
+        Keep in the range, by its last day; signing in to an older account is no new one. Recorded
+        from 21 Nov 2026.
+      </p>
+    </Card>
+  );
+}
+
+function Sources({ data }: { data: Data }) {
+  const gtc = "minmax(200px,2fr) 110px 120px 140px 110px";
+  return (
+    <Card id="sources" labelledBy="h-sources">
+      <SectionHead
+        id="h-sources"
+        level={3}
+        title="Where people came from"
+        description="The people who opened Mira in the range, by the link or site that brought them, and how many of them started a chat and created an account."
+      />
+      {data.sources.length === 0 ? (
+        <p className="m-0 text-sm text-ap-muted">Nobody opened Mira in the range.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+          <div role="table" aria-label="Where people came from" style={{ minWidth: 680 }}>
+            <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+              {[
+                "Source",
+                "Opened Mira",
+                "Started a chat",
+                "Created an account",
+                "Sign-up rate",
+              ].map((h, i) => (
+                <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
+                  {h}
+                </span>
+              ))}
+            </div>
+            {data.sources.map((r) => (
+              <div
+                key={r.label}
+                role="row"
+                className="grid items-center border-t border-ap-line"
+                style={{ gridTemplateColumns: gtc }}
+              >
+                <span role="rowheader" className="break-all px-3 py-2.5 text-sm font-bold">
+                  {r.label}
+                </span>
+                {[count(r.opened), count(r.started), count(r.accounts), pct(r.rate)].map((v, i) => (
+                  <span key={i} role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                    {v}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className={NOTE}>
+        A person counts under the first source recorded for them: a tagged link&rsquo;s source
+        (utm_source), else the site that linked to Mira, else Direct. Not recorded: nothing was
+        recorded before 21 Nov 2026. Started a chat and Created an account count the people who
+        opened Mira in the range and did so in it; the sign-up rate is Created an account ÷ Opened
+        Mira.
+      </p>
+    </Card>
   );
 }
 
@@ -855,8 +1012,8 @@ function Knows({ data }: { data: Data }) {
         Of today&rsquo;s {count(accounts)} signed-up accounts, whatever the range: an account keeps
         no history of these. An intake answer counts whether it was tapped or typed, signed in or
         before signing up; only which question was answered is kept, never the answer. Profile depth
-        is the average share of the five areas Mira knows per account. Users can export or delete
-        this data anytime.
+        is the average share of the five areas Mira knows per account. Users can ask for a copy or
+        delete it anytime.
       </p>
     </Card>
   );
@@ -930,10 +1087,12 @@ function NudgeTypes({ data }: { data: Data }) {
 }
 
 function Safety({ data }: { data: Data }) {
-  const { conversations, crisis, notHelpful, referred } = data.safety;
+  const { conversations, crisis, declined, minorStops, notHelpful, referred } = data.safety;
   const per = (k: number) => (conversations ? fmt("count", (k / conversations) * 1000, 1) : EMPTY);
   const rows: Array<[string, number | null, string]> = [
     ["Stopped coaching", crisis, "Crisis or support lines shown, the team reviews each case"],
+    ["Declined replies", declined, "Support lines shown instead of a reply"],
+    ["Under-18 stops", minorStops, "Coaching stopped for someone under 18"],
     ["Referred on", referred, "Doctor or therapist suggested, coaching continues"],
     ["Handed over", null, "Not measured yet: other coaches start after the beta"],
     ["Answers rated not helpful", notHelpful, "Sampled weekly to improve prompts and sources"],
@@ -985,9 +1144,11 @@ function Safety({ data }: { data: Data }) {
       </div>
       <p className={NOTE}>
         Stopped coaching: the support lines shown in the range (a crisis message, or a reply that
-        raised the stop rail). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor
-        or other professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000
-        of the range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
+        raised the stop rail). Declined replies: replies Mira declined, with the support lines shown
+        instead; Under-18 stops: coaching stopped because the person is under 18 (both recorded from
+        21 Nov 2026). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor or other
+        professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000 of the
+        range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
       </p>
     </Card>
   );

@@ -2,6 +2,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { memberByEmail } from "@features/brain/server/sign-in";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
+import { fromTeamBrowser, requestExtras } from "./attribution";
 import { isStaffEmail } from "./google";
 import type { CitedSource } from "./safety";
 import type { CoachingStyle } from "./prompt";
@@ -61,6 +62,7 @@ export async function getProfile(id: string): Promise<MiraProfile | null> {
 /**
  * Created (or its consent renewed) at every sign-in, with the form's two optional ticks as given
  * that time (the LoveIQ result; the team reading rated replies); the rest of the profile is kept.
+ * Signed in from a team browser, the account is the team's from then on (is_team, never unset here).
  */
 export async function upsertProfileAtSignIn(
   id: string,
@@ -68,6 +70,7 @@ export async function upsertProfileAtSignIn(
   consentVersion: string,
   choices: { useAssessment: boolean; shareRated: boolean }
 ): Promise<MiraProfile | null> {
+  const team = await fromTeamBrowser();
   const res = await supabaseFetch("/rest/v1/mira_user?on_conflict=id", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=representation" },
@@ -79,6 +82,7 @@ export async function upsertProfileAtSignIn(
       use_assessment: choices.useAssessment,
       share_rated_replies: choices.shareRated,
       updated_at: new Date().toISOString(),
+      ...(team ? { is_team: true } : {}),
     }),
   });
   if (!res.ok) throw new Error(`mira profile upsert failed (${res.status})`);
@@ -311,12 +315,16 @@ export type MiraEventName =
   | "keep_card_keep"
   | "keep_card_not_now";
 
-/** The KPI log. Written after the response, so it never slows a reply; a lost row is logged. */
+/**
+ * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.
+ * The request adds `team` and where the visit came from (attribution.ts), read while it lasts.
+ */
 export function logMiraEvent(
   name: MiraEventName,
   who: { anonId?: string | null; userId?: string | null },
   props: Record<string, unknown> = {}
 ): void {
+  const extras = requestExtras(name);
   scheduleAfterResponse(`mira-event:${name}`, async () => {
     const res = await supabaseFetch("/rest/v1/mira_event", {
       method: "POST",
@@ -324,7 +332,7 @@ export function logMiraEvent(
         name,
         anon_id: who.anonId ?? null,
         user_id: who.userId ?? null,
-        props,
+        props: { ...props, ...(await extras) },
       }),
     });
     if (!res.ok) logger.warn({ status: res.status, name }, "mira: an event row was refused");

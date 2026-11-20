@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { GradientButton, LegalLinks, Wordmark } from "./MiraShell";
-import { local, miraApi, useReloadWhenRestored } from "./api";
+import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
@@ -348,6 +348,7 @@ export default function SignUpFlow({
                   <a
                     href={adult && terms && consent ? googleHref : undefined}
                     aria-disabled={busy || !adult || !terms || !consent}
+                    onClick={rememberSourceForGoogle}
                     className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple aria-disabled:pointer-events-none aria-disabled:opacity-50"
                   >
                     <GoogleG />

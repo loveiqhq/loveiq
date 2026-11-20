@@ -99,4 +99,19 @@ describe("GET /admin/auth/callback", () => {
     expect(res.headers.get("location")).toContain("error=not_authorized");
     expect(res.cookies.get("__admin_activity")).toBeUndefined();
   });
+
+  it("marks a teammate's browser as team for two years, so Mira's numbers leave it out", async () => {
+    expect((await callback()).cookies.get("loveiq_team")).toMatchObject({
+      value: "1",
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 2 * 365 * 24 * 60 * 60,
+    });
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
+    expect((await callback()).cookies.get("loveiq_team")).toBeUndefined();
+    auth.verifyOtp.mockResolvedValue({ error: { message: "expired" } });
+    auth.getUser.mockResolvedValue({ data: { user: null } });
+    expect((await callback()).cookies.get("loveiq_team")).toBeUndefined();
+  });
 });

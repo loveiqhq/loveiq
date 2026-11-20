@@ -306,7 +306,14 @@ describe("buildMiraPage", () => {
     );
     const p = page(d, "2026-11-02", "2026-11-15");
     expect(p.tiles.helpful).toMatchObject({ value: 0.75, foot: "3 of 4 thumbs were up" });
-    expect(p.safety).toEqual({ conversations: 0, crisis: 1, notHelpful: 1, referred: 0 });
+    expect(p.safety).toEqual({
+      conversations: 0,
+      crisis: 1,
+      declined: 0,
+      minorStops: 0,
+      notHelpful: 1,
+      referred: 0,
+    });
   });
 
   it("reads NPS from the scores given, and how often “Not now” was tapped", () => {
@@ -846,6 +853,11 @@ describe("fetchMira", () => {
       "referred",
       "body_check_offered",
       "body_check_started",
+      "keep_card_shown",
+      "keep_card_keep",
+      "keep_card_not_now",
+      "reply_declined",
+      "minor_stop",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
