@@ -66,8 +66,11 @@ export async function POST(request: Request) {
   const body = parsed.data;
 
   const account = await getMiraAccount();
-  const person = account?.id ?? (await anonId());
-  const who = account ? { userId: person } : { anonId: person };
+  const anon = account ? null : await anonId();
+  const who = account ? { userId: account.id } : { anonId: anon };
+  // Prefixed: the browser picks its own id, and one equal to an account id must not spend
+  // that account's allowance.
+  const person = account ? `u:${account.id}` : `a:${anon}`;
   const daily = await Promise.all([
     checkRateLimit(person, { bucket: "mira-event-day", limit: DAILY_EVENTS, windowMs: DAY_MS }),
     checkRateLimit(ip, { bucket: "mira-event-ip-day", limit: DAILY_EVENTS * 6, windowMs: DAY_MS }),

@@ -15,6 +15,7 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import { POST } from "@/app/api/mira/event/route";
+import { anonId } from "@features/mira/server/anon";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, rateMessage } from "@features/mira/server/store";
 import { checkRateLimit } from "@shared/http/ratelimit";
@@ -69,9 +70,23 @@ describe("POST /api/mira/event", () => {
       expect(res.status).toBe(429);
     }
     expect(logMiraEvent).not.toHaveBeenCalled();
-    const keys = vi.mocked(checkRateLimit).mock.calls.map(([key, cfg]) => `${cfg.bucket}:${key}`);
-    expect(keys).toContain("mira-event-day:anon_test_123456789");
-    expect(keys).toContain("mira-event-ip-day:127.0.0.1");
+    const keys = vi.mocked(checkRateLimit).mock.calls.map(([key, cfg]) => `${cfg.bucket}=${key}`);
+    expect(keys).toContain("mira-event-day=a:anon_test_123456789");
+    expect(keys).toContain("mira-event-ip-day=127.0.0.1");
+  });
+
+  it("never shares a person's daily allowance between an account and a browser id", async () => {
+    // A browser can pick its own id, so it can pick one that equals an account's id.
+    const id = "6f2c4a1e-1111-4222-8333-944455556666";
+    vi.mocked(anonId).mockResolvedValueOnce(id);
+    await post({ type: "track", name: "chat_opened" });
+    vi.mocked(getMiraAccount).mockResolvedValue({ id, email: "lea@example.com" });
+    await post({ type: "track", name: "chat_opened" });
+    const keys = vi
+      .mocked(checkRateLimit)
+      .mock.calls.filter(([, cfg]) => cfg.bucket === "mira-event-day")
+      .map(([key]) => key);
+    expect(keys).toEqual([`a:${id}`, `u:${id}`]);
   });
 
   it("takes only the moments the browser sees, never the server's own KPI events", async () => {
