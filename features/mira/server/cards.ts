@@ -3,11 +3,13 @@ import cardsJson from "../content/evidence-cards.json";
 /**
  * The evidence cards: the only research Mira reads. One card per source of Sanjin's evidence
  * library, in our own words, with the labels from the team's proposal ("Mira: how each source
- * is labelled and used"). For the beta: the 26 core sources we may use (C15 is missing; C24 to
- * C27 are books we have not bought). Only a card marked quoteAllowed (an open CC BY paper) may
- * be quoted; every other card is used in Mira's own words.
+ * is labelled and used"). For the beta: the 27 core sources we may use (C24 to C27 are books we
+ * have not bought). Each card was checked on 20 Nov 2026 against its public record and abstract
+ * (the open papers in full): citation, figures, who was studied and the evidence level. Only a
+ * card marked quoteAllowed (an open CC BY paper) may be quoted; every other card is used in
+ * Mira's own words.
  *
- * All 26 fit in the cached part of her instructions, so there is no search to miss a card.
+ * All of them fit in the cached part of her instructions, so there is no search to miss a card.
  * Past about 150 cards a search will pick the best ones per message instead.
  */
 export type EvidenceCard = {
