@@ -90,6 +90,12 @@ reasons and reviews.
   in both halves, once per gate view; `utm_tracker.gate_reveal_arm` on submissions made while it
   runs (the same arm comes back from `session_id`). Count from the day the switch went on, leave out
   readers who paid before the survey, and judge on EUR 1.99 sales per gate view.
+- **Live since 17 Nov 2026, 09:01:50 UTC** (`GATE_REVEAL_START_AT`; the page, the sheets that
+  follow the arm and the stamp all began with the switch). Registry #11 decides it on EUR 1.99
+  payments per free finisher. Read it on AP-Analytics › Payment › "€1.99 page test": per half,
+  free finishers, who reached the page (`personal_report.initial_gate_seen_at`), who paid EUR 1.99
+  (the Pre-unlock tiles' rule, so E07's €0 gift does not count), both rates and full-report
+  purchases, with the shared readouts' "too early" floors (`features/admin/server/ap/gate-reveal-test.ts`).
 - **Where the board and today differ, the page says today's:** a 14-day guarantee (the board's 7),
   "3x full chapters" (the board's 4×), and the credit "toward your Full Report" (the board's
   "Premium Report").

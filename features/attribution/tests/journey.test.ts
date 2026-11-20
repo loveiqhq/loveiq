@@ -94,6 +94,25 @@ describe("buildSubmissionJourney", () => {
     });
   });
 
+  // The State of Desire tick, off its consent stamp, so a message rebuilt on a later step
+  // (no options then) still says it. Mark sends the code from that line.
+  it("reads the State of Desire tick off the row, for every rebuild", async () => {
+    route({ sub: [{ ...SUBMISSION, state_of_desire_opt_in_at: "2026-08-24T10:12:00.500Z" }] });
+    const journey = await buildSubmissionJourney(1296);
+    expect(queryFor("/survey_submission?")).toContain("state_of_desire_opt_in_at");
+    expect(journey?.stateOfDesireTicked).toBe(true);
+    const section = buildJourneyMessage(journey!, {
+      kind: "survey_completed",
+      questionCount: 61,
+    }).blocks.find((b) => b.type === "section") as { text: { text: string } };
+    expect(section.text.text).toContain("State of Desire: *ticked* (send the study)");
+  });
+
+  it("carries no tick when the row has none", async () => {
+    route({ sub: [{ ...SUBMISSION, state_of_desire_opt_in_at: null }] });
+    expect(await buildSubmissionJourney(1296)).not.toHaveProperty("stateOfDesireTicked");
+  });
+
   it("fetches its seven sources concurrently, not sequentially", async () => {
     route({ quotes: [QUOTE_PURCHASED] });
     await buildSubmissionJourney(1296);
@@ -461,6 +480,30 @@ describe("buildSubmissionJourney", () => {
       expect((await buildSubmissionJourney(1296))?.gateCohort).toBe(false);
     });
 
+    // Mark, 17 Nov: the 50/50 of the EUR 1.99 page in #incoming-surveys. Off the row, so a
+    // message rebuilt on a later step (report opened, paid) still names the half.
+    it("reads the EUR 1.99 page's half off the survey's stamp, for every rebuild", async () => {
+      const tracker = JSON.parse(SUBMISSION.utm_tracker) as Record<string, unknown>;
+      route({
+        sub: [
+          { ...SUBMISSION, utm_tracker: JSON.stringify({ ...tracker, gate_reveal_arm: "reveal" }) },
+        ],
+        reports: [{ initial_gate_cohort_at: "2026-08-24T10:12:01.000Z" }],
+      });
+      const journey = await buildSubmissionJourney(1296);
+      expect(journey?.gateRevealArm).toBe("reveal");
+      const section = buildJourneyMessage(journey!, {
+        kind: "survey_completed",
+        questionCount: 61,
+      }).blocks.find((b) => b.type === "section") as { text: { text: string } };
+      expect(section.text.text).toContain("€1.99 page: *Core Archetype shown* (new page)");
+    });
+
+    it("carries no half when the survey stamped none", async () => {
+      route({ reports: [{ initial_gate_cohort_at: "2026-08-24T10:12:01.000Z" }] });
+      expect(await buildSubmissionJourney(1296)).not.toHaveProperty("gateRevealArm");
+    });
+
     it("lists every payment that took money, oldest first, and none that did not", async () => {
       route({
         payments: [
@@ -603,6 +646,61 @@ describe("buildSubmissionJourney", () => {
    */
   describe("measured report dwell", () => {
     const at = (t: string) => `2026-08-24T${t}.000Z`;
+
+    describe("since a reactivation (dwellSince)", () => {
+      /**
+       * #report-reactivations' "Report time spent": this visit, not the lifetime. The
+       * reader read ten minutes on the day of the survey, then came back at 10:40.
+       */
+      const FIRST_DAY = [
+        { event_type: "report_viewed", event_time: at("10:20:00") },
+        { event_type: "report_engagement_10min", event_time: at("10:30:00") },
+      ];
+
+      it("is absent unless asked for", async () => {
+        route({ events: FIRST_DAY });
+        expect((await buildSubmissionJourney(1296))?.timings).not.toHaveProperty("dwellSinceMs");
+      });
+
+      it("leaves out the first visit's heartbeats and closed sessions", async () => {
+        route({
+          events: FIRST_DAY,
+          reportSessions: [{ started_at: at("10:20:00"), ended_at: at("10:31:00") }],
+        });
+        const j = await buildSubmissionJourney(1296, { dwellSince: at("10:40:00") });
+        // The lifetime still counts them; the visit has nothing yet.
+        expect(j?.timings.reportDwellMs).toBe(660_000);
+        expect(j?.timings.dwellSinceMs).toBeNull();
+      });
+
+      it("measures the visit that came back, its own session close included", async () => {
+        route({
+          events: [
+            ...FIRST_DAY,
+            { event_type: "scroll_depth_50", event_time: at("10:42:00") },
+            { event_type: "report_engagement_1min", event_time: at("10:41:00") },
+          ],
+          // Its row was written a moment before the return was noted.
+          reportSessions: [
+            { started_at: at("10:20:00"), ended_at: at("10:31:00") },
+            { started_at: at("10:39:59"), ended_at: at("10:44:00") },
+          ],
+        });
+        const j = await buildSubmissionJourney(1296, { dwellSince: at("10:40:00") });
+        // From the visit's own open, a second before the return was stamped, to its close.
+        expect(j?.timings.dwellSinceMs).toBe(241_000);
+      });
+
+      it("starts at the report, not at the click that came minutes before it", async () => {
+        // Clicked an email at 10:40, opened the report at 11:00, left at 11:03.
+        route({
+          events: [...FIRST_DAY, { event_type: "report_viewed", event_time: at("11:00:00") }],
+          reportSessions: [{ started_at: at("11:00:00"), ended_at: at("11:03:00") }],
+        });
+        const j = await buildSubmissionJourney(1296, { dwellSince: at("10:40:00") });
+        expect(j?.timings.dwellSinceMs).toBe(180_000);
+      });
+    });
 
     it("spans the open to the last thing they did, whatever order the rows arrive in", async () => {
       route({

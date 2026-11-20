@@ -1,0 +1,298 @@
+{
+  "source": "Sanjin's draft (his briefing page 'Coach Mira overview: body confidence in sex', section 1.6), with every number, its hours and who it serves checked on the operator's own website on 20 Nov 2026: each line's url is the page it was checked on (emergency numbers on government sites). Lines added then: Scotland, Northern Ireland, men's and victim-support lines in Germany and Austria, Switzerland's 142 (victim support, since 1 May 2026) and English line, and Canada's directory of provincial lines.",
+  "status": "Verified 20 Nov 2026. Next check due by 20 Feb 2027.",
+  "rules": [
+    "Emergency number first if there’s any danger",
+    "Ask the country once if it’s unknown",
+    "Never promise confidentiality or say what a service will do",
+    "Re-check every 3 months"
+  ],
+  "countries": [
+    {
+      "code": "US",
+      "name": "United States",
+      "emergency": "911",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "988 Suicide & Crisis Lifeline",
+          "phone": "988",
+          "text": "988",
+          "hours": "24/7",
+          "url": "https://988lifeline.org/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "RAINN National Sexual Assault Hotline",
+          "phone": "800-656-4673",
+          "text": "64673",
+          "keyword": "HOPE",
+          "hours": "24/7",
+          "url": "https://rainn.org/help-and-healing/hotline/"
+        }
+      ]
+    },
+    {
+      "code": "CA",
+      "name": "Canada",
+      "emergency": "911",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "9-8-8 Suicide Crisis Helpline",
+          "phone": "9-8-8",
+          "text": "988",
+          "hours": "24/7",
+          "url": "https://988.ca/"
+        },
+        {
+          "type": "directory",
+          "name": "Gender-based violence crisis lines, by province and territory (Government of Canada)",
+          "url": "https://www.canada.ca/en/women-gender-equality/gender-based-violence/get-help-now.html"
+        }
+      ]
+    },
+    {
+      "code": "GB",
+      "name": "United Kingdom",
+      "emergency": "999 or 112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Samaritans",
+          "phone": "116 123",
+          "hours": "24/7",
+          "url": "https://www.samaritans.org/how-we-can-help/contact-samaritan/"
+        },
+        {
+          "type": "crisis",
+          "name": "Shout",
+          "text": "85258",
+          "keyword": "SHOUT",
+          "hours": "24/7",
+          "url": "https://giveusashout.org/get-help/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Rape Crisis 24/7 Support Line",
+          "who": "England and Wales, 16+",
+          "phone": "0808 500 2222",
+          "hours": "24/7",
+          "url": "https://247sexualabusesupport.org.uk/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Rape Crisis Scotland",
+          "who": "Scotland",
+          "phone": "08088 01 03 02",
+          "hours": "every day 17:00–24:00",
+          "url": "https://www.rapecrisisscotland.org.uk/help-helpline"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Domestic and Sexual Abuse Helpline",
+          "who": "Northern Ireland",
+          "phone": "0808 802 1414",
+          "hours": "24/7",
+          "url": "https://dsahelpline.org/about-the-helpline"
+        }
+      ]
+    },
+    {
+      "code": "IE",
+      "name": "Ireland",
+      "emergency": "999 or 112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Samaritans",
+          "phone": "116 123",
+          "hours": "24/7",
+          "note": "Calls from a hidden number aren’t connected.",
+          "url": "https://www.samaritans.org/samaritans-ireland/"
+        },
+        {
+          "type": "crisis",
+          "name": "Text About It",
+          "text": "50808",
+          "keyword": "HELLO",
+          "hours": "24/7",
+          "url": "https://www.textaboutit.ie/how-it-works"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Dublin Rape Crisis Centre National Helpline",
+          "phone": "1800 77 8888",
+          "hours": "24/7",
+          "url": "https://www.drcc.ie/services/helpline/"
+        }
+      ]
+    },
+    {
+      "code": "AU",
+      "name": "Australia",
+      "emergency": "000",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Lifeline",
+          "phone": "13 11 14",
+          "text": "0477 13 11 14",
+          "hours": "24/7",
+          "url": "https://www.lifeline.org.au/131114"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "1800RESPECT",
+          "phone": "1800 737 732",
+          "text": "0458 737 732",
+          "hours": "24/7",
+          "url": "https://1800respect.org.au/"
+        }
+      ]
+    },
+    {
+      "code": "NZ",
+      "name": "New Zealand",
+      "emergency": "111",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "1737 Need to Talk?",
+          "phone": "1737",
+          "text": "1737",
+          "hours": "24/7",
+          "url": "https://1737.org.nz/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Safe to talk",
+          "phone": "0800 044 334",
+          "text": "4334",
+          "hours": "24/7",
+          "url": "https://www.safetotalk.nz/"
+        }
+      ]
+    },
+    {
+      "code": "DE",
+      "name": "Germany",
+      "emergency": "112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "TelefonSeelsorge",
+          "phone": "0800 1110111",
+          "hours": "24/7",
+          "url": "https://www.telefonseelsorge.de/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Hilfetelefon Gewalt gegen Frauen",
+          "who": "for women",
+          "phone": "116 016",
+          "hours": "24/7",
+          "url": "https://www.hilfetelefon.de/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Hilfetelefon Gewalt an Männern",
+          "who": "for men",
+          "phone": "0800 1239900",
+          "hours": "Mon–Thu 8:00–20:00, Fri 8:00–15:00",
+          "url": "https://www.maennerhilfetelefon.de/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Weisser Ring Opfer-Telefon",
+          "who": "for anyone affected by crime",
+          "phone": "116 006",
+          "hours": "every day 7:00–22:00",
+          "url": "https://weisser-ring.de/hilfe-fuer-opfer/opfer-telefon"
+        }
+      ]
+    },
+    {
+      "code": "AT",
+      "name": "Austria",
+      "emergency": "112",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Telefonseelsorge",
+          "phone": "142",
+          "hours": "24/7",
+          "url": "https://www.telefonseelsorge.at/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Frauenhelpline gegen Gewalt",
+          "who": "for women",
+          "phone": "0800 222 555",
+          "hours": "24/7",
+          "url": "https://www.frauenhelpline.at/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "MännerInfo",
+          "who": "for men",
+          "phone": "0800 400 777",
+          "hours": "24/7",
+          "url": "https://www.maennerinfo.at/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Opfer-Notruf",
+          "who": "for anyone affected by crime",
+          "phone": "0800 112 112",
+          "hours": "working days 8:00–20:00",
+          "url": "https://www.opfer-notruf.at/"
+        }
+      ]
+    },
+    {
+      "code": "CH",
+      "name": "Switzerland",
+      "emergency": "112 or 144",
+      "lines": [
+        {
+          "type": "crisis",
+          "name": "Die Dargebotene Hand",
+          "who": "in German, French or Italian",
+          "phone": "143",
+          "hours": "24/7",
+          "url": "https://www.143.ch/"
+        },
+        {
+          "type": "crisis",
+          "name": "Heart2Heart",
+          "who": "in English",
+          "phone": "0800 143 000",
+          "hours": "18:00–23:00",
+          "url": "https://www.143.ch/en/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Victim Support Switzerland (Opferhilfe)",
+          "who": "for anyone affected by violence",
+          "phone": "142",
+          "hours": "24/7",
+          "url": "https://www.opferhilfe-schweiz.ch/en/"
+        }
+      ]
+    }
+  ],
+  "fallback": {
+    "code": "OTHER",
+    "name": "Somewhere else",
+    "emergency": "your local emergency number",
+    "lines": [
+      {
+        "type": "directory",
+        "name": "Find A Helpline: free, confidential support lines, searchable by country",
+        "url": "https://findahelpline.com"
+      }
+    ],
+    "note": "Find A Helpline (findahelpline.com, run by ThroughLine) lists helplines in over 175 countries, which verify their details with it directly (checked 20 Nov 2026). Shown first to anyone outside the 9 countries."
+  }
+}

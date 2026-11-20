@@ -44,9 +44,12 @@ backup a day for 7 days, so up to a day of writes can be lost.
   view and policy) and `supabase_migrations` (which migrations are applied). Beside each copy,
   a small `.cron.sql` file holds the live pg_cron jobs as `cron.schedule(...)` statements:
   the restored migration history would otherwise stop the migrations from recreating them.
-- **Not in it:** staff sign-in accounts (`auth`: 5 staff, email magic link). No customer row
-  points at them (`app_user.auth_user_id` is always empty), and staff sign in again after a
-  restore; the allowlist `admin_users` is in `public`.
+- **Not in it:** sign-in accounts (`auth`): staff (email magic link) and, since 20 Nov 2026,
+  Mira's users (email code or Google). Staff sign in again after a restore; the allowlist
+  `admin_users` is in `public`. Mira is different: `mira_user.id` IS the sign-in id
+  (`mira_user_id_fkey` → `auth.users`), so a restore leaves that key out (step 4), and a Mira
+  user who signs in again gets a new id. Their profile, chats and body checks stay under the
+  old id until re-linked by email (`mira_user.email`); no tool does that yet.
 - **When:** Sundays at 03:41 UTC, started by Vercel's clock. Every dump is first restored into
   an empty Postgres 17 with pgvector, and the run fails if a table or its rows are missing.
 - **Where:** the Vercel Blob store `loveiq-db-backups` (`store_su8rg2sP8Aia8d5P`): private,
@@ -94,9 +97,13 @@ psql "$TARGET" -c 'create extension if not exists vector with schema public' \
   -c 'create extension if not exists pg_trgm with schema public' \
   -c 'create role posthog_readonly nologin' -c 'create role claude_readonly nologin'
 
-# 4. Restore everything but CREATE SCHEMA public, which every database already has.
+# 4. Restore everything but CREATE SCHEMA public, which every database already has, and the
+#    foreign keys into auth (Mira's sign-in ids, whose accounts are not in the copy).
 #    Expect exactly 3 errors, "permission denied to change default privileges": harmless.
-pg_restore --list copy.pgdump | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' > restore.list
+fks=$(pg_restore --section=post-data -f - copy.pgdump \
+  | grep -oE 'ADD CONSTRAINT [A-Za-z0-9_]+ FOREIGN KEY .* REFERENCES auth\.' | awk '{print $3}' | paste -sd'|' -)
+pg_restore --list copy.pgdump | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' \
+  | grep -v -E " FK CONSTRAINT public [^ ]+ (${fks:-none}) " > restore.list
 pg_restore --no-owner --use-list=restore.list -d "$TARGET" copy.pgdump
 
 # 5. The pg_cron jobs, then let the data API see the tables.

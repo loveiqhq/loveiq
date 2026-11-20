@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type FC, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type FC, type ReactNode, type RefObject } from "react";
 import Image from "next/image";
 import type { LightMapOffer } from "@features/report/logic/lightReportMap";
 import type { SurveySheetId } from "@features/survey/surveySheets";
@@ -17,7 +17,11 @@ import {
   TRUSTPILOT_FALLBACK_URL,
 } from "@shared/ui/trustpilot/config";
 import { trustpilotLabel } from "@shared/ui/trustpilot/label";
-import SurveySheetShell, { SheetGrabber, type SheetDismissVia } from "./SurveySheetShell";
+import SurveySheetShell, {
+  OPEN_GUARD_MS,
+  SheetGrabber,
+  type SheetDismissVia,
+} from "./SurveySheetShell";
 import {
   COUNT_AT_MS,
   COUNT_MS,
@@ -33,8 +37,11 @@ import {
 export interface InfoSheetHandlers {
   /** "Keep going". The State of Desire sheet says whether its box was ticked. */
   onKeepGoing: (extra?: { ticked?: boolean }) => void;
-  /** Closed without the button: the scrim, Esc or a swipe down. Same as Keep going. */
-  onDismiss: (via: SheetDismissVia) => void;
+  /**
+   * Closed without the button: the scrim, Esc or a swipe down. Same as Keep going, the State
+   * of Desire sheet's tick included.
+   */
+  onDismiss: (via: SheetDismissVia, extra?: { ticked?: boolean }) => void;
 }
 
 interface InfoSheetFrameProps extends InfoSheetHandlers {
@@ -595,12 +602,20 @@ const DesireCover: FC = () => {
  * was ticked, to PostHog, and a tick is kept for the run and sent with the answers, whose
  * #incoming-surveys message says who asked for the study (Mark, 13 Nov: "just record the
  * tick for now"; he sends it by hand). Prices never move.
+ *
+ * A tick is consent, so it is kept however the sheet closes (tapping outside, Esc or a swipe
+ * carry it as Keep going does) and the box ignores taps for the sheet's first OPEN_GUARD_MS,
+ * as its buttons do: the tap that pressed Next must never tick it unseen.
  */
 export const DesireSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, ...handlers }) => {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const tickId = useId();
   const [ticked, setTicked] = useState(false);
+  const openedAt = useRef(0);
+  useEffect(() => {
+    if (open) openedAt.current = Date.now();
+  }, [open]);
   const copy = DESIRE_SHEET_COPY;
   return (
     <InfoSheetFrame
@@ -608,8 +623,9 @@ export const DesireSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
       sheetId="desire"
       titleId={titleId}
       headingRef={headingRef}
-      keepGoing={() => handlers.onKeepGoing({ ticked })}
       {...handlers}
+      keepGoing={() => handlers.onKeepGoing({ ticked })}
+      onDismiss={(via) => handlers.onDismiss(via, { ticked })}
     >
       <div className="sheet-in flex flex-col gap-1" style={order(0)}>
         <div className="font-sans text-[13px] font-semibold leading-[18px] text-[#6b5b95]">
@@ -656,7 +672,10 @@ export const DesireSheet: FC<InfoSheetHandlers & { open: boolean }> = ({ open, .
             id={tickId}
             type="checkbox"
             checked={ticked}
-            onChange={(e) => setTicked(e.target.checked)}
+            onChange={(e) => {
+              if (Date.now() - openedAt.current < OPEN_GUARD_MS) return;
+              setTicked(e.target.checked);
+            }}
             className="peer sr-only"
           />
           <span

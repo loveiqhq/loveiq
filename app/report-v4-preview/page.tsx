@@ -5,6 +5,7 @@
 //
 // Nothing here is wired into the real report: ReportPage.tsx imports none of these
 // components, so this page is the only thing that renders them today.
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { buildArchetypeCard } from "@/data/report3-archetype-card";
 import { buildSummary } from "@/data/report3-summary";
@@ -24,8 +25,13 @@ import {
   buildLearnMoreForReader,
   isLearnMoreArticleLocked,
 } from "@features/report/server/contentGating";
+import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 import { buildPreviewQuotes } from "./previewQuotes";
 import ReportV4PreviewClient from "./ReportV4PreviewClient";
+
+// robots.txt's "/report" rule covers this path too, and Google and Bing may fetch it
+// (app/robots.ts), so it says noindex itself like the report, wherever it is served.
+export const metadata: Metadata = { ...PRIVATE_PAGE_METADATA };
 
 const ARCHETYPE = "Spark Seeker";
 

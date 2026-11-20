@@ -37,6 +37,11 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // still records a run, so silence means the job stopped, not that it had nothing to send.
   "email-journeys": 3 * 3_600_000,
   "invite-reminders": 26 * 3_600_000,
+  // Every 30 minutes: Mira's daily nudges. With MIRA_NUDGES_ENABLED off it still records a
+  // run, so silence means the job stopped, not that the switch is off.
+  "mira-nudges": 3 * 3_600_000,
+  // Daily at 03:40: Mira's 12-month memory limit, and sign-in codes older than a day.
+  "mira-memory": 26 * 3_600_000,
   "payment-fulfillment-sweep": 2 * 3_600_000,
   "security-storm-detector": 3_600_000,
   "anomaly-watcher": 3 * 3_600_000,

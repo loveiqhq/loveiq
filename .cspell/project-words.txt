@@ -11,6 +11,7 @@
 # These are legitimate words (not typos). Add new terms as needed.
 Ajna
 Börner
+Čičkušić
 Clickjacking
 Contentsquare
 DPIA
@@ -120,6 +121,7 @@ randomisation
 randomise
 randomised
 randomising
+reactivations
 reauthenticates
 recaptcha
 recognisable
@@ -173,3 +175,8 @@ Hana
 novutalent
 Starnberg
 painpoint
+Barcalow
+Tylka
+Alavi
+Arjas
+Brotto

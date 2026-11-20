@@ -178,6 +178,23 @@ describe("the reworked emails", () => {
     }
   );
 
+  // C3/C4's only button sits in the panel; Marcus (5 Nov) wants the paste line under every
+  // main button. Mark took C4's "last reminder" line out on 9 Nov.
+  it.each(Object.entries(INVITES))(
+    "%s: the panel's button and its paste-this-link line carry the invite link",
+    (_name, email) => {
+      const href = escAttr(INVITE);
+      expect(email.html.split(`href="${href}"`)).toHaveLength(3);
+      expect(email.html).toContain(`Or paste this link into your browser: <a href="${href}"`);
+      expect(email.text).toContain(INVITE);
+    }
+  );
+
+  it("C4 no longer calls itself the last invite reminder", () => {
+    expect(INVITES.C4.html).not.toContain("last reminder");
+    expect(INVITES.C4.text).not.toContain("last reminder");
+  });
+
   it("names no archetype anywhere: the €1.99 step sells the name, and every card blurs it", () => {
     const names = archetypeNames();
     expect(names).toHaveLength(14);
@@ -475,4 +492,40 @@ describe("what the chapter map's legend calls free", () => {
     const { html } = giftEmail({ ...reader, answeredYesterday: true });
     expect(html).toContain("free chapters");
   });
+});
+
+// Eman's calls on the questions sent to Mark with the trials (17 Nov 2026): U1's headline
+// drops "to read" (Mark's 9 Nov edit), C2's subject names the part, the copy follows the
+// Tone of Voice page's contractions, and the invite reminders keep their invite but carry
+// the share icon Mark asked for on every invite email.
+describe("the calls on Mark's open questions (17 Nov)", () => {
+  it("U1's headline is 'Your Core Archetype is ready'", () => {
+    const { html, text } = coreUnlockedEmail(reader);
+    expect(html).toContain("Your Core Archetype is ready<");
+    expect(text.startsWith("Your Core Archetype is ready\n")).toBe(true);
+    expect(html + text).not.toContain("ready to read");
+  });
+
+  it("C2's subject names the part about how you connect", () => {
+    expect(backIntoReportEmail(reader).subject).toBe(
+      "Have you read the part about how you connect yet?"
+    );
+  });
+
+  it("says you'll and you've, never 'you will' or 'you have unlocked'", () => {
+    for (const [name, email] of everyEmail()) {
+      for (const part of [email.subject, email.html, email.text]) {
+        expect(part, name).not.toMatch(/\byou will\b|\byou have unlocked\b/i);
+      }
+    }
+  });
+
+  it.each(Object.entries(INVITES))(
+    "%s keeps the invite and carries the share icon",
+    (_n, email) => {
+      expect(email.html).toContain(EMAIL_IMAGES.iconShare);
+      expect(email.html).not.toContain(EMAIL_IMAGES.iconRefer);
+      expect(email.html).toContain("Invite a friend&nbsp;&rarr;");
+    }
+  );
 });

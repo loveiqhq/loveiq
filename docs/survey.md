@@ -307,8 +307,11 @@ with a "Keep going" that carries on. The rules are in
 - **The State of Desire tick.** Mark, 13 Nov: "just record the tick for now"; he sends the study
   by hand. A tick is kept for its run (`loveiq-survey-desire-tick`) and sent with the answers
   (`stateOfDesireTicked`); the submission's #incoming-surveys message then says "State of
-  Desire: ticked (send the study)", and /admin has the address by submission. It is not a
-  database field yet: storing it there, with its consent wording, is a migration still to do.
+  Desire: ticked (send the study)", and /admin has the address by submission. The submit keeps
+  it with its own consent record, `survey_submission.state_of_desire_opt_in_at` and
+  `state_of_desire_opt_in_version` (the box's words, `DESIRE_SHEET_COPY_VERSION`), in a PATCH
+  of its own, and the message reads it off the row, so every later edit keeps the line. The
+  EUR 5 code is Mark's, sent by hand: nothing sends it by itself (17 Nov).
 - **The numbers.** Sheet 1's shares (respond 36%, start 12%, naturally 44%, plan 6%) and sheet
   5's 15% are measured on finished surveys without the team's own runs, rounded down; the
   queries sit beside the copy. The design's "Most people love to respond" was not true (most

@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSupabaseFetch, mockPost, mockConfigured, mockWarn } = vi.hoisted(() => ({
-  mockSupabaseFetch: vi.fn(),
-  mockPost: vi.fn(),
-  mockConfigured: vi.fn(),
-  mockWarn: vi.fn(),
-}));
+const { mockSupabaseFetch, mockPost, mockConfigured, mockWarn, mockReactivation } = vi.hoisted(
+  () => ({
+    mockSupabaseFetch: vi.fn(),
+    mockPost: vi.fn(),
+    mockConfigured: vi.fn(),
+    mockWarn: vi.fn(),
+    mockReactivation: vi.fn(),
+  })
+);
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: mockWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -17,6 +20,11 @@ vi.mock("@features/admin/server/supabase", () => ({
 vi.mock("@shared/observability/slack-bot", () => ({
   isSlackBotConfigured: () => mockConfigured(),
   postJourneyMessage: (...args: unknown[]) => mockPost(...args),
+}));
+// The #report-reactivations post has its own tests (reactivation-post.test.ts); here, only
+// that every claimed day is handed to it.
+vi.mock("@features/attribution/server/reactivation-post", () => ({
+  postReactivation: (...args: unknown[]) => mockReactivation(...args),
 }));
 
 import {
@@ -333,6 +341,26 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     backend();
   });
 
+  it("leaves out a reader who asked us to restrict processing: no claim, no reply, no post", async () => {
+    backend({
+      submission: [{ app_user: { processing_restricted_at: "2026-11-01T10:00:00.000Z" } }],
+    });
+    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockReactivation).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when it cannot read whether the reader restricted processing", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith("/rest/v1/survey_submission?")) return res(null, false);
+      throw new Error(`unexpected ${path}`);
+    });
+    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
+    expect(claims()).toHaveLength(0);
+    expect(mockReactivation).not.toHaveBeenCalled();
+  });
+
   it("claims the reader's Berlin day, replies in their thread and keeps the reply's ts", async () => {
     await noteReaderReturn({
       submissionId: 2790,
@@ -506,5 +534,84 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
       reader: READER,
     });
     expect(JSON.parse((claims()[0]![1] as { body: string }).body).via).toBeNull();
+  });
+});
+
+describe("noteReaderReturn: every claimed day goes to #report-reactivations too", () => {
+  const NEXT_DAY = new Date("2026-11-15T07:00:00.000Z");
+
+  function backend(claimed: unknown[] = [{ survey_submission_id: 2790 }], message: unknown[] = []) {
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
+      if (path === "/rest/v1/reader_return" && init?.method === "POST") return res(claimed);
+      if (path.startsWith("/rest/v1/reader_return?") && init?.method === "PATCH") return res(null);
+      if (path.startsWith("/rest/v1/slack_journey_message?")) return res(message);
+      // The restriction check (GDPR Art. 18): a reader who did not restrict processing.
+      if (path.startsWith("/rest/v1/survey_submission?")) return res([{ app_user: null }]);
+      throw new Error(`unexpected ${path}`);
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConfigured.mockReturnValue(true);
+    mockPost.mockResolvedValue({ channel: "C0JOURNEY", ts: "1731650000.000200" });
+    mockReactivation.mockResolvedValue(undefined);
+    backend();
+  });
+
+  it("hands the claim over with its day, whether or not a thread exists", async () => {
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "email",
+      at: NEXT_DAY,
+      via: "gift_unopened",
+      reader: READER,
+    });
+    expect(mockReactivation).toHaveBeenCalledTimes(1);
+    expect(mockReactivation).toHaveBeenCalledWith({
+      submissionId: 2790,
+      source: "email",
+      via: "gift_unopened",
+      at: NEXT_DAY,
+      day: "2026-11-15",
+    });
+    // No thread for this reader: the reply is skipped, the reactivation post is not.
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("hands over drafts too: the post leaves them out itself", async () => {
+    await noteReaderReturn({
+      submissionId: 2844,
+      source: "draft",
+      at: NEXT_DAY,
+      reader: READER,
+    });
+    expect(mockReactivation).toHaveBeenCalledWith(expect.objectContaining({ source: "draft" }));
+  });
+
+  it("hands nothing over for a day already claimed, or for no return at all", async () => {
+    backend([]);
+    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "report",
+      at: NEXT_DAY,
+      reader: { ...READER, internal: true },
+    });
+    expect(mockReactivation).not.toHaveBeenCalled();
+  });
+
+  it("replies in the thread as well", async () => {
+    backend(undefined, [{ channel: "C0JOURNEY", message_ts: "1731570000.000100" }]);
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "report",
+      at: NEXT_DAY,
+      via: "initial_gift",
+      reader: READER,
+    });
+    expect(mockReactivation).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect((mockPost.mock.calls[0]![0] as { threadTs: string }).threadTs).toBe("1731570000.000100");
   });
 });

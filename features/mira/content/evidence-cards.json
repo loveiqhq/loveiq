@@ -1,0 +1,622 @@
+[
+  {
+    "id": "C01",
+    "title": "Objectification theory: toward understanding women's lived experiences and mental health risks",
+    "authors": "Fredrickson BL, Roberts T-A",
+    "year": 1997,
+    "citation": "Fredrickson BL, Roberts T-A (1997). Objectification theory: toward understanding women's lived experiences and mental health risks. Psychology of Women Quarterly 21(2):173-206.",
+    "link": "https://doi.org/10.1111/j.1471-6402.1997.tb00108.x",
+    "labels": {
+      "type": "2 Models & theories",
+      "evidence": "Theory",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes"],
+      "tags": ["spectatoring"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it is: a theory paper, not a study. The authors propose that in cultures that sexually objectify women's bodies, girls and women learn to take an observer's view as the main way of seeing their own bodies. This can turn into habitual checking of how they look, which, the authors argue, can bring more shame and anxiety, fewer moments of being fully absorbed, and less awareness of what is happening inside the body. Over time, they suggest, this may help explain why women face higher risks of depression, sexual problems and eating disorders. How strong: Theory. It explains; it does not test. Later reviews in our library are more cautious: a 2025 review of 47 studies (R04) found the links with sexual problems and satisfaction inconsistent, mostly from cross-sectional studies of Western, heterosexual, college-age women, and a 2018 review of the lab experiments (R01) notes that the predicted loss of awareness of inner body states has hardly been tested. So Mira presents it as one plausible contributor, never as the cause. How Mira uses it: to help someone name the habit without blame, for example: 'Many people find themselves watching how they look from the outside, even in bed. It's a habit you can work with, not a flaw in you.' She then moves on to the attention practices (C09, C17) rather than debating looks. Limits: written about women, so applying it to men, queer and trans people needs care; C05 and C08 test similar paths that include men."
+  },
+  {
+    "id": "C02",
+    "title": "Cognitive distraction and women's sexual functioning",
+    "authors": "Dove NL, Wiederman MW",
+    "year": 2000,
+    "citation": "Dove NL, Wiederman MW (2000). Cognitive distraction and women's sexual functioning. Journal of Sex & Marital Therapy 26(1):67-78.",
+    "link": "https://doi.org/10.1080/009262300278650",
+    "labels": {
+      "type": "4 Validated assessments",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes", "Intake questions"],
+      "tags": ["attention", "spectatoring"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 74 young adult women with experience of intercourse completed questionnaires about distraction and their sex lives. Women who reported more distracting thoughts during sex with a partner also reported lower sexual esteem, less sexual satisfaction, less consistent orgasm and more faking of orgasm. These links held after accounting for mood, desire, general self-focus, sexual attitudes and body dissatisfaction. The authors note that earlier work on distraction had mostly studied men in the lab. How strong: Low. Our library files the paper as the source of a distraction scale and rates it early, but its abstract describes one small survey at one point in time: distraction goes together with a less satisfying sex life, not proven to cause it. How Mira uses it: to explain spectatoring simply ('when part of your mind is busy monitoring, less of it is free to feel') and to ask about it in her own words, such as: 'During sex, how often do your thoughts drift away from what you're feeling?' The scale's item wording is copyrighted and not licensed yet, so Mira never quotes, administers or scores its items. Limits: small sample of young women, all with experience of intercourse; self-report only; it does not cover men or older people."
+  },
+  {
+    "id": "C03",
+    "title": "Gender differences in the content of cognitive distraction during sex",
+    "authors": "Meana M, Nunnink SE",
+    "year": 2006,
+    "citation": "Meana M, Nunnink SE (2006). Gender differences in the content of cognitive distraction during sex. Journal of Sex Research 43(1):59-67.",
+    "link": "https://doi.org/10.1080/00224490609552299",
+    "labels": {
+      "type": "2 Association studies",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes"],
+      "tags": ["attention", "spectatoring", "men"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 220 college men and 237 college women reported how often two kinds of thoughts distracted them during sex: worries about how they look and worries about how they perform. Women reported more distraction overall and more appearance worries than men, while performance worries were similar in both. Women had about as much of each kind; men had more performance than appearance worries. In both sexes a more negative body image went with more of both kinds, and not being in a relationship went with more appearance worries. Sexual dissatisfaction went with more performance worries in both sexes and with more appearance worries in men; in women, psychological distress also played a part. How strong: Low. One survey of students at one point in time; these things go together, not proven to cause each other. How Mira uses it: to frame the same attention problem in words that fit the person, checking rather than assuming. Many women may recognise 'thoughts about how I look', many men 'thoughts about how I'm doing'. The practice is the same either way: notice the thought, then bring attention back to touch and sensation. Limits: college students only; it compares men and women and does not cover trans or nonbinary people; the abstract does not describe sexual orientation."
+  },
+  {
+    "id": "C04",
+    "title": "The impact of body dissatisfaction on distressing sexual difficulties among men and women: the mediator role of cognitive distraction",
+    "authors": "Carvalheira A, Godinho L, Costa P",
+    "year": 2017,
+    "citation": "Carvalheira A, Godinho L, Costa P (2017). The impact of body dissatisfaction on distressing sexual difficulties among men and women: the mediator role of cognitive distraction. Journal of Sex Research 54(3):331-340. First published online 2016.",
+    "link": "https://doi.org/10.1080/00224499.2016.1168771",
+    "labels": {
+      "type": "2 Association studies",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes"],
+      "tags": ["attention", "spectatoring", "men"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: in an online survey of 493 women and 595 men, women reported more distressing sexual difficulties, more body dissatisfaction and more distraction about their appearance during sex, while men reported more distraction about their performance. Statistical path models suggested that in women, distraction about both appearance and performance fully accounted for the link between body dissatisfaction and sexual difficulties. In men only performance distraction played this role, and only partly; body dissatisfaction kept its own direct link with difficulties. How strong: Low. A single cross-sectional survey, so body dissatisfaction, distraction and difficulties go together but are not proven to cause one another; a 'mediation' found at one time point is a statistical pattern, not proof of a chain. How Mira uses it: to explain why she works on attention rather than on changing the body: 'Early research hints that body worry and sexual difficulties go together, and that much of that link runs through distraction during sex. That's why we'll work on attention.' With men she pays extra attention to performance worries and does not promise that attention work alone will settle body concerns. Limits: one online sample at one time point; self-report; the abstract does not describe orientation, relationships or health conditions, and the study does not cover trans or nonbinary people."
+  },
+  {
+    "id": "C05",
+    "title": "Body concerns in and out of the bedroom: implications for sexual pleasure and problems",
+    "authors": "Sanchez DT, Kiefer AK",
+    "year": 2007,
+    "citation": "Sanchez DT, Kiefer AK (2007). Body concerns in and out of the bedroom: implications for sexual pleasure and problems. Archives of Sexual Behavior 36(6):808-820.",
+    "link": "https://doi.org/10.1007/s10508-007-9205-0",
+    "labels": {
+      "type": "2 Association studies",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes"],
+      "tags": ["shame", "spectatoring", "men"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 320 heterosexual women and men answered questions about body shame, self-consciousness during physical intimacy, sexual pleasure and sexual problems. Women reported more appearance concerns than men, both in and out of sexual situations, but in both sexes appearance concerns went with more sexual problems. The data fitted a chain: more body shame, then more self-consciousness during intimacy, then less pleasure and lower arousability. This held after accounting for age and relationship status. Being in a relationship went with less self-consciousness and less difficulty reaching orgasm. Some links were stronger in women. How strong: Low. One cross-sectional survey analysed with a statistical model; the chain fits the data but is not proven to cause anything. How Mira uses it: as her core 'root cause' story for both women and men, told honestly: body shame tends to travel with self-consciousness in bed, and self-consciousness with less pleasure, though the study cannot prove one causes the next. It points her to the link she can work on, the self-consciousness in the moment, through attention and kindness practices rather than changing the body. Limits: heterosexual sample only; one time point; self-report; the abstract does not give ages or where participants came from. The study was framed by objectification theory (C01)."
+  },
+  {
+    "id": "C06",
+    "title": "The dual control model: current status and future directions",
+    "authors": "Bancroft J, Graham CA, Janssen E, Sanders SA",
+    "year": 2009,
+    "citation": "Bancroft J, Graham CA, Janssen E, Sanders SA (2009). The dual control model: current status and future directions. Journal of Sex Research 46(2-3):121-142.",
+    "link": "https://doi.org/10.1080/00224490902747222",
+    "labels": {
+      "type": "2 Models & theories",
+      "evidence": "Theory",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes", "Practices"],
+      "tags": [],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it is: a review of the dual control model by its originators and colleagues. The model says sexual response depends on a balance between processes that excite (an accelerator) and processes that inhibit (brakes), and that people differ in how readily each responds, which helps explain why people vary so much. The paper describes questionnaires built to measure these tendencies in men and in women; scores spread out in a roughly normal way in both, which the authors take as a sign that ordinary levels of inhibition are adaptive, not a fault. It also reviews evidence on desire, mood, sexual problems and risky sex. How strong: Theory. A model explains; it does not prove that any exercise works. A 2023 review of 152 later papers by two of the same authors (R05) reports findings consistent with this one, with inhibition playing a part in sexual problems. How Mira uses it: to reframe body worry as one of the things that can press the brakes, rather than a personal failing, and to help someone map their own conditions: what helps them feel relaxed, safe and interested, and what gets in the way. For everyday wording she draws on Nagoski's plain-language version (C28). Limits: that body worry acts as a brake is an application of the model (see C28), not a finding of this paper; the abstract gives no figures, so Mira cites none from it."
+  },
+  {
+    "id": "C07",
+    "title": "What is and what is not positive body image? Conceptual foundations and construct definition",
+    "authors": "Tylka TL, Wood-Barcalow NL",
+    "year": 2015,
+    "citation": "Tylka TL, Wood-Barcalow NL (2015). What is and what is not positive body image? Conceptual foundations and construct definition. Body Image 14:118-129.",
+    "link": "https://doi.org/10.1016/j.bodyim.2015.04.001",
+    "labels": {
+      "type": "2 Models & theories",
+      "evidence": "Theory",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["appreciation"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it is: a conceptual paper, not a new study. Drawing on earlier quantitative and qualitative research, the authors define positive body image and argue that it is its own thing, not just the absence of negative body image. In their account it has several parts: appreciating the body, accepting and even loving it, seeing beauty broadly, caring for appearance in a healthy way, an inner sense of positivity, and filtering incoming messages in a way that protects the body. They describe it as holistic, fairly stable yet changeable, protective, linked to feeling that others accept your body, and shaped by social identities. The paper also spells out what positive body image is not. How strong: Theory. It organises research and sets out definitions; it does not test whether any practice works. How Mira uses it: to set the goal. Success is not only 'I criticise my body less' but a kinder, steadier relationship with the body, including during sex. Mira can say: 'We're not aiming for you to love every part of yourself. We're aiming for you to be on your own side.' Limits: the abstract does not say which groups the underlying research covered, and the paper is not about sex specifically."
+  },
+  {
+    "id": "C08",
+    "title": "Negative body attitudes and sexual dissatisfaction in men: the mediating role of body self-consciousness during physical intimacy",
+    "authors": "van den Brink F, Vollmann M, Sternheim LC, Berkhout LJ, Zomerdijk RA, Woertman L",
+    "year": 2018,
+    "citation": "van den Brink F, Vollmann M, Sternheim LC, Berkhout LJ, Zomerdijk RA, Woertman L (2018). Negative body attitudes and sexual dissatisfaction in men: the mediating role of body self-consciousness during physical intimacy. Archives of Sexual Behavior 47(3):693-701. First published online 2017. Open access under CC BY 4.0.",
+    "link": "https://doi.org/10.1007/s10508-017-1016-3",
+    "labels": {
+      "type": "2 Association studies",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Open",
+      "usedFor": ["Root causes"],
+      "tags": ["men", "spectatoring", "genital worries"],
+      "studiedIn": "Men"
+    },
+    "quoteAllowed": true,
+    "basis": "full text",
+    "card": "What it found: 201 heterosexual Dutch men aged 18 to 44 (average about 24), recruited around a university, completed an online survey. Negative feelings about their muscles, body fat, height and genitals all went with more sexual dissatisfaction, most clearly for genitals. Self-consciousness about the body during intimacy went with dissatisfaction even more strongly. When the four body areas were looked at together, only feelings about the genitals stood out. Statistically, worries about muscles, fat and genitals were linked to dissatisfaction partly through feeling self-conscious during intimacy; height was not. How strong: Low. One cross-sectional survey; these things go together, and the authors say the direction of cause cannot be determined. How Mira uses it: to tell men that body worries in bed are not just a women's issue, and that much of the link runs through self-consciousness in the moment, which attention practice can work on. Genital worries deserve gentle, direct attention (see C31 for reassurance on size). The authors note that men often don't raise body worries unprompted, so Mira can ask. Limits: young, mostly highly educated, heterosexual men from one country; no measure of weight; no partner data; it does not cover gay or bisexual men."
+  },
+  {
+    "id": "C09",
+    "title": "The impact of body awareness on women's sexual health: a comprehensive review",
+    "authors": "Seal BN, Meston CM",
+    "year": 2020,
+    "citation": "Seal BN, Meston CM (2020). The impact of body awareness on women's sexual health: a comprehensive review. Sexual Medicine Reviews 8(2):242-255. First published online 2018.",
+    "link": "https://doi.org/10.1016/j.sxmr.2018.03.003",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["attention", "mindfulness", "sensate focus"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a review of 29 studies in which researchers deliberately changed women's body awareness and measured sexual response: 7 on sensate focus, 13 on mindfulness and 9 lab experiments. Explicit instructions to tune into the body, including those used in sensate focus and mindfulness, appeared to improve sexual response for many women: those with low arousal, low desire, difficulty with orgasm or sexual pain, and women without problems. In one study, raising body awareness indirectly also increased arousal. The authors conclude that body awareness seems to help some women and see it as an integral part of treatment for sexual problems. How strong: Low by our labelling rule (the library rates it 'early to moderate'). It is a narrative review, and the authors stress that in treatment studies it is often unclear how much of the benefit comes from body awareness itself rather than other parts of the programme. How Mira uses it: as the main reason her lead practices steer attention toward what the body feels rather than how it looks. She offers this as worth trying, not as a guaranteed fix. Limits: women only; the abstract does not describe study sizes, ages or orientation; it does not cover men."
+  },
+  {
+    "id": "C10",
+    "title": "Body image and female sexual functioning and behavior: a review",
+    "authors": "Woertman L, van den Brink F",
+    "year": 2012,
+    "citation": "Woertman L, van den Brink F (2012). Body image and female sexual functioning and behavior: a review. Journal of Sex Research 49(2-3):184-211.",
+    "link": "https://doi.org/10.1080/00224499.2012.658586",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes", "Research"],
+      "tags": ["spectatoring", "attention"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a review that brought together 57 studies on body image and sexuality in healthy women. The authors conclude that body image concerns can affect every area of sexual functioning. Thoughts about the body and self-consciousness appear to be the key factors: evaluating the body and related thoughts interfere with sexual response and experience during sex, and also with sexual behaviour more broadly, including avoiding sex and sexual risk-taking. How strong: Medium. Our library rates it strong as evidence of an association, but it is a narrative review that brings the studies together without pooling them into one estimate. Body worry and a poorer sex life go together; the review does not show that one causes the other. How Mira uses it: to validate people early in a chat, for example: 'Studies suggest that how women feel about their bodies and how sex feels go together. You're not imagining it.' It also supports her focus on thoughts and self-consciousness during sex, and she can gently ask whether worry is leading someone to avoid sex altogether. Limits: healthy women only, so it does not cover men, and the abstract does not describe ages, orientation or cultures; it does not test any intervention."
+  },
+  {
+    "id": "C11",
+    "title": "Effects of mindfulness-based therapies for female sexual dysfunction: a meta-analytic review",
+    "authors": "Stephenson KR, Kerth J",
+    "year": 2017,
+    "citation": "Stephenson KR, Kerth J (2017). Effects of mindfulness-based therapies for female sexual dysfunction: a meta-analytic review. Journal of Sex Research 54(7):832-849.",
+    "link": "https://doi.org/10.1080/00224499.2017.1331199",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["mindfulness"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a meta-analysis of 11 trials (449 participants in total) of mindfulness-based therapy for women's sexual difficulties; two trials were still under review at the time, and only four compared therapy with a wait-list. Across studies, every area of sexual function and sexual wellbeing improved from before to after therapy, mostly by a moderate amount. Against wait-lists, effects were of similar size in most cases but did not reach statistical significance for several outcomes, and some results showed signs of publication bias. Larger effects tended to appear in studies that required participants to have a partner, or that offered individual rather than group therapy. How strong: Medium. The authors' own conclusion is cautious: mindfulness therapy may be effective, and the evidence has important limits. How Mira uses it: to back mindfulness-style attention practice as a reasonable thing to try, framed honestly: 'Studies suggest mindfulness-based therapy can help women with sexual difficulties, often by a moderate amount, though the research is still limited.' She does not promise a cure or quick results. Limits: few trials and few participants overall; only four had a wait-list comparison; these were therapy programmes, not self-guided chat; women only, so it says nothing about men."
+  },
+  {
+    "id": "C12",
+    "title": "A meta-analytic review of stand-alone interventions to improve body image",
+    "authors": "Alleva JM, Sheeran P, Webb TL, Martijn C, Miles E",
+    "year": 2015,
+    "citation": "Alleva JM, Sheeran P, Webb TL, Martijn C, Miles E (2015). A meta-analytic review of stand-alone interventions to improve body image. PLoS ONE 10(9):e0139177. Open access under CC BY.",
+    "link": "https://doi.org/10.1371/journal.pone.0139177",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "High",
+      "priority": "Core",
+      "copyright": "Open",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["CBT"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": true,
+    "basis": "full text",
+    "card": "What it found: a meta-analysis of 62 randomised tests of programmes aimed only at improving body image (3,846 people). At first sight they helped by a small-to-medium amount, but most studies were at high risk of bias, few were large enough, and null results seemed to go unpublished; after correcting for this, the benefit was small but reliable. Twelve techniques went with bigger gains, including discussing how thoughts shape body image, tracking and reworking those thoughts, replacing harsh body talk with neutral words, guided imagery, exposure such as mirror work, relapse planning, stress management, and learning what drives body image. Three went with smaller gains: self-esteem boosting exercises (from one study only), discussing individual differences and discussing physical activity. Media literacy did not help. Programmes did better for people who already disliked their bodies, in groups, with a facilitator and over several sessions; effects faded by follow-up, and none followed people beyond three months. How strong: High that such programmes help, but only by a small amount. The technique findings are weaker: they come from comparing studies, and the helpful techniques were usually used together, so the paper could not tell which did the work; Mira words them as 'studies suggest'. How Mira uses it: to promise modestly and to favour thought work and neutral body language over pep talks, fitness talk or talk about how bodies differ. Limits: body image, not sex; mostly young women; programmes without a facilitator did worse, which matters for a chat coach."
+  },
+  {
+    "id": "C13",
+    "title": "Internet- and mobile-based psychological interventions for sexual dysfunctions: a systematic review and meta-analysis",
+    "authors": "Zarski A-C, Velten J, Knauer J, Berking M, Ebert DD",
+    "year": 2022,
+    "citation": "Zarski A-C, Velten J, Knauer J, Berking M, Ebert DD (2022). Internet- and mobile-based psychological interventions for sexual dysfunctions: a systematic review and meta-analysis. npj Digital Medicine 5:139. Open access under CC BY 4.0.",
+    "link": "https://doi.org/10.1038/s41746-022-00670-1",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Open",
+      "usedFor": ["Research", "Practices"],
+      "tags": ["CBT", "sensate focus", "partner talk", "men"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": true,
+    "basis": "full text",
+    "card": "What it found: a meta-analysis of 12 randomised trials of online or app-based psychological programmes for sexual problems (952 people analysed; six programmes for women and six for men, all of the men's targeting erection problems). Compared with controls, mostly waiting lists, programmes improved women's sexual function by a medium amount, and women's sexual satisfaction by a large but uncertain amount that shrank and lost significance after correcting for publication bias. Men's sexual function improved only slightly, and men's satisfaction did not change significantly. All programmes were CBT-based sex therapy, typically with education, reworking thoughts, sensate focus and communication exercises; only one included mindfulness. How strong: Medium. Trials were few and mostly small, in the typical trial only about half finished the programme, all had at least some risk of bias, and long-term effects could not be judged. How Mira uses it: to say honestly that structured online self-help can help, especially women, and to borrow its ingredients. Ten of the twelve programmes had some human support and many required partner exercises, so Mira does not claim the same results for an AI chat on its own. Limits: mostly heterosexual couples; five trials were in people with cancer or spinal cord injury; queer and trans people barely covered; not about body image."
+  },
+  {
+    "id": "C14",
+    "title": "The effectiveness of stand-alone cognitive-behavioural therapy for body image: a meta-analysis",
+    "authors": "Jarry JL, Ip K",
+    "year": 2005,
+    "citation": "Jarry JL, Ip K (2005). The effectiveness of stand-alone cognitive-behavioural therapy for body image: a meta-analysis. Body Image 2(4):317-331.",
+    "link": "https://doi.org/10.1016/j.bodyim.2005.10.001",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["CBT"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a meta-analysis of 19 studies of CBT programmes aimed only at body image. The behavioural side of body image improved most, and the 'investment' side, how central appearance is to someone's sense of self, improved least. People with clinical-level body image problems improved more than college student samples. Programmes that worked on attitudes, behaviour and perception together did better than those covering attitudes and behaviour only. CBT with a therapist did better than self-directed CBT. Body image measures improved somewhat more than general psychological ones, and gains held at follow-up. How strong: Low. The library has not rated it, and on its merits we keep it low: it is an older meta-analysis whose abstract does not say how study quality or bias was handled, and a later one that corrected for bias (C12) suggests body image programmes in general help by a small amount, so Mira takes her sense of how much to promise from C12. How Mira uses it: as support for her CBT steps, such as noticing harsh body thoughts and testing them, and gently cutting back avoidance, offered in small doses. Because self-directed CBT did less well, she presents herself as a support, not a replacement for a therapist, when problems are severe. Limits: the abstract gives no sample sizes, genders or ages; outcomes are body image, not sex."
+  },
+  {
+    "id": "C15",
+    "title": "The strength of correlation between female genital self-image and sexual function: a systematic review and meta-analysis",
+    "authors": "Alavi-Arjas F, Goodman MP, Simbar M, Alavi Majd H, Nahidi F",
+    "year": 2023,
+    "citation": "Alavi-Arjas F, Goodman MP, Simbar M, Alavi Majd H, Nahidi F (2023). The strength of correlation between female genital self-image and sexual function: a systematic review and meta-analysis. Journal of Sexual Medicine 20(12):1376-1383. A correction (Journal of Sexual Medicine 21(1):72) fixed one author's affiliation only.",
+    "link": "https://doi.org/10.1093/jsxmed/qdad118",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "High",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Root causes", "Research"],
+      "tags": ["genital worries"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a systematic review and meta-analysis of studies from 2000 to 2022 on how women's genital self-image, meaning how they feel about their genitals, relates to their sexual function. Sixteen studies with 13,505 participants were included, and all but one found a clear positive link: women who felt better about their genitals tended to report better sexual function. Pooled together, the link was moderate (a correlation of 0.375). The authors stress that the studies differed a lot: they used different questionnaires in different cultures and did not account for other factors that could explain the link, so its size varied widely. How strong: High for the link itself (the library rates it strong as an association). Almost every study pointed the same way, but these are correlations: genital self-image and sexual function go together, which does not show that one causes the other. How Mira uses it: to take genital worries seriously as part of body confidence in sex, for example: 'Research consistently shows that women who feel better about their genitals tend to report fewer sexual difficulties. The two go together; that doesn't mean one causes the other.' She never judges or compares anyone's genitals, does not promise that feeling better about them will fix sexual function, and sends medical questions, including about genital surgery, to a doctor (rail 12). Limits: women only; the abstract does not describe ages, orientation or countries; for men, see C08 and C31."
+  },
+  {
+    "id": "C16",
+    "title": "Couples' sexual communication and dimensions of sexual function: a meta-analysis",
+    "authors": "Mallory AB, Stanton AM, Handy AB",
+    "year": 2019,
+    "citation": "Mallory AB, Stanton AM, Handy AB (2019). Couples' sexual communication and dimensions of sexual function: a meta-analysis. Journal of Sex Research 56(7):882-898.",
+    "link": "https://doi.org/10.1080/00224499.2019.1568375",
+    "labels": {
+      "type": "1 Reviews & meta-analyses",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices"],
+      "tags": ["partner talk", "men"],
+      "studiedIn": "Couples"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a meta-analysis of 48 studies on how couples' sexual communication relates to sexual function. Better sexual communication went with more desire, arousal, lubrication, orgasm and erectile function, less pain, and better overall sexual function. Most of these links were small; the link with overall function was moderate. Links with desire and orgasm were stronger for women than for men. For overall function the link was strongest in studies of married participants and weakest in studies of dating ones. Links were also stronger in studies done outside the US than in US studies. How strong: Medium, for an association. Talking openly about sex goes together with better sexual function, but this does not show which comes first. How Mira uses it: to encourage partner conversations as one helpful step, at the person's pace. She might help them plan one small, low-pressure thing to say, such as what they enjoy, rather than a big talk about their body. She never pushes disclosure and respects that some people have no partner, or a partner it would not be safe to open up to. Limits: correlational studies; the abstract does not describe orientation or how communication was measured; it is about sexual function, not body image."
+  },
+  {
+    "id": "C17",
+    "title": "A randomized trial comparing group mindfulness-based cognitive therapy with group supportive sex education and therapy for the treatment of female sexual interest/arousal disorder",
+    "authors": "Brotto LA, Zdaniuk B, Chivers ML, Jabs F, Grabovac A, Lalumière ML, Weinberg J, Schonert-Reichl KA, Basson R",
+    "year": 2021,
+    "citation": "Brotto LA, Zdaniuk B, Chivers ML, Jabs F, Grabovac A, Lalumière ML, Weinberg J, Schonert-Reichl KA, Basson R (2021). A randomized trial comparing group mindfulness-based cognitive therapy with group supportive sex education and therapy for the treatment of female sexual interest/arousal disorder. Journal of Consulting and Clinical Psychology 89(7):626-639.",
+    "link": "https://doi.org/10.1037/ccp0000661",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["mindfulness"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 148 women with low sexual interest or arousal (average age late 30s) were randomly assigned to eight weekly group sessions of either mindfulness-based cognitive therapy plus sex education, or supportive sex education and therapy without mindfulness. Desire and arousal improved substantially in both groups, to a similar degree, and the gains lasted 12 months. Sexual distress also fell substantially, more so with mindfulness. Relationship satisfaction rose slightly, and rumination about sex eased moderately, again more with mindfulness. Across both groups, about half the women reported moderate or great improvement in desire and in their sex life overall. How strong: Medium (the library rates it 'moderate to strong'; we use the lower end). A large randomised trial, but both groups received an active treatment and there was no untreated comparison, so it cannot show how much of the change came from the programmes themselves. How Mira uses it: as support for her attention practice, told honestly: for desire and arousal the mindfulness programme did no better than sex education without mindfulness, though it eased distress and rumination more. It is also why she promises modestly: 'In a large study of eight-week group programmes, about half of the women felt clearly better. It's worth trying, and it isn't a guaranteed fix.' Limits: women with a diagnosed desire or arousal problem, not body image as such; therapist-led groups, not self-guided chat; the abstract does not describe orientation or ethnicity; it does not cover men."
+  },
+  {
+    "id": "C18",
+    "title": "Mindfulness and sex education for sexual interest/arousal disorder: mediators and moderators of treatment outcome",
+    "authors": "Brotto LA, Zdaniuk B, Chivers ML, Jabs F, Grabovac AD, Lalumière ML",
+    "year": 2023,
+    "citation": "Brotto LA, Zdaniuk B, Chivers ML, Jabs F, Grabovac AD, Lalumière ML (2023). Mindfulness and sex education for sexual interest/arousal disorder: mediators and moderators of treatment outcome. Journal of Sex Research 60(4):508-521. First published online 2022.",
+    "link": "https://doi.org/10.1080/00224499.2022.2126815",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Research"],
+      "tags": ["mindfulness", "attention", "self-compassion"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a follow-up analysis of the same trial as C17 (148 cisgender women with low sexual interest or arousal) asking what explained the improvements. Gains in self-reported interoceptive awareness, meaning noticing sensations inside the body, helped explain improvements in desire, arousal and sexual distress, more strongly after the mindfulness programme. Growth in self-compassion helped explain gains in desire and arousal in the mindfulness group only, and less distress in both groups. Less self-criticism helped explain less distress, especially after mindfulness, and lower depression did so in the mindfulness group only. Growth in mindfulness predicted improvement only in the mindfulness group. Women's expectations of improvement made no difference to their results. How strong: Low. The library has not rated it, and on its merits we keep it low: it is a secondary analysis of a good randomised trial, and the possible explanations were measured alongside the outcomes, so they suggest how the programmes might work but do not prove it. How Mira uses it: to explain why her practices ask people to notice sensation and to meet themselves kindly: 'Early research hints that when women improve, it goes hand in hand with getting better at noticing their body from the inside and being kinder to themselves.' Limits: cisgender women with a diagnosed desire or arousal problem; therapist-led groups; not about body image as such; it does not cover men or trans people."
+  },
+  {
+    "id": "C19",
+    "title": "Results of a randomized waitlist-controlled trial of online cognitive behavioral sex therapy and online mindfulness-based sex therapy for hypoactive sexual desire dysfunction in women",
+    "authors": "Velten J, Hirschfeld G, Meyers M, Margraf J",
+    "year": 2024,
+    "citation": "Velten J, Hirschfeld G, Meyers M, Margraf J (2024). Results of a randomized waitlist-controlled trial of online cognitive behavioral sex therapy and online mindfulness-based sex therapy for hypoactive sexual desire dysfunction in women. Journal of Consulting and Clinical Psychology 92(11):742-755.",
+    "link": "https://doi.org/10.1037/ccp0000922",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Research", "Practices"],
+      "tags": ["CBT", "mindfulness"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 266 women with low sexual desire were randomly assigned to online CBT sex therapy, online mindfulness-based sex therapy (each eight modules on an e-health platform, with an e-coach supporting adherence), or a waiting list. Compared with the waiting list, both programmes clearly improved desire and reduced sexual distress at 3 and 6 months, and the gains held at 12 months. About a third to two fifths showed reliable improvement in desire, and a further fifth to a quarter reached clinically significant improvement. Distress responded better: more than 4 in 10 showed reliable change, and a further 37 to 42 percent reached clinically significant improvement. Even so, fewer than 1 in 4 women reached clinically significant change in desire. How strong: Medium. A sizeable randomised trial with a waiting-list control, analysed by intention to treat. How Mira uses it: to set honest expectations for self-paced practice: 'Studies suggest online programmes like this help many women feel less distressed, and some feel more desire, but big changes in desire are less common.' She treats feeling less distressed as a real gain, not a consolation prize. Limits: women with diagnosed low desire, not body image as such; human e-coach support, unlike Mira alone; 12-month results only for the two programmes; the abstract does not describe orientation; it does not cover men."
+  },
+  {
+    "id": "C20",
+    "title": "Self-compassion and body dissatisfaction in women: a randomized controlled trial of a brief meditation intervention",
+    "authors": "Albertson ER, Neff KD, Dill-Shackleford KE",
+    "year": 2015,
+    "citation": "Albertson ER, Neff KD, Dill-Shackleford KE (2015). Self-compassion and body dissatisfaction in women: a randomized controlled trial of a brief meditation intervention. Mindfulness 6(3):444-454. First published online 2014.",
+    "link": "https://doi.org/10.1007/s12671-014-0277-3",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices"],
+      "tags": ["self-compassion", "appreciation", "shame"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: women of a wide range of ages were randomly assigned to three weeks of self-compassion meditation training (98 women, average age about 38) or a waiting list (130 women). Compared with the waiting list, the meditation group showed greater drops in body dissatisfaction, body shame and self-worth that depends on appearance, and greater gains in self-compassion and body appreciation. All improvements were still present three months later. The authors suggest this may be a useful, low-cost way to improve body image in adult women. How strong: Medium. One randomised trial with a waiting-list control, so it cannot show whether the self-compassion content itself, rather than simply doing a regular practice, made the difference; in a later online study of UK women (T07), a three-week meditation programme reduced body dissatisfaction whether it focused on self-compassion or on relaxation. How Mira uses it: as the basis for her kindness practice. When someone is harsh about their body, she invites a short, regular exercise: acknowledging that this is painful and answering the inner critic in a warmer voice, without demanding that they feel positive about how they look. She frames it as something that tends to help over weeks, not minutes. Limits: women only; outcomes are body image, not sex; the abstract does not describe ethnicity or orientation."
+  },
+  {
+    "id": "C21",
+    "title": "Expand Your Horizon: a programme that improves body image and reduces self-objectification by training women to focus on body functionality",
+    "authors": "Alleva JM, Martijn C, Van Breukelen GJP, Jansen A, Karos K",
+    "year": 2015,
+    "citation": "Alleva JM, Martijn C, Van Breukelen GJP, Jansen A, Karos K (2015). Expand Your Horizon: a programme that improves body image and reduces self-objectification by training women to focus on body functionality. Body Image 15:81-89.",
+    "link": "https://doi.org/10.1016/j.bodyim.2015.07.001",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Medium",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices"],
+      "tags": ["body functionality", "appreciation"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 81 young women (average age about 23) with a negative body image were randomly assigned to Expand Your Horizon, a set of structured writing assignments about what their body can do, or to an active control programme. Compared with the control group, the Expand Your Horizon group became more satisfied with their appearance and with how their body functions, appreciated their body more and saw it less as an object to be looked at. Outcomes were measured before, straight after and one week later; effects were small to medium. The authors describe it as the first study to show that focusing on body functionality can improve body image and reduce self-objectification in women who dislike their bodies. How strong: Medium. A randomised trial against an active control, a fairer test than a waiting list, but small and short. How Mira uses it: as the basis for her body functionality practice, inviting someone to write or say what their body lets them do and feel (moving, sensing, comforting, enjoying touch) instead of how it looks. It gives people who can't believe 'love your body' messages something concrete to work with. Limits: young women only; one-week follow-up, so we don't know how long it lasts; outcomes are body image, not sex; the abstract does not describe ethnicity or orientation."
+  },
+  {
+    "id": "C22",
+    "title": "The impact of body awareness on sexual arousal in women with sexual dysfunction",
+    "authors": "Seal BN, Meston CM",
+    "year": 2007,
+    "citation": "Seal BN, Meston CM (2007). The impact of body awareness on sexual arousal in women with sexual dysfunction. Journal of Sexual Medicine 4(4 Pt 1):990-1000.",
+    "link": "https://doi.org/10.1111/j.1743-6109.2007.00525.x",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Quick tips"],
+      "tags": ["attention", "spectatoring"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: 21 women with sexual difficulties, all with relatively low body image, viewed erotica in two lab sessions. In one session their body awareness was raised: they faced a full-length mirror throughout and used it to place electrodes on their bodies. In that session they reported more mental sexual arousal and felt more physically aroused than in the session without body awareness. Their body esteem did not explain this. Physiological arousal measured in the lab, mood, anxiety and distraction did not change. The authors conclude that awareness of your own body can go with more felt arousal, at least when it does not turn into distraction. How strong: Low. A small lab experiment with one brief manipulation. How Mira uses it: to correct the idea that any attention to your own body during sex is harmful. Noticing your body is not the problem; anxious checking and judging is. So rather than telling people to avoid their body, she invites curious, non-judging awareness, starting with what they can feel. She does not prescribe mirror exercises on the strength of this study. Limits: 21 women, in a lab, viewing erotica rather than having sex with a partner; the abstract does not describe ages or orientation; it does not cover men."
+  },
+  {
+    "id": "C23",
+    "title": "Positive self-statements: power for some, peril for others",
+    "authors": "Wood JV, Perunovic WQE, Lee JW",
+    "year": 2009,
+    "citation": "Wood JV, Perunovic WQE, Lee JW (2009). Positive self-statements: power for some, peril for others. Psychological Science 20(7):860-866.",
+    "link": "https://doi.org/10.1111/j.1467-9280.2009.02370.x",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Practices", "Quick tips"],
+      "tags": ["appreciation"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: a survey showed that people often use positive self-statements and believe they work. Two experiments then tested them. Among people with low self-esteem, those who repeated a statement that they were lovable, or focused on ways it was true, felt worse than those who did not repeat it or who considered ways it was both true and not true. Among people with high self-esteem, repeating it or focusing on its truth helped, but only a little. The authors conclude that such statements may help some people but backfire for those who seem to need them most. How strong: Low. Two experiments, rated 'early' in our library. How Mira uses it: as a firm rule. Mira never tells someone to 'just love yourself' or to repeat affirmations they don't believe, especially when they seem low in self-worth. Instead she offers statements a person can actually accept ('Right now my body is letting me feel this'), curiosity, kindness and the functionality practice (C21). If someone already finds affirmations helpful she doesn't argue, but she doesn't push them. Limits: not about bodies or sex; the abstract does not say who took part beyond their self-esteem, how many people, or how long the effects lasted."
+  },
+  {
+    "id": "C24",
+    "title": "Feasibility of an online mindfulness-based intervention for women with sexual interest/arousal disorder",
+    "authors": "Brotto LA, Stephenson KR, Zippan N",
+    "year": 2022,
+    "citation": "Brotto LA, Stephenson KR, Zippan N (2022). Feasibility of an online mindfulness-based intervention for women with sexual interest/arousal disorder. Mindfulness 13(3):647-659. Free full text on PubMed Central (PMC8750367); copyright Springer Nature, made free to read under PMC's COVID-19 terms.",
+    "link": "https://europepmc.org/article/PMC/PMC8750367",
+    "labels": {
+      "type": "6 Trials & experiments",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Rewrite only",
+      "usedFor": ["Practices"],
+      "tags": ["mindfulness", "attention", "sensate focus"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "full text",
+    "card": "What it is: a study of eSense-Mindfulness, an eight-module online version of the face-to-face group programme tested in C17, used without personal guidance by 30 participants in relationships with low sexual desire or arousal (29 women, one non-binary person). Each module added a new guided audio practice and a little education about sex, in this order: mindful eating as an introduction; a body scan for awareness of physical sensations; mindful stretching and walking alongside work on body image; mindfulness of thoughts about sex; a meditation on working with difficulty, aversion and avoidance, plus a first introduction to self-touch; a sexual sensations meditation and a pleasurable touch exercise, with sexual communication; sensate focus with a partner (see C25); and a plan for keeping up practice. A breathing space was also among the practices. Fictional case examples modelled three reflection questions for after a practice: what you noticed, how that attention differed from your usual way of paying attention, and how it relates to your sexual concerns. How strong: Low. With no comparison group, the authors say the large improvements in desire, arousal, satisfaction and distress cannot be confidently credited to the programme, and over 9 in 10 were still in the clinical range for sexual distress afterwards. Home practice was the hard part: only half did most or all of it, it felt harder as the modules went on, hardest in the partner module, and the authors cite work suggesting that shorter, more frequent practice is easier to keep up. How Mira uses it: for the order of her attention practices: plain body sensations first (practice 2, Body scan), then thoughts, then self-touch (practice 6) and sexual sensations, with partner touch (practice 7) last and only if wanted. She gives the idea in a sentence, offers the smallest first step, such as a few minutes of noticing whatever sensations are there without judging them, and uses the three questions in check-ins. For self-touch she follows a Royal Berkshire NHS psychosexual therapy leaflet (2026): set a goal-free intention of noticing sensations, start with five minutes if that is all there is, and when the mind wanders, come back without self-blame. Body scans and self-touch can bring up difficult memories, so she offers them gently and as optional (rail 11); with pain, touch stays away from painful areas (rail 12). She does not recommend eSense or any recording. Limits: a small, mostly white, highly educated sample with low desire, not body image as such; people whose difficulties were mainly pain were excluded, and it does not cover men. The paper names the practices and their order but not their wording, and does not say whether practices stirred up difficult memories, although 13 of the 30 reported a history of sexual abuse."
+  },
+  {
+    "id": "C25",
+    "title": "Sensate Focus",
+    "authors": "Cornell Health",
+    "year": 2019,
+    "citation": "Cornell Health (2019). Sensate Focus. Patient handout dated 18 October 2019. Cornell University, Ithaca, NY. Condensed from the chapter 'Sex and Sensuality' in Masters WH, Johnson VE, Kolodny RC (1994), Heterosexuality, HarperCollins.",
+    "link": "https://health.cornell.edu/sites/health/files/pdf-library/sensate-focus.pdf",
+    "labels": {
+      "type": "3 Manuals & books",
+      "evidence": "Practical wisdom",
+      "priority": "Core",
+      "copyright": "Rewrite only",
+      "usedFor": ["Practices"],
+      "tags": ["sensate focus", "spectatoring", "attention"],
+      "studiedIn": "Couples"
+    },
+    "quoteAllowed": false,
+    "basis": "full text",
+    "card": "What it is: a free handout from Cornell Health, Cornell University's health service, condensing Masters, Johnson and Kolodny's account of sensate focus; it says the exercises suit couples of any sex, gender or sexual identity. Partners choose a relaxed, private time and take turns: one touches, the other receives without touching back, then they swap. At first breasts, genitals, oral sex and intercourse are off limits however aroused either feels, which the handout says takes away pressure to respond in a particular way and helps break old habits. The person touching explores what they feel, such as how smooth, rough or warm the skin is, varying pressure and pace; the point is neither a massage nor pleasing the partner. Both try to notice rather than judge, because judging in the moment turns you into an observer instead of a participant. The receiver speaks up if anything is physically or emotionally uncomfortable, either partner can end a session, and touch that starts to feel like an obligation should stop. Later steps add breast and genital touch, still without trying to make arousal or orgasm happen, and in time intercourse; there is no test to pass before moving on. Weiner and Avery-Clark (2014) stress the same core: touching for your own interest rather than pleasuring the partner, staying present to sensation without forcing pleasure or arousal. How strong: Practical wisdom: it shows how the practice is commonly taught, not that it works; for evidence, see C09 and C13. How Mira uses it: to explain practice 7, Slow touch with a partner: taking turns with sex off the table for a while, so attention can rest on what touch feels like rather than on how you look or perform, and coming back to one sensation whenever the watcher shows up. The smallest first step is agreeing with a partner on one short, unhurried, no-sex touch session; the handout allows clothing when being naked is not possible. Partner steps are optional and never offered when there are signs of pressure, and every practice also works alone (practice 6). With pain, touch stays away from painful areas (rail 12). Limits: a how-to handout, not a study; written for two trusting partners; it does not mention trauma or sexual pain, and Mira does not repeat its later, more sexual steps."
+  },
+  {
+    "id": "C26",
+    "title": "Building Body Acceptance: Overcoming Body Dysmorphic Disorder (Modules 3 to 6)",
+    "authors": "Anderson R, Saulsman L, McEvoy P, Fursland A, Nathan P, Ridley S",
+    "year": 2012,
+    "citation": "Anderson R, Saulsman L, McEvoy P, Fursland A, Nathan P, Ridley S (2012). Building Body Acceptance: Overcoming Body Dysmorphic Disorder. Perth, Western Australia: Centre for Clinical Interventions. ISBN 0 9757995 9 2. Modules read: 3 Reducing Appearance Preoccupation; 4 Reducing Checking & Reassurance Seeking; 5 Overcoming Negative Predictions, Avoidance & Safety Behaviours; 6 Adjusting Appearance Assumptions.",
+    "link": "https://www.cci.health.wa.gov.au/Resources/Looking-After-Yourself/Body-Dysmorphia",
+    "labels": {
+      "type": "3 Manuals & books",
+      "evidence": "Practical wisdom",
+      "priority": "Core",
+      "copyright": "Rewrite only",
+      "usedFor": ["Practices"],
+      "tags": ["CBT"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "full text",
+    "card": "What it is: a free CBT self-help workbook from the Centre for Clinical Interventions in Western Australia, written for body dysmorphic disorder and meant to be worked through in order; its references include Cash's Body Image Workbook. The four modules we read set out the core steps. First, notice repetitive thoughts about appearance, such as harsh labels, unfavourable comparisons, sweeping conclusions built on words like never and always, and questions that have no answer, and practise bringing attention back to the present. Second, treat worried predictions as opinions to test, not facts: write down exactly what you expect to happen, weigh the evidence for and against, consider the most likely outcome and how you would cope, then run a small experiment to see what actually happens. Third, cut back checking and reassurance seeking, such as mirror checking, comparing and asking others how you look, and avoidance or safety behaviours, such as covering up or choosing dim lighting: they bring short-term relief but keep the worry going and stop you finding out that predictions may not come true. Change is gradual: pick one or two behaviours, decide whether to reduce, postpone or drop each, climb a stepladder of small steps rated by how distressing they feel, and expect some discomfort along the way. Finally, loosen rigid if-then rules about appearance into more realistic, flexible ones. How strong: Practical wisdom: it shows how CBT for body image is delivered, not that this workbook works. For evidence, see C12 (body image programmes help by a small amount, with bigger gains for techniques such as reworking thoughts and exposure) and C14 (self-directed CBT did less well than CBT with a therapist). How Mira uses it: for the wording of her CBT steps, one small dose at a time: notice and name the harsh thought, treat it as a hypothesis ('What else could be true?'), and, if the person wants, try one small change to one hiding habit. Choosing light and position stays a fine quick tip for comfort; for lasting change she suggests loosening a hiding habit one optional step at a time, never all at once. She never discusses weight or shape (rail 1). Limits: written for a clinical problem that Mira does not treat: hours of checking, or avoiding mirrors, photos or going out, mean a therapist (rail 11). It is not about sex, and Mira never claims these steps improve sex on their own (rail 5)."
+  },
+  {
+    "id": "C27",
+    "title": "Exercise 2: Self-Compassion Break",
+    "authors": "Neff K",
+    "year": 2024,
+    "citation": "Neff K (2024). Exercise 2: Self-Compassion Break. self-compassion.org (Self-Compassion LLC). Undated web page: online at this address since at least March 2024; the exercise has been on Neff's site since at least 2015.",
+    "link": "https://self-compassion.org/exercises/exercise-2-self-compassion-break/",
+    "labels": {
+      "type": "3 Manuals & books",
+      "evidence": "Practical wisdom",
+      "priority": "Core",
+      "copyright": "Rewrite only",
+      "usedFor": ["Practices", "Quick tips"],
+      "tags": ["self-compassion", "shame"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "full text",
+    "card": "What it is: a short written exercise on Kristin Neff's website. When something is causing you stress, bring it to mind and see whether you can feel the stress in your body, then offer yourself three things, one for each part of self-compassion. First, acknowledge in a few plain words that this moment is painful (mindfulness). Second, remind yourself that struggle is part of everyone's life and that others feel this too (common humanity). Third, offer yourself kindness: ask yourself what words of kindness you need at this moment and choose a kind wish for yourself that fits, with a hand on your heart or another soothing touch if that feels right. Neff presents it as something to use whenever it is needed. Her companion exercise on changing critical self-talk (Exercise 5, same site, undated) adds the groundwork, practised over several weeks: notice the critic's exact words and tone, soften it without attacking it, and reword its message the way a very compassionate friend would. How strong: Practical wisdom: it shows how the practice is commonly taught, not that it works. For evidence, see C20 (a randomised trial of self-compassion meditation for body dissatisfaction) and C18 (growth in self-compassion went with improvement after a mindfulness programme). How Mira uses it: as practice 4, Kindness for body worry, and as her quick tip after sex: one kind sentence, as to a friend. She applies the three parts to the body worry in plain words and lets the person choose or write words they can believe rather than handing them a script, since phrases someone cannot believe may backfire (C23). She never asks anyone to love their body (rail 3), and the soothing touch is optional. Limits: an exercise page, not a study, and not about bodies or sex. Some of its sample wishes, such as accepting yourself as you are, may be too big a step for someone with strong body shame, so Mira treats them as options."
+  },
+  {
+    "id": "C28",
+    "title": "Come As You Are",
+    "authors": "Nagoski E",
+    "year": 2015,
+    "citation": "Nagoski E (2015). Come As You Are. Simon & Schuster. LoveIQ's company copy (brain books source) is a later printing; edition not confirmed.",
+    "link": null,
+    "labels": {
+      "type": "3 Manuals & books",
+      "evidence": "Practical wisdom",
+      "priority": "Core",
+      "copyright": "Rewrite only",
+      "usedFor": ["Root causes", "Practices"],
+      "tags": ["attention", "self-compassion"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "full text",
+    "card": "What it is: a popular science book by a sex educator, written mainly for women, that explains sexual response with the dual control model (C06). In her account, everyone has a sexual accelerator, which notices anything the brain reads as sexy, and brakes, which notice reasons not to be aroused right now: one reacts to threats in the moment, another, more constant one is tied to worry about performance, such as not reaching orgasm. She argues that people struggling with desire or orgasm often have too much brake rather than too little accelerator. People differ in how sensitive each system is; most sit in the middle. On bodies, she argues that self-criticism acts like stress and presses the brakes: if you are busy hiding parts of yourself, you cannot attend to sensation. Her remedy is to notice the critical thought without scolding yourself for it, and answer it with something kind and simple. How strong: Practical wisdom: a clear synthesis of research for the public, not a study. How Mira uses it: for plain words, such as: 'Body worry is a brake, not a broken part of you. Let's look at what eases your brakes.' Limits: written mainly about women; Mira does not adopt the book's 'love your body' message as an instruction (see C23) and does not repeat its arguments about weight, in line with her no-weight rule."
+  },
+  {
+    "id": "C29",
+    "title": "Women's body image self-consciousness during physical intimacy with a partner",
+    "authors": "Wiederman MW",
+    "year": 2000,
+    "citation": "Wiederman MW (2000). Women's body image self-consciousness during physical intimacy with a partner. Journal of Sex Research 37(1):60-68.",
+    "link": "https://doi.org/10.1080/00224490009552021",
+    "labels": {
+      "type": "4 Validated assessments",
+      "evidence": "Measure",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Intake questions", "Research"],
+      "tags": ["spectatoring"],
+      "studiedIn": "Women"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it is: the paper behind the Body Image Self-Consciousness Scale (BISC), which measures how self-conscious women feel about their bodies during physical intimacy with a partner. Across a set of studies the author developed a 15-item scale and reports that it measured well. About a third of the college women studied said they felt this self-consciousness with a male partner at least some of the time. Their scores were related to their sexual experience, sexual esteem, sexual assertiveness and avoidance of sex, even after taking account of general body image, sexual anxiety and wellbeing. How strong: Measure. The library rates the scale moderate. A scale shows how to measure something; it is not evidence that any practice works. The findings come from college women at one point in time, so Mira words them as early research ('Early research hints...') and as going together, not proven to cause. How Mira uses it: as the definition of her target, self-consciousness in intimate moments rather than general dislike of the body. That shapes the questions she asks in her own words, such as: 'When you're close with someone, how much does worry about how your body looks get in the way?' The item wording is copyrighted and not licensed yet, so Mira never quotes, administers or scores the items until the team clears the licence. Limits: developed with college women about intimacy with male partners, so wording for men and for queer and nonbinary people needs care."
+  },
+  {
+    "id": "C30",
+    "title": "The Body Appreciation Scale-2: item refinement and psychometric evaluation",
+    "authors": "Tylka TL, Wood-Barcalow NL",
+    "year": 2015,
+    "citation": "Tylka TL, Wood-Barcalow NL (2015). The Body Appreciation Scale-2: item refinement and psychometric evaluation. Body Image 12:53-67.",
+    "link": "https://doi.org/10.1016/j.bodyim.2014.09.006",
+    "labels": {
+      "type": "4 Validated assessments",
+      "evidence": "Measure",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Intake questions", "Research"],
+      "tags": ["appreciation"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: the authors revised the original 13-item Body Appreciation Scale, rewording items so that women and men answer the same version and no body-dissatisfaction language is used, and adding items drawn from positive body image research. Across three studies with college and online community samples (820 women, 767 men), they kept 10 items. The scale measured a single thing, worked the same way for women and men and across sample types, and showed good reliability, including over time, and good validity. The authors judge it sound for research and clinical use. How strong: Measure. The library rates it strong as a measure, but a scale shows how to track body appreciation, not that any practice improves it. How Mira uses it: body appreciation, meaning accepting, thinking well of and respecting your body, is the positive target Mira aims for (see C07), and the library plans a short version as her weekly check-in. In chat she can ask a gentle pulse question in her own words, such as how kindly someone has felt toward their body this week, and reflect changes back without judging. Limits: college and online samples, so other cultures, ages and gender-diverse people need checking; it measures appreciation in general, not during sex. The README says BAS-2 is free to use once the authors are notified; Mira quotes no items until the team confirms that."
+  },
+  {
+    "id": "C31",
+    "title": "Does size matter? Men's and women's views on penis size across the lifespan",
+    "authors": "Lever J, Frederick DA, Peplau LA",
+    "year": 2006,
+    "citation": "Lever J, Frederick DA, Peplau LA (2006). Does size matter? Men's and women's views on penis size across the lifespan. Psychology of Men & Masculinity 7(3):129-143.",
+    "link": "https://doi.org/10.1037/1524-9220.7.3.129",
+    "labels": {
+      "type": "2 Association studies",
+      "evidence": "Low",
+      "priority": "Core",
+      "copyright": "Abstract only",
+      "usedFor": ["Quick tips", "Research"],
+      "tags": ["men", "genital worries"],
+      "studiedIn": "Mixed"
+    },
+    "quoteAllowed": false,
+    "basis": "abstract",
+    "card": "What it found: an internet survey of 52,031 heterosexual men and women asked about penis size. Most men rated their own penis as average (66%), 22% as large and 12% as small. 85% of women were satisfied with their partner's size, but only 55% of men were satisfied with their own; 45% wanted to be larger and almost none smaller. Satisfaction was similar at all ages from 18 to 65. Men who saw themselves as larger than average rated their overall appearance most favourably, which the authors read as a possible confidence effect. Self-reported size went with greater height and lower body fat. How strong: Low. A very large online survey, but with self-reported rather than measured size, at one point in time; the links with height and confidence go together, not proven to cause each other. How Mira uses it: as gentle reassurance for men worried about size: 'In a large survey, most women were happy with their partner's size, far more than men were with their own.' She pairs it with attention work (C04, C08), since the worry itself can pull focus during sex, and leaves out the height and body fat findings, in line with her no-weight rule. Limits: heterosexual sample only, so it does not speak to gay or bisexual men or to trans people; the abstract does not say how people were recruited, so it may not represent everyone."
+  }
+]

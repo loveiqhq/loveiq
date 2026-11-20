@@ -21,6 +21,8 @@
  * error — it invents a 16x result for a test that was already over.
  */
 
+import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
+
 /** The four experiment axes we can attribute a person to, server-side. */
 export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
 
@@ -306,4 +308,17 @@ export const AXIS_TITLES: Record<ExperimentAxis, string> = {
   survey: "Survey design",
   pricing: "Report pricing",
   paywall: "Paywall style",
+};
+
+/**
+ * Mark's 50/50 of the EUR 1.99 page (shared/experiments/gateRevealArm.ts), named for
+ * #incoming-surveys (Mark, 17 Nov: "whether the Core Archetype was shown or not"). Kept apart
+ * from ExperimentAxis on purpose: the axes drive the readouts, the trends and the digest,
+ * and none of them reads this test yet.
+ */
+export const GATE_REVEAL_TITLE = "€1.99 page";
+
+export const GATE_REVEAL_LABELS: Record<GateRevealArm, string> = {
+  reveal: "Core Archetype shown (new page)",
+  control: "Core Archetype not shown (today's page)",
 };

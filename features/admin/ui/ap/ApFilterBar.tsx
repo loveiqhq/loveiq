@@ -52,7 +52,7 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
  * the URL.
  */
 /** Filters a page cannot apply: shown greyed at their "all" value, with the reason. */
-type Fixed = "funnel" | "source" | "device" | "tier" | "visitor";
+type Fixed = "assessment" | "funnel" | "source" | "device" | "tier" | "visitor";
 
 const SAVED_PARAMS = { kind: "filter" };
 
@@ -77,6 +77,7 @@ export default function ApFilterBar({
   const filters = {
     ...chosen,
     ...(assessmentFixed ? { assessment: "a" as const } : {}),
+    ...(off("assessment") ? { assessment: "all" as const } : {}),
     ...(off("funnel") ? { funnel: "all" as const } : {}),
     ...(off("source") ? { source: "all" as const } : {}),
     ...(off("device") ? { device: "all" as const } : {}),
@@ -348,7 +349,7 @@ export default function ApFilterBar({
               Assessment
               <select
                 value={filters.assessment}
-                disabled={assessmentFixed}
+                disabled={assessmentFixed || off("assessment")}
                 onChange={(e) => update({ assessment: e.target.value as ApFilters["assessment"] })}
                 className={control}
               >

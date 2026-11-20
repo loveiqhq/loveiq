@@ -7,6 +7,7 @@ import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
 import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
+import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -14,9 +15,8 @@ export const metadata: Metadata = {
   title: "Survey Intro | LoveIQ",
   description:
     "Prepare to discover your sexual archetypes with LoveIQ's science-backed assessment. This short guide helps you get the most meaningful and accurate results.",
-  alternates: {
-    canonical: `${siteUrl}/survey`,
-  },
+  // Out of search results, like the report; the share tags below still serve a pasted link.
+  ...PRIVATE_PAGE_METADATA,
   openGraph: {
     title: "Survey Intro | LoveIQ",
     description:

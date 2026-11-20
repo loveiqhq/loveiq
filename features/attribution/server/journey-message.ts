@@ -18,6 +18,7 @@
  */
 
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
+import { refreshReactivationPost } from "@features/attribution/server/reactivation-post";
 import {
   buildJourneyMessage,
   JOURNEY_STEPS,
@@ -188,6 +189,10 @@ export async function tryPostJourneyViaBot(input: {
  */
 export async function refreshJourneyDetail(submissionId: number): Promise<void> {
   if (!isSlackBotConfigured()) return;
+  // The reader's #report-reactivations post, while under a day old, shows the same report
+  // time. Alongside this redraw, never ahead of it, and awaited however this one ends
+  // (no stored message included). It never rejects.
+  const reactivation = refreshReactivationPost(submissionId);
   try {
     const stored = await readStored(submissionId);
     if (!stored) return;
@@ -237,6 +242,8 @@ export async function refreshJourneyDetail(submissionId: number): Promise<void> 
     });
   } catch (err) {
     logger.warn({ err, submissionId }, "journey-message: detail refresh failed");
+  } finally {
+    await reactivation;
   }
 }
 
@@ -260,6 +267,9 @@ export async function refreshJourneyMessage(
   witnessed: JourneyState
 ): Promise<void> {
   if (!isSlackBotConfigured()) return;
+  // The reader's #report-reactivations post carries the same rail (reactivation-post.ts):
+  // redrawn alongside, awaited however this one ends. It never rejects.
+  const reactivation = refreshReactivationPost(submissionId, witnessed);
   try {
     const stored = await readStored(submissionId);
     if (!stored) return;
@@ -298,5 +308,7 @@ export async function refreshJourneyMessage(
     if (ok) await markState(submissionId, state);
   } catch (err) {
     logger.warn({ err, submissionId }, "journey-message: refresh failed");
+  } finally {
+    await reactivation;
   }
 }

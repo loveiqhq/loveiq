@@ -194,20 +194,130 @@ export default function TermsOfUsePage() {
 
             {/* Section 11 */}
             <section>
-              <h2 className="text-gray-900 font-semibold mb-4">11. Liability</h2>
-              <p className="mb-4">We are not responsible for:</p>
+              <h2 className="text-gray-900 font-semibold mb-4">11. Mira, the AI Coach (Beta)</h2>
+              <p className="mb-4">
+                Mira is LoveIQ&apos;s AI coach for body confidence in sex. These rules apply in
+                addition when you use Mira.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.1 What Mira is</h3>
+              <p className="mb-4">
+                Mira is an AI coach in beta. An AI model writes her replies. They can be wrong,
+                incomplete or not right for you. Check what matters to you and make your own
+                decisions.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.2 What Mira is not</h3>
+              <p className="mb-4">
+                Mira is not therapy. She does not give medical advice, diagnosis or treatment, and
+                she does not replace a doctor, therapist or counsellor.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.3 Not for emergencies</h3>
+              <p className="mb-4">
+                Mira is not an emergency service. If you are in danger, might hurt yourself or
+                someone else, or need urgent medical help, call your local emergency number (112 in
+                the EU) or go to the nearest emergency department. In the chat, &quot;Need support
+                right now?&quot; lists free support lines.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.4 Only for adults</h3>
+              <p className="mb-4">
+                You may use Mira only if you are 18 or older. If you tell Mira you are under 18, she
+                stops coaching for good on that account or in that browser, turns her emails off and
+                deletes the chats saved in that account.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.5 Acceptable use</h3>
+              <p className="mb-4">You must not:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>decisions you make based on LoveIQ outputs</li>
-                <li>emotional, relational, or personal consequences</li>
-                <li>misunderstandings of psychometric results</li>
+                <li>share or ask for sexual content involving minors, in any form</li>
+                <li>
+                  try to make Mira produce sexually explicit material, such as erotic stories or
+                  role-play, or other harmful content
+                </li>
+                <li>try to get around Mira&apos;s safety rules, for example with trick prompts</li>
+                <li>
+                  use Mira to harass or harm anyone, or share other people&apos;s private details
+                  without their permission
+                </li>
+                <li>
+                  abuse the service, for example with bots or scripts, by flooding it with requests,
+                  by testing its security without our permission or by asking for sign-in codes for
+                  email addresses that are not yours
+                </li>
               </ul>
-              <p>Use is at your own risk.</p>
+              <p className="mb-4">
+                If you break these rules, we may limit or stop your use of Mira, or delete your
+                account.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.6 Free, and may change</h3>
+              <p className="mb-4">
+                Mira is free during the beta. Without an account, you can send 10 messages. After
+                that, you need a free account. Mira always answers a message about a crisis. We may
+                change Mira, limit it or stop it at any time. If we stop it, we will tell account
+                holders by email beforehand where we can.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.7 Daily nudges</h3>
+              <p className="mb-4">
+                A free account comes with daily nudge emails from Mira, at most one a day. You can
+                change their time, pause them or stop them in Mira&apos;s settings, or with the link
+                in any nudge.
+              </p>
+              <h3 className="text-gray-900 font-medium mb-2">11.8 Deleting your account</h3>
+              <p>
+                You can delete your chats or your whole Mira account at any time in Mira&apos;s
+                settings, or ask us at{" "}
+                <a
+                  href="mailto:hello@loveiq.org"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
+                >
+                  hello@loveiq.org
+                </a>
+                . How Mira handles your data is explained in{" "}
+                <a
+                  href="/mira/privacy"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
+                >
+                  How Mira handles your data
+                </a>
+                .
+              </p>
             </section>
 
             {/* Section 12 */}
             <section>
-              <h2 className="text-gray-900 font-semibold mb-4">12. Governing Law</h2>
-              <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
+              <h2 className="text-gray-900 font-semibold mb-4">12. Liability</h2>
+              <p className="mb-4">
+                12.1 We are liable without limitation for intent and gross negligence, for injury to
+                life, body or health caused by our fault, under the German Product Liability Act
+                (Produkthaftungsgesetz) and where we have given a guarantee.
+              </p>
+              <p className="mb-4">
+                12.2 For slight negligence, we are liable only if we breach an essential contractual
+                obligation. An essential obligation is one that makes the proper use of LoveIQ
+                possible in the first place and on which you may regularly rely. In that case, our
+                liability is limited to the damage that is typical and foreseeable for this kind of
+                contract.
+              </p>
+              <p className="mb-4">12.3 Otherwise, our liability is excluded.</p>
+              <p>
+                12.4 These rules also apply to the personal liability of our employees,
+                representatives and agents.
+              </p>
+            </section>
+
+            {/* Section 13 */}
+            <section>
+              <h2 className="text-gray-900 font-semibold mb-4">
+                13. Governing Law and Place of Jurisdiction
+              </h2>
+              <p className="mb-4">
+                These Terms are governed by the law of the Federal Republic of Germany. The UN
+                Convention on Contracts for the International Sale of Goods (CISG) does not apply.
+                If you are a consumer, this choice of law does not take away the protection of the
+                mandatory rules of the country where you usually live (Art. 6(2) Rome I Regulation).
+              </p>
+              <p>
+                If you are a merchant (Kaufmann), a legal entity under public law or a special fund
+                under public law, the exclusive place of jurisdiction for all disputes arising from
+                these Terms is Berlin, Germany.
+              </p>
             </section>
           </div>
         </article>
