@@ -1,6 +1,6 @@
 {
-  "source": "Sanjin's briefing page 'Coach Mira overview: body confidence in sex' (https://claude.ai/artifact/WaNAdZPiMjNkhvZtENjrwk), section 1.6 'Crisis lines', table 'The draft, country by country'. The page names data workbook v1.5 as its source. The workbook's Crisis resources tab itself could not be reached, so check every number against it before launch. Hours and URLs are not in the source and are left null.",
-  "status": "Draft. Blocks launch: team review and country coverage. Canada and Australia need a final check on the services' own sites.",
+  "source": "Sanjin's draft (his briefing page 'Coach Mira overview: body confidence in sex', section 1.6), with every number, its hours and who it serves checked on the operator's own website on 20 Nov 2026: each line's url is the page it was checked on (emergency numbers on government sites). Lines added then: Scotland, Northern Ireland, men's and victim-support lines in Germany and Austria, Switzerland's 142 (victim support, since 1 May 2026) and English line, and Canada's directory of provincial lines.",
+  "status": "Verified 20 Nov 2026. Next check due by 20 Feb 2027.",
   "rules": [
     "Emergency number first if there’s any danger",
     "Ask the country once if it’s unknown",
@@ -15,15 +15,20 @@
       "lines": [
         {
           "type": "crisis",
-          "name": null,
+          "name": "988 Suicide & Crisis Lifeline",
           "phone": "988",
-          "label": "988 (call or text)"
+          "text": "988",
+          "hours": "24/7",
+          "url": "https://988lifeline.org/"
         },
         {
           "type": "sexual_violence",
-          "name": "RAINN",
+          "name": "RAINN National Sexual Assault Hotline",
           "phone": "800-656-4673",
-          "label": "RAINN 800-656-4673"
+          "text": "64673",
+          "keyword": "HOPE",
+          "hours": "24/7",
+          "url": "https://rainn.org/help-and-healing/hotline/"
         }
       ]
     },
@@ -34,9 +39,16 @@
       "lines": [
         {
           "type": "crisis",
-          "name": null,
-          "phone": "988",
-          "label": "988 (call or text)"
+          "name": "9-8-8 Suicide Crisis Helpline",
+          "phone": "9-8-8",
+          "text": "988",
+          "hours": "24/7",
+          "url": "https://988.ca/"
+        },
+        {
+          "type": "directory",
+          "name": "Gender-based violence crisis lines, by province and territory (Government of Canada)",
+          "url": "https://www.canada.ca/en/women-gender-equality/gender-based-violence/get-help-now.html"
         }
       ]
     },
@@ -49,19 +61,40 @@
           "type": "crisis",
           "name": "Samaritans",
           "phone": "116 123",
-          "label": "Samaritans 116 123"
+          "hours": "24/7",
+          "url": "https://www.samaritans.org/how-we-can-help/contact-samaritan/"
         },
         {
           "type": "crisis",
-          "name": null,
-          "phone": "85258",
-          "label": "text SHOUT 85258"
+          "name": "Shout",
+          "text": "85258",
+          "keyword": "SHOUT",
+          "hours": "24/7",
+          "url": "https://giveusashout.org/get-help/"
         },
         {
           "type": "sexual_violence",
-          "name": "Rape Crisis",
+          "name": "Rape Crisis 24/7 Support Line",
+          "who": "England and Wales, 16+",
           "phone": "0808 500 2222",
-          "label": "Rape Crisis 0808 500 2222"
+          "hours": "24/7",
+          "url": "https://247sexualabusesupport.org.uk/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Rape Crisis Scotland",
+          "who": "Scotland",
+          "phone": "08088 01 03 02",
+          "hours": "every day 17:00–24:00",
+          "url": "https://www.rapecrisisscotland.org.uk/help-helpline"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Domestic and Sexual Abuse Helpline",
+          "who": "Northern Ireland",
+          "phone": "0808 802 1414",
+          "hours": "24/7",
+          "url": "https://dsahelpline.org/about-the-helpline"
         }
       ]
     },
@@ -74,19 +107,24 @@
           "type": "crisis",
           "name": "Samaritans",
           "phone": "116 123",
-          "label": "Samaritans 116 123"
+          "hours": "24/7",
+          "note": "Calls from a hidden number aren’t connected.",
+          "url": "https://www.samaritans.org/samaritans-ireland/"
         },
         {
           "type": "crisis",
-          "name": null,
-          "phone": "50808",
-          "label": "text HELLO 50808"
+          "name": "Text About It",
+          "text": "50808",
+          "keyword": "HELLO",
+          "hours": "24/7",
+          "url": "https://www.textaboutit.ie/how-it-works"
         },
         {
           "type": "sexual_violence",
-          "name": "Rape Crisis",
+          "name": "Dublin Rape Crisis Centre National Helpline",
           "phone": "1800 77 8888",
-          "label": "Rape Crisis 1800 77 8888"
+          "hours": "24/7",
+          "url": "https://www.drcc.ie/services/helpline/"
         }
       ]
     },
@@ -99,13 +137,17 @@
           "type": "crisis",
           "name": "Lifeline",
           "phone": "13 11 14",
-          "label": "Lifeline 13 11 14"
+          "text": "0477 13 11 14",
+          "hours": "24/7",
+          "url": "https://www.lifeline.org.au/131114"
         },
         {
           "type": "sexual_violence",
           "name": "1800RESPECT",
           "phone": "1800 737 732",
-          "label": "1800RESPECT 1800 737 732"
+          "text": "0458 737 732",
+          "hours": "24/7",
+          "url": "https://1800respect.org.au/"
         }
       ]
     },
@@ -116,15 +158,19 @@
       "lines": [
         {
           "type": "crisis",
-          "name": null,
+          "name": "1737 Need to Talk?",
           "phone": "1737",
-          "label": "1737 (call or text)"
+          "text": "1737",
+          "hours": "24/7",
+          "url": "https://1737.org.nz/"
         },
         {
           "type": "sexual_violence",
           "name": "Safe to talk",
           "phone": "0800 044 334",
-          "label": "Safe to talk 0800 044 334"
+          "text": "4334",
+          "hours": "24/7",
+          "url": "https://www.safetotalk.nz/"
         }
       ]
     },
@@ -136,14 +182,33 @@
         {
           "type": "crisis",
           "name": "TelefonSeelsorge",
-          "phone": "0800 111 0 111",
-          "label": "TelefonSeelsorge 0800 111 0 111"
+          "phone": "0800 1110111",
+          "hours": "24/7",
+          "url": "https://www.telefonseelsorge.de/"
         },
         {
           "type": "sexual_violence",
-          "name": "Hilfetelefon",
+          "name": "Hilfetelefon Gewalt gegen Frauen",
+          "who": "for women",
           "phone": "116 016",
-          "label": "Hilfetelefon 116 016"
+          "hours": "24/7",
+          "url": "https://www.hilfetelefon.de/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Hilfetelefon Gewalt an Männern",
+          "who": "for men",
+          "phone": "0800 1239900",
+          "hours": "Mon–Thu 8:00–20:00, Fri 8:00–15:00",
+          "url": "https://www.maennerhilfetelefon.de/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Weisser Ring Opfer-Telefon",
+          "who": "for anyone affected by crime",
+          "phone": "116 006",
+          "hours": "every day 7:00–22:00",
+          "url": "https://weisser-ring.de/hilfe-fuer-opfer/opfer-telefon"
         }
       ]
     },
@@ -154,15 +219,34 @@
       "lines": [
         {
           "type": "crisis",
-          "name": "TelefonSeelsorge",
+          "name": "Telefonseelsorge",
           "phone": "142",
-          "label": "TelefonSeelsorge 142"
+          "hours": "24/7",
+          "url": "https://www.telefonseelsorge.at/"
         },
         {
           "type": "sexual_violence",
-          "name": "Frauenhelpline",
+          "name": "Frauenhelpline gegen Gewalt",
+          "who": "for women",
           "phone": "0800 222 555",
-          "label": "Frauenhelpline 0800 222 555"
+          "hours": "24/7",
+          "url": "https://www.frauenhelpline.at/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "MännerInfo",
+          "who": "for men",
+          "phone": "0800 400 777",
+          "hours": "24/7",
+          "url": "https://www.maennerinfo.at/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Opfer-Notruf",
+          "who": "for anyone affected by crime",
+          "phone": "0800 112 112",
+          "hours": "working days 8:00–20:00",
+          "url": "https://www.opfer-notruf.at/"
         }
       ]
     },
@@ -174,8 +258,26 @@
         {
           "type": "crisis",
           "name": "Die Dargebotene Hand",
+          "who": "in German, French or Italian",
           "phone": "143",
-          "label": "Die Dargebotene Hand 143"
+          "hours": "24/7",
+          "url": "https://www.143.ch/"
+        },
+        {
+          "type": "crisis",
+          "name": "Heart2Heart",
+          "who": "in English",
+          "phone": "0800 143 000",
+          "hours": "18:00–23:00",
+          "url": "https://www.143.ch/en/"
+        },
+        {
+          "type": "sexual_violence",
+          "name": "Victim Support Switzerland (Opferhilfe)",
+          "who": "for anyone affected by violence",
+          "phone": "142",
+          "hours": "24/7",
+          "url": "https://www.opferhilfe-schweiz.ch/en/"
         }
       ]
     }
@@ -188,10 +290,9 @@
       {
         "type": "directory",
         "name": "Find A Helpline: free, confidential support lines, searchable by country",
-        "url": "https://findahelpline.com",
-        "label": "findahelpline.com"
+        "url": "https://findahelpline.com"
       }
     ],
-    "note": "Not defined in Sanjin's sources. Open decision on his briefing page: 'The 9 drafted · where our users are · plus a fallback for others' (proposal: 'where our users are, plus a fallback'). Until it is decided, Mira asks the country once. Added 18 Nov 2026 for people outside the 9 countries, pending Sanjin's OK: Find A Helpline (findahelpline.com, run by ThroughLine), a free directory of verified helplines by country."
+    "note": "Find A Helpline (findahelpline.com, run by ThroughLine) lists helplines in over 175 countries, which verify their details with it directly (checked 20 Nov 2026). Shown first to anyone outside the 9 countries."
   }
 }
