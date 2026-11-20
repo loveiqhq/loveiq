@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { DISCLAIMER, Wordmark } from "./MiraShell";
+import { DISCLAIMER, LegalLinks, Wordmark } from "./MiraShell";
 import { SupportPanel } from "./SupportPanel";
 import { useReloadWhenRestored } from "./api";
 
@@ -79,6 +79,7 @@ export function MiraAppFrame({
         <p className="mt-10 max-w-[760px] text-[12px] leading-relaxed text-ap-muted">
           {DISCLAIMER}
         </p>
+        <LegalLinks className="mt-6 max-w-[860px]" />
       </main>
       {support ? <SupportPanel highlight={null} onClose={() => setSupport(false)} /> : null}
     </div>

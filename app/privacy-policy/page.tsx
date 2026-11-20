@@ -104,10 +104,43 @@ export default function PrivacyPolicyPage() {
               </ul>
 
               <h3 className="text-gray-900 font-medium mb-2">3.4 Payment Data</h3>
-              <p>
+              <p className="mb-4">
                 We do not store full payment data. Payments are processed by external payment
                 providers (e.g. Stripe). We receive transaction references, payment status and
                 subscription IDs.
+              </p>
+
+              <h3 className="text-gray-900 font-medium mb-2">
+                3.5 Mira, our AI coach for body confidence (beta)
+              </h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>What you write to Mira, which concerns your sex life</li>
+                <li>
+                  With a free Mira account: your email address, the name, gender and country you
+                  give, your coaching style and settings, and your chats while &quot;Remember our
+                  conversations&quot; is on
+                </li>
+                <li>
+                  If you choose to take it, your answers to Mira&apos;s body check (ten statements
+                  of the Body Appreciation Scale-2, at the start and after four weeks)
+                </li>
+                <li>
+                  Your ratings and feedback, and labels about your chats that never contain your
+                  words: which of Mira&apos;s questions you answered, a new chat&apos;s topic and
+                  when Mira suggested a doctor or therapist
+                </li>
+              </ul>
+              <p>
+                What you share with Mira about your sex life is a special category of personal data
+                under Art. 9 GDPR, which we process only with your explicit consent. The details are
+                in{" "}
+                <a
+                  href="/mira/privacy"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
+                >
+                  How Mira handles your data
+                </a>
+                .
               </p>
             </section>
 
@@ -118,6 +151,10 @@ export default function PrivacyPolicyPage() {
               <ul className="list-disc list-inside space-y-1">
                 <li>Creating and managing user accounts</li>
                 <li>Delivering psychometric reports and insights</li>
+                <li>
+                  Coaching conversations with Mira, her daily emails if you keep them on, and
+                  measuring whether Mira helps
+                </li>
                 <li>Personalizing content and user experience</li>
                 <li>Operating subscriptions and paid content</li>
                 <li>Fraud prevention and platform security</li>
@@ -161,6 +198,13 @@ export default function PrivacyPolicyPage() {
                 <li>Does not replace professional diagnosis</li>
                 <li>Is used exclusively to deliver the requested services</li>
               </ul>
+              <p className="mb-4">
+                Mira, our AI coach, writes her replies and her daily emails with an AI model
+                (Claude, made by Anthropic) from what you write to her. Her replies are generated
+                automatically, have no legal effect and are not a diagnosis or treatment. A message
+                that suggests you may be in danger is answered with support lines without the AI
+                model.
+              </p>
               <p>We do not use your data to train public or third-party AI models.</p>
             </section>
 
@@ -169,8 +213,8 @@ export default function PrivacyPolicyPage() {
               <h2 className="text-gray-900 font-semibold mb-4">7. Recipients of Data</h2>
               <p className="mb-4">
                 We disclose your personal data to the following categories of recipients. With the
-                exception noted in section 7.4, all recipients act as our processors under
-                data-processing agreements in accordance with Art. 28 GDPR.
+                exceptions noted in sections 7.4 and 7.10, all recipients act as our processors
+                under data-processing agreements in accordance with Art. 28 GDPR.
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.1 Infrastructure and hosting</h3>
@@ -202,11 +246,13 @@ export default function PrivacyPolicyPage() {
                 clicked, and when, and it is linked to your survey submission. Our record does not
                 include your IP address, your device or which link you clicked. We use it to see
                 which emails are useful and to make them better. Our legal basis is our legitimate
-                interest (Art. 6(1)(f) GDPR). Some email apps load images by themselves, so an email
-                can count as opened without being read. To avoid tracking, turn off image loading in
-                your email app. You can also visit our website directly instead of clicking a link,
-                or unsubscribe with the link in our emails. You may object under Art. 21 GDPR using
-                the contact details in section 1.
+                interest (Art. 6(1)(f) GDPR). For Mira&apos;s daily emails we record the same way
+                whether each email was delivered and first opened, linked to your Mira account, to
+                see which kinds of email help. Some email apps load images by themselves, so an
+                email can count as opened without being read. To avoid tracking, turn off image
+                loading in your email app. You can also visit our website directly instead of
+                clicking a link, or unsubscribe with the link in our emails. You may object under
+                Art. 21 GDPR using the contact details in section 1.
               </p>
               <p className="mb-4">
                 If you do not unlock your full report, we may email you once to ask why, usually a
@@ -286,6 +332,23 @@ export default function PrivacyPolicyPage() {
                 </li>
               </ul>
 
+              <h3 className="text-gray-900 font-medium mb-2">7.9 AI model</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>
+                  Anthropic PBC (USA) - the AI model that writes Mira&apos;s replies and daily
+                  emails; it receives what you write to Mira and may process it outside the EU
+                </li>
+              </ul>
+
+              <h3 className="text-gray-900 font-medium mb-2">7.10 Sign-in with Google</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>
+                  Google Ireland Ltd. - &quot;Continue with Google&quot; for a Mira account, only if
+                  you choose it: Google confirms your email address to us. For your Google account,
+                  Google is an independent controller.
+                </li>
+              </ul>
+
               <p>
                 A current Record of Processing Activities (Art. 30 GDPR) and the list of standard
                 contractual clauses for non-EU processors can be requested from{" "}
@@ -321,7 +384,13 @@ export default function PrivacyPolicyPage() {
                 <li>Up to 30 days after deletion of your account</li>
                 <li>Longer if required by tax or commercial law</li>
               </ul>
-              <p>Pseudonymized statistical data may be stored longer.</p>
+              <p className="mb-4">Pseudonymized statistical data may be stored longer.</p>
+              <p>
+                Mira: without an account, your chat stays in your browser. With an account, your
+                chats are kept while &quot;Remember our conversations&quot; is on, until you delete
+                them or your account, and at most 12 months after the last message you wrote; body
+                check answers until you delete your Mira account.
+              </p>
             </section>
 
             {/* Section 10 */}

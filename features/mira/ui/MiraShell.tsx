@@ -30,8 +30,38 @@ export function MiraFrame({ children, right }: { children: ReactNode; right?: Re
         <Wordmark />
         <div className="flex items-center gap-3">{right}</div>
       </header>
-      <main className="mx-auto max-w-[1180px] px-4 pb-16 sm:px-8">{children}</main>
+      <main className="mx-auto max-w-[1180px] px-4 pb-10 sm:px-8">{children}</main>
+      <footer className="mx-auto max-w-[1180px] px-4 pb-8 sm:px-8">
+        <LegalLinks />
+      </footer>
     </div>
+  );
+}
+
+const LEGAL_LINKS: Array<[string, string]> = [
+  ["/mira/privacy", "How Mira handles your data"],
+  ["/privacy-policy", "Privacy policy"],
+  ["/terms-of-use", "Terms of use"],
+  ["/imprint", "Imprint"],
+];
+
+/**
+ * On every Mira page: the imprint must be one click away, and Google's sign-in review looks for
+ * the privacy link on the app's home page.
+ */
+export function LegalLinks({ className = "" }: { className?: string }) {
+  return (
+    <nav
+      aria-label="Legal"
+      className={`flex flex-wrap items-center gap-x-4 border-t border-ap-line pt-3 text-[12px] text-ap-muted ${className}`}
+    >
+      <span className="inline-flex min-h-[32px] items-center">Applied Psychometrics</span>
+      {LEGAL_LINKS.map(([href, label]) => (
+        <Link key={href} href={href} className="inline-flex min-h-[32px] items-center underline">
+          {label}
+        </Link>
+      ))}
+    </nav>
   );
 }
 
