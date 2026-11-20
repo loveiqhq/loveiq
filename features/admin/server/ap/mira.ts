@@ -17,7 +17,7 @@ import nudgeConfig from "@features/mira/content/nudges.json";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
-import { fetchAllRows } from "../supabase";
+import { fetchAllRows, supabaseFetch } from "../supabase";
 import type { PageHead, Tile } from "./common";
 import { addDays } from "./days";
 import {
@@ -32,8 +32,6 @@ import { mean, ratio } from "./metrics";
 
 const TOLERANCE_MS = 2_000;
 const HOUR_MS = 3_600_000;
-/** fetchAllRows stops here without a word; past it the counting belongs in SQL. */
-const MAX_EVENTS = 100_000;
 const EVENT_NAMES = [
   "chat_opened",
   "chat_started",
@@ -56,7 +54,8 @@ export interface MiraEventRow {
   name: string;
   anon_id: string | null;
   user_id: string | null;
-  created_at: string;
+  /** created_at, in milliseconds. */
+  at: number;
   /** props.rating on a rating event ("1" or "-1"): nothing else is read from props. */
   rating: string | null;
 }
@@ -79,27 +78,44 @@ export interface MiraData {
 
 /**
  * Every Mira account and every counted event since the beta began.
- * ponytail: counts in memory, fine for the beta; move the counting into one SQL function once
- * mira_event nears MAX_EVENTS (the read refuses past it rather than count part of it).
+ * ponytail: counts in memory, fine for the beta; move the counting into SQL once mira_ap_events'
+ * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
   const [users, events, nudges] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment&order=id.asc"
     ),
-    fetchAllRows<MiraEventRow>(
-      `/rest/v1/mira_event?name=in.(${EVENT_NAMES.join(",")})` +
-        "&select=name,anon_id,user_id,created_at,rating:props->>rating&order=id.asc",
-      { maxRows: MAX_EVENTS + 1 }
-    ),
+    fetchEvents(),
     fetchAllRows<MiraNudgeRow>(
       "/rest/v1/mira_nudge?sent_at=not.is.null&select=user_id,type,sent_at,clicked_at&order=created_at.asc"
     ),
   ]);
   if (!users || !events || !nudges) throw new Error("Mira's tables could not be read");
-  if (events.length > MAX_EVENTS) throw new Error("Too many Mira events to count in memory");
   const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email));
   return { users, events, nudges, withResult: await withLoveIqResult(asked) };
+}
+
+/**
+ * The counted events, in one request however many there are: mira_ap_events
+ * (supabase/migrations/20261120020000_mira_ap_events.sql) groups them per person, name and
+ * rating, each group's times in milliseconds, groups in the order of their first event (so a
+ * browser's first sign-in still comes first). Paging through the rows a thousand at a time
+ * stopped at 100,000 of them.
+ */
+async function fetchEvents(): Promise<MiraEventRow[] | null> {
+  const res = await supabaseFetch("/rest/v1/rpc/mira_ap_events", {
+    method: "POST",
+    body: JSON.stringify({ p_names: EVENT_NAMES }),
+    timeoutMs: 30_000,
+  });
+  if (!res.ok) return null;
+  const groups = (await res.json()) as Array<
+    [name: string, anon: string | null, user: string | null, rating: string | null, at: number[]]
+  >;
+  return groups.flatMap(([name, anon_id, user_id, rating, times]) =>
+    times.map((at) => ({ name, anon_id, user_id, at, rating }))
+  );
 }
 
 /** The accounts whose address has a finished LoveIQ survey: what Mira reads into the chat. */
@@ -172,7 +188,7 @@ export function prepare(data: MiraData): Prepared {
   const events: Counted[] = [];
   let first = Infinity;
   for (const e of data.events) {
-    const at = Date.parse(e.created_at);
+    const { at } = e;
     first = Math.min(first, at);
     const user = e.user_id ?? (e.anon_id ? signedIn.get(e.anon_id) : undefined) ?? null;
     if (user && staff.has(user)) continue;

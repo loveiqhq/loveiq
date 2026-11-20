@@ -83,7 +83,7 @@ export default function ApMira() {
           <Board
             id="nudges"
             title="Daily nudge emails"
-            description="How the daily nudges perform by type: opens, clicks, conversations they start, how deep those conversations go, and unsubscribes."
+            description="How the daily nudges perform by type: clicks, the conversations they start, and unsubscribes. Opens aren’t tracked."
           >
             <Tiles
               data={data}
@@ -340,6 +340,7 @@ function Funnel({ data }: { data: Data }) {
 
 function Engagement({ data }: { data: Data }) {
   const week4 = data.tiles.weekFour!;
+  const fromNudges = data.tiles.nudgeStarted!;
   return (
     <Board
       id="engagement"
@@ -405,14 +406,17 @@ function Engagement({ data }: { data: Data }) {
             stat={{
               label: "Reactivated by nudges",
               unit: "pct",
-              value: null,
-              note: "Not measured yet: the nudge emails aren’t built yet.",
+              value: fromNudges.value,
+              prev: fromNudges.prev,
+              note: fromNudges.foot,
             }}
           />
         </div>
         <p className={NOTE}>
           Week-4 return rate: of the accounts whose sign-up week&rsquo;s week 4 is over by the
-          range&rsquo;s last day, the share who sent a message in it.
+          range&rsquo;s last day, the share who sent a message in it. Reactivated by nudges: of the
+          nudges sent in the range, the share whose person wrote to Mira within 24 hours of clicking
+          it.
         </p>
       </Card>
     </Board>
@@ -666,8 +670,9 @@ function NudgeTypes({ data }: { data: Data }) {
       </div>
       <p className={NOTE}>
         CTR and conversations started are counted per nudge sent. A conversation counts when the
-        person writes to Mira within 24 hours of clicking. Opens, messages and minutes per
-        conversation aren&rsquo;t measured yet, and an unsubscribe isn&rsquo;t tied to one type.
+        person writes to Mira within 24 hours of clicking. Opens aren&rsquo;t tracked (the emails
+        carry no tracking pixel), messages and minutes per conversation aren&rsquo;t measured yet,
+        and an unsubscribe isn&rsquo;t tied to one type.
       </p>
     </Card>
   );
