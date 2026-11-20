@@ -177,7 +177,7 @@ describe("Chat", () => {
   });
 
   it("forgets this browser's chat and the 18+ tick once the person says they are under 18", async () => {
-    localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+    giveConsent();
     replies["POST /api/mira/chat"] = () => ({
       body: { reply: "I can only talk about this with adults.", sources: [], minor: true },
     });
@@ -186,7 +186,7 @@ describe("Chat", () => {
     await screen.findByText("I can only talk about this with adults.");
     expect(localStorage.getItem("mira.chat.v1")).toBeNull();
     expect(localStorage.getItem("mira.consent.v1")).toBeNull();
-    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
   });
 
   it("doesn't send on the Enter that ends an input-method composition", async () => {
