@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import nudgeConfig from "@features/mira/content/nudges.json";
-import { GradientButton } from "./MiraShell";
+import { GradientButton, Wordmark } from "./MiraShell";
 import { miraApi } from "./api";
 
 /**
@@ -130,9 +130,7 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
   return (
     <div className="min-h-screen bg-white text-ap-ink">
       <header className="flex h-[60px] items-center justify-between border-b border-ap-line px-5">
-        <span className="font-serif text-[20px] font-bold">
-          Love<span className="text-ap-plum">IQ</span>
-        </span>
+        <Wordmark />
         <span className="text-[12px] font-semibold text-ap-muted">Email preferences</span>
       </header>
       <main className="mx-auto flex max-w-[480px] flex-col gap-5 px-5 pb-10 pt-7">

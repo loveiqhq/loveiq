@@ -4,7 +4,7 @@ import { readToken } from "@features/mira/server/nudges";
 import MiraNudges from "@features/mira/ui/MiraNudges";
 
 export const metadata: Metadata = {
-  title: "Email preferences | LoveIQ",
+  title: "Email preferences | Applied Psychometrics",
   robots: { index: false, follow: false },
 };
 
