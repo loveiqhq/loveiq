@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 export type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } };
@@ -30,6 +31,23 @@ export async function miraApi<T = Record<string, unknown>>(
 }
 
 export type Turn = { role: "user" | "assistant"; content: string };
+export type Source = { id: string; label: string; link: string | null };
+/** A turn as this browser keeps it: a reply's sources and its rating survive a reload. */
+export type LocalTurn = Turn & { sources?: Source[]; rated?: 1 | -1 };
+
+/**
+ * A page the browser brings back from its back/forward cache still shows the signed-in state it
+ * was left with, which a sign-in or sign-out since may have changed: load it fresh instead.
+ */
+export function useReloadWhenRestored(): void {
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+}
 
 /** The anonymous chat lives only in this browser until sign-up carries it into the account. */
 const LOCAL_CHAT = "mira.chat.v1";
@@ -55,7 +73,7 @@ function write(key: string, value: unknown): void {
 }
 
 /** This browser's anonymous chat; `gate` is set once the free conversations are used. */
-type LocalChat = { turns: Turn[]; freeLeft: number | null; gate?: boolean };
+type LocalChat = { turns: LocalTurn[]; freeLeft: number | null; gate?: boolean };
 
 export const local = {
   chat: () => read<LocalChat>(LOCAL_CHAT),
