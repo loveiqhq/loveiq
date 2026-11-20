@@ -11,6 +11,7 @@ import { metadata as nudges } from "@/app/mira/nudges/page";
 import { metadata as privacy } from "@/app/mira/privacy/page";
 import { metadata as settings } from "@/app/mira/settings/page";
 import { metadata as start } from "@/app/mira/start/page";
+import { metadata as guide } from "@/app/mira/guide/page";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 const TITLE = "Mira, your AI coach for body confidence in sex | LoveIQ";
@@ -59,6 +60,24 @@ describe("Mira's link previews", () => {
       expect(m.robots).toEqual({ index: false, follow: false });
     }
   );
+});
+
+describe("pages with a preview of their own", () => {
+  it("gives the guide its own address, title and description, with Mira's image", () => {
+    expect(guide.alternates?.canonical).toBe(`${SITE}/mira/guide`);
+    expect(guide.openGraph?.url).toBe(`${SITE}/mira/guide`);
+    expect(guide.openGraph?.title).toBe("Body confidence guide | LoveIQ");
+    expect(guide.description).toMatch(/seven short practices/);
+    expect(guide.openGraph?.images).toEqual([
+      { url: "/mira/opengraph-image", width: 1200, height: 630, alt },
+    ]);
+    expect(guide.robots).toEqual({ index: false, follow: false });
+  });
+
+  it("titles the sign-up and privacy previews after their pages", () => {
+    expect(start.openGraph?.title).toBe("Create your free Mira account | LoveIQ");
+    expect(privacy.openGraph?.title).toBe("How Mira handles your data | LoveIQ");
+  });
 });
 
 describe("Mira's Open Graph image", () => {

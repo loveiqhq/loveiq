@@ -359,6 +359,17 @@ describe("POST /api/mira/chat", () => {
     expect(crisis.invitation).toBeUndefined();
   });
 
+  it("leaves the invitation out when Mira's first reply already asks an intake question", async () => {
+    vi.mocked(askModel).mockResolvedValueOnce({
+      ok: true,
+      text: "Where does it show up most for you?\n[[ASK:where]]",
+      refused: false,
+    });
+    const first = await (await post({ message: "I hide during sex", consent: true })).json();
+    expect(first.ask).toBe("where");
+    expect(first.invitation).toBeUndefined();
+  });
+
   it("sends the reply and the invitation to the model as one turn, after a yes", async () => {
     await post({
       message: "Yes, let’s do it",
