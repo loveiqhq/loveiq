@@ -341,6 +341,26 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     backend();
   });
 
+  it("leaves out a reader who asked us to restrict processing: no claim, no reply, no post", async () => {
+    backend({
+      submission: [{ app_user: { processing_restricted_at: "2026-11-01T10:00:00.000Z" } }],
+    });
+    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockReactivation).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when it cannot read whether the reader restricted processing", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith("/rest/v1/survey_submission?")) return res(null, false);
+      throw new Error(`unexpected ${path}`);
+    });
+    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
+    expect(claims()).toHaveLength(0);
+    expect(mockReactivation).not.toHaveBeenCalled();
+  });
+
   it("claims the reader's Berlin day, replies in their thread and keeps the reply's ts", async () => {
     await noteReaderReturn({
       submissionId: 2790,
@@ -525,6 +545,8 @@ describe("noteReaderReturn: every claimed day goes to #report-reactivations too"
       if (path === "/rest/v1/reader_return" && init?.method === "POST") return res(claimed);
       if (path.startsWith("/rest/v1/reader_return?") && init?.method === "PATCH") return res(null);
       if (path.startsWith("/rest/v1/slack_journey_message?")) return res(message);
+      // The restriction check (GDPR Art. 18): a reader who did not restrict processing.
+      if (path.startsWith("/rest/v1/survey_submission?")) return res([{ app_user: null }]);
       throw new Error(`unexpected ${path}`);
     });
   }

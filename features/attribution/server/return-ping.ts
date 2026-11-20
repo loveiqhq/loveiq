@@ -231,6 +231,24 @@ export function buildReturnReply(
 
 const TABLE = "/rest/v1/reader_return";
 
+/**
+ * Whether the reader asked us to restrict processing (GDPR Art. 18, `app_user.processing_restricted_at`):
+ * then no thread reply and no #report-reactivations post, as the email crons and the team export
+ * already skip them. Unknown counts as restricted, so a failed read stays quiet.
+ */
+async function isRestricted(submissionId: number): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/survey_submission?id=eq.${submissionId}` +
+      "&select=app_user!fk_survey_submission_user" +
+      "(processing_restricted_at)&limit=1"
+  );
+  if (!res.ok) return true;
+  const rows = (await res.json()) as Array<{
+    app_user?: { processing_restricted_at?: string | null } | null;
+  }>;
+  return Boolean(rows[0]?.app_user?.processing_restricted_at);
+}
+
 async function readReader(submissionId: number): Promise<ReturnReader | null> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?id=eq.${submissionId}` +
@@ -286,6 +304,7 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     const reader = signal.reader ?? (await readReader(submissionId));
     const { sentAt, userAgent } = signal;
     if (!reader || !isReturn({ source, at, sentAt, userAgent }, reader)) return;
+    if (await isRestricted(submissionId)) return;
 
     const via = signal.via && VIA.test(signal.via) ? signal.via : null;
     const day = reportingDay(at);
