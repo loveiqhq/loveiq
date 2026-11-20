@@ -17,7 +17,8 @@ const SHARED_DISALLOW = ["/api/", "/admin", "/report", "/survey", "/checkout", "
 // Google and Bing may fetch the private pages above, and only so they can read each page's
 // noindex. A page robots.txt blocks is never fetched, so its noindex is never seen, and Google
 // can still list the bare URL from a link ("Indexed, though blocked by robots.txt"). Every page
-// under those paths carries the noindex (__tests__/app/private-pages.test.ts holds them to it).
+// whose path starts with one of them (rules are prefixes: /report covers /report-v4-preview)
+// carries the noindex; __tests__/app/private-pages.test.ts holds them to it.
 // The report's data comes from /api/report, which stays closed, as does the dashboard.
 const SEARCH_ENGINE_USER_AGENTS = ["Googlebot", "Bingbot"];
 const SEARCH_ENGINE_DISALLOW = ["/api/", "/admin"];

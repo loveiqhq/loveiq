@@ -40,8 +40,13 @@ const specifierOf = (file: string) =>
     .join("/")
     .replace(/\.tsx$/, "");
 
-/** Every page.tsx at or below an app route, as an import specifier. */
-function pagesUnder(route: string): string[] {
+const APP = join(process.cwd(), "app");
+
+/**
+ * Every page.tsx in the app, with the URL path it serves: app/report/[token]/page.tsx serves
+ * "/report/[token]". Route groups "(x)" and slots "@x" are not part of the URL.
+ */
+function allPages(): { file: string; path: string }[] {
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
       entry.isDirectory()
@@ -50,7 +55,10 @@ function pagesUnder(route: string): string[] {
           ? [join(dir, entry.name)]
           : []
     );
-  return walk(join(process.cwd(), "app", route)).map(specifierOf);
+  return walk(APP).map((file) => {
+    const segments = relative(APP, file).split(sep).slice(0, -1);
+    return { file, path: "/" + segments.filter((s) => !/^[(@]/.test(s)).join("/") };
+  });
 }
 
 describe("private pages", () => {
@@ -58,7 +66,11 @@ describe("private pages", () => {
     const routes = await pathsOnlySearchEnginesMayFetch();
     expect(routes, "robots.txt lets search engines fetch no private path").not.toEqual([]);
 
-    const pages = routes.flatMap(pagesUnder);
+    // robots.txt rules are prefixes: "Disallow: /report" covers /report-v4-preview too, so a
+    // sibling folder opens to Google and Bing just as a subfolder does.
+    const pages = allPages()
+      .filter(({ path }) => routes.some((route) => path.startsWith(route)))
+      .map(({ file }) => specifierOf(file));
     expect(pages.length).toBeGreaterThanOrEqual(routes.length);
     for (const page of pages) {
       const { metadata } = await import(/* @vite-ignore */ page);
