@@ -124,8 +124,9 @@ const data = (
   users: MiraUserRow[],
   events: MiraEventRow[],
   withResult: string[] = [],
-  nudges: MiraData["nudges"] = []
-) => ({ users, events, nudges, withResult: new Set(withResult) }) satisfies MiraData;
+  nudges: MiraData["nudges"] = [],
+  bodyChecks: MiraData["bodyChecks"] = []
+) => ({ users, events, nudges, bodyChecks, withResult: new Set(withResult) }) satisfies MiraData;
 
 const page = (d: MiraData, from: string, to: string) =>
   buildMiraPage({
@@ -305,7 +306,7 @@ describe("buildMiraPage", () => {
     );
     const p = page(d, "2026-11-02", "2026-11-15");
     expect(p.tiles.helpful).toMatchObject({ value: 0.75, foot: "3 of 4 thumbs were up" });
-    expect(p.safety).toEqual({ conversations: 0, crisis: 1, notHelpful: 1 });
+    expect(p.safety).toEqual({ conversations: 0, crisis: 1, notHelpful: 1, referred: 0 });
   });
 
   it("reads NPS from the scores given, and how often “Not now” was tapped", () => {
@@ -375,7 +376,15 @@ describe("buildMiraPage", () => {
     expect(p.tiles.conversations).toMatchObject({ value: 1, foot: "by 1 person" });
     expect(p.tiles.signups!.value).toBe(1);
     expect(p.tiles.helpful!.value).toBeNull();
-    expect(p.knows).toEqual({ accounts: 1, style: 1, result: 0 });
+    expect(p.knows).toEqual({
+      accounts: 1,
+      rootCause: 0,
+      baseline: 0,
+      goals: 0,
+      style: 1,
+      result: 0,
+      depth: 0.2,
+    });
   });
 
   it("reads DAU % and WAU % over the accounts open each day, and stickiness from them", () => {
@@ -577,15 +586,194 @@ describe("buildMiraPage", () => {
 
   it("leaves not measured only what nothing records, each with its reason", () => {
     const p = page(PEOPLE, "2026-11-02", "2026-11-15");
-    for (const k of ["bodyImage", "profileDepth", "subscription", "churn"]) {
+    for (const k of ["subscription", "churn"]) {
       expect(p.tiles[k]).toMatchObject({
         value: null,
         blocked: expect.stringMatching(/^Not measured yet: \S/),
       });
     }
-    for (const k of ["nps", "timeSpent", "nudgeOpen", "nudgeMessages", "reactivated"]) {
+    for (const k of [
+      "nps",
+      "timeSpent",
+      "nudgeOpen",
+      "nudgeMessages",
+      "reactivated",
+      "bodyImage",
+      "profileDepth",
+    ]) {
       expect(p.tiles[k]!.blocked).toBeNull();
     }
+  });
+});
+
+describe("Mira's outcomes", () => {
+  const check = (user_id: string, created_at: string, score: number) => ({
+    user_id,
+    created_at,
+    score,
+  });
+  const u = (id: string) => account(id, `${id}@example.com`, "2026-10-01T09:00:00Z");
+
+  it("counts a four-week body check against the person's first, improved or worse past the scale's noise", () => {
+    const d = data(
+      [u("u1"), u("u2"), u("u3"), u("u4"), u("u5")],
+      [],
+      [],
+      [],
+      [
+        // 3.5 → 4.3 is 0.8 exactly, not 0.7999…: improved.
+        check("u1", "2026-10-01T10:00:00Z", 3.5),
+        check("u1", "2026-11-05T10:00:00Z", 4.3),
+        // Down 1.0: worse.
+        check("u2", "2026-10-01T10:00:00Z", 3.8),
+        check("u2", "2026-11-06T10:00:00Z", 2.8),
+        // Up 0.7: no clear change.
+        check("u3", "2026-10-01T10:00:00Z", 3.0),
+        check("u3", "2026-11-07T10:00:00Z", 3.7),
+        // Only 27 days later: no four-week check yet.
+        check("u4", "2026-10-12T10:00:00Z", 2.0),
+        check("u4", "2026-11-08T09:00:00Z", 4.5),
+        // The four-week check is outside the range.
+        check("u5", "2026-09-01T10:00:00Z", 2.0),
+        check("u5", "2026-10-20T10:00:00Z", 4.5),
+      ]
+    );
+    const p = page(d, "2026-11-02", "2026-11-15");
+    expect(p.bodyCheck).toMatchObject({ pairs: 3, improved: 1, worse: 1, reliableChange: 0.8 });
+    expect(p.bodyCheck.change).toBeCloseTo((0.8 - 1.0 + 0.7) / 3);
+    expect(p.tiles.bodyImage!.value).toBeCloseTo(1 / 3);
+    expect(p.tiles.bodyImage!.foot).toBe("1 of 3 four-week body checks improved");
+    // First checks and four-week checks finished in the range.
+    expect(p.bodyCheck).toMatchObject({ baselines: 0, followUps: 4 });
+  });
+
+  it("counts profile depth over five areas, with intake answers given before signing up", () => {
+    const d = data(
+      [
+        account("u1", "a@example.com", "2026-11-03T12:00:00Z", { style: { tone: 2 } }),
+        account("u2", "b@example.com", "2026-11-03T12:00:00Z"),
+      ],
+      [
+        ev("intake_answered", { anon: "browser-1" }, "2026-11-03T10:00:00Z", "where"),
+        ev("intake_answered", { anon: "browser-1" }, "2026-11-03T10:05:00Z", "onset"),
+        ev("intake_answered", { anon: "browser-1" }, "2026-11-03T10:06:00Z", "change"),
+        ev("signup_completed", { anon: "browser-1", user: "u1" }, "2026-11-03T12:00:00Z", "email"),
+        // u2 answered only one of the two root-cause questions.
+        ev("intake_answered", { user: "u2" }, "2026-11-04T10:00:00Z", "onset"),
+      ],
+      ["u1"],
+      [],
+      [check("u1", "2026-11-04T10:00:00Z", 3.2)]
+    );
+    const p = page(d, "2026-11-02", "2026-11-15");
+    expect(p.knows).toEqual({
+      accounts: 2,
+      rootCause: 1,
+      baseline: 1,
+      goals: 1,
+      style: 1,
+      result: 1,
+      depth: (5 / 5 + 0 / 5) / 2,
+    });
+    expect(p.tiles.profileDepth).toMatchObject({ value: 0.5, prev: null, blocked: null });
+  });
+
+  it("reads topics as shares of the range's labelled own-words chats, with the trend against before", () => {
+    const d = data(
+      [],
+      [
+        ...chat({ anon: "a1" }, "2026-11-03T10:00:00Z"),
+        ev("chat_topic", { anon: "a1" }, "2026-11-03T10:00:01Z", "hiding"),
+        ...chat({ anon: "a2" }, "2026-11-04T10:00:00Z"),
+        ev("chat_topic", { anon: "a2" }, "2026-11-04T10:00:01Z", "hiding"),
+        ...chat({ anon: "a3" }, "2026-11-05T10:00:00Z"),
+        ev("chat_topic", { anon: "a3" }, "2026-11-05T10:00:01Z", "other"),
+        // An own-words chat without a topic, and a starter chip's chat (never a topic).
+        ...chat({ anon: "a4" }, "2026-11-06T10:00:00Z"),
+        ...chat({ anon: "a5" }, "2026-11-06T11:00:00Z", 1, 2),
+        // The week before (compared: Mira's records start by its first day): one "weight".
+        ev("chat_opened", { anon: "a0" }, "2026-10-26T08:00:00Z"),
+        ...chat({ anon: "a6" }, "2026-10-28T10:00:00Z"),
+        ev("chat_topic", { anon: "a6" }, "2026-10-28T10:00:01Z", "weight"),
+      ]
+    );
+    const p = buildMiraPage({
+      data: d,
+      filters: parseFilters({ period: "custom", from: "2026-11-02", to: "2026-11-08" }, TODAY),
+      today: TODAY,
+      now: new Date(`${TODAY}T12:00:00Z`),
+    });
+    const row = (id: string) => p.topics.find((t) => t.id === id)!;
+    expect(row("hiding")).toMatchObject({ chats: 2, prevShare: 0 });
+    expect(row("hiding").share).toBeCloseTo(2 / 3);
+    expect(row("weight")).toMatchObject({ chats: 0, share: 0, prevShare: 1 });
+    expect(p.topics.at(-1)!.id).toBe("other");
+    expect(p.topics[0]!.id).toBe("hiding");
+    expect(p.untopical).toBe(1);
+  });
+
+  it("counts a referral once per person and conversation, in the range it was made", () => {
+    const d = data(
+      [],
+      [
+        ev("referred", { anon: "a1" }, "2026-11-03T10:00:00Z"),
+        ev("referred", { anon: "a1" }, "2026-11-03T10:20:00Z"), // same conversation
+        ev("referred", { anon: "a1" }, "2026-11-03T12:00:00Z"), // a new one
+        ev("referred", { anon: "a2" }, "2026-11-03T10:00:00Z"),
+        ev("referred", { anon: "a3" }, "2026-10-20T10:00:00Z"), // before the range
+      ]
+    );
+    expect(page(d, "2026-11-02", "2026-11-15").safety.referred).toBe(3);
+  });
+
+  it("counts the body check offered and started per person in the range", () => {
+    const d = data(
+      [u("u1"), u("u2")],
+      [
+        ev("body_check_offered", { user: "u1" }, "2026-11-03T10:00:00Z"),
+        ev("body_check_offered", { user: "u1" }, "2026-11-07T10:00:00Z"),
+        ev("body_check_offered", { user: "u2" }, "2026-11-03T10:00:00Z"),
+        ev("body_check_started", { user: "u1" }, "2026-11-07T10:01:00Z"),
+      ],
+      [],
+      [],
+      [check("u1", "2026-11-07T10:03:00Z", 3)]
+    );
+    expect(page(d, "2026-11-02", "2026-11-15").bodyCheck).toMatchObject({
+      offered: 2,
+      started: 1,
+      baselines: 1,
+      followUps: 0,
+      pairs: 0,
+      change: null,
+    });
+  });
+
+  it("leaves the team's body checks out", () => {
+    const d = data(
+      [account("s1", "eman@loveiq.org", "2026-10-01T09:00:00Z")],
+      [],
+      [],
+      [],
+      [check("s1", "2026-10-01T10:00:00Z", 2), check("s1", "2026-11-05T10:00:00Z", 4)]
+    );
+    expect(page(d, "2026-11-02", "2026-11-15").bodyCheck.pairs).toBe(0);
+  });
+});
+
+describe("mira_ap_events (supabase/migrations/20261120050000_mira_outcomes.sql)", () => {
+  const sql = readFileSync("supabase/migrations/20261120050000_mira_outcomes.sql", "utf8");
+  const rollback = readFileSync("supabase/rollbacks/20261120050000_mira_outcomes_down.sql", "utf8");
+
+  it("also answers intake_answered's question and chat_topic's topic; the rollback goes back to 040000", () => {
+    expect(sql).toContain("WHEN 'intake_answered' THEN 'q'");
+    expect(sql).toContain("WHEN 'chat_topic' THEN 'topic'");
+    expect(sql).toContain("ON DELETE CASCADE");
+    expect(sql).toMatch(/REVOKE ALL ON public\.mira_body_check FROM PUBLIC, anon, authenticated;/);
+    expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
+    expect(rollback).not.toContain("intake_answered");
+    expect(rollback).toContain("WHEN 'nudge_prefs_saved' THEN 'choice'");
+    expect(rollback).toContain("DROP TABLE IF EXISTS public.mira_body_check;");
   });
 });
 
@@ -634,6 +822,7 @@ describe("fetchMira", () => {
         ];
       if (path.startsWith("/rest/v1/app_user")) return [{ email: "a+b@example.com" }];
       if (path.startsWith("/rest/v1/mira_nudge")) return [];
+      if (path.startsWith("/rest/v1/mira_body_check")) return [];
       return null;
     });
     const out = await fetchMira();
@@ -652,6 +841,11 @@ describe("fetchMira", () => {
       "nps",
       "nudge_prefs_saved",
       "nudge_stopped",
+      "intake_answered",
+      "chat_topic",
+      "referred",
+      "body_check_offered",
+      "body_check_started",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(

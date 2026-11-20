@@ -32,8 +32,11 @@ export async function miraApi<T = Record<string, unknown>>(
 
 export type Turn = { role: "user" | "assistant"; content: string };
 export type Source = { id: string; label: string; link: string | null };
-/** A turn as this browser keeps it: a reply's sources and its rating survive a reload. */
-export type LocalTurn = Turn & { sources?: Source[]; rated?: 1 | -1 };
+/**
+ * A turn as this browser keeps it: a reply's sources, its rating and the intake question it
+ * asked (its answer buttons) survive a reload.
+ */
+export type LocalTurn = Turn & { sources?: Source[]; rated?: 1 | -1; ask?: string | null };
 
 /**
  * A page the browser brings back from its back/forward cache still shows the signed-in state it
@@ -54,6 +57,9 @@ const LOCAL_CHAT = "mira.chat.v1";
 const LOCAL_CONSENT = "mira.consent.v1";
 const LOCAL_STYLE = "mira.style.v1";
 const LOCAL_NPS = "mira.nps.v1";
+const LOCAL_BODY_CHECK = "mira.bodycheck.v1";
+/** "Not now" on the body check offer waits this long before it is offered again. */
+const BODY_CHECK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
 function read<T>(key: string): T | null {
   try {
@@ -87,4 +93,10 @@ export const local = {
   nps: () =>
     read<{ convos: number; asked: number | null }>(LOCAL_NPS) ?? { convos: 0, asked: null },
   saveNps: (v: { convos: number; asked: number | null }) => write(LOCAL_NPS, v),
+  /** True while a "Not now" on the body check is less than three days old. */
+  bodyCheckSnoozed: () => {
+    const at = read<{ snoozedAt: number }>(LOCAL_BODY_CHECK)?.snoozedAt;
+    return typeof at === "number" && Date.now() - at < BODY_CHECK_SNOOZE_MS;
+  },
+  snoozeBodyCheck: () => write(LOCAL_BODY_CHECK, { snoozedAt: Date.now() }),
 };

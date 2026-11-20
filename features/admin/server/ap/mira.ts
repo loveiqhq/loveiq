@@ -14,9 +14,16 @@
  * 3 or more of them, counted when its 3rd message is sent. Messages carry no chat id, so it is
  * read from their times alone, and a deleted account's own messages, which belong to nobody any
  * more, make no conversation.
+ *
+ * Outcomes (20 Nov 2026): body image from the body check (the Body Appreciation Scale-2, at the
+ * start and after four weeks, mira_body_check), counted as improved or worse at a change of
+ * BODY_RELIABLE_CHANGE or more; profile depth from the intake questions answered, the body check,
+ * the coaching style and a LoveIQ result; topics and referrals from the markers Mira's replies
+ * carry (features/mira/server/safety.ts), as ids, never words.
  */
 import miraConfig from "@features/mira/content/mira-config.json";
 import nudgeConfig from "@features/mira/content/nudges.json";
+import { FOLLOW_UP_DAYS } from "@features/mira/server/body-check";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
@@ -48,6 +55,16 @@ const NUDGE_REPLY_MS = 24 * HOUR_MS;
 /** Reactivated by nudges: no message for this long when the nudge went, one within 48 h of it. */
 const INACTIVE_MS = 7 * 24 * HOUR_MS;
 const REACTIVATED_MS = 48 * HOUR_MS;
+/**
+ * The smallest change in a body check score (the mean of ten answers, 1 to 5) that is more than
+ * the scale's noise: the reliable change index (Jacobson & Truax 1991), 1.96 × SD × √2 × √(1 − r),
+ * with the BAS-2's community SD of about 0.90 and its 3-week test–retest reliability of .90
+ * (Tylka & Wood-Barcalow 2015, Tables 2 and Study 1), which is 0.79; scores move in tenths.
+ */
+export const BODY_RELIABLE_CHANGE = 0.8;
+/** The intake questions that make up the root-cause screen and the goal (mira-config.json). */
+const ROOT_CAUSE_QUESTIONS = ["where", "onset"];
+const GOAL_QUESTION = "change";
 const EVENT_NAMES = [
   "chat_opened",
   "consent_given",
@@ -60,6 +77,11 @@ const EVENT_NAMES = [
   "nps",
   "nudge_prefs_saved",
   "nudge_stopped",
+  "intake_answered",
+  "chat_topic",
+  "referred",
+  "body_check_offered",
+  "body_check_started",
 ];
 
 export interface MiraUserRow {
@@ -95,11 +117,19 @@ export interface MiraNudgeRow {
   opened_at: string | null;
 }
 
+export interface MiraBodyCheckRow {
+  user_id: string;
+  score: number;
+  created_at: string;
+}
+
 export interface MiraData {
   users: MiraUserRow[];
   events: MiraEventRow[];
   /** Nudge emails that went out (sent_at set). */
   nudges: MiraNudgeRow[];
+  /** Every finished body check, oldest first. */
+  bodyChecks: MiraBodyCheckRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
 }
@@ -110,7 +140,7 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges] = await Promise.all([
+  const [users, events, nudges, bodyChecks] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment&order=id.asc"
     ),
@@ -118,10 +148,21 @@ export async function fetchMira(): Promise<MiraData> {
     fetchAllRows<MiraNudgeRow>(
       "/rest/v1/mira_nudge?sent_at=not.is.null&select=user_id,type,sent_at,clicked_at,delivered_at,opened_at&order=created_at.asc"
     ),
+    fetchAllRows<MiraBodyCheckRow>(
+      "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
+    ),
   ]);
-  if (!users || !events || !nudges) throw new Error("Mira's tables could not be read");
+  if (!users || !events || !nudges || !bodyChecks) {
+    throw new Error("Mira's tables could not be read");
+  }
   const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email));
-  return { users, events, nudges, withResult: await withLoveIqResult(asked) };
+  return {
+    users,
+    events,
+    nudges,
+    bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
+    withResult: await withLoveIqResult(asked),
+  };
 }
 
 /**
@@ -181,6 +222,14 @@ interface Person {
   /** When each of the person's conversations reached its 3rd message. */
   convs: number[];
   account: MiraUserRow | null;
+  /** The intake questions they answered (ids), signed out or in. */
+  answered: Set<string>;
+  /** Their new chats' topics (own words only), and Mira's referrals to a professional. */
+  topics: Array<{ at: number; topic: string }>;
+  refers: number[];
+  /** When the body check was offered to them, and when they started it. */
+  bodyOffers: number[];
+  bodyStarts: number[];
 }
 
 interface Counted {
@@ -214,6 +263,8 @@ export interface Prepared {
   /** Nudges sent to accounts that are not the team's. */
   nudges: CountedNudge[];
   withResult: Set<string>;
+  /** Each account's body checks (not the team's), oldest first. */
+  bodyChecks: Map<string, Array<{ at: number; score: number }>>;
 }
 
 const dayOfHour = new Map<number, string>();
@@ -290,6 +341,11 @@ export function prepare(data: MiraData): Prepared {
         msgDays: new Map(),
         convs: [],
         account: user ? (byId.get(user) ?? null) : null,
+        answered: new Set(),
+        topics: [],
+        refers: [],
+        bodyOffers: [],
+        bodyStarts: [],
       };
       people.set(key, p);
     }
@@ -300,6 +356,11 @@ export function prepare(data: MiraData): Prepared {
     else if (e.name === "chat_opened") p.opens.push(at);
     else if (e.name === "consent_given") p.consents.push(at);
     else if (e.name === "gate_shown") p.gates.push(at);
+    else if (e.name === "intake_answered" && e.detail) p.answered.add(e.detail);
+    else if (e.name === "chat_topic" && e.detail) p.topics.push({ at, topic: e.detail });
+    else if (e.name === "referred") p.refers.push(at);
+    else if (e.name === "body_check_offered") p.bodyOffers.push(at);
+    else if (e.name === "body_check_started") p.bodyStarts.push(at);
   }
   for (const p of people.values()) {
     p.starts.sort((a, b) => a.at - b.at);
@@ -311,7 +372,17 @@ export function prepare(data: MiraData): Prepared {
       p.msgDays.set(day, (p.msgDays.get(day) ?? 0) + (gap <= ACTIVE_GAP_MS ? gap : 0));
     });
     p.convs = conversationsOf(p.msgs);
+    p.refers.sort((a, b) => a - b);
   }
+
+  const bodyChecks = new Map<string, Array<{ at: number; score: number }>>();
+  for (const b of data.bodyChecks ?? []) {
+    if (staff.has(b.user_id)) continue;
+    const list = bodyChecks.get(b.user_id) ?? [];
+    list.push({ at: Date.parse(b.created_at), score: b.score });
+    bodyChecks.set(b.user_id, list);
+  }
+  for (const list of bodyChecks.values()) list.sort((a, b) => a.at - b.at);
 
   const nudges: CountedNudge[] = (data.nudges ?? [])
     .filter((n) => !staff.has(n.user_id))
@@ -341,6 +412,7 @@ export function prepare(data: MiraData): Prepared {
     firstDay: Number.isFinite(first) ? dayOf(first) : null,
     withResult: data.withResult,
     nudges,
+    bodyChecks,
   };
 }
 
@@ -483,6 +555,51 @@ export interface Figures {
   weekFour: { returned: number; of: number };
   nudge: NudgeCounts;
   reactivated: { back: number; of: number };
+  body: BodyChange;
+  /** Referrals to a therapist or doctor, at most one per person and conversation. */
+  referred: number;
+}
+
+export interface BodyChange {
+  /** Four-week body checks finished in the range, each against its person's first. */
+  pairs: number;
+  improved: number;
+  worse: number;
+  /** The average change in score (points on the 1 to 5 scale). */
+  change: number | null;
+}
+
+/**
+ * The four-week body checks finished in the range: each person's first check after 28 days or
+ * more, against their first. Improved or worse at BODY_RELIABLE_CHANGE or more, else no clear
+ * change. Without a control group this is change, not cause.
+ */
+function bodyChange(prep: Prepared, w: Win): BodyChange {
+  const changes: number[] = [];
+  for (const list of prep.bodyChecks.values()) {
+    const base = list[0];
+    const follow = base && list.find((c) => c.at - base.at >= FOLLOW_UP_DAYS * 24 * HOUR_MS);
+    if (!base || !follow || !within(follow.at, w)) continue;
+    // In hundredths, so 3.5 → 4.3 is 0.8 and not 0.7999….
+    changes.push(Math.round((follow.score - base.score) * 100) / 100);
+  }
+  return {
+    pairs: changes.length,
+    improved: changes.filter((c) => c >= BODY_RELIABLE_CHANGE).length,
+    worse: changes.filter((c) => c <= -BODY_RELIABLE_CHANGE).length,
+    change: mean(changes),
+  };
+}
+
+/** Referrals in the range; one within 30 minutes of the person's last is the same conversation's. */
+function referrals(prep: Prepared, w: Win): number {
+  let n = 0;
+  for (const p of prep.people.values()) {
+    p.refers.forEach((at, i) => {
+      if (within(at, w) && (i === 0 || at - p.refers[i - 1]! > SESSION_GAP_MS)) n++;
+    });
+  }
+  return n;
 }
 
 /** Every tile's figure for one range: the range itself, the one before, or a trend point. */
@@ -524,6 +641,8 @@ export function figures(prep: Prepared, from: string, to: string, today: string)
     nps: npsOf(inRange.filter((e) => e.name === "nps").map((e) => e.detail)),
     nudge: nudgeCounts(prep, w),
     reactivated: reactivated(prep, w),
+    body: bodyChange(prep, w),
+    referred: referrals(prep, w),
     weekFour: {
       returned: fourth.reduce((n, c) => n + c.cells[4]!.active, 0),
       of: fourth.reduce((n, c) => n + c.users, 0),
@@ -647,6 +766,94 @@ function chips(prep: Prepared, w: Win): ChipRow[] {
   return [...out.slice(0, -1).sort((a, b) => b.chats - a.chats), out.at(-1)!];
 }
 
+/** What Mira knows of today's accounts: the five areas of Marcus's "Profile depth". */
+function knowsOf(prep: Prepared): Knows {
+  const rows = prep.accounts.map((a) => {
+    const said = prep.people.get(a.id)?.answered ?? new Set<string>();
+    return {
+      rootCause: ROOT_CAUSE_QUESTIONS.every((q) => said.has(q)),
+      baseline: (prep.bodyChecks.get(a.id)?.length ?? 0) > 0,
+      goals: said.has(GOAL_QUESTION),
+      style: Object.keys(a.style ?? {}).length > 0,
+      result: prep.withResult.has(a.id),
+    };
+  });
+  const count = (pick: (r: (typeof rows)[number]) => boolean) => rows.filter(pick).length;
+  return {
+    accounts: rows.length,
+    rootCause: count((r) => r.rootCause),
+    baseline: count((r) => r.baseline),
+    goals: count((r) => r.goals),
+    style: count((r) => r.style),
+    result: count((r) => r.result),
+    depth: mean(rows.map((r) => Object.values(r).filter(Boolean).length / 5)),
+  };
+}
+
+/**
+ * The range's new chats opened in the person's own words, by the topic Mira gave the first
+ * message (a starter chip is its own row in the chips table), with the period before's shares.
+ */
+function topics(
+  prep: Prepared,
+  w: Win,
+  before: Win | null
+): { topics: TopicRow[]; untopical: number } {
+  const tally = (range: Win) => {
+    const n = new Map<string, number>();
+    let all = 0;
+    for (const p of prep.people.values()) {
+      for (const t of p.topics) {
+        if (!within(t.at, range)) continue;
+        n.set(t.topic, (n.get(t.topic) ?? 0) + 1);
+        all++;
+      }
+    }
+    return { n, all };
+  };
+  const cur = tally(w);
+  const prev = before ? tally(before) : null;
+  let own = 0;
+  for (const p of prep.people.values()) {
+    own += p.starts.filter((st) => st.chip === -1 && within(st.at, w)).length;
+  }
+  const rows = (miraConfig.topics as Array<{ id: string; label: string; example: string }>).map(
+    (t) => ({
+      id: t.id,
+      label: t.label,
+      example: t.example,
+      chats: cur.n.get(t.id) ?? 0,
+      share: ratio(cur.n.get(t.id) ?? 0, cur.all),
+      prevShare: prev ? ratio(prev.n.get(t.id) ?? 0, prev.all) : null,
+    })
+  );
+  const other = rows.filter((r) => r.id === "other");
+  return {
+    topics: [...rows.filter((r) => r.id !== "other").sort((a, b) => b.chats - a.chats), ...other],
+    untopical: Math.max(0, own - cur.all),
+  };
+}
+
+/** People offered and starting the body check in the range, and the checks finished in it. */
+function bodyFunnel(prep: Prepared, w: Win) {
+  let offered = 0;
+  let started = 0;
+  for (const p of prep.people.values()) {
+    if (p.bodyOffers.some((at) => within(at, w))) offered++;
+    if (p.bodyStarts.some((at) => within(at, w))) started++;
+  }
+  let baselines = 0;
+  let followUps = 0;
+  for (const list of prep.bodyChecks.values()) {
+    list.forEach((c, i) => {
+      if (!within(c.at, w)) return;
+      if (i === 0) baselines++;
+      else followUps++;
+    });
+  }
+  return { offered, started, baselines, followUps };
+}
+
 const PER_USER = [
   { label: "1 conversation", min: 1, max: 1 },
   { label: "2–3", min: 2, max: 3 },
@@ -665,6 +872,34 @@ export interface MiraStep {
   ofPrev: number | null;
 }
 
+export interface TopicRow {
+  id: string;
+  label: string;
+  /** A paraphrased example from the design, never a person's words. */
+  example: string;
+  /** New chats in the range opened in the person's own words with this topic, and their share. */
+  chats: number;
+  share: number | null;
+  /** The share in the period before, when the page compares. */
+  prevShare: number | null;
+}
+
+export interface Knows {
+  accounts: number;
+  /** Answered where it shows up and when it started (the intake's root-cause questions). */
+  rootCause: number;
+  /** Did the first body check. */
+  baseline: number;
+  /** Said what they would do if it felt easier (the intake's goal question). */
+  goals: number;
+  /** A coaching style saved. */
+  style: number;
+  /** A LoveIQ result Mira may use. */
+  result: number;
+  /** Profile depth: the average share of the five areas Mira knows, per account. */
+  depth: number | null;
+}
+
 export interface MiraPayload extends PageHead {
   tiles: Record<string, Tile>;
   funnel: MiraStep[];
@@ -675,9 +910,20 @@ export interface MiraPayload extends PageHead {
   perUser: Array<{ label: string; n: number; share: number | null; pastTen: boolean }>;
   cohorts: CohortRow[];
   /** Today's accounts, and what Mira knows of them. */
-  knows: { accounts: number; style: number; result: number };
-  safety: { conversations: number; crisis: number; notHelpful: number };
+  knows: Knows;
+  safety: { conversations: number; crisis: number; notHelpful: number; referred: number };
   chips: ChipRow[];
+  topics: TopicRow[];
+  /** New chats in the range opened in the person's own words that carry no topic. */
+  untopical: number;
+  /** The body check in the range: offered to, started by, first and four-week checks finished. */
+  bodyCheck: BodyChange & {
+    offered: number;
+    started: number;
+    baselines: number;
+    followUps: number;
+    reliableChange: number;
+  };
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
@@ -744,6 +990,7 @@ export function buildMiraPage(input: {
     trend: "",
   });
   const afterBeta = "paid plans start after the beta.";
+  const knows = knowsOf(prep);
   const { nps } = cur;
   const notNow = fmt("pct", ratio(nps.notNow, nps.answers + nps.notNow));
   const tiles: Record<string, Tile> = Object.fromEntries(
@@ -807,8 +1054,27 @@ export function buildMiraPage(input: {
         // A score from −100 to +100: a change in it is points, never a percentage of it.
         prev: null,
       },
-      notYet("bodyImage", "Body image improvement", "no body-image scale is asked yet."),
-      notYet("profileDepth", "Profile depth", "3 of its 5 areas aren't asked yet."),
+      tile(
+        "bodyImage",
+        "Body image improvement",
+        "pct",
+        (x) => ratio(x.body.improved, x.body.pairs),
+        cur.body.pairs
+          ? of(cur.body.improved, cur.body.pairs, "four-week body checks improved")
+          : "no four-week body check in the range yet"
+      ),
+      {
+        ...tile(
+          "profileDepth",
+          "Profile depth",
+          "pct",
+          () => knows.depth,
+          "of the 5 areas, per account, today"
+        ),
+        // Today's accounts as they are now: no earlier value to compare or chart.
+        prev: null,
+        spark: [],
+      },
       tile("nudgesSent", "Nudges sent", "count", (x) => x.nudge.sent, "daily nudge emails"),
       tile(
         "nudgeOpen",
@@ -901,13 +1167,16 @@ export function buildMiraPage(input: {
     signupsBy: { email: by("email"), google: by("google") },
     perUser,
     cohorts: cohorts(prep, f.to, today).slice(-8),
-    knows: {
-      accounts: prep.accounts.length,
-      style: prep.accounts.filter((a) => Object.keys(a.style ?? {}).length > 0).length,
-      result: prep.accounts.filter((a) => prep.withResult.has(a.id)).length,
+    knows,
+    safety: {
+      conversations: cur.conversations,
+      crisis: cur.crisis,
+      notHelpful: cur.downs,
+      referred: cur.referred,
     },
-    safety: { conversations: cur.conversations, crisis: cur.crisis, notHelpful: cur.downs },
     chips: chips(prep, w),
+    ...topics(prep, w, compared && cmp ? win(cmp.from, cmp.to) : null),
+    bodyCheck: { ...cur.body, ...bodyFunnel(prep, w), reliableChange: BODY_RELIABLE_CHANGE },
     nps,
     nudgeTypes: nudgeConfig.types.map((k) => ({
       type: k.id,

@@ -163,5 +163,65 @@
     }
   ],
   "crisisMessage": "I’m really glad you told me. This is something to share with the right person, who can give you the support you need. It can help to reach out soon, even just to talk it through. If you’re in immediate danger, please call your local emergency number. You can also reach the crisis line for your country, any time. I’m still here with you while you reach out.",
-  "refusalMessage": "I can’t help with that one here. If you’d like, tell me a little more about what’s on your mind about your body and intimacy, and we can start from there."
+  "refusalMessage": "I can’t help with that one here. If you’d like, tell me a little more about what’s on your mind about your body and intimacy, and we can start from there.",
+  "topics": [
+    {
+      "id": "hiding",
+      "label": "Hiding the body during intimacy",
+      "example": "I only feel okay with the lights off."
+    },
+    {
+      "id": "comparing",
+      "label": "Comparing to others or a partner’s ex",
+      "example": "I keep comparing myself to his ex."
+    },
+    {
+      "id": "causes",
+      "label": "Root causes: where it comes from",
+      "example": "Why do I feel like this about my body?"
+    },
+    {
+      "id": "compliments",
+      "label": "Not believing compliments",
+      "example": "He says I’m beautiful but I don’t believe it."
+    },
+    {
+      "id": "clothes",
+      "label": "Clothes, summer and being seen",
+      "example": "Summer clothes make me feel exposed."
+    },
+    {
+      "id": "weight",
+      "label": "Weight and shape worries",
+      "example": "I want to lose weight before I let anyone see me."
+    },
+    {
+      "id": "changes",
+      "label": "Changes after pregnancy or illness",
+      "example": "My body changed after having a baby."
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "example": ""
+    }
+  ],
+  "bodyCheck": {
+    "scale": "Body Appreciation Scale-2",
+    "citation": "Tylka TL, Wood-Barcalow NL (2015). The Body Appreciation Scale-2: Item refinement and psychometric evaluation. Body Image 12:53-67. https://doi.org/10.1016/j.bodyim.2014.09.006",
+    "directions": "Please indicate whether the question is true about you never, seldom, sometimes, often, or always.",
+    "answers": ["Never", "Seldom", "Sometimes", "Often", "Always"],
+    "items": [
+      "I respect my body.",
+      "I feel good about my body.",
+      "I feel that my body has at least some good qualities.",
+      "I take a positive attitude towards my body.",
+      "I am attentive to my body’s needs.",
+      "I feel love for my body.",
+      "I appreciate the different and unique characteristics of my body.",
+      "My behavior reveals my positive attitude toward my body; for example, I hold my head high and smile.",
+      "I am comfortable in my body.",
+      "I feel like I am beautiful even if I am different from media images of attractive people (e.g., models, actresses/actors)."
+    ]
+  }
 }

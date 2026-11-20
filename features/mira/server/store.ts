@@ -35,6 +35,8 @@ export type StoredMessage = {
   content: string;
   sources: CitedSource[] | null;
   rating: number | null;
+  /** The intake question this reply of Mira's asked (its answers show as buttons). */
+  ask: string | null;
 };
 
 const enc = encodeURIComponent;
@@ -123,7 +125,7 @@ export async function getMessages(
 ): Promise<StoredMessage[]> {
   if (!(await ownsChat(userId, chatId))) return [];
   const newest = await rows<StoredMessage>(
-    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id,role,content,sources,rating&order=id.desc&limit=${limit}`
+    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id,role,content,sources,rating,ask&order=id.desc&limit=${limit}`
   );
   return newest.reverse();
 }
@@ -141,7 +143,12 @@ export async function createChat(userId: string, title: string): Promise<string>
 
 export async function addMessages(
   chatId: string,
-  messages: Array<{ role: "user" | "assistant"; content: string; sources?: CitedSource[] | null }>
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+    sources?: CitedSource[] | null;
+    ask?: string | null;
+  }>
 ): Promise<number[]> {
   const res = await supabaseFetch("/rest/v1/mira_message?select=id", {
     method: "POST",
@@ -152,6 +159,7 @@ export async function addMessages(
         role: m.role,
         content: m.content,
         sources: m.sources ?? null,
+        ask: m.ask ?? null,
       }))
     ),
   });
@@ -284,7 +292,13 @@ export type MiraEventName =
   | "nudge_prefs_saved"
   | "nudge_stopped"
   | "nudge_resumed"
-  | "nps";
+  | "nps"
+  | "intake_answered"
+  | "chat_topic"
+  | "referred"
+  | "body_check_offered"
+  | "body_check_started"
+  | "body_check_done";
 
 /** The KPI log. Written after the response, so it never slows a reply; a lost row is logged. */
 export function logMiraEvent(

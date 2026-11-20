@@ -12,7 +12,8 @@
  *       asked after the 3rd conversation and then monthly (Marcus's MVP success board); null is
  *       "Not now", so the response rate is known too
  *   { type: "track", name }        chat opened, consent given, gate shown (on "New chat", which
- *       the server never sees); only these names, so the server's own KPI events can't be sent
+ *       the server never sees), the body check offered and started (its finish is the server's);
+ *       only these names, so the server's own KPI events can't be sent
  *
  * At most DAILY_EVENTS a day per person (account or browser id) and six times that per network
  * (a cleared cookie is a new id), so mira_event can't be flooded or the counts inflated.
@@ -49,7 +50,13 @@ const schema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("nps"), score: z.number().int().min(0).max(10).nullable() }),
   z.object({
     type: z.literal("track"),
-    name: z.enum(["chat_opened", "consent_given", "gate_shown"]),
+    name: z.enum([
+      "chat_opened",
+      "consent_given",
+      "gate_shown",
+      "body_check_offered",
+      "body_check_started",
+    ]),
   }),
 ]);
 

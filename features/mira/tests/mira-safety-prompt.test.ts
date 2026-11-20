@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import miraConfig from "@features/mira/content/mira-config.json";
 import { EVIDENCE_CARDS } from "@features/mira/server/cards";
 import {
   STABLE_INSTRUCTIONS,
   personalInstructions,
   styleInstructions,
+  topicInstruction,
 } from "@features/mira/server/prompt";
 import { CRISIS_TOKEN, isCrisisMessage, parseReply } from "@features/mira/server/safety";
 
@@ -92,7 +94,52 @@ describe("parseReply", () => {
 
   it("leaves a reply without a sources line alone", () => {
     const out = parseReply("Plain answer.");
-    expect(out).toEqual({ text: "Plain answer.", crisis: false, sources: [] });
+    expect(out).toEqual({
+      text: "Plain answer.",
+      crisis: false,
+      sources: [],
+      ask: null,
+      refer: false,
+      topic: null,
+    });
+  });
+
+  it("reads the app's markers after the Sources line and never shows them", () => {
+    const real = EVIDENCE_CARDS[0]!;
+    const out = parseReply(
+      `How long has it been there?\n\nSources: [${real.id}]\n[[ASK:onset]]\n[[REFER]]\n[[TOPIC:hiding]]`
+    );
+    expect(out.text).toBe("How long has it been there?");
+    expect(out.sources.map((s) => s.id)).toEqual([real.id]);
+    expect(out).toMatchObject({ ask: "onset", refer: true, topic: "hiding", crisis: false });
+  });
+
+  it("forgives spaces and case in a marker", () => {
+    const out = parseReply("Where do you feel it most?\n[[ ask : Where ]]");
+    expect(out.ask).toBe("where");
+    expect(out.text).toBe("Where do you feel it most?");
+  });
+
+  it("drops unknown ids and unknown markers, so nothing reaches the screen", () => {
+    const out = parseReply("Hello there.\n[[ASK:shoesize]]\n[[TOPIC:feet]]\n[[NOTE:x]]");
+    expect(out).toMatchObject({ text: "Hello there.", ask: null, topic: null, refer: false });
+  });
+
+  it("keeps a crisis reply free of answer buttons and referral counts", () => {
+    const out = parseReply(`Please reach out now.\n[[ASK:support]]\n[[REFER]]\n${CRISIS_TOKEN}`);
+    expect(out).toMatchObject({ crisis: true, ask: null, refer: false });
+    expect(out.text).toBe("Please reach out now.");
+  });
+
+  it("knows every intake question and topic id the instructions name", () => {
+    for (const q of miraConfig.intakeQuestions) {
+      expect(parseReply(`Q?\n[[ASK:${q.id}]]`).ask).toBe(q.id);
+      expect(STABLE_INSTRUCTIONS).toContain(`[${q.id}] ${q.question}`);
+    }
+    for (const t of miraConfig.topics) {
+      expect(parseReply(`A.\n[[TOPIC:${t.id}]]`).topic).toBe(t.id);
+      expect(topicInstruction()).toContain(`${t.id} (`);
+    }
   });
 });
 
@@ -115,6 +162,20 @@ describe("Mira's instructions", () => {
     expect(lines).toHaveLength(2);
     expect(lines.some((l) => l.startsWith("Clearly: "))).toBe(true);
     expect(lines.some((l) => l.startsWith("Somewhat: "))).toBe(true);
+  });
+
+  it("ask for the markers the app reads", () => {
+    expect(STABLE_INSTRUCTIONS).toContain("MARKERS FOR THE APP");
+    expect(STABLE_INSTRUCTIONS).toContain("[[ASK:onset]]");
+    expect(STABLE_INSTRUCTIONS).toContain("[[REFER]]");
+    expect(STABLE_INSTRUCTIONS).toContain("never add one to a crisis reply");
+  });
+
+  it("ask for a topic only with a new chat's first message in the person's own words", () => {
+    expect(personalInstructions({}, { signedIn: false })).not.toContain("TOPIC");
+    const first = personalInstructions({}, { signedIn: false }, { topic: true });
+    expect(first).toContain("FIRST MESSAGE TOPIC");
+    expect(first).toContain("[[TOPIC:hiding]]");
   });
 
   it("mention only what the person shared", () => {

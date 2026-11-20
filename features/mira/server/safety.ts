@@ -1,3 +1,4 @@
+import miraConfig from "../content/mira-config.json";
 import { cardById, type EvidenceCard } from "./cards";
 
 /**
@@ -11,7 +12,11 @@ import { cardById, type EvidenceCard } from "./cards";
  *    when a stop rail fires. The token never reaches the screen; it opens the crisis panel.
  *
  * Also here: the "Sources: [C17] [C20]" line Mira ends a reply with when she used evidence
- * cards. It becomes the source tags under her answer, linked to each paper's public page.
+ * cards. It becomes the source tags under her answer, linked to each paper's public page. And
+ * the markers her instructions ask for (prompt.ts, "MARKERS FOR THE APP"): [[ASK:id]] when she
+ * asks an intake question (its answers become buttons), [[REFER]] when she suggests a therapist
+ * or doctor, and [[TOPIC:id]] on a new chat's first reply. Any [[…]] marker is removed, known or
+ * not, so none can reach the screen.
  */
 
 // Matched against normalise(text): lower case, straight apostrophes, single spaces, no accents.
@@ -80,7 +85,28 @@ export const CRISIS_TOKEN = "[[CRISIS]]";
 
 export type CitedSource = { id: string; label: string; link: string | null };
 
-export type ParsedReply = { text: string; crisis: boolean; sources: CitedSource[] };
+export type ParsedReply = {
+  text: string;
+  crisis: boolean;
+  sources: CitedSource[];
+  /** The intake question the reply asks (an id from mira-config.json), if marked. */
+  ask: string | null;
+  /** The reply suggests a therapist, doctor or other professional. */
+  refer: boolean;
+  /** A new chat's topic (an id from mira-config.json's topics), if marked. */
+  topic: string | null;
+};
+
+const INTAKE_IDS = new Set(miraConfig.intakeQuestions.map((q) => q.id));
+const TOPIC_IDS = new Set(miraConfig.topics.map((t) => t.id));
+/** Any [[…]] marker; its inside ("CRISIS", "ASK:onset") is read by markerOf. */
+const MARKER = /\[\[([^[\]\n]{1,40})\]\]/g;
+
+/** "ASK : Onset " → ["ASK", "onset"]; spaces and case forgiven. */
+function markerOf(inside: string): [kind: string, value: string | null] {
+  const [kind = "", value] = inside.split(":", 2).map((p) => p.trim());
+  return [kind.toUpperCase(), value ? value.toLowerCase() : null];
+}
 
 function sourceLabel(card: EvidenceCard): string {
   const first = card.authors.split(",")[0]?.trim() || card.title;
@@ -89,11 +115,20 @@ function sourceLabel(card: EvidenceCard): string {
   return `${surname}${etAl} (${card.year})`;
 }
 
-/** Strip the crisis token and the sources line; turn the cited ids into source tags. */
+/** Strip the markers and the sources line; turn the cited ids into source tags. */
 export function parseReply(raw: string): ParsedReply {
-  let text = raw;
-  const crisis = text.includes(CRISIS_TOKEN);
-  text = text.split(CRISIS_TOKEN).join("");
+  let ask: string | null = null;
+  let topic: string | null = null;
+  let refer = false;
+  let crisis = false;
+  for (const [, inside] of raw.matchAll(MARKER)) {
+    const [kind, id] = markerOf(inside!);
+    if (kind === "CRISIS" && !id) crisis = true;
+    else if (kind === "REFER" && !id) refer = true;
+    else if (kind === "ASK" && id && INTAKE_IDS.has(id)) ask = id;
+    else if (kind === "TOPIC" && id && TOPIC_IDS.has(id)) topic ??= id;
+  }
+  let text = raw.replace(MARKER, "");
 
   const sources: CitedSource[] = [];
   // The last line made only of "Sources:" and card ids (no backtracking regex: line by line).
@@ -116,5 +151,20 @@ export function parseReply(raw: string): ParsedReply {
     text = lines.join("\n");
     break;
   }
-  return { text: text.replace(/\n{3,}/g, "\n\n").trim(), crisis, sources };
+  // A crisis reply is never also a coaching step: no answer buttons, no referral count.
+  if (crisis) {
+    ask = null;
+    refer = false;
+  }
+  return {
+    text: text
+      .replace(/[ \t]+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+    crisis,
+    sources,
+    ask,
+    refer,
+    topic,
+  };
 }
