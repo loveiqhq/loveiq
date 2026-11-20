@@ -332,8 +332,16 @@ describe("runNudges", () => {
     expect(mail.tags).toEqual([{ name: "mira_nudge", value: expect.stringMatching(/^aaaaaaaa-/) }]);
     // Email links never point at staging (getEmailSiteUrl), only at the live site.
     expect(mail.html).toMatch(/https:\/\/www\.loveiq\.org\/api\/mira\/nudge\?t=/);
-    expect(patched[0]).toMatchObject({ message_id: 501, resend_id: "re_1" });
+    // Marked sent first, then the chat copy's id.
+    expect(patched[0]).toMatchObject({ resend_id: "re_1" });
     expect(patched[0]!.sent_at).toEqual(expect.any(String));
+    expect(patched[1]).toEqual({ message_id: 501 });
+    // A retried send call can't mail it twice.
+    expect(send.mock.calls[0]![1]).toEqual({
+      idempotencyKey: expect.stringMatching(/^mira-nudge-/),
+    });
+    // The text part opens with the neutral line too.
+    expect(mail.text.startsWith("A short note for you.")).toBe(true);
     expect(deleted).toEqual([]);
   });
 
@@ -376,6 +384,14 @@ describe("runNudges", () => {
     expect(claims.size).toBe(0);
     expect(addMessages).not.toHaveBeenCalled();
     expect(patched).toHaveLength(0);
+  });
+
+  it("keeps a nudge that went marked as sent even when its chat copy fails", async () => {
+    vi.mocked(addMessages).mockRejectedValueOnce(new Error("db blip"));
+    const summary = await runNudges(TUESDAY_0810);
+    expect(summary).toMatchObject({ sent: 1, errors: 1 });
+    expect(deleted).toEqual([]);
+    expect(patched[0]!.sent_at).toEqual(expect.any(String));
   });
 
   it("lets the slot's second run send what the first could not", async () => {

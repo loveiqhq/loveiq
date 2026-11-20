@@ -80,7 +80,30 @@ const schema = z.object({
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_BODY_CHARS = 200_000;
+/** The function's own limit (maxDuration, 75 s) less time to store the reply and answer. */
+const ROUTE_BUDGET_MS = 65_000;
 const PER_MINUTE = { bucket: "mira-chat", limit: 20, windowMs: 60_000 };
+const RESTING = () =>
+  NextResponse.json(
+    { error: "Mira is resting for today. Please come back tomorrow." },
+    { status: 503 }
+  );
+/**
+ * Everyone's model calls together. Checked after the person's own daily caps (so someone at
+ * their cap can't spend everyone's) and before an anonymous free conversation is counted (so a
+ * resting day doesn't use one of their ten).
+ */
+const everyoneMayAsk = async () =>
+  (
+    await checkRateLimit("all", {
+      bucket: "mira-global-day",
+      limit: GLOBAL_DAILY_MESSAGES,
+      windowMs: DAY_MS,
+    })
+  ).allowed;
+/** Crisis exchanges stored and counted a day per network: the reply itself is never limited. */
+const CRISIS_LOGGED_PER_DAY = 50;
 /** A paying-attention daily ceiling per account: model cost and abuse, not a product limit. */
 const DAILY = { bucket: "mira-daily", limit: DAILY_MESSAGES, windowMs: DAY_MS };
 
@@ -113,7 +136,17 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
   let chatId: string | null = null;
   let messageId: number | null = null;
   try {
-    if ((await checkRateLimit(getClientIp(request), PER_MINUTE)).allowed) {
+    const ip = getClientIp(request);
+    const logged =
+      (await checkRateLimit(ip, PER_MINUTE)).allowed &&
+      (
+        await checkRateLimit(ip, {
+          bucket: "mira-crisis-day",
+          limit: CRISIS_LOGGED_PER_DAY,
+          windowMs: DAY_MS,
+        })
+      ).allowed;
+    if (logged) {
       const account = await getMiraAccount();
       who = { anonId: account ? null : await anonId(), userId: account?.id ?? null };
       const profile = account ? await getProfile(account.id) : null;
@@ -155,10 +188,22 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
 }
 
 export async function POST(request: Request) {
+  const started = Date.now();
   if (!(await verifyCsrfToken(request))) {
     return NextResponse.json({ error: "Invalid request." }, { status: 403 });
   }
-  const body: unknown = await request.json().catch(() => null);
+  // A real request is at most about 100 KB (24 turns of 4,000 characters); anything far larger
+  // is refused before it is parsed or searched for crisis words.
+  const text = await request.text().catch(() => "");
+  if (text.length > MAX_BODY_CHARS) {
+    return NextResponse.json({ error: "That message is too long." }, { status: 413 });
+  }
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = null;
+  }
   // Read leniently first: a crisis message is answered whatever else the body holds.
   const raw = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   if (typeof raw.message === "string" && isCrisisMessage(raw.message)) {
@@ -205,6 +250,7 @@ export async function POST(request: Request) {
           { status: 429 }
         );
       }
+      if (!(await everyoneMayAsk())) return RESTING();
       style = profile.style;
       remember = profile.remember_chats;
       country = profile.country && profile.country !== "OTHER" ? profile.country : country;
@@ -247,6 +293,7 @@ export async function POST(request: Request) {
           { status: 429 }
         );
       }
+      if (!(await everyoneMayAsk())) return RESTING();
       // ponytail: "new conversation" is read from the history the browser sends, so a crafted
       // request can skip the count; no easier than clearing the cookie, and the daily caps above
       // bound the cost. Upgrade: a server-signed conversation token if mira_event shows abuse.
@@ -275,25 +322,17 @@ export async function POST(request: Request) {
   const isFirst = turns.length === 0;
   turns = cleanHistory([...turns, { role: "user", content: message }]);
 
-  // Everyone's model calls together, counted only once a call is about to be made.
-  const everyone = await checkRateLimit("all", {
-    bucket: "mira-global-day",
-    limit: GLOBAL_DAILY_MESSAGES,
-    windowMs: DAY_MS,
-  });
-  if (!everyone.allowed) {
-    return NextResponse.json(
-      { error: "Mira is resting for today. Please come back tomorrow." },
-      { status: 503 }
-    );
-  }
-
   let reply: string;
   let sources: CitedSource[] = [];
   let crisis = false;
   let refused = false;
 
-  const result = await askModel(STABLE_INSTRUCTIONS, personalInstructions(style, person), turns);
+  const result = await askModel(
+    STABLE_INSTRUCTIONS,
+    personalInstructions(style, person),
+    turns,
+    started + ROUTE_BUDGET_MS
+  );
   if (!result.ok) {
     const status = result.reason === "unconfigured" ? 503 : result.reason === "error" ? 502 : 503;
     const error =

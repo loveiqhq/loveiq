@@ -129,20 +129,32 @@ async function callModel(
 export async function askModel(
   stable: string,
   personal: string,
-  turns: MiraTurn[]
+  turns: MiraTurn[],
+  /** The latest moment the answer may come (ms); the caller's own time limit, when it has one. */
+  until?: number
 ): Promise<ModelResult> {
   const key = process.env.MIRA_LLM_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
-  const deadline = Date.now() + MODEL_BUDGET_MS;
+  const deadline = Math.min(Date.now() + MODEL_BUDGET_MS, until ?? Infinity);
+  if (deadline - Date.now() < 5_000) return { ok: false, reason: "error" };
   const main = modelName();
-  const first = await callModel(key, main, stable, personal, turns, MODEL_FIRST_TRY_MS);
+  const first = await callModel(
+    key,
+    main,
+    stable,
+    personal,
+    turns,
+    Math.min(MODEL_FIRST_TRY_MS, deadline - Date.now())
+  );
   const fallback = fallbackModelName();
   if (first.ok || !first.retry || fallback === main) return strip(first);
   logger.warn(
     { model: main, fallback, reason: first.reason },
     "mira: the main model is down, answering with the fallback"
   );
-  return strip(await callModel(key, fallback, stable, personal, turns, deadline - Date.now()));
+  const left = deadline - Date.now();
+  if (left < 3_000) return strip(first);
+  return strip(await callModel(key, fallback, stable, personal, turns, left));
 }
 
 function strip({ retry: _retry, ...result }: Attempt): ModelResult {

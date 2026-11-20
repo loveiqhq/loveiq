@@ -13,6 +13,8 @@ describe("isCrisisMessage", () => {
     "I could kill myself", // maybe a joke, but too plain to risk
     "sometimes I think about suicide",
     "I don't want to live anymore",
+    "I don't want to live like this",
+    "quiero morirme",
     "I don’t want to live anymore", // a phone's curly apostrophe
     "I  WANT TO\nKILL   MYSELF",
     "I've been self-harming again",
@@ -61,6 +63,11 @@ describe("isCrisisMessage", () => {
     "I want to take my life back",
     "I need to take my life in a new direction",
     "I want to end it all with him and move on",
+    "I don't want to live with this shame",
+    "I wanted to die from embarrassment",
+    "I wanted to die when he saw me naked",
+    "I need to take my life more seriously",
+    "me quiero morir de vergüenza",
     "I walked 10 kms today",
   ])("does not stop for %j", (text) => {
     expect(isCrisisMessage(text)).toBe(false);

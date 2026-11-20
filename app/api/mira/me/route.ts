@@ -109,7 +109,12 @@ export async function PATCH(request: Request) {
       !stored || nudges_on === stored.nudges_on
         ? {}
         : nudges_on
-          ? { nudges_on, nudges_stopped_at: null, nudge_stop_reason: null }
+          ? {
+              nudges_on,
+              nudges_stopped_at: null,
+              nudge_stop_reason: null,
+              nudges_paused_until: null,
+            }
           : { nudges_on, nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
     await updateProfile(g.account.id, { ...rest, ...nudgeState });
     logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(parsed.data) });
