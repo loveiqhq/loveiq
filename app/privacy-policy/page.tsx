@@ -339,7 +339,9 @@ export default function PrivacyPolicyPage() {
               <p className="mb-4">
                 These tools also run on the pages of Mira, our AI coach. There, PostHog and
                 Microsoft Clarity also see what you and Mira write in the chat, as it appears on the
-                page. Mira tells you this before your first message.
+                page. Mira&apos;s notice says so, and so does the tick before a first chat without
+                an account. Mira also keeps her own log of steps; without an account, a random id in
+                a cookie on your browser links it and counts your free messages.
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.5 Advertising and attribution</h3>
@@ -363,10 +365,21 @@ export default function PrivacyPolicyPage() {
               <h3 className="text-gray-900 font-medium mb-2">7.7 Internal operations</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
-                  Slack Technologies Ltd. (IE) - internal incident-response notifications. Personal
-                  data is minimized (e.g. email addresses are masked) before being sent.
+                  Slack Technologies Ltd. (IE) - our team&apos;s messaging. It receives alerts about
+                  technical problems, and posts that let the team follow sign-ups and returns: one
+                  for each finished survey, and a note when a reader comes back to their report.
                 </li>
               </ul>
+              <p className="mb-4">
+                These posts show your email address masked (for example a***@example.com), where
+                your visit came from, the landing page you saw, your device type, the country you
+                chose, how far you got and how long each step took. A note about a return also shows
+                what brought you back and how long you read. They never contain your answers. If you
+                have asked us to restrict the processing of your data, you are left out of them.
+                Purchases, contact requests and feedback on a report also reach the team in Slack,
+                with your email address masked. Our legal basis is our legitimate interest in
+                following and improving our service (Art. 6(1)(f) GDPR).
+              </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.8 Reviews and social proof</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">

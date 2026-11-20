@@ -153,7 +153,8 @@ export default function MiraPrivacyPage() {
           <li>
             What you write to Mira, and what she writes back. It is about your sex life and often
             your health. The GDPR calls this sensitive data. We only use it with your explicit
-            consent: the tick before your first message, and again when you make an account.
+            consent, which you give with a tick before your first message or when you make an
+            account.
           </li>
           <li>
             With a free account: your email address, the name and gender you give, the country you
@@ -227,9 +228,9 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             Our analytics tools run on Mira&apos;s pages, as on the rest of our site. PostHog and
-            Microsoft Clarity see what you type in the chat (the tick before your first message says
-            so too). Legal basis, as in section 7.4 of our privacy policy: our legitimate interest
-            (Art. 6(1)(f) GDPR). Google cookies and identifiers need your cookie consent.
+            Microsoft Clarity see what you and Mira write in the chat, as it appears on the page.
+            Legal basis, as in section 7.4 of our privacy policy: our legitimate interest (Art.
+            6(1)(f) GDPR). Google cookies and identifiers need your cookie consent.
           </li>
           <li>
             We do not use what you tell Mira for advertising or to train AI models. Anthropic may
