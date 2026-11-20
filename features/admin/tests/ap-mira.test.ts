@@ -9,8 +9,9 @@ vi.mock("@shared/http/ratelimit", () => ({
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 const mockFetchAllRows = vi.fn();
+const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: vi.fn(),
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
   fetchAllRows: (...args: unknown[]) => mockFetchAllRows(...args),
   countRows: vi.fn(),
   POSTGREST_MAX_ROWS: 1000,
@@ -42,9 +43,33 @@ const ev = (
   name,
   anon_id: who.anon ?? null,
   user_id: who.user ?? null,
-  created_at: at,
+  at: Date.parse(at),
   rating: rating === undefined ? null : String(rating),
 });
+
+/**
+ * What mira_ap_events answers for these rows (in id order): one entry per person, name and
+ * rating, with its times, in the order of each entry's first event.
+ */
+function grouped(events: MiraEventRow[]) {
+  const groups = new Map<string, [string, string | null, string | null, string | null, number[]]>();
+  for (const e of events) {
+    const key = JSON.stringify([e.name, e.anon_id, e.user_id, e.rating]);
+    if (!groups.has(key)) groups.set(key, [e.name, e.anon_id, e.user_id, e.rating, []]);
+    groups.get(key)![4].push(e.at);
+  }
+  return [...groups.values()];
+}
+
+/** The RPC answering `groups`, and every other read answering `rows(path)`. */
+function database(groups: unknown, rows: (path: string) => unknown = () => []) {
+  mockSupabaseFetch.mockImplementation(async (path: string) =>
+    path === "/rest/v1/rpc/mira_ap_events"
+      ? new Response(JSON.stringify(groups), { status: 200 })
+      : new Response("[]", { status: 200 })
+  );
+  mockFetchAllRows.mockImplementation(async (path: string) => rows(path));
+}
 
 /** A chat: its start and `messages` messages a minute apart, the first written 50 ms early. */
 function chat(who: { anon?: string; user?: string }, at: string, messages = 1): MiraEventRow[] {
@@ -332,34 +357,69 @@ describe("buildMiraPage", () => {
 });
 
 describe("fetchMira", () => {
-  it("reads only the rating from an event's props, and asks for LoveIQ results by encoded address, the team's left out", async () => {
-    mockFetchAllRows.mockImplementation(async (path: string) => {
+  it("asks only for the counted events, and for LoveIQ results by encoded address, the team's left out", async () => {
+    database([], (path) => {
       if (path.startsWith("/rest/v1/mira_user"))
         return [
           account("u1", "a+b@example.com", "2026-11-03T12:00:00Z"),
           account("s1", "eman@loveiq.org", "2026-11-03T12:00:00Z"),
           account("u3", "c@example.com", "2026-11-03T12:00:00Z", { use_assessment: false }),
         ];
-      if (path.startsWith("/rest/v1/mira_event")) return [];
       if (path.startsWith("/rest/v1/app_user")) return [{ email: "a+b@example.com" }];
       if (path.startsWith("/rest/v1/mira_nudge")) return [];
       return null;
     });
     const out = await fetchMira();
     expect(out.withResult).toEqual(new Set(["u1"]));
+    const [path, init] = mockSupabaseFetch.mock.calls[0] as [string, { body: string }];
+    expect(path).toBe("/rest/v1/rpc/mira_ap_events");
+    expect(JSON.parse(init.body).p_names).toEqual([
+      "chat_opened",
+      "chat_started",
+      "message_sent",
+      "signup_completed",
+      "rating",
+      "crisis_shown",
+      "nudge_stopped",
+    ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
-    const events = paths.find((p) => p.startsWith("/rest/v1/mira_event"))!;
-    expect(events).toContain("rating:props->>rating");
-    expect(events).not.toMatch(/[,=]props(,|&|$)/);
     const lookup = paths.find((p) => p.startsWith("/rest/v1/app_user"))!;
     expect(lookup).toContain(`email=in.(${encodeURIComponent('"a+b@example.com"')})`);
     expect(lookup).not.toContain("loveiq.org");
   });
 
-  it("fails rather than count part of the events", async () => {
-    mockFetchAllRows.mockImplementation(async (path: string) =>
-      path.startsWith("/rest/v1/mira_event") ? null : []
+  it("reads every event in one request however many there are, never row by row", async () => {
+    const times = Array.from({ length: 150_001 }, (_, i) => Date.parse("2026-11-03T10:00:00Z") + i);
+    database([["message_sent", "browser-a", null, null, times]]);
+    const out = await fetchMira();
+    expect(out.events).toHaveLength(150_001);
+    expect(out.events[150_000]).toEqual({
+      name: "message_sent",
+      anon_id: "browser-a",
+      user_id: null,
+      at: times[150_000],
+      rating: null,
+    });
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetchAllRows.mock.calls.some(([p]) => String(p).includes("mira_event"))).toBe(false);
+  });
+
+  it("counts exactly what it counted from the rows themselves", async () => {
+    database(grouped(PEOPLE.events), (path) =>
+      path.startsWith("/rest/v1/mira_user") ? PEOPLE.users : []
     );
+    const read = await fetchMira();
+    for (const [from, to] of [
+      ["2026-11-02", "2026-11-15"],
+      ["2026-10-01", "2026-12-13"],
+    ] as const) {
+      expect(page(read, from, to)).toEqual(page(PEOPLE, from, to));
+    }
+  });
+
+  it("fails rather than count part of the events", async () => {
+    database([]);
+    mockSupabaseFetch.mockResolvedValueOnce(new Response("timeout", { status: 500 }));
     await expect(fetchMira()).rejects.toThrow(/could not be read/);
   });
 });
@@ -374,12 +434,8 @@ describe("GET /api/admin/ap/mira", () => {
 
   it("answers the page's figures, uncached", async () => {
     mockVerifyAdminSession.mockResolvedValue({ email: "mb@loveiq.org", role: "viewer" });
-    mockFetchAllRows.mockImplementation(async (path: string) =>
-      path.startsWith("/rest/v1/mira_event")
-        ? PEOPLE.events
-        : path.startsWith("/rest/v1/mira_user")
-          ? PEOPLE.users
-          : []
+    database(grouped(PEOPLE.events), (path) =>
+      path.startsWith("/rest/v1/mira_user") ? PEOPLE.users : []
     );
     const res = await GET(new Request(url));
     expect(res.status).toBe(200);
