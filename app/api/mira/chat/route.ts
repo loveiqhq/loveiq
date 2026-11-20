@@ -336,7 +336,13 @@ export async function POST(request: Request) {
     }
   }
 
-  if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account) });
+  // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
+  if (isFirst) {
+    logMiraEvent("chat_started", who, {
+      signedIn: Boolean(account),
+      chip: miraConfig.starterChips.indexOf(message),
+    });
+  }
   logMiraEvent("message_sent", who, { signedIn: Boolean(account), chars: message.length });
   logMiraEvent("reply_shown", who, { sources: sources.map((s) => s.id), crisis });
   if (crisis) logMiraEvent("crisis_shown", who, { country });
