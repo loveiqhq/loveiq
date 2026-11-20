@@ -26,7 +26,7 @@ export const DISCLAIMER =
 export function MiraFrame({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="min-h-screen bg-white font-sans text-ap-ink">
-      <header className="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-4 py-5 sm:px-8">
+      <header className="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-5">
         <Wordmark />
         <div className="flex items-center gap-3">{right}</div>
       </header>
