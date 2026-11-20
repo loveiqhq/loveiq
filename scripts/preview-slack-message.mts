@@ -16,6 +16,7 @@
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --no-open
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey        # latest
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey=2078
+ *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --reactivation=2826  # latest return
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --ux-review
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --scorecard
  *
@@ -38,6 +39,10 @@ import {
   WINDOW_DAYS,
 } from "../app/api/cron/conversion-digest/route";
 import { buildSubmissionJourney } from "../features/attribution/server/journey";
+import {
+  buildReactivationMessage,
+  type ReactivationSource,
+} from "../features/attribution/server/reactivation-post";
 import { buildJourneyMessage } from "../features/attribution/server/slack-journey";
 import {
   fetchArmCohorts,
@@ -72,12 +77,16 @@ const OUT = join(OUT_DIR, "slack-preview.html");
 /** Slack mrkdwn -> HTML. Only the subset the digests actually use. */
 function mrkdwn(raw: string): string {
   const esc = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return esc
-    .replace(/```([\s\S]*?)```/g, (_m, code) => `<pre>${code}</pre>`)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*([^*\n]+)\*/g, "<b>$1</b>")
-    .replace(/_([^_\n]+)_/g, "<i>$1</i>")
-    .replace(/\n/g, "<br>");
+  return (
+    esc
+      .replace(/```([\s\S]*?)```/g, (_m, code) => `<pre>${code}</pre>`)
+      // Slack's <url|text> link, escaped above (the reactivation post's #id).
+      .replace(/&lt;(https?:\/\/[^\s|]+?)\|([^\n]+?)&gt;/g, '<a href="$1">$2</a>')
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*([^*\n]+)\*/g, "<b>$1</b>")
+      .replace(/_([^_\n]+)_/g, "<i>$1</i>")
+      .replace(/\n/g, "<br>")
+  );
 }
 
 type Block = Record<string, any>;
@@ -267,6 +276,91 @@ async function previewSurvey(arg: string): Promise<void> {
 }
 
 /**
+ * The #report-reactivations post (reactivation-post.ts) for a reader's latest return that is
+ * no draft, off `reader_return`: `--reactivation=2826`, or the newest one with no id. Built by
+ * the same pure builder the post uses, with the time spent measured from that return. Rendered,
+ * never sent: nothing here calls Slack, so the #id links to a stand-in address for the
+ * reader's #incoming-surveys message where the real post carries Slack's own permalink.
+ */
+async function previewReactivation(arg: string): Promise<void> {
+  const url = requireEnv("SUPABASE_URL");
+  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  const explicit = arg.includes("=") ? Number(arg.split("=")[1]) : NaN;
+  const only = Number.isFinite(explicit) ? `&survey_submission_id=eq.${explicit}` : "";
+  const res = await fetch(
+    `${url}/rest/v1/reader_return?source=neq.draft${only}` +
+      `&select=survey_submission_id,day,returned_at,source,via&order=returned_at.desc&limit=1`,
+    { headers }
+  );
+  const row = (
+    (await res.json()) as Array<{
+      survey_submission_id: number;
+      day: string;
+      returned_at: string;
+      source: ReactivationSource;
+      via: string | null;
+    }>
+  )[0];
+  if (!row) {
+    console.log(`no return found${only ? ` for submission ${explicit}` : ""}`);
+    return;
+  }
+  const id = row.survey_submission_id;
+  console.log(
+    `building the reactivation post for #${id}, back ${row.returned_at} (${row.source})...`
+  );
+  const journey = await buildSubmissionJourney(id, { dwellSince: row.returned_at });
+  if (!journey) {
+    console.log(`submission ${id} not found`);
+    return;
+  }
+  const mRes = await fetch(
+    `${url}/rest/v1/slack_journey_message?survey_submission_id=eq.${id}` +
+      `&select=channel,message_ts,state,backfilled_at&limit=1`,
+    { headers }
+  );
+  const message = (
+    (await mRes.json()) as Array<{
+      channel: string;
+      message_ts: string;
+      state: string | null;
+      backfilled_at: string | null;
+    }>
+  )[0];
+  const standIn =
+    message && !message.backfilled_at
+      ? `https://slack.com/archives/${message.channel}/p${message.message_ts.replace(".", "")}`
+      : null;
+  const floor = (["completed", "report_opened", "paywall", "checkout", "paid"] as const).find(
+    (s) => s === message?.state
+  );
+
+  const msg = buildReactivationMessage(
+    journey,
+    { submissionId: id, source: row.source, via: row.via, returnedAt: row.returned_at },
+    { floor, journeyLink: standIn }
+  );
+  const out = join(OUT_DIR, `slack-preview-reactivation-${id}.html`);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(
+    out,
+    page(
+      `Slack preview — report reactivation #${id}`,
+      msg.text,
+      msg.blocks as Block[],
+      `#report-reactivations post &middot; submission ${id}, back on ${row.day} &middot; rendered ${new Date().toISOString()}`
+    )
+  );
+  console.log(`wrote ${out}`);
+  if (!process.argv.includes("--no-open")) {
+    execFile("open", [out], (err) => {
+      if (err) console.log(`(could not open automatically: ${err.message})`);
+    });
+  }
+}
+
+/**
  * The UX-review daily digest, against real production data.
  *
  * Two independent reads: PostHog for what the scanners flagged, and the
@@ -377,6 +471,11 @@ async function main(): Promise<void> {
   const surveyArg = process.argv.find((a) => a.startsWith("--survey"));
   if (surveyArg) {
     await previewSurvey(surveyArg);
+    return;
+  }
+  const reactivationArg = process.argv.find((a) => a.startsWith("--reactivation"));
+  if (reactivationArg) {
+    await previewReactivation(reactivationArg);
     return;
   }
   const now = new Date();

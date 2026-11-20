@@ -120,6 +120,44 @@ export async function postJourneyMessage(input: {
 }
 
 /**
+ * A posted message's permalink, for a line that points at it from another channel (the
+ * #report-reactivations post links the reader's #incoming-surveys message). Null when the bot
+ * is not configured or Slack refuses: the caller then prints the plain id.
+ *
+ * A GET with the arguments in the query: chat.getPermalink reads form arguments only and
+ * ignores a JSON body, which is why it does not go through `callSlack`. No scope is needed.
+ */
+export async function getMessagePermalink(channel: string, ts: string): Promise<string | null> {
+  const cfg = config();
+  if (!cfg) return null;
+  try {
+    const query = new URLSearchParams({ channel, message_ts: ts });
+    const res = await fetchWithTimeout(`${SLACK_API}/chat.getPermalink?${query.toString()}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${cfg.token}` },
+      timeoutMs: TIMEOUT_MS,
+    });
+    const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!json || json.ok !== true || typeof json.permalink !== "string") {
+      logger.warn(
+        {
+          method: "chat.getPermalink",
+          status: res.status,
+          slackError: json?.error ?? "unparseable",
+          slack: false,
+        },
+        "slack-bot call failed"
+      );
+      return null;
+    }
+    return json.permalink;
+  } catch (err) {
+    logger.warn({ err, method: "chat.getPermalink", slack: false }, "slack-bot call threw");
+    return null;
+  }
+}
+
+/**
  * Edit an already-posted message in place. Returns false on any failure,
  * including the two expected ones: the message was deleted, or the channel id
  * changed. Both are non-events — the original message simply stops updating.
