@@ -460,4 +460,100 @@ describe("POST /api/mira/chat", () => {
     await post({ message: "hello", consent: true });
     expect(addMessages).not.toHaveBeenCalled();
   });
+
+  const events = (name: string) =>
+    vi
+      .mocked(logMiraEvent)
+      .mock.calls.filter(([n]) => n === name)
+      .map(([, , props]) => props);
+
+  it("asks the model for a topic only on a first message in the person's own words", async () => {
+    await post({ message: "I only feel okay with the lights off", consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("FIRST MESSAGE TOPIC");
+    vi.mocked(askModel).mockClear();
+    await post({ message: miraConfig.starterChips[0], consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain("FIRST MESSAGE TOPIC");
+    vi.mocked(askModel).mockClear();
+    await post({ message: "and then?", consent: true, history: openChat });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain("FIRST MESSAGE TOPIC");
+  });
+
+  it("logs a new chat's topic as its id, never the words, and never for a starter chip", async () => {
+    vi.mocked(askModel).mockResolvedValue({
+      ok: true,
+      text: "That sounds hard.\n[[TOPIC:hiding]]",
+      refused: false,
+    });
+    const body = await (
+      await post({ message: "I only feel okay with the lights off", consent: true })
+    ).json();
+    expect(body.reply).toBe("That sounds hard.");
+    expect(events("chat_topic")).toEqual([{ topic: "hiding" }]);
+    vi.mocked(logMiraEvent).mockClear();
+    await post({ message: miraConfig.starterChips[0], consent: true });
+    expect(events("chat_topic")).toEqual([]);
+  });
+
+  it("returns the intake question Mira asked, and stores it with her reply", async () => {
+    vi.mocked(askModel).mockResolvedValue({
+      ok: true,
+      text: "Has this always been there, or is it more recent?\n[[ASK:onset]]",
+      refused: false,
+    });
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: true,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-18",
+    } as never);
+    const body = await (
+      await post({ message: "Yes, let’s do it", consent: true, history: openChat })
+    ).json();
+    expect(body.ask).toBe("onset");
+    expect(body.reply).toBe("Has this always been there, or is it more recent?");
+    const stored = vi.mocked(addMessages).mock.calls[0]![1];
+    expect(stored[1]).toMatchObject({ role: "assistant", ask: "onset" });
+  });
+
+  it("logs which intake question a message answered, by id only, and only a real one", async () => {
+    await post({ message: "A few years", consent: true, history: openChat, answering: "onset" });
+    expect(events("intake_answered")).toEqual([{ q: "onset" }]);
+    vi.mocked(logMiraEvent).mockClear();
+    await post({ message: "x", consent: true, history: openChat, answering: "shoesize" });
+    expect(events("intake_answered")).toEqual([]);
+    const bad = await post({ message: "x", consent: true, answering: "DROP TABLE" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("logs a referral when Mira suggests a therapist or doctor, never in a crisis reply", async () => {
+    vi.mocked(askModel).mockResolvedValue({
+      ok: true,
+      text: "A pelvic health physiotherapist can help with the pain.\n[[REFER]]",
+      refused: false,
+    });
+    await post({ message: "it hurts during sex", consent: true, history: openChat });
+    expect(events("referred")).toHaveLength(1);
+    vi.mocked(logMiraEvent).mockClear();
+    vi.mocked(askModel).mockResolvedValue({
+      ok: true,
+      text: "Please reach out now.\n[[REFER]]\n[[CRISIS]]",
+      refused: false,
+    });
+    await post({ message: "everything feels dark", consent: true, history: openChat });
+    expect(events("referred")).toEqual([]);
+    expect(events("crisis_shown")).toHaveLength(1);
+    vi.mocked(logMiraEvent).mockClear();
+    // Markers and nothing else: the refusal message is shown, and nobody was referred.
+    vi.mocked(askModel).mockResolvedValue({ ok: true, text: "[[REFER]]", refused: false });
+    const body = await (await post({ message: "hm", consent: true, history: openChat })).json();
+    expect(body.reply).toBe(miraConfig.refusalMessage);
+    expect(events("referred")).toEqual([]);
+  });
 });

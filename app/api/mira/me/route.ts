@@ -1,7 +1,8 @@
 /**
  * /api/mira/me — the signed-in account (boards 06, 08, 08b, 08c).
  *
- *   GET            → profile, chats, the LoveIQ result matched on the verified email
+ *   GET            → profile, chats, the LoveIQ result matched on the verified email, and
+ *                    which body check is due (features/mira/server/body-check.ts)
  *   PATCH          → name, country, gender, coaching style, the two "What Mira may use" switches
  *   DELETE ?what=chats    → deletes every stored chat
  *   DELETE ?what=account  → deletes the account, its profile, chats and messages (a staff or
@@ -9,6 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
 import { isValidTimeZone } from "@features/mira/server/nudges";
 import { getMiraAccount, createMiraSupabase } from "@features/mira/server/session";
 import {
@@ -78,14 +80,24 @@ export async function GET(request: Request) {
   const g = await guard(request, false);
   if ("error" in g) return g.error;
   try {
-    const [profile, chats, assessment] = await Promise.all([
+    const [profile, chats, assessment, checks] = await Promise.all([
       getProfile(g.account.id),
       listChats(g.account.id),
       findAssessment(g.account.email).catch(() => null),
+      // Only offers the check: a failed read offers nothing rather than failing the page.
+      listBodyChecks(g.account.id).catch(() => null),
     ]);
     if (!profile) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+    const bodyCheck = {
+      due: checks
+        ? bodyCheckDue(
+            checks.map((c) => c.created_at),
+            new Date()
+          )
+        : null,
+    };
     return NextResponse.json(
-      { profile, chats, assessment },
+      { profile, chats, assessment, bodyCheck },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {

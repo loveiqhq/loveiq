@@ -9,7 +9,9 @@ export const metadata: Metadata = {
 
 /**
  * Mira's privacy notice, in plain words, written 18 Nov 2026 to match what the code does and
- * checked by Eman on 20 Nov 2026. Change it whenever what Mira stores or shares changes.
+ * checked by Eman on 20 Nov 2026; the body check, the labels Mira's replies leave (questions
+ * answered, a new chat's topic, a referral) and the nudges' delivery and opens added the same day.
+ * Change it whenever what Mira stores or shares changes.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -49,6 +51,16 @@ export default function MiraPrivacyPage() {
             Your thumbs up or down on an answer, your feedback, and a random id for this browser
             that counts your free conversations.
           </li>
+          <li>
+            The body check, if you choose to take it: your answers to ten statements about how you
+            relate to your body (the Body Appreciation Scale-2), once at the start and once four
+            weeks later.
+          </li>
+          <li>
+            Labels about your chats, never your words: which of Mira&apos;s questions you answered
+            (not your answer), the topic Mira gives a new chat&apos;s first message, and when she
+            suggests a doctor or therapist. And whether a nudge email reached you and was opened.
+          </li>
         </ul>
 
         <h2>Why</h2>
@@ -64,6 +76,10 @@ export default function MiraPrivacyPage() {
             tools (PostHog and Microsoft Clarity) record what is typed on the page, as on the rest
             of our site.
           </li>
+          <li>
+            To see whether Mira helps: we compare everyone&apos;s body check scores after four
+            weeks, and count how often she refers people on.
+          </li>
           <li>Never for advertising, and never to train shared AI models.</li>
         </ul>
 
@@ -75,7 +91,8 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             Supabase, our database, in Switzerland; Vercel, which hosts the site; Resend, which
-            sends your sign-in code.
+            sends your sign-in code and your nudges, and tells us whether a nudge was delivered and
+            opened (through a small image in the email).
           </li>
           <li>
             Google, only if you sign in with Google: it confirms your email address to us, and
@@ -94,6 +111,11 @@ export default function MiraPrivacyPage() {
             With an account, your chats are kept while &ldquo;Remember our conversations&rdquo; is
             on, until you delete them or your account, and at most 12 months after the last message
             you wrote.
+          </li>
+          <li>
+            Your body check answers are kept with your account and deleted with it. When you delete
+            your account, the labels about your chats are no longer linked to it and stay only as
+            counts.
           </li>
         </ul>
 

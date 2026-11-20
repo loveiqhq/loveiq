@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
-import { GradientButton, Wordmark } from "./MiraShell";
+import { GradientButton, LegalLinks, Wordmark } from "./MiraShell";
 import { local, miraApi, useReloadWhenRestored } from "./api";
 
 /**
@@ -475,6 +475,7 @@ export default function SignUpFlow({
             </p>
           ) : null}
         </div>
+        <LegalLinks className="mt-auto max-w-[520px] pt-3" />
       </main>
     </div>
   );

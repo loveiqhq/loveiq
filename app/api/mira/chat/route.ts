@@ -11,6 +11,11 @@
  *
  * A crisis message is read before anything can stop it: whatever the limits, the rest of the
  * body or the database say, it gets Sanjin's message E and the support lines (crisisReply).
+ *
+ * For the MVP success board, the reply's markers (safety.ts parseReply) are logged as events,
+ * never with the person's words: which intake question a message answered (`answering`, sent
+ * by the browser when Mira's last reply asked one), a referral to a therapist or doctor, and a
+ * new chat's topic when it opened in the person's own words.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -77,7 +82,14 @@ const schema = z.object({
   // MAX_HISTORY_CHARS in cleanHistory, never refused, or it would fail on every later message.
   history: z.array(turnSchema).max(HISTORY_TURNS).optional(),
   style: styleSchema.optional(),
+  /** The intake question this message answers (Mira's last reply asked it). */
+  answering: z
+    .string()
+    .regex(/^[a-z]{2,16}$/)
+    .optional(),
 });
+
+const INTAKE_IDS = new Set(miraConfig.intakeQuestions.map((q) => q.id));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_BODY_CHARS = 200_000;
@@ -223,7 +235,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-  const { message, chatId: askedChatId, history, style: bodyStyle } = parsed.data;
+  const { message, chatId: askedChatId, history, style: bodyStyle, answering } = parsed.data;
 
   const account = await getMiraAccount();
   const anon = account ? null : await anonId();
@@ -320,16 +332,19 @@ export async function POST(request: Request) {
   }
 
   const isFirst = turns.length === 0;
+  // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
+  const chip = isFirst ? miraConfig.starterChips.indexOf(message) : null;
   turns = cleanHistory([...turns, { role: "user", content: message }]);
 
   let reply: string;
   let sources: CitedSource[] = [];
   let crisis = false;
   let refused = false;
+  let ask: string | null = null;
 
   const result = await askModel(
     STABLE_INSTRUCTIONS,
-    personalInstructions(style, person),
+    personalInstructions(style, person, { topic: chip === -1 }),
     turns,
     started + ROUTE_BUDGET_MS
   );
@@ -354,6 +369,7 @@ export async function POST(request: Request) {
     reply = out.text;
     sources = out.sources;
     crisis = out.crisis;
+    ask = out.ask;
   }
 
   // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
@@ -365,7 +381,7 @@ export async function POST(request: Request) {
       chatId ??= await createChat(account.id, message.replace(/\s+/g, " ").slice(0, 80));
       const ids = await addMessages(chatId, [
         { role: "user", content: message },
-        { role: "assistant", content: reply, sources },
+        { role: "assistant", content: reply, sources, ask },
         ...(invitation ? [{ role: "assistant" as const, content: invitation }] : []),
       ]);
       messageId = ids[1] ?? null;
@@ -375,13 +391,12 @@ export async function POST(request: Request) {
     }
   }
 
-  // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
-  if (isFirst) {
-    logMiraEvent("chat_started", who, {
-      signedIn: Boolean(account),
-      chip: miraConfig.starterChips.indexOf(message),
-    });
-  }
+  if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
+  if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
+  if (answering && INTAKE_IDS.has(answering))
+    logMiraEvent("intake_answered", who, { q: answering });
+  // A reply that was only markers gets the refusal message: it referred nobody.
+  if (out?.refer && !refused) logMiraEvent("referred", who);
   logMiraEvent("message_sent", who, { signedIn: Boolean(account), chars: message.length });
   logMiraEvent("reply_shown", who, { sources: sources.map((s) => s.id), crisis });
   if (crisis) logMiraEvent("crisis_shown", who, { country });
@@ -393,6 +408,7 @@ export async function POST(request: Request) {
     crisisLines: crisis ? crisisFor(country) : undefined,
     chatId,
     messageId,
+    ...(ask ? { ask } : {}),
     ...(invitation ? { invitation } : {}),
     ...(freeLeft === null ? {} : { freeLeft }),
   });

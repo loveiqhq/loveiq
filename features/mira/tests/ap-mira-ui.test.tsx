@@ -72,6 +72,17 @@ const DATA: MiraData = {
     ev("nps", { anon: "a2" }, "2026-11-11T10:05:00Z", "10"),
     ev("nps", { anon: "a3" }, "2026-11-12T10:05:00Z", "2"),
     ev("nps", { anon: "a4" }, "2026-11-12T10:05:00Z", null),
+    ev("intake_answered", u1, "2026-11-10T10:06:00Z", "where"),
+    ev("intake_answered", u1, "2026-11-10T10:07:00Z", "onset"),
+    ev("chat_topic", visitor, "2026-11-10T11:04:00Z", "hiding"),
+    ev("chat_topic", { anon: "a2" }, "2026-11-11T10:04:00Z", "hiding"),
+    ev("chat_topic", { anon: "a3" }, "2026-11-12T10:04:00Z", "weight"),
+    ev("referred", u1, "2026-11-10T10:08:00Z"),
+    ev("referred", u1, "2026-11-10T10:20:00Z"),
+  ],
+  bodyChecks: [
+    { user_id: "u1", score: 3.1, created_at: "2026-10-13T10:00:00Z" },
+    { user_id: "u1", score: 4.0, created_at: "2026-11-12T10:00:00Z" },
   ],
   nudges: [
     {
@@ -170,16 +181,41 @@ describe("the Mira staff page", () => {
     expect(within(time).queryByText(/Not measured yet/)).toBeNull();
   });
 
-  it("leaves “Not measured yet” only where nothing records the figure, each with its reason", () => {
-    show();
+  it("measures topics, body image, profile depth and referrals, as the design defines them", () => {
+    const payload = show();
     const outcomes = screen.getByRole("region", { name: "Outcomes & satisfaction" });
-    for (const name of ["Most common prompts", "Therapeutic success"]) {
-      const card = within(outcomes).getByRole("region", { name });
-      expect(within(card).getByText("Not measured yet")).toBeTruthy();
-    }
-    expect(within(outcomes).getByText(/Nothing groups first messages into topics/)).toBeTruthy();
-    expect(within(outcomes).getByText(/no body-image scale is asked yet/)).toBeTruthy();
-    expect(within(outcomes).getByText(/3 of its 5 areas aren.t asked yet/)).toBeTruthy();
-    expect(within(outcomes).getByText(/don.t record a doctor or therapist/)).toBeTruthy();
+    // Only the hand-over is left unmeasured: other coaches start after the beta.
+    expect(
+      within(outcomes)
+        .getAllByText(/Not measured yet/)
+        .map((n) => n.textContent)
+    ).toEqual(["Not measured yet: other coaches start after the beta"]);
+
+    const prompts = within(outcomes).getByRole("region", { name: "Most common prompts" });
+    const hiding = within(prompts).getByRole("rowheader", {
+      name: /Hiding the body during intimacy/,
+    }).parentElement!;
+    expect(
+      within(hiding)
+        .getAllByRole("cell")
+        .map((c) => c.textContent)
+    ).toEqual(["2", "66.7%", "—"]); // no comparison period, so no trend
+
+    // u1's four-week check: 3.1 → 4.0, up 0.9, beyond the 0.8 of the scale's noise.
+    expect(payload.tiles.bodyImage!.value).toBe(1);
+    const success = within(outcomes).getByRole("region", { name: "Therapeutic success" });
+    expect(within(success).getByText("+0.90 avg.")).toBeTruthy();
+    expect(
+      within(success).getByText(/Tylka &amp; Wood-Barcalow|Tylka & Wood-Barcalow/)
+    ).toBeTruthy();
+
+    // u1: root-cause screen (where + onset) and baseline; no goal, style or LoveIQ result.
+    expect(payload.knows).toMatchObject({ rootCause: 1, baseline: 1, goals: 0, depth: 0.4 });
+    expect(payload.tiles.profileDepth!.value).toBe(0.4);
+
+    // Two referrals 12 minutes apart are one conversation's.
+    const safety = within(outcomes).getByRole("region", { name: "Safety and quality" });
+    const referred = within(safety).getByRole("rowheader", { name: "Referred on" }).parentElement!;
+    expect(within(referred).getAllByRole("cell")[0]!.textContent).toBe("1");
   });
 });

@@ -50,7 +50,7 @@ export function renderIntake(questions = miraConfig.intakeQuestions as IntakeQue
     .map((q) => {
       const answers = q.options?.length ? ` Answers: ${q.options.join(" · ")}.` : "";
       const when = q.instruction ? ` When: ${q.instruction}.` : "";
-      return `- ${q.question}${answers}${when}`;
+      return `- [${q.id}] ${q.question}${answers}${when}`;
     })
     .join("\n");
 }
@@ -61,6 +61,11 @@ INTAKE QUESTIONS
 The app invites the person to these right after your first reply (the invitation and their answer are in the conversation). Ask them one per message, in your own words.
 
 ${renderIntake()}
+
+MARKERS FOR THE APP
+The app reads these markers and removes them before the person sees your reply. Put each on its own line at the very end, after the Sources line, and never add one to a crisis reply.
+- When your message asks one of the intake questions, add its marker, such as [[ASK:onset]], with the id in square brackets above. The app then shows that question's answers as buttons. One per message, and only for these questions.
+- When your reply suggests a therapist, a doctor or another health professional (rails 11 and 12, or a medical review alongside coaching), add [[REFER]].
 
 EVIDENCE CARDS
 These are the only research sources you may draw on. Cite a card by its id in your Sources line.
@@ -79,9 +84,27 @@ export function styleInstructions(style: CoachingStyle | null | undefined): stri
   return lines;
 }
 
+type Topic = { id: string; label: string; example: string };
+
+/** Marcus's topics for "Most common prompts" (MVP success board), from mira-config.json. */
+export const TOPICS = miraConfig.topics as Topic[];
+
+/**
+ * Asked only with a new chat's first message in the person's own words (a starter chip is its
+ * own record): the model names the topic, and only its id is kept, never the words.
+ */
+export function topicInstruction(): string {
+  const ids = TOPICS.map((t) => `${t.id} (${t.id === "other" ? "anything else" : t.label})`);
+  return [
+    "FIRST MESSAGE TOPIC",
+    `This is the first message of a new chat, in the person's own words. Add one marker on its own line at the very end of your reply, such as [[TOPIC:hiding]], with the id that fits their message best: ${ids.join(", ")}. Leave it out of a crisis reply.`,
+  ].join("\n");
+}
+
 export function personalInstructions(
   style: CoachingStyle | null | undefined,
-  person: PersonContext
+  person: PersonContext,
+  opts: { topic?: boolean } = {}
 ): string {
   const lines: string[] = ["ABOUT THIS CONVERSATION"];
   lines.push(
@@ -103,5 +126,6 @@ export function personalInstructions(
     lines.push("Their coaching style (it shades how you talk; your rules and voice still apply):");
     lines.push(...styleLines.map((s) => `- ${s}`));
   }
+  if (opts.topic) lines.push("", topicInstruction());
   return lines.join("\n");
 }
