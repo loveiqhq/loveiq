@@ -29,6 +29,7 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { POST, maxDuration } from "@/app/api/mira/chat/route";
 import { anonId } from "@features/mira/server/anon";
 import {
+  ANON_FREE_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   MODEL_BUDGET_MS,
   MODEL_FIRST_TRY_MS,
@@ -104,12 +105,45 @@ describe("POST /api/mira/chat", () => {
     { role: "assistant", content: "Tell me more." },
   ];
 
-  it("counts a free conversation when a new chat starts and says how many are left", async () => {
+  it("counts every anonymous message against the 10 free ones and says how many are left", async () => {
+    const free = (key: string) =>
+      vi
+        .mocked(checkRateLimit)
+        .mock.calls.filter(([k, cfg]) => k === key && cfg.bucket === "mira-anon-messages");
+    for (const body of [
+      { message: "hi", consent: true },
+      { message: "and then?", consent: true, history: openChat },
+    ]) {
+      vi.mocked(checkRateLimit).mockClear();
+      expect((await (await post(body)).json()).freeLeft).toBe(7);
+      expect(free("anon_test_123456789")).toEqual([
+        [
+          "anon_test_123456789",
+          { bucket: "mira-anon-messages", limit: ANON_FREE_MESSAGES, windowMs: 30 * 86_400_000 },
+        ],
+      ]);
+    }
+    expect(ANON_FREE_MESSAGES).toBe(10);
+  });
+
+  it("never counts a signed-in person's messages against the free ones", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-21",
+    } as never);
     const body = await (await post({ message: "hi", consent: true })).json();
-    expect(vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket)).toContain(
-      "mira-anon-chats"
-    );
-    expect(body.freeLeft).toBe(7);
+    expect(body.freeLeft).toBeUndefined();
+    const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    expect(buckets).not.toContain("mira-anon-messages");
   });
 
   it("records which starter chip opened a chat, as its index and never as text", async () => {
@@ -122,22 +156,45 @@ describe("POST /api/mira/chat", () => {
     expect(started()).toEqual({ signedIn: false, chip: -1 });
   });
 
-  it("shows the sign-up card when an 11th conversation starts", async () => {
-    limitHit("mira-anon-chats");
-    const res = await post({ message: "hi", consent: true });
-    expect(await res.json()).toEqual({ gate: true, freeLeft: 0 });
+  it("answers an 11th message with the sign-up card, in a new chat or an open one", async () => {
+    limitHit("mira-anon-messages");
+    for (const body of [
+      { message: "hi", consent: true },
+      { message: "and then?", consent: true, history: openChat },
+    ]) {
+      expect(await (await post(body)).json()).toEqual({ gate: true, freeLeft: 0 });
+    }
     expect(askModel).not.toHaveBeenCalled();
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([name]) => name)).toEqual([
+      "gate_shown",
+      "gate_shown",
+    ]);
   });
 
-  it("keeps an open conversation going after the free conversations are used", async () => {
-    limitHit("mira-anon-chats");
-    const res = await post({ message: "and then?", consent: true, history: openChat });
-    const body = await res.json();
-    expect(body.reply).toBe("That makes sense.");
-    expect(body.freeLeft).toBeUndefined();
-    expect(vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket)).not.toContain(
-      "mira-anon-chats"
-    );
+  it("logs the sign-up card with the reply that used the last free message, not with a crisis", async () => {
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) => ({
+      allowed: true,
+      remaining: cfg.bucket === "mira-anon-messages" ? 0 : 9,
+      resetAt: new Date(),
+    }));
+    const gates = () => vi.mocked(logMiraEvent).mock.calls.filter(([n]) => n === "gate_shown");
+    const tenth = await (
+      await post({ message: "and then?", consent: true, history: openChat })
+    ).json();
+    expect(tenth).toMatchObject({ reply: "That makes sense.", freeLeft: 0 });
+    expect(gates()).toEqual([["gate_shown", expect.anything(), { limit: ANON_FREE_MESSAGES }]]);
+
+    vi.mocked(logMiraEvent).mockClear();
+    vi.mocked(askModel).mockResolvedValueOnce({
+      ok: true,
+      text: "Please reach out now.\n[[CRISIS]]",
+      refused: false,
+    });
+    const crisis = await (
+      await post({ message: "everything feels dark", consent: true, history: openChat })
+    ).json();
+    expect(crisis).toMatchObject({ crisis: true, freeLeft: 0 });
+    expect(gates()).toEqual([]);
   });
 
   it("stops anonymous messages at the daily cap, per browser and per network", async () => {
@@ -334,12 +391,12 @@ describe("POST /api/mira/chat", () => {
     expect(buckets).not.toContain("mira-global-day");
   });
 
-  it("doesn't spend a free conversation on a resting day", async () => {
+  it("doesn't spend a free message on a resting day", async () => {
     limitHit("mira-global-day");
     const res = await post({ message: "hi", consent: true });
     expect(res.status).toBe(503);
     const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
-    expect(buckets).not.toContain("mira-anon-chats");
+    expect(buckets).not.toContain("mira-anon-messages");
   });
 
   it("refuses an absurdly large body before reading it for anything", async () => {
