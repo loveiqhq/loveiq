@@ -17,7 +17,10 @@
  *   - `brain_*`: Jarvis's index of the company's own email, Slack, WhatsApp and documents,
  *     which everyone can already search through Jarvis;
  *   - plumbing: `cron_run`, `rate_limits`, `system_flags`, `slack_*`;
- *   - `data_subject_request_log`: the people who asked us to delete or restrict their data.
+ *   - `data_subject_request_log`: the people who asked us to delete or restrict their data;
+ *   - `mira_*`: Mira's chats, ratings and labels about people's sex lives. Mira's privacy notice
+ *     promises that deleting chats or an account deletes them, and a copy on Drive would outlive
+ *     that; her own numbers are on AP's Mira page.
  * And while anyone has asked us to restrict processing (`app_user.processing_restricted_at`,
  * GDPR Art. 18), the export does not run at all (assertNobodyRestricted says why).
  *
@@ -50,7 +53,7 @@ export class OutOfTime extends Error {}
 
 /** Whether a table goes into the export. See the header for why each exclusion exists. */
 export function isExported(table: string): boolean {
-  if (table.startsWith("brain_") || table.startsWith("slack_")) return false;
+  if (["brain_", "slack_", "mira_"].some((p) => table.startsWith(p))) return false;
   return !["cron_run", "rate_limits", "system_flags", "data_subject_request_log"].includes(table);
 }
 
@@ -477,8 +480,8 @@ export function readme(
     "  and scores, payments (amounts, plans, dates) and events.",
     "- One CSV per database table, same columns. JSON columns hold JSON text.",
     "- Not exported: Jarvis's own index (brain_*), job and alert plumbing (cron_run,",
-    "  rate_limits, system_flags, slack_*), and the log of people who asked us to delete their",
-    "  data.",
+    "  rate_limits, system_flags, slack_*), Mira's chats and labels (mira_*; her numbers are on",
+    "  AP's Mira page), and the log of people who asked us to delete their data.",
     "- Nobody had asked us to restrict processing their data. The export stops while anyone has.",
     "- `is_likely_test` and `test_reasons` on survey_submission and survey_partial_save flag",
     "  staff emails and runs too fast to be real, as the admin panel does. Filter on them.",

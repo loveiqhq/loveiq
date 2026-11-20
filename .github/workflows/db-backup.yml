@@ -134,8 +134,16 @@ jobs:
           # Every database already has a `public` schema, so the dump's CREATE SCHEMA public is
           # skipped (its comment still restores). Supabase's own roles do not exist here, so
           # owners and grants are left out.
+          # Mira's accounts are keyed by their sign-in id (mira_user.id -> auth.users), and the
+          # auth schema is not in the dump, so every foreign key into it is left out of this test
+          # restore (the stored copy keeps it; DISASTER_RECOVERY.md says how to restore it).
+          auth_fks=$( { pg_restore --section=post-data -f - "$RUNNER_TEMP/db.pgdump" \
+            | grep -oE 'ADD CONSTRAINT [A-Za-z0-9_]+ FOREIGN KEY .* REFERENCES auth\.' || true; } \
+            | awk '{print $3}' | paste -sd'|' -)
           pg_restore --list "$RUNNER_TEMP/db.pgdump" \
-            | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' > "$RUNNER_TEMP/restore.list"
+            | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' \
+            | grep -v -E " FK CONSTRAINT public [^ ]+ (${auth_fks:-no-foreign-key-into-auth}) " \
+            > "$RUNNER_TEMP/restore.list"
           if ! pg_restore --no-owner --no-privileges --use-list="$RUNNER_TEMP/restore.list" \
             -d restore_test "$RUNNER_TEMP/db.pgdump" 2> "$RUNNER_TEMP/restore.err"; then
             grep -E '^pg_restore: error:' "$RUNNER_TEMP/restore.err" \

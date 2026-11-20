@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { parse } from "yaml";
 
@@ -59,6 +61,68 @@ describe("the database backup", () => {
     // The missing-copy check must not count a copy the prune is entitled to delete.
     const checked = Number(/date -u -d '(\d+) days ago'/.exec(yml)?.[1]);
     expect(checked).toBeLessThan(days);
+  });
+
+  it("leaves foreign keys into auth out of the test restore, and keeps every other one", () => {
+    // mira_user.id refers to auth.users, which the dump does not carry: without this the test
+    // restore fails and no copy is stored. Run the step's own lines against a stand-in pg_restore.
+    const run = Object.values(jobs)
+      .flatMap((j) => j.steps)
+      .map((st) => st.run ?? "")
+      .find((r) => r.includes("restore.list"))!;
+    const lines = run.split("\n");
+    const from = lines.findIndex((l) => l.includes("auth_fks=$("));
+    const to = lines.findIndex((l) => l.includes('> "$RUNNER_TEMP/restore.list"'));
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    const snippet = lines.slice(from, to + 1).join("\n");
+
+    const listFor = (postData: string) => {
+      const dir = mkdtempSync(join(tmpdir(), "restore-list-"));
+      try {
+        writeFileSync(join(dir, "post-data.sql"), postData);
+        writeFileSync(
+          join(dir, "toc.txt"),
+          [
+            "1; 2615 2200 SCHEMA - public pg_database_owner",
+            "10; 1259 100 TABLE public mira_user postgres",
+            "11; 2606 101 FK CONSTRAINT public mira_user mira_user_id_fkey postgres",
+            "12; 2606 102 FK CONSTRAINT public mira_chat mira_chat_user_id_fkey postgres",
+          ].join("\n") + "\n"
+        );
+        writeFileSync(
+          join(dir, "pg_restore"),
+          `#!/bin/bash\nif [ "$1" = "--section=post-data" ]; then cat "${dir}/post-data.sql"; else cat "${dir}/toc.txt"; fi\n`
+        );
+        chmodSync(join(dir, "pg_restore"), 0o755);
+        execFileSync("bash", ["-c", `set -euo pipefail\n${snippet}`], {
+          env: { ...process.env, RUNNER_TEMP: dir, PATH: `${dir}:${process.env.PATH}` },
+        });
+        return readFileSync(join(dir, "restore.list"), "utf8");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    const withAuthKey = listFor(
+      [
+        "ALTER TABLE ONLY public.mira_user",
+        "    ADD CONSTRAINT mira_user_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;",
+        "ALTER TABLE ONLY public.mira_chat",
+        "    ADD CONSTRAINT mira_chat_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.mira_user(id);",
+      ].join("\n")
+    );
+    expect(withAuthKey).not.toContain("mira_user_id_fkey");
+    expect(withAuthKey).toContain("FK CONSTRAINT public mira_chat mira_chat_user_id_fkey");
+    expect(withAuthKey).toContain("TABLE public mira_user");
+    expect(withAuthKey).not.toContain("SCHEMA - public");
+
+    // A dump without any key into auth restores every key.
+    const without = listFor(
+      "ALTER TABLE ONLY public.x\n    ADD CONSTRAINT x_pkey PRIMARY KEY (id);\n"
+    );
+    expect(without).toContain("mira_user_id_fkey");
+    expect(without).toContain("mira_chat_user_id_fkey");
   });
 
   it("names every copy after its run, which is what the missing-copy check looks for", () => {
