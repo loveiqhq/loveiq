@@ -8,8 +8,8 @@ import { miraApi } from "./api";
 
 /**
  * Boards 08 (Home) and 08b (Assessments), MVP: Mira is the only active coach, the LoveIQ test is
- * the only assessment, and the rest is marked "Coming soon". The guide shows as coming soon until
- * NEXT_PUBLIC_MIRA_GUIDE_URL points at a live guide page.
+ * the only assessment, and the rest is marked "Coming soon". The guide links to its page,
+ * /mira/guide (NEXT_PUBLIC_MIRA_GUIDE_URL can point it elsewhere).
  */
 
 type Me = {
@@ -55,7 +55,7 @@ export default function MiraHome() {
   const [hello, setHello] = useState("Hello");
   const [error, setError] = useState<string | null>(null);
   const [notified, setNotified] = useState<string[]>([]);
-  const guideUrl = process.env.NEXT_PUBLIC_MIRA_GUIDE_URL;
+  const guideUrl = process.env.NEXT_PUBLIC_MIRA_GUIDE_URL || "/mira/guide";
 
   useEffect(() => {
     void miraApi<Me>("/api/mira/me").then((r) => {
@@ -225,15 +225,9 @@ export default function MiraHome() {
         <h2 className="font-serif text-[20px] font-semibold">Guides</h2>
         <p className="mt-2 text-[15px]">
           <strong>The body confidence guide</strong>{" "}
-          {guideUrl ? (
-            <a href={guideUrl} className="ml-2 underline">
-              Open the guide
-            </a>
-          ) : (
-            <span className="ml-2 rounded-full bg-ap-track px-2 py-[2px] text-[11px] text-ap-muted">
-              Coming soon
-            </span>
-          )}
+          <a href={guideUrl} className="ml-2 underline">
+            Open the guide
+          </a>
         </p>
       </section>
 
