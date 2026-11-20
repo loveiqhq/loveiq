@@ -317,7 +317,8 @@ export default function SignUpFlow({
                 .
               </Tick>
               <Tick checked={consent} onChange={setConsent}>
-                Mira may process what I share about my sex life and health to coach me.{" "}
+                Mira may process what I share about my sex life and health to coach me, and to
+                count, without my words, how Mira is used and whether she helps.{" "}
                 <Link href="/mira/privacy" target="_blank" className="underline">
                   How Mira handles your data
                 </Link>

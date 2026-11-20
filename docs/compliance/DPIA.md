@@ -315,9 +315,10 @@ controller service ([business.safety.google/adsservices](https://business.safety
 - **Lawful basis** per purpose: [LAWFUL_BASIS.md](LAWFUL_BASIS.md) A16 to A19. Coaching rests on
   explicit consent (Art. 6(1)(a), 9(2)(a)): a required tick before a first message without an
   account ("I'm 18 or older, and I agree that Mira may process what I share about my sex life and
-  health to coach me. Our analytics tools also see what I type."), or at sign-up a required "Mira
-  may process what I share about my sex life and health to coach me". The wording's version is
-  stored with each consent.
+  health to coach me, and to count, without my words, how Mira is used and whether she helps. Our
+  analytics tools also see what I type."), or at sign-up a required "Mira may process what I share
+  about my sex life and health to coach me, and to count, without my words, how Mira is used and
+  whether she helps". The wording's version is stored with each consent.
 - **Purpose limitation**: chats are used for coaching, never for advertising. We do not train
   models on them, and Anthropic may not.
 - **Data minimisation**: Mira works without an account (10 messages, then a free account; a crisis
@@ -465,9 +466,9 @@ take one of the M5 measures.
    Germany) and that no zero data retention agreement exists; raise the DPA's "special categories:
    None" for Mira's Art. 9 data; check the DPF list and the list of subprocessors.
 2. **Supabase and Upstash**: confirm the SCCs for Supabase Inc.'s own access and Upstash's region.
-3. **Consent scope**: confirm that "to coach me" covers counting labels and comparing body check
-   scores across everyone. If not, add it to the wording (and bump the consent version) or rely on
-   Art. 9(2)(j) with §27 BDSG.
+3. **Consent scope**: resolved 20 Nov 2026: the consent now names counting "without my words, how
+   Mira is used and whether she helps" (labels, body check comparisons), within version
+   `mira-2026-11-21`, which had not shipped yet.
 4. **The DPO**: tell the Berlin authority the DPO's contact details (Art. 37(7)). Check Art. 38(6):
    Eman also leads engineering and decides how Mira processes data, a role the Article 29 Working
    Party's DPO guidelines (WP243 rev.01) name as a typical conflict of interest.

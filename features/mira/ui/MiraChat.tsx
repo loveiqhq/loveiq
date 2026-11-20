@@ -770,8 +770,8 @@ export default function MiraChat({
                       />
                       <span>
                         I&apos;m 18 or older, and I agree that Mira may process what I share about
-                        my sex life and health to coach me. Our analytics tools also see what I
-                        type.{" "}
+                        my sex life and health to coach me, and to count, without my words, how Mira
+                        is used and whether she helps. Our analytics tools also see what I type.{" "}
                         <Link href="/mira/privacy" className="underline">
                           How Mira handles your data
                         </Link>
