@@ -51,7 +51,7 @@ export const NAV: NavGroup[] = [
       { key: "a-payment", label: "Payment", href: `${ASSESSMENT_A}/payment`, level: 2 },
       {
         key: "a-pay-to-start",
-        label: "Pay to start",
+        label: "Funnel and paywall",
         href: `${ASSESSMENT_A}/pay-to-start`,
         level: 2,
       },

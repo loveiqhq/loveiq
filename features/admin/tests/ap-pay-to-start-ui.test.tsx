@@ -3,11 +3,12 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Table } from "@features/admin/server/ap/common";
+import type { GateTestBlock } from "@features/admin/server/ap/gate-reveal-test";
 import {
   measuresOf,
   type FunnelKey,
+  type FunnelPaywallPayload,
   type PtsFunnel,
-  type PtsPayload,
   type PtsStep,
   type PtsView,
 } from "@features/admin/server/ap/pay-to-start";
@@ -54,7 +55,20 @@ const funnel = (
 
 const s = (label: string, n: number | null, pays = false): PtsStep => ({ label, n, pays });
 
-const payload: PtsPayload = {
+/** #11 outside the fixture's range: its section says why, and the funnels below still show. */
+const noTest: GateTestBlock = {
+  test: "#11 · New €1.99 page",
+  note: "Since 17 Nov 2026 · not in this range",
+  arms: [],
+  lift: null,
+  confidence: null,
+  liftWhy: null,
+  verdict: "",
+  why: "Not running in this range: the test began on 17 Nov 2026 at 10:01. Pick a range that reaches it.",
+};
+
+const payload: FunnelPaywallPayload = {
+  gateTest: noTest,
   range: { from: "2026-10-12", to: "2026-10-22" },
   funnels: [
     funnel(
@@ -510,5 +524,92 @@ describe("ApPayToStart", () => {
     view.payload = payload;
     render(<ApPayToStart />);
     expect(screen.getByText("No ad in this range lands on a pay-to-start page yet.")).toBeTruthy();
+  });
+});
+
+describe("Funnel and paywall (Marcus, 19 Nov 2026)", () => {
+  const running: GateTestBlock = {
+    ...noTest,
+    note: "Since 17 Nov 2026 · live",
+    why: null,
+    verdict:
+      "Not enough data to call this yet: the smallest group has 40 finishers. Treat any difference as noise for now.",
+    arms: [
+      {
+        arm: "control",
+        name: "Today's €1.99 page",
+        control: true,
+        finishers: 40,
+        reached: 38,
+        paid: 4,
+        paidReached: 4,
+        full: 1,
+      },
+      {
+        arm: "reveal",
+        name: "New page: Core Archetype shown",
+        control: false,
+        finishers: 42,
+        reached: 40,
+        paid: 6,
+        paidReached: 6,
+        full: 2,
+      },
+    ],
+  };
+  const withPeriods: FunnelPaywallPayload = {
+    ...payload,
+    gateTest: running,
+    funnels: payload.funnels.map((f) =>
+      f.key === "after"
+        ? { ...f, label: "Before the paywall", period: "Free report · 1 Oct – 22 Oct 2026" }
+        : f
+    ),
+  };
+
+  it("is named as Marcus renamed it, with the paywall test first", () => {
+    view.payload = payload;
+    render(<ApPayToStart />);
+    expect(screen.getByRole("heading", { level: 1, name: "Funnel and paywall" })).toBeTruthy();
+    const nav = screen.getByRole("navigation", { name: "Funnel and paywall sections" });
+    expect(within(nav).getAllByRole("link")[0]!.textContent).toBe("Paywall test");
+    const order = [...document.querySelectorAll("section[id]")].map((s) => s.id);
+    expect(order.indexOf("paywall-test")).toBeLessThan(order.indexOf("funnels"));
+    // A range before the test: its section says why, and the funnels still show.
+    expect(
+      within(document.getElementById("paywall-test")!).getByText(/^Not running in this range/)
+    ).toBeTruthy();
+  });
+
+  it("draws a card per half: saw the page, paid, the pay rate and the sample so far", () => {
+    view.payload = withPeriods;
+    render(<ApPayToStart />);
+    const test = within(document.getElementById("paywall-test")!);
+    const a = within(test.getByRole("region", { name: "Today's €1.99 page" }));
+    expect(a.getByText("A · Today's €1.99 page")).toBeTruthy();
+    expect(a.getByText("38")).toBeTruthy();
+    expect(a.getByText("of 40 finishers")).toBeTruthy();
+    expect(a.getByText("10.0%")).toBeTruthy();
+    expect(a.getByText("38 of ~170 readers")).toBeTruthy();
+    const b = within(test.getByRole("region", { name: "New page: Core Archetype shown" }));
+    expect(b.getByText("14.3%")).toBeTruthy();
+    expect(test.getByText("10 readers")).toBeTruthy();
+    expect(test.getByText("Full report bought: A 1 · B 2")).toBeTruthy();
+    expect(test.getByText(running.verdict)).toBeTruthy();
+    // Every figure carries its info card, the same as AP › Payment's.
+    for (const name of ["Saw €1.99 page", "Paid €1.99", "Pay rate"])
+      expect(a.getByRole("button", { name: `About ${name}` })).toBeTruthy();
+  });
+
+  it("says which stretch each funnel is read over, and exports the test", () => {
+    view.payload = withPeriods;
+    render(<ApPayToStart />);
+    expect(screen.getAllByText("Free report · 1 Oct – 22 Oct 2026").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const t = exported.sections.find((x) => x.name === "Paywall test · #11 · New €1.99 page")!;
+    expect(t.table.rows.map((r) => [r.label, ...r.values])).toEqual([
+      ["Today's €1.99 page", 40, 38, 4, 0.1, 1],
+      ["New page: Core Archetype shown", 42, 40, 6, 6 / 42, 2],
+    ]);
   });
 });

@@ -50,6 +50,7 @@ import {
 import { buckets, rangeLabel, windowOf, type ApFilters } from "./filters";
 import { VISITS_FROM, type FreeAds } from "./metrics";
 import { teamUserIds } from "./team";
+import type { GateTestBlock } from "./gate-reveal-test";
 import { contribution, DEFAULT_ASSUMPTIONS } from "./traffic-math";
 
 export type PtsOffer = "full" | "pre";
@@ -250,6 +251,8 @@ export interface PtsFunnel {
    * survey); null while one of them paid before SURVEY_STARTED_FROM and hasn't finished.
    */
   paidStarted?: number | null;
+  /** The stretch it is read over, when not the page's range (Funnel and paywall). */
+  period?: string;
 }
 
 export interface PtsWeek {
@@ -267,6 +270,63 @@ export interface PtsPayload {
   funnels: PtsFunnel[];
   weeks: PtsWeek[];
   notes: string[];
+}
+
+/**
+ * The free funnel's last stretch before the paywall, as Marcus drew it (19 Nov 2026): the free
+ * report from 1 to 22 Oct 2026, before pay to start (22 Oct) and the EUR 1.99 page (27 Oct).
+ */
+export const BEFORE_PAYWALL = { from: "2026-10-01", to: "2026-10-22" } as const;
+
+/** Marcus's "Funnel and paywall": the free funnel before and since the paywall, and #11 on top. */
+export interface FunnelPaywallPayload extends PtsPayload {
+  gateTest: GateTestBlock;
+}
+
+/** The notes about pay to start's own pages, and about the funnel now read over a past stretch. */
+const PAY_TO_START_NOTE = /pay[- ]to[- ]start|Pay after the report/i;
+
+/**
+ * Marcus's Pay to start copy board (19 Nov 2026), renamed "Funnel and paywall": pay to start is
+ * paused, so its two funnels leave the page; the free funnel before the paywall is read over
+ * BEFORE_PAYWALL whatever the range (`before`), beside the EUR 1.99 page's funnel over the range
+ * (`current`), and the running paywall test sits on top. The week chart keeps the range's own
+ * weeks: the free funnel's line ends where the EUR 1.99 page's begins.
+ */
+export function funnelAndPaywall(
+  current: PtsPayload,
+  before: PtsPayload,
+  gateTest: GateTestBlock
+): FunnelPaywallPayload {
+  const free = before.funnels.find((f) => f.key === "after");
+  const gate = current.funnels.find((f) => f.key === "gate");
+  const funnels: PtsFunnel[] = [
+    ...(free
+      ? [
+          {
+            ...free,
+            label: "Before the paywall",
+            period: `Free report · ${rangeLabel(BEFORE_PAYWALL.from, BEFORE_PAYWALL.to)}`,
+          },
+        ]
+      : []),
+    ...(gate
+      ? [
+          {
+            ...gate,
+            period: gate.live
+              ? `Live · ${rangeLabel(current.range.from, current.range.to)}`
+              : undefined,
+          },
+        ]
+      : []),
+  ];
+  return {
+    ...current,
+    funnels,
+    notes: current.notes.filter((n) => !PAY_TO_START_NOTE.test(n)),
+    gateTest,
+  };
 }
 
 /** Which offer an ad's landing page sells, from its path; null for every other page. */

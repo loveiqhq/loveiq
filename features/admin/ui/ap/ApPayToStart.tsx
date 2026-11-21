@@ -6,16 +6,21 @@ import type { Table } from "@features/admin/server/ap/common";
 import { EMPTY, fmt, quarterTop } from "@features/admin/server/ap/format";
 import type {
   FunnelKey,
+  FunnelPaywallPayload,
   PtsFunnel,
   PtsMeasures,
   PtsPayload,
   PtsView,
   PtsWeek,
 } from "@features/admin/server/ap/pay-to-start";
+import { dayCount } from "@features/admin/server/ap/filters";
+import { GATE_REVEAL_START_AT } from "@shared/experiments/gateRevealArm";
+import { reportingDay } from "@shared/time/reporting-day";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { Info } from "./field-info";
 import { IndexHover, periodTitle, type TipRow } from "./hover";
 import {
   BlackButton,
@@ -36,15 +41,18 @@ import {
 import { useApFilters } from "./useApFilters";
 
 /**
- * AP-Analytics, Assessment A · Pay to start: every funnel that sells the report, side by side,
- * as Marcus drew it on 23.10 ("Funnel metrics compared"): the hard KPIs first (visit → paying
- * customer, revenue per visit, ROAS), then each funnel step by step and week by week.
+ * AP-Analytics, Assessment A · Funnel and paywall (the Pay to start page, renamed by Marcus on
+ * 19 Nov 2026 when pay to start was paused): the running paywall test (#11) on top, then the free
+ * funnel before the paywall beside the EUR 1.99 page's, as he drew them on 23.10 ("Funnel metrics
+ * compared"): the hard KPIs first (visit → paying customer, revenue per visit, ROAS), then each
+ * funnel step by step and week by week.
  */
 
 const FIXED_NOTE =
   "Each funnel is read whole here: the Funnel filter, source, device, country tier and visitor type don't narrow this page.";
 
 const SECTIONS = [
+  { id: "paywall-test", label: "Paywall test" },
   { id: "funnels", label: "Funnel metrics" },
   { id: "steps", label: "Step by step" },
   { id: "weeks", label: "Week by week" },
@@ -228,10 +236,10 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
   },
 ];
 
-function Tag({ live }: { live: boolean }) {
+function Tag({ live, period }: { live: boolean; period?: string }) {
   return (
     <span className={`text-[11px] font-semibold ${live ? "text-ap-good-ink" : "text-ap-label"}`}>
-      {live ? "Live" : "Off"}
+      {live ? (period ?? "Live") : "Off"}
     </span>
   );
 }
@@ -255,7 +263,7 @@ function MetricsTable({ funnels, traffic }: { funnels: PtsFunnel[]; traffic: Tra
               <th key={f.key} scope="col" className="px-3 py-3 text-right align-bottom">
                 <span className="flex flex-col items-end gap-1">
                   <span className="text-[13px] font-bold leading-tight text-ap-ink">{f.label}</span>
-                  <Tag live={f.live} />
+                  <Tag live={f.live} period={f.period} />
                 </span>
               </th>
             ))}
@@ -452,7 +460,10 @@ function StepCards({ funnels }: { funnels: PtsFunnel[] }) {
               aria-label={f.live ? f.label : `${f.label} (off)`}
               className={`flex flex-col gap-3 rounded-[14px] border border-ap-line p-4 ${f.live ? "" : "border-dashed opacity-[0.72]"}`}
             >
-              <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[15px] font-bold text-ap-ink">{f.label}</span>
+                {f.period && <span className="text-xs text-ap-muted">{f.period}</span>}
+              </span>
               <ol className="m-0 flex list-none flex-col gap-1 p-0">
                 {f.steps.map((s, i) => {
                   const shareOf = (n: number | null | undefined) =>
@@ -646,7 +657,7 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
         id="pts-weeks"
         title="Week by week"
         info="pts.weeks"
-        description="One line per funnel, ads and organic, each customer in the week they came in (finished the free survey, or paid to start), so a funnel that is paid later is not undercounted."
+        description="One line per funnel, ads and organic, each customer in the week they finished the survey."
         align="end"
         right={
           <Pills
@@ -811,7 +822,165 @@ const isWholeWeek = (w: { from: string; to: string }) =>
   (Date.parse(`${w.to}T12:00:00Z`) - Date.parse(`${w.from}T12:00:00Z`)) / 86_400_000 === 6;
 
 /** The page as a spreadsheet: both traffic views, the steps, and the weeks. */
-function toCsv(d: PtsPayload): Array<{ name: string; table: Table }> {
+/** What the test needs to be called (its Test Repository row, signed off at the 19 Nov sync). */
+const NEEDED_PER_HALF = 170;
+
+/**
+ * Marcus's "Paywall test: Core Archetype before paying" (19 Nov 2026), the running #11: a card per
+ * half with who saw the EUR 1.99 page, who paid and the pay rate (the decider: paid over free
+ * finishers), how far the half is towards the readers it needs, then the facts to read it by and
+ * the verdict in plain words. The same readout as AP › Payment's.
+ */
+function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: string }) {
+  // The test's day as of the range's last day: the day it began is day 1.
+  const start = reportingDay(new Date(GATE_REVEAL_START_AT));
+  const status = to < start ? t.note : `Running · day ${dayCount(start, to)} · ${t.note}`;
+  const paid = t.arms.reduce((n, a) => n + a.paid, 0);
+  const full = (i: number) => t.arms[i]?.full ?? 0;
+  return (
+    <Card id="paywall-test" labelledBy="h-pw">
+      <SectionHead
+        id="h-pw"
+        title="Paywall test: Core Archetype before paying"
+        description="Free finishers are split 50/50 by survey session. A keeps today’s €1.99 page; B shows the Core Archetype, its match and five aspect cards before the €1.99 step. Price, guarantee and what €1.99 opens are the same. Decided by the share of finishers who pay €1.99."
+        right={
+          <span className="self-start rounded-full bg-ap-good/[0.12] px-2.5 py-1 text-xs font-bold text-ap-good-ink">
+            {status}
+          </span>
+        }
+      />
+      {t.why ? (
+        <p className="m-0 text-sm text-ap-muted">{t.why}</p>
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {t.arms.map((a, i) => {
+              const seen = a.reached ?? a.finishers;
+              return (
+                <section
+                  key={a.arm}
+                  aria-label={a.name}
+                  className="flex flex-col gap-4 rounded-[14px] border border-ap-line p-4"
+                >
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-[15px] font-bold text-ap-ink">
+                      {i === 0 ? "A" : "B"} · {a.name}
+                    </span>
+                    <span className="text-xs text-ap-muted">
+                      {a.control
+                        ? "Control: the archetype stays locked until €1.99"
+                        : "Archetype, match and five aspect cards, then €1.99"}
+                    </span>
+                  </span>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Figure
+                      label="Saw €1.99 page"
+                      info="payment.gt-reached"
+                      value={a.reached === null ? EMPTY : fmt("count", a.reached)}
+                      sub={
+                        a.reached === null
+                          ? "could not be read"
+                          : `of ${fmt("count", a.finishers)} finishers`
+                      }
+                    />
+                    <Figure
+                      label="Paid €1.99"
+                      info="payment.gt-paid"
+                      value={fmt("count", a.paid)}
+                    />
+                    <Figure
+                      label="Pay rate"
+                      info="payment.gt-rate"
+                      value={fmt("pct", a.finishers ? a.paid / a.finishers : null)}
+                      sub="baseline 10.3%"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="flex justify-between text-xs text-ap-body">
+                      <span>Sample so far</span>
+                      <span className="tabular-nums">
+                        {fmt("count", seen)} of ~{NEEDED_PER_HALF} readers
+                      </span>
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="block h-1.5 overflow-hidden rounded-full bg-ap-track"
+                    >
+                      <span
+                        className="block h-full rounded-full"
+                        style={{
+                          width: `${Math.min(100, (seen / NEEDED_PER_HALF) * 100).toFixed(1)}%`,
+                          background: a.control ? "#9c95a3" : "#5a42a6",
+                        }}
+                      />
+                    </span>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Fact
+              label="Paid €1.99 since switch-on"
+              value={`${fmt("count", paid)} ${paid === 1 ? "reader" : "readers"}`}
+              sub="Both halves together. Gift unlocks (€0) left out."
+            />
+            <Fact
+              label="Baseline before the test"
+              value="10.3% pay €1.99"
+              sub="19 of 185 finishers, 27 Oct–17 Nov (173 saw the page)."
+            />
+            <Fact
+              label="Needed to call it"
+              value="~155–185 per half"
+              sub="To see a doubling (10% → 21%): about 5 weeks at ~35 finishers per half a week."
+            />
+            <Fact
+              label="Read alongside"
+              value={`Full report bought: A ${fmt("count", full(0))} · B ${fmt("count", full(1))}`}
+              sub="And the halfway sheet's exits, on AP › Survey's Sheets."
+            />
+          </div>
+          <p className="m-0 text-[13px] leading-relaxed text-ap-ink">{t.verdict}</p>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Figure({
+  label,
+  info,
+  value,
+  sub,
+}: {
+  label: string;
+  info: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-xs text-ap-muted">
+        {label} <Info k={info} label={label} />
+      </span>
+      <span className="font-serif text-xl font-semibold tabular-nums text-ap-ink">{value}</span>
+      {sub && <span className="text-[11px] leading-snug text-ap-muted">{sub}</span>}
+    </span>
+  );
+}
+
+function Fact({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-ap-line bg-ap-ground/60 px-3.5 py-3">
+      <span className="text-xs font-semibold text-ap-muted">{label}</span>
+      <span className="text-sm font-bold text-ap-ink">{value}</span>
+      <span className="text-xs leading-snug text-ap-muted">{sub}</span>
+    </div>
+  );
+}
+
+function toCsv(d: FunnelPaywallPayload): Array<{ name: string; table: Table }> {
   const head = [
     { label: "Measure", unit: "text" as const },
     ...d.funnels.map((f) => ({ label: f.label, unit: "text" as const })),
@@ -825,7 +994,22 @@ function toCsv(d: PtsPayload): Array<{ name: string; table: Table }> {
       }))
     ),
   });
+  const test: Table = {
+    columns: [
+      { label: "Half", unit: "text" },
+      { label: "Free finishers", unit: "count" },
+      { label: "Saw the €1.99 page", unit: "count" },
+      { label: "Paid €1.99", unit: "count" },
+      { label: "Pay rate", unit: "pct" },
+      { label: "Bought the full report", unit: "count" },
+    ],
+    rows: d.gateTest.arms.map((a) => ({
+      label: a.name,
+      values: [a.finishers, a.reached, a.paid, a.finishers ? a.paid / a.finishers : null, a.full],
+    })),
+  };
   return [
+    ...(d.gateTest.arms.length ? [{ name: `Paywall test · ${d.gateTest.test}`, table: test }] : []),
     { name: "Funnel metrics, paid + organic", table: metrics("all") },
     { name: "Funnel metrics, paid traffic only", table: metrics("ads") },
     {
@@ -872,7 +1056,7 @@ function toCsv(d: PtsPayload): Array<{ name: string; table: Table }> {
 
 export default function ApPayToStart() {
   const { params } = useApFilters();
-  const { data, loading, error, refetch } = useAdminFetch<PtsPayload>(
+  const { data, loading, error, refetch } = useAdminFetch<FunnelPaywallPayload>(
     "/api/admin/ap/pay-to-start",
     params
   );
@@ -882,37 +1066,41 @@ export default function ApPayToStart() {
     <>
       <div className="flex flex-col gap-4">
         <PageHeader
-          crumbs={["Assessments", "Assessment A", "Pay to start"]}
-          title="Pay to start"
-          description="Does paying before the survey bring more paying customers per euro of ads than paying after the report? Every funnel is counted the same way, from the ad click to the money."
+          crumbs={["Assessments", "Assessment A", "Funnel and paywall"]}
+          title="Funnel and paywall"
+          description="The free survey and its €1.99 paywall, from the ad click to the money, with the running paywall test on top. Pay to start is paused and no longer shown."
           actions={
             <BlackButton
               disabled={!data}
               onClick={() =>
                 data &&
-                exportTables(`ap-pay-to-start-${data.range.from}-${data.range.to}`, toCsv(data))
+                exportTables(
+                  `ap-funnel-and-paywall-${data.range.from}-${data.range.to}`,
+                  toCsv(data)
+                )
               }
             >
               Export CSV
             </BlackButton>
           }
         />
-        <SectionNav label="Pay to start sections" sections={SECTIONS} ready={Boolean(data)} />
+        <SectionNav label="Funnel and paywall sections" sections={SECTIONS} ready={Boolean(data)} />
       </div>
       <ApFilterBar
         scope="assessment"
         fixed={["funnel", "source", "device", "tier", "visitor"]}
         fixedNote={FIXED_NOTE}
       />
-      {loading && !data && <Loading label="the pay-to-start page" />}
+      {loading && !data && <Loading label="the funnel and paywall page" />}
       {error && <Failed message={error} onRetry={refetch} />}
       {data && (
         <Busy busy={loading}>
+          <PaywallTest t={data.gateTest} to={data.range.to} />
           <Card id="funnels" labelledBy="pts-funnels">
             <SectionHead
               id="pts-funnels"
               title="Funnel metrics compared"
-              description="Ads, conversion and money metrics for each funnel, side by side: pay after the report vs both pay-to-start versions. Green is the best of the running funnels on that line, red the worst."
+              description="Ads, conversion and money for the free survey before and since the €1.99 paywall. Green is the better of the two on that line, red the worse."
               align="end"
               right={
                 <Pills
@@ -945,7 +1133,7 @@ export default function ApPayToStart() {
             <SectionHead
               id="pts-steps"
               title="Step by step"
-              description="Each funnel in its own order. Pay to start takes the money first; pay after the report takes it last. Every step is a share of the funnel's own visits, so the payment step can be read across."
+              description="Each funnel in its own order, every step as a share of the funnel's visits."
             />
             <StepCards funnels={data.funnels} />
           </Card>
