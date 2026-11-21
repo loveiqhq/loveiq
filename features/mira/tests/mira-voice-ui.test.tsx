@@ -291,6 +291,9 @@ describe("the end of a session", () => {
     talk();
     await sayToMira("It's the lights");
     await waitFor(() => expect(spoken().length).toBeGreaterThan(0));
+    // While she says it, the panel (and End) stays; the sign-up card follows.
+    expect(screen.getByRole("region", { name: "Talking with Mira" })).toBeTruthy();
+    expect(screen.queryByText("Keep talking with Mira, for free")).toBeNull();
     finishSpeaking();
     await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(1));
     const [end] = calls("POST /api/mira/recordings");

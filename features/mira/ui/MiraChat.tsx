@@ -888,7 +888,11 @@ export default function MiraChat({
             </div>
 
             <div className="mx-auto w-full max-w-[760px] shrink-0 px-3 pt-1 sm:px-6 sm:pt-0">
-              {gate ? (
+              {/* A voice session keeps its panel (and End) while Mira says her last free reply;
+                  the sign-up card follows once the session ends. */}
+              {voiceOn ? (
+                <VoicePanel voice={voice} onType={typeInstead} />
+              ) : gate ? (
                 <div
                   className={`${CARD} flex flex-col gap-3 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] sm:flex-row sm:items-center sm:gap-4 sm:p-5`}
                 >
@@ -908,8 +912,6 @@ export default function MiraChat({
                     Create free account
                   </Link>
                 </div>
-              ) : voiceOn ? (
-                <VoicePanel voice={voice} onType={typeInstead} />
               ) : (
                 <div
                   className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
