@@ -169,6 +169,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: as long as the Slack workspace keeps messages (its retention setting: to confirm)
 - **Objection**: Art. 21 by email; a restriction request (T-09) also takes the reader out of these posts
 
+### A21 — Mira ratings and quotes (from 2026-11-22, to be checked by Eman)
+
+- **Data**: a signed-in person's one rating (1 to 5); only with a separate tick, one sentence for others with the first name or initials and the optional age range they choose, the consent's version and time, and its review status (`mira_review`); events with ids and counts only ([DPIA.md](DPIA.md) §7.12)
+- **Basis**: the stars, shown only inside an average without names: (f) legitimate interest in telling visitors honestly what people think of Mira. The words, name and age range, which may reveal sex life or health: (a) explicit consent with Art. 9(2)(a), a separate box the person ticks themselves, version `mira-review-2026-11-22` stored with the words. Published only after staff approval; the only edit is a visible […] where an identifying detail was taken out, as the box says
+- **Retention**: until taken back or the account is deleted; words not approved are deleted when rejected
+- **Withdraw**: "Stop showing my words" or "Remove my rating" in Settings, effective at once; deleting the account; a data request. An under-18 stop deletes both
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
@@ -182,6 +189,7 @@ For activities under basis (a):
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 | A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
+| A21 Mira quote | "Stop showing my words" or "Remove my rating" in Settings; delete the account; a data request        | The words, name and age range are deleted and leave Mira's pages from the next page view; "Remove my rating" also takes the stars out of the average                                   |
 
 ## Outstanding work
 

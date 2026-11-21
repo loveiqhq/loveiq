@@ -524,6 +524,53 @@ with its reasons, WP243 rev.01, 4.2):
 By 2027-02-20 (with the crisis-line re-check), and earlier when Mira's data, recipients, model or
 consent wording change, or before Mira leaves the beta.
 
+### 7.12 Ratings and quotes (from 2026-11-22, to be checked by Eman)
+
+**What**: at a good moment in the chat (a 9 or 10 on the recommend question, or the third
+thumbs-up in one chat; never in a chat with a crisis, after an under-18 stop, a referral or the
+body check, at most once in 30 days per browser), a signed-in person may rate Mira from 1 to 5 and,
+only with a separate tick, give one sentence for others, shown with the first name or initials and
+the optional age range they choose (no photos). Mira's pages show the average, how many people
+rated and one approved quote a day, only once 20 different people who are not the team's and not
+under 18 have rated and a quote is approved (`features/mira/reviews.ts`). Code, table and checks:
+`features/mira/AGENT_README.md`, "Ratings and quotes".
+
+**Data**: `mira_review`, one row per account: the stars; with the tick, the words, the name and age
+range, the consent's wording version and time, the review status and which staff address decided;
+whether it came from a team browser. Events `review_prompt_shown`, `review_prompt_not_now`,
+`review_given` (whether words came with it) and `review_withdrawn`, never stars or words.
+
+**Basis**: the stars, counted into an average shown without names: (f) legitimate interest
+(honest ratings for visitors). The words, name and age range, which may reveal the person's sex
+life or health: (a) explicit consent with Art. 9(2)(a), a separate box the person ticks themselves ("I agree that
+Mira's pages may show these words publicly, with the name and age range above. Our team reads them
+first and may take out a detail that could identify someone, marked […]; nothing else is changed. I
+can take this back in Settings at any time."), version `mira-review-2026-11-22` stored with the
+words ([LAWFUL_BASIS.md](LAWFUL_BASIS.md) A21).
+
+**Recipients**: anyone who opens Mira's pages, for approved words (publication); staff with AP
+access read the words waiting for approval.
+
+**Risks and measures**
+
+- **M10, someone identified from published words (MEDIUM before, LOW after)**: one sentence, a
+  first name or initials and an age range only; every quote read by staff before it shows; the only
+  edit allowed is replacing an identifying detail with a visible […] (`redacted()` refuses anything
+  else, in AP and on the server); rejecting deletes the words; the person can stop showing them or
+  remove the rating in Settings, effective from the next page view (the cached figures are
+  revalidated at once), and deleting the account or a data request does the same.
+- **M11, fake or unverified reviews (UWG Annex Nos. 23b, 23c; §5b(3))**: only signed-in accounts
+  rate, once each (unique per account); the team's accounts and browsers and under-18s never count;
+  nothing shows below 20 people or without an approved quote; "How we check reviews" beside every
+  rating says how they are checked. No sample figures anywhere.
+- **M12, minors**: an under-18 stop deletes the rating and words, even approved ones; Mira's rating
+  routes refuse such an account (403); the public figures leave such accounts out.
+- **M13, pressure to rate**: one ask at a good moment, "Not now" respected for 30 days, never near a
+  crisis, a referral or the body check, nothing withheld for not rating.
+
+**Retention**: until the person takes it back or deletes the account; words not approved are
+deleted when rejected; events as `mira_event` (12 months). **Residual risk**: low.
+
 ## 8. Sign-off
 
 By committing this file, the data controller (Eman) confirms the DPIA has been reviewed and the residual risks are accepted given the documented mitigations.
