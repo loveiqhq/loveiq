@@ -1,16 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
-import { miraApi } from "./api";
+import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
+import { miraApi, type ApiResult } from "./api";
+import type { TextSize, Theme } from "./prefs";
+import tokens from "./theme-tokens.js";
 
 /**
- * Board 08c, the Friday cut: account, coaching style, what Mira may use, your data, sign out.
- * Language, Google/Apple, devices, appearance, nudges and session reminders come after launch.
+ * Board 08c, Settings, as upgraded on 21 Nov 2026: calm sections with an index (a sticky column
+ * on wide screens, a sticky row of links on phones), and each change saved as it is made, with a
+ * "Saved" beside its section; only the account's typed details wait for their Save button.
+ *
+ * Other streams' sections drop in through props (app/mira/settings/page.tsx passes them):
+ * `security` (SecuritySettings) and `sharedReview` (SharedReviewSettings) get a section and an
+ * index entry each; `journal` (JournalSettings) and `weeklySession` (WeeklySessionSettings) sit
+ * inside Notifications, under the daily nudges. Each renders its content only (no h2): the
+ * section gives the heading. `Switch`, `Select`, `SettingsGroup` and `SettingsSection` are
+ * exported for them, so every row looks the same.
  */
 
 type Profile = {
@@ -24,6 +36,8 @@ type Profile = {
   nudges_on: boolean;
   nudge_time: "08:00" | "19:00" | "21:30";
   time_zone: string;
+  /** "Mira replies in": a language code, or null to match the person's messages. */
+  reply_language?: string | null;
 };
 
 const NUDGE_TIMES = [
@@ -58,6 +72,7 @@ const saveable = (x: Profile) => ({
   nudges_on: x.nudges_on,
   nudge_time: x.nudge_time,
   time_zone: x.time_zone,
+  reply_language: x.reply_language ?? null,
 });
 
 /** The fields of `now` that differ from `was`. */
@@ -70,38 +85,153 @@ export function changedFields(now: Profile, was: Profile | null): Record<string,
   );
 }
 
-export default function MiraSettings() {
+type SectionId =
+  | "account"
+  | "language"
+  | "security"
+  | "coaching"
+  | "privacy"
+  | "sharing"
+  | "notifications"
+  | "appearance"
+  | "data";
+
+type Status =
+  { kind: "saving" } | { kind: "saved"; text?: string } | { kind: "error"; text: string };
+
+export type SettingsSlots = {
+  /** SecuritySettings: sign-in method, email, devices and passkeys. */
+  security?: ReactNode;
+  /** SharedReviewSettings. */
+  sharedReview?: ReactNode;
+  /** JournalSettings: the journal's reminders, inside Notifications. */
+  journal?: ReactNode;
+  /** WeeklySessionSettings: the weekly session's reminders, inside Notifications. */
+  weeklySession?: ReactNode;
+};
+
+const TEXT_CHOICES: Array<[TextSize, string]> = [
+  ["small", "Small"],
+  ["default", "Default"],
+  ["large", "Large"],
+];
+
+export default function MiraSettings({
+  security,
+  sharedReview,
+  journal,
+  weeklySession,
+}: SettingsSlots = {}) {
   const router = useRouter();
   const [p, setP] = useState<Profile | null>(null);
   // The profile as the server has it, after the load and after each save.
   const stored = useRef<Profile | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [status, setStatusMap] = useState<Partial<Record<SectionId, Status>>>({});
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
+  // The account's typed details changed since they were loaded or saved.
+  const [accountDirty, setAccountDirty] = useState(false);
+  // Saves go out one after another, so the last change made is the one kept.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const { look, change } = useMiraLook();
 
-  useEffect(() => {
+  const sections: Array<[SectionId, string]> = [
+    ["account", "Account"],
+    ["language", "Language"],
+    ...(security ? ([["security", "Sign-in & security"]] as Array<[SectionId, string]>) : []),
+    ["coaching", "Coaching"],
+    ["privacy", "Privacy"],
+    ...(sharedReview ? ([["sharing", "Sharing"]] as Array<[SectionId, string]>) : []),
+    ["notifications", "Notifications"],
+    ["appearance", "Appearance"],
+    ["data", "Your data"],
+  ];
+  const active = useActiveSection(
+    sections.map(([id]) => id),
+    Boolean(p)
+  );
+
+  function load() {
     void miraApi<{ profile: Profile }>("/api/mira/me").then((r) => {
       if (r.status === 401) router.replace("/mira/start");
       else if (r.ok) {
         stored.current = r.data.profile;
         setP(r.data.profile);
-      } else setError(r.data.error ?? "Unable to load your settings.");
+      } else setLoadError(r.data.error ?? "We couldn't load your settings.");
     });
-  }, [router]);
+  }
+  // Once, on arrival.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, []);
 
-  async function save() {
-    if (!p) return;
-    setError(null);
-    const body = changedFields(p, stored.current);
-    if (Object.keys(body).length === 0) return setSaved("Saved.");
-    setBusy(true);
-    const r = await miraApi("/api/mira/me", { method: "PATCH", body });
-    setBusy(false);
+  // "Delete…" swaps the buttons for the question: focus goes to its safe answer.
+  const cancel = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (confirm) cancel.current?.focus();
+  }, [confirm]);
+
+  const setStatus = (id: SectionId, s: Status | null) =>
+    setStatusMap((cur) => ({ ...cur, [id]: s ?? undefined }));
+
+  /** Shows `fields` at once and saves them; a refused save puts the stored values back. */
+  async function autosave(section: SectionId, fields: Partial<Profile>) {
+    setP((cur) => (cur ? { ...cur, ...fields } : cur));
+    setStatus(section, { kind: "saving" });
+    const send = () => miraApi("/api/mira/me", { method: "PATCH", body: fields });
+    const next = queue.current.then(send, send);
+    queue.current = next;
+    const r = await next;
     if (r.ok) {
-      stored.current = p;
-      setSaved("Saved.");
-    } else setError(r.data.error ?? "Unable to save.");
+      if (stored.current) stored.current = { ...stored.current, ...fields };
+      return setStatus(section, { kind: "saved" });
+    }
+    const was = stored.current;
+    if (was) {
+      const back = Object.fromEntries(
+        Object.keys(fields).map((k) => [k, was[k as keyof Profile]])
+      ) as Partial<Profile>;
+      setP((cur) => (cur ? { ...cur, ...back } : cur));
+    }
+    setStatus(section, {
+      kind: "error",
+      text: r.data.error ?? "That didn't save. Please try again.",
+    });
+  }
+
+  async function saveAccount() {
+    if (!p) return;
+    // Everything else saved as it changed, so what differs is what was typed here.
+    const body = changedFields(p, stored.current);
+    if (Object.keys(body).length === 0) {
+      setAccountDirty(false);
+      return setStatus("account", { kind: "saved" });
+    }
+    setStatus("account", { kind: "saving" });
+    const r: ApiResult<Record<string, unknown>> = await miraApi("/api/mira/me", {
+      method: "PATCH",
+      body,
+    });
+    if (r.ok) {
+      if (stored.current) stored.current = { ...stored.current, ...body } as Profile;
+      setAccountDirty(false);
+      return setStatus("account", { kind: "saved" });
+    }
+    setStatus("account", { kind: "error", text: r.data.error ?? "Unable to save." });
+  }
+
+  async function changeLook(patch: { theme?: Theme; text?: TextSize }) {
+    setStatus("appearance", { kind: "saving" });
+    const ok = await change(patch);
+    setStatus(
+      "appearance",
+      ok
+        ? { kind: "saved" }
+        : {
+            kind: "error",
+            text: "This browser keeps it, but your account couldn't save it. Please try again.",
+          }
+    );
   }
 
   async function remove(what: "chats" | "account") {
@@ -110,7 +240,10 @@ export default function MiraSettings() {
     setConfirm(null);
     if (!r.ok) {
       setBusy(false);
-      return setError(r.data.error ?? "Unable to delete right now.");
+      return setStatus("data", {
+        kind: "error",
+        text: r.data.error ?? "Unable to delete right now.",
+      });
     }
     if (what === "account") {
       router.replace("/mira");
@@ -118,267 +251,695 @@ export default function MiraSettings() {
       return;
     }
     setBusy(false);
-    setSaved("All your chats are deleted.");
+    setStatus("data", { kind: "saved", text: "All your chats are deleted." });
   }
 
   async function signOut() {
     setBusy(true);
-    setError(null);
+    setStatus("data", null);
     const r = await miraApi("/api/mira/auth", { body: { action: "logout" } });
     if (!r.ok) {
       setBusy(false);
-      return setError(r.data.error ?? "Unable to sign out. Please try again.");
+      return setStatus("data", {
+        kind: "error",
+        text: r.data.error ?? "Unable to sign out. Please try again.",
+      });
     }
     router.replace("/mira");
     router.refresh();
   }
 
-  const set = (patch: Partial<Profile>) => {
-    setSaved(null);
+  const typed = (patch: Partial<Profile>) => {
+    setStatus("account", null);
+    setAccountDirty(true);
     setP((cur) => (cur ? { ...cur, ...patch } : cur));
   };
 
   return (
     <MiraAppFrame active="settings" email={p?.email} name={p?.name}>
       <h1 className="font-serif text-[34px] font-medium">Settings</h1>
-      {error && !p ? (
-        <p role="alert" className="mt-2 text-ap-bad-ink">
-          {error}
-        </p>
-      ) : null}
-      {p ? (
-        <div className="mt-6 flex flex-col gap-8">
-          <section className="flex flex-col gap-4">
-            <h2 className="font-serif text-[22px] font-medium">Account</h2>
-            <label className="flex flex-col gap-2 text-[14px] font-semibold">
-              Name or nickname
-              <input
-                value={p.name ?? ""}
-                maxLength={60}
-                onChange={(e) => set({ name: e.target.value })}
-                className="min-h-[48px] rounded-2xl border border-ap-line px-4 text-[16px] font-normal"
-              />
-            </label>
-            <p className="text-[14px]">
-              <span className="font-semibold">Email</span>{" "}
-              <span className="text-ap-body [overflow-wrap:anywhere]">{p.email}</span>
-            </p>
-            <label className="flex flex-col gap-2 text-[14px] font-semibold">
-              Gender <span className="font-normal text-ap-muted">Optional</span>
-              <input
-                value={p.gender ?? ""}
-                maxLength={40}
-                onChange={(e) => set({ gender: e.target.value })}
-                className="min-h-[48px] rounded-2xl border border-ap-line px-4 text-[16px] font-normal"
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-[14px] font-semibold">
-              Where you&apos;re based
-              <Select
-                value={p.country ?? ""}
-                onChange={(e) => set({ country: e.target.value || null })}
-              >
-                <option value="">Not set</option>
-                {CRISIS_COUNTRY_OPTIONS.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-                <option value="OTHER">Somewhere else</option>
-              </Select>
-            </label>
-          </section>
+      <p className="mt-1 text-[15px] text-ap-body">
+        Changes save as you make them. Your account details have their own Save.
+      </p>
 
-          <section className="flex flex-col gap-3">
-            <h2 className="font-serif text-[22px] font-medium">How Mira coaches you</h2>
-            <p className="text-[14px] text-ap-body">
-              Pick a point on each line. The middle is balanced.
-            </p>
-            <StyleScales value={p.style ?? {}} onChange={(style) => set({ style })} />
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <h2 className="font-serif text-[22px] font-medium">What Mira may use</h2>
-            <Switch
-              label="Remember our conversations"
-              desc="Mira keeps your chats, so you don't have to start over."
-              checked={p.remember_chats}
-              onChange={(v) => set({ remember_chats: v })}
-            />
-            <Switch
-              label="Use my test result"
-              desc="Your LoveIQ Sexual Personality result tailors the coaching."
-              checked={p.use_assessment}
-              onChange={(v) => set({ use_assessment: v })}
-            />
-            <p className="text-[12px] leading-relaxed text-ap-muted">
-              Your chats concern your sex life, which is sensitive data under the GDPR. We use them
-              with your consent, to coach you and to improve Mira; our analytics tools also see what
-              you type. Never for advertising, never to train shared models.{" "}
-              <a href="/mira/privacy" className="underline">
-                How Mira handles your data
-              </a>
-            </p>
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <h2 className="font-serif text-[22px] font-medium">Notifications</h2>
-            <Switch
-              label="Daily nudges by email"
-              desc="A short thought from Mira that leads back into the chat. Neutral subject line."
-              checked={p.nudges_on}
-              onChange={(v) => set({ nudges_on: v })}
-            />
-            {p.nudges_on && !p.remember_chats ? (
-              <p className="text-[12px] text-ap-muted">
-                Nudges pick up on your last chat, so they need “Remember our conversations” on.
-              </p>
-            ) : null}
-            <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
-              Nudge time
-              <Select
-                value={p.nudge_time}
-                onChange={(e) => set({ nudge_time: e.target.value as Profile["nudge_time"] })}
-              >
-                {NUDGE_TIMES.map(([v, label]) => (
-                  <option key={v} value={v}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
-              Time zone
-              <Select value={p.time_zone} onChange={(e) => set({ time_zone: e.target.value })}>
-                {[...new Set([p.time_zone, ...TIME_ZONES])].map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz.replace("_", " ")}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          </section>
-
-          {/* Save, delete and sign-out errors show here, next to the buttons that caused them. */}
-          <div className="flex flex-wrap items-center gap-3">
-            <PrimaryButton onClick={save} disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </PrimaryButton>
-            <span role="status" className="text-[14px] text-ap-good-ink">
-              {saved}
-            </span>
-            {error ? (
-              <p role="alert" className="text-[14px] text-ap-bad-ink">
-                {error}
-              </p>
-            ) : null}
-          </div>
-
-          <section className="flex flex-col gap-3 border-t border-ap-line pt-6">
-            <h2 className="font-serif text-[22px] font-medium">Your data</h2>
-            <p className="text-[14px] text-ap-body">
-              Want a copy of your data? Email{" "}
-              <a href="mailto:hello@loveiq.org" className="underline">
-                hello@loveiq.org
-              </a>{" "}
-              and we&apos;ll send it within 30 days.
-            </p>
-            {confirm ? (
-              <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
-                <p>
-                  {confirm === "chats"
-                    ? "Delete all your chats? This can't be undone."
-                    : "Delete your account, your profile and all your chats? This can't be undone."}
-                </p>
-                <div className="mt-3 flex gap-3">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => remove(confirm)}
-                    className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirm(null)}
-                    className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setConfirm("chats")}
-                  className="min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold"
-                >
-                  Delete all chats
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirm("account")}
-                  className="min-h-[44px] rounded-full border border-ap-bad px-5 text-[14px] font-semibold text-ap-bad-ink"
-                >
-                  Delete account
-                </button>
-              </div>
-            )}
-            <p className="text-[14px] text-ap-body">
-              <strong>Plan:</strong> free while in beta. We&apos;ll tell you well before anything
-              changes.
-            </p>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={signOut}
-              className="w-fit text-[14px] font-semibold text-ap-plum underline disabled:opacity-50"
+      {loadError ? (
+        <div role="alert" className="mt-8 rounded-3xl border border-ap-line p-5">
+          <p className="text-[15px] font-semibold">{loadError}</p>
+          <p className="mt-1 text-[14px] text-ap-body">
+            Check your connection, then try again. Your settings are safe.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <PrimaryButton
+              onClick={() => {
+                setLoadError(null);
+                load();
+              }}
             >
-              Sign out
-            </button>
-          </section>
+              Try again
+            </PrimaryButton>
+          </div>
+        </div>
+      ) : null}
+
+      {!p && !loadError ? <SettingsSkeleton /> : null}
+
+      {p ? (
+        <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_176px] xl:gap-12">
+          <div>
+            <SectionIndex sections={sections} active={active} variant="row" />
+            <div className="mt-8 flex flex-col gap-12">
+              <SettingsSection
+                id="account"
+                title="Account"
+                status={status.account}
+                footer={
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <PrimaryButton
+                      onClick={saveAccount}
+                      disabled={!accountDirty || status.account?.kind === "saving"}
+                    >
+                      {status.account?.kind === "saving" ? "Saving…" : "Save"}
+                    </PrimaryButton>
+                    {accountDirty ? (
+                      <span className="text-[13px] text-ap-muted">Unsaved changes</span>
+                    ) : null}
+                  </div>
+                }
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Name or nickname">
+                    {(id) => (
+                      <input
+                        id={id}
+                        value={p.name ?? ""}
+                        maxLength={60}
+                        autoComplete="nickname"
+                        onChange={(e) => typed({ name: e.target.value })}
+                        className={INPUT}
+                      />
+                    )}
+                  </Field>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[14px] font-semibold">Email</p>
+                    <p className="flex min-h-[48px] items-center rounded-2xl bg-ap-ground px-4 text-[16px] text-ap-body [overflow-wrap:anywhere]">
+                      {p.email}
+                    </p>
+                    <p className="text-[13px] text-ap-muted">The address you sign in with.</p>
+                  </div>
+                  <Field label="Gender" optional>
+                    {(id) => (
+                      <input
+                        id={id}
+                        value={p.gender ?? ""}
+                        maxLength={40}
+                        onChange={(e) => typed({ gender: e.target.value })}
+                        className={INPUT}
+                      />
+                    )}
+                  </Field>
+                  <Field
+                    label="Where you’re based"
+                    hint="When Mira shares support lines, this country’s come first."
+                  >
+                    {(id) => (
+                      <Select
+                        id={id}
+                        value={p.country ?? ""}
+                        onChange={(e) => typed({ country: e.target.value || null })}
+                      >
+                        <option value="">Not set</option>
+                        {CRISIS_COUNTRY_OPTIONS.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.name}
+                          </option>
+                        ))}
+                        <option value="OTHER">Somewhere else</option>
+                      </Select>
+                    )}
+                  </Field>
+                </div>
+              </SettingsSection>
+
+              <SettingsSection id="language" title="Language" status={status.language}>
+                <SettingsGroup>
+                  <Row
+                    label="Mira replies in"
+                    description="She can answer in the language you write in, or always in one."
+                  >
+                    {(id, describedBy) => (
+                      <Select
+                        id={id}
+                        aria-describedby={describedBy}
+                        value={p.reply_language ?? ""}
+                        onChange={(e) =>
+                          void autosave("language", { reply_language: e.target.value || null })
+                        }
+                      >
+                        <option value="">Match my messages</option>
+                        {REPLY_LANGUAGES.map((l) => (
+                          <option key={l.code} value={l.code} lang={l.code}>
+                            {l.native === l.name ? l.name : `${l.native} · ${l.name}`}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Row>
+                </SettingsGroup>
+                <p className="mt-2 px-1 text-[13px] text-ap-muted">
+                  The app itself, with its safety messages and support lines, stays in English for
+                  now.
+                </p>
+              </SettingsSection>
+
+              {security ? (
+                <SettingsSection id="security" title="Sign-in & security" status={status.security}>
+                  {security}
+                </SettingsSection>
+              ) : null}
+
+              <SettingsSection
+                id="coaching"
+                title="How Mira coaches you"
+                description="Pick a point on each line. The middle is balanced."
+                status={status.coaching}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void autosave("coaching", { style: {} })}
+                    disabled={Object.keys(p.style ?? {}).length === 0}
+                    className="min-h-[44px] px-1 text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline disabled:text-ap-muted disabled:no-underline"
+                  >
+                    Reset to balanced
+                  </button>
+                }
+              >
+                <StyleScales
+                  value={p.style ?? {}}
+                  onChange={(style) => void autosave("coaching", { style })}
+                />
+              </SettingsSection>
+
+              <SettingsSection id="privacy" title="What Mira may use" status={status.privacy}>
+                <SettingsGroup>
+                  <Switch
+                    label="Remember our conversations"
+                    description="Mira keeps your chats, so you don't have to start over."
+                    checked={p.remember_chats}
+                    onChange={(v) => void autosave("privacy", { remember_chats: v })}
+                  />
+                  <Switch
+                    label="Use my test result"
+                    description="Your LoveIQ Sexual Personality result tailors the coaching."
+                    checked={p.use_assessment}
+                    onChange={(v) => void autosave("privacy", { use_assessment: v })}
+                  />
+                </SettingsGroup>
+                <p className="mt-3 px-1 text-[13px] leading-relaxed text-ap-muted">
+                  Your chats concern your sex life, which is sensitive data under the GDPR. We use
+                  them with your consent, to coach you and to improve Mira; our analytics tools also
+                  see what you type. Never for advertising, never to train shared models.{" "}
+                  <a href="/mira/privacy" className="text-ap-plum underline underline-offset-2">
+                    How Mira handles your data
+                  </a>
+                </p>
+              </SettingsSection>
+
+              {sharedReview ? (
+                <SettingsSection id="sharing" title="Sharing" status={status.sharing}>
+                  {sharedReview}
+                </SettingsSection>
+              ) : null}
+
+              <SettingsSection
+                id="notifications"
+                title="Notifications"
+                status={status.notifications}
+              >
+                <SettingsGroup>
+                  <Switch
+                    label="Daily nudges by email"
+                    description="A short thought from Mira that leads back into the chat. Neutral subject line."
+                    checked={p.nudges_on}
+                    onChange={(v) => void autosave("notifications", { nudges_on: v })}
+                  />
+                  {p.nudges_on && !p.remember_chats ? (
+                    <p className="px-4 py-3 text-[13px] text-ap-body sm:px-5">
+                      Nudges pick up on your last chat, so they need “Remember our conversations”
+                      on.
+                    </p>
+                  ) : null}
+                  {p.nudges_on ? (
+                    <Row label="Nudge time">
+                      {(id) => (
+                        <Select
+                          id={id}
+                          value={p.nudge_time}
+                          onChange={(e) =>
+                            void autosave("notifications", {
+                              nudge_time: e.target.value as Profile["nudge_time"],
+                            })
+                          }
+                        >
+                          {NUDGE_TIMES.map(([v, label]) => (
+                            <option key={v} value={v}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </Row>
+                  ) : null}
+                  <Row label="Time zone" description="Nudges and reminders come at your own time.">
+                    {(id) => (
+                      <Select
+                        id={id}
+                        value={p.time_zone}
+                        onChange={(e) =>
+                          void autosave("notifications", { time_zone: e.target.value })
+                        }
+                      >
+                        {[...new Set([p.time_zone, ...TIME_ZONES])].map((tz) => (
+                          <option key={tz} value={tz}>
+                            {tz.replace("_", " ")}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Row>
+                </SettingsGroup>
+                {journal ? <div className="mt-4">{journal}</div> : null}
+                {weeklySession ? <div className="mt-4">{weeklySession}</div> : null}
+              </SettingsSection>
+
+              <SettingsSection
+                id="appearance"
+                title="Appearance"
+                description="Kept in this browser, and with your account for your next sign-in elsewhere."
+                status={status.appearance}
+              >
+                <fieldset>
+                  <legend className="text-[15px] font-semibold">Theme</legend>
+                  <ThemePicker
+                    value={look.theme}
+                    onChange={(theme) => void changeLook({ theme })}
+                  />
+                </fieldset>
+                <fieldset className="mt-6">
+                  <legend className="text-[15px] font-semibold">Text size</legend>
+                  <Segmented
+                    name="mira-text-size"
+                    choices={TEXT_CHOICES}
+                    value={look.text}
+                    onChange={(text) => void changeLook({ text })}
+                  />
+                  <p className="mt-3 rounded-[20px] bg-ap-ground px-4 py-3 text-[16px] leading-[1.65]">
+                    Go gently with yourself. Come back anytime and tell me how it went.
+                  </p>
+                </fieldset>
+              </SettingsSection>
+
+              <SettingsSection id="data" title="Your data" status={status.data}>
+                <div className="rounded-3xl bg-ap-lilac p-5">
+                  <p className="text-[15px] font-semibold">Your plan: free while in beta</p>
+                  <p className="mt-1 text-[14px] text-ap-body">
+                    We&apos;ll tell you well before anything changes.{" "}
+                    <a
+                      href="/mira/feedback"
+                      className="font-semibold text-ap-ink underline underline-offset-2"
+                    >
+                      Share feedback
+                    </a>
+                  </p>
+                </div>
+                <p className="mt-5 text-[14px] text-ap-body">
+                  Want a copy of your data? Email{" "}
+                  <a
+                    href="mailto:hello@loveiq.org"
+                    className="text-ap-plum underline underline-offset-2"
+                  >
+                    hello@loveiq.org
+                  </a>{" "}
+                  and we&apos;ll send it within 30 days.
+                </p>
+                {confirm ? (
+                  <div className="mt-4 rounded-3xl border border-ap-bad p-5 motion-safe:animate-mira-in">
+                    <p id="confirm-delete" className="text-[15px] font-semibold">
+                      {confirm === "chats"
+                        ? "Delete all your chats? This can't be undone."
+                        : "Delete your account, your profile and all your chats? This can't be undone."}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => remove(confirm)}
+                        className="min-h-[44px] rounded-full bg-ap-bad px-5 text-[15px] font-semibold text-white disabled:opacity-50"
+                      >
+                        {busy ? "Deleting…" : "Delete"}
+                      </button>
+                      <button
+                        ref={cancel}
+                        type="button"
+                        onClick={() => setConfirm(null)}
+                        className="min-h-[44px] rounded-full border border-ap-line px-5 text-[15px] font-semibold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setConfirm("chats")}
+                      className="min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold hover:border-ap-quiet"
+                    >
+                      Delete all chats
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirm("account")}
+                      className="min-h-[44px] rounded-full border border-ap-bad px-5 text-[14px] font-semibold text-ap-bad-ink"
+                    >
+                      Delete account
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={signOut}
+                  className="mt-6 min-h-[44px] text-[15px] font-semibold text-ap-plum underline underline-offset-4 disabled:opacity-50"
+                >
+                  Sign out
+                </button>
+              </SettingsSection>
+            </div>
+          </div>
+          <SectionIndex sections={sections} active={active} variant="column" />
         </div>
       ) : null}
     </MiraAppFrame>
   );
 }
 
-function Switch({
+/**
+ * The section in view: the one crossing a line a quarter down the screen. Null until the
+ * browser can tell (no IntersectionObserver: no highlight, the links still work).
+ */
+function useActiveSection(ids: SectionId[], ready: boolean): SectionId | null {
+  const [active, setActive] = useState<SectionId | null>(null);
+  const key = ids.join(" ");
+  useEffect(() => {
+    if (!ready || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) if (e.isIntersecting) setActive(e.target.id as SectionId);
+      },
+      { rootMargin: "-25% 0px -70% 0px" }
+    );
+    for (const id of key.split(" ")) {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [key, ready]);
+  return active;
+}
+
+/** "On this page": a sticky row of links on phones and tablets, a sticky column from xl. */
+function SectionIndex({
+  sections,
+  active,
+  variant,
+}: {
+  sections: Array<[SectionId, string]>;
+  active: SectionId | null;
+  variant: "row" | "column";
+}) {
+  const row = useRef<HTMLOListElement | null>(null);
+  // Phones: the highlighted link stays in view as the page scrolls past its section.
+  useEffect(() => {
+    if (variant !== "row" || !active) return;
+    const link = row.current?.querySelector<HTMLElement>(`[href="#${active}"]`);
+    const list = row.current;
+    if (!link || !list) return;
+    const left = link.offsetLeft - list.offsetLeft;
+    if (left < list.scrollLeft || left + link.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = left - 16;
+    }
+  }, [active, variant]);
+
+  if (variant === "row") {
+    return (
+      <nav
+        aria-label="Settings sections"
+        className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden"
+      >
+        <ol
+          ref={row}
+          className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {sections.map(([id, label]) => (
+            <li key={id} className="shrink-0">
+              <a
+                href={`#${id}`}
+                aria-current={active === id ? "true" : undefined}
+                className="group inline-flex min-h-[44px] items-center px-1 outline-none"
+              >
+                <span
+                  className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-ap-purple ${
+                    active === id
+                      ? "bg-ap-ink font-semibold text-white"
+                      : "text-ap-muted hover:text-ap-ink"
+                  }`}
+                >
+                  {label}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    );
+  }
+  return (
+    <nav aria-label="Settings sections" className="hidden xl:block">
+      <ol className="sticky top-10 flex flex-col gap-0.5">
+        {sections.map(([id, label]) => (
+          <li key={id}>
+            <a
+              href={`#${id}`}
+              aria-current={active === id ? "true" : undefined}
+              className={`block rounded-xl px-3 py-2 text-[14px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ap-purple ${
+                active === id
+                  ? "bg-ap-ground font-semibold text-ap-ink"
+                  : "text-ap-muted hover:bg-ap-ground hover:text-ap-ink"
+              }`}
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+/**
+ * One section of Settings: its heading (with "Saved" or an error beside it, read out politely),
+ * an optional line under it and an action on the right (such as Reset).
+ */
+export function SettingsSection({
+  id,
+  title,
+  description,
+  status,
+  action,
+  footer,
+  children,
+}: {
+  id: string;
+  title: string;
+  description?: string;
+  status?: Status;
+  action?: ReactNode;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-16 xl:scroll-mt-10">
+      <div className="flex flex-wrap items-center justify-between gap-x-3">
+        <div className="flex items-center gap-3">
+          <h2 id={`${id}-title`} className="font-serif text-[22px] font-medium">
+            {title}
+          </h2>
+          <span role="status" className="text-[13px]">
+            {status?.kind === "saving" ? <span className="text-ap-muted">Saving…</span> : null}
+            {status?.kind === "saved" ? (
+              <span className="inline-flex items-center gap-1 font-semibold text-ap-good-ink motion-safe:animate-mira-pop">
+                <svg
+                  aria-hidden="true"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m5 12.5 4.5 4.5L19 7.5" />
+                </svg>
+                {status.text ?? "Saved"}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        {action}
+      </div>
+      {description ? <p className="mt-1 text-[14px] text-ap-body">{description}</p> : null}
+      {status?.kind === "error" ? (
+        <p
+          role="alert"
+          className="mt-3 rounded-2xl bg-ap-bad/10 px-4 py-3 text-[14px] text-ap-bad-ink"
+        >
+          {status.text}
+        </p>
+      ) : null}
+      <div className="mt-4">{children}</div>
+      {footer}
+    </section>
+  );
+}
+
+/** Rows that belong together: one hairline frame, hairlines between. */
+export function SettingsGroup({ children }: { children: ReactNode }) {
+  return (
+    <div className="divide-y divide-ap-line overflow-hidden rounded-3xl border border-ap-line">
+      {children}
+    </div>
+  );
+}
+
+/** A labelled row with its control on the right (under the label on phones). */
+function Row({
   label,
-  desc,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: (id: string, describedBy: string | undefined) => ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5">
+      <div className="min-w-0">
+        <label htmlFor={id} className="block text-[15px] font-semibold">
+          {label}
+        </label>
+        {description ? (
+          <p id={`${id}-d`} className="mt-0.5 text-[14px] leading-snug text-ap-body">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      <div className="sm:w-[260px] sm:shrink-0">
+        {children(id, description ? `${id}-d` : undefined)}
+      </div>
+    </div>
+  );
+}
+
+/** A field with its label above (and a quiet hint under it). */
+function Field({
+  label,
+  hint,
+  optional,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  optional?: boolean;
+  children: (id: string) => ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-[14px] font-semibold">
+        {label} {optional ? <span className="font-normal text-ap-muted">Optional</span> : null}
+      </label>
+      {children(id)}
+      {hint ? <p className="text-[13px] text-ap-muted">{hint}</p> : null}
+    </div>
+  );
+}
+
+const INPUT =
+  "min-h-[48px] w-full rounded-2xl border border-ap-line bg-white px-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25";
+
+/**
+ * An on/off row: the whole row toggles. A checkbox with the switch role, so it is announced as
+ * "on" or "off", named by its label and described by the line under it.
+ */
+export function Switch({
+  label,
+  description,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
-  desc: string;
+  description?: string;
   checked: boolean;
-  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  onChange: (on: boolean) => void;
 }) {
+  const id = useId();
   return (
-    <label className="flex items-start justify-between gap-4 rounded-2xl border border-ap-line p-4">
-      <span>
-        <span className="block text-[15px] font-bold">{label}</span>
-        <span className="text-[14px] text-ap-body">{desc}</span>
+    <label className="flex cursor-pointer items-start justify-between gap-4 px-4 py-4 sm:px-5">
+      <span className="min-w-0">
+        <span id={`${id}-l`} className="block text-[15px] font-semibold">
+          {label}
+        </span>
+        {description ? (
+          <span id={`${id}-d`} className="mt-0.5 block text-[14px] leading-snug text-ap-body">
+            {description}
+          </span>
+        ) : null}
       </span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
-      />
+      <span className="relative mt-0.5 inline-flex shrink-0">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={checked}
+          disabled={disabled}
+          aria-labelledby={`${id}-l`}
+          aria-describedby={description ? `${id}-d` : undefined}
+          onChange={(e) => onChange(e.target.checked)}
+          className="peer absolute inset-0 z-[1] h-full w-full cursor-pointer appearance-none rounded-full opacity-0 disabled:cursor-not-allowed"
+        />
+        <span
+          aria-hidden="true"
+          className="block h-7 w-12 rounded-full bg-ap-muted/75 transition-colors duration-200 peer-checked:bg-ap-purple peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple peer-disabled:opacity-50"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.3)] transition-transform duration-200 peer-checked:translate-x-5 motion-reduce:transition-none"
+        />
+      </span>
     </label>
   );
 }
 
 /** A select that matches the page's fields: WebKit's own select ignores their height and shape. */
-function Select({ children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({ children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <span className="relative flex">
       <select
         {...rest}
-        className="min-h-[48px] w-full appearance-none rounded-2xl border border-ap-line bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none focus:border-ap-purple"
+        className="min-h-[48px] w-full cursor-pointer appearance-none rounded-2xl border border-ap-line bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25"
       >
         {children}
       </select>
@@ -397,5 +958,112 @@ function Select({ children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElem
         <path d="m6 9 6 6 6-6" />
       </svg>
     </span>
+  );
+}
+
+/** Light, Dark, System as three small pictures of Mira, each in its own colours. */
+function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: Theme) => void }) {
+  const name = useId();
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-3">
+      {THEME_CHOICES.map(([theme, label]) => (
+        <label key={theme} className="group cursor-pointer">
+          <input
+            type="radio"
+            name={name}
+            value={theme}
+            checked={value === theme}
+            onChange={() => onChange(theme)}
+            className="peer sr-only"
+          />
+          <span className="relative block overflow-hidden rounded-2xl ring-1 ring-ap-line transition-shadow duration-200 group-hover:ring-ap-quiet peer-checked:ring-2 peer-checked:ring-ap-purple peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple">
+            <ThemePreview palette={theme === "dark" ? tokens.MIRA_DARK : tokens.AP_LIGHT} />
+            {theme === "system" ? (
+              <span className="absolute inset-0 [clip-path:polygon(58%_0,100%_0,100%_100%,42%_100%)]">
+                <ThemePreview palette={tokens.MIRA_DARK} />
+              </span>
+            ) : null}
+          </span>
+          <span className="mt-2 flex items-center justify-center gap-1.5 text-[14px] text-ap-body peer-checked:font-semibold peer-checked:text-ap-ink">
+            <ThemeIcon theme={theme} size={14} />
+            {label}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** A tiny chat in a theme's own colours: whatever the page's theme, each shows its own. */
+function ThemePreview({ palette }: { palette: Record<string, string> }) {
+  return (
+    <span aria-hidden="true" className="block h-[76px] p-3" style={{ background: palette.paper }}>
+      <span className="block h-2 w-3/5 rounded-full" style={{ background: palette.ink }} />
+      <span
+        className="mt-1.5 block h-1.5 w-4/5 rounded-full opacity-60"
+        style={{ background: palette.muted }}
+      />
+      <span
+        className="ml-auto mt-3 block h-4 w-1/2 rounded-full"
+        style={{ background: palette.ground }}
+      />
+    </span>
+  );
+}
+
+/** A row of choices, one picked (native radios: arrow keys move between them). */
+function Segmented<T extends string>({
+  name,
+  choices,
+  value,
+  onChange,
+}: {
+  name: string;
+  choices: Array<[T, string]>;
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="mt-3 inline-flex w-full rounded-full bg-ap-ground p-1 sm:w-auto">
+      {choices.map(([v, label], i) => (
+        <label key={v} className="flex-1 cursor-pointer sm:flex-none">
+          <input
+            type="radio"
+            name={name}
+            value={v}
+            checked={value === v}
+            onChange={() => onChange(v)}
+            className="peer sr-only"
+          />
+          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color,box-shadow] duration-200 hover:text-ap-ink peer-checked:bg-white peer-checked:font-semibold peer-checked:text-ap-ink peer-checked:shadow-[0_1px_3px_rgba(22,16,33,0.18)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
+            <span
+              aria-hidden="true"
+              className="hidden font-serif sm:inline"
+              style={{ fontSize: 12 + i * 3 }}
+            >
+              A
+            </span>
+            {label}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** While the profile loads: the page's shape, softly pulsing. */
+function SettingsSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading your settings" className="mt-8 flex flex-col gap-10">
+      {[200, 120, 260].map((h) => (
+        <div key={h}>
+          <div className="h-6 w-40 rounded-full bg-ap-ground motion-safe:animate-pulse" />
+          <div
+            className="mt-4 rounded-3xl bg-ap-ground motion-safe:animate-pulse"
+            style={{ height: h }}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
