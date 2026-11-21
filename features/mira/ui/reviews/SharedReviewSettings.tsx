@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MyReview } from "@features/mira/server/reviews";
 import { miraApi } from "../api";
 
@@ -19,6 +19,7 @@ export default function SharedReviewSettings() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -37,6 +38,7 @@ export default function SharedReviewSettings() {
     const r = await miraApi(`/api/mira/reviews/mine?what=${what}`, { method: "DELETE" });
     setBusy(false);
     if (!r.ok) return setError(r.data.error ?? "That didn't go through. Please try again.");
+    heading.current?.focus(); // the pressed button goes with what it took back
     setDone(
       what === "words"
         ? "Your words are no longer shown, and we’ve deleted them."
@@ -65,7 +67,12 @@ export default function SharedReviewSettings() {
   const signedAs = review?.name ? `${review.name}${review.age ? `, ${review.age}` : ""}` : "";
   return (
     <section aria-labelledby="mira-your-rating" className="flex flex-col gap-3">
-      <h2 id="mira-your-rating" className="font-serif text-[22px] font-medium">
+      <h2
+        ref={heading}
+        id="mira-your-rating"
+        tabIndex={-1}
+        className="font-serif text-[22px] font-medium outline-none"
+      >
         Your rating of Mira
       </h2>
       {state === "loading" ? (

@@ -69,14 +69,21 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ words: boolean } | null>(null);
   const close = useRef(onClose);
+  const title = useRef<HTMLParagraphElement | null>(null);
   const thanks = useRef<HTMLParagraphElement | null>(null);
+  // After a 9 or 10 the pressed button is gone: the ask (or, without it, the composer) takes the
+  // focus. After a thumbs-up the button stays, so the focus does too.
+  const takeFocus = useRef(from === "nps");
 
   // Only someone who hasn't rated yet is asked; the first name offered to sign with comes along.
   useEffect(() => {
     let live = true;
     void miraApi<{ review?: unknown; name?: string | null }>("/api/mira/reviews/mine").then((r) => {
       if (!live) return;
-      if (!r.ok || r.data.review) return close.current();
+      if (!r.ok || r.data.review) {
+        if (takeFocus.current) document.getElementById("mira-input")?.focus();
+        return close.current();
+      }
       setName(r.data.name ?? "");
       setReady(true);
       markAsked();
@@ -86,6 +93,10 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
       live = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (ready && takeFocus.current) title.current?.focus();
+  }, [ready]);
 
   // The Send button goes with the form: the thanks takes the focus, without opening a keyboard.
   useEffect(() => {
@@ -130,7 +141,7 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
     onClose();
   }
 
-  const title = from === "nps" ? "Thank you, that means a lot." : "Glad this is helping.";
+  const heading = from === "nps" ? "Thank you, that means a lot." : "Glad this is helping.";
   return (
     <section
       aria-labelledby="mira-review-title"
@@ -158,8 +169,13 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
         </div>
       ) : (
         <form onSubmit={send} noValidate>
-          <p id="mira-review-title" className="font-serif text-[17px] font-semibold">
-            {title}
+          <p
+            ref={title}
+            id="mira-review-title"
+            tabIndex={-1}
+            className="font-serif text-[17px] font-semibold outline-none"
+          >
+            {heading}
           </p>
           <p className="mt-1 text-[14px] leading-normal text-ap-body">
             Would you rate Mira? It helps others decide whether to talk to her.

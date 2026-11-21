@@ -194,7 +194,9 @@ describe("the moments in the chat", () => {
     await screen.findByText("A reply");
     typeAndSend("two");
     fireEvent.click(await screen.findByRole("button", { name: "9 out of 10" }));
-    expect(await screen.findByText("Thank you, that means a lot.")).toBeInTheDocument();
+    const ask = await screen.findByText("Thank you, that means a lot.");
+    // The pressed button is gone: the ask takes the focus, not the composer (no phone keyboard).
+    await waitFor(() => expect(document.activeElement).toBe(ask));
     expect(screen.queryByText("Thank you, that helps us a lot.")).toBeNull();
     cleanup();
     fetchMock.mockClear();
@@ -278,6 +280,10 @@ describe("Settings: what you shared", () => {
       )
     ).toBe(true);
     expect(screen.queryByRole("button", { name: "Stop showing my words" })).toBeNull();
+    // The pressed button went: the focus stays in the section, on its heading.
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Your rating of Mira" })
+    );
     fireEvent.click(screen.getByRole("button", { name: "Remove my rating" }));
     expect(await screen.findByText(/You haven’t rated Mira/)).toBeInTheDocument();
   });

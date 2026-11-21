@@ -372,10 +372,11 @@ export default function MiraChat({
 
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
+    // A 9 or 10: the thanks becomes the ask for a rating, which takes the focus, when the moment
+    // is right.
+    if (score !== null && score >= 9 && askForReview("nps")) return setNps(null);
     document.getElementById("mira-input")?.focus(); // the pressed button is about to go
     if (score === null) return setNps(null);
-    // A 9 or 10: the thanks becomes the ask for a rating, when the moment is right.
-    if (score >= 9 && askForReview("nps")) return setNps(null);
     setNps("thanks");
     window.setTimeout(() => setNps(null), 2500);
   }
