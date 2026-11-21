@@ -555,8 +555,9 @@ access read the words waiting for approval.
 
 - **M10, someone identified from published words (MEDIUM before, LOW after)**: one sentence, a
   first name or initials and an age range only; every quote read by staff before it shows; the only
-  edit allowed is replacing an identifying detail with a visible […] (`redacted()` refuses anything
-  else, in AP and on the server); rejecting deletes the words; the person can stop showing them or
+  edit allowed is replacing an identifying detail (at most three words, never a negation) with a
+  visible […] (`redacted()` refuses anything else, in AP and on the server), and the writer sees
+  both versions in Settings; rejecting deletes the words; the person can stop showing them or
   remove the rating in Settings, effective from the next page view (the cached figures are
   revalidated at once), and deleting the account or a data request does the same.
 - **M11, fake or unverified reviews (UWG Annex Nos. 23b, 23c; §5b(3))**: only signed-in accounts

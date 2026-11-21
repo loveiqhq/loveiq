@@ -155,4 +155,37 @@ describe("the team's only edit: taking out identifying details, marked […]", (
       expect(redacted(said, edit), edit).toBeNull();
     }
   });
+
+  it("cuts a detail, never a whole clause or a “not”: the meaning stays theirs", () => {
+    const mixed = "I would not recommend it to my sister Anna Maria Lopez in Berlin.";
+    expect(redacted(mixed, "I would not recommend it to my sister […] in […].")).toBe(
+      "I would not recommend it to my sister […] in […]."
+    );
+    for (const edit of [
+      "I would […] recommend it to my sister Anna Maria Lopez in Berlin.", // the "not"
+      "I […] recommend it to my sister Anna Maria Lopez in Berlin.", // "would not"
+      "[…] recommend it to my sister Anna Maria Lopez in Berlin.", // "I would not"
+      "I would not recommend it […] in Berlin.", // four words at once
+    ]) {
+      expect(redacted(mixed, edit), edit).toBeNull();
+    }
+    expect(
+      redacted("It didn't feel safe before Mira.", "It […] feel safe before Mira.")
+    ).toBeNull();
+  });
+
+  it("never grows past what the page and the table take", () => {
+    // A 160-character quote (the most there is) with a one-letter name cut out grows to 162.
+    const long = `${"a".repeat(150)} T said ok`;
+    expect(long).toHaveLength(160);
+    expect(redacted(long, `${"a".repeat(150)} […] said ok`)).toHaveLength(162);
+    // Forty one-letter cuts would grow it past 200: refused, never a failed save.
+    const letters = Array.from({ length: 80 }, () => "x").join(" ");
+    const cuts = letters
+      .split(" ")
+      .map((w, i) => (i % 2 ? "[…]" : w))
+      .join(" ");
+    expect(cuts.length).toBeGreaterThan(200);
+    expect(redacted(letters, cuts)).toBeNull();
+  });
 });

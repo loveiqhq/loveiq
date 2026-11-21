@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS public.mira_review (
   consent_at      timestamptz,
   quote_status    text NOT NULL DEFAULT 'none'
                     CHECK (quote_status IN ('none', 'pending', 'approved', 'rejected')),
-  published_quote text CHECK (char_length(published_quote) BETWEEN 1 AND 160),
+  published_quote text CHECK (char_length(published_quote) BETWEEN 1 AND 200),
   reviewed_at     timestamptz,
   reviewed_by     text,
   from_team       boolean NOT NULL DEFAULT false,
@@ -62,7 +62,7 @@ GRANT USAGE, SELECT ON SEQUENCE public.mira_review_id_seq TO service_role;
 COMMENT ON TABLE public.mira_review IS
   'Mira ratings (1-5, one per account) and optional one-sentence quotes, shown only with the person''s versioned consent and once staff approved them (features/mira/reviews.ts, server/reviews.ts).';
 COMMENT ON COLUMN public.mira_review.published_quote IS
-  'The quote as approved: the person''s words, with details that could identify someone replaced by a visible […]; nothing else is changed.';
+  'The quote as approved: the person''s words, with details that could identify someone (at most three words each, never a negation) replaced by a visible […]; nothing else is changed. Up to 200 characters, as each mark may be longer than what it replaced (features/mira/reviews.ts PUBLISHED_MAX).';
 COMMENT ON COLUMN public.mira_review.from_team IS
   'Rated from a team browser (cookie loveiq_team=1 or loveiq_probe=1): never counted or shown.';
 

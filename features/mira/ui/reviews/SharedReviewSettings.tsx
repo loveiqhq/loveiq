@@ -103,9 +103,13 @@ export default function SharedReviewSettings() {
                 {review.status === "approved"
                   ? `Shown on Mira’s pages as ${signedAs}.`
                   : `Waiting for our team to read it. Once approved, it shows as ${signedAs}.`}
-                {review.status === "approved" && review.published !== review.quote
-                  ? " We took out a detail that could identify someone, as you allowed."
-                  : ""}
+                {review.status === "approved" && review.published !== review.quote ? (
+                  <>
+                    {" "}
+                    We took out a detail that could identify someone, as you allowed.
+                    <span className="mt-1 block">You wrote: “{review.quote}”</span>
+                  </>
+                ) : null}
               </figcaption>
             </figure>
           ) : review.status === "rejected" ? (

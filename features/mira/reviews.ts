@@ -107,14 +107,20 @@ const initialsOf = (name: string): string =>
 
 /** The mark where the team took out something that could identify someone. */
 export const CUT = "[…]";
+/** The longest published text: a quote at its longest, with a few short details marked […]. */
+export const PUBLISHED_MAX = 200;
+/** A cut takes out a detail, never what turns the meaning round. */
+const NEGATION = /\b(?:not|no|never|nothing|nobody|none|nor|neither|cannot)\b|n['’]t\b/i;
 
 /**
- * The words the team may publish: the person's own, with any parts that could identify someone
- * replaced by a visible […] ("[...]" typed is the same mark), as the consent allows. Anything
- * else (a word dropped or added, a mark where nothing was taken out) is null: we never edit.
+ * The words the team may publish: the person's own, with details that could identify someone
+ * (a name, a place: at most three words each, never a "not") replaced by a visible […] ("[...]"
+ * typed is the same mark), as the consent allows. Anything else (a word dropped or added, a mark
+ * where nothing was taken out, a whole phrase or a negation cut) is null: we never edit.
  */
 export function redacted(original: string, edited: string): string | null {
   const text = edited.trim().replaceAll("[...]", CUT);
+  if (text.length > PUBLISHED_MAX) return null;
   const parts = text.split(CUT);
   if (parts.length === 1) return text === original ? text : null;
   // Two marks side by side, or nothing of the person's words left.
@@ -133,6 +139,9 @@ export function redacted(original: string, edited: string): string | null {
             : -1
           : original.indexOf(part, at + 1);
     if (found < 0 || (i > 0 && found <= at)) return null;
+    // What the mark before this part stands for: a detail, never a phrase or a "not".
+    const cut = original.slice(at, found);
+    if (i > 0 && (cut.trim().split(/\s+/).length > 3 || NEGATION.test(cut))) return null;
     at = found + part.length;
   }
   return text;

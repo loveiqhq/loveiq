@@ -264,6 +264,10 @@ describe("Settings: what you shared", () => {
     expect(await screen.findByText(/You rated Mira 5 out of 5/)).toBeInTheDocument();
     expect(screen.getByText(/Shown on Mira’s pages as Lea, 25–34/)).toBeInTheDocument();
     expect(screen.getByText(/took out a detail that could identify someone/)).toBeInTheDocument();
+    // The writer sees exactly what changed.
+    expect(
+      screen.getByText(/You wrote: “My husband Tom noticed I stopped hiding\.”/)
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Stop showing my words" }));
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Your words are no longer shown, and we’ve deleted them."

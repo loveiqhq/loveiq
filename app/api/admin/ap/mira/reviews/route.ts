@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
  *
  *   GET  → { quotes }: waiting for a decision, and shown now; never an address
  *   POST { id, decision: "approve", text } → shown on Mira's pages: the words as written, or with
- *          details that could identify someone replaced by a visible […]; nothing else (400)
+ *          details that could identify someone (up to three words each, never a negation)
+ *          replaced by a visible […]; nothing else (400)
  *   POST { id, decision: "reject" } → not shown, or taken down; the words are deleted
  *
  * Editors and admins decide (CSRF, rate limit, session and role); 409 when the person took the
@@ -60,7 +61,10 @@ export async function POST(request: Request) {
     const outcome = await decideQuote(parsed.data, admin.email);
     if (outcome === "edited") {
       return NextResponse.json(
-        { error: "Only take details out, marked […]. Nothing else may change." },
+        {
+          error:
+            "Only take out a detail that could identify someone, up to three words, marked […], and never a “not”. Nothing may be added or changed.",
+        },
         { status: 400 }
       );
     }

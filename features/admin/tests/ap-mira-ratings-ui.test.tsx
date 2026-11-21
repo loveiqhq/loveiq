@@ -87,7 +87,9 @@ describe("AP › Mira's Ratings card", () => {
     const approve = within(item).getByRole("button", { name: "Approve with this cut" });
     fireEvent.change(box, { target: { value: "My husband noticed I stopped hiding." } });
     expect(approve).toBeDisabled();
-    expect(within(item).getByText(/Only take words out, marked/)).toBeInTheDocument();
+    expect(
+      within(item).getByText(/Only take out a detail of up to three words/)
+    ).toBeInTheDocument();
     fireEvent.change(box, { target: { value: "My husband […] noticed I stopped hiding." } });
     expect(approve).toBeEnabled();
     fireEvent.click(approve);

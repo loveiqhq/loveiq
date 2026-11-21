@@ -186,7 +186,8 @@ function QuoteReview() {
                     />
                     {cutOk ? null : (
                       <span className="text-xs font-normal text-ap-bad-ink">
-                        Only take words out, marked […]. Nothing may be added or changed.
+                        Only take out a detail of up to three words, marked […], and never a “not”.
+                        Nothing may be added or changed.
                       </span>
                     )}
                   </label>
