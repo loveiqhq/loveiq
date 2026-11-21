@@ -38,7 +38,16 @@ const putSchema = z
   .object({
     weekday: z.number().int().min(1).max(7),
     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-    timeZone: z.string().max(64).refine(isValidTimeZone),
+    // An IANA name only (Intl also takes offsets such as "+01:00", whose ":" would break the
+    // invite's TZID), stored as the zone database spells it.
+    timeZone: z
+      .string()
+      .max(64)
+      .regex(/^[A-Za-z][\w+/-]*$/)
+      .refine(isValidTimeZone)
+      .transform(
+        (tz) => new Intl.DateTimeFormat("en-US", { timeZone: tz }).resolvedOptions().timeZone
+      ),
     /** Where it was booked: the chat's time picker, Home's card or Settings. */
     source: z.enum(["chat", "home", "settings"]),
   })

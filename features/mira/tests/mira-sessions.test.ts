@@ -203,6 +203,9 @@ describe("booking a weekly session (PUT)", () => {
       { time: "24:00" },
       { time: "7:5" },
       { timeZone: "Mars/Olympus" },
+      // Offsets pass Intl but are no IANA zone: a ":" in the invite's TZID would break it.
+      { timeZone: "+01:00" },
+      { timeZone: "-0530" },
       { source: "elsewhere" },
     ]) {
       expect((await book(bad)).status, JSON.stringify(bad)).toBe(400);
@@ -268,6 +271,11 @@ describe("booking a weekly session (PUT)", () => {
     expect(events("session_scheduled")).toEqual([
       { who: { userId: LEA.id }, props: { source: "home" } },
     ]);
+  });
+
+  it("stores a zone the way the zone database spells it", async () => {
+    await book({ timeZone: "europe/berlin" });
+    expect(db.tables.mira_session_slot![0]!.time_zone).toBe("Europe/Berlin");
   });
 
   it("changes nothing and sends nothing when the same time is booked again", async () => {
