@@ -191,6 +191,10 @@ export default function MiraPrivacyPage() {
             and whether you clicked its button.
           </li>
           <li>
+            If you book a weekly session: the day, time and time zone you choose, when each reminder
+            was sent, and whether you opened the session within 30 minutes of its start.
+          </li>
+          <li>
             A random id in a cookie on this browser, kept for a year. Without an account it counts
             your free message and links your steps. When you sign in, a cookie keeps you signed in.
           </li>
@@ -215,6 +219,11 @@ export default function MiraPrivacyPage() {
             which are your sign-in codes and the daily nudges. Legal basis: our contract with you
             (Art. 6(1)(b) GDPR). A nudge picks up on your last chat, so it also rests on your
             consent to coaching.
+          </li>
+          <li>
+            If you book a weekly session: to keep it, and to email you its calendar invite, any
+            change, and a reminder before each session. Legal basis: our contract with you (Art.
+            6(1)(b) GDPR), as you asked for it. These emails never contain anything from your chats.
           </li>
           <li>
             To improve Mira from ratings, feedback, the steps people take and nudge opens, and to
@@ -272,6 +281,12 @@ export default function MiraPrivacyPage() {
           </tbody>
         </table>
 
+        <p className="mt-3">
+          Weekly sessions add no one to this list: Resend sends their emails. If you add a session
+          to your calendar, your calendar provider (for example Google or Apple) keeps that entry
+          under its own privacy policy.
+        </p>
+
         <h2>How long we keep it</h2>
         <ul>
           <li>
@@ -297,6 +312,10 @@ export default function MiraPrivacyPage() {
             Deleting your account deletes any words in the log, and the rest is no longer linked to
             you.
           </li>
+          <li>
+            A weekly session stays until you cancel it or delete your account, and its reminder
+            records go with it.
+          </li>
           <li>Sign-in codes are deleted once used, and otherwise within a day.</li>
           <li>The counters against abuse expire by themselves within 30 days.</li>
           <li>Backups of our database keep copies for up to 30 days.</li>
@@ -320,6 +339,10 @@ export default function MiraPrivacyPage() {
           <li>
             Daily nudges come with your free account. You can pause or stop them with the link in
             any nudge, or in Settings.
+          </li>
+          <li>
+            A weekly session is your choice. Change it, pause its reminders or cancel it in
+            Settings; every session email has a link that stops the reminders.
           </li>
           <li>
             You can ask for access to your data and a copy of it, and for correction, deletion or
