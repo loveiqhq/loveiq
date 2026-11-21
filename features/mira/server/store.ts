@@ -316,7 +316,15 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Coaches, Home's picks and search, the guide's "Ask Mira about this" (22 Nov 2026).
+  | "coaches_viewed"
+  | "finder_started"
+  | "finder_done"
+  | "picks_shown"
+  | "pick_clicked"
+  | "guide_ask"
+  | "search_empty";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.
