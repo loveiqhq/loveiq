@@ -169,6 +169,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: as long as the Slack workspace keeps messages (its retention setting: to confirm)
 - **Objection**: Art. 21 by email; a restriction request (T-09) also takes the reader out of these posts
 
+### A21 — Mira self-checks (from 2026-11-22)
+
+- **Data**: a signed-in person's answers to the anxiety check (GAD-7), the mood check (PHQ-9) and the loneliness check (Three-Item Loneliness Scale) with the date (`mira_check`), scored by the app; "Mira may use my check results" (`mira_user.use_checks`, off by default), with which each check's latest band from the last 90 days goes into Mira's context, never answers or scores; events naming the check and whether it was a retake, and a count of the support panels the PHQ-9's question 9 opened; an unfinished check in the browser tab for up to a day
+- **Basis**: (a) consent with Art. 9(2)(a) explicit consent: the sign-up tick for "what I share about my sex life and health to coach me", confirmed by starting the first check after a note on what is kept, who sees it, that analytics see the screen and how to delete it. Intended purpose: self-reflection and coaching, not diagnosis or treatment ([DPIA.md](DPIA.md) §7.12). Open: whether a tick of its own is wanted (§7.12, open point 1)
+- **Retention**: until deleted in Settings, with the account, or at an under-18 stop
+- **Withdraw**: "Delete my check results" or turn "Mira may use my check results" off in Settings; delete the account; or a data request
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
@@ -182,9 +189,11 @@ For activities under basis (a):
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 | A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
+| A21 self-check | "Delete my check results" or the "Mira may use" switch in Settings; delete the account               | The answers are deleted; with the switch off, Mira gets no bands from the next message on                                                                                              |
 
 ## Outstanding work
 
 - **Mira (A16 to A19)**: the open points in [DPIA.md](DPIA.md) §7.9, the consent scope among them.
+- **Mira self-checks (A21)**: the open points in [DPIA.md](DPIA.md) §7.12: the consent's scope for health questionnaires, permission for the loneliness scale, analytics on the check screens, and the medical device question.
 - **Admin UI for `processing_restricted_at` (T-09 follow-up)**: a tiny admin button "Freeze processing for this user" needs to land. Out of this round per the no-UI-changes constraint.
 - **Cookies banner first-load timing**: CookieYes script loads `lazyOnload`. The banner appears AFTER hydration. A first-visit user has ~200ms of HTML rendering before the banner mounts. Strictly speaking the visitor ID cookie (T-02) waits for consent, but session recording (Microsoft Clarity), GA4 and Google Ads all load before the banner is dismissed — Clarity by explicit owner decision on 2026-08-10, the Google tags by the pre-existing `next/script` gap (measured on production the same day). Clarity additionally records unmasked Art. 9 survey answers, which is not reconcilable with the Art. 9(2)(a) explicit-consent basis claimed above. See DPIA §6 and ROPA §"Consent".

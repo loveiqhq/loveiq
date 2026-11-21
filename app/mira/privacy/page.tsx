@@ -18,7 +18,7 @@ const RECIPIENTS = [
   {
     who: "Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)",
     role: "Processor. Its AI model, Claude, writes Mira's replies and her daily nudges.",
-    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country and, if you allow it, your LoveIQ result.",
+    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country and, if you allow it, your LoveIQ result and the bands of your self-checks (never your answers).",
     basis: "Your explicit consent",
     where:
       "Stored in the USA. It may be processed in the USA, Europe, Asia or Australia. EU standard contractual clauses.",
@@ -62,14 +62,14 @@ const RECIPIENTS = [
   {
     who: "PostHog",
     role: "Processor. Product analytics and session recordings.",
-    gets: "How you use our pages, including what you and Mira write in the chat as it shows on the page.",
+    gets: "How you use our pages, including what you and Mira write in the chat and your self-check answers and results, as they show on the page.",
     basis: "Our legitimate interest",
     where: "EU (Frankfurt). PostHog is in the EU–US Data Privacy Framework.",
   },
   {
     who: "Microsoft: Clarity",
     role: "Independent controller.",
-    gets: "Recordings and heatmaps of how you use our pages, including what you and Mira write in the chat.",
+    gets: "Recordings and heatmaps of how you use our pages, including what you and Mira write in the chat and your self-check answers and results.",
     basis: "Our legitimate interest",
     where: "USA. EU–US Data Privacy Framework.",
   },
@@ -108,7 +108,8 @@ const COLUMNS = [
  * Mira's privacy notice, in plain words. Written 18 Nov 2026 to match what the code does and
  * checked by Eman on 20 Nov 2026. Later that day: the two consent ticks, rated replies' text only
  * with consent, the stop for minors, the retention list, the recipients table, Anthropic's
- * deletion and the data protection officer. Change it whenever what Mira stores or shares changes.
+ * deletion and the data protection officer. 22 Nov 2026: the self-checks (to be checked by Eman).
+ * Change it whenever what Mira stores or shares changes.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -180,6 +181,18 @@ export default function MiraPrivacyPage() {
             The body check, if you choose to take it: your answers to ten statements about how you
             relate to your body (the Body Appreciation Scale-2), at the start and four weeks later.
           </li>
+          <li id="self-checks">
+            Your self-checks, if you choose to take them: your answers to the anxiety check (GAD-7),
+            the mood check (PHQ-9) and the loneliness check, with the date. They are health data. We
+            work out your score and band from your answers and show them only to you, with how they
+            change over time. Mira sees only each check&apos;s latest band from the last 90 days,
+            such as &ldquo;mild anxiety&rdquo;, and only if you turn on &ldquo;Mira may use my check
+            results&rdquo;; never your answers or scores. Our statistics count the checks started
+            and finished and when the mood check&apos;s question about thoughts of self-harm showed
+            support lines, never what you answered. Until you finish a check, your answers so far
+            stay only in this browser tab, for up to a day. The checks support self-reflection; they
+            are not a diagnosis.
+          </li>
           <li>
             Labels about your chats, never your words: which of Mira&apos;s questions you answered
             (not your answer), the topic of a new chat, when Mira suggested a doctor or therapist
@@ -209,6 +222,12 @@ export default function MiraPrivacyPage() {
             To see whether Mira helps. We count the labels and compare body check scores across
             everyone. We never read your words for this. Legal basis: your explicit consent (Art.
             6(1)(a) and Art. 9(2)(a) GDPR).
+          </li>
+          <li>
+            To show you your self-checks and, if you allow it, to let Mira tailor her coaching to
+            their bands. Legal basis: your explicit consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR),
+            which you give at sign-up for what you share about your health and confirm when you
+            start your first check.
           </li>
           <li>
             To run your free account: signing in, your settings and the emails that come with it,
@@ -293,6 +312,11 @@ export default function MiraPrivacyPage() {
             account. If you never finish signing up, your sign-in is deleted after 24 hours.
           </li>
           <li>
+            Your self-check answers stay until you delete them (Settings, &ldquo;Delete my check
+            results&rdquo;) or delete your account. If Mira stops coaching you because you are under
+            18, they are deleted too.
+          </li>
+          <li>
             Mira&apos;s log of labels, steps, ratings and feedback is deleted after 12 months.
             Deleting your account deletes any words in the log, and the rest is no longer linked to
             you.
@@ -313,9 +337,9 @@ export default function MiraPrivacyPage() {
         <h2>Your choices and rights</h2>
         <ul>
           <li>
-            You can take back your consent at any time. Stop chatting, or delete your chats or your
-            account in Settings. Without an account, start a new chat or clear your browser data.
-            This does not make what we did before unlawful.
+            You can take back your consent at any time. Stop chatting, or delete your chats, your
+            self-check results or your account in Settings. Without an account, start a new chat or
+            clear your browser data. This does not make what we did before unlawful.
           </li>
           <li>
             Daily nudges come with your free account. You can pause or stop them with the link in

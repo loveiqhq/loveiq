@@ -225,6 +225,8 @@ names the use of AI to steer the interaction with the people concerned.
 5. Safety and abuse prevention: the crisis rails, the stop for minors, rate limits and daily caps.
 6. Site analytics, as on every page of loveiq.org (PostHog, Microsoft Clarity, Google Analytics,
    Google Ads and Tag Manager, CookieYes).
+7. Self-checks (from 2026-11-22, §7.12): the anxiety, mood and loneliness questionnaires for
+   self-reflection and, with the person's permission, for Mira's coaching.
 
 **Data subjects**: adults (18+) using Mira without an account (the chat lives in their browser) or
 with a free account; the people they write about (partners, former partners, family); people
@@ -235,7 +237,8 @@ are left out of Mira's statistics.
 
 - Art. 9 (sex life, health): the messages and Mira's replies; for account holders the saved chats
   (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
-  (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in.
+  (`mira_event`); body check answers and score (`mira_body_check`); self-check answers
+  (`mira_check`, scored by the app; §7.12); the LoveIQ result on opt-in.
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
   result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason), and each
   consent with its time and wording version.
@@ -356,7 +359,8 @@ details.
 
 - **Measures**: an 18+ tick before the first message and at sign-up; the terms of use require 18+.
   Anyone who says they are under 18 is stopped for good on that account or browser: nudges off,
-  the account's saved chats deleted, a browser chat cleared.
+  the account's saved chats and self-check results deleted, a browser chat cleared, and the
+  self-check routes refuse the account from then on.
 - **Residual**: medium. Age is self-declared; there is no age verification.
 
 #### M3 — Crises: suicide, self-harm, abuse (HIGH before, MEDIUM after)
@@ -431,6 +435,8 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
   message (`mira_forget_old_memory`, daily). With "Remember our conversations" off, no new chats
   are saved; earlier ones stay until deleted or the 12-month limit.
 - Account, profile, body checks, nudge records: until the account is deleted.
+- Self-check answers: until deleted in Settings ("Delete my check results"), with the account, or
+  at an under-18 stop. A check not yet finished stays in that browser tab for up to a day.
 - `mira_event`: 12 months; deleting the account removes any words and unlinks the rest.
 - Sign-in codes: deleted when used, otherwise after a day. Sign-ins that never finished sign-up:
   24 hours.
@@ -519,6 +525,79 @@ with its reasons, WP243 rev.01, 4.2):
 
 By 2027-02-20 (with the crisis-line re-check), and earlier when Mira's data, recipients, model or
 consent wording change, or before Mira leaves the beta.
+
+### 7.12 Self-checks: anxiety, mood and loneliness (from 2026-11-22)
+
+Assessed 2026-11-22 with the feature, before its release; to be checked by the DPO. How it works:
+[`features/mira/AGENT_README.md`](../../features/mira/AGENT_README.md), "Self-checks".
+
+**Intended purpose.** The self-checks let an adult with a Mira account reflect on how they have
+been feeling, follow it over time and, if they choose, let Mira tailor her coaching on body
+confidence to it. They are not intended to diagnose, screen for, prevent, monitor, predict, treat
+or alleviate any disease, and they recommend no treatment. A result is said in plain words ("Your
+answers suggest moderate anxiety over the last two weeks") with "It is not a diagnosis"; from each
+scale's published point for further evaluation, the person is pointed to a doctor or therapist
+and to the support lines.
+
+**What is processed.** The answers to the GAD-7, the PHQ-9 and the Three-Item Loneliness Scale
+with the date (`mira_check`), scored by the app, never by the browser; the switch
+`mira_user.use_checks`; events naming the check and whether it was a retake, and a count of the
+support panels the PHQ-9's question 9 opened (never answers, scores or bands); an unfinished
+check's answers in the browser tab's session storage for up to a day. All of it is health data
+(Art. 9).
+
+**Lawful basis.** Explicit consent (Art. 6(1)(a), 9(2)(a)). The sign-up tick covers "what I share
+about my sex life and health to coach me"; before a first check, a plain note says what is kept,
+who sees it, that analytics tools see the screen and how to delete it, and starting confirms it
+("By starting, you agree that we keep your answers this way"). Open point 1.
+
+**Measures.** Signed-in accounts only; service-role tables; one result per scale and day, and a
+retake only after 14 days (28 for loneliness); results shown to the person alone; Mira sees each
+check's latest band from the last 90 days, never answers or scores, and only with
+`use_checks` (off by default); "Delete my check results" in Settings; deleted with the account
+(cascade) and at an under-18 stop, after which the routes answer 403; included in a staff
+data-subject export (`features/admin/server/data-subject.ts`, `mira_check`).
+
+**Risks.**
+
+- **S1, a result read as a diagnosis, or as reassurance (MEDIUM):** plain wording, "not a
+  diagnosis" on every result and on the cards, the professional step from the published points.
+- **S2, thoughts of suicide or self-harm reported with no clinician to follow up (HIGH before,
+  MEDIUM after):** any answer above "Not at all" on the PHQ-9's question 9 opens the support
+  lines at once, the person's country first, with warm words and a way to Mira, whose crisis
+  rails apply; the result keeps that support at its top. As with the chat, no person follows up.
+  The panel's opening is counted for the weekly safety review.
+- **S3, analytics see the answers (HIGH, as M5):** PostHog and Microsoft Clarity record the check
+  screens as they record the chat. Disclosed in the note and in Mira's notice. Masking the screens
+  (`ph-no-capture`, `data-clarity-mask`) would lower it; that is the owner's decision and was not
+  taken here.
+- **S4, bands reach Anthropic (as M6):** only with the switch on, bands only.
+
+**Medical device question (EU MDR 2017/745), for the owner to decide.** Software its manufacturer
+intends for the diagnosis, prevention, monitoring, prediction, prognosis, treatment or
+alleviation of disease is a medical device (Art. 2(1)); the MDCG 2019-11 guidance counts software
+that screens for a condition as diagnostic, and its Rule 11 would make such software class IIa or
+higher. The GAD-7 and PHQ-9 were built to screen for and grade anxiety and depressive disorders,
+so offering them with severity bands sits near that line. What keeps the self-checks outside it is
+the intended purpose above, carried by every text: the product, its terms and its marketing must
+never say the checks detect, screen for or monitor a condition. Recommendation: keep that purpose
+in every text, never call the checks screenings or the bands diagnoses, and get a regulatory
+opinion before Mira leaves the beta or before the checks are promoted.
+
+**Licenses, read 2026-11-21.** GAD-7 and PHQ-9: "No permission required to reproduce, translate,
+display or distribute" ([phqscreeners.com](https://www.phqscreeners.com/select-screener) and the
+forms there). The Three-Item Loneliness Scale (Hughes et al. 2004): no license published by its
+authors or the journal; the UCLA lab allows the full UCLA scale for non-profit research without
+permission ([UCLA Loneliness Studies](https://peplau.psych.ucla.edu/loneliness)). The WHO-5 was not
+used: WHO publishes it under CC BY-NC-SA 3.0 IGO (2024), so commercial use needs WHO's permission.
+
+**Open points.**
+
+1. Whether the sign-up consent and the note before a first check are specific enough for health
+   questionnaires, or a tick of their own is wanted.
+2. Permission to use the three-item loneliness scale in a commercial product.
+3. Masking the check screens in PostHog and Clarity (S3).
+4. The regulatory opinion on the medical device question.
 
 ## 8. Sign-off
 
