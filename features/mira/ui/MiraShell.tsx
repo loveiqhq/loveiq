@@ -6,9 +6,19 @@ import type { ReactNode } from "react";
  * Psychometrics"), on every Mira page: Mark's minimal board V2 (21 Nov 2026) has it, and Eman chose
  * it for all of Mira's pages the same day (it replaced the 18 Nov "LoveIQ for now").
  */
-export function Wordmark() {
+export function Wordmark({ onHome }: { onHome?: () => void }) {
   return (
-    <Link href="/mira" aria-label="Applied Psychometrics, Mira beta" className="no-underline">
+    <Link
+      href="/mira"
+      aria-label="Applied Psychometrics, Mira beta"
+      className="no-underline"
+      // In the chat itself the logo takes you back to Mira's start, not to the same page.
+      onClick={(e) => {
+        if (!onHome) return;
+        e.preventDefault();
+        onHome();
+      }}
+    >
       <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink sm:text-[22px]">
         <span>
           Applied{" "}

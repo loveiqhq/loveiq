@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { MIRA_TITLE, miraLinkPreview } from "@features/mira/link-preview";
 import { getMiraAccount } from "@features/mira/server/session";
-import { socialProof } from "@features/mira/social-proof";
 import MiraChat from "@features/mira/ui/MiraChat";
 
 export const metadata: Metadata = {
@@ -26,11 +25,5 @@ export default async function MiraPage({
   // straight back to it.
   if (chatId && !account)
     redirect(`/mira/start?next=${encodeURIComponent(`/mira?chat=${chatId}`)}`);
-  return (
-    <MiraChat
-      signedIn={Boolean(account)}
-      initialChatId={account ? chatId : null}
-      proof={socialProof()}
-    />
-  );
+  return <MiraChat signedIn={Boolean(account)} initialChatId={account ? chatId : null} />;
 }
