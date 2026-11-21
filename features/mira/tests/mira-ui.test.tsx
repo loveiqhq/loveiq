@@ -438,6 +438,8 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     expect(calls("POST /api/mira/chat")).toEqual([
       expect.objectContaining({ message: miraConfig.starterChips[0] }),
     ]);
+    // The prompt went away with the welcome: focus is on the conversation, not lost.
+    expect(document.activeElement?.getAttribute("aria-live")).toBe("polite");
   });
 
   it("asks again in a browser that ticked an older wording, and not after this one", async () => {
