@@ -35,6 +35,7 @@ import { isStaffEmail } from "@shared/env/staff-email";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 import { fetchAllRows, supabaseFetch } from "../supabase";
+import { COACH_KPI_EVENTS, coachesKpi, type CoachesKpi } from "./mira-coaches";
 import type { PageHead, Tile } from "./common";
 import { addDays } from "./days";
 import {
@@ -99,6 +100,9 @@ const EVENT_NAMES = [
   "style_saved",
   "reply_declined",
   "minor_stop",
+  // Coaches & picks: Notify me, the coaches page, the finder, Home's picks and search, the
+  // guide's "Ask Mira about this" (22 Nov 2026, mira-coaches.ts).
+  ...COACH_KPI_EVENTS,
 ];
 
 export interface MiraUserRow {
@@ -295,6 +299,8 @@ interface Counted {
   name: string;
   at: number;
   detail: string | null;
+  /** The person (people's key: the account, or `anon:` and the browser id), if any. */
+  who: string | null;
 }
 
 interface CountedNudge {
@@ -392,14 +398,14 @@ export function prepare(data: MiraData): Prepared {
     if ((user && staff.has(user)) || e.team || (e.anon_id && teamBrowsers.has(e.anon_id))) {
       continue;
     }
-    events.push({ name: e.name, at, detail: e.detail });
+    const key = user ?? (e.anon_id ? `anon:${e.anon_id}` : null);
+    events.push({ name: e.name, at, detail: e.detail, who: key });
     if (
       user &&
       (e.name === "nudge_stopped" || (e.name === "nudge_prefs_saved" && e.detail === "pause"))
     ) {
       stops.set(user, [...(stops.get(user) ?? []), at]);
     }
-    const key = user ?? (e.anon_id ? `anon:${e.anon_id}` : null);
     if (!key) continue;
     let p = people.get(key);
     if (!p) {
@@ -1108,6 +1114,8 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** Coaches & picks in the range (mira-coaches.ts). */
+  coaches: CoachesKpi;
 }
 
 export function buildMiraPage(input: {
@@ -1371,5 +1379,6 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    coaches: coachesKpi(prep.events, w),
   };
 }
