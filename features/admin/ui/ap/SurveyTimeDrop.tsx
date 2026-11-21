@@ -136,7 +136,8 @@ export default function TimeDropSection({
   const q = data.questions;
   const chart = timeDropChart(rows, { sheets: data.sheets.seen !== null });
   const title = (c: ChartColumn) => `#${c.row.n} · ${c.row.id} · ${c.band}`;
-  const seen = data.sheets.seen?.ok ? data.sheets.seen.value : null;
+  // The sheets' figures for the charts' own runs: begun in the range, in the order shown.
+  const seen = data.sheets.seen?.ok ? data.sheets.seen.value[order ?? "survey"] : null;
   const known = seen !== null;
   // Hovering a pin's question also shows the sheet after it, with its figures from the Sheets
   // section below (Mark, 17 Nov 2026).
@@ -421,7 +422,11 @@ function Figure({
         <p className="m-0 text-sm text-ap-muted">{empty}</p>
       ) : (
         // Room above the plot for the top scale label and a full bar's label (cut off, 10 Nov 2026).
-        <div className="overflow-x-auto pb-1 pt-2.5">
+        // With sheet pins, more room again: their numbers sit above the plot, clear of the bars'
+        // labels (Mark's pins, 17 Nov 2026).
+        <div
+          className={`overflow-x-auto pb-1 ${chart.cols.some((c) => c.sheets.length > 0) ? "pt-8" : "pt-2.5"}`}
+        >
           <div className="flex min-w-[900px] flex-col gap-1.5">
             <div className={grid}>
               <Scale ticks={quarters(leftTop, left)} side="left" />
@@ -452,7 +457,7 @@ function Figure({
                             />
                             <span
                               className="absolute -right-[10px] z-[3] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-gradient-to-br from-[#bf66d9] to-[#795fc8] text-[10px] font-bold text-white shadow-[0_0_0_2px_#fff]"
-                              style={{ top: `${-9 + k * 20}px` }}
+                              style={{ top: `${-28 - k * 20}px` }}
                             >
                               {sh.n}
                             </span>

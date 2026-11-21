@@ -34,7 +34,7 @@ import {
   SHEETS_FROM,
   type PostHogResult,
   type SurveyIntroClicks,
-  type SurveySheetsSeen,
+  type SurveySheetsByOrder,
 } from "./posthog";
 import type { SurveyQuestions } from "./survey";
 import type { SurveySheetId } from "@features/survey/surveySheets";
@@ -116,7 +116,7 @@ export interface SurveyPayload extends PageHead {
     /** The sheets whose switch is on now, in Mark's order; null when the switches can't be read. */
     on: SurveySheetId[] | null;
     /** Null for a range that ends before the first sheet opened (SHEETS_FROM). */
-    seen: PostHogResult<SurveySheetsSeen> | null;
+    seen: PostHogResult<SurveySheetsByOrder> | null;
     /** The day the sheets began, when the range starts earlier: its figures are from then. */
     from: string | null;
   };
@@ -298,7 +298,7 @@ export function buildSurveyPage(input: {
   prevIntroClicks?: PostHogResult<IntroClicks> | null;
   /** The sheets' switches now (null: unreadable) and PostHog's figures (null: not read). */
   sheetsOn?: SurveySheetId[] | null;
-  sheetsSeen?: PostHogResult<SurveySheetsSeen> | null;
+  sheetsSeen?: PostHogResult<SurveySheetsByOrder> | null;
 }): SurveyPayload {
   const { facts, filters: f, today, now } = input;
   const scope = assessmentScope(f);

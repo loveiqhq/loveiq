@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseFilters } from "@features/admin/server/ap/filters";
-import type { SurveySheetsSeen } from "@features/admin/server/ap/posthog";
+import type { SurveySheetsByOrder, SurveySheetsSeen } from "@features/admin/server/ap/posthog";
 import { buildSurveyQuestions, type QuestionRow } from "@features/admin/server/ap/survey";
 import { buildSurveyPage } from "@features/admin/server/ap/survey-page";
 import type { DropoffRun } from "@features/admin/server/dropoff-report";
@@ -71,9 +71,18 @@ const seen: SurveySheetsSeen = {
   all: fig(311, 7, 4129, 1),
 };
 
+/** The old order's runs met fewer sheets, and never the expert's. */
+const byOrder: SurveySheetsByOrder = {
+  test: seen,
+  survey: {
+    bySheet: { science: fig(41, 0, 5049), halfway: fig(29, 2, 4832) },
+    all: fig(70, 2, 4900),
+  },
+};
+
 const page = (
   to: string,
-  sheetsSeen: Parameters<typeof buildSurveyPage>[0]["sheetsSeen"] = { ok: true, value: seen }
+  sheetsSeen: Parameters<typeof buildSurveyPage>[0]["sheetsSeen"] = { ok: true, value: byOrder }
 ) =>
   buildSurveyPage({
     facts: factsFixture({ from: "2026-11-16", to }),
@@ -209,6 +218,14 @@ describe("the sheets in the question funnel", () => {
     );
     expect(sheetRow("expert")).toBeUndefined();
     expect(neighbours("science").before).toContain("02004");
+    // The old order's own runs: its figures, not the new order's.
+    expect(within(sheetRow("science")!).getAllByRole("cell")[1]!.textContent).toBe("41");
+    expect(within(sheetRow("halfway")!).getAllByRole("cell")[5]!.textContent).toBe("2");
+    expect(
+      within(sheetsRow("Halfway · profile filling in")).getAllByRole("cell")[1]!.textContent
+    ).toBe("29");
+    // A sheet nobody in this order met reads 0, not a blank.
+    expect(within(sheetRow("desire")!).getAllByRole("cell")[1]!.textContent).toBe("0");
   });
 
   it("pins the sheets on both charts", () => {

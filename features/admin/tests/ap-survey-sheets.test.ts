@@ -58,42 +58,54 @@ const newOrder = askedQuestions(400, "variant").map((q) => q.qId);
 const oldOrder = askedQuestions(400, "control").map((q) => q.qId);
 
 describe("what PostHog saw of the sheets", () => {
-  it("reads each sheet and all of them together, leaving the team out", async () => {
+  it("reads each sheet per question order and all of them together, leaving the team out", async () => {
     mockHogql.mockResolvedValue({
       ok: true,
       cut: false,
       rows: [
-        ["halfway", 63, 62, 2, 60, 5679, 0],
-        ["desire", 36, 36, 0, 36, 3405, 1],
+        ["test", "halfway", 34, 34, 0, 34, 6327, 0],
+        ["survey", "halfway", 29, 29, 2, 27, 4832, 0],
+        ["test", "desire", 18, 18, 0, 18, 3495, 1],
         // Nobody closed it yet: no time, not a NaN.
-        ["reportMap", 2, 0, 0, 0, Number.NaN, 0],
-        // Not a sheet of ours: ignored.
-        ["mystery", 9, 9, 9, 0, null, 0],
-        ["", 101, 98, 2, 96, 4100, 1],
+        ["test", "reportMap", 2, 0, 0, 0, Number.NaN, 0],
+        // Not a sheet of ours, or a run whose order is unknown: ignored.
+        ["test", "mystery", 9, 9, 9, 0, null, 0],
+        ["", "science", 5, 5, 0, 5, 3000, 0],
+        ["test", "", 54, 52, 0, 52, 4100, 1],
+        ["survey", "", 29, 29, 2, 27, 4832, 0],
       ],
     });
     const r = await fetchSurveySheets("2026-11-17", "2026-11-21");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.bySheet.halfway).toEqual({
-      saw: 63,
-      settled: 62,
-      leftOpen: 2,
-      closed: 60,
-      medianMs: 5679,
+    expect(r.value.test.bySheet.halfway).toEqual({
+      saw: 34,
+      settled: 34,
+      leftOpen: 0,
+      closed: 34,
+      medianMs: 6327,
       ticked: 0,
     });
-    expect(r.value.bySheet.reportMap?.medianMs).toBeNull();
-    expect(Object.keys(r.value.bySheet).sort()).toEqual(["desire", "halfway", "reportMap"]);
-    expect(r.value.all.saw).toBe(101);
+    expect(r.value.survey.bySheet.halfway?.leftOpen).toBe(2);
+    expect(r.value.test.bySheet.reportMap?.medianMs).toBeNull();
+    expect(Object.keys(r.value.test.bySheet).sort()).toEqual(["desire", "halfway", "reportMap"]);
+    expect(Object.keys(r.value.survey.bySheet)).toEqual(["halfway"]);
+    expect(r.value.test.all.saw).toBe(54);
+    expect(r.value.survey.all.saw).toBe(29);
     const [query, cap] = mockHogql.mock.calls[0]!;
-    // The range is Berlin days; closes are read a day past it; the team's people are left out.
-    expect(query).toContain("toDateTime('2026-11-16 23:00:00', 'UTC')");
+    // Runs begun in the range (a person's first survey event, 30 days back), Berlin days; the
+    // sheets' closes read a day past it; the team's people left out of both.
+    expect(query).toContain("toDateTime('2026-11-16 23:00:00', 'UTC') - INTERVAL 30 DAY");
+    expect(query).toContain(
+      "HAVING began >= toDateTime('2026-11-16 23:00:00', 'UTC') AND began < toDateTime('2026-11-21 23:00:00', 'UTC')"
+    );
     expect(query).toContain("toDateTime('2026-11-21 23:00:00', 'UTC') + INTERVAL 1 DAY");
-    expect(query).toContain(`$session_id IN ('${TEAM_VISIT}')`);
-    expect(query).toContain("event IN ('survey_sheet_shown', 'survey_sheet_closed')");
-    expect(query).toMatch(/SELECT \* FROM \(\s+SELECT sheet/);
-    expect(cap).toBe(20);
+    expect(query.match(new RegExp(`\\$session_id IN \\('${TEAM_VISIT}'\\)`, "g"))).toHaveLength(2);
+    // A run's order: 03011 before 01005 is the new order.
+    expect(query).toContain("properties.question_id = '03011'");
+    expect(query).toContain("properties.question_id = '01005'");
+    expect(query).toMatch(/SELECT \* FROM \(\s+SELECT run_order, sheet/);
+    expect(cap).toBe(30);
   });
 
   it("passes PostHog's failure on plainly, and never a cut answer", async () => {

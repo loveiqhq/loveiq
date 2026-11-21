@@ -291,7 +291,7 @@ export default function ApSurvey() {
           )}
 
           {/* Mark's Sheets section (Survey copy board, 17 Nov 2026): above the demographics. */}
-          <SheetsSection data={data} rows={rows} />
+          <SheetsSection data={data} rows={rows} order={questions?.test ? order : "survey"} />
 
           <Card id="demographics" labelledBy="h-demo">
             <SectionHead
@@ -1000,7 +1000,8 @@ function FunnelSection({
       const id = asked0[spot.after]!.id;
       sheetsAfter.set(id, [...(sheetsAfter.get(id) ?? []), spot]);
     }
-  const sheetsSeen = data.sheets.seen?.ok ? data.sheets.seen.value : null;
+  // The sheets' figures for this funnel's own runs: begun in the range, in the order shown.
+  const sheetsSeen = data.sheets.seen?.ok ? data.sheets.seen.value[order ?? "survey"] : null;
   const sheetsKnown = sheetsSeen !== null;
   // A column clicked becomes the first sort and the first becomes the second; the first clicked
   // again goes back to survey order.

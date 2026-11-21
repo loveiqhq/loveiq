@@ -441,11 +441,14 @@ export interface SheetFigures {
 }
 
 export interface SurveySheetsSeen {
-  /** Each sheet PostHog saw open in the range; a sheet nobody met is missing. */
+  /** Each sheet PostHog saw open for these runs; a sheet nobody met is missing. */
   bySheet: Partial<Record<SurveySheetId, SheetFigures>>;
   /** Every sheet together: the same figures over all of them. */
   all: SheetFigures;
 }
+
+/** The sheets in each question order's runs, as the page's question funnel splits them. */
+export type SurveySheetsByOrder = Record<"survey" | "test", SurveySheetsSeen>;
 
 const NO_SHEET: SheetFigures = {
   saw: 0,
@@ -461,16 +464,21 @@ const NO_SHEET: SheetFigures = {
  * events: survey_sheet_shown when one opens (once per run), survey_sheet_closed when it goes,
  * with how long it was open and, for the State of Desire sheet, whether its box was ticked.
  * PostHog is not consent-gated on the site, so it sees nearly every survey run (not blockers').
- * A person counts once per sheet. A close is read up to a day after the range, so a sheet opened
- * just before midnight still has its close; one opened in the last 30 minutes and not closed yet
- * is still being read, neither left nor settled. Mark's measures (17 Nov 2026), signed off with
- * the sheets' Test Repository row at the 19 Nov sync.
+ *
+ * Counted as the question funnel counts: the runs begun in the range (a person's first survey
+ * event, looked for up to 30 days back), split by the order their questions came in. A run in
+ * the new order (C13's, everyone's since the test ended) answers 03011 before 01005; one in the
+ * old order, 01005 first; every run answers one of them third, before any sheet. A person counts
+ * once per sheet. A sheet opened in the last 30 minutes and not closed yet is still being read,
+ * neither left nor settled. Mark's measures (17 Nov 2026), signed off with the sheets' Test
+ * Repository row at the 19 Nov sync.
  */
 export async function fetchSurveySheets(
   from: string,
   to: string
-): Promise<PostHogResult<SurveySheetsSeen>> {
+): Promise<PostHogResult<SurveySheetsByOrder>> {
   const { since, until } = windowOf({ from, to });
+  const staff = await notStaff();
   const settledAt = "now() - INTERVAL 30 MINUTE";
   const figures = `count() AS saw,
            countIf(closes > 0 OR shown_at < ${settledAt}) AS settled,
@@ -479,7 +487,19 @@ export async function fetchSurveySheets(
            quantileIf(0.5)(ms, closes > 0) AS median_ms,
            countIf(ticked = 1) AS ticked`;
   const q = `
-    WITH per AS (
+    WITH runs AS (
+      SELECT person_id,
+             minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old
+      FROM events
+      WHERE event IN ('survey_started', 'survey_answer')
+        AND properties.$host = '${HOST}'
+        AND timestamp >= ${at(since)} - INTERVAL 30 DAY AND timestamp < ${at(until)} + INTERVAL 1 DAY${staff}
+      GROUP BY person_id
+      HAVING began >= ${at(since)} AND began < ${at(until)}
+    ),
+    per AS (
       SELECT person_id,
              toString(properties.sheet) AS sheet,
              countIf(event = 'survey_sheet_shown') AS shows,
@@ -490,24 +510,32 @@ export async function fetchSurveySheets(
       FROM events
       WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
         AND properties.$host = '${HOST}'
-        AND timestamp >= ${at(since)} AND timestamp < ${at(until)} + INTERVAL 1 DAY${await notStaff()}
+        AND timestamp >= ${at(since)} AND timestamp < ${at(until)} + INTERVAL 1 DAY${staff}
       GROUP BY person_id, sheet
     ),
     seen AS (
-      SELECT * FROM per WHERE shows > 0 AND shown_at >= ${at(since)} AND shown_at < ${at(until)}
+      SELECT per.*,
+             multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
+                     toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
+      FROM per INNER JOIN runs ON per.person_id = runs.person_id
+      WHERE per.shows > 0
     )
     SELECT * FROM (
-      SELECT sheet, ${figures} FROM seen GROUP BY sheet
+      SELECT run_order, sheet, ${figures} FROM seen WHERE run_order != '' GROUP BY run_order, sheet
       UNION ALL
-      SELECT '' AS sheet, ${figures} FROM seen
+      SELECT run_order, '' AS sheet, ${figures} FROM seen WHERE run_order != '' GROUP BY run_order
     )
-    LIMIT 20`;
-  const r = await rows(q, 20);
+    LIMIT 30`;
+  const r = await rows(q, 30);
   if (!r.ok) return r;
-  const bySheet: Array<[SurveySheetId, SheetFigures]> = [];
-  let all: SheetFigures = NO_SHEET;
+  const empty = (): { bySheet: Array<[SurveySheetId, SheetFigures]>; all: SheetFigures } => ({
+    bySheet: [],
+    all: NO_SHEET,
+  });
+  const orders = { survey: empty(), test: empty() };
   for (const row of r.value) {
-    const [sheet, saw, settled, leftOpen, closed, medianMs, ticked] = row;
+    const [order, sheet, saw, settled, leftOpen, closed, medianMs, ticked] = row;
+    if (order !== "survey" && order !== "test") continue;
     const figures: SheetFigures = {
       saw: Number(saw) || 0,
       settled: Number(settled) || 0,
@@ -517,10 +545,14 @@ export async function fetchSurveySheets(
       medianMs: Number(closed) > 0 && Number.isFinite(Number(medianMs)) ? Number(medianMs) : null,
       ticked: Number(ticked) || 0,
     };
-    if (sheet === "") all = figures;
-    else if (isSurveySheetId(sheet)) bySheet.push([sheet, figures]);
+    if (sheet === "") orders[order].all = figures;
+    else if (isSurveySheetId(sheet)) orders[order].bySheet.push([sheet, figures]);
   }
-  return { ok: true, value: { bySheet: Object.fromEntries(bySheet), all } };
+  const done = (o: ReturnType<typeof empty>): SurveySheetsSeen => ({
+    bySheet: Object.fromEntries(o.bySheet),
+    all: o.all,
+  });
+  return { ok: true, value: { survey: done(orders.survey), test: done(orders.test) } };
 }
 
 export interface ReportReturns {

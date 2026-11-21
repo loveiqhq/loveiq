@@ -22,15 +22,18 @@ const GRID = "minmax(220px,2fr) minmax(220px,2fr) 88px 104px 104px 120px";
 export default function SheetsSection({
   data,
   rows,
+  order,
 }: {
   data: SurveyPayload;
   /** The question funnel's rows in the order picked, for where each sheet sits. */
   rows: QuestionRow[];
+  /** That order: the sheets' figures are its runs', as the funnel's are. */
+  order: "survey" | "test";
 }) {
   const { on, seen, from } = data.sheets;
   const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
   const asked = rows.filter((r) => r.n > 0);
-  const figures = seen?.ok ? seen.value : null;
+  const figures = seen?.ok ? seen.value[order] : null;
   const all = figures?.all;
   const tapped = figures?.bySheet.desire;
   return (

@@ -897,12 +897,30 @@ const FUNNEL_CAVEAT =
  * it, the median time it was open and the State of Desire box's ticks; the last row is every
  * sheet together.
  */
-const SHEETS = `-- The sheets between the survey's questions, per sheet: the people it opened for in the range,
--- those who left the survey with it open (never closed it, 30 minutes since it opened), those
--- who closed it, how long it was open (median, ms) and the ticks of the State of Desire sheet's
--- box. A close is read up to a day after the range. The row with an empty sheet is every sheet
+const SHEETS = `-- The sheets between the survey's questions, for the runs begun in the range, in each question
+-- order (run_order: 'test' is the new order, C13's and everyone's since the test ended; 'survey'
+-- the old one): per sheet, the people it opened for, those who left the survey with it open
+-- (never closed it, 30 minutes since it opened), those who closed it, how long it was open
+-- (median, ms) and the ticks of the State of Desire sheet's box. A run's order: it answered
+-- 03011 before 01005 (new) or 01005 first (old). The rows with an empty sheet are every sheet
 -- together. The team's people are left out.
-WITH per AS (
+WITH runs AS (
+  SELECT person_id,
+         minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old
+  FROM events
+  WHERE event IN ('survey_started', 'survey_answer')
+    AND properties.$host = 'www.loveiq.org'
+    AND timestamp >= toDateTime(':from 00:00:00', 'Europe/Berlin') - INTERVAL 30 DAY
+    AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 2 DAY
+    AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN :team_visits
+                                AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC'))
+  GROUP BY person_id
+  HAVING began >= toDateTime(':from 00:00:00', 'Europe/Berlin')
+     AND began < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 1 DAY
+),
+per AS (
   SELECT person_id,
          toString(properties.sheet) AS sheet,
          countIf(event = 'survey_sheet_shown') AS shows,
@@ -915,49 +933,51 @@ WITH per AS (
     AND properties.$host = 'www.loveiq.org'
     AND timestamp >= toDateTime(':from 00:00:00', 'Europe/Berlin')
     AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 2 DAY
-    AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN :team_visits)
+    AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN :team_visits
+                                AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC'))
   GROUP BY person_id, sheet
 ),
 seen AS (
-  SELECT * FROM per
-  WHERE shows > 0
-    AND shown_at >= toDateTime(':from 00:00:00', 'Europe/Berlin')
-    AND shown_at < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 1 DAY
+  SELECT per.*,
+         multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
+                 toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
+  FROM per INNER JOIN runs ON per.person_id = runs.person_id
+  WHERE per.shows > 0
 )
 SELECT * FROM (
-  SELECT sheet, count() AS saw,
+  SELECT run_order, sheet, count() AS saw,
          countIf(closes > 0 OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
          countIf(closes = 0 AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
          countIf(closes > 0) AS closed,
          quantileIf(0.5)(ms, closes > 0) AS median_ms,
          countIf(ticked = 1) AS ticked
-  FROM seen GROUP BY sheet
+  FROM seen WHERE run_order != '' GROUP BY run_order, sheet
   UNION ALL
-  SELECT '' AS sheet, count() AS saw,
+  SELECT run_order, '' AS sheet, count() AS saw,
          countIf(closes > 0 OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
          countIf(closes = 0 AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
          countIf(closes > 0) AS closed,
          quantileIf(0.5)(ms, closes > 0) AS median_ms,
          countIf(ticked = 1) AS ticked
-  FROM seen
+  FROM seen WHERE run_order != '' GROUP BY run_order
 )
-LIMIT 20`;
+LIMIT 30`;
 
 const SHEET_EVENTS: FieldDef["tables"] = [
   {
     source: "posthog",
     table: "events",
     columns:
-      "event (survey_sheet_shown, survey_sheet_closed), properties.sheet, properties.ms_open, properties.ticked, person_id, timestamp, properties.$host",
+      "event (survey_sheet_shown, survey_sheet_closed, survey_started, survey_answer), properties.sheet, properties.ms_open, properties.ticked, properties.question_id, person_id, timestamp, properties.$host",
     filters:
-      "Period, by when the sheet opened (Berlin days); a close is read up to a day after. Nothing else: the sheets' events carry no source or device.",
+      "Period, by when the run began (Berlin days), as the question funnel counts; the order picked above, from whether the run answered 03011 or 01005 first. Nothing else: the sheets' events carry no source or device.",
     watch:
       "PostHog is not consent-gated on the site, so it sees nearly every survey run; a browser that blocks it is missing. The sheets went live on 17 Nov 2026 (the expert's and State of Desire's on 18 Nov).",
   },
 ];
 
 const SHEET_PEOPLE =
-  "People, not runs: PostHog's person, once per sheet however many runs. The team's people are left out. From 17 Nov 2026, when the sheets went live; all traffic whatever the filters.";
+  "The runs begun in the range, in the order picked above, as the question funnel counts them: PostHog's person, once per sheet. A run meets a sheet only from its switch-on (17 Nov 2026; the expert's and State of Desire's 18 Nov), and never a sheet with a price after paying before the survey, so fewer may see a sheet than reached its question. The team's people are left out; all traffic whatever the filters.";
 
 export const fields: FieldRegistry = {
   "survey.starts": {
