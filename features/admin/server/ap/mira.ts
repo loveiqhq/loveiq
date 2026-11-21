@@ -47,6 +47,7 @@ import {
 } from "./filters";
 import { fmt } from "./format";
 import { mean, ratio } from "./metrics";
+import { REVIEW_SELECT, ratingsOf, type MiraReviewRow, type Ratings } from "./mira-ratings";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -99,6 +100,12 @@ const EVENT_NAMES = [
   "style_saved",
   "reply_declined",
   "minor_stop",
+  // Ratings and quotes (22 Nov 2026): the ask shown and put off, ratings given and taken back
+  // (mira-ratings.ts reads them; no prop is needed).
+  "review_prompt_shown",
+  "review_prompt_not_now",
+  "review_given",
+  "review_withdrawn",
 ];
 
 export interface MiraUserRow {
@@ -162,6 +169,8 @@ export interface MiraData {
   bodyChecks: MiraBodyCheckRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
+  /** Ratings and quotes (mira-ratings.ts); null: mira_review could not be read. */
+  reviews?: MiraReviewRow[] | null;
 }
 
 /**
@@ -170,7 +179,7 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks] = await Promise.all([
+  const [users, events, nudges, bodyChecks, reviews] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
     ),
@@ -181,6 +190,8 @@ export async function fetchMira(): Promise<MiraData> {
     fetchAllRows<MiraBodyCheckRow>(
       "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
     ),
+    // Only the Ratings card needs it: unreadable, that card says so and the page stays.
+    fetchAllRows<MiraReviewRow>(`/rest/v1/mira_review?select=${REVIEW_SELECT}&order=id.asc`),
   ]);
   if (!users || !events || !nudges || !bodyChecks) {
     throw new Error("Mira's tables could not be read");
@@ -192,6 +203,7 @@ export async function fetchMira(): Promise<MiraData> {
     nudges,
     bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
     withResult: await withLoveIqResult(asked),
+    reviews,
   };
 }
 
@@ -1108,6 +1120,8 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** The Ratings card (mira-ratings.ts). */
+  ratings: Ratings;
 }
 
 export function buildMiraPage(input: {
@@ -1371,5 +1385,6 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    ratings: ratingsOf(prep, input.data.reviews, w.since, w.until),
   };
 }

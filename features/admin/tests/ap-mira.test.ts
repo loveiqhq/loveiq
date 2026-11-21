@@ -864,6 +864,11 @@ describe("fetchMira", () => {
       "style_saved",
       "reply_declined",
       "minor_stop",
+      // Ratings and quotes (mira-ratings.ts).
+      "review_prompt_shown",
+      "review_prompt_not_now",
+      "review_given",
+      "review_withdrawn",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
