@@ -90,6 +90,11 @@ module.exports = {
           "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.35" },
           "30%": { transform: "translateY(-3px)", opacity: "1" },
         },
+        // Two identical runs of the prompts: moving by half the track loops without a seam.
+        "mira-marquee": {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
       },
       animation: {
         "play-pulse": "play-pulse 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
@@ -100,6 +105,7 @@ module.exports = {
         "mira-pop": "mira-pop 0.7s cubic-bezier(0.16, 1, 0.3, 1) both",
         "mira-rise": "mira-rise 0.26s cubic-bezier(0.16, 1, 0.3, 1) both",
         "mira-dot": "mira-dot 1.1s ease-in-out infinite",
+        "mira-marquee": "mira-marquee 60s linear infinite",
       },
     },
   },

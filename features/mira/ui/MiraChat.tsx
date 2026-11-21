@@ -112,7 +112,6 @@ export default function MiraChat({
   const bodyOffered = useRef(false);
   const bodyStarted = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const chipsRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   /** The index of the reply that just arrived, for the scroll to its start. */
   const replyAt = useRef<number | null>(null);
@@ -487,41 +486,6 @@ export default function MiraChat({
   // A chat opened by its link loads first: the welcome would only flash before it.
   const showWelcome = empty && (ready || !initialChatId);
   const showChips = ready && empty && !gate;
-
-  // Phones: the prompts above the composer drift slowly in a loop (Eman, 21 Nov). A touch, a
-  // swipe or the wheel holds them for a moment, so a tap lands where it was aimed.
-  useEffect(() => {
-    const row = chipsRef.current;
-    const still = (q: string) => window.matchMedia?.(q).matches ?? true;
-    if (!row || still("(prefers-reduced-motion: reduce)") || still("(min-width: 640px)")) return;
-    const copy = row.querySelector<HTMLElement>("[aria-hidden] > button");
-    const first = row.querySelector<HTMLElement>("button");
-    if (!copy || !first) return;
-    const loop = copy.getBoundingClientRect().left - first.getBoundingClientRect().left;
-    let pos = row.scrollLeft;
-    let last = performance.now();
-    let heldUntil = 0;
-    let frame = 0;
-    const step = (now: number) => {
-      if (now > heldUntil) {
-        pos += (now - last) * 0.024; // about 24 px a second
-        if (pos >= loop) pos -= loop;
-        row.scrollLeft = Math.round(pos);
-      } else pos = row.scrollLeft; // carry on from wherever a swipe left it
-      last = now;
-      frame = requestAnimationFrame(step);
-    };
-    const hold = () => {
-      heldUntil = performance.now() + 2500;
-    };
-    const events = ["pointerdown", "touchmove", "wheel"] as const;
-    for (const e of events) row.addEventListener(e, hold, { passive: true });
-    frame = requestAnimationFrame(step);
-    return () => {
-      cancelAnimationFrame(frame);
-      for (const e of events) row.removeEventListener(e, hold);
-    };
-  }, [showChips]);
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-[#efe6fd]">
@@ -966,38 +930,45 @@ export default function MiraChat({
                   {/* Phones: one row above the composer that scrolls sideways. Wider screens: under
                       it, centred, never more than two rows (Mark, 21 Nov). */}
                   {showChips ? (
-                    <div
-                      ref={chipsRef}
-                      className="order-first -mx-3 flex gap-1.5 overflow-x-auto pl-3 pr-8 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-32px),transparent)] [scrollbar-width:none] sm:order-none sm:mx-0 sm:max-h-[66px] sm:flex-wrap sm:justify-center sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden"
-                    >
-                      {miraConfig.starterChips.map((chip, i) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => send(chip)}
-                          style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                          className={CHIP}
+                    // Phones: the prompts glide in a loop, a transform animation run by the
+                    // compositor (smooth, never in steps); a touch or hover holds them, so a tap
+                    // lands where it was aimed. Reduced motion: still, and the row scrolls by hand.
+                    // Wider screens: the board's two still rows.
+                    <div className="group order-first -mx-3 overflow-hidden px-3 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] motion-reduce:overflow-x-auto sm:order-none sm:mx-0 sm:max-h-[66px] sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="flex w-max group-hover:[animation-play-state:paused] group-active:[animation-play-state:paused] max-sm:will-change-transform max-sm:motion-safe:animate-mira-marquee sm:w-auto sm:flex-wrap sm:justify-center sm:gap-1.5">
+                        <span className="flex shrink-0 gap-1.5 pr-1.5 sm:contents">
+                          {miraConfig.starterChips.map((chip, i) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => send(chip)}
+                              style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                              className={CHIP}
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </span>
+                        {/* The second run that closes the loop: hidden from assistive tech and the
+                            tab order; never shown on wider screens or with reduced motion. */}
+                        <span
+                          aria-hidden="true"
+                          className="flex shrink-0 gap-1.5 pr-1.5 motion-reduce:hidden sm:hidden"
                         >
-                          {chip}
-                        </button>
-                      ))}
-                      {/* Phones: a second run of the same prompts, so the row can drift in a loop.
-                          Hidden from assistive tech and the tab order; wider screens and reduced
-                          motion never show it. */}
-                      <span aria-hidden="true" className="contents motion-reduce:hidden sm:hidden">
-                        {miraConfig.starterChips.map((chip, i) => (
-                          <button
-                            key={chip}
-                            type="button"
-                            tabIndex={-1}
-                            onClick={() => send(chip)}
-                            style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                            className={CHIP}
-                          >
-                            {chip}
-                          </button>
-                        ))}
-                      </span>
+                          {miraConfig.starterChips.map((chip, i) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              tabIndex={-1}
+                              onClick={() => send(chip)}
+                              style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                              className={CHIP}
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </span>
+                      </div>
                     </div>
                   ) : null}
                 </div>
