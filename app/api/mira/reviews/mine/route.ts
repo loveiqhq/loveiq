@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { NAME_MAX, NAME_PATTERN } from "@features/mira/reviews";
+import { isMinor } from "@features/mira/server/minor";
 import { getMyReview, withdrawReview } from "@features/mira/server/reviews";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
@@ -41,6 +42,13 @@ async function guard(request: Request, write: boolean) {
   }
   const account = await getMiraAccount();
   if (!account) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
+  // Stopped as under 18 (server/minor.ts): what they shared went with the stop. A failed check
+  // is an error, never a pass.
+  const minor = await isMinor(account.id).catch(() => null);
+  if (minor === null) {
+    return { error: NextResponse.json({ error: "Please try again." }, { status: 500 }) };
+  }
+  if (minor) return { error: NextResponse.json({ error: "Not available." }, { status: 403 }) };
   return { account };
 }
 

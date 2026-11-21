@@ -70,12 +70,21 @@ vi.mock("@features/mira/server/attribution", () => ({
 vi.mock("@features/mira/server/store", () => ({
   getProfile: vi.fn().mockResolvedValue({ name: "Lea Marie" }),
   logMiraEvent: vi.fn(),
+  updateProfile: vi.fn().mockResolvedValue(undefined),
+  deleteChats: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("next/headers", () => ({ cookies: vi.fn(async () => ({ set: vi.fn(), get: vi.fn() })) }));
+// The real under-18 stop; whether someone was stopped is set per test.
+vi.mock("@features/mira/server/minor", async (real) => ({
+  ...(await real<typeof import("@features/mira/server/minor")>()),
+  isMinor: vi.fn(),
 }));
 
 import { GET as getPublic, POST } from "@/app/api/mira/reviews/route";
 import { DELETE, GET as getMine } from "@/app/api/mira/reviews/mine/route";
 import { REVIEW_CONSENT_VERSION } from "@features/mira/reviews";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
+import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -112,6 +121,26 @@ const others = () =>
   }));
 const shown = async () =>
   (await (await getPublic(call("GET", "/api/mira/reviews"))).json()).reviews;
+/** Lea's approved words, with 19 others' ratings: Mira's pages show them. */
+const live = () => {
+  db.rows = [
+    ...others(),
+    {
+      id: 1,
+      user_id: LEA.id,
+      stars: 5,
+      quote: "Mira helped me stop hiding.",
+      published_quote: "Mira helped me stop hiding.",
+      display_name: "Lea",
+      age_range: "25-34",
+      consent_version: REVIEW_CONSENT_VERSION,
+      consent_at: "2026-11-22T10:00:00Z",
+      quote_status: "approved",
+      from_team: false,
+      mira_user: user,
+    },
+  ];
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,6 +149,7 @@ beforeEach(() => {
   cache.clear();
   vi.mocked(getMiraAccount).mockResolvedValue(LEA);
   vi.mocked(fromTeamBrowser).mockResolvedValue(false);
+  vi.mocked(isMinor).mockResolvedValue(false);
 });
 
 describe("POST /api/mira/reviews: a signed-in person's one rating", () => {
@@ -178,28 +208,29 @@ describe("POST /api/mira/reviews: a signed-in person's one rating", () => {
   });
 });
 
-describe("taking back what you shared", () => {
-  /** Lea's approved words, with 19 others' ratings: Mira's pages show them. */
-  const live = () => {
-    db.rows = [
-      ...others(),
-      {
-        id: 1,
-        user_id: LEA.id,
-        stars: 5,
-        quote: "Mira helped me stop hiding.",
-        published_quote: "Mira helped me stop hiding.",
-        display_name: "Lea",
-        age_range: "25-34",
-        consent_version: REVIEW_CONSENT_VERSION,
-        consent_at: "2026-11-22T10:00:00Z",
-        quote_status: "approved",
-        from_team: false,
-        mira_user: user,
-      },
-    ];
-  };
+describe("under 18: nothing shared stays, and nothing more is taken", () => {
+  it("an under-18 stop deletes the rating and its words, approved or not, at once", async () => {
+    live();
+    expect((await shown()).quote.name).toBe("Lea");
+    await stopForMinor(LEA.id);
+    expect(db.rows.some((r) => r.user_id === LEA.id)).toBe(false);
+    expect(await shown()).toBeNull(); // 19 people and no words left: nothing shows
+  });
 
+  it("refuses someone Mira stopped as under 18, and refuses when that can't be checked", async () => {
+    vi.mocked(isMinor).mockResolvedValue(true);
+    expect((await rate({ stars: 5, words })).status).toBe(403);
+    expect((await getMine(call("GET", "/api/mira/reviews/mine"))).status).toBe(403);
+    expect((await DELETE(call("DELETE", "/api/mira/reviews/mine?what=all"))).status).toBe(403);
+    vi.mocked(isMinor).mockRejectedValue(new Error("mira minor read failed (500)"));
+    expect((await rate({ stars: 5 })).status).toBe(500);
+    expect((await getMine(call("GET", "/api/mira/reviews/mine"))).status).toBe(500);
+    expect(db.rows).toEqual([]);
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("taking back what you shared", () => {
   it("hides the words everywhere at once, not when the cache next expires", async () => {
     live();
     expect((await shown()).quote).toEqual({

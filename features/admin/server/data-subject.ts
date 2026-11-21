@@ -36,6 +36,8 @@
  *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
+ *     - mira_review (by user_id, from 2026-11-22): their rating and any words with the consent
+ *       to show them; erased with the account (ON DELETE CASCADE), off Mira's pages at once.
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
@@ -227,6 +229,8 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
     ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
     ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
+    // Ratings and quotes (features/mira/reviews.ts): the rating, words, consent and status.
+    ["mira_review", `/rest/v1/mira_review?user_id=${ids}&select=*&order=id.asc`],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);
@@ -234,7 +238,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       result.ok = false;
       result.warnings.push(`${table}: could not be read in full; run the export again`);
     }
-    // eslint-disable-next-line security/detect-object-injection -- one of the five names above.
+    // eslint-disable-next-line security/detect-object-injection -- one of the six names above.
     result.exportData![table] = rows ?? [];
   }
 }

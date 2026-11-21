@@ -4,6 +4,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 import { fromTeamBrowser, requestExtras } from "./attribution";
 import { isStaffEmail } from "./google";
+import { refreshPublicReviews } from "./reviews";
 import type { CitedSource } from "./safety";
 import type { CoachingStyle } from "./prompt";
 
@@ -279,6 +280,8 @@ export async function deleteAccount(account: { id: string; email: string }): Pro
     ? await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(account.id)}`, { method: "DELETE" })
     : await supabaseFetch(`/auth/v1/admin/users/${enc(account.id)}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`mira account delete failed (${res.status})`);
+  // Its rating and words went with it (ON DELETE CASCADE): off Mira's pages from the next request.
+  refreshPublicReviews();
 }
 
 export type MiraEventName =

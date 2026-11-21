@@ -86,6 +86,9 @@ describe("what Mira's pages may show of her ratings", () => {
     const rejected = row(4, { quote_status: "rejected" });
     // Ratings enough, but no approved words yet: nothing shows at all.
     expect(publicReviews([...people, waiting, rejected])).toBeNull();
+    // Not approved, even with a text beside it (the table refuses that too): never shown.
+    const unapproved = { ...approved(4, "Not yet", "Di"), quote_status: "pending" as const };
+    expect(publicReviews([...people, unapproved])).toBeNull();
     // Approved text without a recorded consent (the table refuses it too) is never shown.
     const unconsented = { ...approved(4, "Never shown", "Bo"), consent_at: null };
     expect(publicReviews([...people, unconsented])).toBeNull();

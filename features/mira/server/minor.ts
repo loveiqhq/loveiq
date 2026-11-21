@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { MINOR_COOKIE } from "./config";
+import { withdrawReview } from "./reviews";
 import { deleteChats, updateProfile } from "./store";
 
 /**
@@ -41,6 +42,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       remember_chats: false,
     }),
     deleteChats(userId),
+    // Their rating and words go too, approved or not: a minor's words are never shown.
+    withdrawReview(userId, "all"),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

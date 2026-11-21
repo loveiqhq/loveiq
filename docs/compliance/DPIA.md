@@ -243,6 +243,10 @@ are left out of Mira's statistics.
   except the person's own feedback), nudge records
   (`mira_nudge`: kind, fixed subject, day, sent, delivered, first opened, clicked) and sign-in code
   rows (`mira_sign_in_code`: address, time, guesses).
+- Ratings and quotes (`mira_review`, from 2026-11-22; §7.12): an account's one rating (1 to 5)
+  and, only with its own consent, one sentence with the first name or initials and age range the
+  person chose, its consent version and time, and its review status. Covered by data requests
+  (export by the account; erased with the account) and purged by an under-18 stop.
 - Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
   IP and email addresses as rate-limit keys (Upstash), request logs (Vercel).
 - Analytics: what the site-wide tools record on Mira's pages, which includes the chat as it

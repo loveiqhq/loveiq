@@ -20,6 +20,7 @@ import {
   forToday,
 } from "@features/mira/reviews";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
+import { isMinor } from "@features/mira/server/minor";
 import { addReview, cachedPublicReviews } from "@features/mira/server/reviews";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
@@ -88,6 +89,10 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
+    // Stopped as under 18 (server/minor.ts): nothing is taken. A failed check takes nothing.
+    if (await isMinor(account.id)) {
+      return NextResponse.json({ error: "Not available." }, { status: 403 });
+    }
     if (!(await addReview(account.id, parsed.data, await fromTeamBrowser()))) {
       return NextResponse.json({ error: "You've already rated Mira." }, { status: 409 });
     }
