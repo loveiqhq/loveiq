@@ -219,7 +219,18 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
           {sub ? <p className="mt-0.5 text-[13px] leading-snug text-ap-muted">{sub}</p> : null}
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        {caption ? (
+          // The words themselves are in the chat once sent; the caption is what is said right
+          // now. Phones: under her photo, above the controls; wider: a line of its own below.
+          <p
+            aria-hidden="true"
+            className={`order-1 basis-full text-[15px] leading-relaxed [overflow-wrap:anywhere] sm:order-2 ${speaking ? "text-ap-plum" : "text-ap-ink"}`}
+          >
+            {caption.length > 180 ? `…${caption.slice(-180)}` : caption}
+          </p>
+        ) : null}
+
+        <div className="order-2 ml-auto flex items-center gap-1.5 sm:order-1">
           {phase === "error" ? (
             <>
               <button type="button" onClick={onType} className={QUIET}>
@@ -255,15 +266,6 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
         </div>
       </div>
 
-      {caption ? (
-        // The words themselves are in the chat once sent; the caption is what is said right now.
-        <p
-          aria-hidden="true"
-          className={`mt-3 text-[15px] leading-relaxed [overflow-wrap:anywhere] ${speaking ? "text-ap-plum" : "text-ap-ink"}`}
-        >
-          {caption.length > 180 ? `…${caption.slice(-180)}` : caption}
-        </p>
-      ) : null}
       <p className="mt-2.5 text-[12px] leading-snug text-ap-quiet">
         {voice.voiceless
           ? "This device has no voice of its own for Mira, so she answers in writing. "
