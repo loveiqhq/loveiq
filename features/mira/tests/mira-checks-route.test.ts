@@ -33,7 +33,12 @@ const LEA = { id: "u1", email: "lea@example.com" };
 
 type Row = { user_id: string; scale: string; answers: number[]; created_at: string };
 let db: {
-  user: { use_checks: boolean; use_assessment: boolean; country: string | null };
+  user: {
+    name: string | null;
+    use_checks: boolean;
+    use_assessment: boolean;
+    country: string | null;
+  };
   checks: Row[];
   body: Array<{ score: number; created_at: string }>;
 };
@@ -46,7 +51,11 @@ beforeEach(() => {
   vi.mocked(getMiraAccount).mockResolvedValue(LEA);
   vi.mocked(verifyCsrfToken).mockResolvedValue(true);
   vi.mocked(isMinor).mockResolvedValue(false);
-  db = { user: { use_checks: false, use_assessment: false, country: "DE" }, checks: [], body: [] };
+  db = {
+    user: { name: "Lea", use_checks: false, use_assessment: false, country: "DE" },
+    checks: [],
+    body: [],
+  };
   vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     const mine = db.checks.filter((r) => r.user_id === "u1");
@@ -243,7 +252,7 @@ describe("GET: the person's checks", () => {
     db.body = [{ score: 3.7, created_at: ago(10) }];
     db.user.use_checks = true;
     const body = await (await call(GET, "GET")).json();
-    expect(body.useChecks).toBe(true);
+    expect(body).toMatchObject({ email: "lea@example.com", name: "Lea", useChecks: true });
     expect(body.support).toBe("DE");
     const [anxiety, mood, loneliness] = body.checks;
     expect(anxiety.results.map((r: { score: number; band: string }) => [r.score, r.band])).toEqual([
@@ -254,7 +263,11 @@ describe("GET: the person's checks", () => {
     expect(mood).toEqual({ id: "mood", results: [], nextAt: null }); // never another's result
     expect(loneliness.results).toMatchObject([{ score: 4, band: "low" }]);
     expect(loneliness.nextAt).toBeNull(); // 40 days on: open again
-    expect(body.bodyCheck).toEqual({ taken: [db.body[0]!.created_at], due: null });
+    expect(body.bodyCheck).toEqual({
+      taken: [db.body[0]!.created_at],
+      due: null,
+      nextAt: new Date(Date.parse(db.body[0]!.created_at) + 28 * DAY).toISOString(),
+    });
     // The answers themselves never leave the server.
     expect(JSON.stringify(body)).not.toContain("answers");
   });

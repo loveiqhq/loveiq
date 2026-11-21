@@ -10,6 +10,7 @@ import {
   supportNow,
   type Check,
 } from "@features/mira/content/checks";
+import { safeNext } from "@features/mira/server/session";
 
 /**
  * The self-checks' content and maths (features/mira/content/checks.ts). Expected values come
@@ -198,5 +199,27 @@ describe("retakes", () => {
     expect(nextTakeAt(anxiety, at).toISOString()).toBe("2026-11-15T10:00:00.000Z");
     expect(nextTakeAt(mood, at).toISOString()).toBe("2026-11-15T10:00:00.000Z");
     expect(nextTakeAt(loneliness, at).toISOString()).toBe("2026-11-29T10:00:00.000Z");
+  });
+});
+
+describe("signing in from a check's page", () => {
+  it("comes back to that page, and only to Mira's own check pages, spelt exactly", () => {
+    for (const ok of [
+      "/mira/assessments",
+      "/mira/assessments/anxiety",
+      "/mira/assessments/mood",
+      "/mira/assessments/loneliness",
+      "/mira/assessments/body",
+    ]) {
+      expect(safeNext(ok)).toBe(ok);
+    }
+    for (const bad of [
+      "/mira/assessments/other",
+      "/mira/assessments/../../admin",
+      "/mira/assessments/mood?x=1",
+      "/mira/assessments/",
+    ]) {
+      expect(safeNext(bad)).toBeNull();
+    }
   });
 });

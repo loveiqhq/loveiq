@@ -4,7 +4,8 @@
  * coaching, never diagnosis.
  *
  *   GET    → each check's results (scored here), when it may be taken again, the body check's
- *            dates, the LoveIQ result, the two "Mira may use" switches and the support country
+ *            dates, the LoveIQ result, the two "Mira may use" switches, the support country, and
+ *            the name and email the signed-in frame shows
  *   POST   { check, answers } → scores and stores a finished check. Refused (409) before the
  *            check's retake date (14 days, 28 for loneliness), so a result covers its own two
  *            weeks; the browser never sends a score.
@@ -28,7 +29,7 @@ import {
   supportNow,
   type CheckId,
 } from "@features/mira/content/checks";
-import { bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
+import { FOLLOW_UP_DAYS, bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
 import {
   addCheck,
   deleteChecks,
@@ -45,6 +46,8 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 export const dynamic = "force-dynamic";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const postSchema = z.object({
   check: z.enum(CHECK_IDS as [CheckId, ...CheckId[]]),
@@ -108,11 +111,22 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         account: g.account.id,
+        email: g.account.email,
+        name: state.name,
         useChecks: state.useChecks,
         useAssessment: state.useAssessment,
         support: crisisFor(country).code,
         checks,
-        bodyCheck: bodyTaken ? { taken: bodyTaken, due: bodyCheckDue(bodyTaken, now) } : null,
+        bodyCheck: bodyTaken
+          ? {
+              taken: bodyTaken,
+              due: bodyCheckDue(bodyTaken, now),
+              nextAt:
+                bodyTaken.length === 1
+                  ? new Date(Date.parse(bodyTaken[0]!) + FOLLOW_UP_DAYS * DAY_MS).toISOString()
+                  : null,
+            }
+          : null,
         assessment,
       },
       { headers: { "Cache-Control": "no-store" } }

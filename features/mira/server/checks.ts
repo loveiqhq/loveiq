@@ -13,6 +13,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type CheckRow = { scale: string; answers: number[]; created_at: string };
 
 export type ChecksState = {
+  name: string | null;
   useChecks: boolean;
   useAssessment: boolean;
   country: string | null;
@@ -23,10 +24,11 @@ export type ChecksState = {
 /** The account's results with the settings the check pages show, in one read; null: no account. */
 export async function readChecks(userId: string): Promise<ChecksState | null> {
   const res = await supabaseFetch(
-    `/rest/v1/mira_user?id=eq.${enc(userId)}&select=use_checks,use_assessment,country,mira_check(scale,answers,created_at)&mira_check.order=created_at.asc&limit=1`
+    `/rest/v1/mira_user?id=eq.${enc(userId)}&select=name,use_checks,use_assessment,country,mira_check(scale,answers,created_at)&mira_check.order=created_at.asc&limit=1`
   );
   if (!res.ok) throw new Error(`mira checks read failed (${res.status})`);
   const [row] = (await res.json()) as Array<{
+    name: string | null;
     use_checks: boolean;
     use_assessment: boolean;
     country: string | null;
@@ -34,6 +36,7 @@ export async function readChecks(userId: string): Promise<ChecksState | null> {
   }>;
   if (!row) return null;
   return {
+    name: row.name,
     useChecks: row.use_checks,
     useAssessment: row.use_assessment,
     country: row.country,

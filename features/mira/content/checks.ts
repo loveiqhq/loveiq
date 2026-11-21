@@ -326,6 +326,21 @@ export const CHECKS: readonly Check[] = [
 
 export const CHECK_IDS = CHECKS.map((c) => c.id);
 
+/** "Talk to Mira" beside the support lines the mood check's question 9 opened. */
+export const SUPPORT_STARTER =
+  "I just did the mood check and things feel really hard right now. Can we talk?";
+
+/**
+ * The chat's message box for `/mira?say=<id>`: a check's starter or the support one, put there
+ * for the person to send or change; anything else puts nothing there.
+ */
+export const starterFor = (say: unknown): string | undefined =>
+  say === "support"
+    ? SUPPORT_STARTER
+    : typeof say === "string"
+      ? CHECKS.find((c) => c.id === say)?.starter
+      : undefined;
+
 export const checkById = (id: string): Check | undefined => CHECKS.find((c) => c.id === id);
 export const checkByScale = (scale: string): Check | undefined =>
   CHECKS.find((c) => c.scale === scale);

@@ -70,12 +70,15 @@ export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: bool
 export default function MiraChat({
   signedIn,
   initialChatId,
+  initialInput = "",
 }: {
   signedIn: boolean;
   initialChatId: string | null;
+  /** Put in the message box for the person to send or change (a self-check's "Talk to Mira"). */
+  initialInput?: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialInput);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
