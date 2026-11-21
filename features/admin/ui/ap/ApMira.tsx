@@ -9,6 +9,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
+import ApMiraCoaches from "./ApMiraCoaches";
 import { bucketTitles } from "./hover";
 import {
   Bar,
@@ -639,6 +640,7 @@ function Engagement({ data }: { data: Data }) {
           who wrote to Mira within 48 hours of it.
         </p>
       </Card>
+      <ApMiraCoaches k={data.coaches} />
     </Board>
   );
 }

@@ -864,6 +864,15 @@ describe("fetchMira", () => {
       "style_saved",
       "reply_declined",
       "minor_stop",
+      // Coaches & picks (22 Nov 2026, mira-coaches.ts).
+      "notify_me",
+      "coaches_viewed",
+      "finder_started",
+      "finder_done",
+      "picks_shown",
+      "pick_clicked",
+      "guide_ask",
+      "search_empty",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(

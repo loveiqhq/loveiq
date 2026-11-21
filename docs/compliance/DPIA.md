@@ -520,6 +520,38 @@ with its reasons, WP243 rev.01, 4.2):
 By 2027-02-20 (with the crisis-line re-check), and earlier when Mira's data, recipients, model or
 consent wording change, or before Mira leaves the beta.
 
+### 7.12 Coaches, suggestions and search (from 2026-11-22)
+
+What changed (`features/mira/content/coaches.ts`, `features/mira/ui/coaches`,
+`app/api/mira/coaches`): a coaches page listing Mira and five coaches who are not live yet, "Notify
+me" for each of them, a two-question "Find my challenge", "Picked for you" and "Your coaches" on
+Home, a search on Home, and "Ask Mira about this" after each of the guide's practices.
+
+- **New processing**: a chat's topic label (`chat_topic`, already kept to count topics) is now also
+  used to coach the person: Home suggests guide practices, and sometimes a coach, from it. Only
+  rows written under the account (`user_id`) are read, never a browser id's, because a browser can
+  be shared and another person's topics must not shape the account's picks. Nothing is used while
+  "Remember our conversations" is off, and nothing from before the person's last "Delete all
+  chats". Only the person sees the suggestions.
+- **New labels in `mira_event`**, ids and numbers only: which coach a "Notify me" was for
+  (`notify_me`), which coach the finder suggested (`finder_done`, never the answers), the coaches
+  page and finder opened, picks shown and tapped, which practice a chat was opened from
+  (`guide_ask`), and searches that found nothing (`search_empty`, never the words; the search runs
+  in the browser). A "Notify me" or a finder outcome says which sex-related challenge the person
+  is interested in, so it is Art. 9 data, like the topic labels.
+- **Basis**: the A16 consent, as for Mira's other labels (LAWFUL_BASIS A21).
+- **Measures**: "Notify me" needs an account (there is no one to tell otherwise); the route lets in
+  only the listed ids and numbers, so no words can reach the log; someone stopped as under 18 is
+  refused (403) and their "Notify me" requests are deleted (`stopForMinor`), so no one under 18 is
+  told a coach for sex is ready; no new table, so data requests and account deletion cover these
+  rows as all of `mira_event`.
+- **Retention**: 12 months, as `mira_event` (7.6). A "Notify me" request older than that is gone,
+  so nobody is told about a coach a year after asking.
+- **Risk**: LOW after the measures. Who is told when a coach is ready, how and by whom, is to be
+  decided before the first such email (7.9).
+- **Open**: the system prompt lets Mira name only Jonas and Ana as coming soon; the coaches page
+  names five. Whether Mira may name the other three is Sanjin's call.
+
 ## 8. Sign-off
 
 By committing this file, the data controller (Eman) confirms the DPIA has been reviewed and the residual risks are accepted given the documented mitigations.

@@ -199,6 +199,39 @@ export default function MiraPrivacyPage() {
           </li>
         </ul>
 
+        <h2>Coaches, suggestions and search</h2>
+        <ul>
+          <li>
+            Mira&apos;s coaches page lists the coaches on their way. If you tap &ldquo;Notify
+            me&rdquo; on one, we keep which coach you asked about, with your account, so we can let
+            you know when that coach is ready. Like the rest of Mira&apos;s log, the request is
+            deleted after 12 months.
+          </li>
+          <li>
+            &ldquo;Find my challenge&rdquo; asks two quick questions. We keep only which coach it
+            suggested, never your answers.
+          </li>
+          <li>
+            &ldquo;Picked for you&rdquo; on your Home page suggests practices from the guide, and
+            sometimes a coach, from the topics of your own chats (the labels above). It uses only
+            the chats you had while signed in, never one from before you last deleted your chats,
+            and nothing while &ldquo;Remember our conversations&rdquo; is off. Only you see it.
+          </li>
+          <li>
+            The search on your Home page runs in your browser: what you type is not sent to us. We
+            count searches that find nothing, without the words.
+          </li>
+          <li>
+            We also count, as steps, when you open the coaches page and the finder, which picks you
+            are shown and which you tap, and which practice of the guide you asked Mira about.
+          </li>
+          <li>
+            Legal basis: your explicit consent to coaching (Art. 6(1)(a) and Art. 9(2)(a) GDPR), as
+            for Mira&apos;s other labels. If you tell Mira you are under 18, your requests to hear
+            about coaches are deleted and no coach is offered to you.
+          </li>
+        </ul>
+
         <h2>Why, and on what legal basis</h2>
         <ul>
           <li>
@@ -357,7 +390,9 @@ export default function MiraPrivacyPage() {
         </p>
         <p className="mt-3">
           Mira&apos;s body confidence guide is a page to read. It asks for nothing and stores
-          nothing beyond the analytics on all our pages.
+          nothing beyond the analytics on all our pages. &ldquo;Ask Mira about this&rdquo; opens the
+          chat with a question about that practice, for you to send or change; the chat notes which
+          practice it was.
         </p>
       </article>
     </MiraFrame>
