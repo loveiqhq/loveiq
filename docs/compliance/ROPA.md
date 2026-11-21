@@ -70,6 +70,17 @@ points. Two things the rows above leave out:
 - **Data requests** (access, copy, deletion) cover all Mira data, and team members' own browsers
   are left out of Mira's statistics.
 
+### Activities 19 and 22, extended: Mira's coaches, suggestions and search (from 2026-11-22)
+
+Coaching (19) now also suggests guide practices and coaches on Home from the topic labels of the
+person's own chats, read only from rows written under their account, never while "Remember our
+conversations" is off. Measurement (22) gains ids and numbers only: which coming-soon coach a
+"Notify me" was for (kept with the account so the person can be told when that coach is ready),
+which coach "Find my challenge" suggested, the coaches page and finder opened, picks shown and
+tapped, which guide practice a chat was opened from, and searches that found nothing. Basis:
+LAWFUL_BASIS A21; retention 12 months (`mira_event`); no new recipient or transfer. Someone stopped
+as under 18 is refused and their "Notify me" requests are deleted ([DPIA.md](DPIA.md) §7.12).
+
 ## 3. Processors / sub-processors
 
 | Vendor                        | Role                                                                        | Data shared                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Location                 | DPA on file?                                                                                               |
@@ -338,6 +349,7 @@ Detailed implementation lives in `docs/runbooks/SECURITY.md` and the residual-ri
 
 ## 7. Change log
 
+- 2026-11-22: Mira's coaches, suggestions and search (activities 19 and 22 extended): "Notify me" per coming-soon coach, the finder's outcome, picks from the person's own chat topics, and the guide's "Ask Mira about this"; LAWFUL_BASIS A21, DPIA §7.12.
 - 2026-11-20: Slack's posts about sign-ups and returns described (purpose, basis, restricted readers left out), with the privacy policy §7.7.
 - 2026-11-20: activities 19 to 22, Mira (the coaching chat, the account and sign-in, daily nudges, measurement and feedback); Anthropic and Google's sign-in added to the processors table; Supabase's location corrected to Zurich, Switzerland; the data protection officer named (Eman Čičkušić).
 - 2026-11-10: added activity 18, the recruiting website novutalent.com (live 2026-11-10): server logs, email enquiries to <hr@novutalent.com> through united-domains' forwarding, and from the same evening a CookieYes banner with GA4 behind it (property 563588616). united-domains added as a processor; its data processing agreement is still to be confirmed.

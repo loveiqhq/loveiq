@@ -169,6 +169,21 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: as long as the Slack workspace keeps messages (its retention setting: to confirm)
 - **Objection**: Art. 21 by email; a restriction request (T-09) also takes the reader out of these posts
 
+### A21 — Mira coaches, suggestions and search (from 2026-11-22)
+
+- **Data**: which coming-soon coach a person asked to be told about (`notify_me`, with the account),
+  which coach "Find my challenge" suggested (never the answers), the topic labels of their own
+  chats (A16) used for "Picked for you" and "Your coaches" on Home, and the steps: the coaches page
+  and finder opened, picks shown and tapped, which guide practice a chat was opened from, searches
+  that found nothing (never the words). All ids and numbers, in `mira_event`
+- **Basis**: (a) consent with Art. 9(2)(a): the A16 consent ("to coach me, and to count, without
+  my words, how Mira is used and whether she helps"). Suggestions read only rows written under the
+  account, nothing while "Remember our conversations" is off, nothing from before the last "Delete
+  all chats" ([DPIA.md](DPIA.md) §7.12)
+- **Retention**: 12 months, as `mira_event`; deleting the account deletes or unlinks them
+- **Withdraw**: as A16; turning "Remember our conversations" off stops the suggestions from chats;
+  anyone stopped as under 18 has their "Notify me" requests deleted
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
