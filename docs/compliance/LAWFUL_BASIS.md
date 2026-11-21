@@ -144,7 +144,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A17 — Mira account, sign-in and service emails
 
-- **Data**: email, profile, settings, consents, sign-in code rows; the sign-in code email; the daily nudge emails (on by default for new accounts)
+- **Data**: email, profile, settings (from 2026-11-21 also the reply language, and light or dark and the text size, which a new sign-in brings to that browser), consents, sign-in code rows; the sign-in code email; the daily nudge emails (on by default for new accounts)
 - **Basis**: (b) contract: the free account and the emails that come with it ("Daily nudges from Mira come with your free account"). A nudge's words come from the last chat, so they also rest on the A16 consent. Each nudge's delivery and first open: (f) legitimate interest, as in A6, an owner's accepted risk; the ePrivacy question in DPIA §6 applies here too
 - **Retention**: until the account is deleted; sign-in codes when used, otherwise after a day; sign-ins that never finished sign-up after 24 hours
 - **Stop**: pause or one-click stop in every nudge, or in Settings; the account can be deleted in Settings
