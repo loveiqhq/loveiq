@@ -174,10 +174,9 @@ export default function MiraSettings() {
             </label>
             <label className="flex flex-col gap-2 text-[14px] font-semibold">
               Where you&apos;re based
-              <select
+              <Select
                 value={p.country ?? ""}
                 onChange={(e) => set({ country: e.target.value || null })}
-                className="min-h-[48px] rounded-2xl border border-ap-line bg-white px-4 text-[16px] font-normal"
               >
                 <option value="">Not set</option>
                 {CRISIS_COUNTRY_OPTIONS.map((c) => (
@@ -186,7 +185,7 @@ export default function MiraSettings() {
                   </option>
                 ))}
                 <option value="OTHER">Somewhere else</option>
-              </select>
+              </Select>
             </label>
           </section>
 
@@ -237,31 +236,26 @@ export default function MiraSettings() {
             ) : null}
             <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
               Nudge time
-              <select
+              <Select
                 value={p.nudge_time}
                 onChange={(e) => set({ nudge_time: e.target.value as Profile["nudge_time"] })}
-                className="min-h-[44px] rounded-full border border-ap-line px-4 text-[16px] font-normal"
               >
                 {NUDGE_TIMES.map(([v, label]) => (
                   <option key={v} value={v}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
               Time zone
-              <select
-                value={p.time_zone}
-                onChange={(e) => set({ time_zone: e.target.value })}
-                className="min-h-[44px] rounded-full border border-ap-line px-4 text-[16px] font-normal"
-              >
+              <Select value={p.time_zone} onChange={(e) => set({ time_zone: e.target.value })}>
                 {[...new Set([p.time_zone, ...TIME_ZONES])].map((tz) => (
                   <option key={tz} value={tz}>
                     {tz.replace("_", " ")}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </section>
 
@@ -375,5 +369,33 @@ function Switch({
         className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
       />
     </label>
+  );
+}
+
+/** A select that matches the page's fields: WebKit's own select ignores their height and shape. */
+function Select({ children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className="relative flex">
+      <select
+        {...rest}
+        className="min-h-[48px] w-full appearance-none rounded-2xl border border-ap-line bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none focus:border-ap-purple"
+      >
+        {children}
+      </select>
+      <svg
+        aria-hidden="true"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ap-muted"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </span>
   );
 }
