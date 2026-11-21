@@ -31,7 +31,8 @@
  *         - report_share (+ report_share_view via cascade)
  *         - report_price_quote
  *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
- *   - Mira, the AI coach (features/mira): mira_user (by email; the account), its mira_chat +
+ *   - Mira, the AI coach (features/mira): mira_user (by email; the account, every column: its
+ *     settings too, such as the reply language and the appearance of 21 Nov 2026), its mira_chat +
  *     mira_message, mira_body_check, mira_nudge and mira_event rows (by user_id), and a pending
  *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and

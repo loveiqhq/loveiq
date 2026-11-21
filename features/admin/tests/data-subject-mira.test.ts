@@ -123,3 +123,16 @@ describe("DSAR delete covers Mira (Art. 17)", () => {
     expect(result.warnings).toContain("mira_user: could not be read; run the request again");
   });
 });
+
+// Settings, 21 Nov 2026 (20261122060000_mira_settings.sql): the account's own columns.
+describe("DSAR export of Mira's Settings choices", () => {
+  it("reads every column of the account, so the reply language and appearance go out too", async () => {
+    accounts = [{ ...ACCOUNT, reply_language: "de", theme: "dark", text_size: "large" }];
+    const result = await exportDataSubject("lea@example.com");
+    expect(result.exportData?.mira_user).toEqual([
+      { ...ACCOUNT, reply_language: "de", theme: "dark", text_size: "large" },
+    ]);
+    const read = fetched().find(([, path]) => String(path).startsWith("/rest/v1/mira_user"));
+    expect(String(read?.[1])).toContain("select=*");
+  });
+});

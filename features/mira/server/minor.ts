@@ -9,8 +9,9 @@ import { deleteChats, updateProfile } from "./store";
  * (safety.ts parseReply), the person said or clearly showed they are under 18: from then on
  * their browser (a cookie, a year) and their account (mira_user.minor_at) get message G without
  * the model. A crisis message still gets the crisis reply and the lines, because the chat route
- * reads crisis words first. The account's nudges go off, and its chats are deleted and no longer
- * kept; the browser forgets its own chat (MiraChat).
+ * reads crisis words first. The account's nudges go off, its chats are deleted and no longer
+ * kept, and its Settings choices (reply language, appearance) are cleared; the browser forgets its
+ * own chat (MiraChat).
  */
 
 /** This browser or this account said its person is under 18. */
@@ -39,6 +40,10 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       minor_at: new Date().toISOString(),
       nudges_on: false,
       remember_chats: false,
+      // Settings' choices go too (21 Nov 2026): an under-18 stop keeps nothing it needn't.
+      reply_language: null,
+      theme: null,
+      text_size: null,
     }),
     deleteChats(userId),
   ]);

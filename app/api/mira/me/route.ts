@@ -3,7 +3,9 @@
  *
  *   GET            → profile, chats, the LoveIQ result matched on the verified email, and
  *                    which body check is due (features/mira/server/body-check.ts)
- *   PATCH          → name, country, gender, coaching style, the two "What Mira may use" switches
+ *   PATCH          → name, country, gender, coaching style, the two "What Mira may use" switches,
+ *                    the nudges, the reply language and the appearance (theme, text size); never
+ *                    for an account stopped as under 18 (403, server/minor.ts)
  *   DELETE ?what=chats    → deletes every stored chat
  *   DELETE ?what=account  → deletes the account, its profile, chats and messages (a staff or
  *       Jarvis login stays: see deleteAccount)
@@ -11,6 +13,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
+import { REPLY_LANGUAGE_CODES } from "@features/mira/reply-languages";
+import { isMinor } from "@features/mira/server/minor";
 import { isValidTimeZone } from "@features/mira/server/nudges";
 import { getMiraAccount, createMiraSupabase } from "@features/mira/server/session";
 import {
@@ -53,8 +57,19 @@ const patchSchema = z
     nudges_on: z.boolean().optional(),
     nudge_time: z.enum(["08:00", "19:00", "21:30"]).optional(),
     time_zone: z.string().max(64).refine(isValidTimeZone).optional(),
+    // Settings, 21 Nov 2026: null is "Match my messages".
+    reply_language: z.enum(REPLY_LANGUAGE_CODES).nullable().optional(),
+    theme: z.enum(["light", "dark", "system"]).optional(),
+    text_size: z.enum(["small", "default", "large"]).optional(),
   })
   .strict();
+
+/** Each Settings choice the KPI log counts on its own (its id only): AP › Mira › Settings. */
+const CHANGE_EVENTS = {
+  theme: "theme_changed",
+  text_size: "text_size_changed",
+  reply_language: "reply_language_changed",
+} as const;
 const deleteSchema = z.object({ what: z.enum(["chats", "account"]) });
 
 async function guard(request: Request, write: boolean) {
@@ -112,6 +127,10 @@ export async function PATCH(request: Request) {
   const parsed = patchSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
+    // Under 18 (rail 15): Mira keeps nothing new for the account, settings included.
+    if (await isMinor(g.account.id)) {
+      return NextResponse.json({ error: "Mira is only for adults." }, { status: 403 });
+    }
     const { nudges_on, ...rest } = parsed.data;
     // The switch in Settings is the same stop as the email's: on again clears the stop. Settings
     // sends nudges_on with every save, so only a real switch counts: the same value again must
@@ -130,6 +149,12 @@ export async function PATCH(request: Request) {
           : { nudges_on, nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
     await updateProfile(g.account.id, { ...rest, ...nudgeState });
     logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(parsed.data) });
+    for (const [field, name] of Object.entries(CHANGE_EVENTS)) {
+      if (field in parsed.data) {
+        const value = parsed.data[field as keyof typeof CHANGE_EVENTS] ?? null;
+        logMiraEvent(name, { userId: g.account.id }, { value });
+      }
+    }
     // The "Nudge emails" unsubscribe numbers count a stop wherever it happens, Settings included.
     if ("nudges_on" in nudgeState) {
       logMiraEvent(

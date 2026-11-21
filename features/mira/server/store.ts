@@ -27,6 +27,13 @@ export type MiraProfile = {
   nudges_on: boolean;
   nudge_time: "08:00" | "19:00" | "21:30";
   time_zone: string;
+  /**
+   * Settings, 21 Nov 2026 (20261122060000_mira_settings.sql): the language Mira replies in (null:
+   * the person's own), and how Mira looks (null: never chosen, this browser's own stays).
+   */
+  reply_language: string | null;
+  theme: "light" | "dark" | "system" | null;
+  text_size: "small" | "default" | "large" | null;
 };
 
 export type ChatSummary = { id: string; title: string; updated_at: string };
@@ -50,7 +57,7 @@ async function rows<T>(path: string): Promise<T[]> {
 }
 
 const PROFILE_COLS =
-  "id,email,name,country,gender,style,remember_chats,use_assessment,consent_at,consent_version,nudges_on,nudge_time,time_zone";
+  "id,email,name,country,gender,style,remember_chats,use_assessment,consent_at,consent_version,nudges_on,nudge_time,time_zone,reply_language,theme,text_size";
 
 export async function getProfile(id: string): Promise<MiraProfile | null> {
   const found = await rows<MiraProfile>(
@@ -102,6 +109,9 @@ export type ProfilePatch = Partial<
     | "nudges_on"
     | "nudge_time"
     | "time_zone"
+    | "reply_language"
+    | "theme"
+    | "text_size"
   > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null; minor_at: string }
 >;
 
@@ -316,7 +326,11 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Settings, 21 Nov 2026: a changed appearance, text size or reply language (its id as `value`).
+  | "theme_changed"
+  | "text_size_changed"
+  | "reply_language_changed";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

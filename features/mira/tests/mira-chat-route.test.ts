@@ -584,6 +584,24 @@ describe("POST /api/mira/chat", () => {
     expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain("FIRST MESSAGE TOPIC");
   });
 
+  // Settings › "Mira replies in" (21 Nov 2026).
+  it("replies in the account's chosen language, else in the person's own", async () => {
+    await post({ message: "Hallo", consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("the person's latest message");
+    vi.mocked(askModel).mockClear();
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      reply_language: "de",
+    } as never);
+    await post({ message: "hi", consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("Reply in German");
+  });
+
   it("logs a new chat's topic as its id, never the words, and never for a starter chip", async () => {
     vi.mocked(askModel).mockResolvedValue({
       ok: true,
@@ -760,6 +778,10 @@ describe("POST /api/mira/chat", () => {
         minor_at: expect.any(String),
         nudges_on: false,
         remember_chats: false,
+        // Settings' choices (21 Nov 2026).
+        reply_language: null,
+        theme: null,
+        text_size: null,
       });
       expect(deleteChats).toHaveBeenCalledWith("u1");
       expect(addMessages).not.toHaveBeenCalled();

@@ -1,6 +1,7 @@
 import { GUIDE_PRACTICES, SKIP_IT } from "../content/guide";
 import miraConfig from "../content/mira-config.json";
 import { MIRA_SYSTEM_PROMPT } from "../content/system-prompt";
+import { REPLY_LANGUAGES } from "../reply-languages";
 import { renderCards } from "./cards";
 
 /**
@@ -34,6 +35,8 @@ export type PersonContext = {
   gender?: string | null;
   country?: string | null;
   archetype?: string | null;
+  /** "Mira replies in" (Settings): a language code, or null to match the person's messages. */
+  replyLanguage?: string | null;
   signedIn: boolean;
 };
 
@@ -125,6 +128,18 @@ export function topicInstruction(): string {
   ].join("\n");
 }
 
+/**
+ * The language of Mira's replies (Settings, 21 Nov 2026): the one the person chose, else the one
+ * they write in, for anonymous chats too. The stable instructions keep the Sources line and the
+ * markers in English, which the app reads (safety.ts parseReply).
+ */
+export function replyLanguageInstruction(code: string | null | undefined): string {
+  const chosen = REPLY_LANGUAGES.find((l) => l.code === code);
+  return chosen
+    ? `Reply in ${chosen.name}, whatever language the person writes in.`
+    : "Reply in the language of the person's latest message (English when you can't tell).";
+}
+
 export function personalInstructions(
   style: CoachingStyle | null | undefined,
   person: PersonContext,
@@ -136,6 +151,7 @@ export function personalInstructions(
       ? "The person has a free account; this chat is kept if they chose that in Settings."
       : "The person is chatting anonymously. Do not ask for their email or name."
   );
+  lines.push(replyLanguageInstruction(person.replyLanguage));
   if (person.name) lines.push(`Their name, as they want to be called: ${person.name}.`);
   if (person.gender)
     lines.push(`Their gender, as they described it: ${person.gender}. Do not ask again.`);
