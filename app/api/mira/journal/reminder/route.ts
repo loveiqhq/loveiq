@@ -2,8 +2,9 @@
  * POST /api/mira/journal/reminder?t=… : stops the daily journal reminder. The email's
  * List-Unsubscribe header points here (RFC 8058 one-click), and so does the button on the page
  * its footer link opens. No sign-in or CSRF check by design: mail providers post it without
- * cookies; the signed token (features/mira/server/nudges.ts, as the nudges') stands for the
- * person. It only ever switches an email off, so it works for everyone.
+ * cookies; the signed token stands for the person, with its own purpose ("journal-stop",
+ * features/mira/server/nudges.ts), so it can't open the nudge preferences and theirs can't be used
+ * here. It only ever switches an email off, so it works for everyone.
  * GET (someone opening the address) goes to that page instead of changing anything.
  */
 import { NextResponse } from "next/server";
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     windowMs: 60_000,
   });
   if (!r.allowed) return new NextResponse("Too many requests", { status: 429 });
-  const userId = readToken("prefs", new URL(request.url).searchParams.get("t"));
+  const userId = readToken("journal-stop", new URL(request.url).searchParams.get("t"));
   if (!userId) return new NextResponse("Invalid link", { status: 403 });
   try {
     await stopReminder(userId);

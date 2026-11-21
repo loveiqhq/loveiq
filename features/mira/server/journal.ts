@@ -301,7 +301,7 @@ export async function runJournalReminders(
         skip("recent-crisis");
         continue;
       }
-      const token = makeToken("prefs", user.id);
+      const token = makeToken("journal-stop", user.id);
       if (!token) {
         skip("no-email-setup");
         continue;

@@ -24,6 +24,8 @@ import { getProfile, logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { DELETE, GET, PATCH, PUT } from "@/app/api/mira/journal/route";
 import { GET as visitStop, POST as stop } from "@/app/api/mira/journal/reminder/route";
+import { GET as nudgePrefs } from "@/app/api/mira/nudges/preferences/route";
+import { POST as nudgeUnsubscribe } from "@/app/api/mira/nudges/unsubscribe/route";
 
 process.env.UNSUBSCRIBE_SECRET = "test-secret-for-mira-journal-0123456789";
 
@@ -275,7 +277,7 @@ describe("the reminder email's stop link", () => {
   it("stops the person's reminder from the signed link alone, no sign-in or CSRF", async () => {
     vi.mocked(getMiraAccount).mockResolvedValue(null);
     vi.mocked(verifyCsrfToken).mockResolvedValue(false);
-    const res = await stop(link(makeToken("prefs", LEA.id)!));
+    const res = await stop(link(makeToken("journal-stop", LEA.id)!));
     expect(res.status).toBe(200);
     expect(writes()).toEqual([
       {
@@ -287,6 +289,21 @@ describe("the reminder email's stop link", () => {
     expect(events()).toEqual([{ name: "journal_reminder_stopped", props: {} }]);
   });
 
+  it("is a link for this one thing: a nudge's token can't stop it, and it can't touch the nudges", async () => {
+    // A nudge email's own token, for the person's nudge preferences.
+    expect((await stop(link(makeToken("prefs", LEA.id)!))).status).toBe(403);
+    const journal = encodeURIComponent(makeToken("journal-stop", LEA.id)!);
+    const prefs = await nudgePrefs(
+      new Request(`http://localhost/api/mira/nudges/preferences?t=${journal}`)
+    );
+    expect(prefs.status).toBe(403);
+    const unsub = await nudgeUnsubscribe(
+      new Request(`http://localhost/api/mira/nudges/unsubscribe?t=${journal}`, { method: "POST" })
+    );
+    expect(unsub.status).toBe(403);
+    expect(supabaseFetch).not.toHaveBeenCalled();
+  });
+
   it("refuses a link we did not sign", async () => {
     const forged = `${LEA.id}.not-our-signature`;
     expect((await stop(link(forged))).status).toBe(403);
@@ -294,7 +311,7 @@ describe("the reminder email's stop link", () => {
   });
 
   it("sends someone opening the link to the page that asks first", async () => {
-    const t = makeToken("prefs", LEA.id)!;
+    const t = makeToken("journal-stop", LEA.id)!;
     const res = await visitStop(
       new Request(`http://localhost/api/mira/journal/reminder?t=${encodeURIComponent(t)}`)
     );
