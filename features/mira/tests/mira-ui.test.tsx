@@ -14,6 +14,7 @@ import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import { SupportPanel } from "@features/mira/ui/SupportPanel";
+import { Wordmark } from "@features/mira/ui/MiraShell";
 
 /** The audit fixes of 20 Nov 2026 on Mira's screens (the API routes are tested on their own). */
 
@@ -492,6 +493,14 @@ describe("Welcome", () => {
     const chip = miraConfig.starterChips[0];
     expect(await screen.findAllByRole("button", { name: chip })).toHaveLength(1);
     expect(screen.getAllByText(chip)).toHaveLength(2);
+  });
+
+  it("hands the logo's link no function outside the chat, so server-rendered pages can use it", () => {
+    // /mira/privacy and /mira/guide render it on the server: a function prop there is a 500.
+    expect((Wordmark({}) as { props: { onClick?: unknown } }).props.onClick).toBeUndefined();
+    expect(
+      (Wordmark({ onHome: () => {} }) as { props: { onClick?: unknown } }).props.onClick
+    ).toBeTypeOf("function");
   });
 
   it("says what Mira was trained on", () => {
