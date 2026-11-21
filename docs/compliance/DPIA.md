@@ -451,6 +451,9 @@ Recorded as owner decisions, not as risks this assessment found acceptable on it
    (owner decision of 2026-08-10, kept for Mira on 2026-11-20).
 2. **Nudges on by default** for new accounts (M8).
 3. **Nudge open tracking** (M7).
+4. **Mira stays on Eman's own Anthropic organization** ("Eman's Individual Org") and its keys, not
+   a company account (owner decision of 2026-11-21). Who the contract is with is still to confirm
+   (7.9 point 1).
 
 ### 7.8 Residual risk
 
@@ -464,27 +467,36 @@ take one of the M5 measures.
 
 1. **Anthropic**: confirm the contract partner (Anthropic Ireland, Limited for an organization in
    Germany) and that no zero data retention agreement exists; raise the DPA's "special categories:
-   None" for Mira's Art. 9 data; check the DPF list and the list of subprocessors.
+   None" (Schedule 1, B.3) for Mira's Art. 9 data; check the DPF list and the list of
+   subprocessors.
 2. **Supabase and Upstash**: confirm the SCCs for Supabase Inc.'s own access and Upstash's region.
 3. **Consent scope**: resolved 20 Nov 2026: the consent now names counting "without my words, how
    Mira is used and whether she helps" (labels, body check comparisons), within version
    `mira-2026-11-21`, which had not shipped yet.
-4. **The DPO**: tell the Berlin authority the DPO's contact details (Art. 37(7)). Check Art. 38(6):
-   Eman also leads engineering and decides how Mira processes data, a role the Article 29 Working
-   Party's DPO guidelines (WP243 rev.01) name as a typical conflict of interest.
+4. **The DPO**: registered with the Berlin authority (Art. 37(7)), confirmed by Marcus on
+   2026-11-21. Still to check, Art. 38(6): Eman also leads engineering and decides how Mira
+   processes data, a role the Article 29 Working Party's DPO guidelines (WP243 rev.01) name as a
+   typical conflict of interest.
 5. **§25 TDDDG**: the browser id cookie is needed for the free limit but also links anonymous
    statistics; the nudge open image (M7).
 6. **§7 UWG**: nudges on by default (M8).
 
 ### 7.10 DPO's opinion (Art. 35(2))
 
-To be completed by Eman Čičkušić, data protection officer:
+Eman Čičkušić, data protection officer:
 
 - [ ] I agree with this assessment.
-- [ ] I agree on these conditions: …
+- [x] I agree on these conditions:
+  1. M5 is still high after the measures, so Art. 36(1) applies: mask the chat in Clarity and
+     PostHog (or don't load them on `/mira`), or consult the Berlin Commissioner. Until one of
+     these is done, Mira is not promoted.
+  2. Anthropic's DPA lists no special categories (Schedule 1, B.3), while Mira sends Art. 9 data.
+     Before Mira is promoted, get that covered in writing, or move the model calls to a provider
+     whose contract covers it.
+  3. The other open points in 7.9 are settled by the review in 7.11.
 - [ ] I disagree, because: …
 
-Date: …
+Date: 2026-11-21
 
 ### 7.11 Review
 
