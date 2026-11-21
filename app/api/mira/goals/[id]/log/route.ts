@@ -3,12 +3,14 @@
  * (Challenges & goals): { day, done }. `day` is today in the person's own time zone, as the
  * browser has it; no other day can be ticked (goal-progress.ts isTickableDay). done: true ticks
  * it (once, however often it is tapped), false takes the tick back. 404 for a goal that isn't
- * the person's own. The KPI log counts goal_logged, with no words or ids.
+ * the person's own, 403 for an account or browser that said it is under 18 (rail 15). The KPI
+ * log counts goal_logged, with no words or ids.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isTickableDay } from "@features/mira/server/goal-progress";
-import { setTick } from "@features/mira/server/goals";
+import { ADULTS_ONLY, setTick } from "@features/mira/server/goals";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -39,6 +41,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const { id } = await params;
   try {
+    if (await isMinor(account.id)) {
+      return NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+    }
     if (!(await setTick(account.id, id, parsed.data.day, parsed.data.done))) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }

@@ -33,7 +33,8 @@
  *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
  *   - Mira, the AI coach (features/mira): mira_user (by email; the account), its mira_chat +
  *     mira_message, mira_body_check, mira_nudge and mira_event rows (by user_id), and a pending
- *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
+ *     mira_sign_in_code (by email). Challenges & goals (22 Nov 2026): its mira_goal and
+ *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
  *
@@ -227,6 +228,9 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
     ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
     ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
+    // Challenges & goals: the goals in the person's words, and the days they ticked them.
+    ["mira_goal", `/rest/v1/mira_goal?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_goal_log", `/rest/v1/mira_goal_log?user_id=${ids}&select=*&order=goal_id.asc,day.asc`],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);
@@ -234,7 +238,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       result.ok = false;
       result.warnings.push(`${table}: could not be read in full; run the export again`);
     }
-    // eslint-disable-next-line security/detect-object-injection -- one of the five names above.
+    // eslint-disable-next-line security/detect-object-injection -- one of the names above.
     result.exportData![table] = rows ?? [];
   }
 }

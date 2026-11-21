@@ -236,6 +236,9 @@ are left out of Mira's statistics.
 - Art. 9 (sex life, health): the messages and Mira's replies; for account holders the saved chats
   (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
   (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in.
+- Art. 9, Challenges & goals (from 2026-11-22, §7.12): an account holder's goals in their own
+  words, with an optional number of days a week, and the days they ticked them (`mira_goal`,
+  `mira_goal_log`); exported and erased with the account by the data-request tool (§4).
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
   result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason), and each
   consent with its time and wording version.

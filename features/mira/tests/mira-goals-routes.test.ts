@@ -66,6 +66,7 @@ const logged = () => JSON.stringify(vi.mocked(logMiraEvent).mock.calls);
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getMiraAccount).mockResolvedValue(LEA);
+  vi.mocked(isMinor).mockResolvedValue(false);
   vi.mocked(verifyCsrfToken).mockResolvedValue(true);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true, remaining: 9, resetAt: new Date() });
   vi.mocked(createGoal).mockResolvedValue({ ...row, days: [] });
@@ -277,5 +278,31 @@ describe("POST /api/mira/goals/[id]/log", () => {
     });
     expect((await log({ day: today, done: true })).status).toBe(429);
     expect(setTick).not.toHaveBeenCalled();
+  });
+});
+
+describe("someone who said they are under 18 (rail 15)", () => {
+  beforeEach(() => vi.mocked(isMinor).mockResolvedValue(true));
+
+  it("sees, sets, changes and ticks no goals", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    expect((await GET(req("GET", "/api/mira/goals"))).status).toBe(403);
+    expect((await POST(req("POST", "/api/mira/goals", { text: "Walk" }))).status).toBe(403);
+    const change = req("PATCH", `/api/mira/goals/${GOAL}`, { completed: true });
+    expect((await PATCH(change, params())).status).toBe(403);
+    const log = req("POST", `/api/mira/goals/${GOAL}/log`, { day: today, done: true });
+    expect((await tick(log, params())).status).toBe(403);
+    expect(listGoals).not.toHaveBeenCalled();
+    expect(createGoal).not.toHaveBeenCalled();
+    expect(updateGoal).not.toHaveBeenCalled();
+    expect(setTick).not.toHaveBeenCalled();
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("can still delete what is there", async () => {
+    expect((await deleteAll(req("DELETE", "/api/mira/goals"))).status).toBe(200);
+    expect((await deleteOne(req("DELETE", `/api/mira/goals/${GOAL}`), params())).status).toBe(200);
+    expect(deleteGoals).toHaveBeenCalledWith(LEA.id);
+    expect(deleteGoal).toHaveBeenCalledWith(LEA.id, GOAL);
   });
 });

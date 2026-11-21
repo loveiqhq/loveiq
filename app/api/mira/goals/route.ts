@@ -6,12 +6,14 @@
  *             "Add as a goal" under one of Mira's replies); 409 with MAX_ACTIVE_GOALS on the go
  *   DELETE  → every goal of the person's, and their ticks
  *
- * Everything is scoped to the signed-in account (features/mira/server/goals.ts). The KPI log
- * counts goals, never their words: goal_set (how, and the target), goals_deleted.
+ * Everything is scoped to the signed-in account (features/mira/server/goals.ts). An account or
+ * browser that said it is under 18 gets 403 on GET and POST (rail 15); DELETE always works. The
+ * KPI log counts goals, never their words: goal_set (how, and the target), goals_deleted.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  ADULTS_ONLY,
   MAX_ACTIVE_GOALS,
   createGoal,
   deleteGoals,
@@ -44,12 +46,14 @@ const slowDown = () =>
   NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
 const signIn = () => NextResponse.json({ error: "Please sign in." }, { status: 401 });
 const invalid = () => NextResponse.json({ error: "Invalid request." }, { status: 403 });
+const adultsOnly = () => NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
 
 export async function GET(request: Request) {
   if (!(await checkRateLimit(getClientIp(request), PER_MINUTE)).allowed) return slowDown();
   const account = await getMiraAccount();
   if (!account) return signIn();
   try {
+    if (await isMinor(account.id)) return adultsOnly();
     const goals = await listGoals(account.id);
     return NextResponse.json({ goals }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
@@ -67,10 +71,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const { text, weeklyTarget: target = null, via = "hand" } = parsed.data;
   try {
-    // Coaching is for adults: an account that said it is under 18 sets no goals (rail 15).
-    if (await isMinor(account.id)) {
-      return NextResponse.json({ error: "Mira's coaching is only for adults." }, { status: 403 });
-    }
+    if (await isMinor(account.id)) return adultsOnly();
     if (!(await checkRateLimit(account.id, NEW_PER_DAY)).allowed) {
       return NextResponse.json({ error: "That's plenty of new goals for today." }, { status: 429 });
     }

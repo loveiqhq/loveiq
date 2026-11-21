@@ -13,6 +13,11 @@ import type { GoalForPrompt } from "./prompt";
 export const GOAL_TEXT_MAX = 120;
 /** Goals on the go at once: a few small steps, not a to-do list. */
 export const MAX_ACTIVE_GOALS = 5;
+/**
+ * Rail 15: an account or browser that said it is under 18 (server/minor.ts isMinor) sees, sets,
+ * changes and ticks no goals; deleting them always works.
+ */
+export const ADULTS_ONLY = "Mira's coaching is only for adults.";
 
 /** A goal as the API takes it: spaces tidied, 1 to GOAL_TEXT_MAX characters. */
 export const goalText = z

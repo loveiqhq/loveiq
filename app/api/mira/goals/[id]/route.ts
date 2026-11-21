@@ -5,18 +5,21 @@
  *             away or mark it done (true), or bring it back (false; 409 past MAX_ACTIVE_GOALS)
  *   DELETE  → the goal and its ticks
  *
- * 404 for any id that isn't one of the person's own. The KPI log counts goal_completed,
+ * 404 for any id that isn't one of the person's own; 403 on PATCH for an account or browser that
+ * said it is under 18 (rail 15), while DELETE always works. The KPI log counts goal_completed,
  * goal_archived and goal_deleted, never the words.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  ADULTS_ONLY,
   MAX_ACTIVE_GOALS,
   deleteGoal,
   goalText,
   updateGoal,
   weeklyTarget,
 } from "@features/mira/server/goals";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -54,6 +57,9 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const { id } = await params;
   try {
+    if (await isMinor(account.id)) {
+      return NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+    }
     const goal = await updateGoal(account.id, id, parsed.data);
     if (goal === "missing") return NOT_FOUND();
     if (goal === "full") {
