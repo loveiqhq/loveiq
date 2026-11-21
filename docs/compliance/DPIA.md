@@ -245,6 +245,15 @@ are left out of Mira's statistics.
   rows (`mira_sign_in_code`: address, time, guesses).
 - Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
   IP and email addresses as rate-limit keys (Upstash), request logs (Vercel).
+- Sign-in and security (from 2026-11-22): passkeys (`mira_passkey`: credential id, public key,
+  signature counter, transports, synced or not, a label, made and last used; no biometric data,
+  which never leaves the device); signed-in devices (`mira_session`: the Supabase session id, how
+  the person signed in, a device label from the user agent such as "iPhone · Safari", the
+  approximate city at sign-in from Vercel's geo header, made and last seen; never the IP); a change
+  of email waiting for its code (`mira_email_change`: the new address, a keyed hash of the code,
+  when, guesses used); passkey challenges (`mira_webauthn_challenge`, random, 5 minutes); when
+  Google last confirmed the address (`mira_user.google_connected_at`); a short-lived cookie with a
+  challenge's id (`mira-passkey`, 5 minutes).
 - Analytics: what the site-wide tools record on Mira's pages, which includes the chat as it
   appears on screen.
 
@@ -332,7 +341,9 @@ controller service ([business.safety.google/adsservices](https://business.safety
 - **Transparency**: the consent ticks link to Mira's notice, which has a recipients table; the
   privacy policy covers Mira in §3.5, §5, §6, §7 and §9.
 - **Rights**: chats and the account can be deleted in Settings; data requests (access, copy,
-  deletion) cover all Mira data; the DPO is named in both notices.
+  deletion) cover all Mira data, from 2026-11-22 also passkeys (ids, labels, public keys), devices
+  and a pending change of email (never a code's hash or a challenge); the DPO is named in both
+  notices.
 - **Alternatives**: EU-only processing (Claude on Google Cloud or Amazon Bedrock in the EU) was
   asked for on Sanjin's coach board; Anthropic's own API was chosen on 19 Nov 2026. Revisit before
   Mira leaves the beta.
@@ -424,6 +435,31 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
 - **People named in chats**: no profile is built about them; their mention goes with the chat.
 - **Sign in with Google**: Google learns that the person signed in to Mira; it is optional.
 
+#### M10 — Account takeover through sign-in (MEDIUM before, LOW after; from 2026-11-22)
+
+Passkeys, signed-in devices and a change of email add ways in and out of an account whose chats
+are Art. 9 data.
+
+- **Passkeys** are Mira's own WebAuthn relying party (not Supabase's project-wide passkeys, which
+  any session in the shared project could use to add a way into the admin panel or Jarvis). The
+  relying party and origin are each site's own; a challenge is single use, lives 5 minutes and is
+  bound to the browser (httpOnly cookie) and, for a new passkey, to the account; user verification
+  is required; the signature counter may only move forward. A passkey sign-in makes the same
+  session an emailed code makes, never for `admin_users`.
+- **A device left signed in** (a shared computer, a stolen cookie) can't add a passkey or change
+  the address: both need a sign-in from the last 15 minutes. The person sees every signed-in device
+  with its approximate city and can sign out one or all; Mira honours only sessions its own sign-in
+  recorded, on every request, so signing out takes effect at once and a session minted elsewhere in
+  the shared project is refused.
+- **A change of email** needs an 8-digit code sent to the new address (an hour, 5 guesses, rate
+  limited like sign-in codes, suppression-aware), never reveals whether an address has an account
+  before the code proves it is the person's, and tells the old address. Staff and Jarvis logins
+  can't be changed or moved onto.
+- **Under 18**: the stop also deletes the account's passkeys, and none can be added again.
+- **Residual**: Supabase keeps a signed-out device's refresh token until that device next calls
+  Mira (then Mira ends it); it opens nothing in Mira, and no table grants the `authenticated` role
+  anything. The device city is approximate, from Vercel's geo lookup at sign-in.
+
 ### 7.6 Retention
 
 - Without an account: the chat stays in the browser; a new chat or clearing site data removes it.
@@ -434,6 +470,9 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
 - `mira_event`: 12 months; deleting the account removes any words and unlinks the rest.
 - Sign-in codes: deleted when used, otherwise after a day. Sign-ins that never finished sign-up:
   24 hours.
+- Passkeys: until removed in Settings, the account is deleted, or Mira stops the person as under 18. Signed-in devices: until signed out, or 90 days after last seen (then that device signs in
+  again). A change of email waiting for its code: deleted when used, otherwise after a day. Passkey
+  challenges: deleted when checked, otherwise by the next daily run (they expire after 5 minutes).
 - Backups: Supabase's daily backups for 7 days and the weekly copy for 30 days
   ([DISASTER_RECOVERY.md](../runbooks/DISASTER_RECOVERY.md)).
 - Rate-limit counters: expire by themselves, within 30 days at most.

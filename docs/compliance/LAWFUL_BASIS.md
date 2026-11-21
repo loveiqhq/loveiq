@@ -149,6 +149,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: until the account is deleted; sign-in codes when used, otherwise after a day; sign-ins that never finished sign-up after 24 hours
 - **Stop**: pause or one-click stop in every nudge, or in Settings; the account can be deleted in Settings
 
+### A17a — Mira sign-in security: passkeys, devices, change of email (from 2026-11-22)
+
+- **Data**: passkeys (credential id, public key, counter, transports, synced or not, a label, made and last used; no biometric data); signed-in devices (session id, how the person signed in, a device label from the user agent, the approximate city at sign-in from the host's geo lookup, made and last seen; never the IP); a change of email waiting for its code (the new address, a keyed hash of the code, when, guesses); passkey challenges (5 minutes); when Google last confirmed the address
+- **Basis**: (b) contract for signing in and the account's security (passkeys, signing devices out, changing the address and telling the old one); (f) legitimate interest for each device's approximate city: letting the person spot a sign-in that isn't theirs. Balancing: city only (no IP, no precise location), taken once at sign-in, shown only to the person, deleted with the device
+- **Retention**: passkeys until removed, the account is deleted or Mira stops the person as under 18; devices until signed out or 90 days after last seen; a pending change of email when used, otherwise after a day; challenges when checked, otherwise by the next daily run
+- **Stop**: remove passkeys, sign devices out and change the email in Settings; an Art. 21 objection by email; deleting the account deletes all of it
+
 ### A18 — Mira ratings, feedback and the log of steps
 
 - **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id); never a reply's text (the optional box that kept it went on 2026-11-21)
