@@ -12,13 +12,16 @@ import {
 } from "@features/admin/server/ap/filters";
 import {
   fetchSurveyIntroClicks,
+  fetchSurveySheets,
   POSTHOG_FROM,
   postHogFailed,
+  SHEETS_FROM,
 } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { fetchSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage, type Benchmark } from "@features/admin/server/ap/survey-page";
 import { addDays } from "@features/admin/server/dropoff-weekly";
+import { enabledSurveySheets } from "@features/survey/server/sheetSwitches";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
@@ -40,23 +43,32 @@ export async function GET(request: Request) {
   const scope = assessmentScope(filters);
 
   try {
-    const [facts, previous, questions, introClicks, prevIntroClicks] = await Promise.all([
-      fetchFactsFor(filters.from, filters.to, filters),
-      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
-      fetchSurveyQuestions(filters.from, filters.to, scope).then(
-        (q) => ({ q, error: null as string | null }),
-        (err: unknown) => {
-          logger.warn({ err }, "AP survey: questions unavailable");
-          return { q: null, error: "The questions could not be read." };
-        }
-      ),
-      fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
-      // The intro tiles' change while they come from PostHog: the same clicks a period earlier,
-      // when PostHog saw all of it.
-      cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
-        ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
-        : Promise.resolve(null),
-    ]);
+    const [facts, previous, questions, introClicks, prevIntroClicks, sheetsSeen, sheetsOn] =
+      await Promise.all([
+        fetchFactsFor(filters.from, filters.to, filters),
+        cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
+        fetchSurveyQuestions(filters.from, filters.to, scope).then(
+          (q) => ({ q, error: null as string | null }),
+          (err: unknown) => {
+            logger.warn({ err }, "AP survey: questions unavailable");
+            return { q: null, error: "The questions could not be read." };
+          }
+        ),
+        fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
+        // The intro tiles' change while they come from PostHog: the same clicks a period earlier,
+        // when PostHog saw all of it.
+        cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
+          ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
+          : Promise.resolve(null),
+        // The sheets between the questions, from their first day (17 Nov 2026).
+        filters.to >= SHEETS_FROM
+          ? fetchSurveySheets(filters.from, filters.to).catch(postHogFailed)
+          : Promise.resolve(null),
+        enabledSurveySheets().catch((err: unknown) => {
+          logger.warn({ err }, "AP survey: the sheets' switches could not be read");
+          return null;
+        }),
+      ]);
     // The previous period as the benchmark (the comparison's own facts when it has them).
     const prevRange = previousRange(filters);
     const benchmark =
@@ -82,6 +94,8 @@ export async function GET(request: Request) {
         questionsError: questions.error,
         introClicks,
         prevIntroClicks,
+        sheetsOn,
+        sheetsSeen,
       }),
       { headers: NO_STORE }
     );

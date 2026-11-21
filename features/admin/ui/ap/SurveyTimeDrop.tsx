@@ -1,12 +1,14 @@
 "use client";
 
 import { fmt, quarterTop, tenths } from "@features/admin/server/ap/format";
+import type { SheetFigures } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
 
 import { Info } from "./field-info";
 import { IndexHover, type Tip } from "./hover";
 import { AllTraffic, Card, Pills, SectionHead } from "./kit";
+import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
 
 /**
  * Marcus's "Time and drop-out per question" (Survey copy board, 10 Nov 2026): each question in
@@ -19,6 +21,8 @@ const BAR = "#b9addf";
 const SLOW_BAR = "#5a42a6";
 const LINE = "#161021";
 const OVER_BAR = "#fe6839";
+/** A sheet's pin and its dashed line between two questions (Mark, 17 Nov 2026). */
+const PIN = "#bf66d9";
 
 /** "Well above average", as drawn: a median at least this many times the questions' average. */
 const SLOW = 1.6;
@@ -44,6 +48,8 @@ export interface ChartColumn {
   slow: boolean;
   /** Over 5% as its one-decimal figure reads: "5.0%" never is, "5.1%" always. */
   over: boolean;
+  /** The sheets between this question and the next (Mark's numbered pins). */
+  sheets: SheetSpot[];
 }
 
 /**
@@ -70,13 +76,18 @@ export interface TimeDropChart {
  * (one no longer asked has no place in it). A question with no time adds nothing to the time so
  * far; "well above average" is against the mean of the medians there are.
  */
-export function timeDropChart(rows: QuestionRow[]): TimeDropChart {
+export function timeDropChart(
+  rows: QuestionRow[],
+  /** Pin the sheets between the questions: only for a range that reaches them. */
+  { sheets = false }: { sheets?: boolean } = {}
+): TimeDropChart {
   const asked = rows.filter((r) => r.n > 0);
   const times = asked.flatMap((r) => (r.medianMs === null ? [] : [r.medianMs]));
   const rates = asked.flatMap((r) => (r.dropRate === null ? [] : [r.dropRate * 100]));
   const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
   let run = 0;
-  const cols = asked.map((row) => {
+  const spots = sheets ? sheetSpots(rows) : [];
+  const cols = asked.map((row, i) => {
     run += row.medianMs ?? 0;
     return {
       row,
@@ -84,6 +95,7 @@ export function timeDropChart(rows: QuestionRow[]): TimeDropChart {
       soFarMs: run,
       slow: row.medianMs !== null && avg > 0 && row.medianMs >= SLOW * avg,
       over: overFive(row.dropRate),
+      sheets: spots.filter((s) => s.after === i),
     };
   });
   const bands: TimeDropChart["bands"] = [];
@@ -122,8 +134,25 @@ export default function TimeDropSection({
   onPick: (id: string) => void;
 }) {
   const q = data.questions;
-  const chart = timeDropChart(rows);
+  const chart = timeDropChart(rows, { sheets: data.sheets.seen !== null });
   const title = (c: ChartColumn) => `#${c.row.n} · ${c.row.id} · ${c.band}`;
+  const seen = data.sheets.seen?.ok ? data.sheets.seen.value : null;
+  const known = seen !== null;
+  // Hovering a pin's question also shows the sheet after it, with its figures from the Sheets
+  // section below (Mark, 17 Nov 2026).
+  const withSheets = (c: ChartColumn, tip: Tip): Tip =>
+    c.sheets.length === 0
+      ? tip
+      : {
+          ...tip,
+          rows: [
+            ...tip.rows,
+            ...c.sheets.flatMap((s) => sheetTipRows(s, seen?.bySheet[s.id], known)),
+          ],
+        };
+  const pinKey = chart.cols.some((c) => c.sheets.length > 0)
+    ? [{ label: "Sheet, numbered", color: PIN, pin: true, info: "survey.sheets" }]
+    : [];
   return (
     <Card id="time-drop" labelledBy="h-td">
       <SectionHead
@@ -170,6 +199,7 @@ export default function TimeDropSection({
                 line: true,
                 info: "survey.timeSoFar",
               },
+              ...pinKey,
             ]}
             chart={chart}
             left={(v) => `${v} s`}
@@ -188,32 +218,34 @@ export default function TimeDropSection({
             line={chart.timed ? (c) => c.soFarMs / 60_000 / chart.minTop : undefined}
             empty={chart.timed ? null : "No time was recorded on the questions in this range."}
             onPick={onPick}
-            tip={(c): Tip => ({
-              title: title(c),
-              sub: c.row.text,
-              rows: [
-                {
-                  label: "Median time",
-                  value: fmt("mmss", c.row.medianMs),
-                  color: c.slow ? SLOW_BAR : BAR,
-                  mark: "square",
-                  strong: true,
-                  muted: c.row.medianMs === null,
-                },
-                {
-                  label: "Survey time so far",
-                  value: minutes(c.soFarMs),
-                  color: LINE,
-                  mark: "line",
-                },
-              ],
-              note:
-                c.row.medianMs === null
-                  ? "No time recorded on it in this range: it adds nothing to the time so far."
-                  : c.slow
-                    ? "Well above average: 1.6 times the average question or more."
-                    : null,
-            })}
+            tip={(c): Tip =>
+              withSheets(c, {
+                title: title(c),
+                sub: c.row.text,
+                rows: [
+                  {
+                    label: "Median time",
+                    value: fmt("mmss", c.row.medianMs),
+                    color: c.slow ? SLOW_BAR : BAR,
+                    mark: "square",
+                    strong: true,
+                    muted: c.row.medianMs === null,
+                  },
+                  {
+                    label: "Survey time so far",
+                    value: minutes(c.soFarMs),
+                    color: LINE,
+                    mark: "line",
+                  },
+                ],
+                note:
+                  c.row.medianMs === null
+                    ? "No time recorded on it in this range: it adds nothing to the time so far."
+                    : c.slow
+                      ? "Well above average: 1.6 times the average question or more."
+                      : null,
+              })
+            }
           />
           <Figure
             title="Drop-out rate per question"
@@ -222,6 +254,7 @@ export default function TimeDropSection({
             keys={[
               { label: "Drop-out rate", color: BAR },
               { label: "Over 5%", color: OVER_BAR },
+              ...pinKey,
             ]}
             chart={chart}
             left={(v) => fmt("pct", v / 100)}
@@ -236,29 +269,72 @@ export default function TimeDropSection({
                   }
             }
             onPick={onPick}
-            tip={(c): Tip => ({
-              title: title(c),
-              sub: c.row.text,
-              rows: [
-                {
-                  label: "Drop-out rate",
-                  value: fmt("pct", c.row.dropRate),
-                  color: c.over ? OVER_BAR : BAR,
-                  mark: "square",
-                  strong: true,
-                  muted: c.row.dropRate === null,
-                },
-              ],
-              note:
-                c.row.dropRate === null
-                  ? "No run in this order was put this question in the range."
-                  : `${fmt("count", c.row.exits)} of ${fmt("count", c.row.shown)} left here.`,
-            })}
+            tip={(c): Tip =>
+              withSheets(c, {
+                title: title(c),
+                sub: c.row.text,
+                rows: [
+                  {
+                    label: "Drop-out rate",
+                    value: fmt("pct", c.row.dropRate),
+                    color: c.over ? OVER_BAR : BAR,
+                    mark: "square",
+                    strong: true,
+                    muted: c.row.dropRate === null,
+                  },
+                ],
+                note:
+                  c.row.dropRate === null
+                    ? "No run in this order was put this question in the range."
+                    : `${fmt("count", c.row.exits)} of ${fmt("count", c.row.shown)} left here.`,
+              })
+            }
           />
         </>
       )}
     </Card>
   );
+}
+
+/** A sheet's lines in its question's card: which sheet, then its figures as the Sheets section. */
+export function sheetTipRows(
+  spot: SheetSpot,
+  f: SheetFigures | undefined,
+  /** PostHog could be read: blanks otherwise, rather than noughts. */
+  known = true
+): Tip["rows"] {
+  const meta = SHEET_NAMES[spot.id];
+  if (!known)
+    return [
+      {
+        label: `Then sheet ${spot.n} · ${meta.name}`,
+        value: "—",
+        color: PIN,
+        mark: "dashed",
+        strong: true,
+        muted: true,
+      },
+    ];
+  return [
+    {
+      label: `Then sheet ${spot.n} · ${meta.name}`,
+      value: `${fmt("count", f ? f.saw : 0)} saw it`,
+      color: PIN,
+      mark: "dashed",
+      strong: true,
+    },
+    { label: "Bounce rate", value: fmt("pct", sheetBounce(f)), muted: !f },
+    { label: "Median time open", value: fmt("mmss", f?.medianMs ?? null), muted: !f?.medianMs },
+    ...(meta.tap
+      ? [
+          {
+            label: "Conversion",
+            value: `${fmt("pct", sheetConversion(f))} · ${fmt("count", f?.ticked ?? 0)} ${f?.ticked === 1 ? "click" : "clicks"}`,
+            muted: !f,
+          },
+        ]
+      : []),
+  ];
 }
 
 /** Quarter lines from the bottom, in percent of the plot, with what each writes. */
@@ -289,7 +365,7 @@ function Figure({
   title: string;
   info: string;
   description: string;
-  keys: Array<{ label: string; color: string; line?: boolean; info?: string }>;
+  keys: Array<{ label: string; color: string; line?: boolean; pin?: boolean; info?: string }>;
   chart: TimeDropChart;
   left: (v: number) => string;
   leftTop: number;
@@ -321,11 +397,20 @@ function Figure({
         <span className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-xs text-ap-body">
           {keys.map((k) => (
             <span key={k.label} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className={k.line ? "h-0.5 w-4" : "h-2.5 w-2.5 rounded-sm"}
-                style={{ background: k.color }}
-              />
+              {k.pin ? (
+                <span
+                  aria-hidden="true"
+                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-br from-[#bf66d9] to-[#795fc8] text-[8px] font-bold text-white"
+                >
+                  1
+                </span>
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className={k.line ? "h-0.5 w-4" : "h-2.5 w-2.5 rounded-sm"}
+                  style={{ background: k.color }}
+                />
+              )}
               {k.label}
               {k.info && <Info k={k.info} label={k.label} />}
             </span>
@@ -356,8 +441,23 @@ function Figure({
                       <span
                         key={c.row.id}
                         data-q={c.row.id}
-                        className="flex min-w-0 flex-1 flex-col items-stretch justify-end"
+                        className="relative flex min-w-0 flex-1 flex-col items-stretch justify-end"
                       >
+                        {c.sheets.map((sh, k) => (
+                          <span key={sh.id} data-sheet={sh.id}>
+                            {/* The gap after the question, dashed, with the sheet's number on top. */}
+                            <span
+                              className="absolute inset-y-0 -right-[2px] z-[2] border-l-[1.5px] border-dashed"
+                              style={{ borderColor: PIN }}
+                            />
+                            <span
+                              className="absolute -right-[10px] z-[3] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-gradient-to-br from-[#bf66d9] to-[#795fc8] text-[10px] font-bold text-white shadow-[0_0_0_2px_#fff]"
+                              style={{ top: `${-9 + k * 20}px` }}
+                            >
+                              {sh.n}
+                            </span>
+                          </span>
+                        ))}
                         {b?.label && (
                           // Wider than its column: drawn over the next bars, haloed so it reads.
                           <span className="relative z-[1] mb-0.5 whitespace-nowrap text-center text-[9px] font-bold text-ap-ink [text-shadow:0_0_2px_#fff,0_0_2px_#fff]">
