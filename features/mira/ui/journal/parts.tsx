@@ -59,13 +59,14 @@ export function Switch({
       aria-checked={checked}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className="group inline-flex min-h-[44px] shrink-0 items-center gap-3 text-left text-[15px] text-ap-ink outline-none disabled:cursor-wait"
+      // Not `disabled` while saving: that would drop keyboard focus. Taps wait instead.
+      aria-disabled={disabled || undefined}
+      onClick={() => !disabled && onChange(!checked)}
+      className="group inline-flex min-h-[44px] shrink-0 items-center gap-3 text-left text-[15px] text-ap-ink outline-none aria-disabled:cursor-wait"
     >
       <span
         aria-hidden="true"
-        className={`flex h-[30px] w-[52px] shrink-0 items-center rounded-full p-[3px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-disabled:opacity-60 ${checked ? "bg-ap-purple" : "bg-[#857f8f]"}`}
+        className={`flex h-[30px] w-[52px] shrink-0 items-center rounded-full p-[3px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-60 ${checked ? "bg-ap-purple" : "bg-[#857f8f]"}`}
       >
         <span
           className={`h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.25)] transition-transform duration-200 ease-out motion-reduce:transition-none ${checked ? "translate-x-[22px]" : ""}`}

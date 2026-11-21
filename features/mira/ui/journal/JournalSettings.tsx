@@ -138,7 +138,6 @@ export function JournalSettings({
                   <span className="relative flex">
                     <select
                       value={s.reminderTime}
-                      disabled={busy}
                       onChange={(e) =>
                         change(
                           { reminderTime: e.target.value },

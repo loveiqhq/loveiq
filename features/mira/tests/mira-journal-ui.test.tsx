@@ -130,6 +130,24 @@ describe("the Home card", () => {
     expect(screen.getByText(miraConfig.crisisMessage)).toBeInTheDocument();
   });
 
+  it("lets the server read a note with nothing rated, for its support lines", async () => {
+    replies["PUT /api/mira/journal"] = () => ({
+      body: {
+        success: false,
+        crisis: true,
+        crisisLines: { code: "DE", name: "Germany", lines: [] },
+      },
+    });
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    fireEvent.change(screen.getByLabelText(/A line for the day/), {
+      target: { value: "I want to end my life" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Tap one circle in any row to save.");
+  });
+
   it("keeps what is rated and written out of the analytics recordings", async () => {
     render(<JournalCard />);
     fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
@@ -194,6 +212,32 @@ describe("the journal's settings", () => {
       { share: "notes" },
       { share: "off" },
     ]);
+  });
+
+  it("keep a switch focusable while it saves, and ignore a second tap until then", async () => {
+    let answer: () => void = () => {};
+    const slow = new Promise<void>((resolve) => (answer = resolve));
+    const usual = fetchMock.getMockImplementation()!;
+    // Only the save answers late.
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+      if (init.method === "PATCH") await slow;
+      return usual(url, init);
+    });
+    try {
+      render(<JournalSettings />);
+      const read = await screen.findByRole("switch", { name: "Let Mira read my journal" });
+      read.focus();
+      fireEvent.click(read);
+      await waitFor(() => expect(read).toHaveAttribute("aria-disabled", "true"));
+      expect(read).not.toBeDisabled();
+      expect(document.activeElement).toBe(read);
+      fireEvent.click(read);
+      answer();
+      await waitFor(() => expect(read).not.toHaveAttribute("aria-disabled", "true"));
+      expect(sent("PATCH").map((p) => p.body)).toEqual([{ share: "scores" }]);
+    } finally {
+      fetchMock.mockImplementation(usual);
+    }
   });
 
   it("set the reminder's time, on the hour or half hour, in the person's time zone", async () => {

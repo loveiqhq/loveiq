@@ -100,7 +100,10 @@ describe("the daily journal reminder", () => {
     expect(send).toHaveBeenCalledTimes(1);
     const [email, opts] = send.mock.calls[0]!;
     expect(email.to).toBe("a@example.com");
-    expect(opts).toEqual({ idempotencyKey: `mira-journal-reminder-${A}-2026-11-21` });
+    // One key per run: a retry within the run never sends twice, the slot's second run is new.
+    expect(opts).toEqual({
+      idempotencyKey: `mira-journal-reminder-${A}-2026-11-21-${NOW.getTime()}`,
+    });
     expect(logMiraEvent).toHaveBeenCalledWith("journal_reminder_sent", { userId: A });
   });
 
@@ -157,6 +160,15 @@ describe("the daily journal reminder", () => {
       body: { journal_reminded_on: null },
     });
     expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("gives the day back when sending throws, too", async () => {
+    send.mockRejectedValueOnce(new Error("socket hang up"));
+    expect(await runJournalReminders(NOW)).toMatchObject({ sent: 0, errors: 1 });
+    expect(writes().at(-1)).toEqual({
+      path: `/rest/v1/mira_user?id=eq.${A}`,
+      body: { journal_reminded_on: null },
+    });
   });
 
   it("starts nobody once its time is spent", async () => {

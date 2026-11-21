@@ -205,6 +205,20 @@ describe("PUT /api/mira/journal", () => {
     expect(JSON.stringify(events())).not.toContain("life");
   });
 
+  it("shows the support lines for crisis words whatever else stops the save", async () => {
+    vi.mocked(getProfile).mockResolvedValue({ country: "DE" } as never);
+    const note = "I want to end my life";
+    // Nothing rated: not a valid check-in, but the words still get the lines.
+    const unrated = await (await PUT(call("PUT", "", { day: today(), note }))).json();
+    expect(unrated).toMatchObject({ success: false, crisis: true, crisisLines: { code: "DE" } });
+    // An account Mira stopped as under 18: no journal, but the lines all the same.
+    vi.mocked(isMinor).mockResolvedValue(true);
+    const minor = await (await PUT(call("PUT", "", { day: today(), mood: 1, note }))).json();
+    expect(minor).toMatchObject({ success: false, crisis: true });
+    expect(writes()).toEqual([]);
+    expect(events().filter((e) => e.name === "crisis_shown")).toHaveLength(2);
+  });
+
   it("answers a plain note without support lines", async () => {
     const out = await (await PUT(call("PUT", "", { day: today(), mood: 4, note: "Fine" }))).json();
     expect(out).toEqual({ success: true });

@@ -82,8 +82,9 @@ export function ApMiraJournal({ journal: j }: { journal?: JournalFigures }) {
         later, by that day. Average streak: each of the range&rsquo;s people&rsquo;s longest run of
         days in a row in the range. Reminder and Mira reading it: today&rsquo;s settings, of
         today&rsquo;s accounts, whatever the range. Only days and settings are read, never a rating
-        or a note; a deleted entry or account leaves the counts. The team is left out as above.
-        Counted from the day the journal went live.
+        or a note; the figures are read live, so a deleted entry or account drops out of them (and
+        can move a person’s first check-in). The team is left out as above. Counted from the day the
+        journal went live.
       </p>
     </Card>
   );

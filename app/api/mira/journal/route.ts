@@ -90,6 +90,8 @@ async function guard(request: Request, write: boolean) {
   const minor = await isMinor(account.id).catch(() => null);
   if (minor !== false) {
     return {
+      // Known, so a crisis note's support lines are still logged for the account (PUT).
+      refused: account,
       error:
         minor === null
           ? NextResponse.json({ error: "Unable to load your journal." }, { status: 500 })
@@ -112,11 +114,49 @@ export async function GET(request: Request) {
   }
 }
 
+/** A body far bigger than any check-in is refused before it is parsed or searched. */
+const MAX_BODY_CHARS = 20_000;
+
+/**
+ * The chat's support lines for a note with crisis words, with this person's country first; logged
+ * as the chat logs them (nudges and reminders then wait 14 days), never with the words.
+ */
+async function supportLines(request: Request, userId: string | null, saved: boolean) {
+  const profile = userId ? await getProfile(userId).catch(() => null) : null;
+  const country =
+    profile?.country && profile.country !== "OTHER" ? profile.country : requestCountry(request);
+  if (userId) logMiraEvent("crisis_shown", { userId }, { country, from: "journal" });
+  return NextResponse.json({ success: saved, crisis: true, crisisLines: crisisFor(country) });
+}
+
 export async function PUT(request: Request) {
-  const g = await guard(request, true);
-  if ("error" in g) return g.error;
-  const parsed = putSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  if (!(await verifyCsrfToken(request))) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+  }
+  const text = await request.text().catch(() => "");
+  if (text.length > MAX_BODY_CHARS) {
+    return NextResponse.json({ error: "Invalid input" }, { status: 413 });
+  }
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = null;
+  }
+  // Read leniently first, as the chat does: crisis words get the support lines whatever else
+  // stops the save below (nothing rated, a limit, an account stopped as under 18, the database).
+  const raw = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const crisis = typeof raw.note === "string" && isCrisisMessage(raw.note);
+  const g = await guard(request, false);
+  if ("error" in g) {
+    return crisis ? supportLines(request, g.refused?.id ?? null, false) : g.error;
+  }
+  const parsed = putSchema.safeParse(body);
+  if (!parsed.success) {
+    return crisis
+      ? supportLines(request, g.account.id, false)
+      : NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  }
   const b = parsed.data;
   const entry: JournalEntry = {
     day: b.day,
@@ -126,9 +166,6 @@ export async function PUT(request: Request) {
     energy: b.energy ?? null,
     note: b.note || null,
   };
-  const who = { userId: g.account.id };
-  // Crisis words get the support lines whatever happens to the save (the chat's rule).
-  const crisis = entry.note !== null && isCrisisMessage(entry.note);
   let saved: boolean | null = null;
   try {
     saved = await saveEntry(g.account.id, entry, canStart(entry.day, new Date()));
@@ -137,20 +174,9 @@ export async function PUT(request: Request) {
   }
   if (saved) {
     const areas = AREAS.filter((a) => entry[a.id] !== null).length;
-    logMiraEvent("journal_saved", who, { areas, note: entry.note !== null });
+    logMiraEvent("journal_saved", { userId: g.account.id }, { areas, note: entry.note !== null });
   }
-  if (crisis) {
-    const profile = await getProfile(g.account.id).catch(() => null);
-    const country =
-      profile?.country && profile.country !== "OTHER" ? profile.country : requestCountry(request);
-    // Counted with the chat's support lines (nudges and reminders then wait 14 days); no words.
-    logMiraEvent("crisis_shown", who, { country, from: "journal" });
-    return NextResponse.json({
-      success: saved === true,
-      crisis: true,
-      crisisLines: crisisFor(country),
-    });
-  }
+  if (crisis) return supportLines(request, g.account.id, saved === true);
   if (saved === null) {
     return NextResponse.json(
       { error: "Your check-in didn't save. Please try again." },

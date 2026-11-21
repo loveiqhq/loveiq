@@ -324,29 +324,38 @@ export async function runJournalReminders(
         checkInUrl: `${site}/mira/journal?checkin=1`,
         stopUrl: `${site}/mira/journal/reminder?t=${enc(token)}`,
       });
-      const mailed = await mail.emails.send(
-        {
-          from: miraEmailFrom(),
-          to: user.email,
-          subject: email.subject,
-          html: email.html,
-          text: email.text,
-          headers: {
-            "List-Unsubscribe": `<${stopUrl}>`,
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      let sent = false;
+      try {
+        const mailed = await mail.emails.send(
+          {
+            from: miraEmailFrom(),
+            to: user.email,
+            subject: email.subject,
+            html: email.html,
+            text: email.text,
+            headers: {
+              "List-Unsubscribe": `<${stopUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
           },
-        },
-        { idempotencyKey: `mira-journal-reminder-${user.id}-${day}` }
-      );
-      if (mailed.error) {
-        summary.errors++;
-        logger.error({ err: mailed.error.name }, "mira: a journal reminder was not sent");
-        // Not sent: the day goes back, so the slot's second run can send it.
-        await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(user.id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ journal_reminded_on: user.journal_reminded_on }),
-        }).then((r) => ok(r, "claim"));
-        continue;
+          // Per run, like a nudge's per claim: a retried call can't send it twice, and the
+          // slot's second run is a new request, never a replay of this one's failure.
+          { idempotencyKey: `mira-journal-reminder-${user.id}-${day}-${now.getTime()}` }
+        );
+        if (mailed.error) {
+          summary.errors++;
+          logger.error({ err: mailed.error.name }, "mira: a journal reminder was not sent");
+          continue;
+        }
+        sent = true;
+      } finally {
+        // Not sent (an error or a throw): the day goes back, so the slot's second run can send it.
+        if (!sent) {
+          await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(user.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ journal_reminded_on: user.journal_reminded_on }),
+          }).then((r) => ok(r, "claim"));
+        }
       }
       summary.sent++;
       logMiraEvent("journal_reminder_sent", { userId: user.id });

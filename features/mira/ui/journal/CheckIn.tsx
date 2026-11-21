@@ -21,6 +21,8 @@ type Ratings = Record<AreaId, number | null>;
 
 const empty = (): Ratings => ({ mood: null, body: null, closeness: null, energy: null });
 
+const UNRATED = "Tap one circle in any row to save.";
+
 const NOTE_HINT = {
   off: "Private. Mira reads your journal only if you allow it in Settings.",
   scores: "Mira sees your ratings, not this line.",
@@ -76,13 +78,17 @@ export function CheckIn({
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!AREAS.some((a) => ratings[a.id] !== null)) {
-      setError("Tap one circle in any row to save.");
+    const rated = AREAS.some((a) => ratings[a.id] !== null);
+    const line = note.replace(/\s+/g, " ").trim() || null;
+    // Nothing rated is no check-in; a line alone still goes to the server, which reads it for
+    // crisis words (and answers with the support lines) before it refuses to save it.
+    if (!rated && !line) {
+      setError(UNRATED);
       return;
     }
     setError(null);
     setPhase("saving");
-    const entry: JournalEntry = { day, ...ratings, note: note.replace(/\s+/g, " ").trim() || null };
+    const entry: JournalEntry = { day, ...ratings, note: line };
     const result = await journal.save(entry);
     // The support lines come first, whatever happened to the save.
     if (result.crisisLines) {
@@ -91,7 +97,7 @@ export function CheckIn({
     }
     if (!result.ok) {
       setPhase("edit");
-      setError(result.error ?? "Your check-in didn’t save. Please try again.");
+      setError(rated ? (result.error ?? "Your check-in didn’t save. Please try again.") : UNRATED);
       return;
     }
     setPhase("done");
