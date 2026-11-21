@@ -7,6 +7,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { REVIEW_CONSENT_VERSION } from "@features/mira/reviews";
+import { CONSENT_VERSION } from "@features/mira/server/config";
 import MiraChat from "@features/mira/ui/MiraChat";
 import { MiraRatingLine, ReviewsWelcome } from "@features/mira/ui/reviews/PublicReviews";
 import { CONSENT_TEXT, ReviewAsk, reviewAskDue } from "@features/mira/ui/reviews/ReviewAsk";
@@ -174,6 +175,15 @@ describe("the moments in the chat", () => {
     await thumbsUpAll();
     expect(calls("GET /api/mira/reviews/mine")).toEqual([]);
     expect(askCard()).toBeNull();
+    cleanup();
+
+    // Signed out (were the free messages ever more than one): ratings come from accounts only.
+    localStorage.clear();
+    localStorage.setItem("mira.consent.v1", JSON.stringify({ version: CONSENT_VERSION }));
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await chatWithThreeReplies({ freeLeft: 5 });
+    await thumbsUpAll();
+    expect(calls("GET /api/mira/reviews/mine")).toEqual([]);
   });
 
   it("turns a 9 or 10 on the recommend question into the ask; an 8 just gets the thanks", async () => {
