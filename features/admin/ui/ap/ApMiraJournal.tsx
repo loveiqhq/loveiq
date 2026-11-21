@@ -83,7 +83,7 @@ export function ApMiraJournal({ journal: j }: { journal?: JournalFigures }) {
         days in a row in the range. Reminder and Mira reading it: today&rsquo;s settings, of
         today&rsquo;s accounts, whatever the range. Only days and settings are read, never a rating
         or a note; a deleted entry or account leaves the counts. The team is left out as above.
-        Recorded from 22 Nov 2026.
+        Counted from the day the journal went live.
       </p>
     </Card>
   );
