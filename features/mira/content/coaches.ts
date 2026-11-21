@@ -159,9 +159,22 @@ export type SearchHit = {
   id: string;
   kind: "Coach" | "Practice" | "Guide" | "Your chat";
   title: string;
+  /** The line under the title, as shown: what it is, and its status, length or day. */
   meta: string;
   href: string;
 };
+
+/** A chat's day as Home writes it: Today, Yesterday, 3 days ago, then the date. */
+function day(iso: string, now: number): string {
+  const days = Math.floor((now - Date.parse(iso)) / 86_400_000);
+  return days <= 0
+    ? "Today"
+    : days === 1
+      ? "Yesterday"
+      : days < 7
+        ? `${days} days ago`
+        : new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
 
 type ChatTitle = { id: string; title: string; updated_at: string };
 
@@ -175,14 +188,14 @@ const STAGE_OF = new Map(
  * Home's search, in the browser over what the page already has: the coaches, the guide's
  * practices and chapters, and the person's own chat titles. Nothing typed leaves the page.
  */
-export function searchHome(query: string, chats: ChatTitle[]): SearchHit[] {
+export function searchHome(query: string, chats: ChatTitle[], now = Date.now()): SearchHit[] {
   const ws = words(query);
   if (!ws.length) return [];
   const coaches = COACHES.filter((c) => found(coachText(c), ws)).map((c): SearchHit => ({
     id: `coach-${c.id}`,
     kind: "Coach",
     title: `${c.name}, ${c.challenge.toLowerCase()}`,
-    meta: c.live ? "Here now" : "Coming soon",
+    meta: c.live ? "Coach · Here now" : "Coach · Coming soon",
     href: c.live ? "/mira" : `/mira/coaches#coach-${c.id}`,
   }));
   const practices = GUIDE_PRACTICES.filter((p) =>
@@ -200,7 +213,7 @@ export function searchHome(query: string, chats: ChatTitle[]): SearchHit[] {
       id: `guide-${s.id}`,
       kind: "Guide",
       title: s.title,
-      meta: "Body confidence guide",
+      meta: "From the guide",
       href: `/mira/guide#${s.id}`,
     }));
   const mine = chats
@@ -209,7 +222,7 @@ export function searchHome(query: string, chats: ChatTitle[]): SearchHit[] {
       id: `chat-${c.id}`,
       kind: "Your chat",
       title: c.title,
-      meta: "Your chat with Mira",
+      meta: `Your chat · ${day(c.updated_at, now)}`,
       href: `/mira?chat=${c.id}`,
     }));
   return [

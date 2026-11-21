@@ -104,7 +104,7 @@ export default function CoachRoster() {
             maxLength={80}
             autoComplete="off"
             enterKeyHint="search"
-            placeholder="Describe it in your words, like “lights off”"
+            placeholder="Try “lights off”, “no desire”"
             className="h-12 w-full rounded-full border border-ap-line bg-white pl-11 pr-4 text-[16px] text-ap-ink caret-ap-purple shadow-[0_6px_24px_-16px_rgba(22,16,33,0.25)] outline-none transition-colors placeholder:text-ap-muted focus-visible:border-ap-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
           />
         </div>
@@ -123,7 +123,8 @@ export default function CoachRoster() {
       <div
         role="group"
         aria-label="Area"
-        className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [animation-delay:240ms] [scrollbar-width:none] motion-safe:animate-mira-in sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+        // Phones: one row that scrolls sideways, its edge fading to say there is more.
+        className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [animation-delay:240ms] [scrollbar-width:none] motion-safe:animate-mira-in max-sm:[mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
       >
         {FILTERS.map(([id, label]) => (
           <button

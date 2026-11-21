@@ -142,11 +142,13 @@ describe("Home search", () => {
     ]);
     expect(searchHome("practice 3", chats).map((h) => h.href)).toEqual(["/mira/guide#practice-3"]);
     expect(searchHome("compliments", chats).map((h) => h.kind)).toEqual(["Coach", "Your chat"]);
+    const now = Date.parse("2026-11-20T18:00:00Z"); // the chat was written the day before
+    expect(searchHome("lights off", chats, now).at(-1)?.meta).toBe("Your chat · Yesterday");
   });
 
   it("opens a coming-soon coach on the roster, never as a chat", () => {
     const jonas = searchHome("libido", []).find((h) => h.kind === "Coach");
-    expect(jonas).toMatchObject({ href: "/mira/coaches#coach-jonas", meta: "Coming soon" });
+    expect(jonas).toMatchObject({ href: "/mira/coaches#coach-jonas", meta: "Coach · Coming soon" });
   });
 
   it("finds nothing for an empty query", () => {

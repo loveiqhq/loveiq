@@ -116,9 +116,7 @@ export default function HomeSearch() {
                     <span className="block truncate text-[15px] font-semibold text-ap-ink">
                       {h.title}
                     </span>
-                    <span className="block truncate text-[12px] text-ap-muted">
-                      {h.kind} · {h.meta}
-                    </span>
+                    <span className="block truncate text-[12px] text-ap-muted">{h.meta}</span>
                   </span>
                   <ChevronIcon className="shrink-0 text-ap-quiet" />
                 </li>

@@ -117,9 +117,7 @@ export default function CoachesCard() {
                     </p>
                     <p className="mt-0.5 text-[13px] leading-snug text-ap-muted">{s.reason}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="rounded-full bg-ap-track px-2.5 py-1 text-[12px] font-semibold text-ap-muted">
-                        Coming soon
-                      </span>
+                      <span className="text-[13px] font-semibold text-ap-muted">Coming soon</span>
                       <NotifyButton
                         coach={s.coach}
                         done={known.includes(s.coach.id)}
