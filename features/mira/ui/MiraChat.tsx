@@ -7,6 +7,7 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
+import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
@@ -33,7 +34,12 @@ import {
  */
 
 /** `live`: written in this page view, so it animates in (a restored chat does not replay). */
-type Message = LocalTurn & { messageId?: number | null; live?: boolean };
+type Message = LocalTurn & {
+  messageId?: number | null;
+  live?: boolean;
+  /** A small goal Mira offers with this reply (Challenges & goals); this page view only. */
+  goal?: string;
+};
 type BodyDue = "baseline" | "week4" | null;
 type CrisisCountry = SupportCountry;
 type ChatSummary = { id: string; title: string; updated_at: string };
@@ -213,6 +219,15 @@ export default function MiraChat({
     });
   }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
 
+  // "Ask Mira to help" on the goals card (/mira?prompt=goal): the question waits in the
+  // composer, unsent, and the address loses the parameter so a reload doesn't bring it back.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("prompt") !== "goal") return;
+    window.history.replaceState(null, "", "/mira");
+    setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
+    inputRef.current?.focus();
+  }, []);
+
   // The composer grows with what is typed, up to about six lines, then scrolls inside.
   useEffect(() => {
     const box = inputRef.current;
@@ -254,6 +269,7 @@ export default function MiraChat({
       gate?: boolean;
       invitation?: string;
       ask?: string;
+      goal?: string;
       signIn?: boolean;
       minor?: boolean;
     }>("/api/mira/chat", {
@@ -290,6 +306,7 @@ export default function MiraChat({
         messageId: res.data.messageId,
         ask: res.data.ask ?? undefined,
         ...(res.data.crisis ? { crisis: true } : {}),
+        ...(res.data.goal ? { goal: res.data.goal } : {}),
       },
       ...(res.data.invitation
         ? [{ role: "assistant" as const, content: res.data.invitation, live: true }]
@@ -439,6 +456,7 @@ export default function MiraChat({
     last?.role === "assistant" &&
     !isInvitation(last) &&
     !last.ask &&
+    !last.goal && // Mira's goal offer goes first; its sign-up path keeps the chat too
     !minor &&
     !crisisIn(messages);
 
@@ -471,6 +489,7 @@ export default function MiraChat({
     last?.role === "assistant" &&
     !isInvitation(last) &&
     !last.ask &&
+    !last.goal &&
     !crisisIn(messages);
 
   useEffect(() => {
@@ -697,6 +716,9 @@ export default function MiraChat({
                             </button>
                           ))}
                         </div>
+                      ) : null}
+                      {m.role === "assistant" && m.goal && !minor ? (
+                        <GoalSuggestion text={m.goal} signedIn={signedIn} />
                       ) : null}
                       {m.role === "assistant" && !isInvitation(m) ? (
                         <div

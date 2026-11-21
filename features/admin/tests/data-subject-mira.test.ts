@@ -69,6 +69,17 @@ describe("DSAR export covers Mira (Art. 15)", () => {
     expect(paths).toContain(`/rest/v1/mira_event?user_id=in.(${UID})&select=*&order=id.asc`);
   });
 
+  it("exports the goals in the person's words and the days they ticked them (Challenges & goals)", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    expect(result.exportData?.mira_goal).toEqual([{ from: "/rest/v1/mira_goal" }]);
+    expect(result.exportData?.mira_goal_log).toEqual([{ from: "/rest/v1/mira_goal_log" }]);
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    expect(paths).toContain(`/rest/v1/mira_goal?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(
+      `/rest/v1/mira_goal_log?user_id=in.(${UID})&select=*&order=goal_id.asc,day.asc`
+    );
+  });
+
   it("reads nothing more when there is no Mira account", async () => {
     accounts = [];
     const result = await exportDataSubject("lea@example.com");

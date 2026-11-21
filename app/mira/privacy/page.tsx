@@ -18,7 +18,7 @@ const RECIPIENTS = [
   {
     who: "Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)",
     role: "Processor. Its AI model, Claude, writes Mira's replies and her daily nudges.",
-    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in and, if you allow it, your LoveIQ result.",
+    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in, your goals on the go with this week's ticks and, if you allow it, your LoveIQ result.",
     basis: "Your explicit consent",
     where:
       "Stored in the USA. It may be processed in the USA, Europe, Asia or Australia. EU standard contractual clauses.",
@@ -108,8 +108,9 @@ const COLUMNS = [
  * Mira's privacy notice, in plain words. Written 18 Nov 2026 to match what the code does and
  * checked by Eman on 20 Nov 2026. Later that day: the two consent ticks, rated replies' text only
  * with consent, the stop for minors, the retention list, the recipients table, Anthropic's
- * deletion and the data protection officer. 21 Nov 2026: the reply language and the look (light or
- * dark, text size) with their cookie. Change it whenever what Mira stores or shares changes.
+ * deletion and the data protection officer. Change it whenever what Mira stores or shares changes.
+ * 21 Nov 2026: the reply language and the look (light or dark, text size) with their cookie.
+ * 22 Nov 2026: goals (Challenges & goals), in each section below.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -187,6 +188,12 @@ export default function MiraPrivacyPage() {
             relate to your body (the Body Appreciation Scale-2), at the start and four weeks later.
           </li>
           <li>
+            Your goals, if you set any with an account: each goal in your words, how many days a
+            week you aim for, whether Mira suggested it, and the days you tick it. When you chat,
+            Mira sees your goals on the go and this week&apos;s ticks, so she can ask how one is
+            going. We count goals set, ticked, done and put away, never what they say.
+          </li>
+          <li>
             Labels about your chats, never your words: which of Mira&apos;s questions you answered
             (not your answer), the topic of a new chat, when Mira suggested a doctor or therapist
             and when she showed you support lines. Also the steps you take, such as opening the chat
@@ -248,6 +255,11 @@ export default function MiraPrivacyPage() {
             To see whether Mira helps. We count the labels and compare body check scores across
             everyone. We never read your words for this. Legal basis: your explicit consent (Art.
             6(1)(a) and Art. 9(2)(a) GDPR).
+          </li>
+          <li>
+            To keep your goals, show how they build up and let Mira check in on them. This is part
+            of coaching you. Legal basis: your explicit consent (Art. 6(1)(a) and Art. 9(2)(a)
+            GDPR).
           </li>
           <li>
             To run your free account: signing in, your settings and the emails that come with it,
@@ -332,6 +344,10 @@ export default function MiraPrivacyPage() {
             account. If you never finish signing up, your sign-in is deleted after 24 hours.
           </li>
           <li>
+            Your goals and the days you ticked them stay until you delete them on your goals page,
+            or delete your account.
+          </li>
+          <li>
             Mira&apos;s log of labels, steps, ratings and feedback is deleted after 12 months.
             Deleting your account deletes any words in the log, and the rest is no longer linked to
             you.
@@ -360,6 +376,7 @@ export default function MiraPrivacyPage() {
             Daily nudges come with your free account. You can pause or stop them with the link in
             any nudge, or in Settings.
           </li>
+          <li>You can delete one goal, or all your goals, on your goals page at any time.</li>
           <li>
             You can ask for access to your data and a copy of it, and for correction, deletion or
             restriction. You can object to what we do on the basis of our legitimate interest. Write
@@ -384,7 +401,7 @@ export default function MiraPrivacyPage() {
           Mira is only for people aged 18 or older. If you tell Mira you are under 18, she stops
           coaching for good on that account or in that browser. She turns her emails off and deletes
           the chats saved in that account. In a browser without an account, the chat there is
-          cleared.
+          cleared. Any goals in that account are deleted too.
         </p>
 
         <h2>Mira is not a therapist</h2>

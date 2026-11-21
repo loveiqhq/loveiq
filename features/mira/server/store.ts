@@ -333,7 +333,15 @@ export type MiraEventName =
   // Settings, 21 Nov 2026: a changed appearance, text size or reply language (its id as `value`).
   | "theme_changed"
   | "text_size_changed"
-  | "reply_language_changed";
+  | "reply_language_changed"
+  // Challenges & goals (22 Nov 2026): counts only, never a goal's words.
+  | "goal_suggested"
+  | "goal_set"
+  | "goal_logged"
+  | "goal_completed"
+  | "goal_archived"
+  | "goal_deleted"
+  | "goals_deleted";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

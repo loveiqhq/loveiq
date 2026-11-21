@@ -3,6 +3,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { forgetNotify } from "./coaches";
 import { MINOR_COOKIE } from "./config";
+import { deleteGoals } from "./goals";
 import { deleteChats, updateProfile } from "./store";
 
 /**
@@ -49,6 +50,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     }),
     deleteChats(userId),
     forgetNotify(userId),
+    // Challenges & goals: their goals and ticks go too.
+    deleteGoals(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

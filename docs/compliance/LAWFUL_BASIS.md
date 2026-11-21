@@ -183,6 +183,12 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: 12 months, as `mira_event`; deleting the account deletes or unlinks them
 - **Withdraw**: as A16; turning "Remember our conversations" off stops the suggestions from chats;
   anyone stopped as under 18 has their "Notify me" requests deleted
+### A21 — Mira goals (Challenges & goals, added 2026-11-22, before release)
+
+- **Data**: an account holder's goals in their own words (Art. 9: often about sex), the days a week they aim for, whether a goal came from Mira's suggestion, put away or done, and the days they ticked it (`mira_goal`, `mira_goal_log`); the goals on the go with this week's ticks go to the model as the person's context
+- **Basis**: (a) consent with Art. 9(2)(a): the A16 coaching consent every account holder gives at sign-up, as a goal is something the person shares with Mira to be coached. The counts (`goal_*` events, AP's Goals card) as A18, with no words
+- **Retention**: until the person deletes the goal, or all goals, on the goals page, or the account ([DPIA.md](DPIA.md) §7.12, open point on a 12-month limit)
+- **Withdraw**: delete goals on the goals page; delete the account; a data request. The under-18 stop deletes them (DPIA M2)
 
 ## Withdrawal of consent flows
 
@@ -197,9 +203,11 @@ For activities under basis (a):
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 | A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
+| A21 Mira goals | Delete a goal or all goals on the goals page; delete the account; a data request                     | The goals and their ticks are deleted; Anthropic deletes its copy of the context within 30 days                                                                                        |
 
 ## Outstanding work
 
 - **Mira (A16 to A19)**: the open points in [DPIA.md](DPIA.md) §7.9, the consent scope among them.
+- **Mira goals (A21)**: the open points in [DPIA.md](DPIA.md) §7.12 (a 12-month limit; Jarvis's live data tool).
 - **Admin UI for `processing_restricted_at` (T-09 follow-up)**: a tiny admin button "Freeze processing for this user" needs to land. Out of this round per the no-UI-changes constraint.
 - **Cookies banner first-load timing**: CookieYes script loads `lazyOnload`. The banner appears AFTER hydration. A first-visit user has ~200ms of HTML rendering before the banner mounts. Strictly speaking the visitor ID cookie (T-02) waits for consent, but session recording (Microsoft Clarity), GA4 and Google Ads all load before the banner is dismissed — Clarity by explicit owner decision on 2026-08-10, the Google tags by the pre-existing `next/script` gap (measured on production the same day). Clarity additionally records unmasked Art. 9 survey answers, which is not reconcilable with the Art. 9(2)(a) explicit-consent basis claimed above. See DPIA §6 and ROPA §"Consent".

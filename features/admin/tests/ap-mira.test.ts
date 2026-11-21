@@ -877,6 +877,7 @@ describe("fetchMira", () => {
       "theme_changed",
       "text_size_changed",
       "reply_language_changed",
+      "goal_suggested",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
