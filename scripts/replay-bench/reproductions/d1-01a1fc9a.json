@@ -1,0 +1,18 @@
+{
+  "criterion": "D1",
+  "label": "dead control",
+  "session_id": "01a1fc9a-889b-7ba4-9350-06e43c22a016",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a1fc9a-889b-7ba4-9350-06e43c22a016",
+  "viewport": {
+    "min": 411,
+    "max": 411,
+    "os": "Android"
+  },
+  "probes": [
+    {
+      "file": "verify-dead-click-target.mjs",
+      "output": "FAIL  Pixel 7        (step 0) <a> \"\" looks pressable but the tap lands on h1.animate-on-load |  | FAIL (1) — the reader tapped a control that could not respond"
+    }
+  ],
+  "reproduced": true
+}
