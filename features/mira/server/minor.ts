@@ -3,6 +3,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { MINOR_COOKIE } from "./config";
 import { deleteChats, updateProfile } from "./store";
+import { deleteSlot } from "./weekly-sessions";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
@@ -10,7 +11,8 @@ import { deleteChats, updateProfile } from "./store";
  * their browser (a cookie, a year) and their account (mira_user.minor_at) get message G without
  * the model. A crisis message still gets the crisis reply and the lines, because the chat route
  * reads crisis words first. The account's nudges go off, and its chats are deleted and no longer
- * kept; the browser forgets its own chat (MiraChat).
+ * kept; the browser forgets its own chat (MiraChat). A booked weekly session is deleted without
+ * any email, and the session routes refuse the account (weekly-sessions.ts).
  */
 
 /** This browser or this account said its person is under 18. */
@@ -41,6 +43,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       remember_chats: false,
     }),
     deleteChats(userId),
+    // A weekly session goes too, silently: no cancellation, reminder or invite is ever sent.
+    deleteSlot(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

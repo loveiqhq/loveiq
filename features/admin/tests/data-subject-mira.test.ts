@@ -69,6 +69,18 @@ describe("DSAR export covers Mira (Art. 15)", () => {
     expect(paths).toContain(`/rest/v1/mira_event?user_id=in.(${UID})&select=*&order=id.asc`);
   });
 
+  it("exports the weekly session: its slot by the account, its reminders through the slot", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    for (const table of ["mira_session_slot", "mira_session_reminder"]) {
+      expect(result.exportData?.[table]).toEqual([{ from: `/rest/v1/${table}` }]);
+    }
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    expect(paths).toContain(`/rest/v1/mira_session_slot?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(
+      `/rest/v1/mira_session_reminder?select=*,mira_session_slot!inner(user_id)&mira_session_slot.user_id=in.(${UID})&order=id.asc`
+    );
+  });
+
   it("reads nothing more when there is no Mira account", async () => {
     accounts = [];
     const result = await exportDataSubject("lea@example.com");

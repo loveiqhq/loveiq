@@ -316,7 +316,16 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Weekly sessions (21 Nov 2026, server/weekly-sessions.ts): booked, moved, reminders paused or
+  // back on, cancelled, a reminder sent, a reminded session opened within 30 minutes of its start.
+  | "session_scheduled"
+  | "session_changed"
+  | "session_paused"
+  | "session_resumed"
+  | "session_cancelled"
+  | "session_reminder_sent"
+  | "session_attended";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

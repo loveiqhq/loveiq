@@ -36,6 +36,9 @@
  *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
+ *     Weekly sessions (21 Nov 2026): mira_session_slot (by user_id) and its
+ *     mira_session_reminder rows (through the slot); erased by the same deletion (ON DELETE
+ *     CASCADE from mira_user, then from the slot).
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
@@ -227,6 +230,12 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
     ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
     ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
+    // Weekly sessions: the slot by its account; its reminders carry no user_id, so through it.
+    ["mira_session_slot", `/rest/v1/mira_session_slot?user_id=${ids}&select=*&order=id.asc`],
+    [
+      "mira_session_reminder",
+      `/rest/v1/mira_session_reminder?select=*,mira_session_slot!inner(user_id)&mira_session_slot.user_id=${ids}&order=id.asc`,
+    ],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);
@@ -234,7 +243,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       result.ok = false;
       result.warnings.push(`${table}: could not be read in full; run the export again`);
     }
-    // eslint-disable-next-line security/detect-object-injection -- one of the five names above.
+    // eslint-disable-next-line security/detect-object-injection -- one of the table names above.
     result.exportData![table] = rows ?? [];
   }
 }

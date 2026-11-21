@@ -68,20 +68,23 @@ function secret(): Buffer | null {
   return null;
 }
 
-function sign(purpose: "prefs" | "open", id: string, key: Buffer): string {
+/**
+ * What a signed link may do; each endpoint reads only its own. prefs and open: the nudge's links.
+ * session-stop: the weekly session emails' stop link, which only pauses their reminders.
+ */
+export type LinkPurpose = "prefs" | "open" | "session-stop";
+
+function sign(purpose: LinkPurpose, id: string, key: Buffer): string {
   return createHmac("sha256", key).update(`mira-nudge:${purpose}:${id}`).digest("base64url");
 }
 
-export function makeToken(purpose: "prefs" | "open", id: string): string | null {
+export function makeToken(purpose: LinkPurpose, id: string): string | null {
   const key = secret();
   return key ? `${id}.${sign(purpose, id, key)}` : null;
 }
 
 /** The id the token was made for, or null if it was not made by us for this purpose. */
-export function readToken(
-  purpose: "prefs" | "open",
-  token: string | null | undefined
-): string | null {
+export function readToken(purpose: LinkPurpose, token: string | null | undefined): string | null {
   const key = secret();
   if (!key || !token) return null;
   const dot = token.lastIndexOf(".");
@@ -241,14 +244,15 @@ export function parseNudge(
 
 // ── The email ─────────────────────────────────────────────────────────────────────────────────
 
-function from(): string {
+/** "Mira <address>": the neutral sender of every Mira email (the weekly session's too). */
+export function from(): string {
   const configured = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
   const address = /<([^>]+)>/.exec(configured)?.[1] ?? configured;
   return `${nudgeConfig.senderName} <${address}>`;
 }
 
 /** The legal entity under every nudge, as in the imprint (the sign-in code email has the same). */
-const COMPANY_LINE =
+export const COMPANY_LINE =
   "Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner";
 
 export function nudgeEmail(input: {
@@ -348,7 +352,8 @@ export async function nudgeCandidates(): Promise<NudgeUser[]> {
 
 type ChatTurn = { role: "user" | "assistant"; content: string; created_at: string };
 
-async function lastChat(userId: string): Promise<{ id: string; turns: ChatTurn[] } | null> {
+/** The person's most recent chat and its newest turns, oldest first (the weekly session uses it too). */
+export async function lastChat(userId: string): Promise<{ id: string; turns: ChatTurn[] } | null> {
   const chats = await rows<{ id: string }>(
     `/rest/v1/mira_chat?user_id=eq.${enc(userId)}&select=id&order=updated_at.desc&limit=1`
   );
