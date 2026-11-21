@@ -158,6 +158,8 @@ export async function addMessages(
     content: string;
     sources?: CitedSource[] | null;
     ask?: string | null;
+    /** A spoken turn's voice session (features/mira/server/voice.ts); only sent when there is one. */
+    voiceSession?: string | null;
   }>
 ): Promise<number[]> {
   const res = await supabaseFetch("/rest/v1/mira_message?select=id", {
@@ -170,6 +172,7 @@ export async function addMessages(
         content: m.content,
         sources: m.sources ?? null,
         ask: m.ask ?? null,
+        ...(m.voiceSession ? { voice_session: m.voiceSession } : {}),
       }))
     ),
   });
@@ -316,7 +319,10 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Talking to Mira by voice (22 Nov 2026, server/voice.ts): ids and numbers only.
+  | "voice_session_ended"
+  | "voice_points_opened";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

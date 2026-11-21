@@ -125,10 +125,21 @@ export function topicInstruction(): string {
   ].join("\n");
 }
 
+/**
+ * A spoken turn (features/mira/ui/voice): the person's device reads her reply aloud, so it must
+ * sound like talking. Never a looser rule: the stop rails, fixed messages and markers stay as written.
+ */
+export function spokenInstruction(): string {
+  return [
+    "SPOKEN CONVERSATION",
+    'The person is talking to you out loud: speech recognition turned their words into text, so read past small mistakes in them, and their device reads your reply aloud. Answer like a calm person talking, in two to four short sentences. No lists, headings, bold or emoji, no web addresses or links and nothing in brackets: give a practice\'s steps one at a time and ask whether they want the next, and say "the guide on the site" instead of an address. Your rules, fixed messages and markers apply exactly as in writing; the Sources line and the markers still go at the very end, and the app removes them before reading.',
+  ].join("\n");
+}
+
 export function personalInstructions(
   style: CoachingStyle | null | undefined,
   person: PersonContext,
-  opts: { topic?: boolean } = {}
+  opts: { topic?: boolean; voice?: boolean } = {}
 ): string {
   const lines: string[] = ["ABOUT THIS CONVERSATION"];
   lines.push(
@@ -151,5 +162,6 @@ export function personalInstructions(
     lines.push(...styleLines.map((s) => `- ${s}`));
   }
   if (opts.topic) lines.push("", topicInstruction());
+  if (opts.voice) lines.push("", spokenInstruction());
   return lines.join("\n");
 }

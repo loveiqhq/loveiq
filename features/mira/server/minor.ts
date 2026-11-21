@@ -3,6 +3,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { MINOR_COOKIE } from "./config";
 import { deleteChats, updateProfile } from "./store";
+import { deleteRecordings } from "./voice";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
@@ -41,6 +42,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       remember_chats: false,
     }),
     deleteChats(userId),
+    // Voice sessions (22 Nov 2026): their key points too, not only their words.
+    deleteRecordings(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {
