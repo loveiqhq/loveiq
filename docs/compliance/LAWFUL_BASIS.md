@@ -169,6 +169,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: as long as the Slack workspace keeps messages (its retention setting: to confirm)
 - **Objection**: Art. 21 by email; a restriction request (T-09) also takes the reader out of these posts
 
+### A21 — Mira daily journal (from 2026-11-22)
+
+- **Data**: per day, mood, body, closeness and energy rated 1 to 5 or skipped, and an optional one-line note (`mira_journal_entry`); the settings below with the time Mira's reading was chosen; the reminder's time and last day; events without ratings or words
+- **Basis**: (a) consent with Art. 9(2)(a) explicit consent. Keeping the entries to show them back rests on the account's consent ("Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps"); open whether that covers a journal or a first-use consent is wanted ([DPIA.md](DPIA.md) §7.12). Mira reading the last 7 days is a separate explicit opt-in, "Let Mira read my journal", off by default, and the notes a second one, "Include my notes"; `mira_user.journal_share_at` records when. The daily reminder email is an opt-in ("Remind me daily") with a one-click stop in every email
+- **Retention**: until the person deletes an entry, the journal or the account; deleted at once when Mira stops someone as under 18
+- **Withdraw**: turn either reading choice off (it applies from the next message); delete entries or the whole journal on the journal page or in Settings; stop the reminder there or from any reminder email; delete the account
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
@@ -182,6 +189,7 @@ For activities under basis (a):
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 | A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
+| A21 journal    | Turn off Mira's reading or the reminder; delete entries, the journal or the account                  | Mira stops reading it from the next message; deleted entries are gone, with the account's                                                                                              |
 
 ## Outstanding work
 

@@ -197,7 +197,7 @@ export function JournalSettings({
           <p className="text-[12px] leading-relaxed text-ap-muted">
             Your check-ins are about your mood, body and closeness, which is sensitive data. They
             are private: Mira reads them only while you let her, and our analytics tools don’t
-            record them. They stay until you delete them or your account.{" "}
+            record what you rate or write. They stay until you delete them or your account.{" "}
             <a href="/mira/privacy" className="underline">
               How Mira handles your data
             </a>
