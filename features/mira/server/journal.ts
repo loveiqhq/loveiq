@@ -319,7 +319,7 @@ export async function runJournalReminders(
         skip("already-today");
         continue;
       }
-      const stopUrl = `${site}/api/mira/journal/reminder?t=${enc(token)}`;
+      const stopUrl = `${site}/api/mira/journal/unsubscribe?t=${enc(token)}`;
       const email = reminderEmail({
         checkInUrl: `${site}/mira/journal?checkin=1`,
         stopUrl: `${site}/mira/journal/reminder?t=${enc(token)}`,

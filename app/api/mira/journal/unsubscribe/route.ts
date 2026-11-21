@@ -1,5 +1,5 @@
 /**
- * POST /api/mira/journal/reminder?t=… : stops the daily journal reminder. The email's
+ * POST /api/mira/journal/unsubscribe?t=… : stops the daily journal reminder. The email's
  * List-Unsubscribe header points here (RFC 8058 one-click), and so does the button on the page
  * its footer link opens. No sign-in or CSRF check by design: mail providers post it without
  * cookies; the signed token stands for the person, with its own purpose ("journal-stop",

@@ -175,7 +175,7 @@ describe("the reminder email", () => {
     expect(email.from).toBe("Mira <hello@send.loveiq.org>");
     expect(email.subject).toBe("Your check-in for today");
     const stopUrl = email.headers["List-Unsubscribe"].slice(1, -1) as string;
-    expect(stopUrl).toMatch(/^https:\/\/www\.loveiq\.org\/api\/mira\/journal\/reminder\?t=/);
+    expect(stopUrl).toMatch(/^https:\/\/www\.loveiq\.org\/api\/mira\/journal\/unsubscribe\?t=/);
     const t = new URL(stopUrl).searchParams.get("t");
     expect(readToken("journal-stop", t)).toBe(A);
     // Its own purpose: forwarded, it can't open the person's nudge preferences.

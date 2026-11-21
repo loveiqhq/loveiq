@@ -24,7 +24,7 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
   async function stop() {
     setBusy(true);
     setError(null);
-    const res = await miraApi(`/api/mira/journal/reminder?t=${encodeURIComponent(token)}`, {
+    const res = await miraApi(`/api/mira/journal/unsubscribe?t=${encodeURIComponent(token)}`, {
       method: "POST",
     });
     setBusy(false);

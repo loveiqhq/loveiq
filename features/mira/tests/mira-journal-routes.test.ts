@@ -23,7 +23,7 @@ import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { DELETE, GET, PATCH, PUT } from "@/app/api/mira/journal/route";
-import { GET as visitStop, POST as stop } from "@/app/api/mira/journal/reminder/route";
+import { GET as visitStop, POST as stop } from "@/app/api/mira/journal/unsubscribe/route";
 import { GET as nudgePrefs } from "@/app/api/mira/nudges/preferences/route";
 import { POST as nudgeUnsubscribe } from "@/app/api/mira/nudges/unsubscribe/route";
 
@@ -269,7 +269,7 @@ describe("DELETE /api/mira/journal", () => {
 
 describe("the reminder email's stop link", () => {
   const link = (t: string) =>
-    new Request(`http://localhost/api/mira/journal/reminder?t=${encodeURIComponent(t)}`, {
+    new Request(`http://localhost/api/mira/journal/unsubscribe?t=${encodeURIComponent(t)}`, {
       method: "POST",
       body: "List-Unsubscribe=One-Click",
     });
@@ -313,7 +313,7 @@ describe("the reminder email's stop link", () => {
   it("sends someone opening the link to the page that asks first", async () => {
     const t = makeToken("journal-stop", LEA.id)!;
     const res = await visitStop(
-      new Request(`http://localhost/api/mira/journal/reminder?t=${encodeURIComponent(t)}`)
+      new Request(`http://localhost/api/mira/journal/unsubscribe?t=${encodeURIComponent(t)}`)
     );
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe(

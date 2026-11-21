@@ -268,8 +268,12 @@ describe("the journal page", () => {
   });
 
   it("opens today's check-in straight away from the reminder email's button", async () => {
+    window.history.replaceState(null, "", "/mira/journal?checkin=1");
     render(<JournalPage startCheckIn />);
     expect(await screen.findByRole("dialog", { name: "Today’s check-in" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    // Done with: a reload shows the page, not the sheet again.
+    expect(window.location.search).toBe("");
   });
 });
 
@@ -278,7 +282,7 @@ describe("the reminder's stop page", () => {
     render(<ReminderStop token="abc.def" valid />);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminders" }));
     expect(await screen.findByRole("heading", { name: "Reminders are off." })).toBeInTheDocument();
-    expect(sent("POST").map((p) => p.url)).toEqual(["/api/mira/journal/reminder?t=abc.def"]);
+    expect(sent("POST").map((p) => p.url)).toEqual(["/api/mira/journal/unsubscribe?t=abc.def"]);
   });
 
   it("says plainly when the link doesn't work, and asks nothing of the server", () => {

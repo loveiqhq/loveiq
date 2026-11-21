@@ -209,6 +209,8 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
           onClose={() => {
             setDay(null);
             setDismissed(true);
+            // The email's ?checkin=1 has done its job: a reload shouldn't open the sheet again.
+            if (startCheckIn) window.history.replaceState(null, "", "/mira/journal");
           }}
         />
       ) : null}
