@@ -134,9 +134,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
                   The last four weeks, one bar a day, taller for a better day. This week is the
                   darker end.
                 </p>
-                <ul
-                  className="mt-4 divide-y divide-ap-line border-y border-ap-line"
-                >
+                <ul className="mt-4 divide-y divide-ap-line border-y border-ap-line">
                   {patterns(entries, today).map((p) => (
                     <li
                       key={p.id}
@@ -164,9 +162,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
                 >
                   {said?.text}
                 </p>
-                <ol
-                  className="mt-2 divide-y divide-ap-line border-y border-ap-line"
-                >
+                <ol className="mt-2 divide-y divide-ap-line border-y border-ap-line">
                   {entries.slice(0, shown).map((e) => (
                     <Day
                       key={e.day}

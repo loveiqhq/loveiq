@@ -192,34 +192,39 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: 12 months, as `mira_event`; deleting the account deletes or unlinks them
 - **Withdraw**: as A16; turning "Remember our conversations" off stops the suggestions from chats;
   anyone stopped as under 18 has their "Notify me" requests deleted
-### A21 — Mira goals (Challenges & goals, added 2026-11-22, before release)
+
+### A22 — Mira goals (Challenges & goals, added 2026-11-22, before release)
 
 - **Data**: an account holder's goals in their own words (Art. 9: often about sex), the days a week they aim for, whether a goal came from Mira's suggestion, put away or done, and the days they ticked it (`mira_goal`, `mira_goal_log`); the goals on the go with this week's ticks go to the model as the person's context
 - **Basis**: (a) consent with Art. 9(2)(a): the A16 coaching consent every account holder gives at sign-up, as a goal is something the person shares with Mira to be coached. The counts (`goal_*` events, AP's Goals card) as A18, with no words
-- **Retention**: until the person deletes the goal, or all goals, on the goals page, or the account ([DPIA.md](DPIA.md) §7.12, open point on a 12-month limit)
+- **Retention**: until the person deletes the goal, or all goals, on the goals page, or the account ([DPIA.md](DPIA.md) §7.13, open point on a 12-month limit)
 - **Withdraw**: delete goals on the goals page; delete the account; a data request. The under-18 stop deletes them (DPIA M2)
-### A21 — Mira ratings and quotes (from 2026-11-22, to be checked by Eman)
 
-- **Data**: a signed-in person's one rating (1 to 5); only with a separate tick, one sentence for others with the first name or initials and the optional age range they choose, the consent's version and time, and its review status (`mira_review`); events with ids and counts only ([DPIA.md](DPIA.md) §7.12)
+### A23 — Mira ratings and quotes (from 2026-11-22, to be checked by Eman)
+
+- **Data**: a signed-in person's one rating (1 to 5); only with a separate tick, one sentence for others with the first name or initials and the optional age range they choose, the consent's version and time, and its review status (`mira_review`); events with ids and counts only ([DPIA.md](DPIA.md) §7.14)
 - **Basis**: the stars, shown only inside an average without names: (f) legitimate interest in telling visitors honestly what people think of Mira. The words, name and age range, which may reveal sex life or health: (a) explicit consent with Art. 9(2)(a), a separate box the person ticks themselves, version `mira-review-2026-11-22` stored with the words. Published only after staff approval; the only edit is a visible […] where an identifying detail was taken out, as the box says
 - **Retention**: until taken back or the account is deleted; words not approved are deleted when rejected
 - **Withdraw**: "Stop showing my words" or "Remove my rating" in Settings, effective at once; deleting the account; a data request. An under-18 stop deletes both
-### A21 — Talking to Mira by voice (from 2026-11-22)
+
+### A24 — Talking to Mira by voice (from 2026-11-22)
 
 - **Data**: the text the person's browser makes of their speech (handled as A16's messages; the browser's own speech service, when used, hears the voice under the browser's terms); with an account and "Remember our conversations" on, the voice session (`mira_voice_session`: times, words per side, recognition mode, up to three key points written by Anthropic's model); the KPI events `voice_session_ended` and `voice_points_opened` (ids and numbers)
 - **Basis**: as A16, (a) consent with Art. 9(2)(a) for the words and the key points; before the browser's own speech service is first used, a one-time notice with a tick says who turns the voice into text. The events: as A18, (f) legitimate interest
-- **Retention**: with the chat and the account (A16, [DPIA.md](DPIA.md) §7.12); the events 12 months (A18)
+- **Retention**: with the chat and the account (A16, [DPIA.md](DPIA.md) §7.15); the events 12 months (A18)
 - **Withdraw**: End or Mute at any time; delete a session on its page, or the chats or the account in Settings; a data request
-### A21 — Mira self-checks (from 2026-11-22)
+
+### A25 — Mira self-checks (from 2026-11-22)
 
 - **Data**: a signed-in person's answers to the anxiety check (GAD-7), the mood check (PHQ-9) and the loneliness check (Three-Item Loneliness Scale) with the date (`mira_check`), scored by the app; "Mira may use my check results" (`mira_user.use_checks`, off by default), with which each check's latest band from the last 90 days goes into Mira's context, never answers or scores; events naming the check and whether it was a retake, and a count of the support panels the PHQ-9's question 9 opened; an unfinished check in the browser tab for up to a day
-- **Basis**: (a) consent with Art. 9(2)(a) explicit consent: the sign-up tick for "what I share about my sex life and health to coach me", confirmed by starting the first check after a note on what is kept, who sees it, that analytics see the screen and how to delete it. Intended purpose: self-reflection and coaching, not diagnosis or treatment ([DPIA.md](DPIA.md) §7.12). Open: whether a tick of its own is wanted (§7.12, open point 1)
+- **Basis**: (a) consent with Art. 9(2)(a) explicit consent: the sign-up tick for "what I share about my sex life and health to coach me", confirmed by starting the first check after a note on what is kept, who sees it, that analytics see the screen and how to delete it. Intended purpose: self-reflection and coaching, not diagnosis or treatment ([DPIA.md](DPIA.md) §7.16). Open: whether a tick of its own is wanted (§7.16, open point 1)
 - **Retention**: until deleted in Settings, with the account, or at an under-18 stop
 - **Withdraw**: "Delete my check results" or turn "Mira may use my check results" off in Settings; delete the account; or a data request
-### A21 — Mira daily journal (from 2026-11-22)
+
+### A26 — Mira daily journal (from 2026-11-22)
 
 - **Data**: per day, mood, body, closeness and energy rated 1 to 5 or skipped, and an optional one-line note (`mira_journal_entry`); the settings below with the time Mira's reading was chosen; the reminder's time and last day; events without ratings or words
-- **Basis**: (a) consent with Art. 9(2)(a) explicit consent. Keeping the entries to show them back rests on the account's consent ("Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps"); open whether that covers a journal or a first-use consent is wanted ([DPIA.md](DPIA.md) §7.12). Mira reading the last 7 days is a separate explicit opt-in, "Let Mira read my journal", off by default, and the notes a second one, "Include my notes"; `mira_user.journal_share_at` records when. The daily reminder email is an opt-in ("Remind me daily") with a one-click stop in every email
+- **Basis**: (a) consent with Art. 9(2)(a) explicit consent. Keeping the entries to show them back rests on the account's consent ("Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps"); open whether that covers a journal or a first-use consent is wanted ([DPIA.md](DPIA.md) §7.17). Mira reading the last 7 days is a separate explicit opt-in, "Let Mira read my journal", off by default, and the notes a second one, "Include my notes"; `mira_user.journal_share_at` records when. The daily reminder email is an opt-in ("Remind me daily") with a one-click stop in every email
 - **Retention**: until the person deletes an entry, the journal or the account; deleted at once when Mira stops someone as under 18
 - **Withdraw**: turn either reading choice off (it applies from the next message); delete entries or the whole journal on the journal page or in Settings; stop the reminder there or from any reminder email; delete the account
 
@@ -236,15 +241,15 @@ For activities under basis (a):
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 | A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
-| A21 Mira goals | Delete a goal or all goals on the goals page; delete the account; a data request                     | The goals and their ticks are deleted; Anthropic deletes its copy of the context within 30 days                                                                                        |
-| A21 Mira quote | "Stop showing my words" or "Remove my rating" in Settings; delete the account; a data request        | The words, name and age range are deleted and leave Mira's pages from the next page view; "Remove my rating" also takes the stars out of the average                                   |
-| A21 self-check | "Delete my check results" or the "Mira may use" switch in Settings; delete the account               | The answers are deleted; with the switch off, Mira gets no bands from the next message on                                                                                              |
-| A21 journal    | Turn off Mira's reading or the reminder; delete entries, the journal or the account                  | Mira stops reading it from the next message; deleted entries are gone, with the account's                                                                                              |
+| A22 Mira goals | Delete a goal or all goals on the goals page; delete the account; a data request                     | The goals and their ticks are deleted; Anthropic deletes its copy of the context within 30 days                                                                                        |
+| A23 Mira quote | "Stop showing my words" or "Remove my rating" in Settings; delete the account; a data request        | The words, name and age range are deleted and leave Mira's pages from the next page view; "Remove my rating" also takes the stars out of the average                                   |
+| A25 self-check | "Delete my check results" or the "Mira may use" switch in Settings; delete the account               | The answers are deleted; with the switch off, Mira gets no bands from the next message on                                                                                              |
+| A26 journal    | Turn off Mira's reading or the reminder; delete entries, the journal or the account                  | Mira stops reading it from the next message; deleted entries are gone, with the account's                                                                                              |
 
 ## Outstanding work
 
 - **Mira (A16 to A19)**: the open points in [DPIA.md](DPIA.md) §7.9, the consent scope among them.
-- **Mira goals (A21)**: the open points in [DPIA.md](DPIA.md) §7.12 (a 12-month limit; Jarvis's live data tool).
-- **Mira self-checks (A21)**: the open points in [DPIA.md](DPIA.md) §7.12: the consent's scope for health questionnaires, permission for the loneliness scale, analytics on the check screens, and the medical device question.
+- **Mira goals (A22)**: the open points in [DPIA.md](DPIA.md) §7.13 (a 12-month limit; Jarvis's live data tool).
+- **Mira self-checks (A25)**: the open points in [DPIA.md](DPIA.md) §7.16: the consent's scope for health questionnaires, permission for the loneliness scale, analytics on the check screens, and the medical device question.
 - **Admin UI for `processing_restricted_at` (T-09 follow-up)**: a tiny admin button "Freeze processing for this user" needs to land. Out of this round per the no-UI-changes constraint.
 - **Cookies banner first-load timing**: CookieYes script loads `lazyOnload`. The banner appears AFTER hydration. A first-visit user has ~200ms of HTML rendering before the banner mounts. Strictly speaking the visitor ID cookie (T-02) waits for consent, but session recording (Microsoft Clarity), GA4 and Google Ads all load before the banner is dismissed — Clarity by explicit owner decision on 2026-08-10, the Google tags by the pre-existing `next/script` gap (measured on production the same day). Clarity additionally records unmasked Art. 9 survey answers, which is not reconcilable with the Art. 9(2)(a) explicit-consent basis claimed above. See DPIA §6 and ROPA §"Consent".

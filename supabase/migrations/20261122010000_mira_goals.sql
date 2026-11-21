@@ -13,7 +13,7 @@
 --   land on someone else's goal; it goes with the goal, and so with the account.
 --
 -- Special-category data (Art. 9: the goals are often about sex), service role only like every
--- other Mira object; docs/compliance/DPIA.md section 7.12.
+-- other Mira object; docs/compliance/DPIA.md section 7.13.
 -- migration-lint: ignore (the indexes are created on tables created empty in this same file)
 
 BEGIN;

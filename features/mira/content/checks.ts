@@ -1,7 +1,7 @@
 /**
  * Mira's self-checks (22 Nov 2026): three short validated questionnaires a signed-in person can
  * take from Home or /mira/assessments, for self-reflection and coaching. Not for diagnosis or
- * treatment: the intended purpose is in docs/compliance/DPIA.md §7.12. Pure data and maths, so
+ * treatment: the intended purpose is in docs/compliance/DPIA.md §7.16. Pure data and maths, so
  * the browser (the questions) and the server (the scoring it trusts) share one source.
  *
  * Rules for this file, all of it pending Sanjin's review (AGENT_README):
@@ -11,7 +11,7 @@
  * - Licences, read on 21 Nov 2026: the GAD-7 and PHQ-9 forms at phqscreeners.com say "No
  *   permission required to reproduce, translate, display or distribute", and their instruction
  *   manual calls them "in the public domain". The three-item loneliness scale has no published
- *   licence (DPIA §7.12, open point). The WHO-5 was not used: WHO publishes it under CC BY-NC-SA
+ *   licence (DPIA §7.16, open point). The WHO-5 was not used: WHO publishes it under CC BY-NC-SA
  *   3.0 IGO (2024), which rules out commercial use without WHO's permission.
  *
  * The body check (Body Appreciation Scale-2, server/body-check.ts) fits this shape too (answers

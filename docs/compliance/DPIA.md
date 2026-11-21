@@ -225,9 +225,9 @@ names the use of AI to steer the interaction with the people concerned.
 5. Safety and abuse prevention: the crisis rails, the stop for minors, rate limits and daily caps.
 6. Site analytics, as on every page of loveiq.org (PostHog, Microsoft Clarity, Google Analytics,
    Google Ads and Tag Manager, CookieYes).
-7. Self-checks (from 2026-11-22, §7.12): the anxiety, mood and loneliness questionnaires for
+7. Self-checks (from 2026-11-22, §7.16): the anxiety, mood and loneliness questionnaires for
    self-reflection and, with the person's permission, for Mira's coaching.
-7. Weekly sessions (from 2026-11-21), only for account holders who book one: a weekly 15-minute
+8. Weekly sessions (from 2026-11-21), only for account holders who book one: a weekly 15-minute
    slot, the calendar invite by email, a reminder email 30 to 60 minutes before each session, and
    whether a reminded session was opened within 30 minutes of its start.
 
@@ -241,11 +241,11 @@ are left out of Mira's statistics.
 - Art. 9 (sex life, health): the messages and Mira's replies; for account holders the saved chats
   (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
   (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in.
-- Art. 9, Challenges & goals (from 2026-11-22, §7.12): an account holder's goals in their own
+- Art. 9, Challenges & goals (from 2026-11-22, §7.13): an account holder's goals in their own
   words, with an optional number of days a week, and the days they ticked them (`mira_goal`,
   `mira_goal_log`); exported and erased with the account by the data-request tool (§4).
   (`mira_event`); body check answers and score (`mira_body_check`); self-check answers
-  (`mira_check`, scored by the app; §7.12); the LoveIQ result on opt-in.
+  (`mira_check`, scored by the app; §7.16); the LoveIQ result on opt-in.
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
   result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason; from
   2026-11-21 the language Mira replies in, and light or dark and the text size), and each consent
@@ -254,7 +254,7 @@ are left out of Mira's statistics.
   except the person's own feedback), nudge records
   (`mira_nudge`: kind, fixed subject, day, sent, delivered, first opened, clicked) and sign-in code
   rows (`mira_sign_in_code`: address, time, guesses).
-- Ratings and quotes (`mira_review`, from 2026-11-22; §7.12): an account's one rating (1 to 5)
+- Ratings and quotes (`mira_review`, from 2026-11-22; §7.14): an account's one rating (1 to 5)
   and, only with its own consent, one sentence with the first name or initials and age range the
   person chose, its consent version and time, and its review status. Covered by data requests
   (export by the account; erased with the account) and purged by an under-18 stop.
@@ -439,11 +439,11 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
   covers analytics is doubtful.
 - **What would lower it** (not taken, by owner decision): mask the chat in both tools
   (`data-clarity-mask`, PostHog's `ph-no-capture`), or not load them on `/mira`.
-- **Since 2026-11-22, the self-checks too** (§7.12, S3): PostHog and Clarity also record the
+- **Since 2026-11-22, the self-checks too** (§7.16, S3): PostHog and Clarity also record the
   answers and results of the anxiety, mood and loneliness checks, health data under Art. 9, on
   the same basis the privacy policy states (legitimate interest, §7.4), which is not an Art. 9(2)
   condition. Mira's notice says so. Whether the owner's acceptance of M5 extends to them is an
-  open decision for Eman (§7.12, open point 3).
+  open decision for Eman (§7.16, open point 3).
 
 #### M6 — Transfers to the USA (MEDIUM)
 
@@ -537,7 +537,7 @@ Recorded as owner decisions, not as risks this assessment found acceptable on it
    (owner decision of 2026-08-10, kept for Mira on 2026-11-20). The chat is not masked in Clarity
    or PostHog either (owner decision of 2026-11-21), so the Berlin Commissioner is consulted before
    Mira is promoted (7.10, condition 1). Whether this extends to the self-checks' answers and
-   results (7.12, S3) is still open.
+   results (7.16, S3) is still open.
 2. **Nudges on by default** for new accounts (M8).
 3. **Nudge open tracking** (M7).
 4. **Mira stays on Eman's own Anthropic organization** ("Eman's Individual Org") and its keys, not
@@ -640,7 +640,8 @@ Home, a search on Home, and "Ask Mira about this" after each of the guide's prac
   decided before the first such email (7.9).
 - **Open**: the system prompt lets Mira name only Jonas and Ana as coming soon; the coaches page
   names five. Whether Mira may name the other three is Sanjin's call.
-### 7.12 Challenges & goals (added 2026-11-22, before release)
+
+### 7.13 Challenges & goals (added 2026-11-22, before release)
 
 A signed-in person can keep a few small goals (at most five on the go) in their own words, with an
 optional number of days a week, tick the days they do one, and see the last 8 weeks. Mira can offer
@@ -653,7 +654,7 @@ their goals on the go with this week's ticks, so she can check in at most once a
   zone (`mira_goal`, `mira_goal_log`). Account holders only: an anonymous visitor's "Add as a goal"
   leads to sign-up and sends nothing.
 - **Purpose and basis**: coaching (purpose 1), under the same explicit consent as the chat (A16;
-  [LAWFUL_BASIS.md](LAWFUL_BASIS.md) A21). Counting goals is purpose 4, by ids and numbers only
+  [LAWFUL_BASIS.md](LAWFUL_BASIS.md) A22). Counting goals is purpose 4, by ids and numbers only
   (`goal_suggested`, `goal_set`, `goal_logged`, `goal_completed`, `goal_archived`, `goal_deleted`,
   `goals_deleted`); AP's Goals card reads the tables by ids and times, never a goal's words.
 - **Recipients**: Anthropic gets the goals on the go with each message of a signed-in person, as
@@ -675,7 +676,8 @@ their goals on the go with this week's ticks, so she can check in at most once a
   (2) Jarvis's live data tool (`query_product_data`, `app/api/mcp/route.ts`) masks columns by name
   but does not leave out `mira_*` tables, so `mira_message.content` (already) and `mira_goal.text`
   can be read through it: leave `mira_*` out, as the team export does.
-### 7.12 Ratings and quotes (from 2026-11-22, to be checked by Eman)
+
+### 7.14 Ratings and quotes (from 2026-11-22, to be checked by Eman)
 
 **What**: at a good moment in the chat (a 9 or 10 on the recommend question, or the third
 thumbs-up in one chat; never in a chat with a crisis, after an under-18 stop, a referral or the
@@ -697,7 +699,7 @@ life or health: (a) explicit consent with Art. 9(2)(a), a separate box the perso
 Mira's pages may show these words publicly, with the name and age range above. Our team reads them
 first and may take out a detail that could identify someone, marked […]; nothing else is changed. I
 can take this back in Settings at any time."), version `mira-review-2026-11-22` stored with the
-words ([LAWFUL_BASIS.md](LAWFUL_BASIS.md) A21).
+words ([LAWFUL_BASIS.md](LAWFUL_BASIS.md) A23).
 
 **Recipients**: anyone who opens Mira's pages, for approved words (publication); staff with AP
 access read the words waiting for approval.
@@ -723,7 +725,8 @@ access read the words waiting for approval.
 
 **Retention**: until the person takes it back or deletes the account; words not approved are
 deleted when rejected; events as `mira_event` (12 months). **Residual risk**: low.
-### 7.12 Talking to Mira by voice (2026-11-22)
+
+### 7.15 Talking to Mira by voice (2026-11-22)
 
 Built on 2026-11-22 from Eman's brief for Mira's post-MVP features and Mark's boards "Main" (Talk)
 and "Home" (session recordings). How it works: [`features/mira/AGENT_README.md`](../../features/mira/AGENT_README.md),
@@ -776,7 +779,8 @@ event (12 months, as `mira_event`).
 **Open**: (1) whether a browser maker's speech service must be named per browser in the notice
 (it names Apple's and Google's as examples); (2) Android: whether Chrome reports its own voices as
 on the device; where it does not, Mira answers in writing there.
-### 7.12 Self-checks: anxiety, mood and loneliness (from 2026-11-22)
+
+### 7.16 Self-checks: anxiety, mood and loneliness (from 2026-11-22)
 
 Assessed 2026-11-22 with the feature, before its release; to be checked by the DPO. How it works:
 [`features/mira/AGENT_README.md`](../../features/mira/AGENT_README.md), "Self-checks".
@@ -857,7 +861,8 @@ used: WHO publishes it under CC BY-NC-SA 3.0 IGO (2024), so commercial use needs
    condition), or are the check screens masked as S3 describes? Until he decides, nothing is
    masked and the notice says the tools see the screens.
 4. The regulatory opinion on the medical device question.
-### 7.12 The daily journal (added 2026-11-22)
+
+### 7.17 The daily journal (added 2026-11-22)
 
 **What**: account holders can check in once a day: mood, body, closeness and energy, each rated 1
 to 5 or skipped, and an optional one-line note (`mira_journal_entry`, one row per person and local
@@ -865,7 +870,7 @@ day). Health and sex-life data (Art. 9). Purposes: showing it back to the person
 day), and, only on their explicit choice, Mira's context in a chat; counting use without ratings or
 words (AP › Mira's "Journal" card reads only who checked in on which day and today's settings).
 
-**Basis**: the account's explicit consent (LAWFUL_BASIS A21). "Let Mira read my journal" is a
+**Basis**: the account's explicit consent (LAWFUL_BASIS A26). "Let Mira read my journal" is a
 separate opt-in, off by default (the last 7 days' ratings join the person's context sent to
 Anthropic, §7.3), and "Include my notes" a second one; `mira_user.journal_share_at` records when
 each was chosen, and turning one off applies from the next message. The reminder email is an
