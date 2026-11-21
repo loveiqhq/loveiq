@@ -73,13 +73,14 @@ const finishSpeaking = () => {
 
 type Reply = { status?: number; body: unknown };
 let replies: Record<string, (body: Record<string, unknown>) => Reply>;
-const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
+const route = async (url: string, init: RequestInit = {}) => {
   const key = `${init.method ?? "GET"} ${url.split("?")[0]}`;
   const body = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
   const r = replies[key]?.(body) ?? { body: { success: true } };
   const status = r.status ?? 200;
   return { ok: status < 400, status, json: async () => r.body } as Response;
-});
+};
+const fetchMock = vi.fn(route);
 const calls = (key: string) =>
   fetchMock.mock.calls
     .filter(([url, init]) => `${init?.method ?? "GET"} ${url.split("?")[0]}` === key)
@@ -98,6 +99,7 @@ beforeEach(() => {
     "GET /api/mira/me": () => ({ body: { profile: { style: {} }, chats: [] } }),
     "POST /api/mira/chat": () => ({ body: { reply: REPLY, sources: [], freeLeft: 5 } }),
   };
+  fetchMock.mockImplementation(route); // a test may hold answers back
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("SpeechRecognition", FakeRecognizer);
   vi.stubGlobal("speechSynthesis", synth);
@@ -361,6 +363,26 @@ describe("the end of a session", () => {
     expect(spoken()).toEqual([]); // ended: her answer is written, not read out
   });
 
+  it("ends without keeping or sending anything when Mira stops for someone under 18", async () => {
+    replies["POST /api/mira/chat"] = () => ({
+      body: {
+        reply: "I'm glad you reached out. I can only coach adults.",
+        minor: true,
+        sources: [],
+      },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    talk();
+    await sayToMira("I'm 16");
+    await waitFor(() => expect(spoken().length).toBeGreaterThan(0));
+    finishSpeaking();
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Talking with Mira" })).toBeNull()
+    );
+    expect(calls("POST /api/mira/recordings")).toHaveLength(0);
+    expect(screen.queryByText(/couldn.t be saved/)).toBeNull();
+  });
+
   it("sends nothing for a session without a turn", async () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
     talk();
@@ -379,6 +401,38 @@ describe("the microphone", () => {
     expect(screen.getByText("Microphone off")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
     expect(listening()).toHaveLength(1);
+  });
+
+  it("can be muted while she speaks: she finishes, it stays off, and Unmute brings it back", async () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    await sayToMira("It's the lights");
+    await waitFor(() => expect(screen.getByText("Mira is speaking")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    expect(listening()).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Unmute" }).getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
+    expect(listening()).toHaveLength(1); // listening for the person to cut in again
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    finishSpeaking();
+    expect(screen.getByText("Microphone off")).toBeTruthy();
+    expect(listening()).toHaveLength(0);
+  });
+
+  it("never starts the browser's service behind the notice, even after the tab was left", async () => {
+    localStorage.removeItem("mira.voice.notice.v1");
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    expect(screen.getByRole("heading", { name: "Before you talk" })).toBeTruthy();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+    expect(screen.getByRole("heading", { name: "Before you talk" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(FakeRecognizer.made).toHaveLength(0);
   });
 
   it("explains a blocked microphone, with typing as the way out", async () => {

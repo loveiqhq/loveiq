@@ -111,7 +111,8 @@ export function useVoice(options: {
     heard: "",
     said: "",
     speech: 0,
-    after: null as "end" | null,
+    /** After her reply: end the session, or end it and keep nothing (an under-18 stop). */
+    after: null as "end" | "forget" | null,
     muted: false,
     held: false,
     session: null as string | null,
@@ -274,8 +275,9 @@ export function useVoice(options: {
     if (m.phase !== "thinking") return; // ended or left meanwhile: the reply is on screen
     if (d.gate && !d.reply) return end(); // no free message was left: the sign-up card takes over
     if (!res.ok || !d.reply) return listen(); // the chat shows what went wrong; they can say it again
-    // The last free message, or an under-18 stop: she answers, then the session ends.
-    m.after = d.minor || (d.freeLeft === 0 && !d.crisis) ? "end" : null;
+    // The last free message: she answers, then the session ends. An under-18 stop ends it too,
+    // and nothing of it is sent or kept (Mira's routes refuse that person anyway).
+    m.after = d.minor ? "forget" : d.freeLeft === 0 && !d.crisis ? "end" : null;
     speak([d.reply, d.invitation].filter(Boolean).join("\n\n"));
   }
 
@@ -328,7 +330,7 @@ export function useVoice(options: {
 
   function afterSpeaking() {
     setSaying("");
-    if (m.after === "end") return end();
+    if (m.after) return end();
     listen();
   }
 
@@ -391,8 +393,9 @@ export function useVoice(options: {
   }
 
   function toggleMute() {
-    if (m.phase === "paused" || m.phase === "error") return resume();
+    if (m.muted || m.phase === "paused" || m.phase === "error") return resume();
     m.muted = true;
+    setPause("muted"); // while she speaks too: she finishes, and the microphone stays off
     micOff();
     if (m.phase === "listening") listen(); // to paused
   }
@@ -402,6 +405,7 @@ export function useVoice(options: {
     setPause(null);
     setTrouble(null);
     if (m.phase === "paused" || m.phase === "error") listen();
+    else if (m.phase === "speaking" && m.duplex) micOn(); // listening for the person to cut in
   }
 
   /** Her photo: "I'm done" while the person talks, "stop" while she speaks, "go on" when paused. */
@@ -436,7 +440,7 @@ export function useVoice(options: {
     setTrouble(null);
     const session = m.session;
     m.session = null;
-    if (session && m.turns > 0) {
+    if (session && m.turns > 0 && m.after !== "forget") {
       m.last = {
         session,
         chatId: m.chatId,
@@ -487,7 +491,10 @@ export function useVoice(options: {
     // Leaving the tab stops the microphone and her voice; closing it ends the session (a turn still
     // on its way then can't name a new chat, so that session is counted, not kept).
     const away = () => {
-      if (document.visibilityState !== "hidden" || m.phase === "off" || m.phase === "error") return;
+      // Only what is live: the notice (and getting ready) wait as they are, so Resume can never
+      // start the browser's service without the notice's tick.
+      const live = m.phase === "listening" || m.phase === "speaking" || m.phase === "thinking";
+      if (document.visibilityState !== "hidden" || !live) return;
       micOff();
       hush();
       clear("thinking");

@@ -188,7 +188,7 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
             unoptimized
             className={`relative h-11 w-11 rounded-full object-cover ring-2 ring-white transition-[filter,opacity] duration-300 ${paused || phase === "error" ? "opacity-70 grayscale" : ""}`}
           />
-          {paused && pause === "muted" ? (
+          {pause === "muted" ? (
             <span
               aria-hidden="true"
               className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full bg-ap-ink text-white ring-2 ring-white"
@@ -250,12 +250,12 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
                 <button
                   type="button"
                   onClick={voice.toggleMute}
-                  aria-pressed={paused && pause === "muted"}
+                  aria-pressed={pause === "muted"}
                   disabled={phase === "preparing"}
                   className={GHOST}
                 >
-                  <MicIcon off={paused && pause === "muted"} size={16} />
-                  {paused && pause === "muted" ? "Unmute" : "Mute"}
+                  <MicIcon off={pause === "muted"} size={16} />
+                  {pause === "muted" ? "Unmute" : "Mute"}
                 </button>
               )}
               <button type="button" onClick={voice.end} className={INK}>
