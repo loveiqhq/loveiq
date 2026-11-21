@@ -27,6 +27,10 @@
  * BODY_RELIABLE_CHANGE or more; profile depth from the intake questions answered, the body check,
  * the coaching style and a LoveIQ result; topics and referrals from the markers Mira's replies
  * carry (features/mira/server/safety.ts), as ids, never words.
+ *
+ * Voice (22 Nov 2026, features/mira/server/voice.ts): the two voice events are read with their
+ * props (seconds, recognition mode, the session's id), not through mira_ap_events, which keeps
+ * one prop per event; the team is left out by the same rules (Prepared.personOf).
  */
 import miraConfig from "@features/mira/content/mira-config.json";
 import nudgeConfig from "@features/mira/content/nudges.json";
@@ -46,7 +50,7 @@ import {
   type ApFilters,
 } from "./filters";
 import { fmt } from "./format";
-import { mean, ratio } from "./metrics";
+import { mean, median, ratio } from "./metrics";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -153,6 +157,22 @@ export interface MiraBodyCheckRow {
   created_at: string;
 }
 
+/** A voice session's end (voice_session_ended) or its key points' first opening. */
+export interface MiraVoiceRow {
+  name: "voice_session_ended" | "voice_points_opened";
+  anon_id: string | null;
+  user_id: string | null;
+  /** created_at, in milliseconds. */
+  at: number;
+  seconds: number | null;
+  mode: string | null;
+  /** The session's id: on an ended session that was kept, and on every opening. */
+  session: string | null;
+  /** Key points written at the end (0: none, or not yet). */
+  points: number;
+  team?: true;
+}
+
 export interface MiraData {
   users: MiraUserRow[];
   events: MiraEventRow[];
@@ -162,6 +182,8 @@ export interface MiraData {
   bodyChecks: MiraBodyCheckRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
+  /** Voice sessions' ends and key points opened, oldest first (absent before 22 Nov 2026). */
+  voice?: MiraVoiceRow[];
 }
 
 /**
@@ -170,7 +192,7 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks] = await Promise.all([
+  const [users, events, nudges, bodyChecks, voice] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
     ),
@@ -181,8 +203,18 @@ export async function fetchMira(): Promise<MiraData> {
     fetchAllRows<MiraBodyCheckRow>(
       "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
     ),
+    // ponytail: one row per voice session, paged; into mira_ap_events if it ever nears 100,000.
+    fetchAllRows<{
+      name: MiraVoiceRow["name"];
+      anon_id: string | null;
+      user_id: string | null;
+      created_at: string;
+      props: Record<string, unknown> | null;
+    }>(
+      "/rest/v1/mira_event?name=in.(voice_session_ended,voice_points_opened)&select=name,anon_id,user_id,created_at,props&order=id.asc"
+    ),
   ]);
-  if (!users || !events || !nudges || !bodyChecks) {
+  if (!users || !events || !nudges || !bodyChecks || !voice) {
     throw new Error("Mira's tables could not be read");
   }
   const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email) && !u.is_team);
@@ -192,6 +224,19 @@ export async function fetchMira(): Promise<MiraData> {
     nudges,
     bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
     withResult: await withLoveIqResult(asked),
+    voice: voice.map(({ props: p, created_at, ...row }) => {
+      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      return {
+        ...row,
+        at: Date.parse(created_at),
+        seconds: num(p?.seconds),
+        mode: str(p?.mode),
+        session: str(p?.session),
+        points: num(p?.points) ?? 0,
+        ...(p?.team === true ? { team: true as const } : {}),
+      };
+    }),
   };
 }
 
@@ -324,6 +369,11 @@ export interface Prepared {
   withResult: Set<string>;
   /** Each account's body checks (not the team's), oldest first. */
   bodyChecks: Map<string, Array<{ at: number; score: number }>>;
+  /**
+   * Who a row read outside mira_ap_events belongs to, by the rules above: its account (a browser
+   * that signed in is that account), `anon:` its browser, or null for the team's (voice, 22 Nov).
+   */
+  personOf: (row: { anon_id: string | null; user_id: string | null; team?: true }) => string | null;
 }
 
 const dayOfHour = new Map<number, string>();
@@ -489,7 +539,16 @@ export function prepare(data: MiraData): Prepared {
     }
   }
 
+  const personOf: Prepared["personOf"] = (row) => {
+    const user = row.user_id ?? (row.anon_id ? signedIn.get(row.anon_id) : undefined) ?? null;
+    if ((user && staff.has(user)) || row.team || (row.anon_id && teamBrowsers.has(row.anon_id))) {
+      return null;
+    }
+    return user ?? (row.anon_id ? `anon:${row.anon_id}` : null);
+  };
+
   return {
+    personOf,
     people,
     events,
     accounts,
@@ -1068,6 +1127,39 @@ export interface SourceRow {
   rate: number | null;
 }
 
+export interface VoiceFigures {
+  /** Voice sessions that ended in the range (signed in or not), and the people who had them. */
+  sessions: number;
+  people: number;
+  /** Their median length (ms). */
+  median: number | null;
+  /** Kept sessions with key points that ended in the range; of them, opened by its last day. */
+  withPoints: number;
+  opened: number;
+  /** Sessions whose speech became text on the device (the rest: the browser's service). */
+  device: number;
+}
+
+/** Talking to Mira by voice in the range, the team left out. */
+export function voiceFigures(prep: Prepared, rows: MiraVoiceRow[], w: Win): VoiceFigures {
+  const theirs = rows.filter((r) => prep.personOf(r) !== null);
+  const ended = theirs.filter((r) => r.name === "voice_session_ended" && within(r.at, w));
+  const opened = new Set(
+    theirs
+      .filter((r) => r.name === "voice_points_opened" && r.session && r.at < w.until)
+      .map((r) => r.session)
+  );
+  const withPoints = ended.filter((r) => r.session && r.points > 0);
+  return {
+    sessions: ended.length,
+    people: new Set(ended.map((r) => prep.personOf(r))).size,
+    median: median(ended.flatMap((r) => (r.seconds === null ? [] : [r.seconds * 1000]))),
+    withPoints: withPoints.length,
+    opened: withPoints.filter((r) => opened.has(r.session)).length,
+    device: ended.filter((r) => r.mode === "device").length,
+  };
+}
+
 export interface MiraPayload extends PageHead {
   tiles: Record<string, Tile>;
   funnel: MiraStep[];
@@ -1108,6 +1200,8 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** Talking to Mira by voice, in the range (voiceFigures). */
+  voice: VoiceFigures;
 }
 
 export function buildMiraPage(input: {
@@ -1371,5 +1465,6 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    voice: voiceFigures(prep, input.data.voice ?? [], w),
   };
 }
