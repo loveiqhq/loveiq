@@ -35,6 +35,19 @@ export type PersonContext = {
   country?: string | null;
   archetype?: string | null;
   signedIn: boolean;
+  /** Their goals on the go (Challenges & goals), for a gentle check-in. */
+  goals?: GoalForPrompt[];
+};
+
+/** One goal on the go as Mira is told of it (server/goals.ts goalsForPrompt). */
+export type GoalForPrompt = {
+  /** In the person's own words. */
+  text: string;
+  /** Days a week they aim for, or null. */
+  target: number | null;
+  /** Days ticked this week (Monday to Sunday), and days since the newest tick (null: none yet). */
+  thisWeek: number;
+  daysSinceLast: number | null;
 };
 
 type IntakeQuestion = {

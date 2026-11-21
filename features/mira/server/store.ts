@@ -316,7 +316,15 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Challenges & goals (22 Nov 2026): counts only, never a goal's words.
+  | "goal_suggested"
+  | "goal_set"
+  | "goal_logged"
+  | "goal_completed"
+  | "goal_archived"
+  | "goal_deleted"
+  | "goals_deleted";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

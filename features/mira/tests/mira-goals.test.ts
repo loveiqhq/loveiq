@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isTickableDay, localDay, progress, weekStart } from "@features/mira/server/goal-progress";
 import { CRISIS_TOKEN, parseReply } from "@features/mira/server/safety";
@@ -134,5 +135,27 @@ describe("a goal's progress", () => {
   it("counts a week with any tick when there is no target", () => {
     const days = ["2026-11-03", "2026-11-12", "2026-11-19"];
     expect(progress({ days, target: null, since: "2026-11-01" }, today).streak).toBe(3);
+  });
+});
+
+describe("the goal tables (supabase/migrations/20261122010000_mira_goals.sql)", () => {
+  const sql = readFileSync("supabase/migrations/20261122010000_mira_goals.sql", "utf8");
+
+  it("are the service role's only, with row-level security on", () => {
+    for (const t of ["mira_goal", "mira_goal_log"]) {
+      expect(sql).toContain(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY;`);
+    }
+    expect(sql).toContain(
+      "REVOKE ALL ON public.mira_goal, public.mira_goal_log FROM PUBLIC, anon, authenticated;"
+    );
+  });
+
+  it("keep a tick on its own person's goal, and go with the account", () => {
+    expect(sql).toMatch(
+      /FOREIGN KEY \(goal_id, user_id\) REFERENCES public\.mira_goal \(id, user_id\) ON DELETE CASCADE/
+    );
+    expect(sql).toMatch(
+      /user_id +uuid NOT NULL REFERENCES public\.mira_user \(id\) ON DELETE CASCADE/
+    );
   });
 });

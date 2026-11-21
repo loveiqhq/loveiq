@@ -13,6 +13,9 @@ const fromUtc = (ms: number): Day => new Date(ms).toISOString().slice(0, 10);
 const toUtc = (day: Day) => Date.parse(`${day}T00:00:00Z`);
 
 export const addDays = (day: Day, n: number): Day => fromUtc(toUtc(day) + n * DAY_MS);
+/** Whole days from `from` to `to`. */
+export const daysBetween = (from: Day, to: Day): number =>
+  Math.round((toUtc(to) - toUtc(from)) / DAY_MS);
 
 /** The day an instant falls on in a time zone (the runtime's own when none is given, UTC when unknown). */
 export function localDay(at: Date, timeZone?: string): Day {
