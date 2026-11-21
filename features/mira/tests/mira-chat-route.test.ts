@@ -662,16 +662,23 @@ describe("POST /api/mira/chat", () => {
       text: "A pelvic health physiotherapist can help with the pain.\n[[REFER]]",
       refused: false,
     });
-    await post({ message: "it hurts during sex", consent: true, history: openChat });
+    const referral = await post({
+      message: "it hurts during sex",
+      consent: true,
+      history: openChat,
+    });
     expect(events("referred")).toHaveLength(1);
+    // The browser learns it too, so no rating is asked for after it.
+    expect((await referral.json()).refer).toBe(true);
     vi.mocked(logMiraEvent).mockClear();
     vi.mocked(askModel).mockResolvedValue({
       ok: true,
       text: "Please reach out now.\n[[REFER]]\n[[CRISIS]]",
       refused: false,
     });
-    await post({ message: "everything feels dark", consent: true, history: openChat });
+    const dark = await post({ message: "everything feels dark", consent: true, history: openChat });
     expect(events("referred")).toEqual([]);
+    expect((await dark.json()).refer).toBeUndefined();
     expect(events("crisis_shown")).toHaveLength(1);
     vi.mocked(logMiraEvent).mockClear();
     // Markers and nothing else: the refusal message is shown, and nobody was referred.

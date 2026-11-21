@@ -4,6 +4,7 @@ import logger from "@shared/observability/logger";
 import { forgetNotify } from "./coaches";
 import { MINOR_COOKIE } from "./config";
 import { deleteGoals } from "./goals";
+import { refreshPublicReviews, withdrawReview } from "./reviews";
 import { deleteChats, updateProfile } from "./store";
 
 /**
@@ -52,10 +53,14 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     forgetNotify(userId),
     // Challenges & goals: their goals and ticks go too.
     deleteGoals(userId),
+    // Their rating and words go too, approved or not: a minor's words are never shown.
+    withdrawReview(userId, "all"),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {
       logger.error({ err: r.reason }, "mira: an under-18 stop was not saved in full");
     }
   }
+  // Whatever failed above, the account's mark keeps them off Mira's pages from the next request.
+  refreshPublicReviews();
 }

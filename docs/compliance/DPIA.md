@@ -247,6 +247,10 @@ are left out of Mira's statistics.
   except the person's own feedback), nudge records
   (`mira_nudge`: kind, fixed subject, day, sent, delivered, first opened, clicked) and sign-in code
   rows (`mira_sign_in_code`: address, time, guesses).
+- Ratings and quotes (`mira_review`, from 2026-11-22; §7.12): an account's one rating (1 to 5)
+  and, only with its own consent, one sentence with the first name or initials and age range the
+  person chose, its consent version and time, and its review status. Covered by data requests
+  (export by the account; erased with the account) and purged by an under-18 stop.
 - Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
   the display choice (`mira_look` cookie, one year, Mira's pages only: light, dark or system and the
   text size, with or without an account), IP and email addresses as rate-limit keys (Upstash),
@@ -597,6 +601,54 @@ their goals on the go with this week's ticks, so she can check in at most once a
   (2) Jarvis's live data tool (`query_product_data`, `app/api/mcp/route.ts`) masks columns by name
   but does not leave out `mira_*` tables, so `mira_message.content` (already) and `mira_goal.text`
   can be read through it: leave `mira_*` out, as the team export does.
+### 7.12 Ratings and quotes (from 2026-11-22, to be checked by Eman)
+
+**What**: at a good moment in the chat (a 9 or 10 on the recommend question, or the third
+thumbs-up in one chat; never in a chat with a crisis, after an under-18 stop, a referral or the
+body check, at most once in 30 days per browser), a signed-in person may rate Mira from 1 to 5 and,
+only with a separate tick, give one sentence for others, shown with the first name or initials and
+the optional age range they choose (no photos). Mira's pages show the average, how many people
+rated and one approved quote a day, only once 20 different people who are not the team's and not
+under 18 have rated and a quote is approved (`features/mira/reviews.ts`). Code, table and checks:
+`features/mira/AGENT_README.md`, "Ratings and quotes".
+
+**Data**: `mira_review`, one row per account: the stars; with the tick, the words, the name and age
+range, the consent's wording version and time, the review status and which staff address decided;
+whether it came from a team browser. Events `review_prompt_shown`, `review_prompt_not_now`,
+`review_given` (whether words came with it) and `review_withdrawn`, never stars or words.
+
+**Basis**: the stars, counted into an average shown without names: (f) legitimate interest
+(honest ratings for visitors). The words, name and age range, which may reveal the person's sex
+life or health: (a) explicit consent with Art. 9(2)(a), a separate box the person ticks themselves ("I agree that
+Mira's pages may show these words publicly, with the name and age range above. Our team reads them
+first and may take out a detail that could identify someone, marked […]; nothing else is changed. I
+can take this back in Settings at any time."), version `mira-review-2026-11-22` stored with the
+words ([LAWFUL_BASIS.md](LAWFUL_BASIS.md) A21).
+
+**Recipients**: anyone who opens Mira's pages, for approved words (publication); staff with AP
+access read the words waiting for approval.
+
+**Risks and measures**
+
+- **M10, someone identified from published words (MEDIUM before, LOW after)**: one sentence, a
+  first name or initials and an age range only; every quote read by staff before it shows; the only
+  edit allowed is replacing an identifying detail (at most three words, never a negation) with a
+  visible […] (`redacted()` refuses anything else, in AP and on the server), and the writer sees
+  both versions in Settings; rejecting deletes the words; the person can stop showing them or
+  remove the rating in Settings, effective from the next page view (the cached figures are
+  revalidated at once), and deleting the account or a data request does the same.
+- **M11, fake or unverified reviews (UWG Annex Nos. 23b, 23c; §5b(3))**: only signed-in accounts
+  rate, once each (unique per account); the team's accounts and browsers and under-18s never count;
+  nothing shows below 20 people or without an approved quote; "How we check reviews" beside every
+  rating says how they are checked. No sample figures anywhere.
+- **M12, minors**: an under-18 stop deletes the rating and words, even approved ones; Mira's rating
+  routes refuse such an account (403), except taking back, which is never refused; the public
+  figures leave such accounts out, from the next request even if the delete failed.
+- **M13, pressure to rate**: one ask at a good moment, "Not now" respected for 30 days, never near a
+  crisis, a referral or the body check, nothing withheld for not rating.
+
+**Retention**: until the person takes it back or deletes the account; words not approved are
+deleted when rejected; events as `mira_event` (12 months). **Residual risk**: low.
 
 ## 8. Sign-off
 

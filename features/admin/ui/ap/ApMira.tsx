@@ -10,6 +10,7 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
 import ApMiraCoaches from "./ApMiraCoaches";
+import { RatingsCard } from "./ApMiraRatings";
 import { bucketTitles } from "./hover";
 import {
   Bar,
@@ -771,6 +772,7 @@ function Outcomes({ data }: { data: Data }) {
       <Topics data={data} />
       <Therapeutic data={data} />
       <Satisfaction data={data} />
+      <RatingsCard data={data} />
       <Knows data={data} />
       <SettingsCard data={data} />
       <Safety data={data} />

@@ -88,6 +88,13 @@ const RECIPIENTS = [
     where: "USA. EU–US Data Privacy Framework.",
   },
   {
+    who: "Everyone who visits Mira's pages",
+    role: "The public. Only if you rate Mira and tick the box to show your words.",
+    gets: "Your words once our team approved them, with the first name or initials and the age range you chose. Your stars only as part of the average, never with your name.",
+    basis: "Your explicit consent",
+    where: "Anywhere: a web page anyone can open.",
+  },
+  {
     who: "CookieYes",
     role: "Processor. Stores your cookie choice.",
     gets: "Your cookie choice, with a random id.",
@@ -110,7 +117,8 @@ const COLUMNS = [
  * with consent, the stop for minors, the retention list, the recipients table, Anthropic's
  * deletion and the data protection officer. Change it whenever what Mira stores or shares changes.
  * 21 Nov 2026: the reply language and the look (light or dark, text size) with their cookie.
- * 22 Nov 2026: goals (Challenges & goals), in each section below.
+ * 22 Nov 2026: goals (Challenges & goals), in each section below; ratings and quotes
+ * (features/mira/reviews.ts), to be checked by Eman.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -182,6 +190,15 @@ export default function MiraPrivacyPage() {
           <li>
             Your feedback, and your answer when Mira asks whether you would recommend her. Your
             email address goes with your feedback only if you say we may contact you.
+          </li>
+          <li>
+            If you rate Mira: your stars, from 1 to 5. Only if you tick the box for it, also one
+            sentence for others, with the first name or initials and the age range you choose, when
+            you agreed and to which wording, and whether our team approved it. See{" "}
+            <a href="#ratings" className="underline">
+              Ratings and quotes
+            </a>
+            .
           </li>
           <li>
             The body check, if you choose to take it: your answers to ten statements about how you
@@ -273,6 +290,13 @@ export default function MiraPrivacyPage() {
             (Art. 6(1)(f) GDPR).
           </li>
           <li>
+            To show honest ratings on Mira&apos;s pages. Your stars count toward the average shown,
+            never with your name. Legal basis: our legitimate interest in telling visitors what
+            people think of Mira (Art. 6(1)(f) GDPR). Your words, name and age range are shown only
+            with your explicit consent, because they may say something about your sex life or your
+            health (Art. 6(1)(a) and Art. 9(2)(a) GDPR).
+          </li>
+          <li>
             Our analytics tools run on Mira&apos;s pages, as on the rest of our site. PostHog and
             Microsoft Clarity see what you and Mira write in the chat, as it appears on the page.
             Legal basis, as in section 7.4 of our privacy policy: our legitimate interest (Art.
@@ -346,6 +370,8 @@ export default function MiraPrivacyPage() {
           <li>
             Your goals and the days you ticked them stay until you delete them on your goals page,
             or delete your account.
+            Your rating, and your words if you shared them, stay until you take them back in
+            Settings or delete your account. Words our team decides not to show are deleted then.
           </li>
           <li>
             Mira&apos;s log of labels, steps, ratings and feedback is deleted after 12 months.
@@ -378,6 +404,10 @@ export default function MiraPrivacyPage() {
           </li>
           <li>You can delete one goal, or all your goals, on your goals page at any time.</li>
           <li>
+            You can stop showing your words, or remove your rating, in Settings at any time. They
+            disappear from Mira&apos;s pages straight away.
+          </li>
+          <li>
             You can ask for access to your data and a copy of it, and for correction, deletion or
             restriction. You can object to what we do on the basis of our legitimate interest. Write
             to{" "}
@@ -393,6 +423,31 @@ export default function MiraPrivacyPage() {
           <li>
             You can complain to a data protection authority, for example the Berlin Commissioner for
             Data Protection and Freedom of Information.
+          </li>
+        </ul>
+
+        <h2 id="ratings">Ratings and quotes</h2>
+        <p className="mt-3">
+          Signed in, Mira may ask you for a rating at a good moment: after you say you would
+          recommend her, or after you liked several of her answers in one chat. Never right after a
+          crisis, a suggestion to see a doctor or therapist, or the body check, and at most once a
+          month. You can always say &ldquo;Not now&rdquo;.
+        </p>
+        <ul>
+          <li>Only people signed in to Mira can rate her, once each.</li>
+          <li>
+            Your words are shown only if you tick the box for it. Our team reads every quote before
+            it shows. We never change your words, except to take out a detail that could identify
+            you or someone else, which we mark with […], as the box says.
+          </li>
+          <li>
+            Mira&apos;s pages show the average, how many people rated her and one approved quote a
+            day, and only once at least 20 people have rated her. Our team&apos;s own ratings, and
+            those of anyone who said they are under 18, never count.
+          </li>
+          <li>
+            If you tell Mira you are under 18, your rating and your words are deleted, even if they
+            were shown.
           </li>
         </ul>
 

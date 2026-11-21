@@ -38,6 +38,8 @@
  *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
+ *     - mira_review (by user_id, from 2026-11-22): their rating and any words with the consent
+ *       to show them; erased with the account (ON DELETE CASCADE), off Mira's pages at once.
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
@@ -232,6 +234,8 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     // Challenges & goals: the goals in the person's words, and the days they ticked them.
     ["mira_goal", `/rest/v1/mira_goal?user_id=${ids}&select=*&order=id.asc`],
     ["mira_goal_log", `/rest/v1/mira_goal_log?user_id=${ids}&select=*&order=goal_id.asc,day.asc`],
+    // Ratings and quotes (features/mira/reviews.ts): the rating, words, consent and status.
+    ["mira_review", `/rest/v1/mira_review?user_id=${ids}&select=*&order=id.asc`],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);

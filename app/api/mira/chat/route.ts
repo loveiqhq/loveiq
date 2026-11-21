@@ -454,6 +454,8 @@ export async function POST(request: Request) {
     chatId,
     messageId,
     ...(minor ? { minor: true } : {}),
+    // A referral (the event's own rule): the chat asks for no rating after it (reviews/ReviewAsk).
+    ...(out?.refer && !refused ? { refer: true } : {}),
     ...(ask ? { ask } : {}),
     ...(goal ? { goal } : {}),
     ...(invitation ? { invitation } : {}),

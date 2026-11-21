@@ -878,6 +878,11 @@ describe("fetchMira", () => {
       "text_size_changed",
       "reply_language_changed",
       "goal_suggested",
+      // Ratings and quotes (mira-ratings.ts).
+      "review_prompt_shown",
+      "review_prompt_not_now",
+      "review_given",
+      "review_withdrawn",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(

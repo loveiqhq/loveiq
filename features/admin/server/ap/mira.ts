@@ -50,6 +50,7 @@ import {
 import { fmt } from "./format";
 import { mean, ratio } from "./metrics";
 import { fetchGoalRows, goalFigures, type GoalFigures, type MiraGoalRows } from "./mira-goals";
+import { REVIEW_SELECT, ratingsOf, type MiraReviewRow, type Ratings } from "./mira-ratings";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -111,6 +112,12 @@ const EVENT_NAMES = [
   "reply_language_changed",
   // Challenges & goals (22 Nov 2026): Mira's goal suggestions in the chat.
   "goal_suggested",
+  // Ratings and quotes (22 Nov 2026): the ask shown and put off, ratings given and taken back
+  // (mira-ratings.ts reads them; no prop is needed).
+  "review_prompt_shown",
+  "review_prompt_not_now",
+  "review_given",
+  "review_withdrawn",
 ];
 
 export interface MiraUserRow {
@@ -180,6 +187,8 @@ export interface MiraData {
   withResult: Set<string>;
   /** Challenges & goals: the goal tables (mira-goals.ts); null when they can't be read. */
   goals?: MiraGoalRows | null;
+  /** Ratings and quotes (mira-ratings.ts); null: mira_review could not be read. */
+  reviews?: MiraReviewRow[] | null;
 }
 
 /**
@@ -188,7 +197,7 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks, goals] = await Promise.all([
+  const [users, events, nudges, bodyChecks, goals, reviews] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,theme,text_size,reply_language&order=id.asc"
     ),
@@ -201,6 +210,8 @@ export async function fetchMira(): Promise<MiraData> {
     ),
     // Apart from the rest: the page still shows if these tables can't be read.
     fetchGoalRows(),
+    // Only the Ratings card needs it: unreadable, that card says so and the page stays.
+    fetchAllRows<MiraReviewRow>(`/rest/v1/mira_review?select=${REVIEW_SELECT}&order=id.asc`),
   ]);
   if (!users || !events || !nudges || !bodyChecks) {
     throw new Error("Mira's tables could not be read");
@@ -213,6 +224,7 @@ export async function fetchMira(): Promise<MiraData> {
     bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
     withResult: await withLoveIqResult(asked),
     goals,
+    reviews,
   };
 }
 
@@ -1227,6 +1239,8 @@ export interface MiraPayload extends PageHead {
   coaches: CoachesKpi;
   /** Challenges & goals in the range (mira-goals.ts); null when the tables can't be read. */
   goals?: GoalFigures | null;
+  /** The Ratings card (mira-ratings.ts). */
+  ratings: Ratings;
 }
 
 export function buildMiraPage(input: {
@@ -1496,5 +1510,6 @@ export function buildMiraPage(input: {
       input.data.goals === null
         ? null
         : goalFigures(input.data.goals ?? { goals: [], logs: [] }, prep, w, now.getTime()),
+    ratings: ratingsOf(prep, input.data.reviews, w.since, w.until),
   };
 }

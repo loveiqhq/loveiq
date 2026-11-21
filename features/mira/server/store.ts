@@ -5,6 +5,7 @@ import logger from "@shared/observability/logger";
 import { fromTeamBrowser, requestExtras } from "./attribution";
 import { isStaffEmail } from "./google";
 import type { CoachEvent } from "@features/mira/content/coaches";
+import { refreshPublicReviews } from "./reviews";
 import type { CitedSource } from "./safety";
 import type { CoachingStyle } from "./prompt";
 
@@ -290,6 +291,8 @@ export async function deleteAccount(account: { id: string; email: string }): Pro
     ? await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(account.id)}`, { method: "DELETE" })
     : await supabaseFetch(`/auth/v1/admin/users/${enc(account.id)}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`mira account delete failed (${res.status})`);
+  // Its rating and words went with it (ON DELETE CASCADE): off Mira's pages from the next request.
+  refreshPublicReviews();
 }
 
 export type MiraEventName =
@@ -341,7 +344,14 @@ export type MiraEventName =
   | "goal_completed"
   | "goal_archived"
   | "goal_deleted"
-  | "goals_deleted";
+  | "goals_deleted"
+  // Ratings and quotes (features/mira/reviews.ts, 22 Nov 2026): the ask shown and put off in the
+  // chat, a rating given ({ words }: with words for others) and taken back ({ what }). Never stars
+  // or words: a rating taken back must leave nothing behind.
+  | "review_prompt_shown"
+  | "review_prompt_not_now"
+  | "review_given"
+  | "review_withdrawn";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.
