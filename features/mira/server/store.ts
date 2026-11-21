@@ -316,7 +316,14 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // The daily journal (server/journal.ts): ids and numbers only, never ratings or words.
+  | "journal_saved"
+  | "journal_deleted"
+  | "journal_share_set"
+  | "journal_reminder_set"
+  | "journal_reminder_sent"
+  | "journal_reminder_stopped";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

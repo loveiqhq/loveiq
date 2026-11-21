@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { MINOR_COOKIE } from "./config";
+import { forgetJournal } from "./journal";
 import { deleteChats, updateProfile } from "./store";
 
 /**
@@ -41,6 +42,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       remember_chats: false,
     }),
     deleteChats(userId),
+    // The daily journal goes too, with Mira's reading of it and its reminder (server/journal.ts).
+    forgetJournal(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

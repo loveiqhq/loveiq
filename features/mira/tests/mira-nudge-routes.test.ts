@@ -20,6 +20,17 @@ vi.mock("@shared/observability/slack-alert-dedup", () => ({
   recordCronRun: vi.fn(),
   startCronTimer: vi.fn().mockReturnValue(async () => {}),
 }));
+// The daily journal's reminders run in the same cron; mira-journal-reminders.test.ts covers them.
+vi.mock("@features/mira/server/journal", () => ({
+  runJournalReminders: vi.fn().mockResolvedValue({
+    candidates: 0,
+    due: 0,
+    sent: 0,
+    skipped: {},
+    errors: 0,
+    stoppedEarly: false,
+  }),
+}));
 vi.mock("@features/mira/server/nudges", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/mira/server/nudges")>()),
   runNudges: vi.fn().mockResolvedValue({ candidates: 1, due: 1, sent: 1, skipped: {}, errors: 0 }),

@@ -35,6 +35,8 @@ export type PersonContext = {
   country?: string | null;
   archetype?: string | null;
   signedIn: boolean;
+  /** The daily journal's block (journal.ts forMira), only while the person lets Mira read it. */
+  journal?: string | null;
 };
 
 type IntakeQuestion = {
@@ -150,6 +152,7 @@ export function personalInstructions(
     lines.push("Their coaching style (it shades how you talk; your rules and voice still apply):");
     lines.push(...styleLines.map((s) => `- ${s}`));
   }
+  if (person.journal) lines.push("", person.journal);
   if (opts.topic) lines.push("", topicInstruction());
   return lines.join("\n");
 }

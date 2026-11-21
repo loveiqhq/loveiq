@@ -571,3 +571,7 @@ export async function runNudges(
 /** The kind ids, for the "Only some nudges" choice. */
 export const NUDGE_CHOICES = NUDGE_KINDS.map((k) => ({ id: k.id, title: k.title }));
 export const NUDGE_PAUSE_DAYS = PAUSE_DAYS;
+
+// Shared with the daily journal's reminder email (server/journal.ts): the same sender, company
+// line and quiet days after a crisis.
+export { from as miraEmailFrom, COMPANY_LINE, CRISIS_QUIET_DAYS, hadCrisis };
