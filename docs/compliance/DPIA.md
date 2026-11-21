@@ -523,6 +523,42 @@ with its reasons, WP243 rev.01, 4.2):
 By 2027-02-20 (with the crisis-line re-check), and earlier when Mira's data, recipients, model or
 consent wording change, or before Mira leaves the beta.
 
+### 7.12 Challenges & goals (added 2026-11-22, before release)
+
+A signed-in person can keep a few small goals (at most five on the go) in their own words, with an
+optional number of days a week, tick the days they do one, and see the last 8 weeks. Mira can offer
+a goal in a reply (`[[GOAL:…]]`, shown as "Add as a goal"), and while the person chats she is given
+their goals on the go with this week's ticks, so she can check in at most once a chat. How it works:
+[`features/mira/AGENT_README.md`](../../features/mira/AGENT_README.md), "Challenges & goals".
+
+- **Data (Art. 9)**: each goal's words (often about sex), the days a week, whether it came from
+  Mira's suggestion, put away or done, and one row per day ticked, the day in the person's time
+  zone (`mira_goal`, `mira_goal_log`). Account holders only: an anonymous visitor's "Add as a goal"
+  leads to sign-up and sends nothing.
+- **Purpose and basis**: coaching (purpose 1), under the same explicit consent as the chat (A16;
+  [LAWFUL_BASIS.md](LAWFUL_BASIS.md) A21). Counting goals is purpose 4, by ids and numbers only
+  (`goal_suggested`, `goal_set`, `goal_logged`, `goal_completed`, `goal_archived`, `goal_deleted`,
+  `goals_deleted`); AP's Goals card reads the tables by ids and times, never a goal's words.
+- **Recipients**: Anthropic gets the goals on the go with each message of a signed-in person, as
+  part of the person's context (7.3). PostHog and Clarity see goals as they show on the goals page
+  and on Home (M5, the owner's accepted risk, 7.7 item 1). `mira_*` tables stay out of the team's
+  data export (R3.8).
+- **Minors (M2)**: the under-18 stop deletes the account's goals with its chats, and such an account
+  or browser can no longer see, add, change or tick goals; deleting them always works.
+- **Rights**: one goal or all of them can be deleted on the goals page, with their ticks; deleting
+  the account deletes them (cascade); the data-request tool exports and erases both tables (§4).
+- **Retention**: until deleted on the goals page or with the account.
+- **Risks and measures**: a goal can be as sensitive as a chat message, so it has the chats'
+  protections (service role only, RLS on, every query scoped to the account, a tick tied to its own
+  goal by the database, no words in the log). A coach that nags or shames would do harm: Mira's
+  instructions allow one check-in a chat, celebrate what was done and never call a week missed, and
+  the screens show a quiet week only as an empty bar while the total keeps growing.
+- **Open points**: (1) unlike saved chats, goals have no 12-month limit: forget goals with no
+  activity for 12 months in `mira_forget_old_memory`, or decide that they stay with the account;
+  (2) Jarvis's live data tool (`query_product_data`, `app/api/mcp/route.ts`) masks columns by name
+  but does not leave out `mira_*` tables, so `mira_message.content` (already) and `mira_goal.text`
+  can be read through it: leave `mira_*` out, as the team export does.
+
 ## 8. Sign-off
 
 By committing this file, the data controller (Eman) confirms the DPIA has been reviewed and the residual risks are accepted given the documented mitigations.
