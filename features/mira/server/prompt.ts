@@ -2,6 +2,7 @@ import { GUIDE_PRACTICES, SKIP_IT } from "../content/guide";
 import miraConfig from "../content/mira-config.json";
 import { MIRA_SYSTEM_PROMPT } from "../content/system-prompt";
 import { renderCards } from "./cards";
+import type { CheckForMira } from "./checks";
 
 /**
  * Mira's instructions for one message, in two parts:
@@ -34,6 +35,8 @@ export type PersonContext = {
   gender?: string | null;
   country?: string | null;
   archetype?: string | null;
+  /** Their self-checks' latest bands, only with "Mira may use my check results" (server/checks.ts). */
+  checks?: CheckForMira[];
   signedIn: boolean;
 };
 
@@ -143,6 +146,14 @@ export function personalInstructions(
   if (person.archetype) {
     lines.push(
       `Their LoveIQ Sexual Personality result is "${person.archetype}". Mention it only when it truly helps, and never as a diagnosis.`
+    );
+  }
+  if (person.checks?.length) {
+    const ago = (d: number) => (d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`);
+    lines.push(
+      "Self-checks they took in the app and allowed you to use (the latest of each; a questionnaire's band, never a diagnosis):",
+      ...person.checks.map((c) => `- ${c.title} (${c.name}), ${ago(c.daysAgo)}: ${c.band}.`),
+      "Use them only to tailor your pace, tone and suggestions. Never diagnose, name a condition or quote a score, and bring them up only when it truly helps. Where a band is high, gently suggesting a doctor or therapist fits your rules."
     );
   }
   const styleLines = styleInstructions(style);

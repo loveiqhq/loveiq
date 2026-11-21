@@ -316,7 +316,18 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // The self-checks (22 Nov 2026, content/checks.ts): started (the browser), finished (the
+  // server: scale and retake only), the support lines opened by the mood check's question 9, and
+  // "Delete my check results". Never answers, scores or bands.
+  | "anxiety_check_started"
+  | "anxiety_check_done"
+  | "mood_check_started"
+  | "mood_check_done"
+  | "loneliness_check_started"
+  | "loneliness_check_done"
+  | "check_support_shown"
+  | "checks_deleted";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

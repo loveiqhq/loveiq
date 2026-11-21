@@ -32,6 +32,7 @@ import {
   HISTORY_TURNS,
   MAX_MESSAGE_CHARS,
 } from "@features/mira/server/config";
+import { checksForMira } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
@@ -279,15 +280,18 @@ export async function POST(request: Request) {
       style = profile.style;
       remember = profile.remember_chats;
       country = profile.country && profile.country !== "OTHER" ? profile.country : country;
-      const assessment = profile.use_assessment
-        ? await findAssessment(account.email).catch(() => null)
-        : null;
+      const [assessment, checks] = await Promise.all([
+        profile.use_assessment ? findAssessment(account.email).catch(() => null) : null,
+        // Self-check bands only with "Mira may use my check results"; a failed read adds none.
+        checksForMira(account.id).catch(() => []),
+      ]);
       person = {
         signedIn: true,
         name: profile.name,
         gender: profile.gender,
         country: profile.country,
         archetype: assessment?.archetype ?? null,
+        checks,
       };
       if (askedChatId && (await ownsChat(account.id, askedChatId))) {
         chatId = askedChatId;
