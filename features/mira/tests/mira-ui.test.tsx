@@ -186,8 +186,12 @@ describe("Chat", () => {
     await screen.findByText("I can only talk about this with adults.");
     expect(localStorage.getItem("mira.chat.v1")).toBeNull();
     expect(localStorage.getItem("mira.consent.v1")).toBeNull();
-    for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
     expect(screen.queryByRole("link", { name: "Keep this chat" })).toBeNull();
+    // The 18+ tick is gone with it: the next message asks for it again, unticked.
+    typeAndSend("hello");
+    const step = await screen.findByRole("dialog", { name: "Before your first message" });
+    for (const box of within(step).getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(calls("POST /api/mira/chat")).toHaveLength(1);
   });
 
   it("doesn't send on the Enter that ends an input-method composition", async () => {
@@ -383,21 +387,31 @@ describe("Body check", () => {
 });
 
 describe("First-message consent (wording of 21 Nov 2026)", () => {
-  const required = () => screen.getByRole("checkbox", { name: /18 or older/ });
-  const optional = () => screen.getByRole("checkbox", { name: /team may read replies I rate/ });
+  // Asked in a short step when the first message is sent (Mark's minimal chat, 21 Nov 2026).
+  const step = () => screen.getByRole("dialog", { name: "Before your first message" });
+  const required = () => within(step()).getByRole("checkbox", { name: /18 or older/ });
+  const optional = () =>
+    within(step()).getByRole("checkbox", { name: /team may read replies I rate/ });
+  const start = () => within(step()).getByRole("button", { name: "Start chatting" });
   const consentEvents = () => calls("POST /api/mira/event").filter((b) => b.type === "consent");
   const ratings = () => calls("POST /api/mira/event").filter((b) => b.type === "rating");
 
-  it("needs the 18+ and sex-life tick; the rating box is optional, unticked, and kept with the version", async () => {
+  it("holds the first message until the 18+ and sex-life tick; the rating box is optional, unticked, and kept with the version", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     render(<MiraChat signedIn={false} initialChatId={null} />);
-    await waitFor(() => expect(optional()).not.toBeChecked());
+    typeAndSend("hi");
+    await screen.findByRole("dialog", { name: "Before your first message" });
     expect(required()).not.toBeChecked();
-    fireEvent.change(screen.getByLabelText("Message Mira"), { target: { value: "hi" } });
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(optional()).not.toBeChecked();
+    expect(start()).toBeDisabled();
+    expect(calls("POST /api/mira/chat")).toHaveLength(0);
     fireEvent.click(required());
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(start());
     await screen.findByText("Try this.");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls("POST /api/mira/chat")).toEqual([
+      expect.objectContaining({ message: "hi", consent: true }),
+    ]);
     expect(consentEvents()).toEqual([
       { type: "consent", version: CONSENT_VERSION, shareRated: false },
     ]);
@@ -407,10 +421,39 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     });
   });
 
-  it("asks again in a browser that ticked an older wording", async () => {
-    localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+  it("keeps the typed words when the step is cancelled, and sends a tapped prompt once agreed", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     render(<MiraChat signedIn={false} initialChatId={null} />);
-    await waitFor(() => expect(required()).not.toBeChecked());
+    typeAndSend("hi");
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" })
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("hi");
+    expect(consentEvents()).toEqual([]);
+    fireEvent.click(await screen.findByRole("button", { name: miraConfig.starterChips[0] }));
+    fireEvent.click(required());
+    fireEvent.click(start());
+    await screen.findByText("Try this.");
+    expect(calls("POST /api/mira/chat")).toEqual([
+      expect.objectContaining({ message: miraConfig.starterChips[0] }),
+    ]);
+  });
+
+  it("asks again in a browser that ticked an older wording, and not after this one", async () => {
+    localStorage.setItem("mira.consent.v1", JSON.stringify("mira-2026-11-18"));
+    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByRole("dialog", { name: "Before your first message" });
+    expect(required()).not.toBeChecked();
+    first.unmount();
+
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("sends a rated reply's words only when the rating box was ticked, else the thumbs only", async () => {
@@ -425,10 +468,11 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     fetchMock.mockClear();
 
     render(<MiraChat signedIn={false} initialChatId={null} />);
-    await waitFor(() => expect(optional()).not.toBeChecked());
+    typeAndSend("hi");
+    await screen.findByRole("dialog", { name: "Before your first message" });
     fireEvent.click(required());
     fireEvent.click(optional());
-    typeAndSend("hi");
+    fireEvent.click(start());
     fireEvent.click(await screen.findByRole("button", { name: "Not helpful" }));
     await waitFor(() =>
       expect(ratings()).toEqual([{ type: "rating", rating: -1, reply: "Try this." }])

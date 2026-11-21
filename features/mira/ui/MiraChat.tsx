@@ -1,14 +1,15 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
-import { IntakeAnswers } from "./IntakeAnswers";
-import { SupportPanel, type SupportCountry } from "./SupportPanel";
-import { DISCLAIMER, GradientButton, MiraFrame } from "./MiraShell";
+import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
+import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
+import { DISCLAIMER, LegalLinks } from "./MiraShell";
 import {
   local,
   miraApi,
@@ -20,11 +21,15 @@ import {
 
 /**
  * Boards 01 (anonymous chat), 01b (free limit reached), 03 (coaching style) and 08a (chats,
- * signed in) as one screen. Decisions taken for Friday (18 Nov): typing only (spoken Talk comes
- * after), no invented numbers or quotes on the page, an 18+ and sensitive-data tick before the
- * first anonymous message, and the sign-up card once an anonymous person's 10 free messages are
- * answered (the 11th needs the free account). Board "01 Anonymous chat (embed) copy": the "Keep
- * this chat" card after Mira's first reply to an anonymous person.
+ * signed in) as one screen, laid out as Mark's "01 Anonymous chat · minimal (Gemini-style) V2"
+ * (21 Nov 2026, after Marcus asked for a less noisy phone version): no frame around the chat, a
+ * welcome line in the middle, one pill-shaped composer, Mira's words as plain text and the
+ * person's in a grey bubble. On phones the composer sits at the bottom from the start.
+ * Decisions kept from 18 Nov: typing only (no voice yet), no invented numbers or quotes on the
+ * page (so V2's "trained on 100M+ words" line and its review score are not shown), the 18+ and
+ * sensitive-data consent before the first anonymous message (now a short step when it is sent),
+ * and the sign-up card once an anonymous person's 10 free messages are answered. Board "01
+ * Anonymous chat (embed) copy": the "Keep this chat" card after Mira's first reply.
  */
 
 type Message = LocalTurn & { messageId?: number | null };
@@ -76,6 +81,8 @@ export default function MiraChat({
   const [gate, setGate] = useState(false);
   const [consented, setConsented] = useState(signedIn);
   const [tick, setTick] = useState(false);
+  // A first message waiting for the consent step: sent once the person agrees.
+  const [pending, setPending] = useState<string | null>(null);
   // "Mira's team may read replies I rate": the optional box, then the choice it recorded.
   const [share, setShare] = useState(false);
   // "Not now" on the "Keep this chat" card: away for this chat (kept with it in this browser).
@@ -100,6 +107,7 @@ export default function MiraChat({
   const bodyOffered = useRef(false);
   const bodyStarted = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   /** The index of the reply that just arrived, for the scroll to its start. */
   const replyAt = useRef<number | null>(null);
   useReloadWhenRestored();
@@ -191,7 +199,15 @@ export default function MiraChat({
     });
   }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
 
-  async function send(text: string, opts: { skip?: boolean } = {}) {
+  // The composer grows with what is typed, up to about six lines, then scrolls inside.
+  useEffect(() => {
+    const box = inputRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, 168)}px`;
+  }, [input]);
+
+  async function send(text: string, opts: { skip?: boolean; agreed?: boolean } = {}) {
     const message = text.trim();
     if (!message || sending || gate) return;
     // A message right after Mira asked an intake question answers it, tapped or typed; a skip
@@ -200,13 +216,10 @@ export default function MiraChat({
     const answering = !opts.skip && last?.role === "assistant" ? last.ask : null;
     // An offer nobody started gives way to the conversation; a check in progress stays.
     if (bodyOpen && !bodyStarted.current) setBodyOpen(false);
-    if (!consented) {
-      if (!tick) return;
-      local.saveConsent({ version: CONSENT_VERSION, shareRated: share });
-      setConsented(true);
-      void miraApi("/api/mira/event", {
-        body: { type: "consent", version: CONSENT_VERSION, shareRated: share },
-      });
+    // Nothing reaches Mira before the consent: the message waits for the consent step.
+    if (!consented && !opts.agreed) {
+      setPending(message);
+      return;
     }
     setError(null);
     const firstOfChat = !chatId && messages.length === 0;
@@ -308,6 +321,19 @@ export default function MiraChat({
     }
   }
 
+  /** The consent step's "Start chatting": the tick is recorded, then the waiting message goes. */
+  function agree() {
+    const text = pending;
+    if (!tick || text === null) return;
+    local.saveConsent({ version: CONSENT_VERSION, shareRated: share });
+    setConsented(true);
+    void miraApi("/api/mira/event", {
+      body: { type: "consent", version: CONSENT_VERSION, shareRated: share },
+    });
+    setPending(null);
+    void send(text, { agreed: true });
+  }
+
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
     document.getElementById("mira-input")?.focus(); // the pressed button is about to go
@@ -396,478 +422,521 @@ export default function MiraChat({
     document.getElementById("mira-input")?.focus(); // the pressed button is about to go
   }
 
-  return (
-    <MiraFrame
-      right={
-        signedIn ? (
-          <Link href="/mira/home" className="text-[14px] font-semibold text-ap-plum">
-            Home
-          </Link>
-        ) : (
-          <Link href="/mira/start" className="text-[14px] font-semibold text-ap-plum">
-            Sign in
-          </Link>
-        )
-      }
-    >
-      <section className="mb-4 max-w-[720px] sm:mb-6 sm:mt-2">
-        <h1 className="font-serif text-[26px] font-medium leading-[1.15] sm:text-[44px] [@media(max-height:760px)]:text-[22px]">
-          Talk to <span className="text-[#d05976]">Mira</span> about your body confidence
-        </h1>
-        {/* On very short screens the message box comes first; the composer repeats "not a therapist". */}
-        <p className="mt-2 text-[14px] leading-relaxed text-ap-body sm:mt-3 sm:text-[16px] [@media(max-height:760px)]:hidden">
-          Her answers draw on research about body confidence. Mira is an AI coach, not a therapist.
-        </p>
-      </section>
+  const empty = !started;
+  // A chat opened by its link loads first: the welcome would only flash before it.
+  const showWelcome = empty && (ready || !initialChatId);
+  const showChips = ready && empty && !gate;
 
-      {/* As tall as the screen below the heading, so the composer is always in view; the
-          messages scroll inside. The minimum keeps a first visit's consent tick and composer whole. */}
-      <div className="flex h-[calc(100dvh-200px)] min-h-[400px] overflow-hidden sm:h-[calc(100dvh-280px)] sm:min-h-[min(520px,100dvh)] rounded-[27px] border border-ap-line bg-white shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)]">
-        <aside className="hidden w-[260px] shrink-0 flex-col gap-3 border-r border-ap-line bg-[#faf9fc] p-4 lg:flex">
-          <button
-            type="button"
-            onClick={newChat}
-            disabled={sending || gate}
-            className="min-h-[44px] rounded-full border border-ap-purple text-[14px] font-semibold text-[#561dbd] disabled:opacity-50"
-          >
-            + New chat
-          </button>
-          {signedIn ? (
-            <nav aria-label="Your chats" className="flex flex-col gap-1 overflow-y-auto">
-              {chats.length === 0 ? (
-                <p className="px-2 text-[13px] text-ap-muted">Your chats will show here.</p>
-              ) : null}
+  return (
+    <div className="bg-white font-sans text-ap-ink">
+      {/* Exactly one screen: header, the chat (or the welcome), the composer. Only the messages
+          scroll, so the composer stays where the person typed. The legal lines follow below. */}
+      <div className="relative flex h-dvh flex-col overflow-hidden">
+        <div aria-hidden="true" className={CLOUD} />
+
+        <header className="relative z-[1] flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-3 min-[360px]:px-4 sm:px-8 sm:pt-6">
+          <Link href="/mira" aria-label="Applied Psychometrics, Mira beta" className="no-underline">
+            <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] sm:text-[22px]">
+              <span>
+                Applied{" "}
+                <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
+                  BETA
+                </span>
+              </span>
+              <span className={AP_INK}>Psychometrics</span>
+            </span>
+          </Link>
+          <div className="flex items-center gap-0.5">
+            {/* Only once a chat is under way: the welcome screen is the board's, logo and sign-in. */}
+            {started || chatId ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setStyleOpen(true)}
+                  disabled={!ready}
+                  aria-label="How Mira coaches you"
+                  title="How Mira coaches you"
+                  className={ICON_BUTTON}
+                >
+                  <SlidersIcon />
+                </button>
+                <button
+                  type="button"
+                  onClick={newChat}
+                  disabled={sending || gate}
+                  aria-label="New chat"
+                  title="New chat"
+                  className={ICON_BUTTON}
+                >
+                  <NewChatIcon />
+                </button>
+              </>
+            ) : null}
+            {signedIn ? (
+              <Link
+                href="/mira/home"
+                className="ml-1.5 inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full border border-ap-line bg-white px-4 text-[14px] font-bold"
+              >
+                Home
+              </Link>
+            ) : (
+              <Link
+                href="/mira/start"
+                className="ml-1.5 inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white min-[360px]:px-[18px]"
+              >
+                Sign in
+              </Link>
+            )}
+          </div>
+        </header>
+
+        <div className="relative z-[1] flex min-h-0 flex-1">
+          {/* Wide screens, signed in: the chat list, once there is more than one chat to go back
+              to (Mark on the canvas, 21 Nov: "only needed once the user has had multiple
+              conversations"). Home lists them on every screen size. */}
+          {signedIn && chats.length > 1 ? (
+            <nav
+              aria-label="Your chats"
+              className="hidden w-[248px] shrink-0 flex-col gap-0.5 overflow-y-auto py-3 pl-5 pr-2 lg:flex"
+            >
+              <p className="px-3 pb-1 text-[12px] font-semibold text-ap-quiet">Your chats</p>
               {chats.map((c) => (
                 <a
                   key={c.id}
                   href={`/mira?chat=${c.id}`}
-                  className={`truncate rounded-lg px-3 py-2 text-[13px] ${c.id === chatId ? "bg-ap-lilac font-semibold" : "text-ap-body hover:bg-ap-track"}`}
+                  aria-current={c.id === chatId ? "page" : undefined}
+                  className={`truncate rounded-xl px-3 py-2 text-[13px] ${c.id === chatId ? "bg-ap-ground font-semibold" : "text-ap-body hover:bg-ap-ground"}`}
                 >
                   {c.title}
                 </a>
               ))}
             </nav>
-          ) : (
-            <div className="mt-auto rounded-2xl border border-[#e6b65c99] bg-[#fdf3dc] p-4 text-[13px] text-ap-body">
-              <p className="font-bold text-ap-ink">Get more from Mira</p>
-              <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
-                <li>Your chats saved</li>
-                <li>Answers that build on your story</li>
-                <li>Coaching based on your test result</li>
-              </ul>
-              <Link
-                href="/mira/start"
-                className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-full bg-black text-[13px] font-bold text-white"
-              >
-                Create free account
-              </Link>
-            </div>
-          )}
-        </aside>
+          ) : null}
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* The sidebar's actions on phones and tablets, where the sidebar is hidden. */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ap-line bg-[#faf9fc] px-3 py-2 lg:hidden">
-            <button
-              type="button"
-              onClick={newChat}
-              disabled={sending || gate}
-              className="min-h-[44px] rounded-full border border-ap-purple px-3 text-[14px] font-semibold text-[#561dbd] disabled:opacity-50"
+          <main className="flex min-w-0 flex-1 flex-col">
+            {/* Wider screens: the welcome, the composer and the prompts sit together in the
+                middle (the board); the spacers give way to the chat once it starts. */}
+            {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
+            <div
+              ref={listRef}
+              aria-live="polite"
+              className={
+                empty
+                  ? "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-5 pb-[6dvh] sm:flex-initial sm:px-6 sm:pb-0"
+                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-image:linear-gradient(to_bottom,transparent,#000_20px)]"
+              }
             >
-              New chat
-            </button>
-            {signedIn ? (
-              <Link
-                href="/mira/home"
-                className="inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-ap-plum"
-              >
-                Your chats
-              </Link>
-            ) : (
-              <Link
-                href="/mira/start"
-                className="inline-flex min-h-[44px] items-center rounded-full bg-black px-3 text-[13px] font-bold text-white"
-              >
-                Create free account
-              </Link>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 bg-ap-lilac px-5 py-3">
-            <span
-              aria-hidden="true"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] to-[#bf66d9] font-serif text-[18px] font-bold text-white"
-            >
-              M
-            </span>
-            <div className="flex-1">
-              <p className="font-serif text-[18px] font-semibold leading-tight">Mira</p>
-              {/* One line on phones, where every line of the chat's height counts. */}
-              <p className="text-[12px] text-ap-muted">
-                <span className="sm:hidden">AI coach · Beta</span>
-                <span className="hidden sm:inline">AI coach · Body confidence · Beta</span>
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setStyleOpen(true)}
-              disabled={!ready}
-              className="min-h-[44px] rounded-full px-3 text-[13px] font-semibold text-ap-plum hover:bg-white disabled:opacity-50"
-            >
-              How Mira coaches you
-            </button>
-          </div>
-
-          <div
-            ref={listRef}
-            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-4 py-5 sm:px-6"
-            aria-live="polite"
-          >
-            <Bubble role="assistant" text={miraConfig.openingMessage} />
-            {ready && !started && !gate ? (
-              <div aria-live="off" className="flex flex-wrap gap-2 pl-1">
-                {miraConfig.starterChips.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    disabled={!consented && !tick}
-                    onClick={() => send(chip)}
-                    className="min-h-[40px] rounded-full border border-ap-mist px-4 text-left text-[13px] text-[#561dbd] hover:border-ap-purple disabled:opacity-50"
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {messages.map((m, i) => (
-              <div key={i} data-msg={i} className="flex flex-col gap-1">
-                <Bubble role={m.role} text={m.content} />
-                {m.role === "assistant" &&
-                m.ask &&
-                i === messages.length - 1 &&
-                !sending &&
-                !gate ? (
-                  <IntakeAnswers
-                    questionId={m.ask}
-                    onAnswer={(answer) => void send(answer)}
-                    onSkip={() => void send(SKIP_ANSWER, { skip: true })}
-                  />
-                ) : null}
-                {isInvitation(m) && i === messages.length - 1 && !sending && !gate ? (
-                  <div className="flex flex-wrap gap-2 pl-1">
-                    {miraConfig.intakeReplyButtons.map((label) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => send(label)}
-                        className="min-h-[40px] rounded-full border border-ap-mist px-4 text-[13px] text-[#561dbd] hover:border-ap-purple"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {m.role === "assistant" && !isInvitation(m) ? (
-                  <div className="flex flex-wrap items-center gap-3 pl-1 text-[12px] text-ap-muted">
-                    {m.sources?.length ? (
-                      <span className="[overflow-wrap:anywhere]">
-                        Sources:{" "}
-                        {m.sources.map((s, j) => (
-                          <span key={s.id}>
-                            {j > 0 ? ", " : ""}
-                            {s.link ? (
-                              <a
-                                href={s.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline"
-                              >
-                                {s.label}
-                              </a>
-                            ) : (
-                              s.label
-                            )}
-                          </span>
-                        ))}
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label="Helpful"
-                      aria-pressed={m.rated === 1}
-                      onClick={() => rate(m, 1)}
-                      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${m.rated === 1 ? "text-ap-purple" : ""}`}
-                    >
-                      <svg
-                        aria-hidden="true"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M7 10v11" />
-                        <path d="M15 5.9 14 10h5.8a2 2 0 0 1 2 2.3l-1.4 7A2 2 0 0 1 18.4 21H7V10l4-8a3 3 0 0 1 4 3.9z" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Not helpful"
-                      aria-pressed={m.rated === -1}
-                      onClick={() => rate(m, -1)}
-                      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${m.rated === -1 ? "text-ap-purple" : ""}`}
-                    >
-                      <svg
-                        aria-hidden="true"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M17 14V3" />
-                        <path d="M9 18.1 10 14H4.2a2 2 0 0 1-2-2.3l1.4-7A2 2 0 0 1 5.6 3H17v11l-4 8a3 3 0 0 1-4-3.9z" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-            {showKeep ? (
-              <div className="mt-1.5 flex flex-col gap-3 rounded-[20px] bg-ap-lilac px-5 py-[18px] sm:flex-row sm:items-center sm:gap-4">
-                <div className="flex flex-1 items-start gap-3 sm:items-center sm:gap-4">
-                  <svg
-                    aria-hidden="true"
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="shrink-0 text-ap-purple"
-                  >
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <p className="text-[15px] leading-normal text-ap-body">
-                    Would you like Mira to remember this conversation next time? Sign in and she can
-                    also gently tailor things to your LoveIQ result.
+              {showWelcome ? (
+                <div className="mx-auto flex max-w-[760px] flex-col items-center gap-3 py-6 text-center sm:gap-3.5 sm:pb-7 sm:pt-0">
+                  <h1 className="text-balance font-serif text-[30px] font-medium leading-[1.2] tracking-[-0.01em] sm:text-[40px] [@media(max-height:480px)]:text-[24px]">
+                    Talk to{" "}
+                    <Image
+                      src="/images/mira/mira.webp"
+                      alt=""
+                      width={46}
+                      height={46}
+                      preload
+                      unoptimized
+                      className="inline-block h-[34px] w-[34px] rounded-full object-cover align-[-7px] sm:h-[46px] sm:w-[46px] sm:align-[-10px]"
+                    />{" "}
+                    <span className={MIRA_INK}>Mira</span> about your body confidence
+                  </h1>
+                  <p className="max-w-[34ch] text-[13px] leading-snug text-ap-muted sm:max-w-none sm:text-[14px] [@media(max-height:480px)]:hidden">
+                    <SparkIcon />
+                    Her answers draw on{" "}
+                    <b className="font-semibold text-ap-body">research about body confidence</b>
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center justify-end gap-1">
-                  <button
-                    type="button"
-                    onClick={keepNotNow}
-                    className="min-h-[44px] px-3.5 text-[14px] font-semibold text-ap-plum"
-                  >
-                    Not now
-                  </button>
-                  {/* This browser's chat goes into the new account at sign-up. */}
+              ) : null}
+              {started ? (
+                <div className="mx-auto flex w-full max-w-[760px] flex-col gap-5 px-5 pb-4 pt-5 sm:px-6">
+                  {messages.map((m, i) => (
+                    <div
+                      key={i}
+                      data-msg={i}
+                      className={
+                        m.role === "user" ? "flex flex-col items-end" : "flex flex-col gap-2"
+                      }
+                    >
+                      {m.role === "user" ? (
+                        <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] bg-ap-ground px-4 py-2.5 text-[16px] leading-[1.6] [overflow-wrap:anywhere] sm:max-w-[70%] sm:px-[18px] sm:py-3">
+                          {m.content}
+                        </p>
+                      ) : (
+                        <p className="whitespace-pre-wrap text-[16px] leading-[1.65] [overflow-wrap:anywhere] sm:max-w-[88%]">
+                          {m.content}
+                        </p>
+                      )}
+                      {m.role === "assistant" &&
+                      m.ask &&
+                      i === messages.length - 1 &&
+                      !sending &&
+                      !gate ? (
+                        <IntakeAnswers
+                          questionId={m.ask}
+                          onAnswer={(answer) => void send(answer)}
+                          onSkip={() => void send(SKIP_ANSWER, { skip: true })}
+                        />
+                      ) : null}
+                      {isInvitation(m) && i === messages.length - 1 && !sending && !gate ? (
+                        <div className="flex flex-wrap gap-2">
+                          {miraConfig.intakeReplyButtons.map((label) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => send(label)}
+                              className={ANSWER_CHIP}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      {m.role === "assistant" && !isInvitation(m) ? (
+                        <div className="-ml-2 flex flex-wrap items-center text-[12px] text-ap-muted">
+                          <button
+                            type="button"
+                            aria-label="Helpful"
+                            aria-pressed={m.rated === 1}
+                            onClick={() => rate(m, 1)}
+                            className={`${RATE_BUTTON} ${m.rated === 1 ? "text-ap-purple" : ""}`}
+                          >
+                            <ThumbIcon up />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Not helpful"
+                            aria-pressed={m.rated === -1}
+                            onClick={() => rate(m, -1)}
+                            className={`${RATE_BUTTON} ${m.rated === -1 ? "text-ap-purple" : ""}`}
+                          >
+                            <ThumbIcon />
+                          </button>
+                          {m.sources?.length ? (
+                            <span className="ml-1.5 [overflow-wrap:anywhere]">
+                              Sources:{" "}
+                              {m.sources.map((s, j) => (
+                                <span key={s.id}>
+                                  {j > 0 ? ", " : ""}
+                                  {s.link ? (
+                                    <a
+                                      href={s.link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="underline"
+                                    >
+                                      {s.label}
+                                    </a>
+                                  ) : (
+                                    s.label
+                                  )}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                  {showKeep ? (
+                    <div
+                      className={`${CARD} flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4`}
+                    >
+                      <p className="flex-1 text-[14px] leading-normal text-ap-body">
+                        Would you like Mira to remember this conversation next time? Sign in and she
+                        can also gently tailor things to your LoveIQ result.
+                      </p>
+                      <div className="flex shrink-0 items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={keepNotNow}
+                          className="min-h-[44px] px-3.5 text-[14px] font-semibold text-ap-muted"
+                        >
+                          Not now
+                        </button>
+                        {/* This browser's chat goes into the new account at sign-up. */}
+                        <Link
+                          href="/mira/start"
+                          onClick={() =>
+                            void miraApi("/api/mira/event", {
+                              body: { type: "track", name: "keep_card_keep" },
+                            })
+                          }
+                          className="inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+                        >
+                          Keep this chat
+                        </Link>
+                      </div>
+                    </div>
+                  ) : null}
+                  {nps ? (
+                    <div className={CARD}>
+                      {nps === "thanks" ? (
+                        <p role="status" className="text-[14px] text-ap-body">
+                          Thank you, that helps us a lot.
+                        </p>
+                      ) : (
+                        <fieldset>
+                          <legend className="text-[14px] font-semibold">
+                            Quick question: how likely are you to recommend Mira to a friend?
+                          </legend>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {Array.from({ length: 11 }, (_, n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => answerNps(n)}
+                                aria-label={`${n} out of 10`}
+                                className="h-10 min-w-[40px] rounded-full border border-ap-line bg-white text-[14px] hover:border-[#d9d4e2] hover:bg-ap-ground"
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mt-2 flex justify-between text-[12px] text-ap-muted">
+                            <span>0 = not at all likely</span>
+                            <span>10 = extremely likely</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => answerNps(null)}
+                            className="mt-1 min-h-[44px] text-[13px] text-ap-muted underline"
+                          >
+                            Not now
+                          </button>
+                        </fieldset>
+                      )}
+                    </div>
+                  ) : null}
+                  {bodyOpen && bodyDue ? (
+                    <BodyCheck
+                      due={bodyDue}
+                      onStart={() => {
+                        bodyStarted.current = true;
+                      }}
+                      onClose={(done) => {
+                        setBodyOpen(false);
+                        bodyStarted.current = false;
+                        if (done) setBodyDue(null);
+                        else local.snoozeBodyCheck();
+                      }}
+                    />
+                  ) : null}
+                  {sending ? (
+                    <div className="flex items-center gap-1.5 py-1.5">
+                      <span className="sr-only">Mira is writing…</span>
+                      {[0, 150, 300].map((delay) => (
+                        <span
+                          key={delay}
+                          aria-hidden="true"
+                          style={{ animationDelay: `${delay}ms` }}
+                          className="h-[7px] w-[7px] animate-pulse rounded-full bg-ap-purple motion-reduce:animate-none"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mx-auto w-full max-w-[760px] shrink-0 px-3 pt-1 sm:px-6 sm:pt-0">
+              {gate ? (
+                <div
+                  className={`${CARD} flex flex-col gap-3 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] sm:flex-row sm:items-center sm:gap-4 sm:p-5`}
+                >
+                  <div className="flex-1">
+                    <p className="font-serif text-[18px] font-semibold">
+                      Keep talking with Mira, for free
+                    </p>
+                    <p className="mt-1 text-[14px] leading-normal text-ap-body">
+                      You&apos;ve had your {ANON_FREE_MESSAGES} free messages with Mira. Create a
+                      free account to carry on. She&apos;ll remember where you left off, and this
+                      chat comes with you.
+                    </p>
+                  </div>
                   <Link
                     href="/mira/start"
-                    onClick={() =>
-                      void miraApi("/api/mira/event", {
-                        body: { type: "track", name: "keep_card_keep" },
-                      })
-                    }
-                    className="inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] to-[#958ef6] px-5 text-[14px] font-bold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)]"
+                    className="inline-flex min-h-[44px] items-center justify-center whitespace-nowrap rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
                   >
-                    Keep this chat
+                    Create free account
                   </Link>
                 </div>
-              </div>
-            ) : null}
-            {nps ? (
-              <div className="rounded-2xl border border-ap-line bg-[#faf9fc] p-4">
-                {nps === "thanks" ? (
-                  <p role="status" className="text-[14px] text-ap-body">
-                    Thank you, that helps us a lot.
-                  </p>
-                ) : (
-                  <fieldset>
-                    <legend className="text-[14px] font-semibold">
-                      Quick question: how likely are you to recommend Mira to a friend?
-                    </legend>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {Array.from({ length: 11 }, (_, n) => (
+              ) : (
+                <div className="flex flex-col gap-2.5 sm:gap-3.5">
+                  <form
+                    className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void send(input);
+                    }}
+                  >
+                    <label htmlFor="mira-input" className="sr-only">
+                      Message Mira
+                    </label>
+                    <textarea
+                      id="mira-input"
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter that picks a word in an input method (Japanese, Chinese…) is not a send.
+                        const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+                        if (e.key === "Enter" && !e.shiftKey && !composing) {
+                          e.preventDefault();
+                          void send(input);
+                        }
+                      }}
+                      rows={1}
+                      maxLength={2000}
+                      enterKeyHint="send"
+                      placeholder="Ask Mira anything…"
+                      className="max-h-[168px] min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[16px] leading-6 outline-none placeholder:text-ap-muted sm:min-h-[48px] sm:py-3"
+                    />
+                    <button
+                      type="submit"
+                      aria-label="Send"
+                      disabled={sending || !input.trim()}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ap-ink text-white transition-colors disabled:cursor-not-allowed disabled:bg-ap-muted sm:h-12 sm:w-12"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 19V5" />
+                        <path d="M5 12l7-7 7 7" />
+                      </svg>
+                    </button>
+                  </form>
+                  {/* Phones: one row above the composer that scrolls sideways. Wider screens: under
+                      it, centred, never more than two rows (Mark, 21 Nov). */}
+                  {showChips ? (
+                    <div className="order-first -mx-3 flex gap-1.5 overflow-x-auto pl-3 pr-8 [mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)] [scrollbar-width:none] sm:order-none sm:mx-0 sm:max-h-[66px] sm:flex-wrap sm:justify-center sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+                      {miraConfig.starterChips.map((chip) => (
                         <button
-                          key={n}
+                          key={chip}
                           type="button"
-                          onClick={() => answerNps(n)}
-                          aria-label={`${n} out of 10`}
-                          className="min-h-[44px] min-w-[44px] rounded-full border border-ap-line bg-white text-[14px] hover:border-ap-purple"
+                          onClick={() => send(chip)}
+                          className="h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-colors hover:border-[#d9d4e2] hover:bg-ap-ground sm:h-[30px]"
                         >
-                          {n}
+                          {chip}
                         </button>
                       ))}
                     </div>
-                    <div className="mt-2 flex justify-between text-[12px] text-ap-muted">
-                      <span>0 = not at all likely</span>
-                      <span>10 = extremely likely</span>
-                    </div>
+                  ) : null}
+                </div>
+              )}
+              {!gate && freeLeft !== null && freeLeft <= 3 && !signedIn ? (
+                <p className="mt-2 text-center text-[12px] text-ap-muted">
+                  {freeLeft === 0
+                    ? "That was your last free message: the next one needs a free account."
+                    : `${freeLeft} more free ${freeLeft === 1 ? "message" : "messages"} before you need a free account.`}
+                </p>
+              ) : null}
+              {error ? (
+                <div className="mt-2 text-center">
+                  <p role="alert" className="text-[13px] text-ap-bad-ink">
+                    {error.text}
+                    {error.signIn ? (
+                      <>
+                        {" "}
+                        <Link href="/mira/start" className="font-semibold underline">
+                          Sign in again
+                        </Link>
+                      </>
+                    ) : null}
+                  </p>
+                  <p className="mt-0.5 text-[12px] text-ap-muted">
+                    If you&apos;re in danger right now, open{" "}
                     <button
                       type="button"
-                      onClick={() => answerNps(null)}
-                      className="mt-1 min-h-[44px] text-[13px] text-ap-muted underline"
+                      onClick={() => setSupportOpen(true)}
+                      className="underline"
                     >
-                      Not now
+                      Need support
                     </button>
-                  </fieldset>
-                )}
-              </div>
-            ) : null}
-            {bodyOpen && bodyDue ? (
-              <BodyCheck
-                due={bodyDue}
-                onStart={() => {
-                  bodyStarted.current = true;
-                }}
-                onClose={(done) => {
-                  setBodyOpen(false);
-                  bodyStarted.current = false;
-                  if (done) setBodyDue(null);
-                  else local.snoozeBodyCheck();
-                }}
-              />
-            ) : null}
-            {sending ? <p className="pl-1 text-[13px] text-ap-muted">Mira is writing…</p> : null}
-          </div>
-
-          <div className="border-t border-ap-line px-4 py-4 sm:px-6">
-            {gate ? (
-              <div className="flex flex-col gap-3 rounded-2xl bg-ap-lilac p-5 sm:flex-row sm:items-center">
-                <div className="flex-1">
-                  <p className="font-serif text-[20px] font-semibold">
-                    Keep talking with Mira, for free
-                  </p>
-                  <p className="mt-1 text-[14px] text-ap-body">
-                    You&apos;ve had your {ANON_FREE_MESSAGES} free messages with Mira. Create a free
-                    account to carry on. She&apos;ll remember where you left off, and this chat
-                    comes with you.
                   </p>
                 </div>
-                <Link
-                  href="/mira/start"
-                  className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-black px-6 text-[15px] font-bold text-white"
-                >
-                  Create free account
-                </Link>
-              </div>
-            ) : (
-              <>
-                {ready && !consented ? (
-                  <div className="mb-3 flex flex-col gap-2 text-[13px] leading-snug text-ap-body [@media(max-height:760px)]:mb-2 [@media(max-height:760px)]:gap-1 [@media(max-height:760px)]:text-[12px]">
-                    <label className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={tick}
-                        onChange={(e) => setTick(e.target.checked)}
-                        className="mt-[2px] h-4 w-4 accent-[#795fc8]"
-                      />
-                      <span>
-                        I&apos;m 18 or older, and I agree that Mira may process what I share about
-                        my sex life and health to coach me, and to count, without my words, how Mira
-                        is used and whether she helps. Our analytics tools also see what I type.{" "}
-                        <Link href="/mira/privacy" className="underline">
-                          How Mira handles your data
-                        </Link>
-                      </span>
-                    </label>
-                    {/* Optional and unticked: only with it does a rated reply keep its words. */}
-                    <label className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={share}
-                        onChange={(e) => setShare(e.target.checked)}
-                        className="mt-[2px] h-4 w-4 accent-[#795fc8]"
-                      />
-                      <span>Mira&apos;s team may read replies I rate, to improve Mira.</span>
-                    </label>
-                  </div>
-                ) : null}
-                <form
-                  className="flex gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void send(input);
-                  }}
-                >
-                  <label htmlFor="mira-input" className="sr-only">
-                    Message Mira
-                  </label>
-                  <textarea
-                    id="mira-input"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      // Enter that picks a word in an input method (Japanese, Chinese…) is not a send.
-                      const composing = e.nativeEvent.isComposing || e.keyCode === 229;
-                      if (e.key === "Enter" && !e.shiftKey && !composing) {
-                        e.preventDefault();
-                        void send(input);
-                      }
-                    }}
-                    rows={1}
-                    maxLength={2000}
-                    placeholder="Type how it feels, in your own words…"
-                    className="min-h-[72px] flex-1 resize-none rounded-3xl sm:min-h-[48px] border border-ap-line px-4 py-3 text-[16px] outline-none focus:border-ap-purple"
-                  />
-                  <GradientButton
-                    type="submit"
-                    disabled={sending || !input.trim() || (!consented && !tick)}
-                  >
-                    Send
-                  </GradientButton>
-                </form>
-                {freeLeft !== null && freeLeft <= 3 && !signedIn ? (
-                  <p className="mt-2 text-[12px] text-ap-muted">
-                    {freeLeft === 0
-                      ? "That was your last free message: the next one needs a free account."
-                      : `${freeLeft} more free ${freeLeft === 1 ? "message" : "messages"} before you need a free account.`}
-                  </p>
-                ) : null}
-              </>
-            )}
-            {error ? (
-              <>
-                <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
-                  {error.text}
-                  {error.signIn ? (
-                    <>
-                      {" "}
-                      <Link href="/mira/start" className="font-semibold underline">
-                        Sign in again
-                      </Link>
-                    </>
-                  ) : null}
-                </p>
-                <p className="mt-1 text-[12px] text-ap-muted">
-                  If you&apos;re in danger right now, open{" "}
-                  <button type="button" onClick={() => setSupportOpen(true)} className="underline">
-                    Need support
-                  </button>
-                </p>
-              </>
-            ) : null}
-            <p className="mt-3 text-center text-[12px] text-ap-muted">
+              ) : null}
+            </div>
+            {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
+            <p className="shrink-0 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5 text-center text-[12px] leading-snug text-ap-muted sm:pb-5">
               Mira is an AI and can be wrong. She is not a therapist ·{" "}
               <button type="button" onClick={() => setSupportOpen(true)} className="underline">
                 Need support right now?
               </button>
             </p>
-          </div>
+          </main>
         </div>
       </div>
 
-      <p className="mt-6 max-w-[760px] text-[12px] leading-relaxed text-ap-muted">{DISCLAIMER}</p>
+      <div className="mx-auto max-w-[760px] px-4 pb-8 pt-4 sm:px-6">
+        <p className="text-[12px] leading-relaxed text-ap-muted">{DISCLAIMER}</p>
+        <LegalLinks className="mt-4" />
+      </div>
 
+      {pending !== null ? (
+        <Modal label="Before your first message" onClose={() => setPending(null)}>
+          <h2
+            data-autofocus
+            tabIndex={-1}
+            className="font-serif text-[22px] font-medium outline-none"
+          >
+            Before your first message
+          </h2>
+          <div className="mt-3 flex flex-col gap-3 text-[14px] leading-snug text-ap-body">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={tick}
+                onChange={(e) => setTick(e.target.checked)}
+                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+              />
+              <span>
+                I&apos;m 18 or older, and I agree that Mira may process what I share about my sex
+                life and health to coach me, and to count, without my words, how Mira is used and
+                whether she helps. Our analytics tools also see what I type.{" "}
+                <Link href="/mira/privacy" className="underline">
+                  How Mira handles your data
+                </Link>
+              </span>
+            </label>
+            {/* Optional and unticked: only with it does a rated reply keep its words. */}
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={share}
+                onChange={(e) => setShare(e.target.checked)}
+                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+              />
+              <span>Mira&apos;s team may read replies I rate, to improve Mira.</span>
+            </label>
+          </div>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPending(null)}
+              className="min-h-[44px] px-4 text-[15px] font-semibold text-ap-muted"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={agree}
+              disabled={!tick}
+              className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted"
+            >
+              Start chatting
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       {styleOpen ? (
         <CoachingStylePanel value={style} onClose={() => setStyleOpen(false)} onSave={saveStyle} />
       ) : null}
@@ -880,18 +949,102 @@ export default function MiraChat({
           }}
         />
       ) : null}
-    </MiraFrame>
+    </div>
   );
 }
 
-function Bubble({ role, text }: { role: "user" | "assistant"; text: string }) {
-  return role === "user" ? (
-    <div className="ml-auto max-w-[80%] whitespace-pre-wrap rounded-3xl bg-ap-purple px-4 py-3 text-[15px] leading-relaxed text-white [overflow-wrap:anywhere]">
-      {text}
-    </div>
-  ) : (
-    <div className="max-w-[85%] whitespace-pre-wrap rounded-3xl bg-[#f4f2f7] px-4 py-3 text-[15px] leading-relaxed text-ap-ink [overflow-wrap:anywhere]">
-      {text}
-    </div>
+/** The soft coral, orchid and lavender cloud behind the middle of the screen (board V2). */
+const CLOUD =
+  "pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,0.14),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,0.16),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,0.18),rgba(149,142,246,0)_100%)] blur-[72px] sm:h-[560px] sm:w-[1000px]";
+const MIRA_INK =
+  "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text font-semibold text-transparent";
+const AP_INK =
+  "bg-[linear-gradient(105deg,#d05976_20.51%,#c167cf_48.14%,#8887f6_79.16%)] bg-clip-text text-transparent";
+const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
+const ICON_BUTTON =
+  "inline-flex h-9 w-9 items-center justify-center rounded-full text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10";
+const RATE_BUTTON =
+  "inline-flex h-9 min-w-[36px] items-center justify-center rounded-full hover:bg-ap-ground hover:text-ap-body";
+
+function SlidersIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    >
+      <path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4" />
+    </svg>
+  );
+}
+
+function NewChatIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z" />
+    </svg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#bf66d9"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="mr-1.5 inline-block align-[-2px]"
+    >
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+    </svg>
+  );
+}
+
+function ThumbIcon({ up = false }: { up?: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {up ? (
+        <>
+          <path d="M7 10v11" />
+          <path d="M15 5.9 14 10h5.8a2 2 0 0 1 2 2.3l-1.4 7A2 2 0 0 1 18.4 21H7V10l4-8a3 3 0 0 1 4 3.9z" />
+        </>
+      ) : (
+        <>
+          <path d="M17 14V3" />
+          <path d="M9 18.1 10 14H4.2a2 2 0 0 1-2-2.3l1.4-7A2 2 0 0 1 5.6 3H17v11l-4 8a3 3 0 0 1-4-3.9z" />
+        </>
+      )}
+    </svg>
   );
 }

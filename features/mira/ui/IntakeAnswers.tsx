@@ -5,8 +5,10 @@ import miraConfig from "@features/mira/content/mira-config.json";
 
 type Question = (typeof miraConfig.intakeQuestions)[number];
 
-const chip =
-  "min-h-[40px] rounded-full border border-ap-mist px-4 text-[13px] text-[#561dbd] hover:border-ap-purple";
+/** An answer button: a quiet white pill, like the starter prompts (Mark's V2, 21 Nov 2026). */
+export const ANSWER_CHIP =
+  "min-h-[40px] rounded-full border border-ap-line bg-white px-4 text-[14px] text-ap-body transition-colors hover:border-[#d9d4e2] hover:bg-ap-ground";
+const chip = ANSWER_CHIP;
 
 /**
  * The answers to the intake question Mira just asked (her reply's [[ASK:id]] marker), as buttons
@@ -34,7 +36,7 @@ export function IntakeAnswers({
 
   if (q.answerType === "likert") {
     return (
-      <div role="group" aria-label="Your answer, 1 to 7" className="flex flex-col gap-1 pl-1">
+      <div role="group" aria-label="Your answer, 1 to 7" className="flex flex-col gap-1">
         <div className="flex flex-wrap gap-1.5">
           {[1, 2, 3, 4, 5, 6, 7].map((n) => (
             <button
@@ -42,7 +44,7 @@ export function IntakeAnswers({
               type="button"
               aria-label={`${n} of 7`}
               onClick={() => onAnswer(`${n} of 7`)}
-              className="min-h-[44px] min-w-[44px] rounded-full border border-ap-mist text-[14px] text-[#561dbd] hover:border-ap-purple"
+              className="min-h-[44px] min-w-[44px] rounded-full border border-ap-line bg-white text-[14px] text-ap-body transition-colors hover:border-[#d9d4e2] hover:bg-ap-ground"
             >
               {n}
             </button>
@@ -61,7 +63,7 @@ export function IntakeAnswers({
     const toggle = (o: string) =>
       setPicked((p) => (p.includes(o) ? p.filter((x) => x !== o) : [...p, o]));
     return (
-      <div role="group" aria-label="Your answer: pick any" className="flex flex-wrap gap-2 pl-1">
+      <div role="group" aria-label="Your answer: pick any" className="flex flex-wrap gap-2">
         {q.options.map((o) => (
           <button
             key={o}
@@ -77,7 +79,7 @@ export function IntakeAnswers({
           type="button"
           disabled={picked.length === 0}
           onClick={() => onAnswer(q.options.filter((o) => picked.includes(o)).join(", "))}
-          className="min-h-[40px] rounded-full bg-black px-4 text-[13px] font-bold text-white disabled:opacity-40"
+          className="min-h-[40px] rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white disabled:opacity-40"
         >
           Send answer
         </button>
@@ -87,7 +89,7 @@ export function IntakeAnswers({
   }
 
   return (
-    <div role="group" aria-label="Your answer" className="flex flex-wrap gap-2 pl-1">
+    <div role="group" aria-label="Your answer" className="flex flex-wrap gap-2">
       {q.options.map((o) => (
         <button key={o} type="button" onClick={() => onAnswer(o)} className={chip}>
           {o}
