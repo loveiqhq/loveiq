@@ -234,6 +234,7 @@ function Overview({ data }: { data: Data }) {
       <Funnel data={data} />
       <KeepCard data={data} />
       <StyleTipCard data={data} />
+      <SignInCard data={data} />
       <Sources data={data} />
     </Board>
   );
@@ -283,6 +284,78 @@ function StyleTipCard({ data }: { data: Data }) {
       ]}
       note="The tip shows once per browser, after one of Mira’s replies. People: an account, or a browser before it signs in. Saved styles count from either the tip or the header button. Recorded from 21 Nov 2026."
     />
+  );
+}
+
+/**
+ * "Sign-in" (22 Nov 2026): how people sign in (code, Google, passkey), how many accounts have a
+ * passkey, how the "Use Face ID next time?" offer lands, and the account-safety moments.
+ */
+function SignInCard({ data }: { data: Data }) {
+  const { byMethod, passkeys, offer, signedOutEverywhere, emailChanges } = data.signIn;
+  const all = byMethod.email + byMethod.google + byMethod.passkey;
+  const of = `of ${count(all)} sign-ins in the range`;
+  return (
+    <Card id="sign-in" labelledBy="h-sign-in">
+      <SectionHead
+        id="h-sign-in"
+        level={3}
+        title="Sign-in"
+        description="How people sign in, how many use a passkey, and how often they sign out everywhere or change their email."
+      />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{ label: "With an emailed code", unit: "count", value: byMethod.email, note: of }}
+        />
+        <StatBox stat={{ label: "With Google", unit: "count", value: byMethod.google, note: of }} />
+        <StatBox
+          stat={{ label: "With a passkey", unit: "count", value: byMethod.passkey, note: of }}
+        />
+        <StatBox
+          stat={{
+            label: "Accounts with a passkey",
+            unit: "pct",
+            value: passkeys ? share(passkeys.accounts, passkeys.of) : null,
+            note: passkeys
+              ? `${count(passkeys.accounts)} of ${count(passkeys.of)} accounts, today`
+              : "Not measured: the passkeys could not be read",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "“Use Face ID next time?” accepted",
+            unit: "pct",
+            value: share(offer.accepted, offer.shown),
+            note: `${count(offer.accepted)} of ${count(offer.shown)} times shown`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Signed out everywhere",
+            unit: "count",
+            value: signedOutEverywhere,
+            note: "times, in the range",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Changed their email",
+            unit: "count",
+            value: emailChanges,
+            note: "in the range",
+          }}
+        />
+      </div>
+      <p className={NOTE}>
+        Every sign-in counts, a returning person&rsquo;s too, so these are sign-ins, not people.
+        &ldquo;Use Face ID next time?&rdquo; (Touch ID, Windows Hello, a fingerprint, by device) is
+        offered once per browser after a code sign-in on a device that can make a passkey; accepted
+        means a passkey was added from it. The team is left out. Recorded from 22 Nov 2026.
+      </p>
+    </Card>
   );
 }
 

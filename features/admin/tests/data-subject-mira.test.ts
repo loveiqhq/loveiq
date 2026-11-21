@@ -69,6 +69,39 @@ describe("DSAR export covers Mira (Art. 15)", () => {
     expect(paths).toContain(`/rest/v1/mira_event?user_id=in.(${UID})&select=*&order=id.asc`);
   });
 
+  it("exports the account's passkeys, devices and pending email change, never a secret (22 Nov 2026)", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    for (const table of ["mira_passkey", "mira_session", "mira_email_change"]) {
+      expect(result.exportData?.[table], table).toEqual([{ from: `/rest/v1/${table}` }]);
+    }
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    const select = (table: string) =>
+      new URL(
+        `http://x${paths.find((p) => p.startsWith(`/rest/v1/${table}?user_id=in.(${UID})`))!}`
+      ).searchParams
+        .get("select")!
+        .split(",");
+    expect(select("mira_passkey")).toEqual(
+      expect.arrayContaining(["id", "label", "public_key", "created_at", "last_used_at"])
+    );
+    expect(select("mira_session")).toEqual(
+      expect.arrayContaining(["id", "device", "city", "created_at", "last_seen_at"])
+    );
+    expect(select("mira_email_change")).toEqual(["new_email", "issued_at", "attempts"]);
+    for (const table of ["mira_passkey", "mira_session", "mira_email_change"]) {
+      expect(select(table), table).not.toContain("*");
+      expect(select(table), table).not.toContain("code_hash");
+      expect(select(table), table).not.toContain("user_id");
+    }
+    // Nothing of a ceremony's challenge, ever.
+    expect(paths.some((p) => p.includes("mira_webauthn_challenge"))).toBe(false);
+    // A change another account started to this address: the address and when, nothing of them.
+    expect(fetched()).toContainEqual([
+      "GET",
+      "/rest/v1/mira_email_change?new_email=eq.lea%40example.com&select=new_email,issued_at",
+    ]);
+  });
+
   it("reads nothing more when there is no Mira account", async () => {
     accounts = [];
     const result = await exportDataSubject("lea@example.com");
@@ -96,11 +129,15 @@ describe("DSAR delete covers Mira (Art. 17)", () => {
     expect(deleteAccount).toHaveBeenCalledWith(ACCOUNT);
     expect(result.rowsAffected.mira_user).toBe(1);
     expect(result.rowsAffected.mira_sign_in_code).toBe(1);
-    // Nothing of Mira's is deleted around that path (it keeps staff and Jarvis logins).
+    // Nothing of Mira's is deleted around that path (it keeps staff and Jarvis logins): the
+    // account's passkeys, devices and pending change go with it (ON DELETE CASCADE). Only a
+    // change another account started to this address is erased here.
     const miraDeletes = fetched().filter(
       ([m, p]) => m === "DELETE" && /\/mira_(?!sign_in_code)/.test(p)
     );
-    expect(miraDeletes).toEqual([]);
+    expect(miraDeletes).toEqual([
+      ["DELETE", "/rest/v1/mira_email_change?new_email=eq.lea%40example.com"],
+    ]);
   });
 
   it("reports a partial erasure when an account could not be deleted", async () => {

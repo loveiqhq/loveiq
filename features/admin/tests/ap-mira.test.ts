@@ -864,6 +864,11 @@ describe("fetchMira", () => {
       "style_saved",
       "reply_declined",
       "minor_stop",
+      // Sign-in & security (22 Nov 2026).
+      "passkey_offer_shown",
+      "passkey_offer_accepted",
+      "signed_out_everywhere",
+      "email_changed",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
