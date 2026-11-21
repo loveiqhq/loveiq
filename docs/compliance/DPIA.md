@@ -321,7 +321,7 @@ controller service ([business.safety.google/adsservices](https://business.safety
   whether she helps". The wording's version is stored with each consent.
 - **Purpose limitation**: chats are used for coaching, never for advertising. We do not train
   models on them, and Anthropic may not.
-- **Data minimisation**: Mira works without an account (10 messages, then a free account; a crisis
+- **Data minimisation**: Mira works without an account (one message, then a free account; a crisis
   message is always answered). The profile asks for little. Chats are stored only while memory is
   on. The test result and a rated reply's text are used only on opt-in, both off by default. The
   labels and the log of steps hold ids, never words. The model gets the latest 24 turns. Prompts
