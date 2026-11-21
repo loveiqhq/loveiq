@@ -392,6 +392,11 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
   covers analytics is doubtful.
 - **What would lower it** (not taken, by owner decision): mask the chat in both tools
   (`data-clarity-mask`, PostHog's `ph-no-capture`), or not load them on `/mira`.
+- **Since 2026-11-22, the self-checks too** (§7.12, S3): PostHog and Clarity also record the
+  answers and results of the anxiety, mood and loneliness checks, health data under Art. 9, on
+  the same basis the privacy policy states (legitimate interest, §7.4), which is not an Art. 9(2)
+  condition. Mira's notice says so. Whether the owner's acceptance of M5 extends to them is an
+  open decision for Eman (§7.12, open point 3).
 
 #### M6 — Transfers to the USA (MEDIUM)
 
@@ -454,7 +459,8 @@ Recorded as owner decisions, not as risks this assessment found acceptable on it
 1. **Analytics on Mira's pages stay as they are** (M5), including Microsoft Clarity without consent
    (owner decision of 2026-08-10, kept for Mira on 2026-11-20). The chat is not masked in Clarity
    or PostHog either (owner decision of 2026-11-21), so the Berlin Commissioner is consulted before
-   Mira is promoted (7.10, condition 1).
+   Mira is promoted (7.10, condition 1). Whether this extends to the self-checks' answers and
+   results (7.12, S3) is still open.
 2. **Nudges on by default** for new accounts (M8).
 3. **Nudge open tracking** (M7).
 4. **Mira stays on Eman's own Anthropic organization** ("Eman's Individual Org") and its keys, not
@@ -567,10 +573,16 @@ data-subject export (`features/admin/server/data-subject.ts`, `mira_check`).
   lines at once, the person's country first, with warm words and a way to Mira, whose crisis
   rails apply; the result keeps that support at its top. As with the chat, no person follows up.
   The panel's opening is counted for the weekly safety review.
-- **S3, analytics see the answers (HIGH, as M5):** PostHog and Microsoft Clarity record the check
-  screens as they record the chat. Disclosed in the note and in Mira's notice. Masking the screens
-  (`ph-no-capture`, `data-clarity-mask`) would lower it; that is the owner's decision and was not
-  taken here.
+- **S3, analytics see the answers (HIGH; it extends M5):** PostHog and Microsoft Clarity record the
+  check screens as they record the chat: every answer tapped, and the result with its band and
+  score, which are Art. 9 health data, in session recordings and, for PostHog, in the taps it
+  captures by itself. The basis the privacy policy states for these tools, legitimate interest
+  (§7.4), is not an Art. 9(2) condition. Disclosed in the note before a first check and in Mira's
+  notice. The option that would lower it: mark the check screens `ph-no-capture` (PostHog then drops
+  the taps and blanks the screens in its replays) and `data-clarity-mask="true"` (Clarity masks
+  them), or not load the two tools on `/mira/assessments`. Not taken: reducing analytics is Eman's
+  decision alone, and he kept the chat visible on 2026-11-21 (7.7, item 1). An open decision for him
+  (open point 3).
 - **S4, bands reach Anthropic (as M6):** only with the switch on, bands only.
 
 **Medical device question (EU MDR 2017/745), for the owner to decide.** Software its manufacturer
@@ -596,7 +608,10 @@ used: WHO publishes it under CC BY-NC-SA 3.0 IGO (2024), so commercial use needs
 1. Whether the sign-up consent and the note before a first check are specific enough for health
    questionnaires, or a tick of their own is wanted.
 2. Permission to use the three-item loneliness scale in a commercial product.
-3. Masking the check screens in PostHog and Clarity (S3).
+3. **For Eman to decide:** does the owner's acceptance of M5 extend to the self-check answers and
+   results in PostHog and Clarity (Art. 9 data in recordings, on a basis that is not an Art. 9(2)
+   condition), or are the check screens masked as S3 describes? Until he decides, nothing is
+   masked and the notice says the tools see the screens.
 4. The regulatory opinion on the medical device question.
 
 ## 8. Sign-off
