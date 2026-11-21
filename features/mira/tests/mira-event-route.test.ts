@@ -130,6 +130,16 @@ describe("POST /api/mira/event", () => {
     ]);
   });
 
+  // Settings (21 Nov 2026): the footer's theme switch, signed out. The account's own changes
+  // are logged by PATCH /api/mira/me, so the browser can't send those.
+  it("logs a theme chosen while signed out, never the account's settings changes", async () => {
+    expect((await post({ type: "track", name: "theme_changed" })).status).toBe(200);
+    for (const name of ["text_size_changed", "reply_language_changed", "settings_saved"]) {
+      expect((await post({ type: "track", name })).status).toBe(400);
+    }
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([n]) => n)).toEqual(["theme_changed"]);
+  });
+
   it("logs the consent with its wording's version, and only so", async () => {
     await post({ type: "consent", version: "mira-2026-11-21-2", shareRated: true });
     expect(vi.mocked(logMiraEvent).mock.calls).toEqual([

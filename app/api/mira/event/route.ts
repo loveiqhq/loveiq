@@ -14,8 +14,8 @@
  *       "Not now", so the response rate is known too
  *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
  *       sees), the body check offered and started (its finish is the server's), the "Keep this
- *       chat" card shown, kept or put off; only these names, so the server's own KPI events
- *       can't be sent
+ *       chat" card shown, kept or put off, a theme chosen while signed out; only these names, so
+ *       the server's own KPI events can't be sent
  *
  * At most DAILY_EVENTS a day per person (account or browser id) and six times that per network
  * (a cleared cookie is a new id), so mira_event can't be flooded or the counts inflated.
@@ -65,6 +65,8 @@ const schema = z.discriminatedUnion("type", [
       "style_tip_shown",
       "style_tip_opened",
       "style_saved",
+      // A theme chosen at the foot of a page while signed out (signed in, PATCH /me logs it).
+      "theme_changed",
     ]),
   }),
 ]);

@@ -30,6 +30,7 @@
  */
 import miraConfig from "@features/mira/content/mira-config.json";
 import nudgeConfig from "@features/mira/content/nudges.json";
+import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { FOLLOW_UP_DAYS } from "@features/mira/server/body-check";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
@@ -99,6 +100,10 @@ const EVENT_NAMES = [
   "style_saved",
   "reply_declined",
   "minor_stop",
+  // Settings (21 Nov 2026): a changed theme (signed in or out), text size or reply language.
+  "theme_changed",
+  "text_size_changed",
+  "reply_language_changed",
 ];
 
 export interface MiraUserRow {
@@ -109,6 +114,10 @@ export interface MiraUserRow {
   use_assessment: boolean;
   /** Created or signed in from a team browser (20261121030000_mira_team_and_source.sql). */
   is_team?: boolean;
+  /** Settings' choices, null where never made (20261122060000_mira_settings.sql). */
+  theme?: string | null;
+  text_size?: string | null;
+  reply_language?: string | null;
 }
 
 /** An event's source when the visit had neither campaign tags nor a referring site. */
@@ -172,7 +181,7 @@ export interface MiraData {
 export async function fetchMira(): Promise<MiraData> {
   const [users, events, nudges, bodyChecks] = await Promise.all([
     fetchAllRows<MiraUserRow>(
-      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
+      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,theme,text_size,reply_language&order=id.asc"
     ),
     fetchEvents(),
     fetchAllRows<MiraNudgeRow>(
@@ -1068,6 +1077,96 @@ export interface SourceRow {
   rate: number | null;
 }
 
+export interface SettingsShare {
+  label: string;
+  n: number;
+  share: number | null;
+}
+
+/** AP › Mira › Settings: how today's accounts set Mira up, and how often people change it. */
+export interface SettingsKpi {
+  accounts: number;
+  theme: SettingsShare[];
+  textSize: SettingsShare[];
+  replyLanguage: SettingsShare[];
+  /** Changes per week (its Monday), the 8 weeks to the range's last day, oldest first. */
+  weeks: Array<{ week: string; theme: number; textSize: number; replyLanguage: number }>;
+}
+
+const CHANGES = new Map<string, "theme" | "textSize" | "replyLanguage">([
+  ["theme_changed", "theme"],
+  ["text_size_changed", "textSize"],
+  ["reply_language_changed", "replyLanguage"],
+]);
+
+/**
+ * Today's accounts by their theme, text size and reply language (never chosen counts as the
+ * default: System, Default, Match my messages), and the changes in each week: every change made,
+ * signed in, or a theme signed out.
+ */
+export function settingsKpi(prep: Prepared, to: string): SettingsKpi {
+  const accounts = prep.accounts.length;
+  /** Each option's accounts; an account that never chose counts as the first (the default). */
+  const shares = (
+    pick: (a: MiraUserRow) => string | null | undefined,
+    options: Array<[string, string]>
+  ): SettingsShare[] => {
+    const counts = new Map<string, number>(options.map(([v]) => [v, 0]));
+    for (const a of prep.accounts) {
+      const v = pick(a);
+      const key = v && counts.has(v) ? v : options[0]![0];
+      counts.set(key, counts.get(key)! + 1);
+    }
+    return options.map(([v, label]) => {
+      const n = counts.get(v)!;
+      return { label, n, share: ratio(n, accounts) };
+    });
+  };
+  const [match, ...languages] = shares(
+    (a) => a.reply_language,
+    [
+      ["match", "Match my messages (the default)"],
+      ...REPLY_LANGUAGES.map((l): [string, string] => [l.code, l.name]),
+    ]
+  );
+  const last = monday(to);
+  const weeks = Array.from({ length: 8 }, (_, k) => ({
+    week: addDays(last, 7 * (k - 7)),
+    theme: 0,
+    textSize: 0,
+    replyLanguage: 0,
+  }));
+  for (const e of prep.events) {
+    const kind = CHANGES.get(e.name);
+    const day = kind ? dayOf(e.at) : null;
+    const row = day && day <= to ? weeks.find((w) => w.week === monday(day)) : undefined;
+    // eslint-disable-next-line security/detect-object-injection -- kind is a closed union.
+    if (row && kind) row[kind]++;
+  }
+  return {
+    accounts,
+    theme: shares(
+      (a) => a.theme,
+      [
+        ["system", "System (the default)"],
+        ["light", "Light"],
+        ["dark", "Dark"],
+      ]
+    ),
+    textSize: shares(
+      (a) => a.text_size,
+      [
+        ["default", "Default"],
+        ["small", "Small"],
+        ["large", "Large"],
+      ]
+    ),
+    // Only the languages someone chose, most chosen first.
+    replyLanguage: [match!, ...languages.filter((l) => l.n > 0).sort((a, b) => b.n - a.n)],
+    weeks,
+  };
+}
+
 export interface MiraPayload extends PageHead {
   tiles: Record<string, Tile>;
   funnel: MiraStep[];
@@ -1081,6 +1180,8 @@ export interface MiraPayload extends PageHead {
   cohorts: CohortRow[];
   /** Today's accounts, and what Mira knows of them. */
   knows: Knows;
+  /** Settings: today's accounts' choices, and the changes per week (settingsKpi). */
+  settings: SettingsKpi;
   safety: {
     conversations: number;
     crisis: number;
@@ -1352,6 +1453,7 @@ export function buildMiraPage(input: {
     perUser,
     cohorts: cohorts(prep, f.to, today).slice(-8),
     knows,
+    settings: settingsKpi(prep, f.to),
     safety: {
       conversations: cur.conversations,
       crisis: cur.crisis,
