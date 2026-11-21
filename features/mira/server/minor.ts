@@ -10,6 +10,7 @@ import { removePasskeys } from "./passkeys";
 import { forgetJournal } from "./journal";
 import { deleteChats, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
+import { deleteSlot } from "./weekly-sessions";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
@@ -24,7 +25,9 @@ import { deleteRecordings } from "./voice";
  *
  * Sign-in & security (22 Nov 2026): the account's passkeys go too, like the nudges a way back in,
  * and none can be added again (the passkey, email and Google-connect routes answer 403). Its
- * signed-in devices stay, as the stop signs nobody out; Settings can still sign them out.
+ * signed-in devices stay, as the stop signs nobody out; Settings can still sign them out. A booked
+ * weekly session is deleted without any email, and the session routes refuse the account
+ * (weekly-sessions.ts).
  */
 
 /** This browser or this account said its person is under 18. */
@@ -72,6 +75,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     deleteChecks(userId),
     // The daily journal goes too, with Mira's reading of it and its reminder (server/journal.ts).
     forgetJournal(userId),
+    // A weekly session goes too, silently: no cancellation, reminder or invite is ever sent.
+    deleteSlot(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

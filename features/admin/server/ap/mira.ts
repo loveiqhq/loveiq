@@ -143,6 +143,11 @@ const EVENT_NAMES = [
   // The self-checks (22 Nov 2026): started, finished, and the support lines from question 9.
   ...CHECKS.flatMap((c) => [`${c.id}_check_started`, `${c.id}_check_done`]),
   "check_support_shown",
+  // Weekly sessions (21 Nov 2026): booked, cancelled, a reminder sent, a reminded start joined.
+  "session_scheduled",
+  "session_cancelled",
+  "session_reminder_sent",
+  "session_attended",
 ];
 
 /** A self-check event's check, and whether it is the finish. */
@@ -407,6 +412,8 @@ interface Person {
   tipShown: number[];
   tipOpened: number[];
   styleSaved: number[];
+  /** Their weekly-session events and under-18 stops (which end a session), as they came. */
+  sessions: Array<{ at: number; name: string }>;
   /** The first source recorded for them (MiraEventRow.source), and when; null: none recorded. */
   from: { at: number; source: string } | null;
   /** Their self-check starts and finishes, oldest first. */
@@ -552,6 +559,7 @@ export function prepare(data: MiraData): Prepared {
         tipShown: [],
         tipOpened: [],
         styleSaved: [],
+        sessions: [],
         from: null,
         checks: [],
       };
@@ -577,6 +585,9 @@ export function prepare(data: MiraData): Prepared {
     else if (e.name === "style_tip_opened") p.tipOpened.push(at);
     else if (e.name === "style_saved") p.styleSaved.push(at);
     else if (CHECK_EVENTS.has(e.name)) p.checks.push({ at, ...CHECK_EVENTS.get(e.name)! });
+    else if (e.name.startsWith("session_") || e.name === "minor_stop") {
+      p.sessions.push({ at, name: e.name });
+    }
   }
   for (const p of people.values()) {
     p.starts.sort((a, b) => a.at - b.at);
@@ -1109,6 +1120,32 @@ function keepCardFunnel(prep: Prepared, w: Win) {
  * The coaching-style tip in the range: the people shown it; of them, those who opened the panel
  * from it, and those who saved a style after first seeing it, by the range's end.
  */
+/**
+ * Weekly sessions in the range: the people who booked one; the sessions in place at the range's
+ * end (booked, and not since cancelled or ended by an under-18 stop, whatever their reminders);
+ * the reminder emails sent; the reminded starts opened within 30 minutes of their time; the
+ * people who cancelled.
+ */
+function weeklySessions(prep: Prepared, w: Win) {
+  const out = { scheduled: 0, active: 0, reminders: 0, attended: 0, cancelled: 0 };
+  const states = new Set(["session_scheduled", "session_cancelled", "minor_stop"]);
+  for (const p of prep.people.values()) {
+    if (!p.sessions.length) continue;
+    const inRange = p.sessions.filter((e) => within(e.at, w));
+    const count = (name: string) => inRange.filter((e) => e.name === name).length;
+    if (count("session_scheduled")) out.scheduled++;
+    if (count("session_cancelled")) out.cancelled++;
+    out.reminders += count("session_reminder_sent");
+    out.attended += count("session_attended");
+    const last = p.sessions
+      .filter((e) => e.at < w.until && states.has(e.name))
+      .sort((a, b) => a.at - b.at)
+      .at(-1);
+    if (last?.name === "session_scheduled") out.active++;
+  }
+  return out;
+}
+
 function styleTipFunnel(prep: Prepared, w: Win) {
   const out = { shown: 0, opened: 0, saved: 0 };
   for (const p of prep.people.values()) {
@@ -1457,6 +1494,14 @@ export interface MiraPayload extends PageHead {
   styleTip: { shown: number; opened: number; saved: number };
   /** The "Sign-in" card (signInFigures). */
   signIn: SignInFigures;
+  /** Weekly sessions in the range (weeklySessions). */
+  weeklySessions: {
+    scheduled: number;
+    active: number;
+    reminders: number;
+    attended: number;
+    cancelled: number;
+  };
   chips: ChipRow[];
   topics: TopicRow[];
   /** New chats in the range opened in the person's own words that carry no topic. */
@@ -1745,6 +1790,7 @@ export function buildMiraPage(input: {
       w,
       input.data.passkeyUsers === undefined ? [] : input.data.passkeyUsers
     ),
+    weeklySessions: weeklySessions(prep, w),
     chips: chips(prep, w),
     ...topics(prep, w, compared && cmp ? win(cmp.from, cmp.to) : null),
     bodyCheck: { ...cur.body, ...bodyFunnel(prep, w), reliableChange: BODY_RELIABLE_CHANGE },

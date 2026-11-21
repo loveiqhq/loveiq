@@ -48,6 +48,9 @@
  *     pending mira_email_change (the new address and when; never the code's hash), by user_id,
  *     all erased by the account's deletion (ON DELETE CASCADE); and a change another account
  *     started to this address (by new_email), exported without that account and erased here.
+ *     Weekly sessions (21 Nov 2026): mira_session_slot (by user_id) and its
+ *     mira_session_reminder rows (through the slot); erased by the same deletion (ON DELETE
+ *     CASCADE from mira_user, then from the slot).
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
@@ -266,6 +269,12 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     ],
     // The daily journal (erased with the account by its ON DELETE CASCADE).
     ["mira_journal_entry", `/rest/v1/mira_journal_entry?user_id=${ids}&select=*&order=id.asc`],
+    // Weekly sessions: the slot by its account; its reminders carry no user_id, so through it.
+    ["mira_session_slot", `/rest/v1/mira_session_slot?user_id=${ids}&select=*&order=id.asc`],
+    [
+      "mira_session_reminder",
+      `/rest/v1/mira_session_reminder?select=*,mira_session_slot!inner(user_id)&mira_session_slot.user_id=${ids}&order=id.asc`,
+    ],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);

@@ -148,6 +148,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Basis**: (b) contract: the free account and the emails that come with it ("Daily nudges from Mira come with your free account"). A nudge's words come from the last chat, so they also rest on the A16 consent. Each nudge's delivery and first open: (f) legitimate interest, as in A6, an owner's accepted risk; the ePrivacy question in DPIA §6 applies here too
 - **Retention**: until the account is deleted; sign-in codes when used, otherwise after a day; sign-ins that never finished sign-up after 24 hours
 - **Stop**: pause or one-click stop in every nudge, or in Settings; the account can be deleted in Settings
+- **Weekly sessions (from 2026-11-21)**: when the person books one, the slot (weekday, local time, time zone) and the emails that come with it: the calendar invite (an .ics with their address as attendee), its updates and cancellation, and a reminder 30 to 60 minutes before each session. Basis: (b) contract, a service the person asked for by booking. The emails carry no chat content and neutral subjects; reminders stop with the one-click link in every session email, in Settings, or by cancelling. Kept until cancelled, the account is deleted, or an under-18 stop (which deletes it without any email)
 
 ### A17a — Mira sign-in security: passkeys, devices, change of email (from 2026-11-22)
 
@@ -160,6 +161,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 - **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id); never a reply's text (the optional box that kept it went on 2026-11-21)
 - **Basis**: (f) legitimate interest for steps, thumbs, feedback and scores: improving Mira. Balancing: no words in the log except the person's own feedback, team browsers left out, kept 12 months, objection by email
+- **Weekly sessions (from 2026-11-21)**: the log also holds a session booked or cancelled, each reminder sent, and a reminded session opened within 30 minutes of its start (`mira_session_reminder.joined_at`, the minutes from the start as a number). Same basis and balancing: times only
 - **Retention**: 12 months; deleting the account deletes the words and unlinks the rest
 - **Withdraw**: delete the account, or ask; an Art. 21 objection by email
 

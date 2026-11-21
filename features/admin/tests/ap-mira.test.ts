@@ -897,6 +897,11 @@ describe("fetchMira", () => {
       "loneliness_check_started",
       "loneliness_check_done",
       "check_support_shown",
+      // Weekly sessions (21 Nov 2026).
+      "session_scheduled",
+      "session_cancelled",
+      "session_reminder_sent",
+      "session_attended",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(

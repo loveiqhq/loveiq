@@ -42,9 +42,12 @@ import { goalsForPrompt } from "@features/mira/server/goals";
 import { journalContext } from "@features/mira/server/journal";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
+import { lastChat } from "@features/mira/server/nudges";
 import {
   STABLE_INSTRUCTIONS,
   personalInstructions,
+  sessionOpeningInstructions,
+  weeklySessionInstructions,
   type CoachingStyle,
 } from "@features/mira/server/prompt";
 import { isCrisisMessage, parseReply, type CitedSource } from "@features/mira/server/safety";
@@ -58,6 +61,7 @@ import {
   logMiraEvent,
   ownsChat,
 } from "@features/mira/server/store";
+import { getSlot, markJoined, type StoredSlot } from "@features/mira/server/weekly-sessions";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -101,6 +105,8 @@ const schema = z.object({
     .optional(),
   /** Spoken, not typed: the voice session it belongs to (an id the browser made for it). */
   voice: z.object({ session: z.string().uuid().optional() }).strict().optional(),
+  /** The first message of a weekly session opened from its link (signed in only). */
+  session: z.literal(true).optional(),
 });
 
 /** A spoken crisis message's session, read leniently: the crisis reply never waits for the body. */
@@ -268,6 +274,11 @@ export async function POST(request: Request) {
   const account = await getMiraAccount();
   const anon = account ? null : await anonId();
   const who = { anonId: anon, userId: account?.id ?? null };
+  // Weekly sessions: the booked slot (undefined: unknown, so Mira is told nothing either way),
+  // and whether this message opens a session from its link, with the last chat she remembers.
+  const opening = Boolean(parsed.data.session && account);
+  let weekly: StoredSlot | null | undefined;
+  let earlier: Array<{ role: "user" | "assistant"; content: string }> | null = null;
 
   let style: CoachingStyle | undefined = bodyStyle;
   let person: Parameters<typeof personalInstructions>[1] = { signedIn: false };
@@ -303,11 +314,15 @@ export async function POST(request: Request) {
         logger.warn({ err }, "mira: goals were not read for the chat");
         return [];
       });
-      const [assessment, checks] = await Promise.all([
+      const [assessment, checks, slot, last] = await Promise.all([
         profile.use_assessment ? findAssessment(account.email).catch(() => null) : null,
         // Self-check bands only with "Mira may use my check results"; a failed read adds none.
         checksForMira(account.id).catch(() => []),
+        getSlot(account.id).catch(() => undefined),
+        opening && profile.remember_chats ? lastChat(account.id).catch(() => null) : null,
       ]);
+      weekly = slot;
+      earlier = last?.turns.map(({ role, content }) => ({ role, content })) ?? null;
       person = {
         signedIn: true,
         name: profile.name,
@@ -374,7 +389,8 @@ export async function POST(request: Request) {
 
   const isFirst = turns.length === 0;
   // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
-  const chip = isFirst ? miraConfig.starterChips.indexOf(message) : null;
+  // A weekly session's opening line is the app's, neither (null).
+  const chip = isFirst && !opening ? miraConfig.starterChips.indexOf(message) : null;
   turns = cleanHistory([...turns, { role: "user", content: message }]);
 
   let reply: string;
@@ -386,7 +402,11 @@ export async function POST(request: Request) {
 
   const result = await askModel(
     STABLE_INSTRUCTIONS,
-    personalInstructions(style, person, { topic: chip === -1, voice: Boolean(voice) }),
+    [
+      personalInstructions(style, person, { topic: chip === -1, voice: Boolean(voice) }),
+      ...(weekly === undefined ? [] : [weeklySessionInstructions(weekly)]),
+      ...(opening ? [sessionOpeningInstructions(weekly ?? null, earlier)] : []),
+    ].join("\n\n"),
     turns,
     started + ROUTE_BUDGET_MS
   );
@@ -423,8 +443,11 @@ export async function POST(request: Request) {
 
   // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
   // Not when her first reply already asked an intake question: that question's buttons come first.
+  // Nor after a weekly session's opening: it is their session, not a first chat.
   const invitation =
-    isFirst && !crisis && !refused && !minor && !ask ? miraConfig.intakeInvitation : null;
+    isFirst && !crisis && !refused && !minor && !ask && !opening
+      ? miraConfig.intakeInvitation
+      : null;
 
   let messageId: number | null = null;
   if (minor) {
@@ -448,6 +471,12 @@ export async function POST(request: Request) {
   }
 
   if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
+  // Attendance: opened within 30 minutes of a start its reminder went out for (once per start).
+  if (opening && weekly && account && !minor) {
+    await markJoined(weekly, account.id, new Date()).catch((err) =>
+      logger.error({ err }, "mira: a weekly session's attendance was not recorded")
+    );
+  }
   if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
   if (answering && INTAKE_IDS.has(answering))
     logMiraEvent("intake_answered", who, { q: answering });

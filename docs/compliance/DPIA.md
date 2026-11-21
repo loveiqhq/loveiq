@@ -227,6 +227,9 @@ names the use of AI to steer the interaction with the people concerned.
    Google Ads and Tag Manager, CookieYes).
 7. Self-checks (from 2026-11-22, §7.12): the anxiety, mood and loneliness questionnaires for
    self-reflection and, with the person's permission, for Mira's coaching.
+7. Weekly sessions (from 2026-11-21), only for account holders who book one: a weekly 15-minute
+   slot, the calendar invite by email, a reminder email 30 to 60 minutes before each session, and
+   whether a reminded session was opened within 30 minutes of its start.
 
 **Data subjects**: adults (18+) using Mira without an account (the chat lives in their browser) or
 with a free account; the people they write about (partners, former partners, family); people
@@ -269,6 +272,9 @@ are left out of Mira's statistics.
   when, guesses used); passkey challenges (`mira_webauthn_challenge`, random, 5 minutes); when
   Google last confirmed the address (`mira_user.google_connected_at`); a short-lived cookie with a
   challenge's id (`mira-passkey`, 5 minutes).
+- Weekly session (`mira_session_slot`: weekday, local time, time zone, the invite's update count,
+  reminders paused; `mira_session_reminder`: each reminded start, and when the session was opened
+  within 30 minutes of it). Times only, never words; the session emails carry no chat content.
 - Analytics: what the site-wide tools record on Mira's pages, which includes the chat as it
   appears on screen.
 
@@ -296,6 +302,10 @@ or the conversation.
 | Google Ireland Ltd. (Analytics, Tag Manager)          | Processor                         | page views and events; identifiers only with cookie consent                       | USA: DPF                                                                                           |
 | Google Ireland Ltd. (Ads)                             | Independent controller            | its tag runs on Mira's pages and may set `_gcl_au` before the banner is answered  | USA: DPF                                                                                           |
 | CookieYes Ltd.                                        | Processor                         | the consent record                                                                | UK: adequacy decision                                                                              |
+
+Weekly sessions add no recipient: Resend sends their emails (the address, and the invite with the
+session's day, time and zone). A calendar the person adds the session to (from the invite, the
+download or the Google Calendar link) keeps that entry under its provider's own terms.
 
 Google's roles are Google's own list: Analytics and Tag Manager are processor services, Google Ads a
 controller service ([business.safety.google/adsservices](https://business.safety.google/adsservices/)).
@@ -359,6 +369,11 @@ controller service ([business.safety.google/adsservices](https://business.safety
   deletion) cover all Mira data, from 2026-11-22 also passkeys (ids, labels, public keys), devices
   and a pending change of email (never a code's hash or a challenge); the DPO is named in both
   notices.
+  deletion) cover all Mira data; the DPO is named in both notices. The staff data-subject tool
+  (`features/admin/server/data-subject.ts`) exports the weekly session's `mira_session_slot` and
+  `mira_session_reminder` rows and erases them with the account (by cascade); a weekly session is
+  changed, its reminders paused or the session cancelled in Settings, and every session email
+  has a stop link.
 - **Alternatives**: EU-only processing (Claude on Google Cloud or Amazon Bedrock in the EU) was
   asked for on Sanjin's coach board; Anthropic's own API was chosen on 19 Nov 2026. Revisit before
   Mira leaves the beta.
@@ -386,6 +401,9 @@ details.
   reply language and display choices cleared; Settings then refuses changes (403).
   the account's saved chats and self-check results deleted, a browser chat cleared, and the
   self-check routes refuse the account from then on.
+  the account's saved chats deleted, a browser chat cleared.
+  From 2026-11-21 a booked weekly session is deleted too, without any email; its routes refuse
+  the account and the reminder job never emails it.
 - **Residual**: medium. Age is self-declared; there is no age verification.
 
 #### M3 — Crises: suicide, self-harm, abuse (HIGH before, MEDIUM after)
@@ -496,6 +514,8 @@ are Art. 9 data.
 - Account, profile, body checks, nudge records: until the account is deleted.
 - Self-check answers: until deleted in Settings ("Delete my check results"), with the account, or
   at an under-18 stop. A check not yet finished stays in that browser tab for up to a day.
+- Weekly session: until cancelled (the cancellation email takes it out of the calendar), the
+  account is deleted, or Mira stops the account as under 18; its reminder records go with it.
 - `mira_event`: 12 months; deleting the account removes any words and unlinks the rest.
 - Sign-in codes: deleted when used, otherwise after a day. Sign-ins that never finished sign-up:
   24 hours.

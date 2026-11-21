@@ -2,6 +2,7 @@ import { GUIDE_PRACTICES, SKIP_IT } from "../content/guide";
 import miraConfig from "../content/mira-config.json";
 import { MIRA_SYSTEM_PROMPT } from "../content/system-prompt";
 import { REPLY_LANGUAGES } from "../reply-languages";
+import { slotLabel, zoneLabel } from "./calendar";
 import { renderCards } from "./cards";
 import type { CheckForMira } from "./checks";
 
@@ -238,4 +239,48 @@ export function goalsInstructions(goals: GoalForPrompt[]): string {
     ...lines,
     "You may check in on one of them at most once in this chat, briefly and only when it fits what they bring; if you already did earlier in this conversation, don't again. Notice and celebrate what they did. A missed day or week is normal and never a failure, so never make them feel behind. Leave goals out of a crisis reply, and don't list them back: the app shows them.",
   ].join("\n");
+}
+// ── Weekly sessions (21 Nov 2026, server/weekly-sessions.ts) ──────────────────────────────────
+
+type BookedSlot = { weekday: number; time: string; timeZone: string; paused: boolean };
+type Turn = { role: "user" | "assistant"; content: string };
+
+/**
+ * Added to every signed-in message: whether a weekly session is booked. Only the app books one
+ * (the time picker), so Mira never says a session, an invite or a reminder exists before this
+ * says so.
+ */
+export function weeklySessionInstructions(slot: BookedSlot | null): string {
+  return [
+    "WEEKLY SESSION",
+    slot
+      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emailed them the calendar invite. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
+      : "Nothing is booked. To offer a weekly session, ask the weekly question with its marker, [[ASK:weekly]]: the app shows a time picker that books it and emails the calendar invite. Only the picker books: never say a session is booked, or that an invite or reminder is coming, until this section says it is booked.",
+  ].join("\n");
+}
+
+/**
+ * The person opened their weekly session from its link and the app sent a short line for them:
+ * Mira opens it, picking up from the last chat she remembers (only with "Remember our
+ * conversations" on). Short, and never reopening a crisis.
+ */
+export function sessionOpeningInstructions(
+  slot: BookedSlot | null,
+  lastChat: Turn[] | null
+): string {
+  const when = slot ? ` (${slotLabel(slot)}, ${zoneLabel(slot.timeZone)})` : "";
+  const lines = [
+    "THIS IS THEIR WEEKLY SESSION",
+    `They just opened their weekly 15-minute session with you${when}; the app sent a short line for them to start it. Open it the way a coach they like would: welcome them to their weekly session in one short line. Then, if their last chat below gives you something concrete (a practice they meant to try, something you agreed), ask in one sentence how it went; otherwise ask what they'd like to use today's 15 minutes for. Three or four short sentences, no list, and no intake question in this reply. If the last chat touched self-harm, abuse, an eating disorder or a crisis, don't bring it up: welcome them and ask how they are.`,
+  ];
+  if (lastChat?.length) {
+    lines.push(
+      "",
+      "THEIR LAST CHAT, oldest first (it may be days old):",
+      ...lastChat.map((t) => `${t.role === "user" ? "Person" : "Mira"}: ${t.content.slice(0, 700)}`)
+    );
+  } else {
+    lines.push("You have no earlier chat of theirs to go on: don't pretend to remember one.");
+  }
+  return lines.join("\n");
 }
