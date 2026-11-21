@@ -12,12 +12,16 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
       href="/mira"
       aria-label="Applied Psychometrics, Mira beta"
       className="no-underline"
-      // In the chat itself the logo takes you back to Mira's start, not to the same page.
-      onClick={(e) => {
-        if (!onHome) return;
-        e.preventDefault();
-        onHome();
-      }}
+      // In the chat itself the logo takes you back to Mira's start, not to the same page. Only
+      // there: server-rendered pages (privacy, guide) may not hand a function to a client Link.
+      onClick={
+        onHome
+          ? (e) => {
+              e.preventDefault();
+              onHome();
+            }
+          : undefined
+      }
     >
       <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink sm:text-[22px]">
         <span>
