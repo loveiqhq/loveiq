@@ -1,0 +1,18 @@
+{
+  "criterion": "D1",
+  "label": "dead control",
+  "session_id": "01a1b065-6a0f-7e97-9240-c1e09020d476",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a1b065-6a0f-7e97-9240-c1e09020d476",
+  "viewport": {
+    "min": 462,
+    "max": 545,
+    "os": "Linux"
+  },
+  "probes": [
+    {
+      "file": "verify-dead-click-target.mjs",
+      "output": "FAIL  Desktop Chrome (step 0) <button> \"\" looks pressable but the tap lands on div.report-shell |  | FAIL (1) — the reader tapped a control that could not respond"
+    }
+  ],
+  "reproduced": true
+}
