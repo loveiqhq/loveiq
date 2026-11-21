@@ -164,11 +164,9 @@ describe("Home's weekly session card", () => {
     replies["GET /api/mira/weekly-session"] = has(SLOT);
     render(<NextSessionCard />);
     expect(
-      await screen.findByRole("heading", { name: "Your next session · Tuesday 19:00" })
+      await screen.findByRole("heading", { name: /^Your next weekly session:\s*Tuesday, 19:00$/ })
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/In 3 days, 24 November · 15 minutes · Berlin time/)
-    ).toBeInTheDocument();
+    expect(screen.getByText("In 3 days · 15 minutes with Mira · Berlin time")).toBeInTheDocument();
     const add = screen.getByRole("button", { name: "Add to calendar" });
     expect(add).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(add);

@@ -148,7 +148,6 @@ export function upcoming(slot: SlotView, now: number) {
     weekdayShort: fmt({ weekday: "short" }),
     weekday: fmt({ weekday: "long" }),
     day: fmt({ day: "numeric" }),
-    date: fmt({ day: "numeric", month: "long" }),
     when: days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`,
     now: Math.abs(start.getTime() - now) <= 30 * 60_000,
   };

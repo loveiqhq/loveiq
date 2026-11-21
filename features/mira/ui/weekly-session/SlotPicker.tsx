@@ -16,16 +16,31 @@ import {
 /** A day and a time: what the picker holds until both are chosen. */
 export type Pick = { weekday: number | null; time: string | null };
 
-/** Short on screen, whole for screen readers ("Tue" + "sday"). */
+/** Short on screen, whole for screen readers (its aria-label). */
 const DAYS: Array<[string, string]> = [
-  ["Mon", "day"],
-  ["Tue", "sday"],
-  ["Wed", "nesday"],
-  ["Thu", "rsday"],
-  ["Fri", "day"],
-  ["Sat", "urday"],
-  ["Sun", "day"],
+  ["Mon", "Monday"],
+  ["Tue", "Tuesday"],
+  ["Wed", "Wednesday"],
+  ["Thu", "Thursday"],
+  ["Fri", "Friday"],
+  ["Sat", "Saturday"],
+  ["Sun", "Sunday"],
 ];
+
+/**
+ * Whether two zones keep different clocks: now, or in six months (summer time can differ). Berlin
+ * and Sarajevo don't, so the picker doesn't offer one for the other.
+ */
+function clocksDiffer(a: string, b: string): boolean {
+  const offset = (timeZone: string, at: Date) =>
+    new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+      .formatToParts(at)
+      .find((p) => p.type === "timeZoneName")?.value;
+  const now = new Date();
+  return [now, new Date(now.getTime() + 182 * 86_400_000)].some(
+    (at) => offset(a, at) !== offset(b, at)
+  );
+}
 
 /** A radio styled as the chat's answer chip; selected in the multi-select's lilac. */
 const RADIO_CHIP =
@@ -36,8 +51,8 @@ export const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 /**
  * Day and time as radio chips: real radios (one tab stop per row, arrow keys, the whole day's
  * name read out), Sanjin's suggested times, and "Another time" with the browser's own time
- * input. The zone line says whose clock the time is on, and offers this device's zone when it
- * differs.
+ * input. The zone line says whose clock the time is on, and offers this device's zone when its
+ * clock differs.
  */
 export function SlotPicker({
   value,
@@ -63,20 +78,18 @@ export function SlotPicker({
       <fieldset>
         <legend className={LEGEND}>Day</legend>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {DAYS.map(([short, rest], i) => (
+          {DAYS.map(([short, day], i) => (
             <label key={short} className="relative">
               <input
                 type="radio"
                 name={`${id}-day`}
                 value={i + 1}
+                aria-label={day}
                 checked={value.weekday === i + 1}
                 onChange={() => onChange({ ...value, weekday: i + 1 })}
                 className="peer sr-only"
               />
-              <span className={RADIO_CHIP}>
-                {short}
-                <span className="sr-only">{rest}</span>
-              </span>
+              <span className={RADIO_CHIP}>{short}</span>
             </label>
           ))}
         </div>
@@ -140,7 +153,7 @@ export function SlotPicker({
 
       <p className="text-[13px] leading-snug text-ap-muted">
         Times are {zoneLabel(timeZone)}.
-        {here && here !== timeZone ? (
+        {here && here !== timeZone && clocksDiffer(here, timeZone) ? (
           <>
             {" "}
             <button

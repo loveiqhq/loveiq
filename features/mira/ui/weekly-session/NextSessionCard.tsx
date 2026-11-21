@@ -127,14 +127,19 @@ export function NextSessionCard() {
         </div>
         <div className="min-w-0 flex-1">
           <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
-            {next.now
-              ? "Your session is open now"
-              : `Your next session · ${next.weekday} ${slot.time}`}
+            {next.now ? (
+              "Your session is open now"
+            ) : (
+              <>
+                <span className="sr-only">Your next weekly session: </span>
+                {next.weekday}, {slot.time}
+              </>
+            )}
           </h2>
           <p className="mt-0.5 text-[14px] text-ap-body">
             {next.now
               ? `${slotLabel(slot)}, ${zoneLabel(slot.timeZone)}. Fifteen minutes, whenever you’re ready.`
-              : `${next.when}, ${next.date} · 15 minutes · ${zoneLabel(slot.timeZone)}`}
+              : `${next.when} · 15 minutes with Mira · ${zoneLabel(slot.timeZone)}`}
           </p>
           {slot.paused ? (
             <p className="mt-1 text-[13px] text-ap-muted">

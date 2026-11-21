@@ -17,9 +17,15 @@ const LINK_PILL =
   "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
 
 /** Add the session to a calendar: Google's own form, or the invite as a file (Apple, Outlook). */
-export function CalendarLinks({ googleUrl }: { googleUrl: string }) {
+export function CalendarLinks({
+  googleUrl,
+  center = false,
+}: {
+  googleUrl: string;
+  center?: boolean;
+}) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={`flex flex-wrap gap-2 ${center ? "justify-center" : ""}`}>
       <a href={googleUrl} target="_blank" rel="noopener noreferrer" className={LINK_PILL}>
         Google Calendar
       </a>
@@ -125,7 +131,7 @@ export function ScheduleSheet({
               : "We couldn’t email your invite just now. Add it to your calendar here:"}
           </p>
           <div className="relative mt-3 [animation-delay:480ms] motion-safe:animate-mira-in">
-            <CalendarLinks googleUrl={done.slot.googleUrl} />
+            <CalendarLinks googleUrl={done.slot.googleUrl} center />
           </div>
           <div className="relative mt-6">
             <PrimaryButton onClick={onClose}>Done</PrimaryButton>
