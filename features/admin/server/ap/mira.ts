@@ -1275,8 +1275,8 @@ const CHANGES = new Map<string, "theme" | "textSize" | "replyLanguage">([
 
 /**
  * Today's accounts by their theme, text size and reply language (never chosen counts as the
- * default: System, Default, Match my messages), and the changes in each week: every change made,
- * signed in, or a theme signed out.
+ * default: System, Default, Match my messages), and the changes in each week: every change made
+ * in Settings.
  */
 export function settingsKpi(prep: Prepared, to: string): SettingsKpi {
   const accounts = prep.accounts.length;
