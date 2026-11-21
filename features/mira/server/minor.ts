@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { MINOR_COOKIE } from "./config";
-import { withdrawReview } from "./reviews";
+import { refreshPublicReviews, withdrawReview } from "./reviews";
 import { deleteChats, updateProfile } from "./store";
 
 /**
@@ -50,4 +50,6 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       logger.error({ err: r.reason }, "mira: an under-18 stop was not saved in full");
     }
   }
+  // Whatever failed above, the account's mark keeps them off Mira's pages from the next request.
+  refreshPublicReviews();
 }

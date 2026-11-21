@@ -6,6 +6,7 @@
  *   DELETE ?what=words   → takes their words back (the rating stays)
  *   DELETE ?what=all     → removes the rating and the words
  *   Either way they show nowhere from the next request (features/mira/server/reviews.ts).
+ *   After an under-18 stop GET is refused (403); taking back never is.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -42,6 +43,8 @@ async function guard(request: Request, write: boolean) {
   }
   const account = await getMiraAccount();
   if (!account) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
+  // Taking back is never refused, not even after an under-18 stop: whatever is left goes.
+  if (write) return { account };
   // Stopped as under 18 (server/minor.ts): what they shared went with the stop. A failed check
   // is an error, never a pass.
   const minor = await isMinor(account.id).catch(() => null);

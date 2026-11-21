@@ -26,9 +26,11 @@ const PUBLIC_COLS =
 const enc = encodeURIComponent;
 
 /**
- * The public figures, read at most every ten minutes (they change slowly) and at once after a
- * withdrawal or a decision (refreshPublicReviews). Only what may be shown is cached, never an
- * address. A failed read throws, so nothing shows rather than something wrong.
+ * The public figures, read at most once a minute and at once after a withdrawal or a decision
+ * (refreshPublicReviews). The minute also bounds a narrow race: a read that began before a
+ * withdrawal and finished after its refresh is stored, but only until then. Only what may be
+ * shown is cached, never an address. A failed read throws: nothing shows rather than something
+ * wrong.
  */
 export const cachedPublicReviews = unstable_cache(
   async (): Promise<PublicReviews | null> => {
@@ -39,7 +41,7 @@ export const cachedPublicReviews = unstable_cache(
     return publicReviews(rows);
   },
   ["mira-reviews-public-v1"],
-  { tags: [REVIEWS_TAG], revalidate: 600 }
+  { tags: [REVIEWS_TAG], revalidate: 60 }
 );
 
 /**

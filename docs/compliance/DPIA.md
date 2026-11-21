@@ -565,7 +565,8 @@ access read the words waiting for approval.
   nothing shows below 20 people or without an approved quote; "How we check reviews" beside every
   rating says how they are checked. No sample figures anywhere.
 - **M12, minors**: an under-18 stop deletes the rating and words, even approved ones; Mira's rating
-  routes refuse such an account (403); the public figures leave such accounts out.
+  routes refuse such an account (403), except taking back, which is never refused; the public
+  figures leave such accounts out, from the next request even if the delete failed.
 - **M13, pressure to rate**: one ask at a good moment, "Not now" respected for 30 days, never near a
   crisis, a referral or the body check, nothing withheld for not rating.
 

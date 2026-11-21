@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Deleting a Mira account (Settings, a data request, the memory cron) takes the person's rating
  * and words with it: the table cascades (supabase/migrations/20261122080000), and the public
  * figures are recomputed on the next request, so an approved quote doesn't outlive the account
- * in the ten-minute cache.
+ * in the one-minute cache.
  */
 const order: string[] = [];
 vi.mock("@features/admin/server/supabase", () => ({

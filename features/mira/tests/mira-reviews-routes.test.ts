@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * it does on Vercel. So "a withdrawal hides at once" is tested as what the next visitor sees.
  */
 type Row = Record<string, unknown> & { id: number; user_id: string };
-const db = vi.hoisted(() => ({ rows: [] as Row[], nextId: 1 }));
+const db = vi.hoisted(() => ({ rows: [] as Row[], nextId: 1, failDeletes: false }));
 const cache = vi.hoisted(() => new Map<string, { value: unknown; tags: string[] }>());
 
 function matches(row: Row, query: URLSearchParams): boolean {
@@ -40,6 +40,7 @@ vi.mock("@features/admin/server/supabase", () => ({
         hit.forEach((r) => Object.assign(r, JSON.parse(init.body!)));
         return json(hit);
       case "DELETE":
+        if (db.failDeletes) return json({ message: "down" }, 503);
         db.rows = db.rows.filter((r) => !hit.includes(r));
         return json(hit);
       default:
@@ -92,7 +93,7 @@ import { REVIEW_CONSENT_VERSION } from "@features/mira/reviews";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
-import { logMiraEvent } from "@features/mira/server/store";
+import { logMiraEvent, updateProfile } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { revalidateTag } from "next/cache";
 
@@ -152,6 +153,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.rows = [];
   db.nextId = 1;
+  db.failDeletes = false;
   cache.clear();
   vi.mocked(getMiraAccount).mockResolvedValue(LEA);
   vi.mocked(fromTeamBrowser).mockResolvedValue(false);
@@ -223,16 +225,33 @@ describe("under 18: nothing shared stays, and nothing more is taken", () => {
     expect(await shown()).toBeNull(); // 19 people and no words left: nothing shows
   });
 
+  it("takes the words off the pages at once even when deleting them fails: the mark does it", async () => {
+    live();
+    expect((await shown()).quote.name).toBe("Lea");
+    // The account's under-18 mark is saved; deleting the rating is not.
+    vi.mocked(updateProfile).mockImplementationOnce(async (id, patch) => {
+      for (const r of db.rows) {
+        if (r.user_id === id) r.mira_user = { ...user, minor_at: patch.minor_at ?? null };
+      }
+    });
+    db.failDeletes = true;
+    await stopForMinor(LEA.id);
+    expect(db.rows.some((r) => r.user_id === LEA.id)).toBe(true);
+    expect(await shown()).toBeNull();
+  });
+
   it("refuses someone Mira stopped as under 18, and refuses when that can't be checked", async () => {
     vi.mocked(isMinor).mockResolvedValue(true);
     expect((await rate({ stars: 5, words })).status).toBe(403);
     expect((await getMine(call("GET", "/api/mira/reviews/mine"))).status).toBe(403);
-    expect((await DELETE(call("DELETE", "/api/mira/reviews/mine?what=all"))).status).toBe(403);
+    // Taking back is never refused: whatever is left of it goes.
+    expect((await DELETE(call("DELETE", "/api/mira/reviews/mine?what=all"))).status).toBe(200);
     vi.mocked(isMinor).mockRejectedValue(new Error("mira minor read failed (500)"));
     expect((await rate({ stars: 5 })).status).toBe(500);
     expect((await getMine(call("GET", "/api/mira/reviews/mine"))).status).toBe(500);
     expect(db.rows).toEqual([]);
-    expect(logMiraEvent).not.toHaveBeenCalled();
+    // Nothing was taken; only the taking back is logged.
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([name]) => name)).toEqual(["review_withdrawn"]);
   });
 });
 
