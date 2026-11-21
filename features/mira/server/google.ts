@@ -38,7 +38,7 @@ export type GoogleStart = { state: string; verifier: string; nonce: string };
  * What the sign-up form chose, carried through Google beside the start values: its two optional
  * ticks, and where to go after (raw here: the routes check it with safeNext both ways).
  */
-export type SignUpChoices = { useAssessment: boolean; shareRated: boolean; next: string | null };
+export type SignUpChoices = { useAssessment: boolean; next: string | null };
 
 export function googleClient(): GoogleClient | null {
   const id = process.env.MIRA_GOOGLE_CLIENT_ID?.trim();
@@ -96,7 +96,6 @@ export function unpackStart(value: string | undefined): (GoogleStart & SignUpCho
     verifier,
     nonce,
     useAssessment: c.useAssessment === true,
-    shareRated: c.shareRated === true,
     next: typeof c.next === "string" ? c.next : null,
   };
 }

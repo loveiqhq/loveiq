@@ -49,8 +49,8 @@ const typeAndSend = (text: string) => {
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 };
 /** This browser already gave the first-message consent, in the current wording. */
-const giveConsent = (shareRated = false) =>
-  localStorage.setItem("mira.consent.v1", JSON.stringify({ version: CONSENT_VERSION, shareRated }));
+const giveConsent = () =>
+  localStorage.setItem("mira.consent.v1", JSON.stringify({ version: CONSENT_VERSION }));
 /** The track events the page sent, by name. */
 const tracked = () =>
   calls("POST /api/mira/event")
@@ -390,19 +390,17 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
   // Asked in a short step when the first message is sent (Mark's minimal chat, 21 Nov 2026).
   const step = () => screen.getByRole("dialog", { name: "Before your first message" });
   const required = () => within(step()).getByRole("checkbox", { name: /18 or older/ });
-  const optional = () =>
-    within(step()).getByRole("checkbox", { name: /team may read replies I rate/ });
   const start = () => within(step()).getByRole("button", { name: "Start chatting" });
   const consentEvents = () => calls("POST /api/mira/event").filter((b) => b.type === "consent");
   const ratings = () => calls("POST /api/mira/event").filter((b) => b.type === "rating");
 
-  it("holds the first message until the 18+ and sex-life tick; the rating box is optional, unticked, and kept with the version", async () => {
+  it("holds the first message until the 18+ and sex-life tick, the only box, kept with its version", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("hi");
     await screen.findByRole("dialog", { name: "Before your first message" });
     expect(required()).not.toBeChecked();
-    expect(optional()).not.toBeChecked();
+    expect(within(step()).getAllByRole("checkbox")).toHaveLength(1); // the rating box went (21 Nov)
     expect(start()).toBeDisabled();
     expect(calls("POST /api/mira/chat")).toHaveLength(0);
     fireEvent.click(required());
@@ -412,12 +410,9 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     expect(calls("POST /api/mira/chat")).toEqual([
       expect.objectContaining({ message: "hi", consent: true }),
     ]);
-    expect(consentEvents()).toEqual([
-      { type: "consent", version: CONSENT_VERSION, shareRated: false },
-    ]);
+    expect(consentEvents()).toEqual([{ type: "consent", version: CONSENT_VERSION }]);
     expect(JSON.parse(localStorage.getItem("mira.consent.v1")!)).toEqual({
       version: CONSENT_VERSION,
-      shareRated: false,
     });
   });
 
@@ -458,30 +453,13 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("sends a rated reply's words only when the rating box was ticked, else the thumbs only", async () => {
+  it("sends the thumbs only when a reply is rated, never its words", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
-    giveConsent(false);
-    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
-    typeAndSend("hi");
-    fireEvent.click(await screen.findByRole("button", { name: "Helpful" }));
-    await waitFor(() => expect(ratings()).toEqual([{ type: "rating", rating: 1 }]));
-    first.unmount();
-    localStorage.clear();
-    fetchMock.mockClear();
-
+    giveConsent();
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("hi");
-    await screen.findByRole("dialog", { name: "Before your first message" });
-    fireEvent.click(required());
-    fireEvent.click(optional());
-    fireEvent.click(start());
     fireEvent.click(await screen.findByRole("button", { name: "Not helpful" }));
-    await waitFor(() =>
-      expect(ratings()).toEqual([{ type: "rating", rating: -1, reply: "Try this." }])
-    );
-    expect(consentEvents()).toEqual([
-      { type: "consent", version: CONSENT_VERSION, shareRated: true },
-    ]);
+    await waitFor(() => expect(ratings()).toEqual([{ type: "rating", rating: -1 }]));
   });
 });
 
@@ -707,13 +685,13 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
   };
 
-  it("needs three ticks; the LoveIQ result and rating ones start unticked and go with the code check", async () => {
+  it("needs three ticks; the LoveIQ result one starts unticked and goes with the code check", async () => {
     render(<SignUpFlow />);
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
     const send = screen.getByRole("button", { name: "Send me a code" });
     const assessment = box(/Use my LoveIQ test result to tailor my coaching/);
     expect(assessment).not.toBeChecked();
-    expect(box(/team may read replies I rate/)).not.toBeChecked();
+    expect(screen.queryByText(/team may read replies I rate/)).toBeNull(); // the box went (21 Nov)
     fireEvent.click(box(/18 years of age or older/));
     fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
     expect(send).toBeDisabled();
@@ -733,8 +711,8 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     expect(calls("POST /api/mira/auth")[1]).toMatchObject({
       action: "verify",
       useAssessment: true,
-      shareRated: false,
     });
+    expect(calls("POST /api/mira/auth")[1]).not.toHaveProperty("shareRated");
   });
 
   it("has a honeypot people never see or reach, sent with the code request", async () => {
@@ -763,7 +741,7 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     screen.getAllByRole("checkbox").forEach((b) => fireEvent.click(b));
     expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
       "href",
-      `/api/mira/auth/google?adult=1&terms=1&consent=1&assessment=1&share=1&next=${encodeURIComponent(next)}`
+      `/api/mira/auth/google?adult=1&terms=1&consent=1&assessment=1&next=${encodeURIComponent(next)}`
     );
     await signIn();
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith(next));

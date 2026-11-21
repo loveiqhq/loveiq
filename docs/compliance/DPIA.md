@@ -220,8 +220,8 @@ names the use of AI to steer the interaction with the people concerned.
 3. Daily nudge emails, on by default for account holders, written by the model from the last chat.
 4. Seeing whether Mira helps, and improving her: labels from Mira's replies (intake question
    answered, a new chat's topic, a referral, the support panel shown), the body check (Body
-   Appreciation Scale-2) at the start and after 28 days, thumbs, the text of a rated reply only
-   with the optional consent, feedback, the recommend score and a log of steps.
+   Appreciation Scale-2) at the start and after 28 days, thumbs (never the reply's text, since
+   2026-11-21), feedback, the recommend score and a log of steps.
 5. Safety and abuse prevention: the crisis rails, the stop for minors, rate limits and daily caps.
 6. Site analytics, as on every page of loveiq.org (PostHog, Microsoft Clarity, Google Analytics,
    Google Ads and Tag Manager, CookieYes).
@@ -235,13 +235,12 @@ are left out of Mira's statistics.
 
 - Art. 9 (sex life, health): the messages and Mira's replies; for account holders the saved chats
   (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
-  (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in;
-  a rated reply's text with consent.
+  (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in.
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
   result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason), and each
   consent with its time and wording version.
 - Usage: the log of steps (`mira_event`: event names, times and small properties, never words
-  except a rated reply's text with consent and the person's own feedback), nudge records
+  except the person's own feedback), nudge records
   (`mira_nudge`: kind, fixed subject, day, sent, delivered, first opened, clicked) and sign-in code
   rows (`mira_sign_in_code`: address, time, guesses).
 - Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
@@ -323,7 +322,7 @@ controller service ([business.safety.google/adsservices](https://business.safety
   models on them, and Anthropic may not.
 - **Data minimisation**: Mira works without an account (one message, then a free account; a crisis
   message is always answered). The profile asks for little. Chats are stored only while memory is
-  on. The test result and a rated reply's text are used only on opt-in, both off by default. The
+  on. The test result is used only on opt-in, off by default. A rating keeps the thumbs only. The
   labels and the log of steps hold ids, never words. The model gets the latest 24 turns. Prompts
   and chats are never logged. Nudge subjects are neutral, the inbox preview line is hidden, and a
   nudge's words live only in the chat. Ops alerts carry counts only. Team browsers are left out of
@@ -432,8 +431,7 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
   message (`mira_forget_old_memory`, daily). With "Remember our conversations" off, no new chats
   are saved; earlier ones stay until deleted or the 12-month limit.
 - Account, profile, body checks, nudge records: until the account is deleted.
-- `mira_event`: 12 months. Deleting chats removes rated replies' text; deleting the account removes
-  any words and unlinks the rest.
+- `mira_event`: 12 months; deleting the account removes any words and unlinks the rest.
 - Sign-in codes: deleted when used, otherwise after a day. Sign-ins that never finished sign-up:
   24 hours.
 - Backups: Supabase's daily backups for 7 days and the weekly copy for 30 days

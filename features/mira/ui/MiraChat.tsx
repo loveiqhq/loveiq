@@ -84,8 +84,6 @@ export default function MiraChat({
   const [tick, setTick] = useState(false);
   // A first message waiting for the consent step: sent once the person agrees.
   const [pending, setPending] = useState<string | null>(null);
-  // "Mira's team may read replies I rate": the optional box, then the choice it recorded.
-  const [share, setShare] = useState(false);
   // "Not now" on the "Keep this chat" card: away for this chat (kept with it in this browser).
   const [keepOff, setKeepOff] = useState(false);
   const keepLogged = useRef(false);
@@ -134,7 +132,6 @@ export default function MiraChat({
       }
       const given = local.consent();
       setConsented(given?.version === CONSENT_VERSION);
-      setShare(given?.version === CONSENT_VERSION && given.shareRated === true);
       setStyle(local.style() ?? {});
       setTipSeen(local.styleTipSeen());
       setReady(true);
@@ -310,7 +307,6 @@ export default function MiraChat({
       setMinor(true);
       setConsented(false);
       setTick(false);
-      setShare(false);
       setChats([]);
       return;
     }
@@ -342,11 +338,9 @@ export default function MiraChat({
   function agree() {
     const text = pending;
     if (!tick || text === null) return;
-    local.saveConsent({ version: CONSENT_VERSION, shareRated: share });
+    local.saveConsent({ version: CONSENT_VERSION });
     setConsented(true);
-    void miraApi("/api/mira/event", {
-      body: { type: "consent", version: CONSENT_VERSION, shareRated: share },
-    });
+    void miraApi("/api/mira/event", { body: { type: "consent", version: CONSENT_VERSION } });
     setPending(null);
     void send(text, { agreed: true });
   }
@@ -370,9 +364,7 @@ export default function MiraChat({
         type: "rating",
         rating,
         ...(m.messageId ? { messageId: m.messageId } : {}),
-        // The reply's words go along only when this browser ticked "Mira's team may read
-        // replies I rate"; otherwise the thumbs only. A signed-in rating never sends them.
-        ...(!signedIn && share ? { reply: m.content.slice(0, 4000) } : {}),
+        // The thumbs only: a reply's words are never sent (Eman, 21 Nov 2026).
       },
     });
     if (!res.ok) {
@@ -1084,16 +1076,6 @@ export default function MiraChat({
                   How Mira handles your data
                 </Link>
               </span>
-            </label>
-            {/* Optional and unticked: only with it does a rated reply keep its words. */}
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={share}
-                onChange={(e) => setShare(e.target.checked)}
-                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
-              />
-              <span>Mira&apos;s team may read replies I rate, to improve Mira.</span>
             </label>
           </div>
           <div className="mt-5 flex items-center justify-end gap-2">

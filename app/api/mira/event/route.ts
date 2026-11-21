@@ -1,14 +1,12 @@
 /**
  * POST /api/mira/event — what people tell us about Mira, and the KPI moments the browser sees.
  *
- *   { type: "rating", rating: 1 | -1, messageId? , reply? } thumbs on one reply. A signed-in
- *       person's stored reply gets the rating on its row, and their reply text is never kept
- *       here (it lives only in their chat, and only while Mira may remember it); an anonymous
- *       rating keeps the rated reply's first 2,000 characters only when the person ticked
- *       "Mira's team may read replies I rate" (the browser sends the text only then), so we can
- *       see what went wrong. Without the tick: the thumbs only.
- *   { type: "consent", version, shareRated }  the first-message consent, logged as
- *       consent_given with its wording's version and the optional rating tick
+ *   { type: "rating", rating: 1 | -1, messageId? }  thumbs on one reply. A signed-in person's
+ *       stored reply gets the rating on its row. The reply's words are never sent or kept here:
+ *       the thumbs only (Eman, 21 Nov 2026, when the optional "Mira's team may read replies I
+ *       rate" box went; a text an older page still sends is dropped by the schema).
+ *   { type: "consent", version }  the first-message consent, logged as consent_given with its
+ *       wording's version
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach
  *   { type: "nps", score }        "How likely are you to recommend Mira to a friend?" 0 to 10,
@@ -34,14 +32,12 @@ export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_EVENTS = 300;
-const RATED_REPLY_CHARS = 2000;
 
 const schema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("rating"),
     rating: z.union([z.literal(1), z.literal(-1)]),
     messageId: z.number().int().positive().optional(),
-    reply: z.string().max(4000).optional(),
   }),
   z.object({
     type: z.literal("feedback"),
@@ -54,8 +50,7 @@ const schema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("nps"), score: z.number().int().min(0).max(10).nullable() }),
   z.object({
     type: z.literal("consent"),
-    version: z.string().regex(/^mira-\d{4}-\d{2}-\d{2}$/),
-    shareRated: z.boolean(),
+    version: z.string().regex(/^mira-[\d-]{10,13}$/), // mira-2026-11-21, mira-2026-11-21-2
   }),
   z.object({
     type: z.literal("track"),
@@ -115,10 +110,7 @@ export async function POST(request: Request) {
           stored,
         });
       } else {
-        logMiraEvent("rating", who, {
-          rating: body.rating,
-          reply: body.reply?.slice(0, RATED_REPLY_CHARS) ?? null,
-        });
+        logMiraEvent("rating", who, { rating: body.rating });
       }
       break;
     }
@@ -138,7 +130,7 @@ export async function POST(request: Request) {
       logMiraEvent("nps", who, { score: body.score });
       break;
     case "consent":
-      logMiraEvent("consent_given", who, { version: body.version, shareRated: body.shareRated });
+      logMiraEvent("consent_given", who, { version: body.version });
       break;
     case "track":
       logMiraEvent(body.name, who);

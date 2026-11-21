@@ -86,7 +86,6 @@ export async function GET(request: Request) {
   try {
     const profile = await upsertProfileAtSignIn(account.id, account.email, CONSENT_VERSION, {
       useAssessment: start.useAssessment,
-      shareRated: start.shareRated,
     });
     logMiraEvent(
       "signup_completed",

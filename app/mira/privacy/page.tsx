@@ -170,9 +170,7 @@ export default function MiraPrivacyPage() {
             the email address you confirmed.
           </li>
           <li>
-            Your thumbs up or down on a reply. We keep the text of a reply you rate only if you
-            ticked &ldquo;Mira&apos;s team may read replies I rate, to improve Mira.&rdquo; Without
-            that tick, we keep only the thumbs.
+            Your thumbs up or down on a reply. We keep only the thumbs, never the reply&apos;s text.
           </li>
           <li>
             Your feedback, and your answer when Mira asks whether you would recommend her. Your
@@ -217,10 +215,6 @@ export default function MiraPrivacyPage() {
             which are your sign-in codes and the daily nudges. Legal basis: our contract with you
             (Art. 6(1)(b) GDPR). A nudge picks up on your last chat, so it also rests on your
             consent to coaching.
-          </li>
-          <li>
-            To read the replies you rate, so we can improve Mira. Only if you ticked that box. Legal
-            basis: your consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR).
           </li>
           <li>
             To improve Mira from ratings, feedback, the steps people take and nudge opens, and to
@@ -299,8 +293,7 @@ export default function MiraPrivacyPage() {
             account. If you never finish signing up, your sign-in is deleted after 24 hours.
           </li>
           <li>
-            Mira&apos;s log of labels, steps, ratings, feedback and the replies you let us read is
-            deleted after 12 months. Deleting your chats deletes the text of replies you rated.
+            Mira&apos;s log of labels, steps, ratings and feedback is deleted after 12 months.
             Deleting your account deletes any words in the log, and the rest is no longer linked to
             you.
           </li>

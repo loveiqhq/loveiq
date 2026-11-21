@@ -58,7 +58,7 @@ const S = {
   nonce: "nonce_cccccccccccccccc",
 };
 /** The form's choices when nothing optional was ticked and nothing asked to come back to. */
-const NONE = { useAssessment: false, shareRated: false, next: null };
+const NONE = { useAssessment: false, next: null };
 const CHAT = "6f2c4a1e-1111-4222-8333-944455556666";
 const NOW = Date.parse("2026-11-19T23:00:00Z");
 
@@ -127,7 +127,7 @@ describe("the hand-over to Google", () => {
       createHash("sha256").update(S.verifier).digest("base64url")
     );
     expect(unpackStart(packStart(S, NONE))).toEqual({ ...S, ...NONE });
-    const chosen = { useAssessment: true, shareRated: true, next: `/mira?chat=${CHAT}` };
+    const chosen = { useAssessment: true, next: `/mira?chat=${CHAT}` };
     expect(unpackStart(packStart(S, chosen))).toEqual({ ...S, ...chosen });
     expect(unpackStart(`${packStart(S, NONE)}.extra_eeeeeeeeeeeeeee`)).toBeNull();
     expect(unpackStart([S.state, S.verifier, S.nonce].join("."))).toBeNull();
@@ -243,9 +243,11 @@ describe("GET /api/mira/auth/google", () => {
         `https://www.loveiq.org/api/mira/auth/google?adult=1&terms=1&consent=1&assessment=1&share=1&next=${next}`
       )
     );
-    expect(unpackStart(vi.mocked(jar.set).mock.calls[0]![1])).toMatchObject({
+    // The rating box is gone: an older page's `share=1` changes nothing.
+    expect(unpackStart(vi.mocked(jar.set).mock.calls[0]![1])).toEqual({
+      ...S,
+      ...{ state: expect.any(String), verifier: expect.any(String), nonce: expect.any(String) },
       useAssessment: true,
-      shareRated: true,
       next: `/mira?chat=${CHAT}`,
     });
     vi.mocked(jar.set).mockClear();
@@ -306,10 +308,7 @@ describe("GET /api/mira/auth/google/callback", () => {
       "u1",
       "lea.k@gmail.com",
       expect.any(String),
-      {
-        useAssessment: false,
-        shareRated: false,
-      }
+      { useAssessment: false }
     );
     expect(logMiraEvent).toHaveBeenCalledWith(
       "signup_completed",
@@ -323,17 +322,14 @@ describe("GET /api/mira/auth/google/callback", () => {
   });
 
   it("records the optional ticks with the consent and goes on to next, checked again", async () => {
-    const chosen = { useAssessment: true, shareRated: true, next: `/mira?chat=${CHAT}` };
+    const chosen = { useAssessment: true, next: `/mira?chat=${CHAT}` };
     jar.get.mockReturnValue({ value: packStart(S, chosen) });
     const res = await back(`code=abc&state=${S.state}`);
     expect(upsertProfileAtSignIn).toHaveBeenCalledWith(
       "u1",
       "lea.k@gmail.com",
       expect.any(String),
-      {
-        useAssessment: true,
-        shareRated: true,
-      }
+      { useAssessment: true }
     );
     expect(res.headers.get("location")).toBe(
       `https://www.loveiq.org/mira/start?google=done&about=1&next=${encodeURIComponent(chosen.next)}`

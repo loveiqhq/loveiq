@@ -54,9 +54,9 @@ describe("POST /api/mira/event", () => {
     expect(loggedProps()).toEqual({ rating: 1, messageId: 12, stored: true });
   });
 
-  it("keeps an anonymous rating's reply, cut to 2,000 characters", async () => {
+  it("never keeps a reply's words with an anonymous rating, even when an older page sends them", async () => {
     await post({ type: "rating", rating: -1, reply: "x".repeat(4000) });
-    expect(loggedProps()).toEqual({ rating: -1, reply: "x".repeat(2000) });
+    expect(loggedProps()).toEqual({ rating: -1 });
   });
 
   it("caps events a day per person and per network", async () => {
@@ -130,27 +130,23 @@ describe("POST /api/mira/event", () => {
     ]);
   });
 
-  it("logs the consent with its wording's version and the rating tick, and only so", async () => {
-    await post({ type: "consent", version: "mira-2026-11-21", shareRated: true });
+  it("logs the consent with its wording's version, and only so", async () => {
+    await post({ type: "consent", version: "mira-2026-11-21-2", shareRated: true });
     expect(vi.mocked(logMiraEvent).mock.calls).toEqual([
-      [
-        "consent_given",
-        { anonId: "anon_test_123456789" },
-        { version: "mira-2026-11-21", shareRated: true },
-      ],
+      ["consent_given", { anonId: "anon_test_123456789" }, { version: "mira-2026-11-21-2" }],
     ]);
     for (const bad of [
       { type: "track", name: "consent_given" }, // a consent without its version
-      { type: "consent", version: "mira-2026-11-21" },
-      { type: "consent", version: "anything at all", shareRated: false },
+      { type: "consent" },
+      { type: "consent", version: "anything at all" },
     ]) {
       expect((await post(bad)).status).toBe(400);
     }
     expect(logMiraEvent).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the thumbs only when an anonymous rating comes without the reply's words", async () => {
+  it("keeps the thumbs of an anonymous rating", async () => {
     await post({ type: "rating", rating: 1 });
-    expect(loggedProps()).toEqual({ rating: 1, reply: null });
+    expect(loggedProps()).toEqual({ rating: 1 });
   });
 });

@@ -4,7 +4,7 @@
  * The page sends people here only after the same three ticks the emailed code needs, and this
  * route checks them again. It then hands over to Google with a fresh state, nonce and PKCE
  * verifier, kept for 10 minutes in an httpOnly cookie that only the callback can read, with the
- * form's optional ticks (`assessment=1`, `share=1`) and `next` (a Mira page, safeNext) beside them.
+ * form's optional tick (`assessment=1`) and `next` (a Mira page, safeNext) beside them.
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -69,7 +69,6 @@ export async function GET(request: Request) {
   const start = newGoogleStart();
   const choices = {
     useAssessment: url.searchParams.get("assessment") === "1",
-    shareRated: url.searchParams.get("share") === "1",
     next,
   };
   (await cookies()).set(GOOGLE_COOKIE, packStart(start, choices), {
