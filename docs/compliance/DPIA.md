@@ -448,12 +448,19 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
 Recorded as owner decisions, not as risks this assessment found acceptable on its own:
 
 1. **Analytics on Mira's pages stay as they are** (M5), including Microsoft Clarity without consent
-   (owner decision of 2026-08-10, kept for Mira on 2026-11-20).
+   (owner decision of 2026-08-10, kept for Mira on 2026-11-20). The chat is not masked in Clarity
+   or PostHog either (owner decision of 2026-11-21), so the Berlin Commissioner is consulted before
+   Mira is promoted (7.10, condition 1).
 2. **Nudges on by default** for new accounts (M8).
 3. **Nudge open tracking** (M7).
 4. **Mira stays on Eman's own Anthropic organization** ("Eman's Individual Org") and its keys, not
    a company account (owner decision of 2026-11-21). Who the contract is with is still to confirm
    (7.9 point 1).
+5. **Anthropic's DPA as it is** (owner decision of 2026-11-21): Mira keeps calling Anthropic's API
+   under its standard DPA, although Schedule 1 (B.3) lists no special categories and Mira sends
+   Art. 9 data. Not chosen: asking Anthropic for a signed change, and moving the model calls to
+   Google Cloud (Vertex AI) or AWS Bedrock in the EU, whose contracts cover such data but where the
+   Team plan's monthly API credits do not apply. This does not follow the DPO's condition 2 (7.10).
 
 ### 7.8 Residual risk
 
@@ -466,9 +473,9 @@ take one of the M5 measures.
 ### 7.9 Open points
 
 1. **Anthropic**: confirm the contract partner (Anthropic Ireland, Limited for an organization in
-   Germany) and that no zero data retention agreement exists; raise the DPA's "special categories:
-   None" (Schedule 1, B.3) for Mira's Art. 9 data; check the DPF list and the list of
-   subprocessors.
+   Germany) and that no zero data retention agreement exists; check the DPF list and the list of
+   subprocessors. The DPA's "special categories: None" (Schedule 1, B.3) stays as it is (7.7,
+   item 5).
 2. **Supabase and Upstash**: confirm the SCCs for Supabase Inc.'s own access and Upstash's region.
 3. **Consent scope**: resolved 20 Nov 2026: the consent now names counting "without my words, how
    Mira is used and whether she helps" (labels, body check comparisons), within version
@@ -497,6 +504,18 @@ Eman Čičkušić, data protection officer:
 - [ ] I disagree, because: …
 
 Date: 2026-11-21
+
+The controller's answer to the conditions, 2026-11-21 (advice that is not followed is written down
+with its reasons, WP243 rev.01, 4.2):
+
+1. Condition 1: the chat stays visible to Clarity and PostHog (7.7, item 1). M5 therefore stays
+   high, and the Berlin Commissioner is consulted under Art. 36(1) before Mira is promoted.
+2. Condition 2: not followed (7.7, item 5). Anthropic's DPA does not exclude special categories and
+   leaves the categories of data subjects and personal data to the customer (Schedule 1, B.1 and
+   B.2). A signed change is unlikely for an organization of our size, and the providers whose
+   contracts name such data are cloud platforms where the Team plan's monthly API credits do not
+   apply. The residual risk is accepted and looked at again in the review (7.11).
+3. Condition 3: as the DPO set it.
 
 ### 7.11 Review
 
