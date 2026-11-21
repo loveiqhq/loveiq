@@ -6,28 +6,26 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { miraApi } from "./api";
+import ChecksHomeCard from "./checks/ChecksHomeCard";
+import CoachesCard from "./coaches/CoachesCard";
+import HomeSearch from "./coaches/HomeSearch";
+import PicksCard from "./coaches/PicksCard";
+import GoalsCard from "./goals/GoalsCard";
+import { JournalCard } from "./journal/JournalCard";
+import { RecordingsCard } from "./recordings/Recordings";
+import { NextSessionCard } from "./weekly-session/NextSessionCard";
 
 /**
- * Boards 08 (Home) and 08b (Assessments), MVP: Mira is the only active coach, the LoveIQ test is
- * the only assessment, and the rest is marked "Coming soon". The guide links to its page,
- * /mira/guide (NEXT_PUBLIC_MIRA_GUIDE_URL can point it elsewhere).
+ * Board 08, Home, past the MVP (22 Nov 2026): the greeting and search, the way back into the
+ * chat, then today's habits first (the journal's check-in, goals, the weekly session), what is
+ * picked for the person, their checks, voice sessions and coaches. Every card loads its own data
+ * and owns its loading, empty and error states; this page only orders them, phone first.
  */
 
 type Me = {
-  profile: { name: string | null; email: string; use_assessment: boolean };
+  profile: { name: string | null; email: string };
   chats: Array<{ id: string; title: string; updated_at: string }>;
-  assessment: { archetype: string; takenAt: string; reportPath: string | null } | null;
 };
-
-const COMING_SOON = [
-  {
-    title: "Challenges & goals",
-    desc: "Pick what you want to work on and set small, doable goals.",
-  },
-  { title: "Daily journal", desc: "A 30-second check-in that shows your patterns over time." },
-  { title: "Session recordings", desc: "Talk to Mira by voice and revisit what you discussed." },
-];
-const NEXT_COACHES = ["Libido challenges", "Saying what you want"];
 
 /** 05–11 morning, 12–17 afternoon, otherwise evening (00:44 is not "morning"). */
 export function greeting(hour: number): string {
@@ -55,8 +53,6 @@ export default function MiraHome() {
   // Neutral on the server (its clock is UTC); the browser's hour comes in with the account.
   const [hello, setHello] = useState("Hello");
   const [error, setError] = useState<string | null>(null);
-  const [notified, setNotified] = useState<string[]>([]);
-  const guideUrl = process.env.NEXT_PUBLIC_MIRA_GUIDE_URL || "/mira/guide";
 
   useEffect(() => {
     void miraApi<Me>("/api/mira/me").then((r) => {
@@ -67,31 +63,10 @@ export default function MiraHome() {
     });
   }, [router]);
 
-  async function notify(coach: string) {
-    setError(null);
-    setNotified((n) => [...n, coach]);
-    const r = await miraApi("/api/mira/event", { body: { type: "notify", coach } });
-    if (!r.ok) {
-      setNotified((n) => n.filter((c) => c !== coach));
-      setError(r.data.error ?? "That didn't go through. Please try again.");
-    }
-  }
-
-  async function toggleAssessment(on: boolean) {
-    const setUse = (v: boolean) =>
-      setMe((m) => (m ? { ...m, profile: { ...m.profile, use_assessment: v } } : m));
-    setError(null);
-    setUse(on);
-    const r = await miraApi("/api/mira/me", { method: "PATCH", body: { use_assessment: on } });
-    if (!r.ok) {
-      setUse(!on);
-      setError(r.data.error ?? "Unable to save. Please try again.");
-    }
-  }
+  const [latest, ...earlier] = me?.chats ?? [];
 
   return (
     <MiraAppFrame active="home" email={me?.profile.email} name={me?.profile.name}>
-      {/* Fixed at the bottom: the controls that fail sit far down the page. */}
       {error ? (
         <p
           role="alert"
@@ -100,13 +75,27 @@ export default function MiraHome() {
           {error}
         </p>
       ) : null}
-      <h1 className="font-serif text-[34px] font-medium [overflow-wrap:anywhere] motion-safe:animate-mira-in">
-        {hello}
-        {me?.profile.name ? `, ${me.profile.name}` : ""}
-      </h1>
 
-      <section className="mt-6 rounded-3xl border border-ap-line p-5">
-        <div className="flex flex-wrap items-center gap-3">
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-serif text-[34px] font-medium leading-tight [overflow-wrap:anywhere] motion-safe:animate-mira-in">
+            {hello}
+            {me?.profile.name ? `, ${me.profile.name}` : ""}
+          </h1>
+          <p className="mt-1 text-[15px] text-ap-muted motion-safe:animate-mira-in">
+            Wonderful to see you working on your life.
+          </p>
+        </div>
+        <div className="w-full lg:max-w-[340px]">
+          <HomeSearch />
+        </div>
+      </header>
+
+      <section
+        aria-labelledby="continue-h"
+        className="mt-7 rounded-3xl border border-ap-line p-5 motion-safe:animate-mira-rise"
+      >
+        <div className="flex items-center gap-3">
           <Image
             src="/images/mira/mira.webp"
             alt=""
@@ -115,136 +104,79 @@ export default function MiraHome() {
             unoptimized
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
-          <div className="min-w-[180px] flex-1">
-            <h2 className="font-serif text-[20px] font-semibold">Mira</h2>
-            <p className="text-[13px] text-ap-muted">Body confidence · your coach</p>
-            <p className="mt-1 text-[14px] text-ap-body">
-              Feel more at home in your body, in and out of the bedroom.
+          <div className="min-w-0 flex-1">
+            <h2 id="continue-h" className="font-serif text-[22px] font-medium leading-tight">
+              {latest ? "Continue with Mira" : "Start with Mira"}
+            </h2>
+            <p className="text-[13px] text-ap-muted">
+              Body confidence
+              {latest ? ` · last chat ${when(latest.updated_at).toLowerCase()}` : " · your coach"}
             </p>
           </div>
+        </div>
+        {latest ? (
+          <Link
+            href={`/mira?chat=${latest.id}`}
+            className="mt-4 block rounded-2xl bg-ap-ground px-4 py-3 text-[15px] text-ap-body transition-colors hover:bg-ap-track"
+          >
+            <span className="line-clamp-2 [overflow-wrap:anywhere]">{latest.title}</span>
+          </Link>
+        ) : (
+          <p className="mt-4 text-[15px] text-ap-body">
+            Feel more at home in your body, in and out of the bedroom.
+          </p>
+        )}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {latest ? (
+            <Link
+              href={`/mira?chat=${latest.id}`}
+              className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+            >
+              Open chat
+            </Link>
+          ) : null}
           <Link
             href="/mira"
-            className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+            className={
+              latest
+                ? "inline-flex min-h-[44px] items-center rounded-full border border-ap-line px-5 text-[14px] font-semibold"
+                : "inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+            }
           >
             New chat
           </Link>
         </div>
-        <ul className="mt-4 flex flex-col divide-y divide-ap-line">
-          {me && me.chats.length === 0 ? (
-            <li className="py-3 text-[14px] text-ap-muted">No chats yet. Start one with Mira.</li>
-          ) : null}
-          {me?.chats.slice(0, 5).map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/mira?chat=${c.id}`}
-                className="flex min-h-[44px] items-center justify-between gap-3 py-2 text-[14px]"
-              >
-                <span className="truncate">{c.title}</span>
-                <span className="shrink-0 text-[12px] text-ap-muted">{when(c.updated_at)}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="mt-6 rounded-3xl border border-ap-line p-5">
-        <h2 className="font-serif text-[20px] font-semibold">New coaches coming soon</h2>
-        <p className="mt-1 text-[14px] text-ap-body">
-          Each one focused on a single challenge, like Mira.
-        </p>
-        <ul className="mt-3 flex flex-col gap-2">
-          {NEXT_COACHES.map((coach) => (
-            <li key={coach} className="flex items-center justify-between gap-3 text-[14px]">
-              <span>
-                {coach}{" "}
-                <span className="ml-2 rounded-full bg-ap-track px-2 py-[2px] text-[11px] text-ap-muted">
-                  Soon
-                </span>
-              </span>
-              <button
-                type="button"
-                disabled={notified.includes(coach)}
-                onClick={() => notify(coach)}
-                className="min-h-[40px] rounded-full border border-ap-line px-4 text-[13px] font-semibold disabled:text-ap-muted"
-              >
-                {notified.includes(coach) ? "We'll let you know" : "Notify me"}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section id="assessments" className="mt-6 rounded-3xl border border-ap-line p-5">
-        <h2 className="font-serif text-[20px] font-semibold">Assessments</h2>
-        {me?.assessment ? (
-          <div className="mt-3 flex flex-col gap-3">
-            <p className="text-[15px]">
-              <strong>Sexual Personality</strong> · your result: {me.assessment.archetype}
-              <span className="text-ap-muted">
-                {" "}
-                · taken {new Date(me.assessment.takenAt).toLocaleDateString()}
-              </span>
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {me.assessment.reportPath ? (
-                <a
-                  href={me.assessment.reportPath}
-                  className="inline-flex min-h-[44px] items-center rounded-full border border-ap-line px-5 text-[14px] font-semibold"
+        {earlier.length ? (
+          <ul
+            aria-label="Earlier chats"
+            className="mt-4 flex flex-col divide-y divide-ap-line border-t border-ap-line"
+          >
+            {earlier.slice(0, 3).map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/mira?chat=${c.id}`}
+                  className="flex min-h-[44px] items-center justify-between gap-3 py-2 text-[14px]"
                 >
-                  View report
-                </a>
-              ) : null}
-            </div>
-            <label className="flex items-center justify-between gap-3 text-[14px]">
-              <span>Mira may use this result to tailor her coaching</span>
-              <input
-                type="checkbox"
-                checked={me.profile.use_assessment}
-                onChange={(e) => toggleAssessment(e.target.checked)}
-                className="h-5 w-5 accent-[#795fc8]"
-              />
-            </label>
-          </div>
-        ) : me ? (
-          <div className="mt-3 flex flex-col gap-3">
-            <p className="text-[15px] text-ap-body">
-              <strong className="text-ap-ink">Sexual Personality</strong> · not taken yet · about 9
-              min. Use the same email as your account and your result shows up here.
-            </p>
-            <Link
-              href="/"
-              className="inline-flex min-h-[44px] w-fit items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
-            >
-              Take the assessment
-            </Link>
-          </div>
+                  <span className="truncate">{c.title}</span>
+                  <span className="shrink-0 text-[12px] text-ap-muted">{when(c.updated_at)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         ) : null}
-        <p className="mt-4 text-[12px] text-ap-muted">
-          Results support self-reflection. They are not a diagnosis.
-        </p>
       </section>
 
-      <section className="mt-6 rounded-3xl border border-ap-line p-5">
-        <h2 className="font-serif text-[20px] font-semibold">Guides</h2>
-        <p className="mt-2 text-[15px]">
-          <strong>The body confidence guide</strong>{" "}
-          <a href={guideUrl} className="ml-2 underline">
-            Open the guide
-          </a>
-        </p>
-      </section>
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-3">
-        {COMING_SOON.map((c) => (
-          <div key={c.title} className="rounded-3xl border border-dashed border-ap-line p-5">
-            <span className="rounded-full bg-ap-track px-2 py-[2px] text-[11px] text-ap-muted">
-              Coming soon
-            </span>
-            <h3 className="mt-2 font-serif text-[18px] font-semibold">{c.title}</h3>
-            <p className="mt-1 text-[13px] text-ap-body">{c.desc}</p>
-          </div>
-        ))}
-      </section>
+      <div className="mt-8 flex flex-col gap-8">
+        <JournalCard />
+        <div className="grid gap-6 md:grid-cols-2">
+          <GoalsCard />
+          <NextSessionCard />
+        </div>
+        <PicksCard />
+        <ChecksHomeCard />
+        <RecordingsCard />
+        <CoachesCard />
+      </div>
     </MiraAppFrame>
   );
 }

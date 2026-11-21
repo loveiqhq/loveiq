@@ -30,11 +30,26 @@
  *         - report_share (+ report_share_view via cascade)
  *         - report_price_quote
  *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
- *   - Mira, the AI coach (features/mira): mira_user (by email; the account), its mira_chat +
- *     mira_message, mira_body_check, mira_nudge and mira_event rows (by user_id), and a pending
- *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
+ *   - Mira, the AI coach (features/mira): mira_user (by email; the account, every column: its
+ *     settings too, such as the reply language and the appearance of 21 Nov 2026), its mira_chat +
+ *     mira_message, mira_body_check, mira_check (the self-checks), mira_nudge and mira_event rows (by user_id), and a pending
+ *     mira_sign_in_code (by email). Challenges & goals (22 Nov 2026): its mira_goal and
+ *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Voice
+ *     sessions (mira_voice_session, by user_id; their words are mira_message rows) from 22 Nov
+ *     2026. Also its daily journal, mira_journal_entry (by user_id). Erased with Mira's own account
+ *     deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
+ *     - mira_review (by user_id, from 2026-11-22): their rating and any words with the consent
+ *       to show them; erased with the account (ON DELETE CASCADE), off Mira's pages at once.
+ *     Sign-in & security (22 Nov 2026): the account's mira_passkey (ids, labels, public keys,
+ *     never anything secret), mira_session (its devices: label, approximate city, times) and a
+ *     pending mira_email_change (the new address and when; never the code's hash), by user_id,
+ *     all erased by the account's deletion (ON DELETE CASCADE); and a change another account
+ *     started to this address (by new_email), exported without that account and erased here.
+ *     Weekly sessions (21 Nov 2026): mira_session_slot (by user_id) and its
+ *     mira_session_reminder rows (through the slot); erased by the same deletion (ON DELETE
+ *     CASCADE from mira_user, then from the slot).
  *
  * Skipped (intentional, see above):
  *   - payment, payment_item, payment_webhook_event
@@ -210,6 +225,11 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     `/rest/v1/mira_sign_in_code?email=eq.${encodeURIComponent(emailNorm)}&select=*`,
     "mira-code"
   );
+  // A change of email another account started to this address: the address and when only.
+  result.exportData!.mira_email_change_to_address = await fetchRows(
+    `/rest/v1/mira_email_change?new_email=eq.${encodeURIComponent(emailNorm)}&select=new_email,issued_at`,
+    "mira-email-change"
+  );
   const accounts = await miraAccounts(emailNorm, result);
   if (!accounts) return;
   result.exportData!.mira_user = accounts;
@@ -224,8 +244,36 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       `/rest/v1/mira_message?select=*,mira_chat!inner(user_id)&mira_chat.user_id=${ids}&order=id.asc`,
     ],
     ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_voice_session", `/rest/v1/mira_voice_session?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_check", `/rest/v1/mira_check?user_id=${ids}&select=*&order=id.asc`],
     ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
     ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
+    // Challenges & goals: the goals in the person's words, and the days they ticked them.
+    ["mira_goal", `/rest/v1/mira_goal?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_goal_log", `/rest/v1/mira_goal_log?user_id=${ids}&select=*&order=goal_id.asc,day.asc`],
+    // Ratings and quotes (features/mira/reviews.ts): the rating, words, consent and status.
+    ["mira_review", `/rest/v1/mira_review?user_id=${ids}&select=*&order=id.asc`],
+    // Sign-in & security (22 Nov 2026): public keys and ids only, never a challenge or code hash.
+    [
+      "mira_passkey",
+      `/rest/v1/mira_passkey?user_id=${ids}&select=id,label,public_key,transports,backed_up,counter,created_at,last_used_at&order=created_at.asc,id.asc`,
+    ],
+    [
+      "mira_session",
+      `/rest/v1/mira_session?user_id=${ids}&select=id,method,device,city,created_at,last_seen_at&order=created_at.asc,id.asc`,
+    ],
+    [
+      "mira_email_change",
+      `/rest/v1/mira_email_change?user_id=${ids}&select=new_email,issued_at,attempts&order=user_id.asc`,
+    ],
+    // The daily journal (erased with the account by its ON DELETE CASCADE).
+    ["mira_journal_entry", `/rest/v1/mira_journal_entry?user_id=${ids}&select=*&order=id.asc`],
+    // Weekly sessions: the slot by its account; its reminders carry no user_id, so through it.
+    ["mira_session_slot", `/rest/v1/mira_session_slot?user_id=${ids}&select=*&order=id.asc`],
+    [
+      "mira_session_reminder",
+      `/rest/v1/mira_session_reminder?select=*,mira_session_slot!inner(user_id)&mira_session_slot.user_id=${ids}&order=id.asc`,
+    ],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);
@@ -233,7 +281,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       result.ok = false;
       result.warnings.push(`${table}: could not be read in full; run the export again`);
     }
-    // eslint-disable-next-line security/detect-object-injection -- one of the five names above.
+    // eslint-disable-next-line security/detect-object-injection -- one of the names above.
     result.exportData![table] = rows ?? [];
   }
 }
@@ -247,6 +295,11 @@ async function deleteMira(emailNorm: string, result: DsrResult): Promise<void> {
   result.rowsAffected.mira_sign_in_code = await deleteWhere(
     `/rest/v1/mira_sign_in_code?email=eq.${encodeURIComponent(emailNorm)}`,
     "mira-code",
+    result
+  );
+  result.rowsAffected.mira_email_change = await deleteWhere(
+    `/rest/v1/mira_email_change?new_email=eq.${encodeURIComponent(emailNorm)}`,
+    "mira-email-change",
     result
   );
   const accounts = await miraAccounts(emailNorm, result);

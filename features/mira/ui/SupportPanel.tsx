@@ -26,7 +26,7 @@ export type SupportCountry = {
 };
 const DATA = crisisJson as unknown as { countries: SupportCountry[]; fallback: SupportCountry };
 const digits = (n: string) => n.replace(/[^\d+]/g, "");
-const LINK = "font-semibold text-[#561dbd] underline";
+const LINK = "font-semibold text-ap-link underline";
 
 /** "Shout: text SHOUT to 85258 · 24/7 · website", with call and text links that work on phones. */
 function LineItem({ line: l }: { line: SupportLine }) {
@@ -126,14 +126,17 @@ export function Modal({
 /**
  * "Need support right now?" and the crisis panel. When Mira's safety rule fired, the person's
  * country (from the server) comes first; every other country's lines follow, so nobody is
- * left with the wrong list.
+ * left with the wrong list. `children`, when given, come first under the heading: the words for
+ * the moment that opened it (the mood check's question 9, ui/checks/CheckPage.tsx).
  */
 export function SupportPanel({
   highlight,
   onClose,
+  children,
 }: {
   highlight: Pick<SupportCountry, "code"> | null;
   onClose: () => void;
+  children?: ReactNode;
 }) {
   // A listed country moves to the top; anyone elsewhere sees "Somewhere else" first instead.
   const top = DATA.countries.find((c) => c.code === highlight?.code);
@@ -154,6 +157,7 @@ export function SupportPanel({
       <h2 data-autofocus tabIndex={-1} className="font-serif text-[24px] font-medium outline-none">
         Support right now
       </h2>
+      {children}
       <p className="mt-1 text-[14px] leading-relaxed text-ap-body">
         If you might hurt yourself or are in danger, call your local emergency number now. You can
         also call or text one of these lines.

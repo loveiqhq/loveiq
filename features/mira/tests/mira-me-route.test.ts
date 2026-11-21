@@ -9,6 +9,8 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock("@features/mira/server/nudges", () => ({ isValidTimeZone: () => true }));
+// No under-18 mark (PATCH refuses one: features/mira/tests/mira-settings-server.test.ts).
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
 const signOut = vi.fn().mockResolvedValue({ error: null });
 vi.mock("@features/mira/server/session", () => ({
   getMiraAccount: vi.fn(),
@@ -120,6 +122,17 @@ describe("PATCH /api/mira/me", () => {
       ["nudge_stopped", { reason: null, source: "settings" }],
       ["nudge_resumed", { source: "settings" }],
     ]);
+  });
+
+  it("saves 'Mira may use my check results' with the other 'What Mira may use' switches", async () => {
+    expect((await PATCH(call("PATCH", "", { use_checks: "yes" }))).status).toBe(400);
+    expect((await PATCH(call("PATCH", "", { use_checks: true }))).status).toBe(200);
+    expect(vi.mocked(updateProfile).mock.calls[0]).toEqual(["u1", { use_checks: true }]);
+    expect(logMiraEvent).toHaveBeenCalledWith(
+      "settings_saved",
+      { userId: "u1" },
+      { fields: ["use_checks"] }
+    );
   });
 
   it("doesn't read the profile when the switch isn't sent", async () => {

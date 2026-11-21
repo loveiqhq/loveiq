@@ -4,12 +4,15 @@
  * is more than 12 months old (supabase function mira_forget_old_memory), sign-in codes issued
  * more than a day ago (a code lives an hour; an unused one would keep the address it was sent to
  * for good), KPI events (mira_event) older than 12 months, and the logins Mira's sign-in made for
- * a sign-up that never finished. Production host only. Protected by
+ * a sign-up that never finished. Since 22 Nov 2026 also passkey challenges past their 5 minutes,
+ * email changes waiting more than a day, and signed-in devices not seen for 90 days (they sign in
+ * again; features/mira/server/devices.ts). Production host only. Protected by
  * `Authorization: Bearer ${CRON_SECRET}`.
  */
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { DEVICE_IDLE_DAYS } from "@features/mira/server/devices";
 import { MIRA_CREATED } from "@features/mira/server/sign-in";
 import { deleteAccount } from "@features/mira/server/store";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -157,6 +160,15 @@ export async function GET(request: Request) {
       { method: "DELETE" }
     );
     if (!codes.ok) throw new Error(`old sign-in codes: status ${codes.status}`);
+    const iso = (ms: number) => encodeURIComponent(new Date(ms).toISOString());
+    for (const path of [
+      `/rest/v1/mira_webauthn_challenge?expires_at=lt.${iso(startedAtMs)}`,
+      `/rest/v1/mira_email_change?issued_at=lt.${iso(startedAtMs - DAY_MS)}`,
+      `/rest/v1/mira_session?last_seen_at=lt.${iso(startedAtMs - DEVICE_IDLE_DAYS * DAY_MS)}`,
+    ]) {
+      const res = await supabaseFetch(path, { method: "DELETE" });
+      if (!res.ok) throw new Error(`sign-in leftovers: status ${res.status}`);
+    }
     const events = await forgetOldEvents(isOutOfTime);
     const signUps = await removeUnfinishedSignUps(startedAtMs, isOutOfTime);
     const stoppedEarly = events.stoppedEarly || signUps.stoppedEarly;

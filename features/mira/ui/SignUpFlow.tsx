@@ -6,14 +6,27 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
+import { useMiraLook } from "./MiraLook";
 import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
+import { accountLook } from "./prefs";
+import { PasskeyOffer } from "./account/PasskeyOffer";
+import {
+  autofillWorks,
+  canOfferPasskey,
+  offeredHere,
+  signInWithPasskey,
+  stopPasskeyPrompt,
+  usePasskeysWork,
+} from "./account/passkeys";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
- * (out of the MVP). Sign-in by emailed code or with Google (Apple follows later).
+ * (out of the MVP). Sign-in by emailed code, with Google, or (22 Nov 2026) with a passkey: a
+ * button, and the email field's own suggestions where the browser offers passkeys there. After a
+ * code sign-in on a device that can make one, "Use Face ID next time?" once (account/).
  */
 
-type Step = "account" | "verify" | "about";
+type Step = "account" | "verify" | "passkey" | "about";
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: "account", label: "Account" },
   { key: "verify", label: "Verify" },
@@ -33,12 +46,19 @@ const GOOGLE_ERRORS: Record<string, string> = {
 const DEFAULT_TIME_ZONE = "Europe/Berlin";
 const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
 
-/** The daily nudge comes at the person's own 8:00: a profile still on the default zone gets this browser's. */
-async function keepTimeZone() {
+type SavedLook = { theme?: string | null; text_size?: string | null };
+
+/**
+ * Into an account that exists: the look it saved (Settings › Appearance) comes to this browser,
+ * and the daily nudge comes at the person's own 8:00 (a profile still on the default zone gets
+ * this browser's).
+ */
+async function afterSignIn(adopt: (saved: SavedLook) => void) {
+  const me = await miraApi<{ profile?: SavedLook & { time_zone?: string } }>("/api/mira/me");
+  if (!me.ok || !me.data.profile) return;
+  adopt(me.data.profile);
   const tz = browserTimeZone();
-  if (!tz || tz === DEFAULT_TIME_ZONE) return;
-  const me = await miraApi<{ profile?: { time_zone?: string } }>("/api/mira/me");
-  if (me.ok && me.data.profile?.time_zone === DEFAULT_TIME_ZONE) {
+  if (tz && tz !== DEFAULT_TIME_ZONE && me.data.profile.time_zone === DEFAULT_TIME_ZONE) {
     await miraApi("/api/mira/me", { method: "PATCH", body: { time_zone: tz } });
   }
 }
@@ -60,6 +80,8 @@ export default function SignUpFlow({
   next?: string | null;
 }) {
   const router = useRouter();
+  const { look, adopt } = useMiraLook();
+  const adoptSaved = (saved: SavedLook) => adopt(accountLook(saved, look));
   const backFromGoogle = googleResult === "done";
   const [step, setStep] = useState<Step>(backFromGoogle && needsAbout ? "about" : "account");
   const [email, setEmail] = useState("");
@@ -81,6 +103,11 @@ export default function SignUpFlow({
   const [notice, setNotice] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const shownStep = useRef(step);
+  // Passkeys: shown only where the browser has them; where the offer goes on to.
+  const passkeys = usePasskeysWork();
+  const afterOffer = useRef<"about" | "home">("home");
+  const ticks = useRef({ adult, terms, consent, useAssessment });
+  ticks.current = { adult, terms, consent, useAssessment };
   useReloadWhenRestored();
 
   // A new step moves focus to its heading, so keyboard and screen reader users start there.
@@ -108,7 +135,7 @@ export default function SignUpFlow({
         if (res.ok) local.saveChat(null);
       }
       if (needsAbout) return;
-      await keepTimeZone();
+      await afterSignIn(adoptSaved);
       goHome();
     })();
     // Once, on arrival.
@@ -138,30 +165,92 @@ export default function SignUpFlow({
     setError(null);
     setNotice(null);
     const carry = carriedChat();
-    const res = await miraApi<{ needsProfile?: boolean; chatId?: string | null }>(
-      "/api/mira/auth",
-      {
-        body: {
-          action: "verify",
-          email,
-          code,
-          useAssessment,
-          ...(carry.length ? { carry } : {}),
-        },
-      }
-    );
+    const res = await miraApi<{
+      needsProfile?: boolean;
+      chatId?: string | null;
+      offerPasskey?: boolean;
+    }>("/api/mira/auth", {
+      body: {
+        action: "verify",
+        email,
+        code,
+        useAssessment,
+        ...(carry.length ? { carry } : {}),
+      },
+    });
     if (!res.ok) {
       setBusy(false);
       return setError(res.data.error ?? "That code didn't work. Check it, or send a new one.");
     }
     local.saveChat(null);
+    if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
+      afterOffer.current = res.data.needsProfile ? "about" : "home";
+      setBusy(false);
+      return setStep("passkey");
+    }
     if (res.data.needsProfile) {
       setBusy(false);
       return setStep("about");
     }
-    await keepTimeZone();
+    await afterSignIn(adoptSaved);
     goHome();
   }
+
+  /** After the offer, wherever the sign-in was going. */
+  async function afterPasskeyOffer() {
+    if (afterOffer.current === "about") return setStep("about");
+    setBusy(true);
+    await afterSignIn(adoptSaved);
+    goHome();
+  }
+
+  /**
+   * Signs in with a passkey, from the button or (autofill) the email field's suggestions. Then as
+   * after Google: the chat in this browser comes along, "About you" if they're new, else on.
+   */
+  async function passkeySignIn(autofill: boolean): Promise<void> {
+    if (!autofill) {
+      setBusy(true);
+      setError(null);
+      setNotice(null);
+    }
+    const res = await signInWithPasskey({ autofill, ticks: () => ticks.current });
+    if (!res.ok) {
+      setBusy(false);
+      if (res.error) setError(res.error);
+      // The suggestions stay on offer: a challenge that ran out, or a person who closed the sheet.
+      if (autofill && (res.retry || !res.error)) void passkeySignIn(true);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const carry = carriedChat();
+    if (carry.length) {
+      const moved = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
+      if (moved.ok) local.saveChat(null);
+    }
+    if (res.needsProfile) {
+      setBusy(false);
+      return setStep("about");
+    }
+    await afterSignIn(adoptSaved);
+    goHome();
+  }
+
+  // The email field offers the browser's passkeys while the form shows (conditional mediation).
+  useEffect(() => {
+    if (step !== "account" || backFromGoogle || !passkeys) return;
+    let live = true;
+    void autofillWorks().then((works) => {
+      if (works && live) void passkeySignIn(true);
+    });
+    return () => {
+      live = false;
+      stopPasskeyPrompt();
+    };
+    // passkeySignIn reads state through refs; once per showing of the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, backFromGoogle, passkeys]);
 
   async function saveAbout() {
     setBusy(true);
@@ -187,11 +276,12 @@ export default function SignUpFlow({
     setBusy(true);
     setError(null);
     // This step promises the nudge at "8:00 your time": the zone is kept even when it's skipped.
-    await keepTimeZone();
+    await afterSignIn(adoptSaved);
     goHome();
   }
 
-  const current = STEPS.findIndex((s) => s.key === step);
+  // The offer belongs to the code check: the progress stays on Verify.
+  const current = STEPS.findIndex((s) => s.key === (step === "passkey" ? "verify" : step));
   const emailOk = /^\S+@\S+\.\S+$/.test(email.trim());
   // Google sign-in leaves the page, so the optional ticks and `next` ride along on the link.
   const googleHref =
@@ -231,7 +321,7 @@ export default function SignUpFlow({
             <li>Answers that build on what you&apos;ve shared</li>
             <li>Delete everything anytime, in Settings</li>
           </ul>
-          <p className="border-t border-black/10 pt-4 text-[13px] leading-relaxed text-ap-body">
+          <p className="border-t border-ap-line pt-4 text-[13px] leading-relaxed text-ap-body">
             Emails from us use a neutral sender name and subject line, so nothing about your chats
             shows in your inbox.
           </p>
@@ -289,7 +379,8 @@ export default function SignUpFlow({
                 Email
                 <input
                   type="email"
-                  autoComplete="email"
+                  // "webauthn": where the browser has them, this field also suggests passkeys.
+                  autoComplete="email webauthn"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -363,8 +454,20 @@ export default function SignUpFlow({
                   </a>
                 </>
               ) : null}
+              {passkeys ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void passkeySignIn(false)}
+                  className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:opacity-50"
+                >
+                  <PasskeyIcon />
+                  Sign in with a passkey
+                </button>
+              ) : null}
               <p className="text-[13px] text-ap-muted">
-                No password needed. Already have an account? Use the same form.
+                No password needed. Already have an account? Use the same form
+                {passkeys ? ", or your passkey" : ""}.
               </p>
             </form>
           ) : null}
@@ -428,6 +531,10 @@ export default function SignUpFlow({
                 </button>
               </div>
             </form>
+          ) : null}
+
+          {step === "passkey" ? (
+            <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
           ) : null}
 
           {step === "about" ? (
@@ -520,6 +627,28 @@ export default function SignUpFlow({
         <LegalLinks className="mt-auto max-w-[520px] pt-3" />
       </main>
     </div>
+  );
+}
+
+/** A passkey: a person and a key, the mark passkey managers use. */
+function PasskeyIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="9" cy="7.5" r="3.5" />
+      <path d="M3 20v-1a5 5 0 0 1 5-5h2.5" />
+      <circle cx="17" cy="13.5" r="2.5" />
+      <path d="M17 16v5l1.5-1.2M17 18.5l1.5 1" />
+    </svg>
   );
 }
 

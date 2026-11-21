@@ -1,16 +1,33 @@
 import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { forgetNotify } from "./coaches";
+import { deleteChecks } from "./checks";
 import { MINOR_COOKIE } from "./config";
+import { deleteGoals } from "./goals";
+import { refreshPublicReviews, withdrawReview } from "./reviews";
+import { removePasskeys } from "./passkeys";
+import { forgetJournal } from "./journal";
 import { deleteChats, updateProfile } from "./store";
+import { deleteRecordings } from "./voice";
+import { deleteSlot } from "./weekly-sessions";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
  * (safety.ts parseReply), the person said or clearly showed they are under 18: from then on
  * their browser (a cookie, a year) and their account (mira_user.minor_at) get message G without
  * the model. A crisis message still gets the crisis reply and the lines, because the chat route
- * reads crisis words first. The account's nudges go off, and its chats are deleted and no longer
- * kept; the browser forgets its own chat (MiraChat).
+ * reads crisis words first. The account's nudges go off, its chats are deleted and no longer
+ * kept, and its Settings choices (reply language, appearance) are cleared, as are its self-check results
+ * (server/checks.ts); the browser forgets its
+ * own chat (MiraChat). Its Notify me requests for coming-soon coaches go too (22 Nov 2026), so
+ * nobody under 18 is told a coach for sex is ready.
+ *
+ * Sign-in & security (22 Nov 2026): the account's passkeys go too, like the nudges a way back in,
+ * and none can be added again (the passkey, email and Google-connect routes answer 403). Its
+ * signed-in devices stay, as the stop signs nobody out; Settings can still sign them out. A booked
+ * weekly session is deleted without any email, and the session routes refuse the account
+ * (weekly-sessions.ts).
  */
 
 /** This browser or this account said its person is under 18. */
@@ -39,12 +56,33 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       minor_at: new Date().toISOString(),
       nudges_on: false,
       remember_chats: false,
+      // Settings' choices go too (21 Nov 2026): an under-18 stop keeps nothing it needn't.
+      reply_language: null,
+      theme: null,
+      text_size: null,
     }),
     deleteChats(userId),
+    forgetNotify(userId),
+    // Challenges & goals: their goals and ticks go too.
+    deleteGoals(userId),
+    // Their rating and words go too, approved or not: a minor's words are never shown.
+    withdrawReview(userId, "all"),
+    // Voice sessions (22 Nov 2026): their key points too, not only their words.
+    deleteRecordings(userId),
+    removePasskeys(userId),
+    // Its self-check results too (health data a minor's account must not keep); the check
+    // routes refuse it from then on (403).
+    deleteChecks(userId),
+    // The daily journal goes too, with Mira's reading of it and its reminder (server/journal.ts).
+    forgetJournal(userId),
+    // A weekly session goes too, silently: no cancellation, reminder or invite is ever sent.
+    deleteSlot(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {
       logger.error({ err: r.reason }, "mira: an under-18 stop was not saved in full");
     }
   }
+  // Whatever failed above, the account's mark keeps them off Mira's pages from the next request.
+  refreshPublicReviews();
 }

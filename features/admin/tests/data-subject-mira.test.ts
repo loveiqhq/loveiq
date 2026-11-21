@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("DSAR export covers Mira (Art. 15)", () => {
-  it("exports the account, its chats and messages, body checks, nudges, events and a pending code", async () => {
+  it("exports the account, its chats and messages, body checks, self-checks, nudges, events, rating and a pending code", async () => {
     const result = await exportDataSubject("lea@example.com");
     expect(result.ok).toBe(true);
     expect(result.exportData?.mira_user).toEqual([ACCOUNT]);
@@ -55,8 +55,10 @@ describe("DSAR export covers Mira (Art. 15)", () => {
       "mira_chat",
       "mira_message",
       "mira_body_check",
+      "mira_check",
       "mira_nudge",
       "mira_event",
+      "mira_review", // the rating, and any words with their consent and status
     ]) {
       expect(result.exportData?.[table]).toEqual([{ from: `/rest/v1/${table}` }]);
     }
@@ -67,6 +69,74 @@ describe("DSAR export covers Mira (Art. 15)", () => {
       `/rest/v1/mira_message?select=*,mira_chat!inner(user_id)&mira_chat.user_id=in.(${UID})&order=id.asc`
     );
     expect(paths).toContain(`/rest/v1/mira_event?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(`/rest/v1/mira_check?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(`/rest/v1/mira_review?user_id=in.(${UID})&select=*&order=id.asc`);
+  });
+
+  it("exports the goals in the person's words and the days they ticked them (Challenges & goals)", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    expect(result.exportData?.mira_goal).toEqual([{ from: "/rest/v1/mira_goal" }]);
+    expect(result.exportData?.mira_goal_log).toEqual([{ from: "/rest/v1/mira_goal_log" }]);
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    expect(paths).toContain(`/rest/v1/mira_goal?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(
+      `/rest/v1/mira_goal_log?user_id=in.(${UID})&select=*&order=goal_id.asc,day.asc`
+    );
+  });
+
+  it("exports the account's passkeys, devices and pending email change, never a secret (22 Nov 2026)", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    for (const table of ["mira_passkey", "mira_session", "mira_email_change"]) {
+      expect(result.exportData?.[table], table).toEqual([{ from: `/rest/v1/${table}` }]);
+    }
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    const select = (table: string) =>
+      new URL(
+        `http://x${paths.find((p) => p.startsWith(`/rest/v1/${table}?user_id=in.(${UID})`))!}`
+      ).searchParams
+        .get("select")!
+        .split(",");
+    expect(select("mira_passkey")).toEqual(
+      expect.arrayContaining(["id", "label", "public_key", "created_at", "last_used_at"])
+    );
+    expect(select("mira_session")).toEqual(
+      expect.arrayContaining(["id", "device", "city", "created_at", "last_seen_at"])
+    );
+    expect(select("mira_email_change")).toEqual(["new_email", "issued_at", "attempts"]);
+    for (const table of ["mira_passkey", "mira_session", "mira_email_change"]) {
+      expect(select(table), table).not.toContain("*");
+      expect(select(table), table).not.toContain("code_hash");
+      expect(select(table), table).not.toContain("user_id");
+    }
+    // Nothing of a ceremony's challenge, ever.
+    expect(paths.some((p) => p.includes("mira_webauthn_challenge"))).toBe(false);
+    // A change another account started to this address: the address and when, nothing of them.
+    expect(fetched()).toContainEqual([
+      "GET",
+      "/rest/v1/mira_email_change?new_email=eq.lea%40example.com&select=new_email,issued_at",
+    ]);
+  });
+
+  it("exports the daily journal too: every entry, by the account's id", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    expect(result.exportData?.mira_journal_entry).toEqual([
+      { from: "/rest/v1/mira_journal_entry" },
+    ]);
+    expect(db.all.mock.calls.map(([p]) => p)).toContain(
+      `/rest/v1/mira_journal_entry?user_id=in.(${UID})&select=*&order=id.asc`
+    );
+  });
+
+  it("exports the weekly session: its slot by the account, its reminders through the slot", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    for (const table of ["mira_session_slot", "mira_session_reminder"]) {
+      expect(result.exportData?.[table]).toEqual([{ from: `/rest/v1/${table}` }]);
+    }
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    expect(paths).toContain(`/rest/v1/mira_session_slot?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(
+      `/rest/v1/mira_session_reminder?select=*,mira_session_slot!inner(user_id)&mira_session_slot.user_id=in.(${UID})&order=id.asc`
+    );
   });
 
   it("reads nothing more when there is no Mira account", async () => {
@@ -96,11 +166,15 @@ describe("DSAR delete covers Mira (Art. 17)", () => {
     expect(deleteAccount).toHaveBeenCalledWith(ACCOUNT);
     expect(result.rowsAffected.mira_user).toBe(1);
     expect(result.rowsAffected.mira_sign_in_code).toBe(1);
-    // Nothing of Mira's is deleted around that path (it keeps staff and Jarvis logins).
+    // Nothing of Mira's is deleted around that path (it keeps staff and Jarvis logins): the
+    // account's passkeys, devices and pending change go with it (ON DELETE CASCADE). Only a
+    // change another account started to this address is erased here.
     const miraDeletes = fetched().filter(
       ([m, p]) => m === "DELETE" && /\/mira_(?!sign_in_code)/.test(p)
     );
-    expect(miraDeletes).toEqual([]);
+    expect(miraDeletes).toEqual([
+      ["DELETE", "/rest/v1/mira_email_change?new_email=eq.lea%40example.com"],
+    ]);
   });
 
   it("reports a partial erasure when an account could not be deleted", async () => {
@@ -121,5 +195,18 @@ describe("DSAR delete covers Mira (Art. 17)", () => {
     expect(result.ok).toBe(false);
     expect(deleteAccount).not.toHaveBeenCalled();
     expect(result.warnings).toContain("mira_user: could not be read; run the request again");
+  });
+});
+
+// Settings, 21 Nov 2026 (20261122060000_mira_settings.sql): the account's own columns.
+describe("DSAR export of Mira's Settings choices", () => {
+  it("reads every column of the account, so the reply language and appearance go out too", async () => {
+    accounts = [{ ...ACCOUNT, reply_language: "de", theme: "dark", text_size: "large" }];
+    const result = await exportDataSubject("lea@example.com");
+    expect(result.exportData?.mira_user).toEqual([
+      { ...ACCOUNT, reply_language: "de", theme: "dark", text_size: "large" },
+    ]);
+    const read = fetched().find(([, path]) => String(path).startsWith("/rest/v1/mira_user"));
+    expect(String(read?.[1])).toContain("select=*");
   });
 });

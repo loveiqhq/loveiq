@@ -130,6 +130,20 @@ describe("POST /api/mira/event", () => {
     ]);
   });
 
+  // Settings (21 Nov 2026): the account's own changes are logged by PATCH /api/mira/me, so the
+  // browser can't send those (the theme is chosen in Settings only).
+  it("never takes Settings changes from the browser", async () => {
+    for (const name of [
+      "theme_changed",
+      "text_size_changed",
+      "reply_language_changed",
+      "settings_saved",
+    ]) {
+      expect((await post({ type: "track", name })).status).toBe(400);
+    }
+    expect(vi.mocked(logMiraEvent)).not.toHaveBeenCalled();
+  });
+
   it("logs the consent with its wording's version, and only so", async () => {
     await post({ type: "consent", version: "mira-2026-11-21-2", shareRated: true });
     expect(vi.mocked(logMiraEvent).mock.calls).toEqual([

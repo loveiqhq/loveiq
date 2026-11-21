@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { ChatSlotPicker } from "./weekly-session/SlotPicker";
 
 type Question = (typeof miraConfig.intakeQuestions)[number];
 
@@ -57,6 +58,12 @@ export function IntakeAnswers({
         <div>{skip}</div>
       </div>
     );
+  }
+
+  // The weekly session: a time picker that books it (signed in) or invites to sign up.
+  if (q.answerType === "slots") {
+    const notReady = q.options.find((o) => !/\d/.test(o)) ?? "Not ready yet";
+    return <ChatSlotPicker notReady={notReady} onAnswer={onAnswer} onSkip={onSkip} />;
   }
 
   if (q.answerType === "multi") {

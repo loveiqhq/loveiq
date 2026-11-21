@@ -147,7 +147,17 @@ export type ParsedReply = {
   topic: string | null;
   /** The person said or clearly showed they are under 18 (rail 15). */
   minor: boolean;
+  /** A small goal Mira offers ([[GOAL:…]]), shown as "Add as a goal"; absent when none. */
+  goal?: string;
 };
+
+/**
+ * Challenges & goals (22 Nov 2026): [[GOAL:the step]] on a reply that offers one, in at most
+ * GOAL_MAX_CHARS. Read on its own, as its text is longer than the other markers may be, and
+ * removed whatever its length; a longer one is dropped rather than cut.
+ */
+const GOAL_MARKER = /\[\[\s*goal\s*:([^[\]\n]*)\]\]/gi;
+export const GOAL_MAX_CHARS = 80;
 
 const INTAKE_IDS = new Set(miraConfig.intakeQuestions.map((q) => q.id));
 const TOPIC_IDS = new Set(miraConfig.topics.map((t) => t.id));
@@ -174,6 +184,8 @@ export function sourceLabel(card: EvidenceCard): string {
 
 /** Strip the markers and the sources line; turn the cited ids into source tags. */
 export function parseReply(raw: string): ParsedReply {
+  const [goal] = [...raw.matchAll(GOAL_MARKER)].map((m) => m[1]!.replace(/\s+/g, " ").trim());
+  raw = raw.replace(GOAL_MARKER, "");
   let ask: string | null = null;
   let topic: string | null = null;
   let refer = false;
@@ -228,5 +240,6 @@ export function parseReply(raw: string): ParsedReply {
     refer,
     topic,
     minor,
+    ...(goal && goal.length <= GOAL_MAX_CHARS && !crisis && !minor ? { goal } : {}),
   };
 }

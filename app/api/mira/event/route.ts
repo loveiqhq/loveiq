@@ -8,21 +8,29 @@
  *   { type: "consent", version }  the first-message consent, logged as consent_given with its
  *       wording's version
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
- *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach
+ *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach:
+ *       its id, or its challenge as Home sent it before 22 Nov 2026, logged as notify_me with the
+ *       id (one data model); an account only, or we couldn't tell them when the coach is ready
  *   { type: "nps", score }        "How likely are you to recommend Mira to a friend?" 0 to 10,
  *       asked after the 3rd conversation and then monthly (Marcus's MVP success board); null is
  *       "Not now", so the response rate is known too
+ *   { type: "coaches", name, detail? }  the roster, "Find my challenge", Home's picks and search,
+ *       and the guide's "Ask Mira about this" (features/mira/content/coaches.ts): each name with
+ *       its own detail, an id or a number, never words (22 Nov 2026)
  *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
  *       sees), the body check offered and started (its finish is the server's), the "Keep this
- *       chat" card shown, kept or put off; only these names, so the server's own KPI events
- *       can't be sent
+ *       chat" card shown, kept or put off, the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
+ *       is the server's), a self-check started and the support lines its mood check opened;
+ *       only these names, so the server's own KPI events can't be sent
  *
  * At most DAILY_EVENTS a day per person (account or browser id) and six times that per network
  * (a cleared cookie is a new id), so mira_event can't be flooded or the counts inflated.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { COACH_EVENTS, coachEventProps, coachIdFor, COACHES } from "@features/mira/content/coaches";
 import { anonId } from "@features/mira/server/anon";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, rateMessage } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -32,6 +40,8 @@ export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_EVENTS = 300;
+/** Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. */
+const MINOR_REFUSED = () => NextResponse.json({ error: "Mira isn't available." }, { status: 403 });
 
 const schema = z.discriminatedUnion("type", [
   z.object({
@@ -47,6 +57,11 @@ const schema = z.discriminatedUnion("type", [
     mayEmail: z.boolean(),
   }),
   z.object({ type: z.literal("notify"), coach: z.string().max(60) }),
+  z.object({
+    type: z.literal("coaches"),
+    name: z.enum(COACH_EVENTS),
+    detail: z.string().max(24).optional(),
+  }),
   z.object({ type: z.literal("nps"), score: z.number().int().min(0).max(10).nullable() }),
   z.object({
     type: z.literal("consent"),
@@ -65,6 +80,17 @@ const schema = z.discriminatedUnion("type", [
       "style_tip_shown",
       "style_tip_opened",
       "style_saved",
+      // The thank-you ask for a rating (features/mira/ui/reviews/ReviewAsk.tsx): shown, put off.
+      "review_prompt_shown",
+      "review_prompt_not_now",
+      // Sign-in & security (22 Nov 2026): the passkey offer after a code sign-in was shown.
+      "passkey_offer_shown",
+      // The self-checks (22 Nov 2026): a check started, and the support lines its mood check's
+      // question 9 opened (the finish is the server's, app/api/mira/checks).
+      "anxiety_check_started",
+      "mood_check_started",
+      "loneliness_check_started",
+      "check_support_shown",
     ]),
   }),
 ]);
@@ -123,9 +149,23 @@ export async function POST(request: Request) {
         email: body.mayEmail && account ? account.email : null,
       });
       break;
-    case "notify":
-      logMiraEvent("notify_me", who, { coach: body.coach });
+    case "notify": {
+      if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+      if (await isMinor(account.id)) return MINOR_REFUSED();
+      const coach = coachIdFor(body.coach);
+      if (!coach || COACHES.find((c) => c.id === coach)?.live) {
+        return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+      }
+      logMiraEvent("notify_me", who, { coach });
       break;
+    }
+    case "coaches": {
+      if (await isMinor(account?.id ?? null)) return MINOR_REFUSED();
+      const props = coachEventProps(body.name, body.detail);
+      if (!props) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+      logMiraEvent(body.name, who, props);
+      break;
+    }
     case "nps":
       logMiraEvent("nps", who, { score: body.score });
       break;

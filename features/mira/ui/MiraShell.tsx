@@ -23,7 +23,8 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
           : undefined
       }
     >
-      <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink sm:text-[22px]">
+      {/* A logo keeps its size whatever the text size (--mira-fs, Settings › Appearance). */}
+      <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink [--mira-fs:1] sm:text-[22px]">
         <span>
           Applied{" "}
           <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
@@ -40,13 +41,14 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
 
 /**
  * The soft coral, orchid and lavender cloud behind Mira's welcome (board V2): it blooms in, then
- * breathes slowly. Still for anyone who asks for less motion.
+ * breathes slowly. Still for anyone who asks for less motion. On the dark theme it glows a little
+ * stronger (--mira-cloud, tailwind.config.js), or the deep plum would swallow it.
  */
 export function MiraCloud({ className = "" }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,0.14),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,0.16),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,0.18),rgba(149,142,246,0)_100%)] blur-[72px] motion-safe:animate-mira-cloud sm:h-[560px] sm:w-[1000px] ${className}`}
+      className={`pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,calc(0.14*var(--mira-cloud,1))),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,calc(0.16*var(--mira-cloud,1))),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,calc(0.18*var(--mira-cloud,1))),rgba(149,142,246,0)_100%)] blur-[72px] motion-safe:animate-mira-cloud sm:h-[560px] sm:w-[1000px] ${className}`}
     />
   );
 }
@@ -78,13 +80,23 @@ const LEGAL_LINKS: Array<[string, string]> = [
 
 /**
  * On every Mira page: the imprint must be one click away, and Google's sign-in review looks for
- * the privacy link on the app's home page.
+ * the privacy link on the app's home page. (The theme is chosen in Settings; System until then.)
  */
 export function LegalLinks({ className = "" }: { className?: string }) {
   return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-x-4 border-t border-ap-line pt-3 ${className}`}
+    >
+      <LegalNav />
+    </div>
+  );
+}
+
+function LegalNav() {
+  return (
     <nav
       aria-label="Legal"
-      className={`flex flex-wrap items-center gap-x-4 border-t border-ap-line pt-3 text-[12px] text-ap-muted ${className}`}
+      className="flex flex-wrap items-center gap-x-4 text-[12px] text-ap-muted"
     >
       <span className="inline-flex min-h-[32px] items-center">Applied Psychometrics</span>
       {LEGAL_LINKS.map(([href, label]) => (
@@ -119,7 +131,7 @@ export function PrimaryButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white transition-[transform,background-color] hover:bg-[#2b2338] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
+      className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
     >
       {children}
     </button>

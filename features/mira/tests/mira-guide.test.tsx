@@ -157,13 +157,12 @@ describe("The guide page", () => {
 });
 
 describe("Wired in", () => {
-  it("Home's guide tile opens /mira/guide, no longer coming soon", () => {
+  it("the menu on every signed-in page opens /mira/guide", () => {
     vi.stubEnv("NEXT_PUBLIC_MIRA_GUIDE_URL", "");
     const home = dom(<MiraHome />);
     vi.unstubAllEnvs();
-    const link = [...home.querySelectorAll("a")].find((a) => a.textContent === "Open the guide");
-    expect(link?.getAttribute("href")).toBe("/mira/guide");
-    expect(link?.closest("section")?.textContent).not.toContain("Coming soon");
+    const nav = home.querySelector('nav[aria-label="Mira"]')!;
+    expect(nav.querySelector('a[href="/mira/guide"]')).not.toBeNull();
   });
 
   it("Mira knows the guide is published at /mira/guide and can give its steps", () => {

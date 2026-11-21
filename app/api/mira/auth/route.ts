@@ -5,9 +5,11 @@
  *       sign-in code (`website` is a hidden field only a bot fills)
  *   { action: "verify", email, code, carry?, useAssessment? }  → signs in (Mira's
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
- *       true), and moves the anonymous chat into the account ("your current chat comes with you")
+ *       true), records the device (devices.ts; Mira honours only recorded sessions), moves the
+ *       anonymous chat into the account ("your current chat comes with you"), and says whether to
+ *       offer "Use Face ID next time?" (`offerPasskey`: never to staff, under-18s or at 10 passkeys)
  *   { action: "carry", carry } → after Google sign-in, moves the anonymous chat into the account
- *   { action: "logout" }
+ *   { action: "logout" }  → also forgets this device (its row in Settings › Devices)
  *
  * "start" answers the same whether or not the address is new, so it can't be used to learn who
  * has an account; and the same when it sends nothing (the hidden `website` field filled, or the
@@ -16,6 +18,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CONSENT_VERSION, HISTORY_TURNS, MAX_MESSAGE_CHARS } from "@features/mira/server/config";
+import { recordSession, signOutDevices } from "@features/mira/server/devices";
+import { isStaffEmail } from "@features/mira/server/google";
+import { isMinor } from "@features/mira/server/minor";
+import { MAX_PASSKEYS, listPasskeys } from "@features/mira/server/passkeys";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
 import { SIGN_IN_CODE, addressKey, sendSignInCode } from "@features/mira/server/sign-in";
 import {
@@ -159,6 +165,10 @@ export async function POST(request: Request) {
   const body = parsed.data;
 
   if (body.action === "logout") {
+    const account = await getMiraAccount();
+    if (account?.session) {
+      await signOutDevices(account.id, account.session.id).catch(() => undefined);
+    }
     const supabase = await createMiraSupabase();
     await supabase.auth.signOut({ scope: "local" });
     return NextResponse.json({ success: true });
@@ -304,9 +314,10 @@ export async function POST(request: Request) {
     profile = await upsertProfileAtSignIn(account.id, account.email, CONSENT_VERSION, {
       useAssessment: body.useAssessment,
     });
+    await recordSession(data.session?.access_token, account.id, "email", request.headers);
   } catch (err) {
-    // Signed in without a profile is a dead end (/api/mira/me answers 401) and the code is
-    // used up, so sign out again: the next code starts clean.
+    // Signed in without a profile (or a recorded device) is a dead end (/api/mira/me answers
+    // 401) and the code is used up, so sign out again: the next code starts clean.
     logger.error({ err }, "mira: the profile was not saved at sign-in");
     await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
     return NextResponse.json(
@@ -322,10 +333,20 @@ export async function POST(request: Request) {
       { anonId: await anonId(), userId: account.id },
       { carried: carry.length, method: "email" }
     );
+    // Only an offer: a failed read just doesn't make it.
+    const offerPasskey = await Promise.all([
+      isStaffEmail(account.email),
+      isMinor(account.id),
+      listPasskeys(account.id),
+    ]).then(
+      ([staff, minor, keys]) => !staff && !minor && keys.length < MAX_PASSKEYS,
+      () => false
+    );
     return NextResponse.json({
       success: true,
       needsProfile: !profile?.name,
       chatId: chatId === "limited" ? null : chatId,
+      offerPasskey,
     });
   } catch (err) {
     logger.error({ err }, "mira: the chat was not carried in at sign-in");

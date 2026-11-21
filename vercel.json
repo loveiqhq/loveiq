@@ -133,6 +133,10 @@
     {
       "path": "/api/cron/mira-memory",
       "schedule": "40 3 * * *"
+    },
+    {
+      "path": "/api/cron/mira-session-reminders",
+      "schedule": "2,17,32,47 * * * *"
     }
   ],
   "functions": {
@@ -249,6 +253,9 @@
     },
     "app/api/cron/mira-nudges/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/mira-session-reminders/route.ts": {
+      "maxDuration": 60
     }
   }
 }

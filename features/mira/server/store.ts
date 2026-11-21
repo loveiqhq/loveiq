@@ -4,6 +4,8 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 import { fromTeamBrowser, requestExtras } from "./attribution";
 import { isStaffEmail } from "./google";
+import type { CoachEvent } from "@features/mira/content/coaches";
+import { refreshPublicReviews } from "./reviews";
 import type { CitedSource } from "./safety";
 import type { CoachingStyle } from "./prompt";
 
@@ -27,6 +29,13 @@ export type MiraProfile = {
   nudges_on: boolean;
   nudge_time: "08:00" | "19:00" | "21:30";
   time_zone: string;
+  /**
+   * Settings, 21 Nov 2026 (20261122060000_mira_settings.sql): the language Mira replies in (null:
+   * the person's own), and how Mira looks (null: never chosen, this browser's own stays).
+   */
+  reply_language: string | null;
+  theme: "light" | "dark" | "system" | null;
+  text_size: "small" | "default" | "large" | null;
 };
 
 export type ChatSummary = { id: string; title: string; updated_at: string };
@@ -50,7 +59,7 @@ async function rows<T>(path: string): Promise<T[]> {
 }
 
 const PROFILE_COLS =
-  "id,email,name,country,gender,style,remember_chats,use_assessment,consent_at,consent_version,nudges_on,nudge_time,time_zone";
+  "id,email,name,country,gender,style,remember_chats,use_assessment,consent_at,consent_version,nudges_on,nudge_time,time_zone,reply_language,theme,text_size";
 
 export async function getProfile(id: string): Promise<MiraProfile | null> {
   const found = await rows<MiraProfile>(
@@ -102,7 +111,16 @@ export type ProfilePatch = Partial<
     | "nudges_on"
     | "nudge_time"
     | "time_zone"
-  > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null; minor_at: string }
+    | "reply_language"
+    | "theme"
+    | "text_size"
+  > & {
+    nudges_stopped_at: string | null;
+    nudge_stop_reason: string | null;
+    minor_at: string;
+    /** "Mira may use my check results" (20261122090000_mira_checks.sql); written, not read here. */
+    use_checks: boolean;
+  } & { is_team: true; google_connected_at: string | null } // Sign-in & security (22 Nov 2026): a team browser's passkey sign-in, and Google's confirmation.
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<void> {
@@ -158,6 +176,8 @@ export async function addMessages(
     content: string;
     sources?: CitedSource[] | null;
     ask?: string | null;
+    /** A spoken turn's voice session (features/mira/server/voice.ts); only sent when there is one. */
+    voiceSession?: string | null;
   }>
 ): Promise<number[]> {
   const res = await supabaseFetch("/rest/v1/mira_message?select=id", {
@@ -170,6 +190,7 @@ export async function addMessages(
         content: m.content,
         sources: m.sources ?? null,
         ask: m.ask ?? null,
+        ...(m.voiceSession ? { voice_session: m.voiceSession } : {}),
       }))
     ),
   });
@@ -257,7 +278,7 @@ export async function deleteChats(userId: string): Promise<void> {
  * True when the login is also an admin panel or Jarvis login (admin_users, or an active member
  * of Jarvis's people registry), or when that can't be checked.
  */
-async function sharesLogin(email: string): Promise<boolean> {
+export async function sharesLogin(email: string): Promise<boolean> {
   if (await isStaffEmail(email)) return true; // fails closed itself
   return memberByEmail(email).then(
     (member) => member !== null,
@@ -279,6 +300,8 @@ export async function deleteAccount(account: { id: string; email: string }): Pro
     ? await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(account.id)}`, { method: "DELETE" })
     : await supabaseFetch(`/auth/v1/admin/users/${enc(account.id)}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`mira account delete failed (${res.status})`);
+  // Its rating and words went with it (ON DELETE CASCADE): off Mira's pages from the next request.
+  refreshPublicReviews();
 }
 
 export type MiraEventName =
@@ -316,7 +339,68 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Coaches, Home's picks and search, the guide's "Ask Mira about this" (22 Nov 2026).
+  | CoachEvent
+  // Settings, 21 Nov 2026: a changed appearance, text size or reply language (its id as `value`).
+  | "theme_changed"
+  | "text_size_changed"
+  | "reply_language_changed"
+  // Challenges & goals (22 Nov 2026): counts only, never a goal's words.
+  | "goal_suggested"
+  | "goal_set"
+  | "goal_logged"
+  | "goal_completed"
+  | "goal_archived"
+  | "goal_deleted"
+  | "goals_deleted"
+  // Ratings and quotes (features/mira/reviews.ts, 22 Nov 2026): the ask shown and put off in the
+  // chat, a rating given ({ words }: with words for others) and taken back ({ what }). Never stars
+  // or words: a rating taken back must leave nothing behind.
+  | "review_prompt_shown"
+  | "review_prompt_not_now"
+  | "review_given"
+  | "review_withdrawn"
+  // Talking to Mira by voice (22 Nov 2026, server/voice.ts): ids and numbers only.
+  | "voice_session_ended"
+  | "voice_points_opened"
+  // Sign-in & security (22 Nov 2026): passkeys, the "Use Face ID next time?" offer, devices
+  // signed out, email changes and Google connected (signup_completed's method "passkey" too).
+  | "passkey_offer_shown"
+  | "passkey_offer_accepted"
+  | "passkey_added"
+  | "passkey_removed"
+  | "device_signed_out"
+  | "signed_out_everywhere"
+  | "email_changed"
+  | "google_connected"
+  // The self-checks (22 Nov 2026, content/checks.ts): started (the browser), finished (the
+  // server: scale and retake only), the support lines opened by the mood check's question 9, and
+  // "Delete my check results". Never answers, scores or bands.
+  | "anxiety_check_started"
+  | "anxiety_check_done"
+  | "mood_check_started"
+  | "mood_check_done"
+  | "loneliness_check_started"
+  | "loneliness_check_done"
+  | "check_support_shown"
+  | "checks_deleted"
+  // The daily journal (server/journal.ts): ids and numbers only, never ratings or words.
+  | "journal_saved"
+  | "journal_deleted"
+  | "journal_share_set"
+  | "journal_reminder_set"
+  | "journal_reminder_sent"
+  | "journal_reminder_stopped"
+  // Weekly sessions (21 Nov 2026, server/weekly-sessions.ts): booked, moved, reminders paused or
+  // back on, cancelled, a reminder sent, a reminded session opened within 30 minutes of its start.
+  | "session_scheduled"
+  | "session_changed"
+  | "session_paused"
+  | "session_resumed"
+  | "session_cancelled"
+  | "session_reminder_sent"
+  | "session_attended";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

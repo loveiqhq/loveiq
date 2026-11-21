@@ -833,6 +833,7 @@ describe("fetchMira", () => {
       if (path.startsWith("/rest/v1/app_user")) return [{ email: "a+b@example.com" }];
       if (path.startsWith("/rest/v1/mira_nudge")) return [];
       if (path.startsWith("/rest/v1/mira_body_check")) return [];
+      if (path.startsWith("/rest/v1/mira_event?name=in.(voice_")) return [];
       return null;
     });
     const out = await fetchMira();
@@ -864,6 +865,43 @@ describe("fetchMira", () => {
       "style_saved",
       "reply_declined",
       "minor_stop",
+      // Coaches & picks (22 Nov 2026, mira-coaches.ts).
+      "notify_me",
+      "coaches_viewed",
+      "finder_started",
+      "finder_done",
+      "picks_shown",
+      "pick_clicked",
+      "guide_ask",
+      "search_empty",
+      // Settings (21 Nov 2026).
+      "theme_changed",
+      "text_size_changed",
+      "reply_language_changed",
+      "goal_suggested",
+      // Ratings and quotes (mira-ratings.ts).
+      "review_prompt_shown",
+      "review_prompt_not_now",
+      "review_given",
+      "review_withdrawn",
+      // Sign-in & security (22 Nov 2026).
+      "passkey_offer_shown",
+      "passkey_offer_accepted",
+      "signed_out_everywhere",
+      "email_changed",
+      // The self-checks (22 Nov 2026).
+      "anxiety_check_started",
+      "anxiety_check_done",
+      "mood_check_started",
+      "mood_check_done",
+      "loneliness_check_started",
+      "loneliness_check_done",
+      "check_support_shown",
+      // Weekly sessions (21 Nov 2026).
+      "session_scheduled",
+      "session_cancelled",
+      "session_reminder_sent",
+      "session_attended",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
@@ -891,7 +929,11 @@ describe("fetchMira", () => {
     });
     expect(out.events[150_001]).toMatchObject({ name: "chat_started", detail: "3" });
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
-    expect(mockFetchAllRows.mock.calls.some(([p]) => String(p).includes("mira_event"))).toBe(false);
+    // The counted events, that is: the voice sessions (one row each) are read with their props.
+    const paged = mockFetchAllRows.mock.calls.map(([p]) => String(p));
+    expect(paged.some((p) => p.includes("mira_event") && !p.includes("name=in.(voice_"))).toBe(
+      false
+    );
   });
 
   it("counts exactly what it counted from the rows themselves", async () => {

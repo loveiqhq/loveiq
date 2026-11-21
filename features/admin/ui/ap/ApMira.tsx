@@ -9,6 +9,9 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
+import ApMiraCoaches from "./ApMiraCoaches";
+import { RatingsCard } from "./ApMiraRatings";
+import { ApMiraJournal } from "./ApMiraJournal";
 import { bucketTitles } from "./hover";
 import {
   Bar,
@@ -234,6 +237,7 @@ function Overview({ data }: { data: Data }) {
       <Funnel data={data} />
       <KeepCard data={data} />
       <StyleTipCard data={data} />
+      <SignInCard data={data} />
       <Sources data={data} />
     </Board>
   );
@@ -283,6 +287,78 @@ function StyleTipCard({ data }: { data: Data }) {
       ]}
       note="The tip shows once per browser, after one of Mira’s replies. People: an account, or a browser before it signs in. Saved styles count from either the tip or the header button. Recorded from 21 Nov 2026."
     />
+  );
+}
+
+/**
+ * "Sign-in" (22 Nov 2026): how people sign in (code, Google, passkey), how many accounts have a
+ * passkey, how the "Use Face ID next time?" offer lands, and the account-safety moments.
+ */
+function SignInCard({ data }: { data: Data }) {
+  const { byMethod, passkeys, offer, signedOutEverywhere, emailChanges } = data.signIn;
+  const all = byMethod.email + byMethod.google + byMethod.passkey;
+  const of = `of ${count(all)} sign-ins in the range`;
+  return (
+    <Card id="sign-in" labelledBy="h-sign-in">
+      <SectionHead
+        id="h-sign-in"
+        level={3}
+        title="Sign-in"
+        description="How people sign in, how many use a passkey, and how often they sign out everywhere or change their email."
+      />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{ label: "With an emailed code", unit: "count", value: byMethod.email, note: of }}
+        />
+        <StatBox stat={{ label: "With Google", unit: "count", value: byMethod.google, note: of }} />
+        <StatBox
+          stat={{ label: "With a passkey", unit: "count", value: byMethod.passkey, note: of }}
+        />
+        <StatBox
+          stat={{
+            label: "Accounts with a passkey",
+            unit: "pct",
+            value: passkeys ? share(passkeys.accounts, passkeys.of) : null,
+            note: passkeys
+              ? `${count(passkeys.accounts)} of ${count(passkeys.of)} accounts, today`
+              : "Not measured: the passkeys could not be read",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "“Use Face ID next time?” accepted",
+            unit: "pct",
+            value: share(offer.accepted, offer.shown),
+            note: `${count(offer.accepted)} of ${count(offer.shown)} times shown`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Signed out everywhere",
+            unit: "count",
+            value: signedOutEverywhere,
+            note: "times, in the range",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Changed their email",
+            unit: "count",
+            value: emailChanges,
+            note: "in the range",
+          }}
+        />
+      </div>
+      <p className={NOTE}>
+        Every sign-in counts, a returning person&rsquo;s too, so these are sign-ins, not people.
+        &ldquo;Use Face ID next time?&rdquo; (Touch ID, Windows Hello, a fingerprint, by device) is
+        offered once per browser after a code sign-in on a device that can make a passkey; accepted
+        means a passkey was added from it. The team is left out. Recorded from 22 Nov 2026.
+      </p>
+    </Card>
   );
 }
 
@@ -639,7 +715,75 @@ function Engagement({ data }: { data: Data }) {
           who wrote to Mira within 48 hours of it.
         </p>
       </Card>
+      <ApMiraCoaches k={data.coaches} />
+      <GoalsCard data={data} />
+      <VoiceCard data={data} />
+      {/* The daily journal's card (features/admin/server/ap/mira-journal.ts). */}
+      <ApMiraJournal journal={data.journal} />
+      <WeeklySessions data={data} />
     </Board>
+  );
+}
+
+/** Talking to Mira by voice (22 Nov 2026): sessions, people, length, key points read, on-device. */
+function VoiceCard({ data }: { data: Data }) {
+  const v = data.voice;
+  return (
+    <Card id="voice" labelledBy="h-voice">
+      <SectionHead
+        id="h-voice"
+        level={3}
+        title="Voice"
+        description="Talking to Mira out loud: how many sessions and people, how long they talk, whether they come back to a session's key points, and where speech became text."
+      />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{
+            label: "Voice sessions",
+            unit: "count",
+            value: v.sessions,
+            note: `by ${count(v.people)} ${v.people === 1 ? "person" : "people"}`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Median length",
+            unit: "mmss",
+            value: v.median,
+            note: "per session, minutes:seconds",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Key points opened later",
+            unit: "pct",
+            value: share(v.opened, v.withPoints),
+            note: `${count(v.opened)} of ${count(v.withPoints)} kept sessions with key points`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Speech on the device",
+            unit: "pct",
+            value: share(v.device, v.sessions),
+            note: "the rest used the browser's speech service",
+          }}
+        />
+      </div>
+      <p className={NOTE}>
+        A voice session: from Talk to End (or the page closing) with at least one spoken turn,
+        counted when it ends in the range, signed in or not. People: an account, or a browser before
+        it signs in. Length: from the session&rsquo;s start to its end. Key points opened later: of
+        the sessions kept with key points (signed in, &ldquo;Remember our conversations&rdquo; on)
+        that ended in the range, the share whose page was opened by the range&rsquo;s last day.
+        Speech on the device: Chrome turned speech into text on the device; otherwise the
+        browser&rsquo;s own service did (Apple&rsquo;s or Google&rsquo;s). Never audio, never words:
+        ids and numbers only. Recorded from 22 Nov 2026.
+      </p>
+    </Card>
   );
 }
 
@@ -767,8 +911,11 @@ function Outcomes({ data }: { data: Data }) {
       <Chips data={data} />
       <Topics data={data} />
       <Therapeutic data={data} />
+      <SelfChecks data={data} />
       <Satisfaction data={data} />
+      <RatingsCard data={data} />
       <Knows data={data} />
+      <SettingsCard data={data} />
       <Safety data={data} />
     </Board>
   );
@@ -962,6 +1109,74 @@ function Therapeutic({ data }: { data: Data }) {
   );
 }
 
+/** The self-checks (22 Nov 2026): starts, finishes, completion and retakes per check. */
+function SelfChecks({ data }: { data: Data }) {
+  const { checks, miraUse, supportShown } = data.selfChecks;
+  const gtc = "minmax(170px,1.6fr) 90px 90px 110px 90px";
+  return (
+    <Card id="self-checks" labelledBy="h-self-checks">
+      <SectionHead
+        id="h-self-checks"
+        level={3}
+        title="Self-checks"
+        description="The anxiety (GAD-7), mood (PHQ-9) and loneliness checks: how many are started, finished and taken again."
+      />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Self-checks" style={{ minWidth: 560 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+            {["Check", "Started", "Finished", "Completion", "Retakes"].map((h, i) => (
+              <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
+                {h}
+              </span>
+            ))}
+          </div>
+          {checks.map((c) => (
+            <div
+              key={c.id}
+              role="row"
+              className="grid items-center border-t border-ap-line"
+              style={{ gridTemplateColumns: gtc }}
+            >
+              <span role="rowheader" className="px-3 py-2.5 text-sm font-bold">
+                {c.title}
+              </span>
+              {[count(c.started), count(c.finished), pct(c.completion), count(c.retakes)].map(
+                (v, i) => (
+                  <span key={i} role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                    {v}
+                  </span>
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+        <span>
+          <strong className="tabular-nums">
+            {pct(share(miraUse.on, miraUse.of))} ({count(miraUse.on)} of {count(miraUse.of)})
+          </strong>{" "}
+          let Mira use their results
+        </span>
+        <span>
+          <strong className="tabular-nums">{count(supportShown)}</strong> support-line{" "}
+          {supportShown === 1 ? "panel" : "panels"} opened by the mood check&rsquo;s question 9
+        </span>
+      </div>
+      <p className={NOTE}>
+        Started: checks begun in the range (a resumed one counts once). Finished: results saved in
+        the range, and completion is finished &divide; started. Retakes: finished results that were
+        not the person&rsquo;s first of that check (a check opens again after 14 days, 28 for
+        loneliness). Mira may use results: of today&rsquo;s accounts that finished a check, those
+        with &ldquo;Mira may use my check results&rdquo; on. Question 9 asks about thoughts of being
+        better off dead or of self-harm; any answer above &ldquo;Not at all&rdquo; opens the support
+        lines at once, and only that it happened is counted. Answers, scores and bands are never
+        logged. Recorded from 22 Nov 2026.
+      </p>
+    </Card>
+  );
+}
+
 function Satisfaction({ data }: { data: Data }) {
   const { answers, notNow, promoters, detractors, score } = data.nps;
   const rows: Array<[string, number]> = [
@@ -1001,6 +1216,90 @@ function Satisfaction({ data }: { data: Data }) {
         From {count(answers)} scores in the range: the share of promoters minus the share of
         detractors, from &minus;100 to +100. &ldquo;Not now&rdquo; gives no score: it was{" "}
         {pct(share(notNow, answers + notNow))} of the {count(answers + notNow)} replies.
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Settings (21 Nov 2026): how today's accounts set Mira up (theme, text size, reply language)
+ * and how many changes people make each week.
+ */
+function SettingsCard({ data }: { data: Data }) {
+  const { accounts, theme, textSize, replyLanguage, weeks } = data.settings;
+  const groups: Array<[string, typeof theme]> = [
+    ["Appearance", theme],
+    ["Text size", textSize],
+    ["Mira replies in", replyLanguage],
+  ];
+  return (
+    <Card id="settings" labelledBy="h-settings">
+      <SectionHead
+        id="h-settings"
+        level={3}
+        title="Settings"
+        description="How people set Mira up: the theme, text size and reply language they chose, and how often they change them."
+      />
+      <div className="grid max-w-[860px] gap-6 md:grid-cols-3">
+        {groups.map(([title, rows]) => (
+          <div key={title} className="flex flex-col gap-2">
+            <h4 className="m-0 text-sm font-bold">{title}</h4>
+            {rows.map((r) => (
+              <div
+                key={r.label}
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: "minmax(0,1fr) 92px" }}
+              >
+                <span className="flex flex-col gap-1">
+                  <span className="text-xs">{r.label}</span>
+                  <Bar pct={r.share} color={PURPLE} />
+                </span>
+                <span className="text-right text-sm font-bold tabular-nums">
+                  {pct(r.share)} <span className="font-medium text-ap-muted">({count(r.n)})</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="max-w-[860px] overflow-x-auto">
+        <table className="w-full min-w-[420px] border-collapse text-sm tabular-nums">
+          <caption className="pb-2 text-left text-sm font-bold">Changes per week</caption>
+          <thead>
+            <tr className="border-b border-ap-line text-left">
+              <th scope="col" className={HEAD}>
+                Week of
+              </th>
+              <th scope="col" className={`${HEAD} text-right`}>
+                Appearance
+              </th>
+              <th scope="col" className={`${HEAD} text-right`}>
+                Text size
+              </th>
+              <th scope="col" className={`${HEAD} text-right`}>
+                Reply language
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {weeks.map((w) => (
+              <tr key={w.week} className="border-b border-ap-line last:border-0">
+                <th scope="row" className="px-3 py-2 text-left font-medium">
+                  {shortDate(w.week)}
+                </th>
+                <td className="px-3 py-2 text-right">{count(w.theme)}</td>
+                <td className="px-3 py-2 text-right">{count(w.textSize)}</td>
+                <td className="px-3 py-2 text-right">{count(w.replyLanguage)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className={NOTE}>
+        Shares of today&rsquo;s {count(accounts)} signed-up accounts, whatever the range: an account
+        keeps only its current choice, and one that never chose counts under the default. Changes
+        count every change made in Settings; the 8 weeks end with the range&rsquo;s last day.
+        Recorded from 22 Nov 2026.
       </p>
     </Card>
   );
@@ -1194,6 +1493,134 @@ function Safety({ data }: { data: Data }) {
         21 Nov 2026). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor or other
         professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000 of the
         range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Challenges & goals (22 Nov 2026): who has a goal, how goals are set, whether a new goal is
+ * ticked in its first week, and who keeps ticking (features/admin/server/ap/mira-goals.ts).
+ */
+function GoalsCard({ data }: { data: Data }) {
+  const g = data.goals;
+  const set = g ? g.viaMira + g.byHand : 0;
+  const box = (label: string, unit: "count" | "pct", value: number | null, note: string) => (
+    <StatBox stat={{ label, unit, value, note }} />
+  );
+  return (
+    <Card id="challenges-goals" labelledBy="h-challenges-goals">
+      <SectionHead
+        id="h-challenges-goals"
+        level={3}
+        title="Challenges & goals"
+        description="Whether people set small goals with Mira, and keep ticking them."
+      />
+      {g ? (
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+        >
+          {box(
+            "People with a goal",
+            "count",
+            g.people,
+            `${pct(share(g.people, g.accounts))} of ${count(g.accounts)} accounts, by the range’s last day`
+          )}
+          {box(
+            "Set with Mira",
+            "pct",
+            share(g.viaMira, set),
+            `${count(g.viaMira)} of ${count(set)} goals set in the range; ${count(g.byHand)} by hand. Mira suggested ${count(g.suggested)}`
+          )}
+          {box(
+            "Ticked in the first week",
+            "pct",
+            share(g.tickedInWeek, g.weekOld),
+            `${count(g.tickedInWeek)} of ${count(g.weekOld)} goals set in the range and a week old`
+          )}
+          {box(
+            "Weekly goal loggers",
+            "count",
+            g.weeklyLoggers,
+            "people who ticked a goal in the range’s last 7 days"
+          )}
+        </div>
+      ) : (
+        <p className="m-0 text-[13px] text-ap-muted">
+          Not measured yet: the goal tables can&rsquo;t be read (is migration 20261122010000
+          applied?).
+        </p>
+      )}
+      <p className={NOTE}>
+        Signed-in people only; the team is left out. Set with Mira: goals added with &ldquo;Add as a
+        goal&rdquo; under one of Mira&rsquo;s replies, of all goals set in the range (Mira suggested
+        counts her suggestions in the range, signed in or not). Ticked in the first week: of the
+        goals set in the range that are at least 7 days old now, the share with a tick within 7 days
+        of being set. A deleted goal or account drops out with its ticks. Only ids and times are
+        read, never what a goal says. Recorded from 22 Nov 2026.
+      </p>
+    </Card>
+  );
+}
+
+/** Weekly sessions (21 Nov 2026): booked, in place, reminders sent, joined on time, cancelled. */
+function WeeklySessions({ data }: { data: Data }) {
+  const { scheduled, active, reminders, attended, cancelled } = data.weeklySessions;
+  return (
+    <Card id="weekly-sessions" labelledBy="h-weekly-sessions">
+      <SectionHead
+        id="h-weekly-sessions"
+        level={3}
+        title="Weekly sessions"
+        description="Whether people book a regular 15 minutes with Mira, keep it, and turn up."
+      />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{ label: "Booked", unit: "count", value: scheduled, note: "People, in the range" }}
+        />
+        <StatBox
+          stat={{
+            label: "In place",
+            unit: "count",
+            value: active,
+            note: "Booked and not cancelled, at the range’s end",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Reminders sent",
+            unit: "count",
+            value: reminders,
+            note: "One per session, 30 to 60 minutes before it",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Joined on time",
+            unit: "pct",
+            value: share(attended, reminders),
+            note: `${count(attended)} of ${count(reminders)} reminded sessions`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Cancelled",
+            unit: "count",
+            value: cancelled,
+            note: "People, in the range",
+          }}
+        />
+      </div>
+      <p className={NOTE}>
+        Sessions need an account, so people are accounts. Booked: booked a weekly session in the
+        range (a later change of time doesn&rsquo;t count again). In place: booked and not
+        cancelled, or ended by an under-18 stop, by the range&rsquo;s last day, reminders on or
+        paused. Joined on time: of the sessions reminded in the range, the share opened from the
+        session&rsquo;s link within 30 minutes of their start. Recorded from 21 Nov 2026.
       </p>
     </Card>
   );

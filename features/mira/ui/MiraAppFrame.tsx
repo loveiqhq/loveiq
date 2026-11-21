@@ -1,16 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DISCLAIMER, LegalLinks, Wordmark } from "./MiraShell";
 import { SupportPanel } from "./SupportPanel";
 import { useReloadWhenRestored } from "./api";
 
-const PAGES: Array<[href: string, label: string, key?: "home" | "settings"]> = [
-  ["/mira/home", "Home", "home"],
-  ["/mira", "Coach & chats"],
-  ["/mira/home#assessments", "Assessments"],
-  ["/mira/settings", "Settings", "settings"],
+export type MiraPage =
+  | "home"
+  | "chats"
+  | "coaches"
+  | "assessments"
+  | "goals"
+  | "journal"
+  | "recordings"
+  | "guide"
+  | "settings"
+  | "feedback";
+
+/**
+ * Every signed-in page, in the menu's order. `short` is the phone tab's label; `wide` false keeps
+ * it off the phone row (the header's "Chat with Mira" already leads to the chat).
+ */
+const PAGES: Array<{ href: string; label: string; short: string; key: MiraPage; phone?: false }> = [
+  { href: "/mira/home", label: "Home", short: "Home", key: "home" },
+  { href: "/mira", label: "Coach & chats", short: "Chats", key: "chats", phone: false },
+  { href: "/mira/journal", label: "Daily journal", short: "Journal", key: "journal" },
+  { href: "/mira/goals", label: "Challenges & goals", short: "Goals", key: "goals" },
+  { href: "/mira/assessments", label: "Assessments", short: "Assessments", key: "assessments" },
+  { href: "/mira/recordings", label: "Voice sessions", short: "Voice", key: "recordings" },
+  { href: "/mira/coaches", label: "Coaches", short: "Coaches", key: "coaches" },
+  // NEXT_PUBLIC_MIRA_GUIDE_URL can point the guide elsewhere (inlined at build time).
+  {
+    href: process.env.NEXT_PUBLIC_MIRA_GUIDE_URL || "/mira/guide",
+    label: "Guide",
+    short: "Guide",
+    key: "guide",
+  },
+  { href: "/mira/settings", label: "Settings", short: "Settings", key: "settings" },
 ];
 
 /**
@@ -24,15 +51,24 @@ export function MiraAppFrame({
   name,
   children,
 }: {
-  active: "home" | "settings" | "feedback";
+  active: MiraPage;
   email?: string;
   name?: string | null;
   children: ReactNode;
 }) {
   const [support, setSupport] = useState(false);
+  const nav = useRef<HTMLElement>(null);
   useReloadWhenRestored();
+  // Phones: the tab row scrolls sideways, so the page's own tab comes into view (never the page).
+  useEffect(() => {
+    const row = nav.current;
+    const tab = row?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (row && tab && row.scrollWidth > row.clientWidth) {
+      row.scrollLeft = Math.max(0, tab.offsetLeft - (row.clientWidth - tab.offsetWidth) / 2);
+    }
+  }, [active]);
   return (
-    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink selection:bg-[#efe6fd] lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink selection:bg-ap-lilac lg:flex-row">
       <aside className="border-b border-ap-line lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:gap-6 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3 lg:p-0">
           <Wordmark />
@@ -44,34 +80,30 @@ export function MiraAppFrame({
           </Link>
         </div>
         <nav
+          ref={nav}
           aria-label="Mira"
-          className="flex gap-5 overflow-x-auto px-4 [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden"
+          className="flex gap-5 overflow-x-auto px-4 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:[mask-image:none] [&::-webkit-scrollbar]:hidden"
         >
-          {PAGES.map(([href, label, key]) => {
+          {PAGES.map(({ href, label, short, key, phone }) => {
             const on = key === active;
             return (
               <Link
                 key={href}
                 href={href}
                 aria-current={on ? "page" : undefined}
-                className={`relative whitespace-nowrap py-3 text-[14px] transition-colors lg:rounded-xl lg:px-3 lg:py-2 ${
+                className={`relative shrink-0 whitespace-nowrap py-3 text-[14px] transition-colors last:pr-6 lg:rounded-xl lg:px-3 lg:py-2 lg:last:pr-3 ${
+                  phone === false ? "hidden lg:block" : ""
+                } ${
                   on
                     ? "font-semibold after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:rounded-full after:bg-ap-ink lg:bg-ap-ground lg:after:hidden"
                     : "text-ap-muted hover:text-ap-ink lg:hover:bg-ap-ground"
                 }`}
               >
-                {label}
+                <span className="lg:hidden">{short}</span>
+                <span className="hidden lg:inline">{label}</span>
               </Link>
             );
           })}
-          {["Challenges & goals", "Daily journal", "Session recordings"].map((t) => (
-            <span
-              key={t}
-              className="hidden items-center justify-between rounded-xl px-3 py-2 text-[14px] text-ap-quiet lg:flex"
-            >
-              {t} <span className="ml-2 text-[11px]">Soon</span>
-            </span>
-          ))}
         </nav>
         <div className="hidden lg:mt-auto lg:flex lg:flex-col lg:gap-3">
           <button

@@ -8,6 +8,7 @@
  */
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+import { runJournalReminders } from "@features/mira/server/journal";
 import { runNudges } from "@features/mira/server/nudges";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
@@ -43,6 +44,14 @@ export async function GET(request: Request) {
   let status: "success" | "error" = "success";
   let message: string | undefined;
   try {
+    // The daily journal's reminders first (features/mira/server/journal.ts): no model call, so
+    // seconds, inside the same budget; a failure of theirs never keeps the nudges from going.
+    const journal = await runJournalReminders(new Date(startedAtMs), {
+      outOfTime: () => Date.now() - startedAtMs > 225_000,
+    }).catch((err: unknown) => {
+      logger.error({ err }, "mira-nudges: the journal reminders failed");
+      return null;
+    });
     const summary = await runNudges(new Date(startedAtMs), {
       // Nobody new after 225 s: one person's worst case (the model's ~65 s with its fallback,
       // plus the reads and the send) still ends inside the 300 s ceiling, which would kill the
@@ -59,7 +68,29 @@ export async function GET(request: Request) {
         (Object.keys(skipped).length ? `; skipped ${JSON.stringify(skipped)}` : "");
       logger.error({ cron: "mira-nudges", reason: message }, "mira-nudges: people were left out");
     }
-    return NextResponse.json({ ok: true, ...summary });
+    // Journal reminders left out or failed are an error too, in the same row.
+    if (
+      !journal ||
+      journal.errors > 0 ||
+      journal.stoppedEarly ||
+      journal.skipped["no-email-setup"]
+    ) {
+      status = "error";
+      const said = journal
+        ? `sent ${journal.sent} of ${journal.due} due, ${journal.errors} failed` +
+          (journal.stoppedEarly ? ", stopped at the time budget" : "") +
+          (Object.keys(journal.skipped).length
+            ? `, skipped ${JSON.stringify(journal.skipped)}`
+            : "")
+        : "could not run";
+      message = [message, `journal reminders: ${said}`].filter(Boolean).join("; ");
+      if (journal)
+        logger.error(
+          { cron: "mira-nudges", reason: message },
+          "mira-nudges: reminders were left out"
+        );
+    }
+    return NextResponse.json({ ok: true, ...summary, journal });
   } catch (err) {
     status = "error";
     message = (err as Error)?.message;

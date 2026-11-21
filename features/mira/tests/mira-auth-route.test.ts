@@ -22,6 +22,18 @@ vi.mock("@features/mira/server/session", () => ({
   createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut } })),
   getMiraAccount: () => getMiraAccount(),
 }));
+// Sign-in & security (22 Nov 2026): the device a sign-in records, and the passkey offer's checks
+// (tested in mira-account-sign-in.test.ts).
+vi.mock("@features/mira/server/devices", () => ({
+  recordSession: vi.fn().mockResolvedValue(undefined),
+  signOutDevices: vi.fn().mockResolvedValue(1),
+}));
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
+vi.mock("@features/mira/server/google", () => ({ isStaffEmail: vi.fn().mockResolvedValue(false) }));
+vi.mock("@features/mira/server/passkeys", () => ({
+  MAX_PASSKEYS: 10,
+  listPasskeys: vi.fn().mockResolvedValue([]),
+}));
 vi.mock("@features/mira/server/sign-in", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/mira/server/sign-in")>()),
   sendSignInCode: vi.fn().mockResolvedValue(true),

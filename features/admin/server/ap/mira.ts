@@ -27,14 +27,26 @@
  * BODY_RELIABLE_CHANGE or more; profile depth from the intake questions answered, the body check,
  * the coaching style and a LoveIQ result; topics and referrals from the markers Mira's replies
  * carry (features/mira/server/safety.ts), as ids, never words.
+ *
+ * Voice (22 Nov 2026, features/mira/server/voice.ts): the two voice events are read with their
+ * props (seconds, recognition mode, the session's id), not through mira_ap_events, which keeps
+ * one prop per event; the team is left out by the same rules (Prepared.personOf).
+ * Self-checks (22 Nov 2026, features/mira/content/checks.ts): each check's starts (the browser's
+ * <check>_check_started) and finishes (the server's <check>_check_done), retakes (a finish that
+ * is not the person's first of that check), the support lines the mood check's question 9 opened
+ * (check_support_shown, a count) and, of today's accounts that finished one, the share that let
+ * Mira use their results (mira_user.use_checks). Events carry no answers, scores or bands.
  */
 import miraConfig from "@features/mira/content/mira-config.json";
+import { CHECKS } from "@features/mira/content/checks";
 import nudgeConfig from "@features/mira/content/nudges.json";
+import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { FOLLOW_UP_DAYS } from "@features/mira/server/body-check";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 import { fetchAllRows, supabaseFetch } from "../supabase";
+import { COACH_KPI_EVENTS, coachesKpi, type CoachesKpi } from "./mira-coaches";
 import type { PageHead, Tile } from "./common";
 import { addDays } from "./days";
 import {
@@ -46,7 +58,15 @@ import {
   type ApFilters,
 } from "./filters";
 import { fmt } from "./format";
-import { mean, ratio } from "./metrics";
+import { mean, median, ratio } from "./metrics";
+import { fetchGoalRows, goalFigures, type GoalFigures, type MiraGoalRows } from "./mira-goals";
+import { REVIEW_SELECT, ratingsOf, type MiraReviewRow, type Ratings } from "./mira-ratings";
+import {
+  fetchJournal,
+  journalFigures,
+  type JournalFigures,
+  type JournalRows,
+} from "./mira-journal";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -99,7 +119,44 @@ const EVENT_NAMES = [
   "style_saved",
   "reply_declined",
   "minor_stop",
+  // Coaches & picks: Notify me, the coaches page, the finder, Home's picks and search, the
+  // guide's "Ask Mira about this" (22 Nov 2026, mira-coaches.ts).
+  ...COACH_KPI_EVENTS,
+  // Settings (21 Nov 2026): a changed theme (signed in or out), text size or reply language.
+  "theme_changed",
+  "text_size_changed",
+  "reply_language_changed",
+  // Challenges & goals (22 Nov 2026): Mira's goal suggestions in the chat.
+  "goal_suggested",
+  // Ratings and quotes (22 Nov 2026): the ask shown and put off, ratings given and taken back
+  // (mira-ratings.ts reads them; no prop is needed).
+  "review_prompt_shown",
+  "review_prompt_not_now",
+  "review_given",
+  "review_withdrawn",
+  // Sign-in & security (22 Nov 2026): the "Sign-in" card. signup_completed's method also reads
+  // "passkey" now (every sign-in logs one, so it counts sign-ins by method as well as sign-ups).
+  "passkey_offer_shown",
+  "passkey_offer_accepted",
+  "signed_out_everywhere",
+  "email_changed",
+  // The self-checks (22 Nov 2026): started, finished, and the support lines from question 9.
+  ...CHECKS.flatMap((c) => [`${c.id}_check_started`, `${c.id}_check_done`]),
+  "check_support_shown",
+  // Weekly sessions (21 Nov 2026): booked, cancelled, a reminder sent, a reminded start joined.
+  "session_scheduled",
+  "session_cancelled",
+  "session_reminder_sent",
+  "session_attended",
 ];
+
+/** A self-check event's check, and whether it is the finish. */
+const CHECK_EVENTS = new Map(
+  CHECKS.flatMap((c) => [
+    [`${c.id}_check_started`, { check: c.id, done: false }],
+    [`${c.id}_check_done`, { check: c.id, done: true }],
+  ])
+);
 
 export interface MiraUserRow {
   id: string;
@@ -109,6 +166,12 @@ export interface MiraUserRow {
   use_assessment: boolean;
   /** Created or signed in from a team browser (20261121030000_mira_team_and_source.sql). */
   is_team?: boolean;
+  /** Settings' choices, null where never made (20261122060000_mira_settings.sql). */
+  theme?: string | null;
+  text_size?: string | null;
+  reply_language?: string | null;
+  /** "Mira may use my check results" (20261122090000_mira_checks.sql). */
+  use_checks?: boolean;
 }
 
 /** An event's source when the visit had neither campaign tags nor a referring site. */
@@ -153,6 +216,22 @@ export interface MiraBodyCheckRow {
   created_at: string;
 }
 
+/** A voice session's end (voice_session_ended) or its key points' first opening. */
+export interface MiraVoiceRow {
+  name: "voice_session_ended" | "voice_points_opened";
+  anon_id: string | null;
+  user_id: string | null;
+  /** created_at, in milliseconds. */
+  at: number;
+  seconds: number | null;
+  mode: string | null;
+  /** The session's id: on an ended session that was kept, and on every opening. */
+  session: string | null;
+  /** Key points written at the end (0: none, or not yet). */
+  points: number;
+  team?: true;
+}
+
 export interface MiraData {
   users: MiraUserRow[];
   events: MiraEventRow[];
@@ -162,6 +241,16 @@ export interface MiraData {
   bodyChecks: MiraBodyCheckRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
+  /** Challenges & goals: the goal tables (mira-goals.ts); null when they can't be read. */
+  goals?: MiraGoalRows | null;
+  /** Ratings and quotes (mira-ratings.ts); null: mira_review could not be read. */
+  reviews?: MiraReviewRow[] | null;
+  /** Voice sessions' ends and key points opened, oldest first (absent before 22 Nov 2026). */
+  voice?: MiraVoiceRow[];
+  /** The accounts with a passkey today (mira_passkey); null when it could not be read. */
+  passkeyUsers?: string[] | null;
+  /** The daily journal's days and settings (mira-journal.ts); null when they could not be read. */
+  journal?: JournalRows | null;
 }
 
 /**
@@ -170,9 +259,9 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks] = await Promise.all([
+  const [users, events, nudges, bodyChecks, goals, reviews, voice, passkeys] = await Promise.all([
     fetchAllRows<MiraUserRow>(
-      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
+      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,theme,text_size,reply_language,use_checks&order=id.asc"
     ),
     fetchEvents(),
     fetchAllRows<MiraNudgeRow>(
@@ -181,8 +270,26 @@ export async function fetchMira(): Promise<MiraData> {
     fetchAllRows<MiraBodyCheckRow>(
       "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
     ),
+    // Apart from the rest: the page still shows if these tables can't be read.
+    fetchGoalRows(),
+    // Only the Ratings card needs it: unreadable, that card says so and the page stays.
+    fetchAllRows<MiraReviewRow>(`/rest/v1/mira_review?select=${REVIEW_SELECT}&order=id.asc`),
+    // ponytail: one row per voice session, paged; into mira_ap_events if it ever nears 100,000.
+    fetchAllRows<{
+      name: MiraVoiceRow["name"];
+      anon_id: string | null;
+      user_id: string | null;
+      created_at: string;
+      props: Record<string, unknown> | null;
+    }>(
+      "/rest/v1/mira_event?name=in.(voice_session_ended,voice_points_opened)&select=name,anon_id,user_id,created_at,props&order=id.asc"
+    ),
+    // Only the Sign-in card's adoption: a failed read leaves it "not measured", not the page.
+    fetchAllRows<{ user_id: string }>("/rest/v1/mira_passkey?select=user_id&order=id.asc").catch(
+      () => null
+    ),
   ]);
-  if (!users || !events || !nudges || !bodyChecks) {
+  if (!users || !events || !nudges || !bodyChecks || !voice) {
     throw new Error("Mira's tables could not be read");
   }
   const asked = users.filter((u) => u.use_assessment && !isStaffEmail(u.email) && !u.is_team);
@@ -192,6 +299,24 @@ export async function fetchMira(): Promise<MiraData> {
     nudges,
     bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
     withResult: await withLoveIqResult(asked),
+    goals,
+    reviews,
+    voice: voice.map(({ props: p, created_at, ...row }) => {
+      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      return {
+        ...row,
+        at: Date.parse(created_at),
+        seconds: num(p?.seconds),
+        mode: str(p?.mode),
+        session: str(p?.session),
+        points: num(p?.points) ?? 0,
+        ...(p?.team === true ? { team: true as const } : {}),
+      };
+    }),
+    passkeyUsers: passkeys ? passkeys.map((p) => p.user_id) : null,
+    // Its own card: a failed read says so there and leaves the rest of the page standing.
+    journal: await fetchJournal(),
   };
 }
 
@@ -287,14 +412,20 @@ interface Person {
   tipShown: number[];
   tipOpened: number[];
   styleSaved: number[];
+  /** Their weekly-session events and under-18 stops (which end a session), as they came. */
+  sessions: Array<{ at: number; name: string }>;
   /** The first source recorded for them (MiraEventRow.source), and when; null: none recorded. */
   from: { at: number; source: string } | null;
+  /** Their self-check starts and finishes, oldest first. */
+  checks: Array<{ at: number; check: string; done: boolean }>;
 }
 
 interface Counted {
   name: string;
   at: number;
   detail: string | null;
+  /** The person (people's key: the account, or `anon:` and the browser id), if any. */
+  who: string | null;
 }
 
 interface CountedNudge {
@@ -324,6 +455,11 @@ export interface Prepared {
   withResult: Set<string>;
   /** Each account's body checks (not the team's), oldest first. */
   bodyChecks: Map<string, Array<{ at: number; score: number }>>;
+  /**
+   * Who a row read outside mira_ap_events belongs to, by the rules above: its account (a browser
+   * that signed in is that account), `anon:` its browser, or null for the team's (voice, 22 Nov).
+   */
+  personOf: (row: { anon_id: string | null; user_id: string | null; team?: true }) => string | null;
 }
 
 const dayOfHour = new Map<number, string>();
@@ -392,14 +528,14 @@ export function prepare(data: MiraData): Prepared {
     if ((user && staff.has(user)) || e.team || (e.anon_id && teamBrowsers.has(e.anon_id))) {
       continue;
     }
-    events.push({ name: e.name, at, detail: e.detail });
+    const key = user ?? (e.anon_id ? `anon:${e.anon_id}` : null);
+    events.push({ name: e.name, at, detail: e.detail, who: key });
     if (
       user &&
       (e.name === "nudge_stopped" || (e.name === "nudge_prefs_saved" && e.detail === "pause"))
     ) {
       stops.set(user, [...(stops.get(user) ?? []), at]);
     }
-    const key = user ?? (e.anon_id ? `anon:${e.anon_id}` : null);
     if (!key) continue;
     let p = people.get(key);
     if (!p) {
@@ -423,7 +559,9 @@ export function prepare(data: MiraData): Prepared {
         tipShown: [],
         tipOpened: [],
         styleSaved: [],
+        sessions: [],
         from: null,
+        checks: [],
       };
       people.set(key, p);
     }
@@ -446,6 +584,10 @@ export function prepare(data: MiraData): Prepared {
     else if (e.name === "style_tip_shown") p.tipShown.push(at);
     else if (e.name === "style_tip_opened") p.tipOpened.push(at);
     else if (e.name === "style_saved") p.styleSaved.push(at);
+    else if (CHECK_EVENTS.has(e.name)) p.checks.push({ at, ...CHECK_EVENTS.get(e.name)! });
+    else if (e.name.startsWith("session_") || e.name === "minor_stop") {
+      p.sessions.push({ at, name: e.name });
+    }
   }
   for (const p of people.values()) {
     p.starts.sort((a, b) => a.at - b.at);
@@ -458,6 +600,7 @@ export function prepare(data: MiraData): Prepared {
     });
     p.convs = conversationsOf(p.msgs);
     p.refers.sort((a, b) => a - b);
+    p.checks.sort((a, b) => a.at - b.at);
   }
 
   const bodyChecks = new Map<string, Array<{ at: number; score: number }>>();
@@ -489,7 +632,16 @@ export function prepare(data: MiraData): Prepared {
     }
   }
 
+  const personOf: Prepared["personOf"] = (row) => {
+    const user = row.user_id ?? (row.anon_id ? signedIn.get(row.anon_id) : undefined) ?? null;
+    if ((user && staff.has(user)) || row.team || (row.anon_id && teamBrowsers.has(row.anon_id))) {
+      return null;
+    }
+    return user ?? (row.anon_id ? `anon:${row.anon_id}` : null);
+  };
+
   return {
+    personOf,
     people,
     events,
     accounts,
@@ -968,6 +1120,32 @@ function keepCardFunnel(prep: Prepared, w: Win) {
  * The coaching-style tip in the range: the people shown it; of them, those who opened the panel
  * from it, and those who saved a style after first seeing it, by the range's end.
  */
+/**
+ * Weekly sessions in the range: the people who booked one; the sessions in place at the range's
+ * end (booked, and not since cancelled or ended by an under-18 stop, whatever their reminders);
+ * the reminder emails sent; the reminded starts opened within 30 minutes of their time; the
+ * people who cancelled.
+ */
+function weeklySessions(prep: Prepared, w: Win) {
+  const out = { scheduled: 0, active: 0, reminders: 0, attended: 0, cancelled: 0 };
+  const states = new Set(["session_scheduled", "session_cancelled", "minor_stop"]);
+  for (const p of prep.people.values()) {
+    if (!p.sessions.length) continue;
+    const inRange = p.sessions.filter((e) => within(e.at, w));
+    const count = (name: string) => inRange.filter((e) => e.name === name).length;
+    if (count("session_scheduled")) out.scheduled++;
+    if (count("session_cancelled")) out.cancelled++;
+    out.reminders += count("session_reminder_sent");
+    out.attended += count("session_attended");
+    const last = p.sessions
+      .filter((e) => e.at < w.until && states.has(e.name))
+      .sort((a, b) => a.at - b.at)
+      .at(-1);
+    if (last?.name === "session_scheduled") out.active++;
+  }
+  return out;
+}
+
 function styleTipFunnel(prep: Prepared, w: Win) {
   const out = { shown: 0, opened: 0, saved: 0 };
   for (const p of prep.people.values()) {
@@ -1007,6 +1185,58 @@ function sources(prep: Prepared, w: Win): SourceRow[] {
         b.opened - a.opened ||
         String(a.source).localeCompare(String(b.source))
     );
+}
+
+export interface SelfChecks {
+  /** Per check, in the range: starts, finishes, finishes ÷ starts, and finishes that were retakes. */
+  checks: Array<{
+    id: string;
+    title: string;
+    started: number;
+    finished: number;
+    completion: number | null;
+    retakes: number;
+  }>;
+  /** Of today's accounts that finished a check, those that let Mira use their results. */
+  miraUse: { on: number; of: number };
+  /** Times the mood check's question 9 opened the support lines, in the range. */
+  supportShown: number;
+}
+
+/** The self-checks in the range (and the "Mira may use" share, today). */
+function selfChecks(prep: Prepared, w: Win): SelfChecks {
+  const checks = CHECKS.map((c) => {
+    let started = 0;
+    let finished = 0;
+    let retakes = 0;
+    for (const p of prep.people.values()) {
+      const mine = p.checks.filter((e) => e.check === c.id);
+      const firstDone = mine.find((e) => e.done);
+      for (const e of mine) {
+        if (!within(e.at, w)) continue;
+        if (!e.done) started++;
+        else {
+          finished++;
+          if (e !== firstDone) retakes++;
+        }
+      }
+    }
+    return {
+      id: c.id,
+      title: c.title,
+      started,
+      finished,
+      completion: started ? Math.min(1, finished / started) : null,
+      retakes,
+    };
+  });
+  const finishers = prep.accounts.filter((a) => prep.people.get(a.id)?.checks.some((e) => e.done));
+  return {
+    checks,
+    miraUse: { on: finishers.filter((a) => a.use_checks).length, of: finishers.length },
+    supportShown: prep.events.filter((e) => e.name === "check_support_shown" && within(e.at, w))
+      .length,
+  };
 }
 
 const PER_USER = [
@@ -1068,6 +1298,173 @@ export interface SourceRow {
   rate: number | null;
 }
 
+export interface SettingsShare {
+  label: string;
+  n: number;
+  share: number | null;
+}
+
+/** AP › Mira › Settings: how today's accounts set Mira up, and how often people change it. */
+export interface SettingsKpi {
+  accounts: number;
+  theme: SettingsShare[];
+  textSize: SettingsShare[];
+  replyLanguage: SettingsShare[];
+  /** Changes per week (its Monday), the 8 weeks to the range's last day, oldest first. */
+  weeks: Array<{ week: string; theme: number; textSize: number; replyLanguage: number }>;
+}
+
+const CHANGES = new Map<string, "theme" | "textSize" | "replyLanguage">([
+  ["theme_changed", "theme"],
+  ["text_size_changed", "textSize"],
+  ["reply_language_changed", "replyLanguage"],
+]);
+
+/**
+ * Today's accounts by their theme, text size and reply language (never chosen counts as the
+ * default: System, Default, Match my messages), and the changes in each week: every change made
+ * in Settings.
+ */
+export function settingsKpi(prep: Prepared, to: string): SettingsKpi {
+  const accounts = prep.accounts.length;
+  /** Each option's accounts; an account that never chose counts as the first (the default). */
+  const shares = (
+    pick: (a: MiraUserRow) => string | null | undefined,
+    options: Array<[string, string]>
+  ): SettingsShare[] => {
+    const counts = new Map<string, number>(options.map(([v]) => [v, 0]));
+    for (const a of prep.accounts) {
+      const v = pick(a);
+      const key = v && counts.has(v) ? v : options[0]![0];
+      counts.set(key, counts.get(key)! + 1);
+    }
+    return options.map(([v, label]) => {
+      const n = counts.get(v)!;
+      return { label, n, share: ratio(n, accounts) };
+    });
+  };
+  const [match, ...languages] = shares(
+    (a) => a.reply_language,
+    [
+      ["match", "Match my messages (the default)"],
+      ...REPLY_LANGUAGES.map((l): [string, string] => [l.code, l.name]),
+    ]
+  );
+  const last = monday(to);
+  const weeks = Array.from({ length: 8 }, (_, k) => ({
+    week: addDays(last, 7 * (k - 7)),
+    theme: 0,
+    textSize: 0,
+    replyLanguage: 0,
+  }));
+  for (const e of prep.events) {
+    const kind = CHANGES.get(e.name);
+    const day = kind ? dayOf(e.at) : null;
+    const row = day && day <= to ? weeks.find((w) => w.week === monday(day)) : undefined;
+    // eslint-disable-next-line security/detect-object-injection -- kind is a closed union.
+    if (row && kind) row[kind]++;
+  }
+  return {
+    accounts,
+    theme: shares(
+      (a) => a.theme,
+      [
+        ["system", "System (the default)"],
+        ["light", "Light"],
+        ["dark", "Dark"],
+      ]
+    ),
+    textSize: shares(
+      (a) => a.text_size,
+      [
+        ["default", "Default"],
+        ["small", "Small"],
+        ["large", "Large"],
+      ]
+    ),
+    // Only the languages someone chose, most chosen first.
+    replyLanguage: [match!, ...languages.filter((l) => l.n > 0).sort((a, b) => b.n - a.n)],
+    weeks,
+  };
+}
+
+export interface VoiceFigures {
+  /** Voice sessions that ended in the range (signed in or not), and the people who had them. */
+  sessions: number;
+  people: number;
+  /** Their median length (ms). */
+  median: number | null;
+  /** Kept sessions with key points that ended in the range; of them, opened by its last day. */
+  withPoints: number;
+  opened: number;
+  /** Sessions whose speech became text on the device (the rest: the browser's service). */
+  device: number;
+}
+
+/** Talking to Mira by voice in the range, the team left out. */
+export function voiceFigures(prep: Prepared, rows: MiraVoiceRow[], w: Win): VoiceFigures {
+  const theirs = rows.filter((r) => prep.personOf(r) !== null);
+  const ended = theirs.filter((r) => r.name === "voice_session_ended" && within(r.at, w));
+  const opened = new Set(
+    theirs
+      .filter((r) => r.name === "voice_points_opened" && r.session && r.at < w.until)
+      .map((r) => r.session)
+  );
+  const withPoints = ended.filter((r) => r.session && r.points > 0);
+  return {
+    sessions: ended.length,
+    people: new Set(ended.map((r) => prep.personOf(r))).size,
+    median: median(ended.flatMap((r) => (r.seconds === null ? [] : [r.seconds * 1000]))),
+    withPoints: withPoints.length,
+    opened: withPoints.filter((r) => opened.has(r.session)).length,
+    device: ended.filter((r) => r.mode === "device").length,
+  };
+}
+
+/**
+ * The "Sign-in" card (22 Nov 2026), the team left out: sign-ins in the range by method (every
+ * sign-in logs signup_completed with its method), today's accounts with a passkey, the "Use Face
+ * ID next time?" offer shown and accepted in the range (times: it shows once per browser), and in
+ * the range how often people signed out everywhere and changed their email.
+ */
+export interface SignInFigures {
+  byMethod: { email: number; google: number; passkey: number };
+  /** Accounts with a passkey, of all accounts, today; null where it could not be read. */
+  passkeys: { accounts: number; of: number } | null;
+  offer: { shown: number; accepted: number };
+  signedOutEverywhere: number;
+  emailChanges: number;
+}
+
+function signInFigures(prep: Prepared, w: Win, passkeyUsers: string[] | null): SignInFigures {
+  const out: SignInFigures = {
+    byMethod: { email: 0, google: 0, passkey: 0 },
+    passkeys: null,
+    offer: { shown: 0, accepted: 0 },
+    signedOutEverywhere: 0,
+    emailChanges: 0,
+  };
+  for (const e of prep.events) {
+    if (!within(e.at, w)) continue;
+    if (e.name === "signup_completed") {
+      if (e.detail === "email" || e.detail === "google" || e.detail === "passkey") {
+        out.byMethod[e.detail]++;
+      }
+    } else if (e.name === "passkey_offer_shown") out.offer.shown++;
+    else if (e.name === "passkey_offer_accepted") out.offer.accepted++;
+    else if (e.name === "signed_out_everywhere") out.signedOutEverywhere++;
+    else if (e.name === "email_changed") out.emailChanges++;
+  }
+  if (passkeyUsers) {
+    const withKey = new Set(passkeyUsers);
+    out.passkeys = {
+      accounts: prep.accounts.filter((a) => withKey.has(a.id)).length,
+      of: prep.accounts.length,
+    };
+  }
+  return out;
+}
+
 export interface MiraPayload extends PageHead {
   tiles: Record<string, Tile>;
   funnel: MiraStep[];
@@ -1081,6 +1478,8 @@ export interface MiraPayload extends PageHead {
   cohorts: CohortRow[];
   /** Today's accounts, and what Mira knows of them. */
   knows: Knows;
+  /** Settings: today's accounts' choices, and the changes per week (settingsKpi). */
+  settings: SettingsKpi;
   safety: {
     conversations: number;
     crisis: number;
@@ -1093,6 +1492,16 @@ export interface MiraPayload extends PageHead {
   keepCard: { shown: number; kept: number; accounts: number; notNow: number };
   /** The "Make Mira yours" tip in the range (styleTipFunnel). */
   styleTip: { shown: number; opened: number; saved: number };
+  /** The "Sign-in" card (signInFigures). */
+  signIn: SignInFigures;
+  /** Weekly sessions in the range (weeklySessions). */
+  weeklySessions: {
+    scheduled: number;
+    active: number;
+    reminders: number;
+    attended: number;
+    cancelled: number;
+  };
   chips: ChipRow[];
   topics: TopicRow[];
   /** New chats in the range opened in the person's own words that carry no topic. */
@@ -1108,6 +1517,18 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** Coaches & picks in the range (mira-coaches.ts). */
+  coaches: CoachesKpi;
+  /** Challenges & goals in the range (mira-goals.ts); null when the tables can't be read. */
+  goals?: GoalFigures | null;
+  /** The Ratings card (mira-ratings.ts). */
+  ratings: Ratings;
+  /** Talking to Mira by voice, in the range (voiceFigures). */
+  voice: VoiceFigures;
+  /** The self-checks (selfChecks). */
+  selfChecks: SelfChecks;
+  /** The daily journal's KPI card (mira-journal.ts). */
+  journal: JournalFigures;
 }
 
 export function buildMiraPage(input: {
@@ -1352,6 +1773,7 @@ export function buildMiraPage(input: {
     perUser,
     cohorts: cohorts(prep, f.to, today).slice(-8),
     knows,
+    settings: settingsKpi(prep, f.to),
     safety: {
       conversations: cur.conversations,
       crisis: cur.crisis,
@@ -1362,6 +1784,13 @@ export function buildMiraPage(input: {
     },
     keepCard: keepCardFunnel(prep, w),
     styleTip: styleTipFunnel(prep, w),
+    // Data from before passkeys (a fixture) has none; null is a failed read.
+    signIn: signInFigures(
+      prep,
+      w,
+      input.data.passkeyUsers === undefined ? [] : input.data.passkeyUsers
+    ),
+    weeklySessions: weeklySessions(prep, w),
     chips: chips(prep, w),
     ...topics(prep, w, compared && cmp ? win(cmp.from, cmp.to) : null),
     bodyCheck: { ...cur.body, ...bodyFunnel(prep, w), reliableChange: BODY_RELIABLE_CHANGE },
@@ -1371,5 +1800,19 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    coaches: coachesKpi(prep.events, w),
+    goals:
+      input.data.goals === null
+        ? null
+        : goalFigures(input.data.goals ?? { goals: [], logs: [] }, prep, w, now.getTime()),
+    ratings: ratingsOf(prep, input.data.reviews, w.since, w.until),
+    voice: voiceFigures(prep, input.data.voice ?? [], w),
+    selfChecks: selfChecks(prep, w),
+    journal: journalFigures(
+      input.data.journal,
+      new Set(prep.accounts.map((a) => a.id)),
+      f.from,
+      f.to
+    ),
   };
 }

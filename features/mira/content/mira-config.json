@@ -110,7 +110,7 @@
       "question": "Progress is all about commitment. How about a weekly 15-minute session with me?",
       "answerType": "slots",
       "options": ["Mon 18:00", "Wed 12:30", "Thu 19:00", "Sun 10:00", "Not ready yet"],
-      "instruction": "End of the first chat. If they pick a slot, note it and say you look forward to it; the beta can’t send invites or reminders yet, so don’t promise one. If not ready, ask again in a later chat"
+      "instruction": "End of the first chat, unless the WEEKLY SESSION section says one is booked. The app’s time picker books it and emails the invite: once that section says it is booked, confirm it in one warm line. A time typed in words isn’t booked: ask them to pick it in the picker. If not ready, ask again in a later chat"
     },
     {
       "id": "safety",

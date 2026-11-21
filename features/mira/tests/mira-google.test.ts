@@ -26,7 +26,12 @@ vi.mock("@features/mira/server/sign-in", () => ({
 vi.mock("@features/mira/server/store", () => ({
   getProfile: vi.fn().mockResolvedValue({ name: "Lea" }),
   logMiraEvent: vi.fn(),
+  updateProfile: vi.fn().mockResolvedValue(undefined),
   upsertProfileAtSignIn: vi.fn().mockResolvedValue({ name: null, remember_chats: true }),
+}));
+// Sign-in & security (22 Nov 2026): the device a sign-in records (mira-account-sign-in.test.ts).
+vi.mock("@features/mira/server/devices", () => ({
+  recordSession: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((to: string) => {

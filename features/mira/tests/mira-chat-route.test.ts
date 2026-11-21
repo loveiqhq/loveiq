@@ -573,6 +573,50 @@ describe("POST /api/mira/chat", () => {
       .mock.calls.filter(([n]) => n === name)
       .map(([, , props]) => props);
 
+  it("tells Mira the self-checks' latest bands only as far as the account allows, never answers", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-21",
+    } as never);
+    // Switched off (or never taken): the account row's filter finds nothing, and Mira hears nothing.
+    await post({ message: "hi", consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain("Self-checks");
+    const asked = vi.mocked(supabaseFetch).mock.calls.map(([path]) => String(path));
+    expect(asked.some((p) => p.includes("mira_user?id=eq.u1&use_checks=is.true&"))).toBe(true);
+    // Switched on: the latest band, and nothing of the answers.
+    vi.mocked(askModel).mockClear();
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    vi.mocked(supabaseFetch).mockImplementation(
+      async (path) =>
+        new Response(
+          JSON.stringify(
+            String(path).includes("use_checks=is.true")
+              ? [
+                  {
+                    mira_check: [
+                      { scale: "gad7", answers: [2, 2, 2, 2, 1, 1, 0], created_at: threeDaysAgo },
+                    ],
+                  },
+                ]
+              : []
+          )
+        )
+    );
+    await post({ message: "hi", consent: true });
+    const personal = vi.mocked(askModel).mock.calls[0]![1];
+    expect(personal).toContain("- Anxiety check (GAD-7), 3 days ago: moderate anxiety.");
+    expect(personal).not.toMatch(/2, ?2, ?2/);
+  });
+
   it("asks the model for a topic only on a first message in the person's own words", async () => {
     await post({ message: "I only feel okay with the lights off", consent: true });
     expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("FIRST MESSAGE TOPIC");
@@ -582,6 +626,24 @@ describe("POST /api/mira/chat", () => {
     vi.mocked(askModel).mockClear();
     await post({ message: "and then?", consent: true, history: openChat });
     expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain("FIRST MESSAGE TOPIC");
+  });
+
+  // Settings › "Mira replies in" (21 Nov 2026).
+  it("replies in the account's chosen language, else in the person's own", async () => {
+    await post({ message: "Hallo", consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("the person's latest message");
+    vi.mocked(askModel).mockClear();
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      reply_language: "de",
+    } as never);
+    await post({ message: "hi", consent: true });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("Reply in German");
   });
 
   it("logs a new chat's topic as its id, never the words, and never for a starter chip", async () => {
@@ -644,16 +706,23 @@ describe("POST /api/mira/chat", () => {
       text: "A pelvic health physiotherapist can help with the pain.\n[[REFER]]",
       refused: false,
     });
-    await post({ message: "it hurts during sex", consent: true, history: openChat });
+    const referral = await post({
+      message: "it hurts during sex",
+      consent: true,
+      history: openChat,
+    });
     expect(events("referred")).toHaveLength(1);
+    // The browser learns it too, so no rating is asked for after it.
+    expect((await referral.json()).refer).toBe(true);
     vi.mocked(logMiraEvent).mockClear();
     vi.mocked(askModel).mockResolvedValue({
       ok: true,
       text: "Please reach out now.\n[[REFER]]\n[[CRISIS]]",
       refused: false,
     });
-    await post({ message: "everything feels dark", consent: true, history: openChat });
+    const dark = await post({ message: "everything feels dark", consent: true, history: openChat });
     expect(events("referred")).toEqual([]);
+    expect((await dark.json()).refer).toBeUndefined();
     expect(events("crisis_shown")).toHaveLength(1);
     vi.mocked(logMiraEvent).mockClear();
     // Markers and nothing else: the refusal message is shown, and nobody was referred.
@@ -760,8 +829,16 @@ describe("POST /api/mira/chat", () => {
         minor_at: expect.any(String),
         nudges_on: false,
         remember_chats: false,
+        // Settings' choices (21 Nov 2026).
+        reply_language: null,
+        theme: null,
+        text_size: null,
       });
       expect(deleteChats).toHaveBeenCalledWith("u1");
+      // …and its self-check results: health data a minor's account must not keep.
+      expect(supabaseFetch).toHaveBeenCalledWith("/rest/v1/mira_check?user_id=eq.u1", {
+        method: "DELETE",
+      });
       expect(addMessages).not.toHaveBeenCalled();
       expect(events("minor_stop")).toEqual([{ signedIn: true }]);
       // Another browser, without the cookie: the account's mark stops it, before any limit.
