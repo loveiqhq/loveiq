@@ -47,6 +47,7 @@ import {
 } from "./filters";
 import { fmt } from "./format";
 import { mean, ratio } from "./metrics";
+import { fetchGoalRows, goalFigures, type GoalFigures, type MiraGoalRows } from "./mira-goals";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -99,6 +100,8 @@ const EVENT_NAMES = [
   "style_saved",
   "reply_declined",
   "minor_stop",
+  // Challenges & goals (22 Nov 2026): Mira's goal suggestions in the chat.
+  "goal_suggested",
 ];
 
 export interface MiraUserRow {
@@ -162,6 +165,8 @@ export interface MiraData {
   bodyChecks: MiraBodyCheckRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
+  /** Challenges & goals: the goal tables (mira-goals.ts); null when they can't be read. */
+  goals?: MiraGoalRows | null;
 }
 
 /**
@@ -170,7 +175,7 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks] = await Promise.all([
+  const [users, events, nudges, bodyChecks, goals] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
     ),
@@ -181,6 +186,8 @@ export async function fetchMira(): Promise<MiraData> {
     fetchAllRows<MiraBodyCheckRow>(
       "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
     ),
+    // Apart from the rest: the page still shows if these tables can't be read.
+    fetchGoalRows(),
   ]);
   if (!users || !events || !nudges || !bodyChecks) {
     throw new Error("Mira's tables could not be read");
@@ -192,6 +199,7 @@ export async function fetchMira(): Promise<MiraData> {
     nudges,
     bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
     withResult: await withLoveIqResult(asked),
+    goals,
   };
 }
 
@@ -1108,6 +1116,8 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** Challenges & goals in the range (mira-goals.ts); null when the tables can't be read. */
+  goals?: GoalFigures | null;
 }
 
 export function buildMiraPage(input: {
@@ -1371,5 +1381,9 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    goals:
+      input.data.goals === null
+        ? null
+        : goalFigures(input.data.goals ?? { goals: [], logs: [] }, prep, w, now.getTime()),
   };
 }

@@ -639,6 +639,7 @@ function Engagement({ data }: { data: Data }) {
           who wrote to Mira within 48 hours of it.
         </p>
       </Card>
+      <GoalsCard data={data} />
     </Board>
   );
 }
@@ -1194,6 +1195,72 @@ function Safety({ data }: { data: Data }) {
         21 Nov 2026). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor or other
         professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000 of the
         range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Challenges & goals (22 Nov 2026): who has a goal, how goals are set, whether a new goal is
+ * ticked in its first week, and who keeps ticking (features/admin/server/ap/mira-goals.ts).
+ */
+function GoalsCard({ data }: { data: Data }) {
+  const g = data.goals;
+  const set = g ? g.viaMira + g.byHand : 0;
+  const box = (label: string, unit: "count" | "pct", value: number | null, note: string) => (
+    <StatBox stat={{ label, unit, value, note }} />
+  );
+  return (
+    <Card id="challenges-goals" labelledBy="h-challenges-goals">
+      <SectionHead
+        id="h-challenges-goals"
+        level={3}
+        title="Challenges & goals"
+        description="Whether people set small goals with Mira, and keep ticking them."
+      />
+      {g ? (
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+        >
+          {box(
+            "People with a goal",
+            "count",
+            g.people,
+            `${pct(share(g.people, g.accounts))} of ${count(g.accounts)} accounts, by the range’s last day`
+          )}
+          {box(
+            "Set with Mira",
+            "pct",
+            share(g.viaMira, set),
+            `${count(g.viaMira)} of ${count(set)} goals set in the range; ${count(g.byHand)} by hand. Mira suggested ${count(g.suggested)}`
+          )}
+          {box(
+            "Ticked in the first week",
+            "pct",
+            share(g.tickedInWeek, g.weekOld),
+            `${count(g.tickedInWeek)} of ${count(g.weekOld)} goals set in the range and a week old`
+          )}
+          {box(
+            "Weekly goal loggers",
+            "count",
+            g.weeklyLoggers,
+            "people who ticked a goal in the range’s last 7 days"
+          )}
+        </div>
+      ) : (
+        <p className="m-0 text-[13px] text-ap-muted">
+          Not measured yet: the goal tables can&rsquo;t be read (is migration 20261122010000
+          applied?).
+        </p>
+      )}
+      <p className={NOTE}>
+        Signed-in people only; the team is left out. Set with Mira: goals added with &ldquo;Add as a
+        goal&rdquo; under one of Mira&rsquo;s replies, of all goals set in the range (Mira suggested
+        counts her suggestions in the range, signed in or not). Ticked in the first week: of the
+        goals set in the range that are at least 7 days old now, the share with a tick within 7 days
+        of being set. A deleted goal or account drops out with its ticks. Only ids and times are
+        read, never what a goal says. Recorded from 22 Nov 2026.
       </p>
     </Card>
   );
