@@ -545,8 +545,9 @@ export async function fetchSurveySheets(
       medianMs: Number(closed) > 0 && Number.isFinite(Number(medianMs)) ? Number(medianMs) : null,
       ticked: Number(ticked) || 0,
     };
-    if (sheet === "") orders[order].all = figures;
-    else if (isSurveySheetId(sheet)) orders[order].bySheet.push([sheet, figures]);
+    const into = order === "test" ? orders.test : orders.survey;
+    if (sheet === "") into.all = figures;
+    else if (isSurveySheetId(sheet)) into.bySheet.push([sheet, figures]);
   }
   const done = (o: ReturnType<typeof empty>): SurveySheetsSeen => ({
     bySheet: Object.fromEntries(o.bySheet),
