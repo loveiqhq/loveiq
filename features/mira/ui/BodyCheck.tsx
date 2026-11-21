@@ -57,7 +57,7 @@ export function BodyCheck({
     else void save(next);
   }
 
-  const card = "rounded-2xl border border-ap-line bg-[#faf9fc] p-4";
+  const card = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 
   if (step === "offer") {
     return (
@@ -80,7 +80,7 @@ export function BodyCheck({
               onStart();
               setStep(0);
             }}
-            className="min-h-[44px] rounded-full bg-black px-5 text-[14px] font-bold text-white"
+            className="min-h-[44px] rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
           >
             Start
           </button>
