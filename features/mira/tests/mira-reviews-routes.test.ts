@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 type Row = Record<string, unknown> & { id: number; user_id: string };
 const db = vi.hoisted(() => ({ rows: [] as Row[], nextId: 1 }));
-const cache = vi.hoisted(() => new Map<string, unknown>());
+const cache = vi.hoisted(() => new Map<string, { value: unknown; tags: string[] }>());
 
 function matches(row: Row, query: URLSearchParams): boolean {
   for (const [key, value] of query) {
@@ -48,12 +48,17 @@ vi.mock("@features/admin/server/supabase", () => ({
   }),
 }));
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: () => Promise<unknown>, keys: string[]) => async () => {
-    const key = keys.join("|");
-    if (!cache.has(key)) cache.set(key, await fn());
-    return cache.get(key);
-  },
-  revalidateTag: vi.fn(() => cache.clear()),
+  unstable_cache:
+    (fn: () => Promise<unknown>, keys: string[], opts: { tags?: string[] } = {}) =>
+    async () => {
+      const key = keys.join("|");
+      if (!cache.has(key)) cache.set(key, { value: await fn(), tags: opts.tags ?? [] });
+      return cache.get(key)!.value;
+    },
+  // Only what carries the tag goes, as on Vercel.
+  revalidateTag: vi.fn((tag: string) => {
+    for (const [key, entry] of cache) if (entry.tags.includes(tag)) cache.delete(key);
+  }),
 }));
 vi.mock("@shared/http/csrf", () => ({ verifyCsrfToken: vi.fn().mockResolvedValue(true) }));
 vi.mock("@shared/http/ratelimit", () => ({
