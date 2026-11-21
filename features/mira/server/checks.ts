@@ -77,15 +77,6 @@ export async function deleteChecks(userId: string): Promise<void> {
   if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
 }
 
-/** "Mira may use my check results". */
-export async function setUseChecks(userId: string, on: boolean): Promise<void> {
-  const res = await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(userId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ use_checks: on, updated_at: new Date().toISOString() }),
-  });
-  if (!res.ok) throw new Error(`mira check setting failed (${res.status})`);
-}
-
 export type CheckForMira = { title: string; name: string; band: string; daysAgo: number };
 
 /** A band older than this no longer describes the person, so Mira isn't told it. */

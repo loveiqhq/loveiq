@@ -5,11 +5,11 @@
  *
  *   GET    → each check's results (scored here), when it may be taken again, the body check's
  *            dates, the LoveIQ result, the two "Mira may use" switches, the support country, and
- *            the name and email the signed-in frame shows
+ *            the name and email the signed-in frame shows ("Mira may use my check results" is
+ *            saved with the other "What Mira may use" switches, PATCH /api/mira/me use_checks)
  *   POST   { check, answers } → scores and stores a finished check. Refused (409) before the
  *            check's retake date (14 days, 28 for loneliness), so a result covers its own two
  *            weeks; the browser never sends a score.
- *   PATCH  { useChecks } → "Mira may use my check results"
  *   DELETE → deletes every check result
  *
  * Someone Mira stopped as under 18 (server/minor.ts) gets 403 on every method, as their data is
@@ -30,13 +30,7 @@ import {
   type CheckId,
 } from "@features/mira/content/checks";
 import { FOLLOW_UP_DAYS, bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
-import {
-  addCheck,
-  deleteChecks,
-  lastCheck,
-  readChecks,
-  setUseChecks,
-} from "@features/mira/server/checks";
+import { addCheck, deleteChecks, lastCheck, readChecks } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
@@ -53,7 +47,6 @@ const postSchema = z.object({
   check: z.enum(CHECK_IDS as [CheckId, ...CheckId[]]),
   answers: z.array(z.number().int()).max(20),
 });
-const patchSchema = z.object({ useChecks: z.boolean() }).strict();
 
 /** CSRF on writes, the rate limit, a signed-in account, and never someone stopped as under 18. */
 async function guard(request: Request, write: boolean) {
@@ -172,20 +165,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     return failed(err, "Your answers didn't save. Please try again.");
-  }
-}
-
-export async function PATCH(request: Request) {
-  try {
-    const g = await guard(request, true);
-    if ("error" in g) return g.error;
-    const parsed = patchSchema.safeParse(await request.json().catch(() => ({})));
-    if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
-    await setUseChecks(g.account.id, parsed.data.useChecks);
-    logMiraEvent("settings_saved", { userId: g.account.id }, { fields: ["use_checks"] });
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    return failed(err, "Unable to save.");
   }
 }
 

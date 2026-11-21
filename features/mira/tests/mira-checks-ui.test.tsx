@@ -19,6 +19,7 @@ import { SUPPORT_STARTER, checkById } from "@features/mira/content/checks";
 import { getMiraAccount } from "@features/mira/server/session";
 import CheckPage from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
+import ChecksSettings from "@features/mira/ui/checks/ChecksSettings";
 import type { ChecksData } from "@features/mira/ui/checks/data";
 
 /** The self-check screens (features/mira/ui/checks): runner, result, Home card, chat starter. */
@@ -263,6 +264,33 @@ describe("the Home card", () => {
         .closest("a")!
         .getAttribute("href")
     ).toBe("/mira/assessments/body");
+  });
+});
+
+describe("Settings › Self-checks", () => {
+  it("saves 'Mira may use my check results' with the other switches, and puts it back on failure", async () => {
+    render(<ChecksSettings />);
+    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    fireEvent.click(box);
+    await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
+    expect(box).toBeChecked();
+    replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
+    fireEvent.click(box);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
+    expect(box).toBeChecked();
+  });
+
+  it("deletes every check result after a confirmation", async () => {
+    account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild" }];
+    render(<ChecksSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete my check results" }));
+    expect(sent("DELETE /api/mira/checks")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Your check results are deleted.")).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(([u, i]) => u === "/api/mira/checks" && i?.method === "DELETE")
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "No check results to delete" })).toBeDisabled();
   });
 });
 

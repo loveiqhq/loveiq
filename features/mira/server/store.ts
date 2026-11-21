@@ -102,7 +102,13 @@ export type ProfilePatch = Partial<
     | "nudges_on"
     | "nudge_time"
     | "time_zone"
-  > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null; minor_at: string }
+  > & {
+    nudges_stopped_at: string | null;
+    nudge_stop_reason: string | null;
+    minor_at: string;
+    /** "Mira may use my check results" (20261122090000_mira_checks.sql); written, not read here. */
+    use_checks: boolean;
+  }
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<void> {

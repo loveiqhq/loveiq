@@ -5,8 +5,9 @@ import { miraApi } from "../api";
 import { useChecks } from "./data";
 
 /**
- * "Mira may use my check results" (mira_user.use_checks, off by default): saved on change, put
- * back if the save fails. Mira then sees each check's latest band, never answers or scores.
+ * "Mira may use my check results" (mira_user.use_checks, off by default), one of the "What Mira
+ * may use" switches (PATCH /api/mira/me): saved on change, put back if the save fails. Mira then
+ * sees each check's latest band, never answers or scores.
  */
 export function UseChecksSwitch({
   on,
@@ -21,7 +22,7 @@ export function UseChecksSwitch({
     setError(null);
     setBusy(true);
     onChange(next);
-    const r = await miraApi("/api/mira/checks", { method: "PATCH", body: { useChecks: next } });
+    const r = await miraApi("/api/mira/me", { method: "PATCH", body: { use_checks: next } });
     setBusy(false);
     if (!r.ok) {
       onChange(!next);

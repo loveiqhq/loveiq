@@ -16,7 +16,7 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch: vi.fn() }));
 
-import { DELETE, GET, PATCH, POST } from "@/app/api/mira/checks/route";
+import { DELETE, GET, POST } from "@/app/api/mira/checks/route";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { checksForMira } from "@features/mira/server/checks";
 import { isMinor } from "@features/mira/server/minor";
@@ -98,10 +98,6 @@ beforeEach(() => {
       db.checks = db.checks.filter((r) => r.user_id !== "u1");
       return new Response(null, { status: 204 });
     }
-    if (method === "PATCH" && path === "/rest/v1/mira_user?id=eq.u1") {
-      Object.assign(db.user, JSON.parse(String(init!.body)));
-      return new Response(null, { status: 204 });
-    }
     if (method === "GET" && path.startsWith("/rest/v1/mira_body_check?user_id=eq.u1")) {
       return json(db.body);
     }
@@ -136,7 +132,6 @@ describe("every method", () => {
     for (const [h, m] of [
       [GET, "GET"],
       [POST, "POST"],
-      [PATCH, "PATCH"],
       [DELETE, "DELETE"],
     ] as const) {
       expect((await call(h, m, m === "GET" ? undefined : {})).status, m).toBe(401);
@@ -144,14 +139,12 @@ describe("every method", () => {
     vi.mocked(getMiraAccount).mockResolvedValue(LEA);
     vi.mocked(verifyCsrfToken).mockResolvedValue(false);
     expect((await save("anxiety", GAD)).status).toBe(403);
-    expect((await call(PATCH, "PATCH", { useChecks: true })).status).toBe(403);
     expect((await call(DELETE, "DELETE")).status).toBe(403);
     vi.mocked(verifyCsrfToken).mockResolvedValue(true);
     vi.mocked(isMinor).mockResolvedValue(true);
     for (const [h, m] of [
       [GET, "GET"],
       [POST, "POST"],
-      [PATCH, "PATCH"],
       [DELETE, "DELETE"],
     ] as const) {
       const res = await call(h, m, m === "POST" ? { check: "anxiety", answers: GAD } : undefined);
@@ -279,15 +272,7 @@ describe("GET: the person's checks", () => {
   });
 });
 
-describe("PATCH and DELETE", () => {
-  it("turns 'Mira may use my check results' on and off for the account only", async () => {
-    expect((await call(PATCH, "PATCH", { useChecks: "yes" })).status).toBe(400);
-    expect((await call(PATCH, "PATCH", { useChecks: true, other: 1 })).status).toBe(400);
-    expect((await call(PATCH, "PATCH", { useChecks: true })).status).toBe(200);
-    expect(db.user.use_checks).toBe(true);
-    expect(events()).toEqual([["settings_saved", { userId: "u1" }, { fields: ["use_checks"] }]]);
-  });
-
+describe("DELETE", () => {
   it("deletes every result of the account and no one else's", async () => {
     someone("gad7", GAD, ago(3));
     someone("gad7", GAD, ago(3), "someone-else");

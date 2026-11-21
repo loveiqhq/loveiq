@@ -3,7 +3,8 @@
  *
  *   GET            → profile, chats, the LoveIQ result matched on the verified email, and
  *                    which body check is due (features/mira/server/body-check.ts)
- *   PATCH          → name, country, gender, coaching style, the two "What Mira may use" switches
+ *   PATCH          → name, country, gender, coaching style, the "What Mira may use" switches
+ *                    (memory, the LoveIQ result and, from 22 Nov 2026, the self-checks' bands)
  *   DELETE ?what=chats    → deletes every stored chat
  *   DELETE ?what=account  → deletes the account, its profile, chats and messages (a staff or
  *       Jarvis login stays: see deleteAccount)
@@ -50,6 +51,8 @@ const patchSchema = z
       .optional(),
     remember_chats: z.boolean().optional(),
     use_assessment: z.boolean().optional(),
+    // "Mira may use my check results" (the self-checks, 20261122090000_mira_checks.sql).
+    use_checks: z.boolean().optional(),
     nudges_on: z.boolean().optional(),
     nudge_time: z.enum(["08:00", "19:00", "21:30"]).optional(),
     time_zone: z.string().max(64).refine(isValidTimeZone).optional(),
