@@ -27,8 +27,15 @@
  * BODY_RELIABLE_CHANGE or more; profile depth from the intake questions answered, the body check,
  * the coaching style and a LoveIQ result; topics and referrals from the markers Mira's replies
  * carry (features/mira/server/safety.ts), as ids, never words.
+ *
+ * Self-checks (22 Nov 2026, features/mira/content/checks.ts): each check's starts (the browser's
+ * <check>_check_started) and finishes (the server's <check>_check_done), retakes (a finish that
+ * is not the person's first of that check), the support lines the mood check's question 9 opened
+ * (check_support_shown, a count) and, of today's accounts that finished one, the share that let
+ * Mira use their results (mira_user.use_checks). Events carry no answers, scores or bands.
  */
 import miraConfig from "@features/mira/content/mira-config.json";
+import { CHECKS } from "@features/mira/content/checks";
 import nudgeConfig from "@features/mira/content/nudges.json";
 import { FOLLOW_UP_DAYS } from "@features/mira/server/body-check";
 import { isStaffEmail } from "@shared/env/staff-email";
@@ -99,7 +106,18 @@ const EVENT_NAMES = [
   "style_saved",
   "reply_declined",
   "minor_stop",
+  // The self-checks (22 Nov 2026): started, finished, and the support lines from question 9.
+  ...CHECKS.flatMap((c) => [`${c.id}_check_started`, `${c.id}_check_done`]),
+  "check_support_shown",
 ];
+
+/** A self-check event's check, and whether it is the finish. */
+const CHECK_EVENTS = new Map(
+  CHECKS.flatMap((c) => [
+    [`${c.id}_check_started`, { check: c.id, done: false }],
+    [`${c.id}_check_done`, { check: c.id, done: true }],
+  ])
+);
 
 export interface MiraUserRow {
   id: string;
@@ -109,6 +127,8 @@ export interface MiraUserRow {
   use_assessment: boolean;
   /** Created or signed in from a team browser (20261121030000_mira_team_and_source.sql). */
   is_team?: boolean;
+  /** "Mira may use my check results" (20261122090000_mira_checks.sql). */
+  use_checks?: boolean;
 }
 
 /** An event's source when the visit had neither campaign tags nor a referring site. */
@@ -172,7 +192,7 @@ export interface MiraData {
 export async function fetchMira(): Promise<MiraData> {
   const [users, events, nudges, bodyChecks] = await Promise.all([
     fetchAllRows<MiraUserRow>(
-      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team&order=id.asc"
+      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,use_checks&order=id.asc"
     ),
     fetchEvents(),
     fetchAllRows<MiraNudgeRow>(
@@ -289,6 +309,8 @@ interface Person {
   styleSaved: number[];
   /** The first source recorded for them (MiraEventRow.source), and when; null: none recorded. */
   from: { at: number; source: string } | null;
+  /** Their self-check starts and finishes, oldest first. */
+  checks: Array<{ at: number; check: string; done: boolean }>;
 }
 
 interface Counted {
@@ -424,6 +446,7 @@ export function prepare(data: MiraData): Prepared {
         tipOpened: [],
         styleSaved: [],
         from: null,
+        checks: [],
       };
       people.set(key, p);
     }
@@ -446,6 +469,7 @@ export function prepare(data: MiraData): Prepared {
     else if (e.name === "style_tip_shown") p.tipShown.push(at);
     else if (e.name === "style_tip_opened") p.tipOpened.push(at);
     else if (e.name === "style_saved") p.styleSaved.push(at);
+    else if (CHECK_EVENTS.has(e.name)) p.checks.push({ at, ...CHECK_EVENTS.get(e.name)! });
   }
   for (const p of people.values()) {
     p.starts.sort((a, b) => a.at - b.at);
@@ -458,6 +482,7 @@ export function prepare(data: MiraData): Prepared {
     });
     p.convs = conversationsOf(p.msgs);
     p.refers.sort((a, b) => a - b);
+    p.checks.sort((a, b) => a.at - b.at);
   }
 
   const bodyChecks = new Map<string, Array<{ at: number; score: number }>>();
@@ -1009,6 +1034,58 @@ function sources(prep: Prepared, w: Win): SourceRow[] {
     );
 }
 
+export interface SelfChecks {
+  /** Per check, in the range: starts, finishes, finishes ÷ starts, and finishes that were retakes. */
+  checks: Array<{
+    id: string;
+    title: string;
+    started: number;
+    finished: number;
+    completion: number | null;
+    retakes: number;
+  }>;
+  /** Of today's accounts that finished a check, those that let Mira use their results. */
+  miraUse: { on: number; of: number };
+  /** Times the mood check's question 9 opened the support lines, in the range. */
+  supportShown: number;
+}
+
+/** The self-checks in the range (and the "Mira may use" share, today). */
+function selfChecks(prep: Prepared, w: Win): SelfChecks {
+  const checks = CHECKS.map((c) => {
+    let started = 0;
+    let finished = 0;
+    let retakes = 0;
+    for (const p of prep.people.values()) {
+      const mine = p.checks.filter((e) => e.check === c.id);
+      const firstDone = mine.find((e) => e.done);
+      for (const e of mine) {
+        if (!within(e.at, w)) continue;
+        if (!e.done) started++;
+        else {
+          finished++;
+          if (e !== firstDone) retakes++;
+        }
+      }
+    }
+    return {
+      id: c.id,
+      title: c.title,
+      started,
+      finished,
+      completion: started ? Math.min(1, finished / started) : null,
+      retakes,
+    };
+  });
+  const finishers = prep.accounts.filter((a) => prep.people.get(a.id)?.checks.some((e) => e.done));
+  return {
+    checks,
+    miraUse: { on: finishers.filter((a) => a.use_checks).length, of: finishers.length },
+    supportShown: prep.events.filter((e) => e.name === "check_support_shown" && within(e.at, w))
+      .length,
+  };
+}
+
 const PER_USER = [
   { label: "1 conversation", min: 1, max: 1 },
   { label: "2–3", min: 2, max: 3 },
@@ -1108,6 +1185,8 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** The self-checks (selfChecks). */
+  selfChecks: SelfChecks;
 }
 
 export function buildMiraPage(input: {
@@ -1371,5 +1450,6 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    selfChecks: selfChecks(prep, w),
   };
 }

@@ -767,6 +767,7 @@ function Outcomes({ data }: { data: Data }) {
       <Chips data={data} />
       <Topics data={data} />
       <Therapeutic data={data} />
+      <SelfChecks data={data} />
       <Satisfaction data={data} />
       <Knows data={data} />
       <Safety data={data} />
@@ -957,6 +958,74 @@ function Therapeutic({ data }: { data: Data }) {
         test&ndash;retest reliability). Without a control group this shows change, not cause. In the
         range: offered to {count(b.offered)}, started by {count(b.started)}; first checks{" "}
         {count(b.baselines)}, four-week checks {count(b.followUps)}.
+      </p>
+    </Card>
+  );
+}
+
+/** The self-checks (22 Nov 2026): starts, finishes, completion and retakes per check. */
+function SelfChecks({ data }: { data: Data }) {
+  const { checks, miraUse, supportShown } = data.selfChecks;
+  const gtc = "minmax(170px,1.6fr) 90px 90px 110px 90px";
+  return (
+    <Card id="self-checks" labelledBy="h-self-checks">
+      <SectionHead
+        id="h-self-checks"
+        level={3}
+        title="Self-checks"
+        description="The anxiety (GAD-7), mood (PHQ-9) and loneliness checks: how many are started, finished and taken again."
+      />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Self-checks" style={{ minWidth: 560 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
+            {["Check", "Started", "Finished", "Completion", "Retakes"].map((h, i) => (
+              <span key={h} role="columnheader" className={`${HEAD} ${i ? "text-right" : ""}`}>
+                {h}
+              </span>
+            ))}
+          </div>
+          {checks.map((c) => (
+            <div
+              key={c.id}
+              role="row"
+              className="grid items-center border-t border-ap-line"
+              style={{ gridTemplateColumns: gtc }}
+            >
+              <span role="rowheader" className="px-3 py-2.5 text-sm font-bold">
+                {c.title}
+              </span>
+              {[count(c.started), count(c.finished), pct(c.completion), count(c.retakes)].map(
+                (v, i) => (
+                  <span key={i} role="cell" className="px-3 py-2.5 text-right text-sm tabular-nums">
+                    {v}
+                  </span>
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+        <span>
+          <strong className="tabular-nums">
+            {pct(share(miraUse.on, miraUse.of))} ({count(miraUse.on)} of {count(miraUse.of)})
+          </strong>{" "}
+          let Mira use their results
+        </span>
+        <span>
+          <strong className="tabular-nums">{count(supportShown)}</strong> support-line{" "}
+          {supportShown === 1 ? "panel" : "panels"} opened by the mood check&rsquo;s question 9
+        </span>
+      </div>
+      <p className={NOTE}>
+        Started: checks begun in the range (a resumed one counts once). Finished: results saved in
+        the range, and completion is finished &divide; started. Retakes: finished results that were
+        not the person&rsquo;s first of that check (a check opens again after 14 days, 28 for
+        loneliness). Mira may use results: of today&rsquo;s accounts that finished a check, those
+        with &ldquo;Mira may use my check results&rdquo; on. Question 9 asks about thoughts of being
+        better off dead or of self-harm; any answer above &ldquo;Not at all&rdquo; opens the support
+        lines at once, and only that it happened is counted. Answers, scores and bands are never
+        logged. Recorded from 22 Nov 2026.
       </p>
     </Card>
   );
