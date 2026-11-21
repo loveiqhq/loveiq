@@ -3,9 +3,11 @@
  * signed-in person's name and email (the frame), whether "Remember our conversations" is on, their
  * chats' topics (none while it is off: picks from chats follow that switch), the coming-soon
  * coaches they asked to hear about, and their chat titles for Home's search. Their own rows only.
+ * Someone Mira stopped as under 18 is refused (403), like Mira's other routes.
  */
 import { NextResponse } from "next/server";
 import { readCoachState } from "@features/mira/server/coaches";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, listChats } from "@features/mira/server/store";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -25,6 +27,9 @@ export async function GET(request: Request) {
   const account = await getMiraAccount();
   if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   try {
+    if (await isMinor(account.id)) {
+      return NextResponse.json({ error: "Mira isn't available." }, { status: 403 });
+    }
     const [profile, chats, state] = await Promise.all([
       getProfile(account.id),
       listChats(account.id),

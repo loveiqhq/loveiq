@@ -29,6 +29,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { COACH_EVENTS, coachEventProps, coachIdFor, COACHES } from "@features/mira/content/coaches";
 import { anonId } from "@features/mira/server/anon";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, rateMessage } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -38,6 +39,8 @@ export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_EVENTS = 300;
+/** Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. */
+const MINOR_REFUSED = () => NextResponse.json({ error: "Mira isn't available." }, { status: 403 });
 
 const schema = z.discriminatedUnion("type", [
   z.object({
@@ -136,6 +139,7 @@ export async function POST(request: Request) {
       break;
     case "notify": {
       if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+      if (await isMinor(account.id)) return MINOR_REFUSED();
       const coach = coachIdFor(body.coach);
       if (!coach || COACHES.find((c) => c.id === coach)?.live) {
         return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -144,6 +148,7 @@ export async function POST(request: Request) {
       break;
     }
     case "coaches": {
+      if (await isMinor(account?.id ?? null)) return MINOR_REFUSED();
       const props = coachEventProps(body.name, body.detail);
       if (!props) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
       logMiraEvent(body.name, who, props);
