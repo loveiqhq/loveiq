@@ -316,7 +316,14 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Ratings and quotes (features/mira/reviews.ts, 22 Nov 2026): the ask shown and put off in the
+  // chat, a rating given ({ words }: with words for others) and taken back ({ what }). Never stars
+  // or words: a rating taken back must leave nothing behind.
+  | "review_prompt_shown"
+  | "review_prompt_not_now"
+  | "review_given"
+  | "review_withdrawn";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.
