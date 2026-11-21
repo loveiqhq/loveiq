@@ -1372,6 +1372,10 @@ function FunnelSection({
           })}
         </div>
       </div>
+      {/* Said aloud when the sort changes: the table's rows move without a page change. */}
+      <p role="status" className="sr-only">
+        {first ? `Sorted by ${sortLabel}.` : "In survey order."}
+      </p>
       {first && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ap-body">
           <span>

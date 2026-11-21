@@ -189,7 +189,7 @@ export function SheetBadge({ n }: { n: number }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-gradient-to-br from-[#bf66d9] to-[#795fc8] text-[11px] font-bold text-white"
+      className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-gradient-to-br from-[#9b4fc4] to-[#5a42a6] text-[11px] font-bold text-white"
     >
       {n}
     </span>

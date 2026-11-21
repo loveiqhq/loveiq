@@ -410,7 +410,7 @@ function Figure({
               {k.pin ? (
                 <span
                   aria-hidden="true"
-                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-br from-[#bf66d9] to-[#795fc8] text-[8px] font-bold text-white"
+                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-br from-[#9b4fc4] to-[#5a42a6] text-[8px] font-bold text-white"
                 >
                   1
                 </span>
@@ -465,7 +465,7 @@ function Figure({
                               style={{ borderColor: PIN }}
                             />
                             <span
-                              className="absolute -right-[10px] z-[3] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-gradient-to-br from-[#bf66d9] to-[#795fc8] text-[10px] font-bold text-white shadow-[0_0_0_2px_#fff]"
+                              className="absolute -right-[10px] z-[3] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-gradient-to-br from-[#9b4fc4] to-[#5a42a6] text-[10px] font-bold text-white shadow-[0_0_0_2px_#fff]"
                               style={{ top: `${-28 - k * 20}px` }}
                             >
                               {sh.n}
