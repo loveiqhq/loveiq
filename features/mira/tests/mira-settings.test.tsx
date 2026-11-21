@@ -98,15 +98,18 @@ describe("Settings sections", () => {
 
     await openSettings({
       security: <p>Passkeys here</p>,
+      checks: <p>Self-checks here</p>,
       sharedReview: <p>Shared review here</p>,
-      journal: <p>Journal reminders here</p>,
-      weeklySession: <p>Session reminders here</p>,
+      journal: <p>Journal settings here</p>,
+      weeklySession: <p>Weekly session here</p>,
     });
-    expect(within(section("Sign-in & security")).getByText("Passkeys here")).toBeInTheDocument();
-    expect(within(section("Sharing")).getByText("Shared review here")).toBeInTheDocument();
-    const notifications = section("Notifications");
-    expect(within(notifications).getByText("Journal reminders here")).toBeInTheDocument();
-    expect(within(notifications).getByText("Session reminders here")).toBeInTheDocument();
+    // Each brings its own heading; the page gives it an index entry and an anchor.
+    const at = (id: string) => document.getElementById(id)!;
+    expect(at("security-slot")).toHaveTextContent("Passkeys here");
+    expect(at("checks")).toHaveTextContent("Self-checks here");
+    expect(at("sharing")).toHaveTextContent("Shared review here");
+    expect(at("journal")).toHaveTextContent("Journal settings here");
+    expect(at("weekly")).toHaveTextContent("Weekly session here");
     const links = within(screen.getAllByRole("navigation", { name: "Settings sections" })[0]!)
       .getAllByRole("link")
       .map((a) => a.getAttribute("href"));
@@ -116,8 +119,11 @@ describe("Settings sections", () => {
       "#security",
       "#coaching",
       "#privacy",
+      "#checks",
       "#sharing",
       "#notifications",
+      "#journal",
+      "#weekly",
       "#appearance",
       "#data",
     ]);

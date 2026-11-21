@@ -17,11 +17,11 @@ import tokens from "./theme-tokens.js";
  * on wide screens, a sticky row of links on phones), and each change saved as it is made, with a
  * "Saved" beside its section; only the account's typed details wait for their Save button.
  *
- * Other streams' sections drop in through props (app/mira/settings/page.tsx passes them):
- * `security` (SecuritySettings) and `sharedReview` (SharedReviewSettings) get a section and an
- * index entry each; `journal` (JournalSettings) and `weeklySession` (WeeklySessionSettings) sit
- * inside Notifications, under the daily nudges. Each renders its content only (no h2): the
- * section gives the heading. `Switch`, `Select`, `SettingsGroup` and `SettingsSection` are
+ * Other features' sections drop in through props (app/mira/settings/page.tsx passes them):
+ * `security` (SecuritySettings), `checks` (ChecksSettings), `sharedReview` (SharedReviewSettings),
+ * `journal` (JournalSettings) and `weeklySession` (WeeklySessionSettings). Each brings its own
+ * heading, styled like SettingsSection's, and gets an index entry and an anchor (`Slot`). `Switch`,
+ * `Select`, `SettingsGroup` and `SettingsSection` are
  * exported for them, so every row looks the same.
  */
 
@@ -91,8 +91,11 @@ type SectionId =
   | "security"
   | "coaching"
   | "privacy"
+  | "checks"
   | "sharing"
   | "notifications"
+  | "journal"
+  | "weekly"
   | "appearance"
   | "data";
 
@@ -108,6 +111,8 @@ export type SettingsSlots = {
   journal?: ReactNode;
   /** WeeklySessionSettings: the weekly session's reminders, inside Notifications. */
   weeklySession?: ReactNode;
+  /** ChecksSettings: "Mira may use my check results" and deleting them. */
+  checks?: ReactNode;
 };
 
 const TEXT_CHOICES: Array<[TextSize, string]> = [
@@ -121,6 +126,7 @@ export default function MiraSettings({
   sharedReview,
   journal,
   weeklySession,
+  checks,
 }: SettingsSlots = {}) {
   const router = useRouter();
   const [p, setP] = useState<Profile | null>(null);
@@ -142,8 +148,11 @@ export default function MiraSettings({
     ...(security ? ([["security", "Sign-in & security"]] as Array<[SectionId, string]>) : []),
     ["coaching", "Coaching"],
     ["privacy", "Privacy"],
-    ...(sharedReview ? ([["sharing", "Sharing"]] as Array<[SectionId, string]>) : []),
+    ...(checks ? ([["checks", "Self-checks"]] as Array<[SectionId, string]>) : []),
+    ...(sharedReview ? ([["sharing", "Your rating"]] as Array<[SectionId, string]>) : []),
     ["notifications", "Notifications"],
+    ...(journal ? ([["journal", "Daily journal"]] as Array<[SectionId, string]>) : []),
+    ...(weeklySession ? ([["weekly", "Weekly session"]] as Array<[SectionId, string]>) : []),
     ["appearance", "Appearance"],
     ["data", "Your data"],
   ];
@@ -411,11 +420,7 @@ export default function MiraSettings({
                 </p>
               </SettingsSection>
 
-              {security ? (
-                <SettingsSection id="security" title="Sign-in & security" status={status.security}>
-                  {security}
-                </SettingsSection>
-              ) : null}
+              {security ? <Slot id="security-slot">{security}</Slot> : null}
 
               <SettingsSection
                 id="coaching"
@@ -464,11 +469,9 @@ export default function MiraSettings({
                 </p>
               </SettingsSection>
 
-              {sharedReview ? (
-                <SettingsSection id="sharing" title="Sharing" status={status.sharing}>
-                  {sharedReview}
-                </SettingsSection>
-              ) : null}
+              {checks ? <Slot id="checks">{checks}</Slot> : null}
+
+              {sharedReview ? <Slot id="sharing">{sharedReview}</Slot> : null}
 
               <SettingsSection
                 id="notifications"
@@ -527,9 +530,11 @@ export default function MiraSettings({
                     )}
                   </Row>
                 </SettingsGroup>
-                {journal ? <div className="mt-4">{journal}</div> : null}
-                {weeklySession ? <div className="mt-4">{weeklySession}</div> : null}
               </SettingsSection>
+
+              {journal ? <Slot id="journal">{journal}</Slot> : null}
+
+              {weeklySession ? <Slot id="weekly">{weeklySession}</Slot> : null}
 
               <SettingsSection
                 id="appearance"
@@ -810,6 +815,18 @@ export function SettingsSection({
       <div className="mt-4">{children}</div>
       {footer}
     </section>
+  );
+}
+
+/**
+ * Another feature's own Settings section (it brings its own heading, the same as
+ * SettingsSection's): only the anchor the index scrolls to and watches.
+ */
+function Slot({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <div id={id} className="scroll-mt-16 xl:scroll-mt-10">
+      {children}
+    </div>
   );
 }
 

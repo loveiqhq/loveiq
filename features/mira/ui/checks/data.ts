@@ -5,12 +5,8 @@ import { useEffect, useState } from "react";
 import { bandOf, type Check, type CheckId } from "@features/mira/content/checks";
 import { miraApi } from "../api";
 
-/**
- * MiraAppFrame marks the tab of the page it is given. It has no "assessments" yet: the lead adds
- * it to its `active` and points the Assessments tab to /mira/assessments (from
- * /mira/home#assessments); until then no tab is marked on these pages.
- */
-export const FRAME_TAB = "assessments" as unknown as "home";
+/** The menu tab these pages mark (MiraAppFrame). */
+export const FRAME_TAB = "assessments" as const;
 
 /** What GET /api/mira/checks answers (app/api/mira/checks/route.ts). */
 export type CheckResult = { at: string; score: number; band: string };

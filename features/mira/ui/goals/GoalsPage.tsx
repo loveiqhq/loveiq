@@ -60,7 +60,7 @@ export default function GoalsPage() {
   }, [g.load]);
 
   return (
-    <MiraAppFrame active="feedback">
+    <MiraAppFrame active="goals">
       {/* "feedback" marks no tab: MiraAppFrame has no Goals tab yet and isn't edited on this
           branch; the lead adds one when the nav is composed. */}
       <div className="max-w-[720px]">

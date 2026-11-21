@@ -83,7 +83,7 @@ export default function RecordingDetail({ id }: { id: string }) {
   }
 
   return (
-    <MiraAppFrame active="home">
+    <MiraAppFrame active="recordings">
       <Link
         href={BACK}
         className="inline-flex min-h-[44px] items-center gap-1.5 text-[14px] font-semibold text-ap-plum"

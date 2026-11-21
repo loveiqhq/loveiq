@@ -310,7 +310,7 @@ export function RecordingsCard() {
 export default function RecordingsPage() {
   const { load, retry } = useSessions(50);
   return (
-    <MiraAppFrame active="home">
+    <MiraAppFrame active="recordings">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-serif text-[34px] font-medium motion-safe:animate-mira-in">

@@ -65,7 +65,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
   );
 
   return (
-    <MiraAppFrame active="home">
+    <MiraAppFrame active="journal">
       <h1 className="font-serif text-[34px] font-medium leading-tight motion-safe:animate-mira-in">
         Daily journal
       </h1>

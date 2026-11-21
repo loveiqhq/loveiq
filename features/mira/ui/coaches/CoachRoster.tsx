@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MiraRatingLine } from "../reviews/PublicReviews";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -70,7 +71,7 @@ export default function CoachRoster() {
 
   if (state.status === "closed") {
     return (
-      <MiraAppFrame active="feedback">
+      <MiraAppFrame active="coaches">
         <h1 className="font-serif text-[32px] font-medium leading-tight">Coaches</h1>
         <p className="mt-3 max-w-[56ch] text-[15px] leading-relaxed text-ap-body">
           Mira’s coaches are for adults, so they aren’t available here.
@@ -81,7 +82,7 @@ export default function CoachRoster() {
 
   return (
     // No Coaches tab in the frame yet: nothing is marked current until the nav gets one.
-    <MiraAppFrame active="feedback" email={data?.email} name={data?.name}>
+    <MiraAppFrame active="coaches" email={data?.email} name={data?.name}>
       <h1 className="text-balance font-serif text-[32px] font-medium leading-[1.15] tracking-[-0.01em] [overflow-wrap:anywhere] motion-safe:animate-mira-in sm:text-[42px]">
         Who would you like to learn from?
       </h1>
@@ -265,6 +266,8 @@ function MiraCard({ mira }: { mira: Coach }) {
         Trained on <b className="font-semibold text-ap-body">{MIRA_TRAINED_ON.papers}</b> &amp;{" "}
         <b className="font-semibold text-ap-body">{MIRA_TRAINED_ON.words}</b> {MIRA_TRAINED_ON.rest}
       </p>
+      {/* Real ratings only: nothing shows until enough real people rated (features/mira/reviews.ts). */}
+      <MiraRatingLine className="relative mt-2 text-[13px]" />
       <div className="relative mt-6 flex flex-wrap items-center gap-2">
         <Link href="/mira" className={INK_PILL}>
           Talk to Mira
