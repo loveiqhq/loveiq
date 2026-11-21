@@ -33,6 +33,7 @@ import {
   MAX_MESSAGE_CHARS,
 } from "@features/mira/server/config";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
+import { goalsForPrompt } from "@features/mira/server/goals";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
 import {
@@ -279,6 +280,11 @@ export async function POST(request: Request) {
       style = profile.style;
       remember = profile.remember_chats;
       country = profile.country && profile.country !== "OTHER" ? profile.country : country;
+      // Challenges & goals: their goals on the go, read beside the result, so Mira can check in.
+      const goals = goalsForPrompt(account.id, profile.time_zone).catch((err) => {
+        logger.warn({ err }, "mira: goals were not read for the chat");
+        return [];
+      });
       const assessment = profile.use_assessment
         ? await findAssessment(account.email).catch(() => null)
         : null;
@@ -288,6 +294,7 @@ export async function POST(request: Request) {
         gender: profile.gender,
         country: profile.country,
         archetype: assessment?.archetype ?? null,
+        goals: await goals,
       };
       if (askedChatId && (await ownsChat(account.id, askedChatId))) {
         chatId = askedChatId;
@@ -351,6 +358,7 @@ export async function POST(request: Request) {
   let crisis = false;
   let refused = false;
   let ask: string | null = null;
+  let goal: string | null = null;
 
   const result = await askModel(
     STABLE_INSTRUCTIONS,
@@ -386,6 +394,7 @@ export async function POST(request: Request) {
     sources = out.sources;
     crisis = out.crisis;
     ask = out.ask;
+    goal = out.goal ?? null; // parseReply never offers one beside a crisis or an under-18 stop
   }
 
   // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
@@ -428,6 +437,7 @@ export async function POST(request: Request) {
     logMiraEvent("reply_declined", who, { why, category: result.category ?? null });
   }
   if (minor) logMiraEvent("minor_stop", who, { signedIn: Boolean(account) });
+  if (goal) logMiraEvent("goal_suggested", who, { signedIn: Boolean(account) });
   // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
   const lines = crisis || refused;
   // The reply that used the last free message brings the sign-up card, never beside the support
@@ -444,6 +454,7 @@ export async function POST(request: Request) {
     messageId,
     ...(minor ? { minor: true } : {}),
     ...(ask ? { ask } : {}),
+    ...(goal ? { goal } : {}),
     ...(invitation ? { invitation } : {}),
     ...(freeLeft === null ? {} : { freeLeft }),
   });
