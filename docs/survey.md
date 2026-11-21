@@ -276,7 +276,7 @@ with a "Keep going" that carries on. The rules are in
 
 - **Placed by question, not by position.** C13 asked the questions in two orders, and the
   reorder still to come moves them again. In C13's control order 01005 is question 3, so the
-  expert's sheet stayed shut there. Since the test ended (2026-11-20) every new run is asked
+  expert's sheet stayed shut there. Since the test ended (2026-11-21) every new run is asked
   the new order, where it opens; a draft resumed in the old order still skips it. Re-key it
   when the reorder lands.
 - **When they open.** A sheet "after" a question holds the move: Next, Auto-advance, Enter,

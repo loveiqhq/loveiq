@@ -560,7 +560,7 @@ export async function POST(request: Request) {
    * start, both already in this payload — so recomputing it server-side agrees with
    * what the respondent actually saw, and a client cannot misreport its arm. A run
    * begun during the test gets the arm its session id drew; one begun from the test's
-   * end (QUESTION_ORDER_TEST_END, 20 Nov 2026) gets the new order, as every run is asked.
+   * end (QUESTION_ORDER_TEST_END, 21 Nov 2026) gets the new order, as every run is asked.
    *
    * ONE EXCEPTION, and it is not production. `?order=control|variant` previews
    * either arm on dev and staging; a previewer whose session hashes the other way
@@ -610,8 +610,8 @@ export async function POST(request: Request) {
    * inflating that bucket by more than half. So the C13 arm only joins a tracker
    * that exists already: the client's, or the one the landing stamp made.
    *
-   * The arm is a pure function of the session id, which is stored on the
-   * submission, so nothing is lost: an unstamped respondent's arm is recomputed
+   * The arm is a pure function of the session id and the run's start, both stored on
+   * the submission, so nothing is lost: an unstamped respondent's arm is recomputed
    * rather than read. The stamp is a convenience for grouping, never the record.
    *
    * It commits only if it still fits the 1000-char budget, AFTER the landing arm,

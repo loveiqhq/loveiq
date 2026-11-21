@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SurveyAnswerValue } from "@features/survey/server/types";
 import {
+  beginsNow,
   QUESTION_ORDER_WINNER,
   resolveDraftQuestionOrderArm,
   resolveQuestionOrderOverride,
@@ -65,7 +66,10 @@ function orderArmFor(draft: Draft): QuestionOrderArm {
 }
 
 function loadState(): SurveyState {
-  const draft = loadDraft();
+  const saved = loadDraft();
+  // A fresh run on a draft dated before C13 ended (a landing card answered then) begins now,
+  // so the server stamps it with the order it is asked (beginsNow).
+  const draft = beginsNow(saved) ? { ...saved, startedAt: new Date().toISOString() } : saved;
   return { ...draft, orderArm: orderArmFor(draft) };
 }
 
@@ -163,7 +167,8 @@ export function useSurveyState() {
   const clearState = useCallback(() => {
     // Starting over drops the landing prefill too, so every question returns.
     answersRef.current = {};
-    // Cleared first: it drops the session id, and the new run's arm is its new id's.
+    // Cleared first: it drops the session id, so the new run gets its own, and is asked the
+    // new order like any fresh run.
     clearPersistedSurveyState({ clearPendingCompletion: true });
     const fresh: Draft = {
       answers: {},

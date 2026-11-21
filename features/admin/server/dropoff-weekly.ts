@@ -110,7 +110,7 @@ export interface DropoffWeeklyPayload {
   weeks: string[];
   /** Whether the last column is the week in progress. */
   partialLast: boolean;
-  /** n = the question's number in today's (control) order; r = % per week, null under the floor. */
+  /** n = the question's number in today's order (the new one, C13's); r = % per week, null under the floor. */
   rows: Array<{ n: number; q: string; r: Array<number | null> }>;
   floor: number;
   updated: string;

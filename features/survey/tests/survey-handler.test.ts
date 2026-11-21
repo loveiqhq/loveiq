@@ -958,9 +958,10 @@ describe("POST /api/survey", () => {
     );
 
     it("agrees with the pure function the readouts use", async () => {
-      // Same check from the other side: whatever the route stamps must equal what the
-      // readouts recompute from the same session id and start. A change to either that does
-      // not move the other is a silent desync between what was shown and what was recorded.
+      // Whatever the route stamps must equal what the readouts recompute from the same session
+      // id and start. A change to either that does not move the other is a silent desync. That
+      // it is also the order the reader was asked is checked on the client's side, against the
+      // same function (useSurveyState.test.ts, "C13 arm").
       const body = { ...validBody(), sessionId: SESSION };
       await POST(makeRequest({ ...body, utmTracker: JSON.stringify({ utm_source: "google" }) }));
       expect(JSON.parse(rpcTracker()).question_order_arm).toBe(

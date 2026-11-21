@@ -431,7 +431,7 @@ describe("readSurveyTests", () => {
       "the team chose the anonymous one, which everyone gets now",
     ]);
     expect([order!.until, order!.outcome]).toEqual([
-      "20 Nov",
+      "21 Nov",
       "the team chose the new order, which everyone gets now",
     ]);
     expect(order!.enoughBy).toBeNull();

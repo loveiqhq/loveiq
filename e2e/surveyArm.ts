@@ -13,7 +13,7 @@ import { assignGateRevealArm, type GateRevealArm } from "../shared/experiments/g
  *
  * THE QUESTION ORDER IS NO LONGER ONE OF THEM. While C13 ran it derived the arm from the
  * session id, and a spec walking the survey by index got the variant opening in about half
- * of its runs. The test ended on 20 Nov 2026 (QUESTION_ORDER_TEST_END) and the variant won:
+ * of its runs. The test ended on 21 Nov 2026 (QUESTION_ORDER_TEST_END) and the variant won:
  * every fresh run is asked it, whatever arm its id drew, so `order` here only picks which
  * fixture is used. A spec that needs the old order seeds a draft that records it
  * (`orderArm: "control"`, as survey-sheets.spec.ts does), or one with progress and no arm,

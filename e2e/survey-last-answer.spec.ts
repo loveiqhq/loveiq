@@ -38,7 +38,7 @@ import { openFirstCategory } from "./surveyGroups";
 /**
  * The new order. The tail this spec is about is identical in both C13 orders — the test
  * only reorders the opening — and every fresh run is asked the new one since the test
- * ended (20 Nov 2026), whatever its session id drew, so the index walk follows it.
+ * ended (21 Nov 2026), whatever its session id drew, so the index walk follows it.
  */
 const ARM = QUESTION_ORDER_WINNER;
 

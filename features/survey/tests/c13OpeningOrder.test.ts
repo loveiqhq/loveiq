@@ -13,6 +13,7 @@ import {
 } from "@features/survey/ui/questionOrder";
 import {
   assignQuestionOrderArm,
+  beginsNow,
   isQuestionOrderArm,
   QUESTION_ORDER_ARM_KEY,
   QUESTION_ORDER_TEST_END,
@@ -252,7 +253,7 @@ describe("the test's end", () => {
   const CONTROL_ID = "00000000-0000-4000-8000-000000000007";
   const end = Date.parse(QUESTION_ORDER_TEST_END);
 
-  it("is a real moment after the launch, on the day it was called", () => {
+  it("is a real moment after the launch, from the day it was called", () => {
     expect(Number.isFinite(end)).toBe(true);
     expect(end).toBeGreaterThan(Date.parse("2026-10-06T18:18:00Z"));
     expect(end).toBeGreaterThanOrEqual(Date.parse("2026-11-20T00:00:00Z"));
@@ -269,5 +270,23 @@ describe("the test's end", () => {
     expect(questionOrderArmAt(CONTROL_ID, Number.NaN)).toBe("control");
     expect(questionOrderArmAt(null, end - 1)).toBe("control");
     expect(questionOrderArmAt(null, end)).toBe("variant");
+  });
+
+  it("begins a fresh run now when its draft is dated before the end, and only then", () => {
+    const before = new Date(end - 86_400_000).toISOString();
+    const after = new Date(end + 60_000).toISOString();
+    const landingCard = { currentIndex: 0, answers: { "01002": 3 }, prefilled: ["01002"] };
+    const untouched = { currentIndex: 0, answers: {}, prefilled: [] };
+    // Asked the new order, so under its old date the stamp would be the arm its session drew.
+    expect(beginsNow({ ...landingCard, startedAt: before })).toBe(true);
+    expect(beginsNow({ ...untouched, startedAt: before })).toBe(true);
+    // Dated from the end on: the stamp is the new order already.
+    expect(beginsNow({ ...landingCard, startedAt: after })).toBe(false);
+    // A recorded arm or progress keeps its order, so it keeps its start too.
+    expect(beginsNow({ ...untouched, startedAt: before, orderArm: "control" })).toBe(false);
+    expect(beginsNow({ ...untouched, startedAt: before, currentIndex: 3 })).toBe(false);
+    expect(beginsNow({ ...untouched, startedAt: before, answers: { "00001": "x" } })).toBe(false);
+    // A start that is not a date is replaced by the server's clock, which is past the end.
+    expect(beginsNow({ ...untouched, startedAt: "not a date" })).toBe(false);
   });
 });

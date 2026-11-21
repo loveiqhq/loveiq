@@ -30,7 +30,7 @@ import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
 
 /**
  * The order this walk runs in: the new one, which every fresh run is asked since the C13
- * test ended (20 Nov 2026), whatever its session id drew. The session is still pinned, for
+ * test ended (21 Nov 2026), whatever its session id drew. The session is still pinned, for
  * the option shuffle it seeds. What this spec covers (option randomisation, selection caps,
  * the priced question) is identical in both orders.
  */

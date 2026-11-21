@@ -67,7 +67,7 @@ export interface QuestionRow {
  * five later questions first and four of the first ones much later. Counted in one order, those
  * runs reach question 6 without question 5, and the funnel rises (21 Oct 2026 call). So each
  * order has its own funnel: `rows` the survey's old order, `test` the test's. The new order won:
- * every run begun from QUESTION_ORDER_TEST_END (20 Nov 2026) is asked it, so a range after that
+ * every run begun from QUESTION_ORDER_TEST_END (21 Nov 2026) is asked it, so a range after that
  * has its runs in `test`.
  */
 export const ORDER_TEST_FROM = "2026-10-06";

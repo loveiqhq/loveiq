@@ -5,6 +5,7 @@
  * (the intro's skip, back and exit columns, recorded from 17 Oct 2026, for 17 – 20 Oct).
  */
 import { QUESTION_ORDER_TEST_END } from "@shared/experiments/questionOrderArm";
+import { reportingDay } from "@shared/time/reporting-day";
 
 import type { FieldDef, FieldRegistry, FieldTable } from "./types";
 
@@ -21,6 +22,13 @@ const ORDER_TEST_END_DAY = new Date(QUESTION_ORDER_TEST_END).toLocaleDateString(
   year: "numeric",
   timeZone: "Europe/Berlin",
 });
+
+/**
+ * The order the page opens on, in SQL: the new one for a range reaching the Berlin day the test
+ * ended, the old one before it (ApSurvey's ORDER_TEST_END_DAY). The cards' queries read it, so
+ * they give the funnel the page shows; swap in 'control' (old) or 'variant' (new) for the other.
+ */
+const ORDER_SHOWN = `(CASE WHEN :to::date >= DATE '${reportingDay(new Date(QUESTION_ORDER_TEST_END))}' THEN 'variant' ELSE 'control' END)`;
 
 /** Shared by the queries below. */
 const FUNNEL = `-- The question funnel, in one question order: per question, the survey runs (sessions) that
@@ -453,7 +461,7 @@ answers AS (
 )
 `;
 
-/** The question funnel, per question, in one order (the survey's; 'variant' for the test's). */
+/** The question funnel, per question, in one order: the one the page opens on (ORDER_SHOWN). */
 const FUNNEL_ROWS =
   FUNNEL +
   `SELECT s.n, s.q_id AS question, s.reached, s.shown, s.exits,
@@ -462,13 +470,13 @@ const FUNNEL_ROWS =
        round(100.0 * s.reached / nullif(s.before, 0), 1) AS of_prev_pct,
        s.added AS added_during_range
   FROM steps s
- WHERE s.arm = 'control'  -- the test's order: 'variant' (here and below)
+ WHERE s.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other, here and below
 UNION ALL
 -- Questions no longer asked that runs in the range still reached, after the asked ones.
 SELECT NULL, x.q_id, count(*), count(*), count(*) FILTER (WHERE a.left_at = x.q_id AND a.last_at < now() - interval '30 minutes'),
        round(100.0 * count(*) FILTER (WHERE a.left_at = x.q_id AND a.last_at < now() - interval '30 minutes') / count(*), 2), NULL, NULL, NULL
-  FROM reached x JOIN arms a ON a.session_id = x.session_id AND a.arm = 'control'
- WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.arm = 'control' AND x.q_id = ANY (o.qs))
+  FROM reached x JOIN arms a ON a.session_id = x.session_id AND a.arm = ${ORDER_SHOWN}
+ WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.arm = ${ORDER_SHOWN} AND x.q_id = ANY (o.qs))
  GROUP BY x.q_id
  ORDER BY 1 NULLS LAST, 2;
 `;
@@ -562,8 +570,9 @@ const MEDIAN_TIME =
 
 const TIME_SO_FAR =
   `-- The survey time so far at each question: the questions' median times (as Median time reads
--- them) added up in the order they are asked, from the first question to that one. 'control' is
--- the survey's own order, 'variant' the test's (C13). A question with no time adds nothing.
+-- them) added up in the order they are asked, from the first question to that one, in the order
+-- the page opens on. 'control' is the old order, 'variant' the new one (C13's, everyone's since the
+-- test ended). A question with no time adds nothing.
 ` +
   MEDIAN_CTES +
   `,
@@ -579,7 +588,7 @@ SELECT u.k AS n, u.q AS question, m.median_ms,
        round((sum(coalesce(m.median_ms, 0)) OVER (ORDER BY u.k) / 60000.0)::numeric, 1) AS minutes_so_far
   FROM orders o CROSS JOIN unnest(o.qs) WITH ORDINALITY AS u (q, k)
   LEFT JOIN medians m ON m.question = u.q
- WHERE o.arm = 'control'  -- the test's order: 'variant'
+ WHERE o.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other
  ORDER BY u.k;
 `;
 
@@ -591,7 +600,7 @@ SELECT q_id AS question,
        date_trunc(:grain, last_at AT TIME ZONE 'Europe/Berlin')::date AS period_from,
        count(*) AS exits
   FROM exit_runs
- WHERE arm = 'control'  -- the test's order: 'variant'
+ WHERE arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other
  GROUP BY 1, 2
  ORDER BY 1, 2;
 `;

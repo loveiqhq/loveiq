@@ -872,8 +872,8 @@ const FUNNEL_GRID =
 /**
  * The design's "Question funnel" (16 Oct 2026): the funnel and the questions table in one.
  * Each question in its order with the people who reached it, the share of the first and of the
- * one before, the people who left there and its median time; a row opens Question detail. While
- * the opening-order test runs (`order` set), each order has its own funnel to pick.
+ * one before, the people who left there and its median time; a row opens Question detail. When
+ * the range has runs in both opening orders (`order` set), each has its own funnel to pick.
  */
 function FunnelSection({
   data,

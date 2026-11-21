@@ -298,7 +298,7 @@ test.describe("Survey — Consent screen", () => {
 test.describe("Survey — Full happy path", () => {
   test("intro → slides 1-4 → consent → agree → questions", async ({ page }) => {
     // Pin the session. The two questions this test asserts open both C13 orders, and every
-    // fresh run is asked the new one since the test ended (20 Nov 2026), whatever its id drew;
+    // fresh run is asked the new one since the test ended (21 Nov 2026), whatever its id drew;
     // the pin keeps the option shuffle and the EUR 1.99 page's half fixed.
     await pinSurveySession(page, QUESTION_ORDER_WINNER);
     page.on("pageerror", (err) => {

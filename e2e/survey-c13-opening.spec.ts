@@ -7,7 +7,7 @@ import { pinSurveySession } from "./surveyArm";
 
 /**
  * C13 — the variant opening, in a real browser. The test ended (QUESTION_ORDER_TEST_END,
- * 20 Nov 2026) and the variant won, so every fresh run is asked it, whatever arm its session
+ * 21 Nov 2026) and the variant won, so every fresh run is asked it, whatever arm its session
  * id drew: both of the e2e session fixtures are walked.
  *
  * The unit suite proves `orderC13Opening` returns the right array. It cannot prove the

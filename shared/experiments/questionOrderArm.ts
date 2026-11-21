@@ -42,10 +42,10 @@
  * sd 3.30 — so it read as a solid, actionable result and was noise plus a bad
  * hash. Anyone running "last 30 days" would have shipped on it.
  *
- * NO SESSION ID MEANS CONTROL. When storage is blocked `getSessionId` returns
- * empty, and the submit path records nothing to slice by. Those respondents get
- * the current order rather than a silently unattributable variant — the same rule
- * `orderedOptions` follows when it declines to shuffle without a session id.
+ * NO SESSION ID MEANT CONTROL while the test ran. When storage is blocked `getSessionId`
+ * returns empty, and the submit path records nothing to slice by, so those respondents got
+ * the current order rather than a silently unattributable variant. Since the end they are
+ * asked the new order like everyone else.
  */
 
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
@@ -64,7 +64,7 @@ export const QUESTION_ORDER_ARM_KEY = "question_order_arm";
  * here on is asked the new order, so the arm its session id recomputes to no longer says what
  * it was shown, and it is outside every readout of the test.
  */
-export const QUESTION_ORDER_TEST_END = "2026-11-20T22:30:00Z";
+export const QUESTION_ORDER_TEST_END = "2026-11-21T11:43:00Z";
 
 /** The order every new survey run is asked since the test ended. */
 export const QUESTION_ORDER_WINNER = "variant" satisfies QuestionOrderArm;
@@ -133,20 +133,43 @@ export function questionOrderArmAt(
  * and stays in control. `useSurveyState` records the result in the draft, so it is decided
  * once per run.
  *
- * A FRESH RUN (nothing answered, or only the landing card's question) IS ASKED THE WINNER.
- * While the test ran it was bucketed by its session id; since the end every new run gets
- * the new order, whatever its id. A draft begun during the test in the current order still
- * reopens in it, for the same reason a draft from before C13 does.
+ * A FRESH RUN (no arm recorded, and nothing answered or only the landing card's question) IS
+ * ASKED THE WINNER. While the test ran it was bucketed by its session id; since the end every
+ * new run gets the new order, whatever its id. A draft that recorded an arm during the test
+ * keeps it, even with nothing answered, for the same reason a draft from before C13 does.
  */
-export function resolveDraftQuestionOrderArm(draft: {
+export function resolveDraftQuestionOrderArm(draft: DraftOrder): QuestionOrderArm {
+  if (isQuestionOrderArm(draft.orderArm)) return draft.orderArm;
+  return hasProgress(draft) ? "control" : QUESTION_ORDER_WINNER;
+}
+
+/** What a saved draft holds that decides its order. */
+type DraftOrder = {
   orderArm?: unknown;
   currentIndex: number;
   answers: Readonly<Record<string, unknown>>;
   prefilled: readonly string[];
-}): QuestionOrderArm {
-  if (isQuestionOrderArm(draft.orderArm)) return draft.orderArm;
-  const hasProgress =
+};
+
+/** A move past the first question, or an answer that is not the landing card's prefill. */
+function hasProgress(draft: DraftOrder): boolean {
+  return (
     draft.currentIndex > 0 ||
-    Object.keys(draft.answers).some((qId) => !draft.prefilled.includes(qId));
-  return hasProgress ? "control" : QUESTION_ORDER_WINNER;
+    Object.keys(draft.answers).some((qId) => !draft.prefilled.includes(qId))
+  );
+}
+
+/**
+ * Whether a run opened over this draft begins now rather than at the draft's date: a fresh run
+ * (as above) dated before the test's end. That is a landing card answered back then, or a draft
+ * left untouched since before C13. It is asked the new order, but the server stamps a run's order
+ * from its start (questionOrderArmAt), so under its old date about half of them would be stamped
+ * with the arm their session drew. `useSurveyState` moves such a run's start to now.
+ */
+export function beginsNow(draft: DraftOrder & { startedAt: string }): boolean {
+  return (
+    !isQuestionOrderArm(draft.orderArm) &&
+    !hasProgress(draft) &&
+    Date.parse(draft.startedAt) < Date.parse(QUESTION_ORDER_TEST_END)
+  );
 }
