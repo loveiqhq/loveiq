@@ -10,6 +10,8 @@ import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
+import { ReviewsWelcome } from "./reviews/PublicReviews";
+import { ReviewAsk, THUMBS_FOR_ASK, reviewAskDue } from "./reviews/ReviewAsk";
 import {
   local,
   miraApi,
@@ -111,6 +113,10 @@ export default function MiraChat({
   const [bodyOpen, setBodyOpen] = useState(false);
   const bodyOffered = useRef(false);
   const bodyStarted = useRef(false);
+  // The thank-you ask for a rating (reviews/ReviewAsk.tsx): after a 9 or 10, or the third
+  // thumbs-up in a chat; never after a referral in this page view.
+  const [reviewFrom, setReviewFrom] = useState<"nps" | "thumbs" | null>(null);
+  const referred = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   /** The index of the reply that just arrived, for the scroll to its start. */
@@ -227,6 +233,7 @@ export default function MiraChat({
     const answering = !opts.skip && last?.role === "assistant" ? last.ask : null;
     // An offer nobody started gives way to the conversation; a check in progress stays.
     if (bodyOpen && !bodyStarted.current) setBodyOpen(false);
+    setReviewFrom(null); // so does the ask for a rating
     // Nothing reaches Mira before the consent: the message waits for the consent step.
     if (!consented && !opts.agreed) {
       setPending(message);
@@ -253,6 +260,7 @@ export default function MiraChat({
       ask?: string;
       signIn?: boolean;
       minor?: boolean;
+      refer?: boolean;
     }>("/api/mira/chat", {
       body: {
         message,
@@ -299,6 +307,7 @@ export default function MiraChat({
     // composer stays, and the server answers a crisis message whatever the limits.
     if (res.data.freeLeft === 0 && !res.data.crisis) setGate(true);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
+    if (res.data.refer) referred.current = true;
     if (res.data.minor) {
       // Under 18 (rail 15): the reply stays on screen, but this browser forgets the chat and the
       // 18+ tick, and no question of ours follows. An account's chats are gone on the server.
@@ -344,10 +353,29 @@ export default function MiraChat({
     void send(text, { agreed: true });
   }
 
+  /**
+   * The thank-you ask, at a good moment only: signed in, never in a chat with a crisis, after an
+   * under-18 stop, a referral or the body check, and at most once in 30 days in this browser.
+   */
+  function askForReview(from: "nps" | "thumbs"): boolean {
+    const ok =
+      signedIn &&
+      !minor &&
+      !referred.current &&
+      !bodyOffered.current &&
+      !reviewFrom &&
+      !crisisIn(messages) &&
+      reviewAskDue();
+    if (ok) setReviewFrom(from);
+    return ok;
+  }
+
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
     document.getElementById("mira-input")?.focus(); // the pressed button is about to go
     if (score === null) return setNps(null);
+    // A 9 or 10: the thanks becomes the ask for a rating, when the moment is right.
+    if (score >= 9 && askForReview("nps")) return setNps(null);
     setNps("thanks");
     window.setTimeout(() => setNps(null), 2500);
   }
@@ -369,6 +397,12 @@ export default function MiraChat({
     if (!res.ok) {
       swap(rated, m);
       setError({ text: res.data.error ?? "Your rating didn't go through. Please try again." });
+    } else if (
+      rating === 1 &&
+      !nps &&
+      messages.filter((x) => x.rated === 1).length + 1 >= THUMBS_FOR_ASK
+    ) {
+      askForReview("thumbs"); // the third thumbs-up in this chat
     }
   }
 
@@ -461,6 +495,7 @@ export default function MiraChat({
     !gate &&
     !minor &&
     !nps &&
+    !reviewFrom &&
     !bodyOpen &&
     !styleOpen &&
     !supportOpen &&
@@ -642,6 +677,7 @@ export default function MiraChat({
                     &amp; <b className="font-semibold text-ap-body">100M+ words</b> of research on
                     body confidence
                   </p>
+                  <ReviewsWelcome place="under" />
                 </div>
               ) : null}
               {!empty ? (
@@ -810,6 +846,9 @@ export default function MiraChat({
                         </fieldset>
                       )}
                     </div>
+                  ) : null}
+                  {reviewFrom ? (
+                    <ReviewAsk from={reviewFrom} onClose={() => setReviewFrom(null)} />
                   ) : null}
                   {bodyOpen && bodyDue ? (
                     <BodyCheck
@@ -1007,6 +1046,7 @@ export default function MiraChat({
               ) : null}
             </div>
             {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
+            {showWelcome ? <ReviewsWelcome place="foot" /> : null}
             <p className="shrink-0 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5 text-center text-[12px] leading-snug text-ap-muted sm:pb-5">
               Mira is an AI and can be wrong. She is not a therapist ·{" "}
               <button type="button" onClick={() => setSupportOpen(true)} className="underline">

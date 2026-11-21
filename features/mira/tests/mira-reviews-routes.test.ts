@@ -80,6 +80,7 @@ vi.mock("@features/mira/server/minor", async (real) => ({
   isMinor: vi.fn(),
 }));
 
+import { POST as postEvent } from "@/app/api/mira/event/route";
 import { GET as getPublic, POST } from "@/app/api/mira/reviews/route";
 import { DELETE, GET as getMine } from "@/app/api/mira/reviews/mine/route";
 import { REVIEW_CONSENT_VERSION } from "@features/mira/reviews";
@@ -297,5 +298,23 @@ describe("GET /api/mira/reviews: what any visitor may see", () => {
     expect(await shown()).toBeNull(); // 20 people, but no approved words
     const body = JSON.stringify(await (await getPublic(call("GET", "/api/mira/reviews"))).json());
     expect(body).not.toContain("example.com");
+  });
+});
+
+describe("the ask's moments in the KPI log", () => {
+  const track = (name: string) =>
+    postEvent(call("POST", "/api/mira/event", { type: "track", name }));
+
+  it("takes the ask shown and put off from the browser, never the server's own events", async () => {
+    for (const name of ["review_prompt_shown", "review_prompt_not_now"]) {
+      expect((await track(name)).status).toBe(200);
+    }
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([name]) => name)).toEqual([
+      "review_prompt_shown",
+      "review_prompt_not_now",
+    ]);
+    for (const name of ["review_given", "review_withdrawn"]) {
+      expect((await track(name)).status).toBe(400);
+    }
   });
 });
