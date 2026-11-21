@@ -17,7 +17,7 @@ LoveIQ relies on three of the six Art. 6(1) bases:
 
 | Basis                       | Used for                                                                                                                                                                                                    | Notes                                                                                                                                                                         |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **(a) Consent**             | Survey participation, marketing emails (Q16015), analytics + tracking cookies, Mira coaching and a rated reply's text (with Art. 9(2)(a); A16, A18)                                                         | Each instance has explicit opt-in. Marketing consent is versioned (`marketing_opt_in_terms_version`, T-11). Analytics cookies gated on CookieYes "analytics" category (T-02). |
+| **(a) Consent**             | Survey participation, marketing emails (Q16015), analytics + tracking cookies, Mira coaching (with Art. 9(2)(a); A16)                                                                                       | Each instance has explicit opt-in. Marketing consent is versioned (`marketing_opt_in_terms_version`, T-11). Analytics cookies gated on CookieYes "analytics" category (T-02). |
 | **(b) Contract**            | Report delivery, payment processing, transactional emails (confirmation, share-link, password-reset adjacent flows), Mira's account, sign-in and emails (A17)                                               | Lawful basis is "necessary for the performance of a contract" because the user requested + paid for the deliverable.                                                          |
 | **(f) Legitimate interest** | Operational forensics (admin_action_log), abuse detection (rate limits, CSRF storm counters), email-bounce suppression, payment-fraud monitoring (Stripe Radar), each nurture email's opens and clicks (A6) | Balancing test documented per activity below. No marketing under legitimate interest — we use consent (but see the A6 correction).                                            |
 
@@ -151,10 +151,10 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A18 — Mira ratings, feedback and the log of steps
 
-- **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id), and a rated reply's text with consent
-- **Basis**: (f) legitimate interest for steps, thumbs, feedback and scores: improving Mira. Balancing: no words in the log except a rated reply's text with consent and the person's own feedback, team browsers left out, kept 12 months, objection by email. A rated reply's text: (a) consent with Art. 9(2)(a), the optional box, not ticked by default, "Mira's team may read replies I rate, to improve Mira." at the chat start and at sign-up; without it only the thumbs are kept
-- **Retention**: 12 months; a rated reply's text also goes when the chats are deleted; deleting the account deletes the words and unlinks the rest
-- **Withdraw**: delete the chats or the account, or ask; an Art. 21 objection by email
+- **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id); never a reply's text (the optional box that kept it went on 2026-11-21)
+- **Basis**: (f) legitimate interest for steps, thumbs, feedback and scores: improving Mira. Balancing: no words in the log except the person's own feedback, team browsers left out, kept 12 months, objection by email
+- **Retention**: 12 months; deleting the account deletes the words and unlinks the rest
+- **Withdraw**: delete the account, or ask; an Art. 21 objection by email
 
 ### A19 — Analytics on Mira's pages
 
@@ -182,7 +182,6 @@ For activities under basis (a):
 | A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 | A15 feedback   | One-click unsubscribe in the email; DSAR delete                                                      | Unsubscribe: suppression list, no further email. Delete: the answer and the reader's own words are erased                                                                              |
 | A16 Mira       | Stop chatting; delete the chats or the account in Settings; a data request                           | Saved chats and the account's labels are deleted; Anthropic deletes its copy within 30 days                                                                                            |
-| A18 rated text | Delete the chats or the account; a data request                                                      | The rated replies' text is deleted; the thumbs stay as counts                                                                                                                          |
 
 ## Outstanding work
 

@@ -35,7 +35,7 @@ export const HISTORY_TURNS = 24;
  * Bumped whenever the consent wording on the chat or the sign-up changes: a browser that ticked
  * an older version is asked again. Pure constants, so the chat page imports this file too.
  */
-export const CONSENT_VERSION = "mira-2026-11-21";
+export const CONSENT_VERSION = "mira-2026-11-21-2"; // the optional rating box went (21 Nov)
 
 export const DEFAULT_MODEL = "claude-sonnet-5-5";
 export const DEFAULT_FALLBACK_MODEL = "claude-haiku-5-5";

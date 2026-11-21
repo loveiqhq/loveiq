@@ -129,8 +129,8 @@ function write(key: string, value: unknown): void {
  */
 type LocalChat = { turns: LocalTurn[]; freeLeft: number | null; gate?: boolean; keepOff?: boolean };
 
-/** The first-message consent: its wording's version, and the optional rating tick. */
-export type LocalConsent = { version: string; shareRated: boolean };
+/** The first-message consent: its wording's version. */
+export type LocalConsent = { version: string };
 
 export const local = {
   chat: () => read<LocalChat>(LOCAL_CHAT),

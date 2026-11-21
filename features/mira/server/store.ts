@@ -60,15 +60,16 @@ export async function getProfile(id: string): Promise<MiraProfile | null> {
 }
 
 /**
- * Created (or its consent renewed) at every sign-in, with the form's two optional ticks as given
- * that time (the LoveIQ result; the team reading rated replies); the rest of the profile is kept.
+ * Created (or its consent renewed) at every sign-in, with the form's optional tick as given that
+ * time (the LoveIQ result); the rest of the profile is kept. `share_rated_replies` is never set
+ * any more (the box went on 21 Nov 2026; ratings are thumbs only).
  * Signed in from a team browser, the account is the team's from then on (is_team, never unset here).
  */
 export async function upsertProfileAtSignIn(
   id: string,
   email: string,
   consentVersion: string,
-  choices: { useAssessment: boolean; shareRated: boolean }
+  choices: { useAssessment: boolean }
 ): Promise<MiraProfile | null> {
   const team = await fromTeamBrowser();
   const res = await supabaseFetch("/rest/v1/mira_user?on_conflict=id", {
@@ -80,7 +81,6 @@ export async function upsertProfileAtSignIn(
       consent_at: new Date().toISOString(),
       consent_version: consentVersion,
       use_assessment: choices.useAssessment,
-      share_rated_replies: choices.shareRated,
       updated_at: new Date().toISOString(),
       ...(team ? { is_team: true } : {}),
     }),

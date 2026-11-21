@@ -131,18 +131,17 @@ describe("POST /api/mira/auth", () => {
     });
     expect(upsertProfileAtSignIn).toHaveBeenCalledWith("u1", "lea@example.com", CONSENT_VERSION, {
       useAssessment: false,
-      shareRated: false,
     });
   });
 
-  it("records the form's two optional ticks with the consent, off unless ticked", async () => {
+  it("records the form's optional tick with the consent, off unless ticked; the rating box is gone", async () => {
     const verify = (ticks: Record<string, unknown>) =>
       post({ action: "verify", email: "lea@example.com", code: "12345678", ...ticks });
-    await verify({ useAssessment: true, shareRated: true });
-    await verify({ useAssessment: false, shareRated: true });
+    await verify({ useAssessment: true, shareRated: true }); // an older page's box is ignored
+    await verify({ useAssessment: false });
     expect(vi.mocked(upsertProfileAtSignIn).mock.calls.map((c) => c[3])).toEqual([
-      { useAssessment: true, shareRated: true },
-      { useAssessment: false, shareRated: true },
+      { useAssessment: true },
+      { useAssessment: false },
     ]);
     expect((await verify({ useAssessment: "yes" })).status).toBe(400);
     expect(CONSENT_VERSION).not.toBe("mira-2026-11-18"); // the reworded ticks are asked again

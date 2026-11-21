@@ -3,7 +3,7 @@
  *
  *   { action: "start", email, adult: true, terms: true, consent: true, website? } → emails a
  *       sign-in code (`website` is a hidden field only a bot fills)
- *   { action: "verify", email, code, carry?, useAssessment?, shareRated? }  → signs in (Mira's
+ *   { action: "verify", email, code, carry?, useAssessment? }  → signs in (Mira's
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
  *       true), and moves the anonymous chat into the account ("your current chat comes with you")
  *   { action: "carry", carry } → after Google sign-in, moves the anonymous chat into the account
@@ -81,7 +81,6 @@ const schema = z.discriminatedUnion("action", [
     code: z.string().trim().regex(SIGN_IN_CODE),
     carry: carrySchema.optional(),
     useAssessment: z.boolean().default(false),
-    shareRated: z.boolean().default(false),
   }),
   z.object({ action: z.literal("carry"), carry: carrySchema.min(1) }),
   z.object({ action: z.literal("logout") }),
@@ -304,7 +303,6 @@ export async function POST(request: Request) {
   try {
     profile = await upsertProfileAtSignIn(account.id, account.email, CONSENT_VERSION, {
       useAssessment: body.useAssessment,
-      shareRated: body.shareRated,
     });
   } catch (err) {
     // Signed in without a profile is a dead end (/api/mira/me answers 401) and the code is

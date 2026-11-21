@@ -68,7 +68,6 @@ export default function SignUpFlow({
   const [consent, setConsent] = useState(false);
   // Optional, unticked: the LoveIQ result (use_assessment) and the team reading rated replies.
   const [useAssessment, setUseAssessment] = useState(false);
-  const [shareRated, setShareRated] = useState(false);
   // The honeypot's value: people never see the field, so only a bot fills it.
   const [website, setWebsite] = useState("");
   const [code, setCode] = useState("");
@@ -147,7 +146,6 @@ export default function SignUpFlow({
           email,
           code,
           useAssessment,
-          shareRated,
           ...(carry.length ? { carry } : {}),
         },
       }
@@ -199,7 +197,6 @@ export default function SignUpFlow({
   const googleHref =
     "/api/mira/auth/google?adult=1&terms=1&consent=1" +
     (useAssessment ? "&assessment=1" : "") +
-    (shareRated ? "&share=1" : "") +
     (next ? `&next=${encodeURIComponent(next)}` : "");
 
   return (
@@ -338,9 +335,6 @@ export default function SignUpFlow({
               <p className="-mb-2 text-[13px] text-ap-muted">Optional</p>
               <Tick checked={useAssessment} onChange={setUseAssessment}>
                 Use my LoveIQ test result to tailor my coaching.
-              </Tick>
-              <Tick checked={shareRated} onChange={setShareRated}>
-                Mira&apos;s team may read replies I rate, to improve Mira.
               </Tick>
               <PrimaryButton
                 type="submit"
