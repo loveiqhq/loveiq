@@ -4,6 +4,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 import { fromTeamBrowser, requestExtras } from "./attribution";
 import { isStaffEmail } from "./google";
+import type { CoachEvent } from "@features/mira/content/coaches";
 import type { CitedSource } from "./safety";
 import type { CoachingStyle } from "./prompt";
 
@@ -318,13 +319,7 @@ export type MiraEventName =
   | "style_tip_opened"
   | "style_saved"
   // Coaches, Home's picks and search, the guide's "Ask Mira about this" (22 Nov 2026).
-  | "coaches_viewed"
-  | "finder_started"
-  | "finder_done"
-  | "picks_shown"
-  | "pick_clicked"
-  | "guide_ask"
-  | "search_empty";
+  | CoachEvent;
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

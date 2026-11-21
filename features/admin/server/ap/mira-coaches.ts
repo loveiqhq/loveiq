@@ -6,20 +6,11 @@
  * from mira.ts's prepared events, so the team is left out exactly as everywhere on the page.
  * Every detail is an id or a number (the events never carry words).
  */
-import { COACHES, coachIdFor } from "@features/mira/content/coaches";
+import { COACH_EVENTS, COACHES, coachIdFor } from "@features/mira/content/coaches";
 import { GUIDE_PRACTICES } from "@features/mira/content/guide";
 
 /** The events this card reads, which mira.ts asks mira_ap_events for (EVENT_NAMES). */
-export const COACH_KPI_EVENTS = [
-  "coaches_viewed",
-  "notify_me",
-  "finder_started",
-  "finder_done",
-  "picks_shown",
-  "pick_clicked",
-  "guide_ask",
-  "search_empty",
-];
+export const COACH_KPI_EVENTS = ["notify_me", ...COACH_EVENTS];
 
 /** A chat started this soon after opening it from the guide counts as started from there. */
 const GUIDE_START_MS = 30 * 60_000;

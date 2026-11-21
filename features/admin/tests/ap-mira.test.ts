@@ -865,8 +865,8 @@ describe("fetchMira", () => {
       "reply_declined",
       "minor_stop",
       // Coaches & picks (22 Nov 2026, mira-coaches.ts).
-      "coaches_viewed",
       "notify_me",
+      "coaches_viewed",
       "finder_started",
       "finder_done",
       "picks_shown",
