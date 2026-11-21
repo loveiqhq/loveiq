@@ -102,7 +102,11 @@ export type ProfilePatch = Partial<
     | "nudges_on"
     | "nudge_time"
     | "time_zone"
-  > & { nudges_stopped_at: string | null; nudge_stop_reason: string | null; minor_at: string }
+  > & {
+    nudges_stopped_at: string | null;
+    nudge_stop_reason: string | null;
+    minor_at: string;
+  } & { is_team: true; google_connected_at: string | null } // Sign-in & security (22 Nov 2026): a team browser's passkey sign-in, and Google's confirmation.
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<void> {
@@ -257,7 +261,7 @@ export async function deleteChats(userId: string): Promise<void> {
  * True when the login is also an admin panel or Jarvis login (admin_users, or an active member
  * of Jarvis's people registry), or when that can't be checked.
  */
-async function sharesLogin(email: string): Promise<boolean> {
+export async function sharesLogin(email: string): Promise<boolean> {
   if (await isStaffEmail(email)) return true; // fails closed itself
   return memberByEmail(email).then(
     (member) => member !== null,
@@ -316,7 +320,17 @@ export type MiraEventName =
   | "keep_card_not_now"
   | "style_tip_shown"
   | "style_tip_opened"
-  | "style_saved";
+  | "style_saved"
+  // Sign-in & security (22 Nov 2026): passkeys, the "Use Face ID next time?" offer, devices
+  // signed out, email changes and Google connected (signup_completed's method "passkey" too).
+  | "passkey_offer_shown"
+  | "passkey_offer_accepted"
+  | "passkey_added"
+  | "passkey_removed"
+  | "device_signed_out"
+  | "signed_out_everywhere"
+  | "email_changed"
+  | "google_connected";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

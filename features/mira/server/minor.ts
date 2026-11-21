@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { MINOR_COOKIE } from "./config";
+import { removePasskeys } from "./passkeys";
 import { deleteChats, updateProfile } from "./store";
 
 /**
@@ -11,6 +12,10 @@ import { deleteChats, updateProfile } from "./store";
  * the model. A crisis message still gets the crisis reply and the lines, because the chat route
  * reads crisis words first. The account's nudges go off, and its chats are deleted and no longer
  * kept; the browser forgets its own chat (MiraChat).
+ *
+ * Sign-in & security (22 Nov 2026): the account's passkeys go too, like the nudges a way back in,
+ * and none can be added again (the passkey, email and Google-connect routes answer 403). Its
+ * signed-in devices stay, as the stop signs nobody out; Settings can still sign them out.
  */
 
 /** This browser or this account said its person is under 18. */
@@ -41,6 +46,7 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       remember_chats: false,
     }),
     deleteChats(userId),
+    removePasskeys(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {
