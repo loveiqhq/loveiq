@@ -35,7 +35,9 @@ import { useGoals, type Goal } from "./useGoals";
 
 type Actions = ReturnType<typeof useGoals>;
 
-const TEXT_BUTTON = `inline-flex min-h-[44px] items-center rounded-full px-3 text-[14px] font-semibold text-ap-body transition-colors hover:bg-ap-ground hover:text-ap-ink ${FOCUS}`;
+const QUIET = `inline-flex min-h-[44px] items-center rounded-full px-3 text-[14px] font-semibold transition-colors hover:bg-ap-ground ${FOCUS}`;
+const TEXT_BUTTON = `${QUIET} text-ap-body hover:text-ap-ink`;
+const DANGER_BUTTON = `${QUIET} text-ap-bad-ink`;
 const H2 = "font-serif text-[22px] font-medium";
 
 const longDate = (iso: string) =>
@@ -257,9 +259,12 @@ function GoalEntry({
   }
 
   return (
-    <li aria-labelledby={headingId} className="flex flex-col gap-4 py-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div className="flex min-w-0 flex-col gap-1">
+    <li
+      aria-labelledby={headingId}
+      className="grid grid-cols-1 gap-y-4 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6"
+    >
+      <div className="contents">
+        <div className="flex min-w-0 flex-col gap-1 sm:col-start-1">
           <h3
             id={headingId}
             className="font-serif text-[19px] font-medium leading-snug [overflow-wrap:anywhere]"
@@ -270,6 +275,9 @@ function GoalEntry({
             {aimLabel(goal.weekly_target)}
             {goal.via === "mira" ? " · from a chat with Mira" : ""}
           </p>
+        </div>
+        <div className="sm:col-start-1">
+          <WeekLine p={p} target={goal.weekly_target} pop={pop} />
         </div>
         <TickButton
           goal={goal}
@@ -284,8 +292,7 @@ function GoalEntry({
           }}
         />
       </div>
-      <WeekLine p={p} target={goal.weekly_target} pop={pop} />
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-2 sm:col-start-1">
         <WeekBars p={p} target={goal.weekly_target} today={today} />
         <p className="flex flex-col text-[13px] leading-snug">
           {p.streak >= 2 ? (
@@ -301,34 +308,37 @@ function GoalEntry({
           </span>
         </p>
       </div>
-      <div className="-ml-3 flex flex-wrap items-center">
+      <div className="-ml-3 flex flex-wrap items-center sm:col-start-1">
         <button
           ref={editRef}
           type="button"
+          aria-label={`Edit: ${goal.text}`}
           className={TEXT_BUTTON}
           onClick={() => setEditing(true)}
         >
-          Edit<span className="sr-only">: {goal.text}</span>
+          Edit
         </button>
         <button
           type="button"
+          aria-label={`Mark done: ${goal.text}`}
           className={TEXT_BUTTON}
           onClick={() =>
             void act(() => g.update(goal, { completed: true }), "Marked done. Well done.")
           }
         >
-          Mark done<span className="sr-only">: {goal.text}</span>
+          Mark done
         </button>
         <button
           type="button"
+          aria-label={`Put away: ${goal.text}`}
           className={TEXT_BUTTON}
           onClick={() => void act(() => g.update(goal, { archived: true }), "Put away.")}
         >
-          Put away<span className="sr-only">: {goal.text}</span>
+          Put away
         </button>
       </div>
       {error ? (
-        <p role="alert" className="text-[13px] text-ap-bad-ink">
+        <p role="alert" className="text-[13px] text-ap-bad-ink sm:col-start-1">
           {error}
         </p>
       ) : null}
@@ -384,7 +394,7 @@ function GoalForm({
           maxLength={GOAL_TEXT_MAX}
           autoFocus={Boolean(initial)}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Leave one soft light on for the first minute"
+          placeholder="For example: leave a soft light on"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
           className="min-h-[48px] rounded-2xl border border-ap-line bg-white px-4 text-[16px] font-normal caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
@@ -466,7 +476,7 @@ function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string)
       <button
         type="button"
         onClick={() => setAsking(true)}
-        className={`${TEXT_BUTTON} text-ap-bad-ink sm:ml-auto`}
+        className={`${DANGER_BUTTON} sm:ml-auto`}
       >
         Delete goal
       </button>
@@ -543,8 +553,13 @@ function PastGoals({
               <p className="text-[13px] text-ap-muted">{note(goal)}</p>
             </div>
             <div className="-ml-3 flex shrink-0 items-center sm:ml-0">
-              <button type="button" onClick={() => void back(goal)} className={TEXT_BUTTON}>
-                Bring back<span className="sr-only">: {goal.text}</span>
+              <button
+                type="button"
+                aria-label={`Bring back: ${goal.text}`}
+                onClick={() => void back(goal)}
+                className={TEXT_BUTTON}
+              >
+                Bring back
               </button>
               {id === "away" ? <DeleteGoal goal={goal} g={g} say={say} /> : null}
             </div>
@@ -603,7 +618,7 @@ function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
           <button
             type="button"
             onClick={() => setAsking(true)}
-            className={`${TEXT_BUTTON} -ml-3 mt-1 text-ap-bad-ink`}
+            className={`${DANGER_BUTTON} -ml-3 mt-1`}
           >
             Delete all goals
           </button>

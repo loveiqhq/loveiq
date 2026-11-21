@@ -29,7 +29,7 @@ export function weekCaption(p: Progress, target: number | null): string {
     return p.thisWeek === 0 ? `${aimLabel(target)}` : `${p.thisWeek} of ${target} this week`;
   }
   if (p.thisWeek > 0) return `${days(p.thisWeek)} this week`;
-  return p.total > 0 ? `${days(p.total)} so far` : "Tick the days you do it";
+  return p.total > 0 ? "Not yet this week" : "Tick the days you do it";
 }
 
 /** "16 Nov", for a day as the person lives it. */
@@ -59,7 +59,7 @@ export function ChallengePills({ goals }: { goals: Goal[] }) {
       <li>
         <Link
           href="/mira/coaches"
-          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-dashed border-ap-mist px-3.5 text-[13px] font-semibold text-ap-ink transition-colors hover:border-ap-lavender hover:bg-ap-ground ${FOCUS}`}
+          className={`relative inline-flex min-h-[32px] items-center gap-1.5 rounded-full border border-dashed border-ap-mist px-3 text-[13px] font-semibold text-ap-ink transition-colors after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:border-ap-lavender hover:bg-ap-ground ${FOCUS}`}
         >
           <PlusIcon size={14} />
           Add a challenge
@@ -89,15 +89,16 @@ export function TickButton({
     <button
       type="button"
       aria-pressed={done}
+      aria-label={`Did it today: ${goal.text}`}
       onClick={onToggle}
-      className={`inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full border pl-2 pr-4 text-[14px] font-semibold transition-[background-color,border-color,transform] duration-200 active:scale-[0.97] ${FOCUS} ${
+      className={`inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start justify-self-start rounded-full border pl-2 pr-4 sm:col-start-2 sm:justify-self-end sm:row-span-2 sm:row-start-1 sm:self-center text-[14px] font-semibold transition-[background-color,border-color,transform] duration-200 active:scale-[0.97] ${FOCUS} ${
         done
           ? "border-transparent bg-ap-lilac text-ap-ink"
           : "border-ap-line bg-white text-ap-body hover:border-[#d9d4e2] hover:bg-ap-ground"
       }`}
     >
       <CheckDot done={done} pop={pop} />
-      Did it today<span className="sr-only">: {goal.text}</span>
+      Did it today
     </button>
   );
 }
@@ -167,7 +168,10 @@ export function WeekBars({ p, target, today }: { p: Progress; target: number | n
   const scale = target ?? Math.max(1, ...p.weeks.map((n) => n ?? 0));
   const thisWeek = weekStart(today);
   return (
-    <ol aria-label="Days ticked, last 8 weeks" className="flex h-7 items-end gap-[5px]">
+    <ol
+      aria-label="Days ticked, last 8 weeks"
+      className="flex h-8 items-end gap-[5px] border-b border-ap-line pb-[3px]"
+    >
       {p.weeks.map((n, i) => {
         const week = addDays(thisWeek, -7 * (p.weeks.length - 1 - i));
         const met = n !== null && n >= (target ?? 1);
