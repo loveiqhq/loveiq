@@ -639,7 +639,70 @@ function Engagement({ data }: { data: Data }) {
           who wrote to Mira within 48 hours of it.
         </p>
       </Card>
+      <WeeklySessions data={data} />
     </Board>
+  );
+}
+
+/** Weekly sessions (21 Nov 2026): booked, in place, reminders sent, joined on time, cancelled. */
+function WeeklySessions({ data }: { data: Data }) {
+  const { scheduled, active, reminders, attended, cancelled } = data.weeklySessions;
+  return (
+    <Card id="weekly-sessions" labelledBy="h-weekly-sessions">
+      <SectionHead
+        id="h-weekly-sessions"
+        level={3}
+        title="Weekly sessions"
+        description="Whether people book a regular 15 minutes with Mira, keep it, and turn up."
+      />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{ label: "Booked", unit: "count", value: scheduled, note: "People, in the range" }}
+        />
+        <StatBox
+          stat={{
+            label: "In place",
+            unit: "count",
+            value: active,
+            note: "Booked and not cancelled, at the range’s end",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Reminders sent",
+            unit: "count",
+            value: reminders,
+            note: "One per session, 30 to 60 minutes before it",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Joined on time",
+            unit: "pct",
+            value: share(attended, reminders),
+            note: `${count(attended)} of ${count(reminders)} reminded sessions`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Cancelled",
+            unit: "count",
+            value: cancelled,
+            note: "People, in the range",
+          }}
+        />
+      </div>
+      <p className={NOTE}>
+        Sessions need an account, so people are accounts. Booked: booked a weekly session in the
+        range (a later change of time doesn&rsquo;t count again). In place: booked and not
+        cancelled, or ended by an under-18 stop, by the range&rsquo;s last day, reminders on or
+        paused. Joined on time: of the sessions reminded in the range, the share opened from the
+        session&rsquo;s link within 30 minutes of their start. Recorded from 21 Nov 2026.
+      </p>
+    </Card>
   );
 }
 
