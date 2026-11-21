@@ -7,13 +7,24 @@ import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
 import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
+import { PasskeyOffer } from "./account/PasskeyOffer";
+import {
+  autofillWorks,
+  canOfferPasskey,
+  offeredHere,
+  signInWithPasskey,
+  stopPasskeyPrompt,
+  usePasskeysWork,
+} from "./account/passkeys";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
- * (out of the MVP). Sign-in by emailed code or with Google (Apple follows later).
+ * (out of the MVP). Sign-in by emailed code, with Google, or (22 Nov 2026) with a passkey: a
+ * button, and the email field's own suggestions where the browser offers passkeys there. After a
+ * code sign-in on a device that can make one, "Use Face ID next time?" once (account/).
  */
 
-type Step = "account" | "verify" | "about";
+type Step = "account" | "verify" | "passkey" | "about";
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: "account", label: "Account" },
   { key: "verify", label: "Verify" },
@@ -81,6 +92,11 @@ export default function SignUpFlow({
   const [notice, setNotice] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const shownStep = useRef(step);
+  // Passkeys: shown only where the browser has them; where the offer goes on to.
+  const passkeys = usePasskeysWork();
+  const afterOffer = useRef<"about" | "home">("home");
+  const ticks = useRef({ adult, terms, consent, useAssessment });
+  ticks.current = { adult, terms, consent, useAssessment };
   useReloadWhenRestored();
 
   // A new step moves focus to its heading, so keyboard and screen reader users start there.
@@ -138,23 +154,29 @@ export default function SignUpFlow({
     setError(null);
     setNotice(null);
     const carry = carriedChat();
-    const res = await miraApi<{ needsProfile?: boolean; chatId?: string | null }>(
-      "/api/mira/auth",
-      {
-        body: {
-          action: "verify",
-          email,
-          code,
-          useAssessment,
-          ...(carry.length ? { carry } : {}),
-        },
-      }
-    );
+    const res = await miraApi<{
+      needsProfile?: boolean;
+      chatId?: string | null;
+      offerPasskey?: boolean;
+    }>("/api/mira/auth", {
+      body: {
+        action: "verify",
+        email,
+        code,
+        useAssessment,
+        ...(carry.length ? { carry } : {}),
+      },
+    });
     if (!res.ok) {
       setBusy(false);
       return setError(res.data.error ?? "That code didn't work. Check it, or send a new one.");
     }
     local.saveChat(null);
+    if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
+      afterOffer.current = res.data.needsProfile ? "about" : "home";
+      setBusy(false);
+      return setStep("passkey");
+    }
     if (res.data.needsProfile) {
       setBusy(false);
       return setStep("about");
@@ -162,6 +184,62 @@ export default function SignUpFlow({
     await keepTimeZone();
     goHome();
   }
+
+  /** After the offer, wherever the sign-in was going. */
+  async function afterPasskeyOffer() {
+    if (afterOffer.current === "about") return setStep("about");
+    setBusy(true);
+    await keepTimeZone();
+    goHome();
+  }
+
+  /**
+   * Signs in with a passkey, from the button or (autofill) the email field's suggestions. Then as
+   * after Google: the chat in this browser comes along, "About you" if they're new, else on.
+   */
+  async function passkeySignIn(autofill: boolean): Promise<void> {
+    if (!autofill) {
+      setBusy(true);
+      setError(null);
+      setNotice(null);
+    }
+    const res = await signInWithPasskey({ autofill, ticks: () => ticks.current });
+    if (!res.ok) {
+      setBusy(false);
+      if (res.error) setError(res.error);
+      // The suggestions stay on offer: a challenge that ran out, or a person who closed the sheet.
+      if (autofill && (res.retry || !res.error)) void passkeySignIn(true);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const carry = carriedChat();
+    if (carry.length) {
+      const moved = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
+      if (moved.ok) local.saveChat(null);
+    }
+    if (res.needsProfile) {
+      setBusy(false);
+      return setStep("about");
+    }
+    await keepTimeZone();
+    goHome();
+  }
+
+  // The email field offers the browser's passkeys while the form shows (conditional mediation).
+  useEffect(() => {
+    if (step !== "account" || backFromGoogle || !passkeys) return;
+    let live = true;
+    void autofillWorks().then((works) => {
+      if (works && live) void passkeySignIn(true);
+    });
+    return () => {
+      live = false;
+      stopPasskeyPrompt();
+    };
+    // passkeySignIn reads state through refs; once per showing of the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, backFromGoogle, passkeys]);
 
   async function saveAbout() {
     setBusy(true);
@@ -191,7 +269,8 @@ export default function SignUpFlow({
     goHome();
   }
 
-  const current = STEPS.findIndex((s) => s.key === step);
+  // The offer belongs to the code check: the progress stays on Verify.
+  const current = STEPS.findIndex((s) => s.key === (step === "passkey" ? "verify" : step));
   const emailOk = /^\S+@\S+\.\S+$/.test(email.trim());
   // Google sign-in leaves the page, so the optional ticks and `next` ride along on the link.
   const googleHref =
@@ -289,7 +368,8 @@ export default function SignUpFlow({
                 Email
                 <input
                   type="email"
-                  autoComplete="email"
+                  // "webauthn": where the browser has them, this field also suggests passkeys.
+                  autoComplete="email webauthn"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -363,8 +443,20 @@ export default function SignUpFlow({
                   </a>
                 </>
               ) : null}
+              {passkeys ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void passkeySignIn(false)}
+                  className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:opacity-50"
+                >
+                  <PasskeyIcon />
+                  Sign in with a passkey
+                </button>
+              ) : null}
               <p className="text-[13px] text-ap-muted">
-                No password needed. Already have an account? Use the same form.
+                No password needed. Already have an account? Use the same form
+                {passkeys ? ", or your passkey" : ""}.
               </p>
             </form>
           ) : null}
@@ -428,6 +520,10 @@ export default function SignUpFlow({
                 </button>
               </div>
             </form>
+          ) : null}
+
+          {step === "passkey" ? (
+            <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
           ) : null}
 
           {step === "about" ? (
@@ -520,6 +616,28 @@ export default function SignUpFlow({
         <LegalLinks className="mt-auto max-w-[520px] pt-3" />
       </main>
     </div>
+  );
+}
+
+/** A passkey: a person and a key, the mark passkey managers use. */
+function PasskeyIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="9" cy="7.5" r="3.5" />
+      <path d="M3 20v-1a5 5 0 0 1 5-5h2.5" />
+      <circle cx="17" cy="13.5" r="2.5" />
+      <path d="M17 16v5l1.5-1.2M17 18.5l1.5 1" />
+    </svg>
   );
 }
 
