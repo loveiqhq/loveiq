@@ -520,6 +520,60 @@ with its reasons, WP243 rev.01, 4.2):
 By 2027-02-20 (with the crisis-line re-check), and earlier when Mira's data, recipients, model or
 consent wording change, or before Mira leaves the beta.
 
+### 7.12 Talking to Mira by voice (2026-11-22)
+
+Built on 2026-11-22 from Eman's brief for Mira's post-MVP features and Mark's boards "Main" (Talk)
+and "Home" (session recordings). How it works: [`features/mira/AGENT_README.md`](../../features/mira/AGENT_README.md),
+"Talking to Mira by voice". Mira's notice says it in its own section.
+
+**What changes**
+
+- Speech becomes text in the person's browser, never on our side: on the device where the browser
+  can (Chrome's on-device recognition), else in the browser maker's own speech service (Apple's
+  for Safari; Google's for Chrome without on-device support). The text goes to `/api/mira/chat`
+  like a typed message, through the same consent, crisis rails, minor stop, limits and sign-up
+  card. No audio reaches us or Anthropic, and none is stored.
+- Mira's replies are read aloud only by a voice on the device (`localService`): an online voice
+  would send her words, which reflect what the person said, to another company.
+- With an account and memory on, a voice session is kept as words (`mira_voice_session`, migration
+  20261122030000): its turns stay `mira_message` rows tagged with the session; the row adds the
+  start, end, length, the words per side, the recognition mode and up to three key points that
+  Anthropic's model writes under Mira's rules. Art. 9 data: the key points sum up what the person
+  said about their sex life and body.
+- KPI events `voice_session_ended` (seconds, mode, turns, kept, the session's id, the number of
+  key points) and `voice_points_opened` (the session's id): ids and numbers, never words.
+- The site's Permissions-Policy lets Mira's pages, and only them, use the microphone
+  (`microphone=(self)` on `/mira` and `/mira/*`; `microphone=()` everywhere else).
+
+**Recipients**: a browser maker's speech service, when used, works under the browser's own terms,
+not on our instructions, so it can't be our processor. Anthropic (processor, 7.3) gets the
+session's words a second time, to write the key points.
+
+**Risks and measures**
+
+- **V1, the browser maker hears the voice (MEDIUM)**: on-device first; a one-time notice with a
+  tick names the service before its first use; Talk is not offered where no recognition exists.
+  Residual: what Apple or Google keep of the audio is set by their terms, which we can't change,
+  and Safari offers no way to ask for on-device recognition.
+- **V2, key points are new sensitive data (MEDIUM before, LOW after)**: the same rules as her
+  replies; none when a stop rail fired (the crisis or refusal message, crisis words) or when the
+  model answers NONE; kept only with memory on; deleted with the session, the chat, the account,
+  the 12-month forgetting and the under-18 stop (`deleteRecordings` in `stopForMinor`); staff data
+  requests export `mira_voice_session` with the account (`features/admin/server/data-subject.ts`).
+- **V3, captions on screen (as M5)**: the words appear on the page as they are spoken, where
+  PostHog and Clarity see them like typed text: no new exposure, the same owner's accepted risk.
+- **V4, someone nearby, or a misheard word (LOW)**: the caption shows what was heard before it is
+  sent; Mute and End stay on screen; a pause or a tap sends; leaving the tab or opening a panel
+  pauses the microphone; someone stopped as under 18 is refused on every voice route.
+
+**Retention**: as the chat (7.6): the session and its words go with the chat or the account, at the
+latest 12 months after the person's last message. Without an account nothing is kept beyond the KPI
+event (12 months, as `mira_event`).
+
+**Open**: (1) whether a browser maker's speech service must be named per browser in the notice
+(it names Apple's and Google's as examples); (2) Android: whether Chrome reports its own voices as
+on the device; where it does not, Mira answers in writing there.
+
 ## 8. Sign-off
 
 By committing this file, the data controller (Eman) confirms the DPIA has been reviewed and the residual risks are accepted given the documented mitigations.

@@ -169,6 +169,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: as long as the Slack workspace keeps messages (its retention setting: to confirm)
 - **Objection**: Art. 21 by email; a restriction request (T-09) also takes the reader out of these posts
 
+### A21 — Talking to Mira by voice (from 2026-11-22)
+
+- **Data**: the text the person's browser makes of their speech (handled as A16's messages; the browser's own speech service, when used, hears the voice under the browser's terms); with an account and "Remember our conversations" on, the voice session (`mira_voice_session`: times, words per side, recognition mode, up to three key points written by Anthropic's model); the KPI events `voice_session_ended` and `voice_points_opened` (ids and numbers)
+- **Basis**: as A16, (a) consent with Art. 9(2)(a) for the words and the key points; before the browser's own speech service is first used, a one-time notice with a tick says who turns the voice into text. The events: as A18, (f) legitimate interest
+- **Retention**: with the chat and the account (A16, [DPIA.md](DPIA.md) §7.12); the events 12 months (A18)
+- **Withdraw**: End or Mute at any time; delete a session on its page, or the chats or the account in Settings; a data request
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
