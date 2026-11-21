@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -99,19 +100,21 @@ export default function MiraHome() {
           {error}
         </p>
       ) : null}
-      <h1 className="font-serif text-[34px] font-medium [overflow-wrap:anywhere]">
+      <h1 className="font-serif text-[34px] font-medium [overflow-wrap:anywhere] motion-safe:animate-mira-in">
         {hello}
         {me?.profile.name ? `, ${me.profile.name}` : ""}
       </h1>
 
       <section className="mt-6 rounded-3xl border border-ap-line p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] to-[#bf66d9] font-serif text-[18px] font-bold text-white"
-          >
-            M
-          </span>
+          <Image
+            src="/images/mira/mira.webp"
+            alt=""
+            width={48}
+            height={48}
+            unoptimized
+            className="h-12 w-12 shrink-0 rounded-full object-cover"
+          />
           <div className="min-w-[180px] flex-1">
             <h2 className="font-serif text-[20px] font-semibold">Mira</h2>
             <p className="text-[13px] text-ap-muted">Body confidence · your coach</p>
@@ -121,7 +124,7 @@ export default function MiraHome() {
           </div>
           <Link
             href="/mira"
-            className="inline-flex min-h-[44px] items-center rounded-full bg-black px-5 text-[14px] font-bold text-white"
+            className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
           >
             New chat
           </Link>
@@ -210,7 +213,7 @@ export default function MiraHome() {
             </p>
             <Link
               href="/"
-              className="inline-flex min-h-[44px] w-fit items-center rounded-full bg-black px-5 text-[14px] font-bold text-white"
+              className="inline-flex min-h-[44px] w-fit items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
             >
               Take the assessment
             </Link>

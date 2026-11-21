@@ -93,6 +93,10 @@ const EVENT_NAMES = [
   "keep_card_shown",
   "keep_card_keep",
   "keep_card_not_now",
+  // The coaching-style tip on the chat's header button, and styles saved there (21 Nov 2026).
+  "style_tip_shown",
+  "style_tip_opened",
+  "style_saved",
   "reply_declined",
   "minor_stop",
 ];
@@ -279,6 +283,10 @@ interface Person {
   keepShown: number[];
   keepKept: number[];
   keepNotNow: number[];
+  /** When the "Make Mira yours" tip was shown to them, opened, and when they saved a style. */
+  tipShown: number[];
+  tipOpened: number[];
+  styleSaved: number[];
   /** The first source recorded for them (MiraEventRow.source), and when; null: none recorded. */
   from: { at: number; source: string } | null;
 }
@@ -412,6 +420,9 @@ export function prepare(data: MiraData): Prepared {
         keepShown: [],
         keepKept: [],
         keepNotNow: [],
+        tipShown: [],
+        tipOpened: [],
+        styleSaved: [],
         from: null,
       };
       people.set(key, p);
@@ -432,6 +443,9 @@ export function prepare(data: MiraData): Prepared {
     else if (e.name === "keep_card_shown") p.keepShown.push(at);
     else if (e.name === "keep_card_keep") p.keepKept.push(at);
     else if (e.name === "keep_card_not_now") p.keepNotNow.push(at);
+    else if (e.name === "style_tip_shown") p.tipShown.push(at);
+    else if (e.name === "style_tip_opened") p.tipOpened.push(at);
+    else if (e.name === "style_saved") p.styleSaved.push(at);
   }
   for (const p of people.values()) {
     p.starts.sort((a, b) => a.at - b.at);
@@ -951,6 +965,23 @@ function keepCardFunnel(prep: Prepared, w: Win) {
 }
 
 /**
+ * The coaching-style tip in the range: the people shown it; of them, those who opened the panel
+ * from it, and those who saved a style after first seeing it, by the range's end.
+ */
+function styleTipFunnel(prep: Prepared, w: Win) {
+  const out = { shown: 0, opened: 0, saved: 0 };
+  for (const p of prep.people.values()) {
+    const shown = p.tipShown.filter((at) => within(at, w));
+    if (!shown.length) continue;
+    out.shown++;
+    if (p.tipOpened.some((at) => within(at, w))) out.opened++;
+    const first = Math.min(...shown);
+    if (p.styleSaved.some((at) => at > first && at < w.until)) out.saved++;
+  }
+  return out;
+}
+
+/**
  * The people who opened Mira in the range, by where they first came from, and of them those who
  * started a chat and created an account in the range. Most opened first, nothing recorded last.
  */
@@ -1060,6 +1091,8 @@ export interface MiraPayload extends PageHead {
   };
   /** The "Keep this chat" card in the range (keepCardFunnel). */
   keepCard: { shown: number; kept: number; accounts: number; notNow: number };
+  /** The "Make Mira yours" tip in the range (styleTipFunnel). */
+  styleTip: { shown: number; opened: number; saved: number };
   chips: ChipRow[];
   topics: TopicRow[];
   /** New chats in the range opened in the person's own words that carry no topic. */
@@ -1328,6 +1361,7 @@ export function buildMiraPage(input: {
       minorStops: cur.minorStops,
     },
     keepCard: keepCardFunnel(prep, w),
+    styleTip: styleTipFunnel(prep, w),
     chips: chips(prep, w),
     ...topics(prep, w, compared && cmp ? win(cmp.from, cmp.to) : null),
     bodyCheck: { ...cur.body, ...bodyFunnel(prep, w), reliableChange: BODY_RELIABLE_CHANGE },

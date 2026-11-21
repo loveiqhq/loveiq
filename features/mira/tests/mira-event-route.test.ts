@@ -119,6 +119,17 @@ describe("POST /api/mira/event", () => {
     ]);
   });
 
+  it("logs the coaching-style tip and a saved style", async () => {
+    for (const name of ["style_tip_shown", "style_tip_opened", "style_saved"]) {
+      expect((await post({ type: "track", name })).status).toBe(200);
+    }
+    expect(vi.mocked(logMiraEvent).mock.calls.map(([n]) => n)).toEqual([
+      "style_tip_shown",
+      "style_tip_opened",
+      "style_saved",
+    ]);
+  });
+
   it("logs the consent with its wording's version and the rating tick, and only so", async () => {
     await post({ type: "consent", version: "mira-2026-11-21", shareRated: true });
     expect(vi.mocked(logMiraEvent).mock.calls).toEqual([

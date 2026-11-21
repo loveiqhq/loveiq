@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
-import { GradientButton } from "./MiraShell";
+import { PrimaryButton } from "./MiraShell";
 import { Modal } from "./SupportPanel";
 
 export type Style = Partial<
@@ -99,7 +99,7 @@ export function CoachingStylePanel({
         >
           Cancel
         </button>
-        <GradientButton
+        <PrimaryButton
           disabled={busy}
           onClick={async () => {
             setBusy(true);
@@ -112,7 +112,7 @@ export function CoachingStylePanel({
           }}
         >
           {busy ? "Saving…" : "Save"}
-        </GradientButton>
+        </PrimaryButton>
       </div>
     </Modal>
   );

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import nudgeConfig from "@features/mira/content/nudges.json";
-import { GradientButton, LegalLinks, Wordmark } from "./MiraShell";
+import { PrimaryButton, LegalLinks, Wordmark } from "./MiraShell";
 import { miraApi } from "./api";
 
 /**
@@ -226,12 +226,12 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
             </fieldset>
             <div className="mt-2 flex flex-col items-center gap-3">
               <div className="w-full [&>button]:w-full">
-                <GradientButton
+                <PrimaryButton
                   onClick={save}
                   disabled={busy || (choice === "types" && kept.length === 0)}
                 >
                   Save my choice
-                </GradientButton>
+                </PrimaryButton>
               </div>
               <button
                 type="button"
@@ -300,7 +300,7 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
                 type="button"
                 disabled={busy}
                 onClick={() => stop(true)}
-                className="h-[52px] w-full rounded-full bg-black text-[16px] font-semibold text-white disabled:opacity-60"
+                className="h-[52px] w-full rounded-full bg-ap-ink text-[16px] font-semibold text-white disabled:opacity-60"
               >
                 Stop nudges
               </button>
@@ -390,7 +390,7 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
             <div className="mt-2 flex flex-col items-center gap-1.5">
               <Link
                 href="/mira/home"
-                className="inline-flex h-[52px] w-full items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] to-[#958ef6] text-[16px] font-semibold text-white"
+                className="inline-flex h-[52px] w-full items-center justify-center rounded-full bg-ap-ink text-[16px] font-semibold text-white"
               >
                 Back to Mira
               </Link>

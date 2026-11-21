@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
-import { GradientButton } from "./MiraShell";
+import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { miraApi } from "./api";
 
@@ -267,9 +267,9 @@ export default function MiraSettings() {
 
           {/* Save, delete and sign-out errors show here, next to the buttons that caused them. */}
           <div className="flex flex-wrap items-center gap-3">
-            <GradientButton onClick={save} disabled={busy}>
+            <PrimaryButton onClick={save} disabled={busy}>
               {busy ? "Saving…" : "Save"}
-            </GradientButton>
+            </PrimaryButton>
             <span role="status" className="text-[14px] text-ap-good-ink">
               {saved}
             </span>

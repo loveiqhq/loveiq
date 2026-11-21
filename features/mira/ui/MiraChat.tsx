@@ -9,7 +9,7 @@ import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
-import { DISCLAIMER, LegalLinks } from "./MiraShell";
+import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import {
   local,
   miraApi,
@@ -32,7 +32,8 @@ import {
  * Anonymous chat (embed) copy": the "Keep this chat" card after Mira's first reply.
  */
 
-type Message = LocalTurn & { messageId?: number | null };
+/** `live`: written in this page view, so it animates in (a restored chat does not replay). */
+type Message = LocalTurn & { messageId?: number | null; live?: boolean };
 type BodyDue = "baseline" | "week4" | null;
 type CrisisCountry = SupportCountry;
 type ChatSummary = { id: string; title: string; updated_at: string };
@@ -99,6 +100,9 @@ export default function MiraChat({
   const [minor, setMinor] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  // The one-time "Make Mira yours" tip on the coaching-style button: null until this browser's
+  // record is read after mount, then whether it was shown here before.
+  const [tipSeen, setTipSeen] = useState<boolean | null>(null);
   // The NPS question (Marcus's MVP success board): "ask" while open, "thanks" once answered.
   const [nps, setNps] = useState<"ask" | "thanks" | null>(null);
   // The body check (Marcus's MVP success board): due from the account, offered once a page view.
@@ -128,10 +132,12 @@ export default function MiraChat({
       setConsented(given?.version === CONSENT_VERSION);
       setShare(given?.version === CONSENT_VERSION && given.shareRated === true);
       setStyle(local.style() ?? {});
+      setTipSeen(local.styleTipSeen());
       setReady(true);
       /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
+    setTipSeen(local.styleTipSeen());
     void (async () => {
       const me = await miraApi<{
         chats: ChatSummary[];
@@ -175,10 +181,14 @@ export default function MiraChat({
     const reply =
       replyAt.current === null ? null : list.querySelector(`[data-msg="${replyAt.current}"]`);
     replyAt.current = null;
-    if (reply) {
-      // Below the list's 20px top fade, so the reply's first line is read at full strength.
-      list.scrollTop += reply.getBoundingClientRect().top - list.getBoundingClientRect().top - 24;
-    } else list.scrollTop = list.scrollHeight;
+    const top = reply
+      ? // Below the list's 20px top fade, so the reply's first line is read at full strength.
+        list.scrollTop + reply.getBoundingClientRect().top - list.getBoundingClientRect().top - 24
+      : list.scrollHeight;
+    const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? true;
+    if (typeof list.scrollTo === "function")
+      list.scrollTo({ top, behavior: calm ? "auto" : "smooth" });
+    else list.scrollTop = top;
   }, [messages.length, sending]); // not on a rating: that rewrites a message, not adds one
 
   // The anonymous chat lives in this browser, with its sources and ratings, after every change
@@ -223,9 +233,10 @@ export default function MiraChat({
       return;
     }
     setError(null);
+    if (showTip) setTipSeen(true);
     const firstOfChat = !chatId && messages.length === 0;
     const history = messages.map(({ role, content }) => ({ role, content })).slice(-24);
-    const next: Message[] = [...messages, { role: "user", content: message }];
+    const next: Message[] = [...messages, { role: "user", content: message, live: true }];
     setMessages(next);
     setInput("");
     setSending(true);
@@ -270,6 +281,7 @@ export default function MiraChat({
       ...next,
       {
         role: "assistant",
+        live: true,
         content: res.data.reply,
         sources: res.data.sources,
         messageId: res.data.messageId,
@@ -277,7 +289,7 @@ export default function MiraChat({
         ...(res.data.crisis ? { crisis: true } : {}),
       },
       ...(res.data.invitation
-        ? [{ role: "assistant" as const, content: res.data.invitation }]
+        ? [{ role: "assistant" as const, content: res.data.invitation, live: true }]
         : []),
     ];
     replyAt.current = next.length;
@@ -390,7 +402,21 @@ export default function MiraChat({
     } else local.saveStyle(next);
     setStyle(next);
     setStyleOpen(false);
+    void miraApi("/api/mira/event", { body: { type: "track", name: "style_saved" } });
     return null;
+  }
+
+  /** The coaching-style panel, from its header button or the tip that points at it. */
+  function openStyle() {
+    setStyleOpen(true);
+    if (!showTip) return;
+    setTipSeen(true);
+    void miraApi("/api/mira/event", { body: { type: "track", name: "style_tip_opened" } });
+  }
+
+  function closeTip() {
+    setTipSeen(true);
+    document.getElementById("mira-input")?.focus(); // the pressed button is about to go
   }
 
   const started = messages.length > 0;
@@ -424,6 +450,30 @@ export default function MiraChat({
     void miraApi("/api/mira/event", { body: { type: "track", name: "keep_card_shown" } });
   }, [showKeep]);
 
+  // "Make Mira yours": once per browser, after a reply of Mira's when nothing else asks for the
+  // person's attention (no question with answer buttons, card, check, panel or crisis).
+  const showTip =
+    tipSeen === false &&
+    !showKeep && // one ask at a time: the "Keep this chat" card goes first
+    !sending &&
+    !gate &&
+    !minor &&
+    !nps &&
+    !bodyOpen &&
+    !styleOpen &&
+    !supportOpen &&
+    pending === null &&
+    last?.role === "assistant" &&
+    !isInvitation(last) &&
+    !last.ask &&
+    !crisisIn(messages);
+
+  useEffect(() => {
+    if (!showTip) return;
+    local.saveStyleTipSeen(); // shown once: a reload does not bring it back
+    void miraApi("/api/mira/event", { body: { type: "track", name: "style_tip_shown" } });
+  }, [showTip]);
+
   function keepNotNow() {
     setKeepOff(true);
     void miraApi("/api/mira/event", { body: { type: "track", name: "keep_card_not_now" } });
@@ -436,38 +486,69 @@ export default function MiraChat({
   const showChips = ready && empty && !gate;
 
   return (
-    <div className="bg-white font-sans text-ap-ink">
+    <div className="bg-white font-sans text-ap-ink selection:bg-[#efe6fd]">
       {/* Exactly one screen: header, the chat (or the welcome), the composer. Only the messages
           scroll, so the composer stays where the person typed. The legal lines follow below. */}
       <div className="relative flex h-dvh flex-col overflow-hidden">
-        <div aria-hidden="true" className={CLOUD} />
+        <MiraCloud />
 
-        <header className="relative z-[1] flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-3 min-[360px]:px-4 sm:px-8 sm:pt-6">
-          <Link href="/mira" aria-label="Applied Psychometrics, Mira beta" className="no-underline">
-            <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] sm:text-[22px]">
-              <span>
-                Applied{" "}
-                <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
-                  BETA
-                </span>
-              </span>
-              <span className={AP_INK}>Psychometrics</span>
-            </span>
-          </Link>
+        <header className="relative z-[2] flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-3 min-[360px]:px-4 sm:px-8 sm:pt-6">
+          <Wordmark />
           <div className="flex items-center gap-0.5">
             {/* Only once a chat is under way: the welcome screen is the board's, logo and sign-in. */}
             {started || chatId ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => setStyleOpen(true)}
-                  disabled={!ready}
-                  aria-label="How Mira coaches you"
-                  title="How Mira coaches you"
-                  className={ICON_BUTTON}
-                >
-                  <SlidersIcon />
-                </button>
+                <span className="relative">
+                  <button
+                    type="button"
+                    onClick={openStyle}
+                    disabled={!ready}
+                    aria-label="Coaching style"
+                    title="How Mira coaches you"
+                    className={`${ICON_BUTTON} ${showTip ? "bg-ap-ground ring-2 ring-[#e7d8f8]" : ""}`}
+                  >
+                    <SlidersIcon />
+                    <span className="hidden sm:inline">Coaching style</span>
+                    {tipSeen === false ? (
+                      <span
+                        aria-hidden="true"
+                        className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#bf66d9] ring-2 ring-white sm:right-0.5 sm:top-0.5"
+                      />
+                    ) : null}
+                  </button>
+                  {showTip ? (
+                    <div
+                      role="note"
+                      aria-label="Tip"
+                      className="fixed inset-x-3 top-[64px] z-20 rounded-[18px] border border-ap-line bg-white p-4 text-left shadow-[0_18px_40px_-18px_rgba(22,16,33,0.35)] motion-safe:animate-mira-in sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2.5 sm:w-[300px]"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-[6px] right-[60px] hidden h-3 w-3 rotate-45 border-l border-t border-ap-line bg-white sm:block"
+                      />
+                      <p className="font-serif text-[17px] font-semibold">Make Mira yours</p>
+                      <p className="mt-1 text-[14px] leading-snug text-ap-body">
+                        Choose how she coaches you: softer or more direct, solutions or root causes.
+                      </p>
+                      <div className="mt-3 flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={closeTip}
+                          className="min-h-[40px] px-3 text-[14px] font-semibold text-ap-muted"
+                        >
+                          Not now
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openStyle}
+                          className="inline-flex min-h-[40px] items-center rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                        >
+                          Set it up
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </span>
                 <button
                   type="button"
                   onClick={newChat}
@@ -477,6 +558,7 @@ export default function MiraChat({
                   className={ICON_BUTTON}
                 >
                   <NewChatIcon />
+                  <span className="hidden sm:inline">New chat</span>
                 </button>
               </>
             ) : null}
@@ -532,12 +614,12 @@ export default function MiraChat({
               className={
                 empty
                   ? "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-5 pb-[6dvh] outline-none sm:flex-initial sm:px-6 sm:pb-0"
-                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)]"
+                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:#ddd7e6_transparent] [scrollbar-width:thin]"
               }
             >
               {showWelcome ? (
                 <div className="mx-auto flex max-w-[760px] flex-col items-center gap-3 py-6 text-center sm:gap-3.5 sm:pb-7 sm:pt-0">
-                  <h1 className="text-balance font-serif text-[30px] font-medium leading-[1.2] tracking-[-0.01em] sm:text-[40px] [@media(max-height:480px)]:text-[24px]">
+                  <h1 className="text-balance font-serif text-[30px] font-medium leading-[1.2] tracking-[-0.01em] motion-safe:animate-mira-in sm:text-[40px] [@media(max-height:480px)]:text-[24px]">
                     Talk to{" "}
                     <Image
                       src="/images/mira/mira.webp"
@@ -546,11 +628,11 @@ export default function MiraChat({
                       height={46}
                       preload
                       unoptimized
-                      className="inline-block h-[34px] w-[34px] rounded-full object-cover align-[-7px] sm:h-[46px] sm:w-[46px] sm:align-[-10px]"
+                      className="inline-block h-[34px] w-[34px] rounded-full object-cover align-[-7px] [animation-delay:120ms] motion-safe:animate-mira-pop sm:h-[46px] sm:w-[46px] sm:align-[-10px]"
                     />{" "}
                     <span className={MIRA_INK}>Mira</span> about your body confidence
                   </h1>
-                  <p className="max-w-[34ch] text-[13px] leading-snug text-ap-muted sm:max-w-none sm:text-[14px] [@media(max-height:480px)]:hidden">
+                  <p className="max-w-[34ch] text-[13px] leading-snug text-ap-muted [animation-delay:260ms] motion-safe:animate-mira-in sm:max-w-none sm:text-[14px] [@media(max-height:480px)]:hidden">
                     <SparkIcon />
                     Her answers draw on{" "}
                     <b className="font-semibold text-ap-body">research about body confidence</b>
@@ -569,11 +651,15 @@ export default function MiraChat({
                       }
                     >
                       {m.role === "user" ? (
-                        <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] bg-ap-ground px-4 py-2.5 text-[16px] leading-[1.6] [overflow-wrap:anywhere] sm:max-w-[70%] sm:px-[18px] sm:py-3">
+                        <p
+                          className={`max-w-[85%] origin-bottom-right whitespace-pre-wrap rounded-[20px] bg-ap-ground px-4 py-2.5 text-[16px] leading-[1.6] [overflow-wrap:anywhere] sm:max-w-[70%] sm:px-[18px] sm:py-3 ${m.live ? "motion-safe:animate-mira-rise" : ""}`}
+                        >
                           {m.content}
                         </p>
                       ) : (
-                        <p className="whitespace-pre-wrap text-[16px] leading-[1.65] [overflow-wrap:anywhere] sm:max-w-[88%]">
+                        <p
+                          className={`whitespace-pre-wrap text-[16px] leading-[1.65] [overflow-wrap:anywhere] sm:max-w-[88%] ${m.live ? "motion-safe:animate-mira-reply" : ""}`}
+                        >
                           {m.content}
                         </p>
                       )}
@@ -603,7 +689,9 @@ export default function MiraChat({
                         </div>
                       ) : null}
                       {m.role === "assistant" && !isInvitation(m) ? (
-                        <div className="-ml-2 flex flex-wrap items-center text-[12px] text-ap-muted">
+                        <div
+                          className={`-ml-2 flex flex-wrap items-center text-[12px] text-ap-muted ${m.live ? "[animation-delay:250ms] motion-safe:animate-mira-reply" : ""}`}
+                        >
                           <button
                             type="button"
                             aria-label="Helpful"
@@ -650,7 +738,7 @@ export default function MiraChat({
                   ))}
                   {showKeep ? (
                     <div
-                      className={`${CARD} flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4`}
+                      className={`${CARD} flex flex-col gap-3 motion-safe:animate-mira-reply sm:flex-row sm:items-center sm:gap-4`}
                     >
                       <p className="flex-1 text-[14px] leading-normal text-ap-body">
                         Would you like Mira to remember this conversation next time? Sign in and she
@@ -733,16 +821,25 @@ export default function MiraChat({
                     />
                   ) : null}
                   {sending ? (
-                    <div className="flex items-center gap-1.5 py-1.5">
+                    <div className="flex items-center gap-2.5 py-1 motion-safe:animate-mira-reply">
+                      <Image
+                        src="/images/mira/mira.webp"
+                        alt=""
+                        width={24}
+                        height={24}
+                        unoptimized
+                        className="h-6 w-6 rounded-full object-cover"
+                      />
                       <span className="sr-only">Mira is writing…</span>
-                      {[0, 150, 300].map((delay) => (
-                        <span
-                          key={delay}
-                          aria-hidden="true"
-                          style={{ animationDelay: `${delay}ms` }}
-                          className="h-[7px] w-[7px] animate-pulse rounded-full bg-ap-purple motion-reduce:animate-none"
-                        />
-                      ))}
+                      <span aria-hidden="true" className="flex items-center gap-1.5">
+                        {[0, 140, 280].map((delay) => (
+                          <span
+                            key={delay}
+                            style={{ animationDelay: `${delay}ms` }}
+                            className="h-[7px] w-[7px] rounded-full bg-ap-purple opacity-60 motion-safe:animate-mira-dot"
+                          />
+                        ))}
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -772,7 +869,9 @@ export default function MiraChat({
                   </Link>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2.5 sm:gap-3.5">
+                <div
+                  className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
+                >
                   <form
                     className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
                     onSubmit={(e) => {
@@ -800,13 +899,13 @@ export default function MiraChat({
                       maxLength={2000}
                       enterKeyHint="send"
                       placeholder="Ask Mira anything…"
-                      className="max-h-[168px] min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[16px] leading-6 outline-none placeholder:text-ap-muted sm:min-h-[48px] sm:py-3"
+                      className="max-h-[168px] min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[16px] leading-6 caret-ap-purple outline-none placeholder:text-ap-muted sm:min-h-[48px] sm:py-3"
                     />
                     <button
                       type="submit"
                       aria-label="Send"
                       disabled={sending || !input.trim()}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ap-ink text-white transition-colors disabled:cursor-not-allowed disabled:bg-ap-muted sm:h-12 sm:w-12"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ap-ink text-white transition-[background-color,transform] active:scale-95 disabled:cursor-not-allowed disabled:bg-ap-muted disabled:active:scale-100 sm:h-12 sm:w-12"
                     >
                       <svg
                         aria-hidden="true"
@@ -828,12 +927,13 @@ export default function MiraChat({
                       it, centred, never more than two rows (Mark, 21 Nov). */}
                   {showChips ? (
                     <div className="order-first -mx-3 flex gap-1.5 overflow-x-auto pl-3 pr-8 [mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)] [scrollbar-width:none] sm:order-none sm:mx-0 sm:max-h-[66px] sm:flex-wrap sm:justify-center sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
-                      {miraConfig.starterChips.map((chip) => (
+                      {miraConfig.starterChips.map((chip, i) => (
                         <button
                           key={chip}
                           type="button"
                           onClick={() => send(chip)}
-                          className="h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-colors hover:border-[#d9d4e2] hover:bg-ap-ground sm:h-[30px]"
+                          style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                          className="h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-[#d9d4e2] hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]"
                         >
                           {chip}
                         </button>
@@ -963,16 +1063,11 @@ export default function MiraChat({
   );
 }
 
-/** The soft coral, orchid and lavender cloud behind the middle of the screen (board V2). */
-const CLOUD =
-  "pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,0.14),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,0.16),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,0.18),rgba(149,142,246,0)_100%)] blur-[72px] sm:h-[560px] sm:w-[1000px]";
 const MIRA_INK =
   "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text font-semibold text-transparent";
-const AP_INK =
-  "bg-[linear-gradient(105deg,#d05976_20.51%,#c167cf_48.14%,#8887f6_79.16%)] bg-clip-text text-transparent";
 const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 const ICON_BUTTON =
-  "inline-flex h-9 w-9 items-center justify-center rounded-full text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10";
+  "relative inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10 sm:w-auto sm:px-3";
 const RATE_BUTTON =
   "inline-flex h-9 min-w-[36px] items-center justify-center rounded-full hover:bg-ap-ground hover:text-ap-body";
 

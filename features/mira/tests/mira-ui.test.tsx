@@ -485,6 +485,54 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
   });
 });
 
+describe("“Make Mira yours” tip (coaching style)", () => {
+  const tip = () => screen.queryByRole("note", { name: "Tip" });
+
+  it("shows once after a reply, opens the coaching panel, and never comes back in that browser", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", chatId: null } });
+    const first = render(<MiraChat signedIn initialChatId={null} />);
+    expect(tip()).toBeNull();
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    expect(await screen.findByRole("note", { name: "Tip" })).toHaveTextContent("Make Mira yours");
+    fireEvent.click(within(tip()!).getByRole("button", { name: "Set it up" }));
+    expect(screen.getByRole("dialog", { name: "How Mira coaches you" })).toBeInTheDocument();
+    expect(tip()).toBeNull();
+    expect(tracked()).toEqual(["chat_opened", "style_tip_shown", "style_tip_opened"]);
+    first.unmount();
+
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hello");
+    await screen.findByText("Try this.");
+    expect(tip()).toBeNull();
+  });
+
+  it("waits while the “Keep this chat” card is up, and Not now puts it away", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText(/remember this conversation next time/);
+    expect(tip()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(await screen.findByRole("note", { name: "Tip" })).toBeInTheDocument();
+    fireEvent.click(within(tip()!).getByRole("button", { name: "Not now" }));
+    expect(tip()).toBeNull();
+    expect(localStorage.getItem("mira.tip.style.v1")).not.toBeNull();
+  });
+
+  it("counts a saved style", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    replies["PATCH /api/mira/me"] = () => ({ body: { success: true } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Coaching style" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(tracked()).toContain("style_saved"));
+  });
+});
+
 describe("Free messages", () => {
   it("shows the sign-up card once the last free message is answered, and keeps the chat", async () => {
     giveConsent();
