@@ -237,14 +237,17 @@ are left out of Mira's statistics.
   (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
   (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in.
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
-  result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason), and each
-  consent with its time and wording version.
+  result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason; from
+  2026-11-21 the language Mira replies in, and light or dark and the text size), and each consent
+  with its time and wording version.
 - Usage: the log of steps (`mira_event`: event names, times and small properties, never words
   except the person's own feedback), nudge records
   (`mira_nudge`: kind, fixed subject, day, sent, delivered, first opened, clicked) and sign-in code
   rows (`mira_sign_in_code`: address, time, guesses).
 - Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
-  IP and email addresses as rate-limit keys (Upstash), request logs (Vercel).
+  the display choice (`mira_look` cookie, one year, Mira's pages only: light, dark or system and the
+  text size, with or without an account), IP and email addresses as rate-limit keys (Upstash),
+  request logs (Vercel).
 - Analytics: what the site-wide tools record on Mira's pages, which includes the chat as it
   appears on screen.
 
@@ -356,7 +359,8 @@ details.
 
 - **Measures**: an 18+ tick before the first message and at sign-up; the terms of use require 18+.
   Anyone who says they are under 18 is stopped for good on that account or browser: nudges off,
-  the account's saved chats deleted, a browser chat cleared.
+  the account's saved chats deleted, a browser chat cleared, and (from 2026-11-21) the account's
+  reply language and display choices cleared; Settings then refuses changes (403).
 - **Residual**: medium. Age is self-declared; there is no age verification.
 
 #### M3 — Crises: suicide, self-harm, abuse (HIGH before, MEDIUM after)
@@ -364,8 +368,12 @@ details.
 - **Measures**: a plain crisis message gets a fixed reply and support lines without a model call,
   and is never stopped by any limit; the model ends a reply with `[[CRISIS]]` when a stop rail
   fires, which opens the support panel; support lines for nine countries, checked on 2026-11-20
-  (re-check by 2027-02-20); no nudge for 14 days after a crisis.
-- **Residual**: medium. Keyword and model detection can miss a crisis.
+  (re-check by 2027-02-20); no nudge for 14 days after a crisis. Mira replies in the language the
+  person writes in, or one they choose in Settings (from 2026-11-21); the languages offered are
+  only those whose crisis words the fixed check reads, and the fixed crisis reply, the under-18
+  message and the support lines stay in English.
+- **Residual**: medium. Keyword and model detection can miss a crisis. A message in a language the
+  fixed check doesn't read relies on the model's marker alone, as before.
 
 #### M4 — Wrong or harmful model output (HIGH before, MEDIUM after)
 

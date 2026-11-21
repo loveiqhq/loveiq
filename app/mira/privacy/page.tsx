@@ -18,7 +18,7 @@ const RECIPIENTS = [
   {
     who: "Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)",
     role: "Processor. Its AI model, Claude, writes Mira's replies and her daily nudges.",
-    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country and, if you allow it, your LoveIQ result.",
+    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in and, if you allow it, your LoveIQ result.",
     basis: "Your explicit consent",
     where:
       "Stored in the USA. It may be processed in the USA, Europe, Asia or Australia. EU standard contractual clauses.",
@@ -108,7 +108,8 @@ const COLUMNS = [
  * Mira's privacy notice, in plain words. Written 18 Nov 2026 to match what the code does and
  * checked by Eman on 20 Nov 2026. Later that day: the two consent ticks, rated replies' text only
  * with consent, the stop for minors, the retention list, the recipients table, Anthropic's
- * deletion and the data protection officer. Change it whenever what Mira stores or shares changes.
+ * deletion and the data protection officer. 21 Nov 2026: the reply language and the look (light or
+ * dark, text size) with their cookie. Change it whenever what Mira stores or shares changes.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -162,6 +163,11 @@ export default function MiraPrivacyPage() {
             With a free account: your email address, the name and gender you give, the country you
             choose, your coaching style, your settings and your time zone. We also keep each consent
             you gave, when you gave it and which wording you saw.
+          </li>
+          <li>
+            The language you want Mira to reply in, if you choose one, and how Mira looks for you
+            (light or dark, and the text size). The look is also kept in a cookie on this browser
+            for a year, so Mira&apos;s pages open the way you set them, with or without an account.
           </li>
           <li>Your saved chats, if &ldquo;Remember our conversations&rdquo; is on.</li>
           <li>

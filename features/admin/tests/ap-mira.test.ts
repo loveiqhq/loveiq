@@ -873,6 +873,10 @@ describe("fetchMira", () => {
       "pick_clicked",
       "guide_ask",
       "search_empty",
+      // Settings (21 Nov 2026).
+      "theme_changed",
+      "text_size_changed",
+      "reply_language_changed",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(

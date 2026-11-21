@@ -288,6 +288,7 @@ export async function POST(request: Request) {
         gender: profile.gender,
         country: profile.country,
         archetype: assessment?.archetype ?? null,
+        replyLanguage: profile.reply_language,
       };
       if (askedChatId && (await ownsChat(account.id, askedChatId))) {
         chatId = askedChatId;

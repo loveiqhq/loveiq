@@ -9,6 +9,8 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock("@features/mira/server/nudges", () => ({ isValidTimeZone: () => true }));
+// No under-18 mark (PATCH refuses one: features/mira/tests/mira-settings-server.test.ts).
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
 const signOut = vi.fn().mockResolvedValue({ error: null });
 vi.mock("@features/mira/server/session", () => ({
   getMiraAccount: vi.fn(),

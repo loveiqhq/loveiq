@@ -771,6 +771,7 @@ function Outcomes({ data }: { data: Data }) {
       <Therapeutic data={data} />
       <Satisfaction data={data} />
       <Knows data={data} />
+      <SettingsCard data={data} />
       <Safety data={data} />
     </Board>
   );
@@ -1003,6 +1004,90 @@ function Satisfaction({ data }: { data: Data }) {
         From {count(answers)} scores in the range: the share of promoters minus the share of
         detractors, from &minus;100 to +100. &ldquo;Not now&rdquo; gives no score: it was{" "}
         {pct(share(notNow, answers + notNow))} of the {count(answers + notNow)} replies.
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Settings (21 Nov 2026): how today's accounts set Mira up (theme, text size, reply language)
+ * and how many changes people make each week.
+ */
+function SettingsCard({ data }: { data: Data }) {
+  const { accounts, theme, textSize, replyLanguage, weeks } = data.settings;
+  const groups: Array<[string, typeof theme]> = [
+    ["Appearance", theme],
+    ["Text size", textSize],
+    ["Mira replies in", replyLanguage],
+  ];
+  return (
+    <Card id="settings" labelledBy="h-settings">
+      <SectionHead
+        id="h-settings"
+        level={3}
+        title="Settings"
+        description="How people set Mira up: the theme, text size and reply language they chose, and how often they change them."
+      />
+      <div className="grid max-w-[860px] gap-6 md:grid-cols-3">
+        {groups.map(([title, rows]) => (
+          <div key={title} className="flex flex-col gap-2">
+            <h4 className="m-0 text-sm font-bold">{title}</h4>
+            {rows.map((r) => (
+              <div
+                key={r.label}
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: "minmax(0,1fr) 92px" }}
+              >
+                <span className="flex flex-col gap-1">
+                  <span className="text-xs">{r.label}</span>
+                  <Bar pct={r.share} color={PURPLE} />
+                </span>
+                <span className="text-right text-sm font-bold tabular-nums">
+                  {pct(r.share)} <span className="font-medium text-ap-muted">({count(r.n)})</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="max-w-[860px] overflow-x-auto">
+        <table className="w-full min-w-[420px] border-collapse text-sm tabular-nums">
+          <caption className="pb-2 text-left text-sm font-bold">Changes per week</caption>
+          <thead>
+            <tr className="border-b border-ap-line text-left">
+              <th scope="col" className={HEAD}>
+                Week of
+              </th>
+              <th scope="col" className={`${HEAD} text-right`}>
+                Appearance
+              </th>
+              <th scope="col" className={`${HEAD} text-right`}>
+                Text size
+              </th>
+              <th scope="col" className={`${HEAD} text-right`}>
+                Reply language
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {weeks.map((w) => (
+              <tr key={w.week} className="border-b border-ap-line last:border-0">
+                <th scope="row" className="px-3 py-2 text-left font-medium">
+                  {shortDate(w.week)}
+                </th>
+                <td className="px-3 py-2 text-right">{count(w.theme)}</td>
+                <td className="px-3 py-2 text-right">{count(w.textSize)}</td>
+                <td className="px-3 py-2 text-right">{count(w.replyLanguage)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className={NOTE}>
+        Shares of today&rsquo;s {count(accounts)} signed-up accounts, whatever the range: an account
+        keeps only its current choice, and one that never chose counts under the default. Changes
+        count every change made, signed in, or a theme chosen while signed out (at the foot of any
+        Mira page); the 8 weeks end with the range&rsquo;s last day. Recorded from 22 Nov 2026.
       </p>
     </Card>
   );
