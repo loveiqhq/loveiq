@@ -9,6 +9,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
+import { ApMiraJournal } from "./ApMiraJournal";
 import { bucketTitles } from "./hover";
 import {
   Bar,
@@ -639,6 +640,8 @@ function Engagement({ data }: { data: Data }) {
           who wrote to Mira within 48 hours of it.
         </p>
       </Card>
+      {/* The daily journal's card (features/admin/server/ap/mira-journal.ts). */}
+      <ApMiraJournal journal={data.journal} />
     </Board>
   );
 }

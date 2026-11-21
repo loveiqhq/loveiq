@@ -47,6 +47,12 @@ import {
 } from "./filters";
 import { fmt } from "./format";
 import { mean, ratio } from "./metrics";
+import {
+  fetchJournal,
+  journalFigures,
+  type JournalFigures,
+  type JournalRows,
+} from "./mira-journal";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -162,6 +168,8 @@ export interface MiraData {
   bodyChecks: MiraBodyCheckRow[];
   /** Accounts that let Mira use their LoveIQ result and whose address has a finished survey. */
   withResult: Set<string>;
+  /** The daily journal's days and settings (mira-journal.ts); null when they could not be read. */
+  journal?: JournalRows | null;
 }
 
 /**
@@ -192,6 +200,8 @@ export async function fetchMira(): Promise<MiraData> {
     nudges,
     bodyChecks: bodyChecks.map((b) => ({ ...b, score: Number(b.score) })),
     withResult: await withLoveIqResult(asked),
+    // Its own card: a failed read says so there and leaves the rest of the page standing.
+    journal: await fetchJournal(),
   };
 }
 
@@ -1108,6 +1118,8 @@ export interface MiraPayload extends PageHead {
   nps: Nps;
   /** The nudge emails by kind, in the range. */
   nudgeTypes: Array<{ type: string; title: string } & NudgeCounts>;
+  /** The daily journal's KPI card (mira-journal.ts). */
+  journal: JournalFigures;
 }
 
 export function buildMiraPage(input: {
@@ -1371,5 +1383,11 @@ export function buildMiraPage(input: {
       title: k.title,
       ...nudgeCounts(prep, w, k.id),
     })),
+    journal: journalFigures(
+      input.data.journal,
+      new Set(prep.accounts.map((a) => a.id)),
+      f.from,
+      f.to
+    ),
   };
 }
