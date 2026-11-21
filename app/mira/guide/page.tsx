@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Fragment } from "react";
 import {
   GUIDE,
   GUIDE_PRACTICES,
@@ -10,6 +11,7 @@ import {
 import { cardById, type EvidenceCard } from "@features/mira/server/cards";
 import { MiraFrame } from "@features/mira/ui/MiraShell";
 import GuideHashScroll from "@features/mira/ui/GuideHashScroll";
+import { AskMiraAbout } from "@features/mira/ui/coaches/GuideAsk";
 import { miraLinkPreview } from "@features/mira/link-preview";
 
 const GUIDE_TITLE = "Body confidence guide | LoveIQ";
@@ -96,7 +98,11 @@ export default function MiraGuidePage() {
                     </h3>
                     <p>{st.intro}</p>
                     {st.practices.map((p) => (
-                      <Practice key={p.number} p={p} />
+                      // Mira after the practice, never inside it: each practice ends with SKIP_IT.
+                      <Fragment key={p.number}>
+                        <Practice p={p} />
+                        <AskMiraAbout practice={p} />
+                      </Fragment>
                     ))}
                   </section>
                 ))}
