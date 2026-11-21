@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isTickableDay, localDay, progress, weekStart } from "@features/mira/server/goal-progress";
+import { STABLE_INSTRUCTIONS, personalInstructions } from "@features/mira/server/prompt";
 import { CRISIS_TOKEN, parseReply } from "@features/mira/server/safety";
 
 /** Challenges & goals: the logic under the API and the screens (routes and UI have their own). */
@@ -157,5 +158,45 @@ describe("the goal tables (supabase/migrations/20261122010000_mira_goals.sql)", 
     expect(sql).toMatch(
       /user_id +uuid NOT NULL REFERENCES public\.mira_user \(id\) ON DELETE CASCADE/
     );
+  });
+});
+
+describe("what Mira is told about goals", () => {
+  it("teaches the goal marker with the app's other markers", () => {
+    const markers = STABLE_INSTRUCTIONS.slice(STABLE_INSTRUCTIONS.indexOf("MARKERS FOR THE APP"));
+    expect(markers).toContain("[[GOAL:");
+    expect(markers).toMatch(/at most 80 characters/);
+    expect(markers).toMatch(/never in a crisis reply/i);
+  });
+
+  it("gives a signed-in person's goals on the go, quoted as their words, with this week", () => {
+    const text = personalInstructions(undefined, {
+      signedIn: true,
+      goals: [
+        { text: "Leave one soft light on", target: 3, thisWeek: 1, daysSinceLast: 1 },
+        {
+          text: 'Say "thank you" to one compliment',
+          target: null,
+          thisWeek: 0,
+          daysSinceLast: null,
+        },
+      ],
+    });
+    expect(text).toContain("THEIR GOALS");
+    expect(text).toContain(
+      '- "Leave one soft light on": aims for 3 days a week, 1 so far this week; last done yesterday.'
+    );
+    expect(text).toContain(
+      '- "Say \\"thank you\\" to one compliment": no weekly target, none so far this week; not done yet.'
+    );
+    // Once a chat at most, and never as pressure.
+    expect(text).toMatch(/at most once in this chat/);
+    expect(text).toMatch(/never make them feel behind/);
+  });
+
+  it("adds nothing when there are no goals on the go", () => {
+    const without = personalInstructions(undefined, { signedIn: true });
+    expect(personalInstructions(undefined, { signedIn: true, goals: [] })).toBe(without);
+    expect(without).not.toContain("GOALS");
   });
 });
