@@ -71,6 +71,8 @@
     "brain:redact": "tsx --env-file-if-exists=.env.local scripts/brain-redact-backfill.ts"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.1.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "@upstash/redis": "^1.39.0",
