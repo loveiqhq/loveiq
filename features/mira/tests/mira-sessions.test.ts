@@ -119,7 +119,7 @@ import { GET as NUDGE_OPEN } from "@/app/api/mira/nudge/route";
 import { GET as NUDGE_PREFS } from "@/app/api/mira/nudges/preferences/route";
 import { POST as NUDGE_UNSUBSCRIBE } from "@/app/api/mira/nudges/unsubscribe/route";
 import { isMinor } from "@features/mira/server/minor";
-import { makeToken } from "@features/mira/server/nudges";
+import { makeToken, readToken } from "@features/mira/server/nudges";
 import { runSessionReminders } from "@features/mira/server/session-emails";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, getProfile } from "@features/mira/server/store";
@@ -424,6 +424,43 @@ describe("the email's stop link (no sign-in)", () => {
       expect((await stop(t)).status, String(t)).toBe(403);
     }
     expect(db.tables.mira_session_slot![0]!.paused_at).toBeNull();
+  });
+
+  it("is the only signed link: joining and changing the session need the sign-in", async () => {
+    await book();
+    candidates.rows = [
+      {
+        id: String(db.tables.mira_session_slot![0]!.id),
+        user_id: LEA.id,
+        weekday: 2,
+        local_time: "19:00",
+        time_zone: "Europe/Berlin",
+        sequence: 0,
+        paused_at: null,
+        mira_user: { email: LEA.email, minor_at: null },
+      },
+    ];
+    await runSessionReminders(new Date("2026-11-24T17:02:00Z"));
+    expect(send).toHaveBeenCalledTimes(2); // the invite and a reminder
+    for (const [mail] of send.mock.calls as Array<[Record<string, unknown>]>) {
+      const links = [...String(mail.text).matchAll(/https:\/\/www\.loveiq\.org\/\S+/g)].map(
+        (m) => new URL(m[0])
+      );
+      const signed = links.filter((u) => u.searchParams.has("t"));
+      expect(signed.length).toBeGreaterThan(0);
+      for (const u of signed) {
+        expect(u.pathname).toBe("/mira/session/stop");
+        const t = u.searchParams.get("t");
+        expect(readToken("session-stop", t)).toBe(LEA.id);
+        expect(readToken("prefs", t)).toBeNull();
+        expect(readToken("open", t)).toBeNull();
+      }
+      for (const u of links.filter((x) => !x.searchParams.has("t"))) {
+        expect(["/mira/session", "/mira/settings", "/mira/home"]).toContain(u.pathname);
+      }
+    }
+    // The calendar entry's link carries nothing either.
+    expect(lastEmail().ics).not.toContain("t=");
   });
 
   it("opens nothing else: the nudge links refuse its token", async () => {
