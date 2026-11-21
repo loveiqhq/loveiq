@@ -9,7 +9,6 @@ import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
-import type { SocialProof } from "@features/mira/social-proof";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import {
   local,
@@ -71,12 +70,9 @@ export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: bool
 export default function MiraChat({
   signedIn,
   initialChatId,
-  proof = null,
 }: {
   signedIn: boolean;
   initialChatId: string | null;
-  /** The rating line and quote under the welcome (social-proof.ts); none when null. */
-  proof?: SocialProof | null;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -104,6 +100,9 @@ export default function MiraChat({
   const [minor, setMinor] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  // The logo while the sign-up card shows: back to the start without losing the chat the card
+  // promises to bring along (no message can be sent from there, so nothing mixes).
+  const [atStart, setAtStart] = useState(false);
   // The one-time "Make Mira yours" tip on the coaching-style button: null until this browser's
   // record is read after mount, then whether it was shown here before.
   const [tipSeen, setTipSeen] = useState<boolean | null>(null);
@@ -115,6 +114,7 @@ export default function MiraChat({
   const bodyOffered = useRef(false);
   const bodyStarted = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const chipsRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   /** The index of the reply that just arrived, for the scroll to its start. */
   const replyAt = useRef<number | null>(null);
@@ -399,6 +399,13 @@ export default function MiraChat({
     }
   }
 
+  /** The logo: back to Mira's start. A new chat, unless that would wipe the one sign-up keeps. */
+  function goToStart() {
+    if (sending) return;
+    if (gate && !signedIn) setAtStart(true);
+    else newChat();
+  }
+
   async function saveStyle(next: Style): Promise<string | null> {
     if (signedIn) {
       const res = await miraApi("/api/mira/me", { method: "PATCH", body: { style: next } });
@@ -484,10 +491,45 @@ export default function MiraChat({
     document.getElementById("mira-input")?.focus(); // the pressed button is about to go
   }
 
-  const empty = !started;
+  const empty = !started || atStart;
   // A chat opened by its link loads first: the welcome would only flash before it.
   const showWelcome = empty && (ready || !initialChatId);
   const showChips = ready && empty && !gate;
+
+  // Phones: the prompts above the composer drift slowly in a loop (Eman, 21 Nov). A touch, a
+  // swipe or the wheel holds them for a moment, so a tap lands where it was aimed.
+  useEffect(() => {
+    const row = chipsRef.current;
+    const still = (q: string) => window.matchMedia?.(q).matches ?? true;
+    if (!row || still("(prefers-reduced-motion: reduce)") || still("(min-width: 640px)")) return;
+    const copy = row.querySelector<HTMLElement>("[aria-hidden] > button");
+    const first = row.querySelector<HTMLElement>("button");
+    if (!copy || !first) return;
+    const loop = copy.getBoundingClientRect().left - first.getBoundingClientRect().left;
+    let pos = row.scrollLeft;
+    let last = performance.now();
+    let heldUntil = 0;
+    let frame = 0;
+    const step = (now: number) => {
+      if (now > heldUntil) {
+        pos += (now - last) * 0.024; // about 24 px a second
+        if (pos >= loop) pos -= loop;
+        row.scrollLeft = Math.round(pos);
+      } else pos = row.scrollLeft; // carry on from wherever a swipe left it
+      last = now;
+      frame = requestAnimationFrame(step);
+    };
+    const hold = () => {
+      heldUntil = performance.now() + 2500;
+    };
+    const events = ["pointerdown", "touchmove", "wheel"] as const;
+    for (const e of events) row.addEventListener(e, hold, { passive: true });
+    frame = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const e of events) row.removeEventListener(e, hold);
+    };
+  }, [showChips]);
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-[#efe6fd]">
@@ -497,7 +539,7 @@ export default function MiraChat({
         <MiraCloud />
 
         <header className="relative z-[2] flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-3 min-[360px]:px-4 sm:px-8 sm:pt-6">
-          <Wordmark />
+          <Wordmark onHome={goToStart} />
           <div className="flex items-center gap-0.5">
             {/* Only once a chat is under way: the welcome screen is the board's, logo and sign-in. */}
             {started || chatId ? (
@@ -644,15 +686,9 @@ export default function MiraChat({
                     &amp; <b className="font-semibold text-ap-body">100M+ words</b> of research on
                     body confidence
                   </p>
-                  {proof ? (
-                    <Proof
-                      proof={proof}
-                      className="mt-5 [animation-delay:520ms] motion-safe:animate-mira-in sm:hidden"
-                    />
-                  ) : null}
                 </div>
               ) : null}
-              {started ? (
+              {!empty ? (
                 <div className="mx-auto flex w-full max-w-[760px] flex-col gap-5 px-5 pb-4 pt-5 sm:px-6">
                   <h1 className="sr-only">Your chat with Mira</h1>
                   {messages.map((m, i) => (
@@ -938,18 +974,38 @@ export default function MiraChat({
                   {/* Phones: one row above the composer that scrolls sideways. Wider screens: under
                       it, centred, never more than two rows (Mark, 21 Nov). */}
                   {showChips ? (
-                    <div className="order-first -mx-3 flex gap-1.5 overflow-x-auto pl-3 pr-8 [mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)] [scrollbar-width:none] sm:order-none sm:mx-0 sm:max-h-[66px] sm:flex-wrap sm:justify-center sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+                    <div
+                      ref={chipsRef}
+                      className="order-first -mx-3 flex gap-1.5 overflow-x-auto pl-3 pr-8 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-32px),transparent)] [scrollbar-width:none] sm:order-none sm:mx-0 sm:max-h-[66px] sm:flex-wrap sm:justify-center sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden"
+                    >
                       {miraConfig.starterChips.map((chip, i) => (
                         <button
                           key={chip}
                           type="button"
                           onClick={() => send(chip)}
                           style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                          className="h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-[#d9d4e2] hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]"
+                          className={CHIP}
                         >
                           {chip}
                         </button>
                       ))}
+                      {/* Phones: a second run of the same prompts, so the row can drift in a loop.
+                          Hidden from assistive tech and the tab order; wider screens and reduced
+                          motion never show it. */}
+                      <span aria-hidden="true" className="contents motion-reduce:hidden sm:hidden">
+                        {miraConfig.starterChips.map((chip, i) => (
+                          <button
+                            key={chip}
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => send(chip)}
+                            style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                            className={CHIP}
+                          >
+                            {chip}
+                          </button>
+                        ))}
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -988,12 +1044,6 @@ export default function MiraChat({
               ) : null}
             </div>
             {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
-            {showWelcome && proof ? (
-              <Proof
-                proof={proof}
-                className="mb-1 hidden px-6 [animation-delay:700ms] motion-safe:animate-mira-in sm:flex"
-              />
-            ) : null}
             <p className="shrink-0 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5 text-center text-[12px] leading-snug text-ap-muted sm:pb-5">
               Mira is an AI and can be wrong. She is not a therapist ·{" "}
               <button type="button" onClick={() => setSupportOpen(true)} className="underline">
@@ -1084,6 +1134,8 @@ export default function MiraChat({
 const MIRA_INK =
   "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text font-semibold text-transparent";
 const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
+const CHIP =
+  "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-[#d9d4e2] hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
 const FREE_LABEL =
   ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
 const ICON_BUTTON =
@@ -1171,48 +1223,5 @@ function ThumbIcon({ up = false }: { up?: boolean }) {
         </>
       )}
     </svg>
-  );
-}
-
-/** Board V2's variant D: three faces, the rating and how many people, then one quote. */
-function Proof({ proof, className }: { proof: SocialProof; className: string }) {
-  return (
-    <section
-      aria-label="What people say about Mira"
-      className={`flex flex-col items-center gap-2 text-center ${className}`}
-    >
-      <div className="flex items-center gap-2.5">
-        <span aria-hidden="true" className="flex">
-          {proof.photo ? (
-            <Image
-              src={proof.photo}
-              alt=""
-              width={26}
-              height={26}
-              unoptimized
-              className="h-[26px] w-[26px] rounded-full border-2 border-white object-cover"
-            />
-          ) : null}
-          <span className="-ml-2 h-[26px] w-[26px] rounded-full border-2 border-white bg-[#e9e1fb] first:ml-0" />
-          <span className="-ml-2 h-[26px] w-[26px] rounded-full border-2 border-white bg-[#fde3d9]" />
-        </span>
-        <p className="flex items-center gap-1 text-[13px] text-ap-muted">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="#fe6839">
-            <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
-          </svg>
-          <span>
-            <span className="sr-only">Rated </span>
-            <b className="font-semibold text-ap-ink">{proof.rating.toFixed(1)}</b> · loved by{" "}
-            <b className="font-semibold text-ap-ink">{proof.people.toLocaleString("en")}</b> people
-          </span>
-        </p>
-      </div>
-      <figure className="m-0 max-w-[34ch] sm:max-w-none">
-        <blockquote className="m-0 inline font-serif text-[13px] italic leading-snug text-ap-body">
-          “{proof.quote}”
-        </blockquote>
-        <figcaption className="ml-1 inline text-[12px] text-ap-muted">— {proof.name}</figcaption>
-      </figure>
-    </section>
   );
 }

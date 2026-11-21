@@ -486,17 +486,34 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
 });
 
 describe("Welcome", () => {
-  it("shows the rating line and quote it is given, and none without", async () => {
-    const proof = { rating: 4.9, people: 1240, quote: "It helped.", name: "Maria", photo: null };
-    const first = render(<MiraChat signedIn={false} initialChatId={null} proof={proof} />);
-    // Phones show it under the welcome, wider screens at the foot: one of them is hidden by CSS.
-    const blocks = screen.getAllByRole("region", { name: "What people say about Mira" });
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0]).toHaveTextContent("Rated 4.9 · loved by 1,240 people");
-    expect(blocks[0]).toHaveTextContent("“It helped.”— Maria");
-    first.unmount();
+  it("the logo goes back to the start: a new chat when signed in", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", chatId: null } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics, Mira beta" }));
+    expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
+    expect(screen.queryByText("Try this.")).toBeNull();
+  });
+
+  it("the logo goes back to the start without losing the chat the sign-up card keeps", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", freeLeft: 0 } });
     render(<MiraChat signedIn={false} initialChatId={null} />);
-    expect(screen.queryByRole("region", { name: "What people say about Mira" })).toBeNull();
+    typeAndSend("hi");
+    await screen.findByText("Keep talking with Mira, for free");
+    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics, Mira beta" }));
+    expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
+    expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns).toHaveLength(2);
+  });
+
+  it("lists each starter prompt once for assistive tech, though phones show a second run", async () => {
+    render(<MiraChat signedIn initialChatId={null} />);
+    const chip = miraConfig.starterChips[0];
+    expect(await screen.findAllByRole("button", { name: chip })).toHaveLength(1);
+    expect(screen.getAllByText(chip)).toHaveLength(2);
   });
 
   it("says what Mira was trained on", () => {
