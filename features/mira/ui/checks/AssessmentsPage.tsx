@@ -189,8 +189,7 @@ export default function AssessmentsPage() {
       ) : null}
 
       <p className="mt-10 max-w-[640px] text-[12px] leading-relaxed text-ap-muted">
-        Results support self-reflection. They are not a diagnosis. Only you see them; you can delete
-        them in Settings.
+        Results support self-reflection. They are not a diagnosis. You can delete them in Settings.
       </p>
     </MiraAppFrame>
   );
@@ -229,7 +228,7 @@ function CheckCard({
             <p className="text-[13px] text-ap-muted">
               {shortDate(last.at)}
               {change && change.diff !== 0
-                ? ` · ${Math.abs(change.diff)} ${change.diff < 0 ? "lower" : "higher"} than your first`
+                ? ` · ${Math.abs(change.diff)} ${Math.abs(change.diff) === 1 ? "point" : "points"} ${change.diff < 0 ? "lower" : "higher"} than your first`
                 : ""}
             </p>
           </div>

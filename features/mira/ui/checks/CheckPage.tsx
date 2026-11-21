@@ -30,6 +30,9 @@ import { FRAME_TAB, drafts, shortDate, useChecks, type CheckResult, type ChecksD
  * above "Not at all", whatever the total.
  */
 
+/** "1 point", "4 points". */
+const points = (diff: number) => `${Math.abs(diff)} ${Math.abs(diff) === 1 ? "point" : "points"}`;
+
 export type Practice = { number: number; name: string; time: string; bestFor: string };
 
 type Saved = {
@@ -38,7 +41,7 @@ type Saved = {
   support: boolean;
 };
 
-const EYEBROW = "text-[12px] font-semibold uppercase tracking-[0.12em] text-ap-muted";
+const EYEBROW = "font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ap-muted";
 const PLUM_LINK =
   "inline-flex min-h-[44px] items-center gap-1 font-semibold text-ap-purple underline-offset-4 hover:text-ap-violet hover:underline";
 
@@ -483,7 +486,7 @@ function Result({
             <span>
               {change.diff === 0
                 ? `Same score as on ${shortDate(before.at)}`
-                : `${Math.abs(change.diff)} ${change.diff < 0 ? "lower" : "higher"} than on ${shortDate(before.at)}`}
+                : `${points(change.diff)} ${change.diff < 0 ? "lower" : "higher"} than on ${shortDate(before.at)}`}
               {change.diff !== 0 && change.reliable === true ? " · a real change" : ""}
               {change.diff !== 0 && change.reliable === false
                 ? " · within the usual ups and downs"
