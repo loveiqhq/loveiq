@@ -806,6 +806,10 @@ describe("POST /api/mira/chat", () => {
         remember_chats: false,
       });
       expect(deleteChats).toHaveBeenCalledWith("u1");
+      // …and its self-check results: health data a minor's account must not keep.
+      expect(supabaseFetch).toHaveBeenCalledWith("/rest/v1/mira_check?user_id=eq.u1", {
+        method: "DELETE",
+      });
       expect(addMessages).not.toHaveBeenCalled();
       expect(events("minor_stop")).toEqual([{ signedIn: true }]);
       // Another browser, without the cookie: the account's mark stops it, before any limit.

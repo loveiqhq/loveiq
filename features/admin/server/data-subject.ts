@@ -32,8 +32,8 @@
  *         - report_price_quote
  *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
  *   - Mira, the AI coach (features/mira): mira_user (by email; the account), its mira_chat +
- *     mira_message, mira_body_check, mira_nudge and mira_event rows (by user_id), and a pending
- *     mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
+ *     mira_message, mira_body_check, mira_check (the self-checks), mira_nudge and mira_event rows
+ *     (by user_id), and a pending mira_sign_in_code (by email). Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
  *
@@ -225,6 +225,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       `/rest/v1/mira_message?select=*,mira_chat!inner(user_id)&mira_chat.user_id=${ids}&order=id.asc`,
     ],
     ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_check", `/rest/v1/mira_check?user_id=${ids}&select=*&order=id.asc`],
     ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
     ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
   ];
@@ -234,7 +235,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       result.ok = false;
       result.warnings.push(`${table}: could not be read in full; run the export again`);
     }
-    // eslint-disable-next-line security/detect-object-injection -- one of the five names above.
+    // eslint-disable-next-line security/detect-object-injection -- one of the six names above.
     result.exportData![table] = rows ?? [];
   }
 }

@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("DSAR export covers Mira (Art. 15)", () => {
-  it("exports the account, its chats and messages, body checks, nudges, events and a pending code", async () => {
+  it("exports the account, its chats and messages, body checks, self-checks, nudges, events and a pending code", async () => {
     const result = await exportDataSubject("lea@example.com");
     expect(result.ok).toBe(true);
     expect(result.exportData?.mira_user).toEqual([ACCOUNT]);
@@ -55,6 +55,7 @@ describe("DSAR export covers Mira (Art. 15)", () => {
       "mira_chat",
       "mira_message",
       "mira_body_check",
+      "mira_check",
       "mira_nudge",
       "mira_event",
     ]) {
@@ -67,6 +68,7 @@ describe("DSAR export covers Mira (Art. 15)", () => {
       `/rest/v1/mira_message?select=*,mira_chat!inner(user_id)&mira_chat.user_id=in.(${UID})&order=id.asc`
     );
     expect(paths).toContain(`/rest/v1/mira_event?user_id=in.(${UID})&select=*&order=id.asc`);
+    expect(paths).toContain(`/rest/v1/mira_check?user_id=in.(${UID})&select=*&order=id.asc`);
   });
 
   it("reads nothing more when there is no Mira account", async () => {

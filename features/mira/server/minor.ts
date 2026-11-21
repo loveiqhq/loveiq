@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { deleteChecks } from "./checks";
 import { MINOR_COOKIE } from "./config";
 import { deleteChats, updateProfile } from "./store";
 
@@ -10,7 +11,8 @@ import { deleteChats, updateProfile } from "./store";
  * their browser (a cookie, a year) and their account (mira_user.minor_at) get message G without
  * the model. A crisis message still gets the crisis reply and the lines, because the chat route
  * reads crisis words first. The account's nudges go off, and its chats are deleted and no longer
- * kept; the browser forgets its own chat (MiraChat).
+ * kept, as are its self-check results (server/checks.ts); the browser forgets its own chat
+ * (MiraChat).
  */
 
 /** This browser or this account said its person is under 18. */
@@ -41,6 +43,9 @@ export async function stopForMinor(userId: string | null): Promise<void> {
       remember_chats: false,
     }),
     deleteChats(userId),
+    // Its self-check results too (health data a minor's account must not keep); the check
+    // routes refuse it from then on (403).
+    deleteChecks(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {
