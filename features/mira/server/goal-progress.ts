@@ -7,6 +7,11 @@
 /** A calendar day in the person's own time zone, "YYYY-MM-DD". */
 export type Day = string;
 
+/** A goal's words, at most (the database's limit too). */
+export const GOAL_TEXT_MAX = 120;
+/** Goals on the go at once: a few small steps, not a to-do list. */
+export const MAX_ACTIVE_GOALS = 5;
+
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const fromUtc = (ms: number): Day => new Date(ms).toISOString().slice(0, 10);

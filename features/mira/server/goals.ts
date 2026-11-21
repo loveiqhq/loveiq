@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { daysBetween, localDay, progress, type Day } from "./goal-progress";
+import {
+  GOAL_TEXT_MAX,
+  MAX_ACTIVE_GOALS,
+  daysBetween,
+  localDay,
+  progress,
+  type Day,
+} from "./goal-progress";
 import type { GoalForPrompt } from "./prompt";
 
 /**
@@ -10,9 +17,7 @@ import type { GoalForPrompt } from "./prompt";
  * key keeps a tick on its own person's goal, so nobody can reach another's goals by guessing ids.
  */
 
-export const GOAL_TEXT_MAX = 120;
-/** Goals on the go at once: a few small steps, not a to-do list. */
-export const MAX_ACTIVE_GOALS = 5;
+export { GOAL_TEXT_MAX, MAX_ACTIVE_GOALS };
 /**
  * Rail 15: an account or browser that said it is under 18 (server/minor.ts isMinor) sees, sets,
  * changes and ticks no goals; deleting them always works.
