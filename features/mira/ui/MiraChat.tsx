@@ -176,7 +176,8 @@ export default function MiraChat({
       replyAt.current === null ? null : list.querySelector(`[data-msg="${replyAt.current}"]`);
     replyAt.current = null;
     if (reply) {
-      list.scrollTop += reply.getBoundingClientRect().top - list.getBoundingClientRect().top - 8;
+      // Below the list's 20px top fade, so the reply's first line is read at full strength.
+      list.scrollTop += reply.getBoundingClientRect().top - list.getBoundingClientRect().top - 24;
     } else list.scrollTop = list.scrollHeight;
   }, [messages.length, sending]); // not on a rating: that rewrites a message, not adds one
 
@@ -410,6 +411,13 @@ export default function MiraChat({
     !minor &&
     !crisisIn(messages);
 
+  // A tapped prompt (or the consent step it opened) goes away with the welcome: focus moves to
+  // the conversation rather than being lost, without opening a phone's keyboard.
+  useEffect(() => {
+    if (started && document.activeElement === document.body)
+      listRef.current?.focus({ preventScroll: true });
+  }, [started]);
+
   useEffect(() => {
     if (!showKeep || keepLogged.current) return;
     keepLogged.current = true; // once a chat, per page view
@@ -520,10 +528,11 @@ export default function MiraChat({
             <div
               ref={listRef}
               aria-live="polite"
+              tabIndex={-1}
               className={
                 empty
-                  ? "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-5 pb-[6dvh] sm:flex-initial sm:px-6 sm:pb-0"
-                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-image:linear-gradient(to_bottom,transparent,#000_20px)]"
+                  ? "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-5 pb-[6dvh] outline-none sm:flex-initial sm:px-6 sm:pb-0"
+                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)]"
               }
             >
               {showWelcome ? (
@@ -550,6 +559,7 @@ export default function MiraChat({
               ) : null}
               {started ? (
                 <div className="mx-auto flex w-full max-w-[760px] flex-col gap-5 px-5 pb-4 pt-5 sm:px-6">
+                  <h1 className="sr-only">Your chat with Mira</h1>
                   {messages.map((m, i) => (
                     <div
                       key={i}
