@@ -43,6 +43,8 @@ export type PersonContext = {
   signedIn: boolean;
   /** Their goals on the go (Challenges & goals), for a gentle check-in. */
   goals?: GoalForPrompt[];
+  /** The daily journal's block (journal.ts forMira), only while the person lets Mira read it. */
+  journal?: string | null;
 };
 
 /** One goal on the go as Mira is told of it (server/goals.ts goalsForPrompt). */
@@ -203,6 +205,7 @@ export function personalInstructions(
     lines.push(...styleLines.map((s) => `- ${s}`));
   }
   if (person.goals?.length) lines.push("", goalsInstructions(person.goals));
+  if (person.journal) lines.push("", person.journal);
   if (opts.topic) lines.push("", topicInstruction());
   if (opts.voice) lines.push("", spokenInstruction());
   return lines.join("\n");

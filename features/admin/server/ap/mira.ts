@@ -61,6 +61,12 @@ import { fmt } from "./format";
 import { mean, median, ratio } from "./metrics";
 import { fetchGoalRows, goalFigures, type GoalFigures, type MiraGoalRows } from "./mira-goals";
 import { REVIEW_SELECT, ratingsOf, type MiraReviewRow, type Ratings } from "./mira-ratings";
+import {
+  fetchJournal,
+  journalFigures,
+  type JournalFigures,
+  type JournalRows,
+} from "./mira-journal";
 
 /** A chat's first message is written up to this long before its chat_started, or after it. */
 const TOLERANCE_MS = 2_000;
@@ -238,6 +244,8 @@ export interface MiraData {
   voice?: MiraVoiceRow[];
   /** The accounts with a passkey today (mira_passkey); null when it could not be read. */
   passkeyUsers?: string[] | null;
+  /** The daily journal's days and settings (mira-journal.ts); null when they could not be read. */
+  journal?: JournalRows | null;
 }
 
 /**
@@ -302,6 +310,8 @@ export async function fetchMira(): Promise<MiraData> {
       };
     }),
     passkeyUsers: passkeys ? passkeys.map((p) => p.user_id) : null,
+    // Its own card: a failed read says so there and leaves the rest of the page standing.
+    journal: await fetchJournal(),
   };
 }
 
@@ -1472,6 +1482,8 @@ export interface MiraPayload extends PageHead {
   voice: VoiceFigures;
   /** The self-checks (selfChecks). */
   selfChecks: SelfChecks;
+  /** The daily journal's KPI card (mira-journal.ts). */
+  journal: JournalFigures;
 }
 
 export function buildMiraPage(input: {
@@ -1750,5 +1762,11 @@ export function buildMiraPage(input: {
     ratings: ratingsOf(prep, input.data.reviews, w.since, w.until),
     voice: voiceFigures(prep, input.data.voice ?? [], w),
     selfChecks: selfChecks(prep, w),
+    journal: journalFigures(
+      input.data.journal,
+      new Set(prep.accounts.map((a) => a.id)),
+      f.from,
+      f.to
+    ),
   };
 }

@@ -214,6 +214,12 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Basis**: (a) consent with Art. 9(2)(a) explicit consent: the sign-up tick for "what I share about my sex life and health to coach me", confirmed by starting the first check after a note on what is kept, who sees it, that analytics see the screen and how to delete it. Intended purpose: self-reflection and coaching, not diagnosis or treatment ([DPIA.md](DPIA.md) §7.12). Open: whether a tick of its own is wanted (§7.12, open point 1)
 - **Retention**: until deleted in Settings, with the account, or at an under-18 stop
 - **Withdraw**: "Delete my check results" or turn "Mira may use my check results" off in Settings; delete the account; or a data request
+### A21 — Mira daily journal (from 2026-11-22)
+
+- **Data**: per day, mood, body, closeness and energy rated 1 to 5 or skipped, and an optional one-line note (`mira_journal_entry`); the settings below with the time Mira's reading was chosen; the reminder's time and last day; events without ratings or words
+- **Basis**: (a) consent with Art. 9(2)(a) explicit consent. Keeping the entries to show them back rests on the account's consent ("Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps"); open whether that covers a journal or a first-use consent is wanted ([DPIA.md](DPIA.md) §7.12). Mira reading the last 7 days is a separate explicit opt-in, "Let Mira read my journal", off by default, and the notes a second one, "Include my notes"; `mira_user.journal_share_at` records when. The daily reminder email is an opt-in ("Remind me daily") with a one-click stop in every email
+- **Retention**: until the person deletes an entry, the journal or the account; deleted at once when Mira stops someone as under 18
+- **Withdraw**: turn either reading choice off (it applies from the next message); delete entries or the whole journal on the journal page or in Settings; stop the reminder there or from any reminder email; delete the account
 
 ## Withdrawal of consent flows
 
@@ -231,6 +237,7 @@ For activities under basis (a):
 | A21 Mira goals | Delete a goal or all goals on the goals page; delete the account; a data request                     | The goals and their ticks are deleted; Anthropic deletes its copy of the context within 30 days                                                                                        |
 | A21 Mira quote | "Stop showing my words" or "Remove my rating" in Settings; delete the account; a data request        | The words, name and age range are deleted and leave Mira's pages from the next page view; "Remove my rating" also takes the stars out of the average                                   |
 | A21 self-check | "Delete my check results" or the "Mira may use" switch in Settings; delete the account               | The answers are deleted; with the switch off, Mira gets no bands from the next message on                                                                                              |
+| A21 journal    | Turn off Mira's reading or the reminder; delete entries, the journal or the account                  | Mira stops reading it from the next message; deleted entries are gone, with the account's                                                                                              |
 
 ## Outstanding work
 

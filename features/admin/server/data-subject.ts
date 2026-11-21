@@ -37,7 +37,8 @@
  *     mira_sign_in_code (by email). Challenges & goals (22 Nov 2026): its mira_goal and
  *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Voice
  *     sessions (mira_voice_session, by user_id; their words are mira_message rows) from 22 Nov
- *     2026. Erased with Mira's own account deletion (store.ts
+ *     2026. Also its daily journal, mira_journal_entry (by user_id). Erased with Mira's own account
+ *     deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
  *     - mira_review (by user_id, from 2026-11-22): their rating and any words with the consent
@@ -263,6 +264,8 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       "mira_email_change",
       `/rest/v1/mira_email_change?user_id=${ids}&select=new_email,issued_at,attempts&order=user_id.asc`,
     ],
+    // The daily journal (erased with the account by its ON DELETE CASCADE).
+    ["mira_journal_entry", `/rest/v1/mira_journal_entry?user_id=${ids}&select=*&order=id.asc`],
   ];
   for (const [table, path] of byUser) {
     const rows = await fetchAllRows<unknown>(path);

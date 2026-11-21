@@ -39,6 +39,7 @@ import {
 import { checksForMira } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { goalsForPrompt } from "@features/mira/server/goals";
+import { journalContext } from "@features/mira/server/journal";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
 import {
@@ -317,6 +318,8 @@ export async function POST(request: Request) {
         goals: await goals,
         checks,
       };
+      // The daily journal's last 7 days, only if the person let Mira read it (server/journal.ts).
+      person.journal = await journalContext(account.id).catch(() => null);
       if (askedChatId && (await ownsChat(account.id, askedChatId))) {
         chatId = askedChatId;
         const stored = await getMessages(account.id, chatId, HISTORY_TURNS);

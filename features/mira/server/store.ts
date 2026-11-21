@@ -384,7 +384,14 @@ export type MiraEventName =
   | "loneliness_check_started"
   | "loneliness_check_done"
   | "check_support_shown"
-  | "checks_deleted";
+  | "checks_deleted"
+  // The daily journal (server/journal.ts): ids and numbers only, never ratings or words.
+  | "journal_saved"
+  | "journal_deleted"
+  | "journal_share_set"
+  | "journal_reminder_set"
+  | "journal_reminder_sent"
+  | "journal_reminder_stopped";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

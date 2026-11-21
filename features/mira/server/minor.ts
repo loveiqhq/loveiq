@@ -7,6 +7,7 @@ import { MINOR_COOKIE } from "./config";
 import { deleteGoals } from "./goals";
 import { refreshPublicReviews, withdrawReview } from "./reviews";
 import { removePasskeys } from "./passkeys";
+import { forgetJournal } from "./journal";
 import { deleteChats, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
 
@@ -69,6 +70,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     // Its self-check results too (health data a minor's account must not keep); the check
     // routes refuse it from then on (403).
     deleteChecks(userId),
+    // The daily journal goes too, with Mira's reading of it and its reminder (server/journal.ts).
+    forgetJournal(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

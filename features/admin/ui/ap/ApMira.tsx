@@ -11,6 +11,7 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 import ApFilterBar from "./ApFilterBar";
 import ApMiraCoaches from "./ApMiraCoaches";
 import { RatingsCard } from "./ApMiraRatings";
+import { ApMiraJournal } from "./ApMiraJournal";
 import { bucketTitles } from "./hover";
 import {
   Bar,
@@ -717,6 +718,8 @@ function Engagement({ data }: { data: Data }) {
       <ApMiraCoaches k={data.coaches} />
       <GoalsCard data={data} />
       <VoiceCard data={data} />
+      {/* The daily journal's card (features/admin/server/ap/mira-journal.ts). */}
+      <ApMiraJournal journal={data.journal} />
     </Board>
   );
 }

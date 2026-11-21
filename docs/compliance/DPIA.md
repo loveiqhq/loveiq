@@ -837,6 +837,47 @@ used: WHO publishes it under CC BY-NC-SA 3.0 IGO (2024), so commercial use needs
    condition), or are the check screens masked as S3 describes? Until he decides, nothing is
    masked and the notice says the tools see the screens.
 4. The regulatory opinion on the medical device question.
+### 7.12 The daily journal (added 2026-11-22)
+
+**What**: account holders can check in once a day: mood, body, closeness and energy, each rated 1
+to 5 or skipped, and an optional one-line note (`mira_journal_entry`, one row per person and local
+day). Health and sex-life data (Art. 9). Purposes: showing it back to the person (patterns, day by
+day), and, only on their explicit choice, Mira's context in a chat; counting use without ratings or
+words (AP › Mira's "Journal" card reads only who checked in on which day and today's settings).
+
+**Basis**: the account's explicit consent (LAWFUL_BASIS A21). "Let Mira read my journal" is a
+separate opt-in, off by default (the last 7 days' ratings join the person's context sent to
+Anthropic, §7.3), and "Include my notes" a second one; `mira_user.journal_share_at` records when
+each was chosen, and turning one off applies from the next message. The reminder email is an
+opt-in with a one-click stop.
+
+**Risks and measures**:
+
+- **J1 Disclosure (MEDIUM)**: service-role-only table with RLS, every read and write scoped to
+  the signed-in account; no staff screen shows entries; like the chat, the journal's screens are
+  visible to PostHog and Clarity recordings (M5, the owner's accepted risk; masking them is an open
+  decision for Eman, as for the self-checks); emails never carry
+  journal content, and the reminder's subject is neutral; its stop link carries a token of its own
+  purpose (`journal-stop`) that opens nothing else.
+- **J2 Model processing (MEDIUM)**: only after the opt-in, only 7 days, notes only after the
+  second opt-in, and nothing is read from the table while it is off. Anthropic's terms as §7.3.
+- **J3 Crisis (MEDIUM before, LOW after)**: a note with crisis words is kept and shows the chat's
+  own support lines and crisis message (no model call), logged as `crisis_shown` with
+  `from: "journal"`, so nudges and reminders wait 14 days.
+- **J4 Minors**: every journal route refuses an account Mira stopped as under 18, and that stop
+  deletes the journal and switches its sharing and reminder off.
+
+**Rights**: entries or the whole journal can be deleted on the journal page or in Settings; data
+requests export `mira_journal_entry` (`features/admin/server/data-subject.ts`) and erase it with
+the account (ON DELETE CASCADE).
+
+**Open points**:
+
+1. Whether the sign-up consent ("to coach me") covers keeping a journal for the person's own view,
+   or a short consent at the first check-in is wanted.
+2. Retention: entries stay until deleted with no automatic limit, unlike the chats' 12 months
+   after the last message (§7.6). To decide.
+3. The DPO's review of this addition (§7.10).
 
 ## 8. Sign-off
 

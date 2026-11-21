@@ -498,6 +498,44 @@ export default function MiraPrivacyPage() {
           </li>
         </ul>
 
+        <h2>Your daily journal</h2>
+        <ul>
+          <li>
+            If you use the daily journal in your account, we keep, for each day you check in, how
+            you rated your mood, your body, closeness and energy (1 to 5, or skipped) and the line
+            you wrote, if any. This is sensitive data about your health and sex life. We keep it to
+            show it back to you, on the explicit consent you gave when you made your account (Art.
+            6(1)(a) and Art. 9(2)(a) GDPR).
+          </li>
+          <li>
+            Mira reads your journal only if you turn on &ldquo;Let Mira read my journal&rdquo;. Then
+            your ratings from the last 7 days go to Anthropic with your messages, so she can notice
+            patterns with you. Your notes go too only if you also turn on &ldquo;Include my
+            notes&rdquo;. Both are off unless you turn them on, we keep when you chose, and turning
+            one off stops it from your next message.
+          </li>
+          <li>
+            PostHog and Microsoft Clarity record how our pages are used, the journal&apos;s screens
+            included, as for the chat (see &ldquo;Who else gets your data&rdquo;).
+          </li>
+          <li>
+            To see how the journal is used, we count check-ins, days in a row and these choices
+            across everyone, never your ratings or your words.
+          </li>
+          <li>
+            A daily reminder email comes only if you turn on &ldquo;Remind me daily&rdquo;: one a
+            day at most, at the time you choose, never with anything from your journal. Resend sends
+            it, as it sends our other emails, and a link in every reminder stops it without signing
+            in.
+          </li>
+          <li>
+            Your journal stays until you delete an entry or all of it, on the journal page or in
+            Settings, or your account. If a note mentions wanting to hurt yourself, you see the same
+            support lines as in the chat. If you tell Mira you are under 18, your journal is
+            deleted.
+          </li>
+        </ul>
+
         <h2>Your choices and rights</h2>
         <ul>
           <li>

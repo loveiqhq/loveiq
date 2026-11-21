@@ -62,6 +62,8 @@ const NEXT_PAGES = new Set([
   "/mira/assessments/mood",
   "/mira/assessments/loneliness",
   "/mira/assessments/body",
+  // The daily journal, where its reminder email's button leads.
+  "/mira/journal",
 ]);
 const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
 

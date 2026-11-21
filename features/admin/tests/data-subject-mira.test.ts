@@ -117,6 +117,16 @@ describe("DSAR export covers Mira (Art. 15)", () => {
     ]);
   });
 
+  it("exports the daily journal too: every entry, by the account's id", async () => {
+    const result = await exportDataSubject("lea@example.com");
+    expect(result.exportData?.mira_journal_entry).toEqual([
+      { from: "/rest/v1/mira_journal_entry" },
+    ]);
+    expect(db.all.mock.calls.map(([p]) => p)).toContain(
+      `/rest/v1/mira_journal_entry?user_id=in.(${UID})&select=*&order=id.asc`
+    );
+  });
+
   it("reads nothing more when there is no Mira account", async () => {
     accounts = [];
     const result = await exportDataSubject("lea@example.com");
