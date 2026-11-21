@@ -235,6 +235,21 @@ describe("proxy middleware", () => {
     expect(pp).toContain("camera=()");
   });
 
+  it("lets only Mira's pages use the microphone, and only themselves (talking to Mira)", async () => {
+    for (const [path, mic] of [
+      ["/mira", "microphone=(self)"],
+      ["/mira/home", "microphone=(self)"],
+      ["/", "microphone=()"],
+      ["/miracle", "microphone=()"],
+      ["/survey", "microphone=()"],
+    ]) {
+      await proxy(makeNextRequest(`http://localhost:3000${path}`));
+      const pp = mockResponseHeaders.get("Permissions-Policy");
+      expect(pp).toContain(mic);
+      expect(pp).toContain("camera=()");
+    }
+  });
+
   it("sets Cross-Origin-Opener-Policy", () => {
     proxy(makeNextRequest());
     expect(mockResponseHeaders.get("Cross-Origin-Opener-Policy")).toBe("same-origin-allow-popups");

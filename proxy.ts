@@ -406,6 +406,17 @@ async function answerShortLink(request: NextRequest, code: string): Promise<Next
   });
 }
 
+/**
+ * No page may use the location, camera, payment or microphone, except that Mira's pages may use
+ * the microphone themselves: talking to Mira (features/mira/ui/voice) runs on the browser's own
+ * speech recognition, which the policy would otherwise refuse. All of Mira's pages, because a
+ * move between them inside the app keeps the policy of the page first opened; never a frame.
+ */
+export function permissionsPolicy(path: string): string {
+  const mic = path === "/mira" || path.startsWith("/mira/") ? "(self)" : "()";
+  return `geolocation=(), microphone=${mic}, camera=(), autoplay=(self), payment=()`;
+}
+
 export async function proxy(request: NextRequest) {
   // Restore Next's trailing-slash redirect, which next.config.js disables for the
   // PostHog proxy's sake. Must run first: everything below assumes a normalised path.
@@ -824,10 +835,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set(
-    "Permissions-Policy",
-    "geolocation=(), microphone=(), camera=(), autoplay=(self), payment=()"
-  );
+  response.headers.set("Permissions-Policy", permissionsPolicy(request.nextUrl.pathname));
   // 6 months — long enough to satisfy HSTS best practice and security scanners,
   // short enough to give operational room if a cert/CDN migration is ever needed.
   // Shortening server-side is forward-safe: existing browsers retain their cached
