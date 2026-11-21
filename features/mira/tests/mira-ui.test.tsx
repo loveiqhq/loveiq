@@ -485,6 +485,28 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
   });
 });
 
+describe("Welcome", () => {
+  it("shows the rating line and quote it is given, and none without", async () => {
+    const proof = { rating: 4.9, people: 1240, quote: "It helped.", name: "Maria", photo: null };
+    const first = render(<MiraChat signedIn={false} initialChatId={null} proof={proof} />);
+    // Phones show it under the welcome, wider screens at the foot: one of them is hidden by CSS.
+    const blocks = screen.getAllByRole("region", { name: "What people say about Mira" });
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toHaveTextContent("Rated 4.9 · loved by 1,240 people");
+    expect(blocks[0]).toHaveTextContent("“It helped.”— Maria");
+    first.unmount();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    expect(screen.queryByRole("region", { name: "What people say about Mira" })).toBeNull();
+  });
+
+  it("says what Mira was trained on", () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    expect(screen.getByText(/of research on/, { selector: "p" })).toHaveTextContent(
+      "Trained on 100+ scientific papers & 100M+ words of research on body confidence"
+    );
+  });
+});
+
 describe("“Make Mira yours” tip (coaching style)", () => {
   const tip = () => screen.queryByRole("note", { name: "Tip" });
 
@@ -540,7 +562,7 @@ describe("Free messages", () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("hi");
     await screen.findByText("Keep talking with Mira, for free");
-    expect(screen.getByText(/had your 10 free messages with Mira/)).toBeInTheDocument();
+    expect(screen.getByText(/had your free message with Mira/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Message Mira")).toBeNull();
     expect(screen.getByText("Try this.")).toBeInTheDocument();
     // New chat would wipe the chat the card promises to bring along.

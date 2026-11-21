@@ -3,9 +3,10 @@
  * 2026, after the AI Mira Synch of 17 Nov and Marcus's canvas):
  *
  * - FREE MESSAGES. Marcus's board 01b asked for a free account "after 10 conversations"; the
- *   team moved it to 10 messages on 20 Nov 2026. An anonymous browser may send 10 (counted
- *   per browser id over 30 days; a crisis message is never counted), then the sign-up card
- *   shows and the 11th needs a free account. One number, so it can move.
+ *   team moved it to 10 messages on 20 Nov 2026, and Eman to ONE on 21 Nov ("lets do it after
+ *   one message", after Mark's canvas note "after 1-2 messages ask for a sign in"). An anonymous
+ *   browser may send one (counted per browser id over 30 days; a crisis message is never
+ *   counted); the reply to it brings the sign-up card and the next needs a free account.
  * - DAILY MESSAGES. Free in the beta, so a daily cap per person (and per network for anonymous
  *   chats) keeps cost and abuse in check; it never applies to a crisis message.
  * - MODEL. Sanjin's coach config (09, "RFD" 18 Nov): Claude Sonnet as the main model and Claude
@@ -14,7 +15,7 @@
  *   also asks for EU-only processing, which Anthropic's own API doesn't offer (that needs Google
  *   Cloud or Amazon Bedrock in the EU): open, with the key decision.
  */
-export const ANON_FREE_MESSAGES = 10;
+export const ANON_FREE_MESSAGES = 1;
 export const DAILY_MESSAGES = 50;
 
 /**

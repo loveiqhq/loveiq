@@ -9,6 +9,7 @@ import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
+import type { SocialProof } from "@features/mira/social-proof";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import {
   local,
@@ -28,7 +29,7 @@ import {
  * Decisions kept from 18 Nov: typing only (no voice yet), no invented numbers or quotes on the
  * page (so V2's "trained on 100M+ words" line and its review score are not shown), the 18+ and
  * sensitive-data consent before the first anonymous message (now a short step when it is sent),
- * and the sign-up card once an anonymous person's 10 free messages are answered. Board "01
+ * and the sign-up card once an anonymous person's free message is answered. Board "01
  * Anonymous chat (embed) copy": the "Keep this chat" card after Mira's first reply.
  */
 
@@ -70,9 +71,12 @@ export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: bool
 export default function MiraChat({
   signedIn,
   initialChatId,
+  proof = null,
 }: {
   signedIn: boolean;
   initialChatId: string | null;
+  /** The rating line and quote under the welcome (social-proof.ts); none when null. */
+  proof?: SocialProof | null;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -632,11 +636,20 @@ export default function MiraChat({
                     />{" "}
                     <span className={MIRA_INK}>Mira</span> about your body confidence
                   </h1>
-                  <p className="max-w-[34ch] text-[13px] leading-snug text-ap-muted [animation-delay:260ms] motion-safe:animate-mira-in sm:max-w-none sm:text-[14px] [@media(max-height:480px)]:hidden">
+                  <p className="max-w-[36ch] text-balance text-[13px] leading-snug text-ap-muted [animation-delay:260ms] motion-safe:animate-mira-in sm:max-w-none sm:text-[14px] [@media(max-height:480px)]:hidden">
                     <SparkIcon />
-                    Her answers draw on{" "}
-                    <b className="font-semibold text-ap-body">research about body confidence</b>
+                    Trained on <b className="font-semibold text-ap-body">
+                      100+ scientific papers
+                    </b>{" "}
+                    &amp; <b className="font-semibold text-ap-body">100M+ words</b> of research on
+                    body confidence
                   </p>
+                  {proof ? (
+                    <Proof
+                      proof={proof}
+                      className="mt-5 [animation-delay:520ms] motion-safe:animate-mira-in sm:hidden"
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {started ? (
@@ -856,9 +869,8 @@ export default function MiraChat({
                       Keep talking with Mira, for free
                     </p>
                     <p className="mt-1 text-[14px] leading-normal text-ap-body">
-                      You&apos;ve had your {ANON_FREE_MESSAGES} free messages with Mira. Create a
-                      free account to carry on. She&apos;ll remember where you left off, and this
-                      chat comes with you.
+                      You&apos;ve had your {FREE_LABEL} with Mira. Create a free account to carry
+                      on. She&apos;ll remember where you left off, and this chat comes with you.
                     </p>
                   </div>
                   <Link
@@ -976,6 +988,12 @@ export default function MiraChat({
               ) : null}
             </div>
             {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
+            {showWelcome && proof ? (
+              <Proof
+                proof={proof}
+                className="mb-1 hidden px-6 [animation-delay:700ms] motion-safe:animate-mira-in sm:flex"
+              />
+            ) : null}
             <p className="shrink-0 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5 text-center text-[12px] leading-snug text-ap-muted sm:pb-5">
               Mira is an AI and can be wrong. She is not a therapist ·{" "}
               <button type="button" onClick={() => setSupportOpen(true)} className="underline">
@@ -1066,6 +1084,8 @@ export default function MiraChat({
 const MIRA_INK =
   "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text font-semibold text-transparent";
 const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
+const FREE_LABEL =
+  ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
 const ICON_BUTTON =
   "relative inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10 sm:w-auto sm:px-3";
 const RATE_BUTTON =
@@ -1151,5 +1171,48 @@ function ThumbIcon({ up = false }: { up?: boolean }) {
         </>
       )}
     </svg>
+  );
+}
+
+/** Board V2's variant D: three faces, the rating and how many people, then one quote. */
+function Proof({ proof, className }: { proof: SocialProof; className: string }) {
+  return (
+    <section
+      aria-label="What people say about Mira"
+      className={`flex flex-col items-center gap-2 text-center ${className}`}
+    >
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden="true" className="flex">
+          {proof.photo ? (
+            <Image
+              src={proof.photo}
+              alt=""
+              width={26}
+              height={26}
+              unoptimized
+              className="h-[26px] w-[26px] rounded-full border-2 border-white object-cover"
+            />
+          ) : null}
+          <span className="-ml-2 h-[26px] w-[26px] rounded-full border-2 border-white bg-[#e9e1fb] first:ml-0" />
+          <span className="-ml-2 h-[26px] w-[26px] rounded-full border-2 border-white bg-[#fde3d9]" />
+        </span>
+        <p className="flex items-center gap-1 text-[13px] text-ap-muted">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="#fe6839">
+            <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
+          </svg>
+          <span>
+            <span className="sr-only">Rated </span>
+            <b className="font-semibold text-ap-ink">{proof.rating.toFixed(1)}</b> · loved by{" "}
+            <b className="font-semibold text-ap-ink">{proof.people.toLocaleString("en")}</b> people
+          </span>
+        </p>
+      </div>
+      <figure className="m-0 max-w-[34ch] sm:max-w-none">
+        <blockquote className="m-0 inline font-serif text-[13px] italic leading-snug text-ap-body">
+          “{proof.quote}”
+        </blockquote>
+        <figcaption className="ml-1 inline text-[12px] text-ap-muted">— {proof.name}</figcaption>
+      </figure>
+    </section>
   );
 }

@@ -148,7 +148,7 @@ describe("POST /api/mira/chat", () => {
         ],
       ]);
     }
-    expect(ANON_FREE_MESSAGES).toBe(10);
+    expect(ANON_FREE_MESSAGES).toBe(1);
   });
 
   it("never counts a signed-in person's messages against the free ones", async () => {
@@ -181,7 +181,7 @@ describe("POST /api/mira/chat", () => {
     expect(started()).toEqual({ signedIn: false, chip: -1 });
   });
 
-  it("answers an 11th message with the sign-up card, in a new chat or an open one", async () => {
+  it("answers a message after the free one with the sign-up card, in a new chat or an open one", async () => {
     limitHit("mira-anon-messages");
     for (const body of [
       { message: "hi", consent: true },

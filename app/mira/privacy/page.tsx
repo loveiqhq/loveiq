@@ -194,8 +194,7 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             A random id in a cookie on this browser, kept for a year. Without an account it counts
-            your 10 free messages and links your steps. When you sign in, a cookie keeps you signed
-            in.
+            your free message and links your steps. When you sign in, a cookie keeps you signed in.
           </li>
           <li>
             Short-lived counters with your IP address, email address or browser id, to stop abuse.
