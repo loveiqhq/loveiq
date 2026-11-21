@@ -48,6 +48,8 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const SKIP_ANSWER = "I’d rather skip this one.";
+/** The line the weekly session's link sends for the person, so Mira opens the session. */
+export const SESSION_OPENING = "I’m here for my weekly session.";
 
 /**
  * The NPS question (Marcus's MVP success board) after the 3rd conversation, then at most
@@ -70,9 +72,12 @@ export function npsDue(firstOfChat: boolean, turns: Message[], crisisReply: bool
 export default function MiraChat({
   signedIn,
   initialChatId,
+  session = false,
 }: {
   signedIn: boolean;
   initialChatId: string | null;
+  /** Opened from the weekly session's link: a new chat that Mira opens as the session. */
+  session?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -218,7 +223,10 @@ export default function MiraChat({
     box.style.height = `${Math.min(box.scrollHeight, 168)}px`;
   }, [input]);
 
-  async function send(text: string, opts: { skip?: boolean; agreed?: boolean } = {}) {
+  async function send(
+    text: string,
+    opts: { skip?: boolean; agreed?: boolean; session?: boolean } = {}
+  ) {
     const message = text.trim();
     if (!message || sending || gate) return;
     // A message right after Mira asked an intake question answers it, tapped or typed; a skip
@@ -260,6 +268,7 @@ export default function MiraChat({
         ...(chatId ? { chatId } : { history }),
         ...(signedIn ? {} : { style }),
         ...(answering ? { answering } : {}),
+        ...(opts.session ? { session: true } : {}),
       },
     });
     setSending(false);
@@ -475,6 +484,17 @@ export default function MiraChat({
     local.saveStyleTipSeen(); // shown once: a reload does not bring it back
     void miraApi("/api/mira/event", { body: { type: "track", name: "style_tip_shown" } });
   }, [showTip]);
+
+  // The weekly session's link: Mira opens the session, once, as soon as the page is up. The
+  // address becomes Mira's own, so a reload is a new chat rather than a second opening.
+  const sessionOpened = useRef(false);
+  useEffect(() => {
+    if (!session || !signedIn || sessionOpened.current) return;
+    sessionOpened.current = true;
+    window.history.replaceState(null, "", "/mira");
+    void send(SESSION_OPENING, { session: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, [session, signedIn]);
 
   function keepNotNow() {
     setKeepOff(true);
