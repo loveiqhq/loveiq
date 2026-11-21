@@ -219,11 +219,11 @@ describe("the moments in the chat", () => {
 });
 
 describe("what visitors see", () => {
-  it("shows nothing at all until there are real ratings to show", async () => {
-    render(<ReviewsWelcome place="under" />);
+  it("shows nothing at all until there are real ratings to show, not even an empty box", async () => {
+    const { container } = render(<ReviewsWelcome place="under" />);
     await waitFor(() => expect(calls("GET /api/mira/reviews")).toHaveLength(1));
-    expect(screen.queryByRole("region", { name: "What people say about Mira" })).toBeNull();
-    expect(screen.queryByText(/rated by/)).toBeNull();
+    await new Promise((r) => setTimeout(r, 0)); // the answer has landed
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("shows the rating, one quote and how we check reviews", async () => {

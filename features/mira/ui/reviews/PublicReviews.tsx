@@ -42,21 +42,27 @@ export function usePublicReviews(): TodaysReviews | null {
 }
 
 /**
- * Under Mira's welcome. Nothing until the figures arrive; then the space opens smoothly (at once
- * for anyone who asks for less motion), so the welcome eases up instead of jumping.
+ * Under Mira's welcome. Nothing at all until the figures arrive (not even an empty box, which
+ * the welcome's gap would space out); then it mounts closed and opens on the next frame, so the
+ * welcome eases up instead of jumping (at once for anyone who asks for less motion).
  */
 export function ReviewsWelcome({ place }: { place: "under" | "foot" }) {
   const reviews = usePublicReviews();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!reviews) return;
+    const frame = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(frame);
+  }, [reviews]);
+  if (!reviews) return null;
   return (
     <div
       className={`grid transition-[grid-template-rows,opacity] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none [@media(max-height:480px)]:hidden ${
-        reviews ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       } ${place === "under" ? "sm:hidden" : "max-sm:hidden"}`}
     >
       <div className="min-h-0 overflow-hidden">
-        {reviews ? (
-          <ReviewsBlock reviews={reviews} className={place === "under" ? "pt-5" : "pb-1 pt-3"} />
-        ) : null}
+        <ReviewsBlock reviews={reviews} className={place === "under" ? "pt-2" : "pb-1 pt-3"} />
       </div>
     </div>
   );
