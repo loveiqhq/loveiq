@@ -215,7 +215,8 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
         info: "pts.net",
         unit: "net",
         value: (_, v) => v.m.net,
-        better: "high",
+        // A total, and the two funnels are read over different stretches (1–22 Oct against the
+        // range): neither is better for being longer or shorter, so it isn't ranked.
       },
       // Mark, 23 Oct: profit (contribution) per customer and per completion, as Traffic counts it.
       {
@@ -872,7 +873,9 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
                         : "Archetype, match and five aspect cards, then €1.99"}
                     </span>
                   </span>
-                  <div className="grid grid-cols-3 gap-3">
+                  {/* Three rows shared by the three figures (subgrid): a label that wraps on a
+                      phone moves every figure's number down together, so they stay level. */}
+                  <div className="grid grid-cols-3 gap-x-3 gap-y-0.5">
                     <Figure
                       label="Saw €1.99 page"
                       info="payment.gt-reached"
@@ -933,7 +936,7 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
             <Fact
               label="Needed to call it"
               value="~155–185 per half"
-              sub="To see a doubling (10% → 21%): about 5 weeks at ~35 finishers per half a week."
+              sub="To see a doubling (10.3% → 20.6%): about 5 weeks at ~35 finishers per half a week."
             />
             <Fact
               label="Read alongside"
@@ -960,12 +963,12 @@ function Figure({
   sub?: string;
 }) {
   return (
-    <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-xs text-ap-muted">
+    <span className="row-span-3 grid min-w-0 grid-rows-subgrid">
+      <span className="self-end text-xs text-ap-muted">
         {label} <Info k={info} label={label} />
       </span>
       <span className="font-serif text-xl font-semibold tabular-nums text-ap-ink">{value}</span>
-      {sub && <span className="text-[11px] leading-snug text-ap-muted">{sub}</span>}
+      <span className="text-[11px] leading-snug text-ap-muted">{sub}</span>
     </span>
   );
 }

@@ -23,6 +23,12 @@ import { fetchSurveySheets } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import { askedQuestions } from "@features/admin/server/dropoff-weekly";
 import { sheetBounce, sheetConversion, sheetSpots } from "@features/admin/ui/ap/sheets";
+import {
+  sheetAfterQuestion,
+  sheetBeforeQuestion,
+  SURVEY_SHEET_IDS,
+  type SurveySheetId,
+} from "@features/survey/surveySheets";
 import { sheetTipRows, timeDropChart } from "@features/admin/ui/ap/SurveyTimeDrop";
 
 const TEAM_VISIT = "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
@@ -106,6 +112,16 @@ describe("what PostHog saw of the sheets", () => {
     expect(query).toContain("properties.question_id = '01005'");
     expect(query).toMatch(/SELECT \* FROM \(\s+SELECT run_order, sheet/);
     expect(cap).toBe(30);
+    // Someone who answered on after the sheet opened (a reload drops the open sheet, no close is
+    // sent) never counts as left with it open; the tick is read however PostHog types it.
+    expect(query).toContain("runs.last_answer > per.shown_at AS went_on");
+    expect(query).toContain(
+      "countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open"
+    );
+    expect(query).toContain(
+      "countIf(closes > 0 OR went_on OR shown_at < now() - INTERVAL 30 MINUTE) AS settled"
+    );
+    expect(query).toContain("toString(properties.ticked) = 'true'");
   });
 
   it("passes PostHog's failure on plainly, and never a cut answer", async () => {
@@ -166,6 +182,32 @@ describe("where the sheets sit", () => {
     const withGone = [...rows, { ...rows[0]!, id: "99999", n: 0 }];
     expect(sheetSpots(withGone)).toEqual(sheetSpots(rows));
     expect(sheetSpots([])).toEqual([]);
+  });
+});
+
+describe("where the sheets sit, against the survey's own runtime", () => {
+  it("puts every sheet where the survey opens it, in both orders", () => {
+    for (const order of [newOrder, oldOrder]) {
+      const ctx = { enabled: SURVEY_SHEET_IDS, shown: new Set<SurveySheetId>(), payToStart: false };
+      // What the survey opens: moving on from question i (after), or arriving at it (before),
+      // each sheet once, as SurveyEngine asks it.
+      const opened: Array<[SurveySheetId, number]> = [];
+      const shown = new Set<SurveySheetId>();
+      for (let i = 0; i < order.length; i++) {
+        const before = sheetBeforeQuestion(order[i], i, { ...ctx, shown });
+        if (before) {
+          shown.add(before);
+          opened.push([before, i - 1]);
+        }
+        const after = sheetAfterQuestion(order[i], i, order.length, { ...ctx, shown });
+        if (after) {
+          shown.add(after);
+          opened.push([after, i]);
+        }
+      }
+      const spots = sheetSpots(rowsOf(order)).map((s) => [s.id, s.after]);
+      expect(spots.sort()).toEqual(opened.sort());
+    }
   });
 });
 

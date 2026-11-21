@@ -34,6 +34,8 @@ export default function SheetsSection({
   const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
   const asked = rows.filter((r) => r.n > 0);
   const figures = seen?.ok ? seen.value[order] : null;
+  // Without the questions (their read failed) there is nothing to place a sheet against.
+  const placed = asked.length > 0;
   const all = figures?.all;
   const tapped = figures?.bySheet.desire;
   return (
@@ -132,12 +134,14 @@ export default function SheetsSection({
                     </span>
                     <span role="cell" className="flex flex-col gap-px px-3 py-2.5">
                       <span className="text-[13px] font-semibold text-ap-ink">
-                        {spot ? spot.where : "Not in this order"}
+                        {spot ? spot.where : placed ? "Not in this order" : "—"}
                       </span>
                       <span className="text-[11px] leading-snug text-ap-muted">
                         {q
                           ? `${q.id} · ${q.text}`
-                          : "Its question is not asked here, or comes too early: it never opens."}
+                          : placed
+                            ? "Its question is not asked here, or comes too early: it never opens."
+                            : ""}
                       </span>
                     </span>
                     <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">

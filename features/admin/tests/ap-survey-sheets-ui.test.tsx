@@ -82,7 +82,8 @@ const byOrder: SurveySheetsByOrder = {
 
 const page = (
   to: string,
-  sheetsSeen: Parameters<typeof buildSurveyPage>[0]["sheetsSeen"] = { ok: true, value: byOrder }
+  sheetsSeen: Parameters<typeof buildSurveyPage>[0]["sheetsSeen"] = { ok: true, value: byOrder },
+  over: Partial<Parameters<typeof buildSurveyPage>[0]> = {}
 ) =>
   buildSurveyPage({
     facts: factsFixture({ from: "2026-11-16", to }),
@@ -97,6 +98,7 @@ const page = (
     introClicks: null,
     sheetsOn: ["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
     sheetsSeen,
+    ...over,
   });
 const payload = page("2026-11-21");
 
@@ -238,6 +240,47 @@ describe("the sheets in the question funnel", () => {
       ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
       ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
     ]);
+  });
+});
+
+describe("the sheets where the figures around them can't follow (review, 21 Nov 2026)", () => {
+  it("keeps the sheets out of a funnel narrowed by a filter, and says where they are", () => {
+    view.payload = page("2026-11-21", undefined, {
+      questions: { ...questions, segment: "Phones" },
+    });
+    render(<ApSurvey />);
+    expect(funnelRows().some((r) => r.hasAttribute("data-sheet"))).toBe(false);
+    expect(document.querySelector("#time-drop [data-sheet]")).toBeNull();
+    expect(
+      screen.getByText(/The sheets show between the questions with all traffic only/)
+    ).toBeTruthy();
+    // The Sheets section still has them.
+    expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(7);
+  });
+
+  it("says from when a sheet is counted, for a range that starts before the sheets", () => {
+    view.payload = page("2026-11-21", undefined, {
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-01", to: "2026-11-21" },
+        "2026-11-22"
+      ),
+      facts: factsFixture({ from: "2026-11-01", to: "2026-11-21" }),
+    });
+    render(<ApSurvey />);
+    expect(within(sheetRow("halfway")!).getByText("Counted from 17 Nov 2026")).toBeTruthy();
+  });
+
+  it("without the questions, reads the order the range opens on and places nothing", () => {
+    view.payload = page("2026-11-21", undefined, {
+      questions: null,
+      questionsError: "The questions could not be read.",
+    });
+    render(<ApSurvey />);
+    const halfway = within(sheetsRow("Halfway · profile filling in")).getAllByRole("cell");
+    // The new order's figures (the range reaches the test's end), not the old order's.
+    expect(halfway[1]!.textContent).toBe("40");
+    expect(halfway[0]!.textContent).toBe("—");
+    expect(document.getElementById("sheets")!.textContent).not.toContain("it never opens");
   });
 });
 

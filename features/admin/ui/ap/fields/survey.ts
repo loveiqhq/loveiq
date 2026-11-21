@@ -900,7 +900,8 @@ const FUNNEL_CAVEAT =
 const SHEETS = `-- The sheets between the survey's questions, for the runs begun in the range, in each question
 -- order (run_order: 'test' is the new order, C13's and everyone's since the test ended; 'survey'
 -- the old one): per sheet, the people it opened for, those who left the survey with it open
--- (never closed it, 30 minutes since it opened), those who closed it, how long it was open
+-- (never closed it, answered nothing after it opened, 30 minutes since), those who closed it,
+-- how long it was open
 -- (median, ms) and the ticks of the State of Desire sheet's box. A run's order: it answered
 -- 03011 before 01005 (new) or 01005 first (old). The rows with an empty sheet are every sheet
 -- together. The team's people are left out.
@@ -908,7 +909,8 @@ WITH runs AS (
   SELECT person_id,
          minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
          minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
-         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
+         maxIf(timestamp, event = 'survey_answer') AS last_answer
   FROM events
   WHERE event IN ('survey_started', 'survey_answer')
     AND properties.$host = 'www.loveiq.org'
@@ -927,7 +929,7 @@ per AS (
          minIf(timestamp, event = 'survey_sheet_shown') AS shown_at,
          countIf(event = 'survey_sheet_closed') AS closes,
          maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms,
-         maxIf(if(properties.ticked = true, 1, 0), event = 'survey_sheet_closed') AS ticked
+         maxIf(if(toString(properties.ticked) = 'true', 1, 0), event = 'survey_sheet_closed') AS ticked
   FROM events
   WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
     AND properties.$host = 'www.loveiq.org'
@@ -939,6 +941,7 @@ per AS (
 ),
 seen AS (
   SELECT per.*,
+         runs.last_answer > per.shown_at AS went_on,
          multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                  toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
   FROM per INNER JOIN runs ON per.person_id = runs.person_id
@@ -946,16 +949,16 @@ seen AS (
 )
 SELECT * FROM (
   SELECT run_order, sheet, count() AS saw,
-         countIf(closes > 0 OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
-         countIf(closes = 0 AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
+         countIf(closes > 0 OR went_on OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
+         countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
          countIf(closes > 0) AS closed,
          quantileIf(0.5)(ms, closes > 0) AS median_ms,
          countIf(ticked = 1) AS ticked
   FROM seen WHERE run_order != '' GROUP BY run_order, sheet
   UNION ALL
   SELECT run_order, '' AS sheet, count() AS saw,
-         countIf(closes > 0 OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
-         countIf(closes = 0 AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
+         countIf(closes > 0 OR went_on OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
+         countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
          countIf(closes > 0) AS closed,
          quantileIf(0.5)(ms, closes > 0) AS median_ms,
          countIf(ticked = 1) AS ticked
@@ -977,7 +980,7 @@ const SHEET_EVENTS: FieldDef["tables"] = [
 ];
 
 const SHEET_PEOPLE =
-  "The runs begun in the range, in the order picked above, as the question funnel counts them: PostHog's person, once per sheet. A run meets a sheet only from its switch-on (17 Nov 2026; the expert's and State of Desire's 18 Nov), and never a sheet with a price after paying before the survey, so fewer may see a sheet than reached its question. The team's people are left out; all traffic whatever the filters.";
+  "The runs begun in the range, in the order picked above, close to how the question funnel counts them: PostHog's person, once per sheet, by when they first began a survey (up to 30 days back), so someone who began again in the range after an earlier try counts with the earlier one. A run meets a sheet only from its switch-on (17 Nov 2026; the expert's and State of Desire's 18 Nov), and never a sheet with a price after paying before the survey, so fewer may see a sheet than reached its question. The team's people are left out; all traffic whatever the filters.";
 
 export const fields: FieldRegistry = {
   "survey.starts": {
@@ -1335,13 +1338,13 @@ SELECT key, enabled, updated_at
   },
   "survey.sheetBounce": {
     label: "Bounce rate",
-    what: "Of the people a sheet opened for, the share who left the survey while it was open and never came back to close it. Shown above 5.0% it is red, as a question's drop-out is.",
+    what: "Of the people a sheet opened for, the share who left the survey while it was open: they never closed it and answered nothing after. Shown above 5.0% it is red, as a question's drop-out is.",
     good: "down",
     stat: "Share",
     per: "per person the sheet opened for",
     formula: {
-      num: "Opened it, never closed it, 30 minutes since",
-      den: "Opened it 30 minutes ago or more, or closed it",
+      num: "Opened it, never closed it, answered nothing after, 30 minutes since",
+      den: "Opened it 30 minutes ago or more, closed it, or answered on",
       mult: "× 100",
     },
     caveat: `Someone who left with the sheet open is also an exit of the question it opens over in the question funnel (the steps can't tell a sheet from its question); someone who closed it and then left is the next question's exit. A sheet opened in the last 30 minutes and not closed yet counts nowhere yet. All sheets together: every sheet's leavers over every sheet's settled people. ${SHEET_PEOPLE}`,

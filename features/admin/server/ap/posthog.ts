@@ -469,8 +469,9 @@ const NO_SHEET: SheetFigures = {
  * event, looked for up to 30 days back), split by the order their questions came in. A run in
  * the new order (C13's, everyone's since the test ended) answers 03011 before 01005; one in the
  * old order, 01005 first; every run answers one of them third, before any sheet. A person counts
- * once per sheet. A sheet opened in the last 30 minutes and not closed yet is still being read,
- * neither left nor settled. Mark's measures (17 Nov 2026), signed off with the sheets' Test
+ * once per sheet. Left with it open: never closed it and answered nothing after it opened (a
+ * reload while it was open never reopens it and sends no close, yet the run carries on). A sheet
+ * opened in the last 30 minutes and not closed yet is still being read, neither left nor settled. Mark's measures (17 Nov 2026), signed off with the sheets' Test
  * Repository row at the 19 Nov sync.
  */
 export async function fetchSurveySheets(
@@ -480,9 +481,11 @@ export async function fetchSurveySheets(
   const { since, until } = windowOf({ from, to });
   const staff = await notStaff();
   const settledAt = "now() - INTERVAL 30 MINUTE";
+  // Left with it open: never closed it, answered nothing after it opened (a reload while it was
+  // open never reopens it and sends no close, but the run carries on), and 30 minutes have passed.
   const figures = `count() AS saw,
-           countIf(closes > 0 OR shown_at < ${settledAt}) AS settled,
-           countIf(closes = 0 AND shown_at < ${settledAt}) AS left_open,
+           countIf(closes > 0 OR went_on OR shown_at < ${settledAt}) AS settled,
+           countIf(closes = 0 AND NOT went_on AND shown_at < ${settledAt}) AS left_open,
            countIf(closes > 0) AS closed,
            quantileIf(0.5)(ms, closes > 0) AS median_ms,
            countIf(ticked = 1) AS ticked`;
@@ -491,7 +494,8 @@ export async function fetchSurveySheets(
       SELECT person_id,
              minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
-             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
+             maxIf(timestamp, event = 'survey_answer') AS last_answer
       FROM events
       WHERE event IN ('survey_started', 'survey_answer')
         AND properties.$host = '${HOST}'
@@ -506,7 +510,7 @@ export async function fetchSurveySheets(
              minIf(timestamp, event = 'survey_sheet_shown') AS shown_at,
              countIf(event = 'survey_sheet_closed') AS closes,
              maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms,
-             maxIf(if(properties.ticked = true, 1, 0), event = 'survey_sheet_closed') AS ticked
+             maxIf(if(toString(properties.ticked) = 'true', 1, 0), event = 'survey_sheet_closed') AS ticked
       FROM events
       WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
         AND properties.$host = '${HOST}'
@@ -515,6 +519,7 @@ export async function fetchSurveySheets(
     ),
     seen AS (
       SELECT per.*,
+             runs.last_answer > per.shown_at AS went_on,
              multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                      toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
       FROM per INNER JOIN runs ON per.person_id = runs.person_id

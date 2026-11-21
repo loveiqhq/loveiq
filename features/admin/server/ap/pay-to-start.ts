@@ -321,12 +321,13 @@ export function funnelAndPaywall(
         ]
       : []),
   ];
-  return {
-    ...current,
-    funnels,
-    notes: current.notes.filter((n) => !PAY_TO_START_NOTE.test(n)),
-    gateTest,
-  };
+  const kept = (notes: string[]) => notes.filter((n) => !PAY_TO_START_NOTE.test(n));
+  // The free funnel's own stretch can lack what the range has (Google Ads unreadable, say): its
+  // notes are kept too, named by its stretch.
+  const beforeNotes = kept(before.notes)
+    .filter((n) => !current.notes.includes(n))
+    .map((n) => `Before the paywall (${rangeLabel(BEFORE_PAYWALL.from, BEFORE_PAYWALL.to)}): ${n}`);
+  return { ...current, funnels, notes: [...kept(current.notes), ...beforeNotes], gateTest };
 }
 
 /** Which offer an ad's landing page sells, from its path; null for every other page. */

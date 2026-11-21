@@ -34,6 +34,7 @@ import { clearFactsCache, fetchFacts } from "@features/admin/server/ap/facts";
 import { clearTeamCache } from "@features/admin/server/ap/team";
 import {
   freeAdsOnly,
+  funnelAndPaywall,
   payToStartFor,
   type FunnelPaywallPayload,
   type PtsPayload,
@@ -710,5 +711,37 @@ describe("GET: Marcus's Funnel and paywall (19 Nov 2026)", () => {
     const body = (await res.json()) as FunnelPaywallPayload;
     expect(body.gateTest.why).toBe("Who is in which half could not be read just now.");
     expect(body.funnels.map((f) => f.key)).toEqual(["after", "gate"]);
+  });
+});
+
+describe("funnelAndPaywall: the notes of both stretches", () => {
+  it("keeps the free funnel's own notes, named by its stretch, and drops pay to start's", () => {
+    const shell = (notes: string[]): PtsPayload => ({
+      range: { from: "2026-11-17", to: "2026-11-21" },
+      funnels: [],
+      weeks: [],
+      notes,
+    });
+    const out = funnelAndPaywall(
+      shell(["Today is still running: its figures are so far, and the ads lag a few hours."]),
+      shell([
+        "Google Ads could not be read just now.",
+        "No ad in this range lands on a pay-to-start page yet.",
+      ]),
+      {
+        test: "#11",
+        note: "",
+        arms: [],
+        lift: null,
+        confidence: null,
+        liftWhy: null,
+        verdict: "",
+        why: "x",
+      }
+    );
+    expect(out.notes).toEqual([
+      "Today is still running: its figures are so far, and the ads lag a few hours.",
+      "Before the paywall (1 Oct – 22 Oct 2026): Google Ads could not be read just now.",
+    ]);
   });
 });

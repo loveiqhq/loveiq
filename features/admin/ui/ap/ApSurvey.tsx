@@ -291,7 +291,12 @@ export default function ApSurvey() {
           )}
 
           {/* Mark's Sheets section (Survey copy board, 17 Nov 2026): above the demographics. */}
-          <SheetsSection data={data} rows={rows} order={questions?.test ? order : "survey"} />
+          <SheetsSection
+            data={data}
+            rows={rows}
+            // The funnel's order; without the questions, the order the range opens on.
+            order={questions?.test ? order : questions ? "survey" : order}
+          />
 
           <Card id="demographics" labelledBy="h-demo">
             <SectionHead
@@ -995,7 +1000,10 @@ function FunnelSection({
   const asked0 = rows.filter((r) => r.n > 0);
   const sheetsAfter = new Map<string, SheetSpot[]>();
   // Only for a range that reaches the sheets (they went live on 17 Nov 2026).
-  if (!first && !term && data.sheets.seen)
+  // Not under a source or device filter either: the sheets' events carry neither, and an all-traffic
+  // row between filtered questions would read as theirs.
+  const allTraffic = !q || q.segment === "All traffic";
+  if (!first && !term && data.sheets.seen && allTraffic)
     for (const spot of sheetSpots(rows)) {
       const id = asked0[spot.after]!.id;
       sheetsAfter.set(id, [...(sheetsAfter.get(id) ?? []), spot]);
@@ -1356,6 +1364,7 @@ function FunnelSection({
                     spot={spot}
                     figures={sheetsSeen?.bySheet[spot.id]}
                     known={sheetsKnown}
+                    from={data.sheets.from}
                   />
                 ))}
               </Fragment>
@@ -1388,6 +1397,12 @@ function FunnelSection({
           {note}
         </p>
       ))}
+      {data.sheets.seen && !allTraffic && (
+        <p className="m-0 text-xs leading-relaxed text-ap-muted">
+          The sheets show between the questions with all traffic only: their events carry no source
+          or device. They are in the Sheets section below.
+        </p>
+      )}
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
         Rows in orange lose more than 5% of the previous step. A question added during the range was
         asked only from the day it was added: its drop-out and skipped rates are over the runs asked
@@ -1517,12 +1532,15 @@ function SheetFunnelRow({
   spot,
   figures,
   known,
+  from,
 }: {
   spot: SheetSpot;
   /** Missing: nobody met it in the range. */
   figures: SheetFigures | undefined;
   /** PostHog could be read: blanks otherwise, rather than noughts. */
   known: boolean;
+  /** The day the sheets began, when the range starts earlier than they did. */
+  from: string | null;
 }) {
   const meta = SHEET_NAMES[spot.id];
   const bounce = sheetBounce(figures);
@@ -1544,6 +1562,7 @@ function SheetFunnelRow({
         <a href="#sheets" className="text-[11px] font-semibold text-ap-violet">
           Sheet {spot.where.charAt(0).toLowerCase() + spot.where.slice(1)}
         </a>
+        {from && <span className="text-[11px] text-ap-muted">Counted from {from}</span>}
       </span>
       <span
         role="cell"

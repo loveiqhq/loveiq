@@ -613,3 +613,20 @@ describe("Funnel and paywall (Marcus, 19 Nov 2026)", () => {
     ]);
   });
 });
+
+describe("Funnel and paywall: what can't be compared across its two stretches (review, 21 Nov 2026)", () => {
+  it("never ranks the return on ad spend, a total over two different stretches", () => {
+    view.payload = payload;
+    render(<ApPayToStart />);
+    const row = screen.getByRole("row", { name: /^Return on ad spend \(€\)/ });
+    for (const cell of within(row).getAllByRole("cell"))
+      expect(cell.className).not.toMatch(/bg-ap-good|bg-ap-bad/);
+    // A rate per visit still is: the two stretches compare on it.
+    const rate = screen.getByRole("row", { name: /^Revenue per visit/ });
+    expect(
+      within(rate)
+        .getAllByRole("cell")
+        .some((c) => /bg-ap-good/.test(c.className))
+    ).toBe(true);
+  });
+});
