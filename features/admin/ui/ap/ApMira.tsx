@@ -643,7 +643,70 @@ function Engagement({ data }: { data: Data }) {
       </Card>
       <ApMiraCoaches k={data.coaches} />
       <GoalsCard data={data} />
+      <VoiceCard data={data} />
     </Board>
+  );
+}
+
+/** Talking to Mira by voice (22 Nov 2026): sessions, people, length, key points read, on-device. */
+function VoiceCard({ data }: { data: Data }) {
+  const v = data.voice;
+  return (
+    <Card id="voice" labelledBy="h-voice">
+      <SectionHead
+        id="h-voice"
+        level={3}
+        title="Voice"
+        description="Talking to Mira out loud: how many sessions and people, how long they talk, whether they come back to a session's key points, and where speech became text."
+      />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+      >
+        <StatBox
+          stat={{
+            label: "Voice sessions",
+            unit: "count",
+            value: v.sessions,
+            note: `by ${count(v.people)} ${v.people === 1 ? "person" : "people"}`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Median length",
+            unit: "mmss",
+            value: v.median,
+            note: "per session, minutes:seconds",
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Key points opened later",
+            unit: "pct",
+            value: share(v.opened, v.withPoints),
+            note: `${count(v.opened)} of ${count(v.withPoints)} kept sessions with key points`,
+          }}
+        />
+        <StatBox
+          stat={{
+            label: "Speech on the device",
+            unit: "pct",
+            value: share(v.device, v.sessions),
+            note: "the rest used the browser's speech service",
+          }}
+        />
+      </div>
+      <p className={NOTE}>
+        A voice session: from Talk to End (or the page closing) with at least one spoken turn,
+        counted when it ends in the range, signed in or not. People: an account, or a browser before
+        it signs in. Length: from the session&rsquo;s start to its end. Key points opened later: of
+        the sessions kept with key points (signed in, &ldquo;Remember our conversations&rdquo; on)
+        that ended in the range, the share whose page was opened by the range&rsquo;s last day.
+        Speech on the device: Chrome turned speech into text on the device; otherwise the
+        browser&rsquo;s own service did (Apple&rsquo;s or Google&rsquo;s). Never audio, never words:
+        ids and numbers only. Recorded from 22 Nov 2026.
+      </p>
+    </Card>
   );
 }
 

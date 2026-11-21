@@ -833,6 +833,7 @@ describe("fetchMira", () => {
       if (path.startsWith("/rest/v1/app_user")) return [{ email: "a+b@example.com" }];
       if (path.startsWith("/rest/v1/mira_nudge")) return [];
       if (path.startsWith("/rest/v1/mira_body_check")) return [];
+      if (path.startsWith("/rest/v1/mira_event?name=in.(voice_")) return [];
       return null;
     });
     const out = await fetchMira();
@@ -910,7 +911,11 @@ describe("fetchMira", () => {
     });
     expect(out.events[150_001]).toMatchObject({ name: "chat_started", detail: "3" });
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
-    expect(mockFetchAllRows.mock.calls.some(([p]) => String(p).includes("mira_event"))).toBe(false);
+    // The counted events, that is: the voice sessions (one row each) are read with their props.
+    const paged = mockFetchAllRows.mock.calls.map(([p]) => String(p));
+    expect(paged.some((p) => p.includes("mira_event") && !p.includes("name=in.(voice_"))).toBe(
+      false
+    );
   });
 
   it("counts exactly what it counted from the rows themselves", async () => {

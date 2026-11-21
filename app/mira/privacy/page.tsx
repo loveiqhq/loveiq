@@ -101,6 +101,14 @@ const RECIPIENTS = [
     basis: "Our legal duty to prove consent",
     where: "UK. The EU recognises the UK as safe (adequacy decision).",
   },
+  // Talking to Mira by voice (22 Nov 2026): the browser's own service, never one of ours.
+  {
+    who: "Your browser's speech service (for example Apple's or Google's)",
+    role: "Your browser's maker, under its own terms. Only when you talk to Mira and your browser can't turn speech into text on your device.",
+    gets: "Your voice while you talk to Mira, which it turns into text for your browser. We never receive the sound.",
+    basis: "Your explicit consent, and a notice you tick before you first talk",
+    where: "Decided by your browser's maker. It may be outside the EU.",
+  },
 ];
 
 const COLUMNS = [
@@ -346,6 +354,50 @@ export default function MiraPrivacyPage() {
             ))}
           </tbody>
         </table>
+
+        {/* Talking to Mira by voice (22 Nov 2026, features/mira/ui/voice). */}
+        <h2>Talking to Mira by voice</h2>
+        <ul>
+          <li>
+            If you tap Talk, your browser listens through your microphone and turns what you say
+            into text. Mira never receives your voice or any recording of it, only the text. The
+            text goes to Mira like a typed message: the same consent, safety rules and limits apply.
+          </li>
+          <li>
+            Where your browser can, this happens on your device (in Chrome, for example). Otherwise
+            your browser uses its maker&apos;s speech service (for example Apple&apos;s or
+            Google&apos;s), under that company&apos;s terms, not ours. We tell you before you first
+            talk, and you agree with a tick.
+          </li>
+          <li>
+            Mira&apos;s replies are read aloud by a voice on your device. We never use an online
+            voice, so no other company gets her words for it.
+          </li>
+          <li>
+            The words show on the page as you speak, so our analytics tools see them there, as they
+            see typed text.
+          </li>
+          <li>
+            With an account and &ldquo;Remember our conversations&rdquo; on, each voice session is
+            kept as words: its spoken messages in your chat, when it began and ended, how much of
+            the talking was yours and Mira&apos;s (counted in words), whether speech became text on
+            your device or in your browser&apos;s service, and up to three key points.
+            Anthropic&apos;s model writes the key points from the session&apos;s words, under the
+            same rules as Mira&apos;s replies. There are none for a session in which Mira showed
+            support lines.
+          </li>
+          <li>
+            You can read and delete each session under Voice sessions. Deleting it deletes its key
+            points and its words, in the chat too. A session also goes with its chat: when you
+            delete your chats or your account, at the 12-month limit, or if Mira stops because you
+            are under 18.
+          </li>
+          <li>
+            For Mira&apos;s statistics we count each session&apos;s length, how speech became text,
+            its number of turns and whether its key points were opened later: numbers, never words.
+            Without an account, that count is all we keep of a voice session.
+          </li>
+        </ul>
 
         <h2>How long we keep it</h2>
         <ul>

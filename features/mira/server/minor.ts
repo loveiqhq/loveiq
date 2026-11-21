@@ -6,6 +6,7 @@ import { MINOR_COOKIE } from "./config";
 import { deleteGoals } from "./goals";
 import { refreshPublicReviews, withdrawReview } from "./reviews";
 import { deleteChats, updateProfile } from "./store";
+import { deleteRecordings } from "./voice";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
@@ -55,6 +56,8 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     deleteGoals(userId),
     // Their rating and words go too, approved or not: a minor's words are never shown.
     withdrawReview(userId, "all"),
+    // Voice sessions (22 Nov 2026): their key points too, not only their words.
+    deleteRecordings(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

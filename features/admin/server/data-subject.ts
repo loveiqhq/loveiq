@@ -35,7 +35,9 @@
  *     settings too, such as the reply language and the appearance of 21 Nov 2026), its mira_chat +
  *     mira_message, mira_body_check, mira_nudge and mira_event rows (by user_id), and a pending
  *     mira_sign_in_code (by email). Challenges & goals (22 Nov 2026): its mira_goal and
- *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Erased with Mira's own account deletion (store.ts
+ *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Voice
+ *     sessions (mira_voice_session, by user_id; their words are mira_message rows) from 22 Nov
+ *     2026. Erased with Mira's own account deletion (store.ts
  *     deleteAccount): the person's words go from the KPI log, whose counts stay unlinked, and
  *     the login goes too unless it is also an admin or Jarvis login.
  *     - mira_review (by user_id, from 2026-11-22): their rating and any words with the consent
@@ -229,6 +231,7 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
       `/rest/v1/mira_message?select=*,mira_chat!inner(user_id)&mira_chat.user_id=${ids}&order=id.asc`,
     ],
     ["mira_body_check", `/rest/v1/mira_body_check?user_id=${ids}&select=*&order=id.asc`],
+    ["mira_voice_session", `/rest/v1/mira_voice_session?user_id=${ids}&select=*&order=id.asc`],
     ["mira_nudge", `/rest/v1/mira_nudge?user_id=${ids}&select=*&order=id.asc`],
     ["mira_event", `/rest/v1/mira_event?user_id=${ids}&select=*&order=id.asc`],
     // Challenges & goals: the goals in the person's words, and the days they ticked them.

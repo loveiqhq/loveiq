@@ -195,6 +195,12 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Basis**: the stars, shown only inside an average without names: (f) legitimate interest in telling visitors honestly what people think of Mira. The words, name and age range, which may reveal sex life or health: (a) explicit consent with Art. 9(2)(a), a separate box the person ticks themselves, version `mira-review-2026-11-22` stored with the words. Published only after staff approval; the only edit is a visible […] where an identifying detail was taken out, as the box says
 - **Retention**: until taken back or the account is deleted; words not approved are deleted when rejected
 - **Withdraw**: "Stop showing my words" or "Remove my rating" in Settings, effective at once; deleting the account; a data request. An under-18 stop deletes both
+### A21 — Talking to Mira by voice (from 2026-11-22)
+
+- **Data**: the text the person's browser makes of their speech (handled as A16's messages; the browser's own speech service, when used, hears the voice under the browser's terms); with an account and "Remember our conversations" on, the voice session (`mira_voice_session`: times, words per side, recognition mode, up to three key points written by Anthropic's model); the KPI events `voice_session_ended` and `voice_points_opened` (ids and numbers)
+- **Basis**: as A16, (a) consent with Art. 9(2)(a) for the words and the key points; before the browser's own speech service is first used, a one-time notice with a tick says who turns the voice into text. The events: as A18, (f) legitimate interest
+- **Retention**: with the chat and the account (A16, [DPIA.md](DPIA.md) §7.12); the events 12 months (A18)
+- **Withdraw**: End or Mute at any time; delete a session on its page, or the chats or the account in Settings; a data request
 
 ## Withdrawal of consent flows
 

@@ -38,10 +38,13 @@ export function rememberSourceForGoogle(): void {
   document.cookie = `${SOURCE_COOKIE}=${miraSource()}; Path=/api/mira/auth/google; Max-Age=600; SameSite=Lax${secure}`;
 }
 
-/** JSON call to a Mira API route, with the CSRF header every write needs. */
+/**
+ * JSON call to a Mira API route, with the CSRF header every write needs. `keepalive`: the call
+ * outlives the page (a voice session ending as the tab closes).
+ */
 export async function miraApi<T = Record<string, unknown>>(
   url: string,
-  init: { method?: string; body?: unknown } = {}
+  init: { method?: string; body?: unknown; keepalive?: boolean } = {}
 ): Promise<ApiResult<T>> {
   try {
     const res = await fetch(url, {
@@ -53,6 +56,7 @@ export async function miraApi<T = Record<string, unknown>>(
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       credentials: "same-origin",
+      ...(init.keepalive ? { keepalive: true } : {}),
     });
     const data = (await res.json().catch(() => ({}))) as T & { error?: string };
     return { ok: res.ok, status: res.status, data };
@@ -102,6 +106,8 @@ const LOCAL_NPS = "mira.nps.v1";
 const LOCAL_BODY_CHECK = "mira.bodycheck.v1";
 /** When this browser was shown the "Make Mira yours" tip on the coaching-style button. */
 const LOCAL_STYLE_TIP = "mira.tip.style.v1";
+/** When this browser's person read the one-time notice about their browser's speech service. */
+const LOCAL_VOICE_NOTICE = "mira.voice.notice.v1";
 /** "Not now" on the body check offer waits this long before it is offered again. */
 const BODY_CHECK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -161,4 +167,7 @@ export const local = {
   /** The coaching-style tip is shown once per browser. */
   styleTipSeen: () => read<number>(LOCAL_STYLE_TIP) !== null,
   saveStyleTipSeen: () => write(LOCAL_STYLE_TIP, Date.now()),
+  /** Talking to Mira: the browser's speech service notice is shown before its first use only. */
+  voiceNoticeSeen: () => read<number>(LOCAL_VOICE_NOTICE) !== null,
+  saveVoiceNoticeSeen: () => write(LOCAL_VOICE_NOTICE, Date.now()),
 };

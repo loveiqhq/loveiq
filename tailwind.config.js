@@ -172,6 +172,8 @@ module.exports = {
         "mira-rise": "mira-rise 0.26s cubic-bezier(0.16, 1, 0.3, 1) both",
         "mira-dot": "mira-dot 1.1s ease-in-out infinite",
         "mira-marquee": "mira-marquee 60s linear infinite",
+        // Talking to Mira (features/mira/ui/voice): her photo's halo breathes while she listens.
+        "mira-listen": "mira-breathe 3.2s ease-in-out infinite",
       },
     },
   },

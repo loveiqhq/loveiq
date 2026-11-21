@@ -19,6 +19,10 @@
  * never with the person's words: which intake question a message answered (`answering`, sent
  * by the browser when Mira's last reply asked one), a referral to a therapist or doctor, and a
  * new chat's topic when it opened in the person's own words.
+ *
+ * A spoken turn (features/mira/ui/voice) is the same message with `voice`: the same rails, limits
+ * and sign-up gate, a reply asked to sound spoken, and, when stored, its messages tagged with the
+ * voice session (`voice.session`) that keeps them as a session to look back on (server/voice.ts).
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -93,7 +97,18 @@ const schema = z.object({
     .string()
     .regex(/^[a-z]{2,16}$/)
     .optional(),
+  /** Spoken, not typed: the voice session it belongs to (an id the browser made for it). */
+  voice: z.object({ session: z.string().uuid().optional() }).strict().optional(),
 });
+
+/** A spoken crisis message's session, read leniently: the crisis reply never waits for the body. */
+function spokenSession(raw: Record<string, unknown>): string | undefined {
+  const v =
+    raw.voice && typeof raw.voice === "object" ? (raw.voice as { session?: unknown }) : null;
+  return typeof v?.session === "string" && z.string().uuid().safeParse(v.session).success
+    ? v.session
+    : undefined;
+}
 
 const INTAKE_IDS = new Set(miraConfig.intakeQuestions.map((q) => q.id));
 
@@ -180,9 +195,10 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
           asked && (await ownsChat(profile.id, asked))
             ? asked
             : await createChat(profile.id, message.replace(/\s+/g, " ").trim().slice(0, 80));
+        const voiceSession = spokenSession(raw);
         const ids = await addMessages(id, [
-          { role: "user", content: message.trim().slice(0, MAX_MESSAGE_CHARS) },
-          { role: "assistant", content: miraConfig.crisisMessage },
+          { role: "user", content: message.trim().slice(0, MAX_MESSAGE_CHARS), voiceSession },
+          { role: "assistant", content: miraConfig.crisisMessage, voiceSession },
         ]);
         chatId = id;
         messageId = ids[1] ?? null;
@@ -245,7 +261,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-  const { message, chatId: askedChatId, history, style: bodyStyle, answering } = parsed.data;
+  const { message, chatId: askedChatId, history, style: bodyStyle, answering, voice } = parsed.data;
 
   const account = await getMiraAccount();
   const anon = account ? null : await anonId();
@@ -363,7 +379,7 @@ export async function POST(request: Request) {
 
   const result = await askModel(
     STABLE_INSTRUCTIONS,
-    personalInstructions(style, person, { topic: chip === -1 }),
+    personalInstructions(style, person, { topic: chip === -1, voice: Boolean(voice) }),
     turns,
     started + ROUTE_BUDGET_MS
   );
@@ -411,10 +427,11 @@ export async function POST(request: Request) {
   } else if (account && remember) {
     try {
       chatId ??= await createChat(account.id, message.replace(/\s+/g, " ").slice(0, 80));
+      const voiceSession = voice?.session;
       const ids = await addMessages(chatId, [
-        { role: "user", content: message },
-        { role: "assistant", content: reply, sources, ask },
-        ...(invitation ? [{ role: "assistant" as const, content: invitation }] : []),
+        { role: "user", content: message, voiceSession },
+        { role: "assistant", content: reply, sources, ask, voiceSession },
+        ...(invitation ? [{ role: "assistant" as const, content: invitation, voiceSession }] : []),
       ]);
       messageId = ids[1] ?? null;
     } catch (err) {
