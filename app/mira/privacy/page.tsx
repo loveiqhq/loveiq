@@ -126,7 +126,8 @@ const COLUMNS = [
  * deletion and the data protection officer. Change it whenever what Mira stores or shares changes.
  * 21 Nov 2026: the reply language and the look (light or dark, text size) with their cookie.
  * 22 Nov 2026: goals (Challenges & goals), in each section below; ratings and quotes
- * (features/mira/reviews.ts), to be checked by Eman.
+ * (features/mira/reviews.ts), to be checked by Eman; passkeys, signed-in devices and changing
+ * the email (Settings › Sign-in & security).
  */
 export default function MiraPrivacyPage() {
   return (
@@ -235,6 +236,22 @@ export default function MiraPrivacyPage() {
           <li>
             Short-lived counters with your IP address, email address or browser id, to stop abuse.
           </li>
+          <li>
+            If you add a passkey (Face ID, Touch ID, Windows Hello or a fingerprint): its public key
+            and id, a name (the device it was made on, which you can change), whether it is synced,
+            and when it was added and last used. Your face or fingerprint never leaves your device;
+            we never see it.
+          </li>
+          <li>
+            For each device you sign in on: how you signed in (a code, Google or a passkey), the
+            kind of device and browser (for example &ldquo;iPhone · Safari&rdquo;), the approximate
+            city at sign-in, which our host works out from your IP address (we don&apos;t keep the
+            IP address), and when it was last used. You see them in Settings.
+          </li>
+          <li>
+            If you change your email: the new address and a scrambled form of the code we send
+            there, until you confirm it.
+          </li>
         </ul>
 
         <h2>Coaches, suggestions and search</h2>
@@ -291,6 +308,13 @@ export default function MiraPrivacyPage() {
             which are your sign-in codes and the daily nudges. Legal basis: our contract with you
             (Art. 6(1)(b) GDPR). A nudge picks up on your last chat, so it also rests on your
             consent to coaching.
+          </li>
+          <li>
+            To keep your account safe: passkeys, the list of devices you&apos;re signed in on,
+            signing them out, and changing your email (we tell your old address). Legal basis: our
+            contract with you (Art. 6(1)(b) GDPR); for each device&apos;s approximate city, our
+            legitimate interest in letting you spot a sign-in that isn&apos;t yours (Art. 6(1)(f)
+            GDPR).
           </li>
           <li>
             To improve Mira from ratings, feedback, the steps people take and nudge opens, and to
@@ -431,6 +455,12 @@ export default function MiraPrivacyPage() {
             you.
           </li>
           <li>Sign-in codes are deleted once used, and otherwise within a day.</li>
+          <li>
+            Passkeys stay until you remove them in Settings or delete your account. A device stays
+            in your list until you sign it out, or until 90 days after it was last used; then it has
+            to sign in again. A change of email waiting for its code is deleted once used, and
+            otherwise within a day.
+          </li>
           <li>The counters against abuse expire by themselves within 30 days.</li>
           <li>Backups of our database keep copies for up to 30 days.</li>
           <li>
@@ -458,6 +488,10 @@ export default function MiraPrivacyPage() {
           <li>
             You can stop showing your words, or remove your rating, in Settings at any time. They
             disappear from Mira&apos;s pages straight away.
+          </li>
+          <li>
+            In Settings you can remove a passkey, sign out any device or every device at once, and
+            change your email.
           </li>
           <li>
             You can ask for access to your data and a copy of it, and for correction, deletion or

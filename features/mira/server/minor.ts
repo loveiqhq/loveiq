@@ -5,6 +5,7 @@ import { forgetNotify } from "./coaches";
 import { MINOR_COOKIE } from "./config";
 import { deleteGoals } from "./goals";
 import { refreshPublicReviews, withdrawReview } from "./reviews";
+import { removePasskeys } from "./passkeys";
 import { deleteChats, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
 
@@ -17,6 +18,10 @@ import { deleteRecordings } from "./voice";
  * kept, and its Settings choices (reply language, appearance) are cleared; the browser forgets its
  * own chat (MiraChat). Its Notify me requests for coming-soon coaches go too (22 Nov 2026), so
  * nobody under 18 is told a coach for sex is ready.
+ *
+ * Sign-in & security (22 Nov 2026): the account's passkeys go too, like the nudges a way back in,
+ * and none can be added again (the passkey, email and Google-connect routes answer 403). Its
+ * signed-in devices stay, as the stop signs nobody out; Settings can still sign them out.
  */
 
 /** This browser or this account said its person is under 18. */
@@ -58,6 +63,7 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     withdrawReview(userId, "all"),
     // Voice sessions (22 Nov 2026): their key points too, not only their words.
     deleteRecordings(userId),
+    removePasskeys(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

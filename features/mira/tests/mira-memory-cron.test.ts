@@ -48,6 +48,8 @@ beforeEach(() => {
   vi.mocked(supabaseFetch).mockImplementation(async (path, init) => {
     if (path.startsWith("/rest/v1/rpc/mira_forget_old_memory")) return json(0);
     if (path.startsWith("/rest/v1/mira_sign_in_code?issued_at")) return json([]);
+    // Sign-in & security (22 Nov 2026): the passkey, email-change and device leftovers.
+    if (/^\/rest\/v1\/mira_(webauthn_challenge|email_change|session)\?/.test(path)) return json([]);
     if (path.startsWith("/rest/v1/mira_event?select=id,created_at"))
       return json(events.slice(0, 1));
     if (path.startsWith("/rest/v1/mira_event?id=lt.") && init?.method === "DELETE") {
@@ -68,6 +70,29 @@ beforeEach(() => {
       return json(codes.includes(email) ? [{ email }] : []);
     }
     throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
+  });
+});
+
+describe("mira-memory: sign-in leftovers (22 Nov 2026)", () => {
+  it("deletes expired passkey challenges, day-old email changes and devices unseen for 90 days", async () => {
+    const before = Date.now();
+    expect((await run()).status).toBe(200);
+    const cut = (path: string, col: string) =>
+      Date.parse(
+        decodeURIComponent(
+          deletes()
+            .find((p) => p.startsWith(path))!
+            .split(`${col}=lt.`)[1]!
+        )
+      );
+    expect(cut("/rest/v1/mira_webauthn_challenge?", "expires_at")).toBeGreaterThanOrEqual(before);
+    expect(before - cut("/rest/v1/mira_email_change?", "issued_at")).toBeGreaterThanOrEqual(
+      DAY - 1_000
+    );
+    expect(before - cut("/rest/v1/mira_session?", "last_seen_at")).toBeGreaterThanOrEqual(
+      90 * DAY - 1_000
+    );
+    expect(before - cut("/rest/v1/mira_session?", "last_seen_at")).toBeLessThan(91 * DAY);
   });
 });
 

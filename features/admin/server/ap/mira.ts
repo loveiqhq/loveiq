@@ -122,6 +122,12 @@ const EVENT_NAMES = [
   "review_prompt_not_now",
   "review_given",
   "review_withdrawn",
+  // Sign-in & security (22 Nov 2026): the "Sign-in" card. signup_completed's method also reads
+  // "passkey" now (every sign-in logs one, so it counts sign-ins by method as well as sign-ups).
+  "passkey_offer_shown",
+  "passkey_offer_accepted",
+  "signed_out_everywhere",
+  "email_changed",
 ];
 
 export interface MiraUserRow {
@@ -211,6 +217,8 @@ export interface MiraData {
   reviews?: MiraReviewRow[] | null;
   /** Voice sessions' ends and key points opened, oldest first (absent before 22 Nov 2026). */
   voice?: MiraVoiceRow[];
+  /** The accounts with a passkey today (mira_passkey); null when it could not be read. */
+  passkeyUsers?: string[] | null;
 }
 
 /**
@@ -219,7 +227,7 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks, goals, reviews, voice] = await Promise.all([
+  const [users, events, nudges, bodyChecks, goals, reviews, voice, passkeys] = await Promise.all([
     fetchAllRows<MiraUserRow>(
       "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,theme,text_size,reply_language&order=id.asc"
     ),
@@ -243,6 +251,10 @@ export async function fetchMira(): Promise<MiraData> {
       props: Record<string, unknown> | null;
     }>(
       "/rest/v1/mira_event?name=in.(voice_session_ended,voice_points_opened)&select=name,anon_id,user_id,created_at,props&order=id.asc"
+    ),
+    // Only the Sign-in card's adoption: a failed read leaves it "not measured", not the page.
+    fetchAllRows<{ user_id: string }>("/rest/v1/mira_passkey?select=user_id&order=id.asc").catch(
+      () => null
     ),
   ]);
   if (!users || !events || !nudges || !bodyChecks || !voice) {
@@ -270,6 +282,7 @@ export async function fetchMira(): Promise<MiraData> {
         ...(p?.team === true ? { team: true as const } : {}),
       };
     }),
+    passkeyUsers: passkeys ? passkeys.map((p) => p.user_id) : null,
   };
 }
 
@@ -1285,6 +1298,50 @@ export function voiceFigures(prep: Prepared, rows: MiraVoiceRow[], w: Win): Voic
   };
 }
 
+/**
+ * The "Sign-in" card (22 Nov 2026), the team left out: sign-ins in the range by method (every
+ * sign-in logs signup_completed with its method), today's accounts with a passkey, the "Use Face
+ * ID next time?" offer shown and accepted in the range (times: it shows once per browser), and in
+ * the range how often people signed out everywhere and changed their email.
+ */
+export interface SignInFigures {
+  byMethod: { email: number; google: number; passkey: number };
+  /** Accounts with a passkey, of all accounts, today; null where it could not be read. */
+  passkeys: { accounts: number; of: number } | null;
+  offer: { shown: number; accepted: number };
+  signedOutEverywhere: number;
+  emailChanges: number;
+}
+
+function signInFigures(prep: Prepared, w: Win, passkeyUsers: string[] | null): SignInFigures {
+  const out: SignInFigures = {
+    byMethod: { email: 0, google: 0, passkey: 0 },
+    passkeys: null,
+    offer: { shown: 0, accepted: 0 },
+    signedOutEverywhere: 0,
+    emailChanges: 0,
+  };
+  for (const e of prep.events) {
+    if (!within(e.at, w)) continue;
+    if (e.name === "signup_completed") {
+      if (e.detail === "email" || e.detail === "google" || e.detail === "passkey") {
+        out.byMethod[e.detail]++;
+      }
+    } else if (e.name === "passkey_offer_shown") out.offer.shown++;
+    else if (e.name === "passkey_offer_accepted") out.offer.accepted++;
+    else if (e.name === "signed_out_everywhere") out.signedOutEverywhere++;
+    else if (e.name === "email_changed") out.emailChanges++;
+  }
+  if (passkeyUsers) {
+    const withKey = new Set(passkeyUsers);
+    out.passkeys = {
+      accounts: prep.accounts.filter((a) => withKey.has(a.id)).length,
+      of: prep.accounts.length,
+    };
+  }
+  return out;
+}
+
 export interface MiraPayload extends PageHead {
   tiles: Record<string, Tile>;
   funnel: MiraStep[];
@@ -1312,6 +1369,8 @@ export interface MiraPayload extends PageHead {
   keepCard: { shown: number; kept: number; accounts: number; notNow: number };
   /** The "Make Mira yours" tip in the range (styleTipFunnel). */
   styleTip: { shown: number; opened: number; saved: number };
+  /** The "Sign-in" card (signInFigures). */
+  signIn: SignInFigures;
   chips: ChipRow[];
   topics: TopicRow[];
   /** New chats in the range opened in the person's own words that carry no topic. */
@@ -1590,6 +1649,12 @@ export function buildMiraPage(input: {
     },
     keepCard: keepCardFunnel(prep, w),
     styleTip: styleTipFunnel(prep, w),
+    // Data from before passkeys (a fixture) has none; null is a failed read.
+    signIn: signInFigures(
+      prep,
+      w,
+      input.data.passkeyUsers === undefined ? [] : input.data.passkeyUsers
+    ),
     chips: chips(prep, w),
     ...topics(prep, w, compared && cmp ? win(cmp.from, cmp.to) : null),
     bodyCheck: { ...cur.body, ...bodyFunnel(prep, w), reliableChange: BODY_RELIABLE_CHANGE },

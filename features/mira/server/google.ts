@@ -36,9 +36,11 @@ export type GoogleClient = { id: string; secret: string };
 export type GoogleStart = { state: string; verifier: string; nonce: string };
 /**
  * What the sign-up form chose, carried through Google beside the start values: its two optional
- * ticks, and where to go after (raw here: the routes check it with safeNext both ways).
+ * ticks, and where to go after (raw here: the routes check it with safeNext both ways). `connect`:
+ * Settings' "Connect Google" (22 Nov 2026), which signs nobody in: it only records that Google
+ * confirmed the signed-in account's own address.
  */
-export type SignUpChoices = { useAssessment: boolean; next: string | null };
+export type SignUpChoices = { useAssessment: boolean; next: string | null; connect?: boolean };
 
 export function googleClient(): GoogleClient | null {
   const id = process.env.MIRA_GOOGLE_CLIENT_ID?.trim();
@@ -57,7 +59,12 @@ export function newGoogleStart(): GoogleStart {
   return { state: r(24), verifier: r(48), nonce: r(24) };
 }
 
-export function authorizeUrl(clientId: string, origin: string, s: GoogleStart): string {
+export function authorizeUrl(
+  clientId: string,
+  origin: string,
+  s: GoogleStart,
+  loginHint?: string
+): string {
   const q = new URLSearchParams({
     client_id: clientId,
     redirect_uri: origin + CALLBACK,
@@ -68,6 +75,7 @@ export function authorizeUrl(clientId: string, origin: string, s: GoogleStart): 
     code_challenge: createHash("sha256").update(s.verifier).digest("base64url"),
     code_challenge_method: "S256",
     prompt: "select_account",
+    ...(loginHint ? { login_hint: loginHint } : {}),
   });
   return `${AUTHORIZE}?${q}`;
 }
@@ -97,6 +105,7 @@ export function unpackStart(value: string | undefined): (GoogleStart & SignUpCho
     nonce,
     useAssessment: c.useAssessment === true,
     next: typeof c.next === "string" ? c.next : null,
+    ...(c.connect === true ? { connect: true } : {}),
   };
 }
 
@@ -179,4 +188,16 @@ export async function exchangeCode(
   if (!res?.ok) return null;
   const body = (await res.json().catch(() => ({}))) as { id_token?: string };
   return checkIdToken(body.id_token, client.id, s.nonce);
+}
+
+/**
+ * Whether Google has confirmed this account's address (a Google sign-in, or Settings' "Connect
+ * Google"), as Settings shows it: mira_user.google_connected_at, cleared when the email changes.
+ */
+export async function googleConnected(userId: string): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/mira_user?id=eq.${encodeURIComponent(userId)}&google_connected_at=not.is.null&select=id&limit=1`
+  );
+  if (!res.ok) throw new Error(`mira google connection read failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length > 0;
 }

@@ -161,6 +161,12 @@ module.exports = {
           "0%": { transform: "translateX(0)" },
           "100%": { transform: "translateX(-50%)" },
         },
+        // "Use Face ID next time?" (features/mira/ui/account): a line sweeps the face mark.
+        "mira-scan": {
+          "0%, 100%": { transform: "translateY(10px)", opacity: "0" },
+          "15%, 85%": { opacity: "1" },
+          "50%": { transform: "translateY(54px)" },
+        },
       },
       animation: {
         "play-pulse": "play-pulse 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
@@ -174,6 +180,7 @@ module.exports = {
         "mira-marquee": "mira-marquee 60s linear infinite",
         // Talking to Mira (features/mira/ui/voice): her photo's halo breathes while she listens.
         "mira-listen": "mira-breathe 3.2s ease-in-out infinite",
+        "mira-scan": "mira-scan 2.4s ease-in-out infinite",
       },
     },
   },

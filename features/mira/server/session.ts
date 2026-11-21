@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { MIRA_AUTH_COOKIE } from "./config";
+import { findSession, sessionIdOf } from "./devices";
 
 /**
  * A Mira account's session: Supabase Auth, the same project as the admin panel and Jarvis, but
@@ -42,7 +43,12 @@ export async function createMiraSupabase() {
   );
 }
 
-export type MiraAccount = { id: string; email: string };
+export type MiraAccount = {
+  id: string;
+  email: string;
+  /** The signed-in device (devices.ts): its session id and when it signed in (ms). */
+  session?: { id: string; signedInAt: number };
+};
 
 /** Mira's own signed-in pages, spelt exactly, and a chat by its id (`/mira?chat=<id>`). */
 const NEXT_PAGES = new Set(["/mira", "/mira/home", "/mira/settings", "/mira/feedback"]);
@@ -60,15 +66,37 @@ export function safeNext(next: unknown): string | null {
   return CHAT_ID.test(chat) ? next : null;
 }
 
-/** The signed-in Mira account, checked with Supabase Auth (not just the cookie), or null. */
+/**
+ * The signed-in Mira account, checked with Supabase Auth (not just the cookie), or null. Every
+ * Mira route and page reads the account here and nowhere else, so this is where signing out a
+ * device takes effect: the session must also be one Mira's sign-in recorded and nobody signed out
+ * since (devices.ts). One that isn't is signed out at Supabase too (its refresh token dies); a
+ * failed read refuses this request only.
+ */
 export async function getMiraAccount(): Promise<MiraAccount | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
     return null;
   try {
     const supabase = await createMiraSupabase();
-    const { data, error } = await supabase.auth.getUser();
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    if (!token) return null;
+    const sessionId = sessionIdOf(token);
+    // The same token both ways, side by side: checked by Supabase, and looked up in Mira's devices.
+    const [{ data, error }, recorded] = await Promise.all([
+      supabase.auth.getUser(token),
+      sessionId ? findSession(sessionId) : ("gone" as const),
+    ]);
     if (error || !data.user?.email) return null;
-    return { id: data.user.id, email: data.user.email.toLowerCase() };
+    if (recorded === "error") return null;
+    if (recorded === "gone" || recorded.userId !== data.user.id) {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      return null;
+    }
+    return {
+      id: data.user.id,
+      email: data.user.email.toLowerCase(),
+      session: { id: sessionId!, signedInAt: recorded.signedInAt },
+    };
   } catch {
     return null;
   }

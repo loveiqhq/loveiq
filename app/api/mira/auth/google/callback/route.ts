@@ -6,12 +6,19 @@
  * consent recorded with the form's optional ticks (the start route checked the ticks and kept
  * them in the cookie). The page then brings the chat along ("your current chat comes with you"),
  * asks the "About you" questions if they're new, and goes on to `next` (checked again here).
+ * The device is recorded (devices.ts) and the account marked as confirmed by Google.
+ *
+ * Settings' "Connect Google" (`connect` in the start cookie) signs nobody in: it records that
+ * Google confirmed the signed-in account's own address, exactly as typed there, and goes back to
+ * Settings. Another address is refused, since Continue with Google would open that address's
+ * account instead.
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { anonId } from "@features/mira/server/anon";
 import { CONSENT_VERSION } from "@features/mira/server/config";
+import { recordSession } from "@features/mira/server/devices";
 import {
   GOOGLE_COOKIE,
   GOOGLE_COOKIE_PATH,
@@ -22,9 +29,10 @@ import {
   sameState,
   unpackStart,
 } from "@features/mira/server/google";
-import { createMiraSupabase, safeNext } from "@features/mira/server/session";
+import { isMinor } from "@features/mira/server/minor";
+import { createMiraSupabase, getMiraAccount, safeNext } from "@features/mira/server/session";
 import { mintSignInCode } from "@features/mira/server/sign-in";
-import { logMiraEvent, upsertProfileAtSignIn } from "@features/mira/server/store";
+import { logMiraEvent, updateProfile, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -43,8 +51,15 @@ export async function GET(request: Request) {
   jar.delete({ name: GOOGLE_COOKIE, path: GOOGLE_COOKIE_PATH }); // one use only
   const next = safeNext(start?.next);
   const andNext = next ? `&next=${encodeURIComponent(next)}` : "";
+  const connect = start?.connect === true;
   const back = (why: string) =>
-    NextResponse.redirect(new URL(`/mira/start?google=${why}${andNext}`, url.origin), 303);
+    NextResponse.redirect(
+      new URL(
+        connect ? `/mira/settings?google=${why}#security` : `/mira/start?google=${why}${andNext}`,
+        url.origin
+      ),
+      303
+    );
 
   const rate = await checkRateLimit(getClientIp(request), {
     bucket: "mira-google",
@@ -67,6 +82,23 @@ export async function GET(request: Request) {
     logger.info("mira: Google sign-in was refused at the token step");
     return back("failed");
   }
+  if (connect) {
+    const account = await getMiraAccount();
+    if (!account) {
+      return NextResponse.redirect(new URL("/mira/start?next=%2Fmira%2Fsettings", origin), 303);
+    }
+    if (who.email !== account.email) return back("mismatch");
+    if (!who.googleRuns || (await isStaffEmail(who.email))) return back("other");
+    if (await isMinor(account.id)) return back("minor");
+    try {
+      await updateProfile(account.id, { google_connected_at: new Date().toISOString() });
+    } catch (err) {
+      logger.error({ err }, "mira: a Google connection was not saved");
+      return back("failed");
+    }
+    logMiraEvent("google_connected", { userId: account.id });
+    return back("connected");
+  }
   // Only addresses Google runs, and never staff: everyone else gets the emailed code.
   if (!who.googleRuns || (await isStaffEmail(who.email))) return back("other");
   const code = await mintSignInCode(who.email);
@@ -87,6 +119,11 @@ export async function GET(request: Request) {
     const profile = await upsertProfileAtSignIn(account.id, account.email, CONSENT_VERSION, {
       useAssessment: start.useAssessment,
     });
+    await recordSession(data.session?.access_token, account.id, "google", request.headers);
+    // Settings shows Google as connected; only a label, so a failed write doesn't stop the sign-in.
+    await updateProfile(account.id, { google_connected_at: new Date().toISOString() }).catch(
+      (err: unknown) => logger.warn({ err }, "mira: Google's confirmation was not saved")
+    );
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },
@@ -95,8 +132,8 @@ export async function GET(request: Request) {
     const done = `/mira/start?google=done${profile?.name ? "" : "&about=1"}${andNext}`;
     return NextResponse.redirect(new URL(done, origin), 303);
   } catch (err) {
-    // Signed in without a profile is a dead end (/api/mira/me answers 401): sign out again, so
-    // the next try starts clean.
+    // Signed in without a profile (or a recorded device) is a dead end (/api/mira/me answers
+    // 401): sign out again, so the next try starts clean.
     logger.error({ err }, "mira: the profile was not saved at Google sign-in");
     await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
     return back("failed");

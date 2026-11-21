@@ -44,19 +44,50 @@ function replyTo(): string | null {
   return v && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(v) ? v : null;
 }
 
-export function signInCodeEmail(code: string) {
-  const subject = `Your sign-in code: ${code}`;
+const FOOTER =
+  "Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner";
+
+/**
+ * A code email: for signing in, or (22 Nov 2026) for confirming a new address in Settings, with
+ * the same neutral sender, layout and footer.
+ */
+export function signInCodeEmail(code: string, purpose: "sign-in" | "new-address" = "sign-in") {
+  const what = purpose === "sign-in" ? "sign-in code" : "confirmation code";
+  const why =
+    purpose === "sign-in"
+      ? "Type it on the page you just came from."
+      : "Type it on the page you just came from to confirm this email address.";
+  const subject = `Your ${what}: ${code}`;
   const text =
-    `Your sign-in code is ${code}.\n\nType it on the page you just came from. It works once, ` +
-    `for an hour.\n\nIf you did not ask for this, you can ignore this email.\n\n` +
-    `Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner`;
+    `Your ${what} is ${code}.\n\n${why} It works once, ` +
+    `for an hour.\n\nIf you did not ask for this, you can ignore this email.\n\n${FOOTER}`;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
-    <p style="margin:0 0 16px 0;">Your sign-in code is</p>
+    <p style="margin:0 0 16px 0;">Your ${what} is</p>
     <p style="margin:0 0 20px 0; font-size:32px; font-weight:700; letter-spacing:6px;">${escapeHtml(code)}</p>
-    <p style="margin:0 0 16px 0;">Type it on the page you just came from. It works once, for an hour.</p>
+    <p style="margin:0 0 16px 0;">${why} It works once, for an hour.</p>
     <p style="margin:0 0 12px 0; font-size:13px; color:#6b6678;">If you did not ask for this, you can ignore this email.</p>
-    <p style="margin:0; font-size:12px; color:#6b6678;">Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner</p>
+    <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
+  </div>`;
+  return { subject, text, html };
+}
+
+/**
+ * The note to the old address after a change of email (22 Nov 2026): neutral like every Mira
+ * email (nothing about chats), with the new address masked, and who to write to if it wasn't them.
+ */
+export function emailChangedNotice(maskedNewAddress: string) {
+  const subject = "Your sign-in email was changed";
+  const text =
+    `The email address you sign in with was changed to ${maskedNewAddress}.\n\n` +
+    `If you made this change, there is nothing more to do.\n\nIf you didn't, write to ` +
+    `hello@loveiq.org straight away and we'll help you get your account back.\n\n${FOOTER}`;
+  const html = `
+  <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
+    <p style="margin:0 0 16px 0;">The email address you sign in with was changed to <strong>${escapeHtml(maskedNewAddress)}</strong>.</p>
+    <p style="margin:0 0 16px 0;">If you made this change, there is nothing more to do.</p>
+    <p style="margin:0 0 16px 0;">If you didn't, write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> straight away and we'll help you get your account back.</p>
+    <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
   </div>`;
   return { subject, text, html };
 }
@@ -103,16 +134,27 @@ export async function sendSignInCode(email: string): Promise<boolean> {
   }
   const code = await mintSignInCode(email);
   if (!code) return false;
+  return sendNeutralEmail(email, signInCodeEmail(code));
+}
 
+/**
+ * One email from the neutral sender, through the Resend account all LoveIQ mail uses, giving up
+ * after 8 seconds. False when it didn't go.
+ */
+export async function sendNeutralEmail(
+  to: string,
+  content: { subject: string; html: string; text: string }
+): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) {
+    logger.error("mira: RESEND_API_KEY is not set, so no email can be sent");
+    return false;
+  }
   resend ??= new Resend(process.env.RESEND_API_KEY);
-  const { subject, html, text } = signInCodeEmail(code);
   const sent = await Promise.race([
     resend.emails.send({
       from: neutralFrom(),
-      to: email,
-      subject,
-      html,
-      text,
+      to,
+      ...content,
       ...(replyTo() ? { replyTo: replyTo()! } : {}),
     }),
     new Promise<{ error: Error }>((resolve) =>
@@ -120,7 +162,7 @@ export async function sendSignInCode(email: string): Promise<boolean> {
     ),
   ]);
   if (sent.error) {
-    logger.error({ err: sent.error }, "mira: the sign-in code email was not sent");
+    logger.error({ err: sent.error }, "mira: an email was not sent");
     return false;
   }
   return true;
