@@ -85,6 +85,9 @@ describe("Mira's text size", () => {
     expect(
       decls(css, '.mira-root[data-mira-text="small"] :is(input, textarea, select)', "--mira-fs")
     ).toEqual(["1"]);
+    expect(
+      decls(css, "html:has(.mira-root)", "scroll-behavior", "(prefers-reduced-motion: reduce)")
+    ).toEqual(["auto"]);
     // Text without a size class inherits a scaled base.
     expect(decls(css, ".mira-root", "font-size")).toEqual(["calc(1rem * var(--mira-fs, 1))"]);
   });

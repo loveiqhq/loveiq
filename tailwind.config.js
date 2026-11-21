@@ -5,7 +5,8 @@ const { AP_LIGHT, MIRA_DARK, TEXT_SCALE } = require("./features/mira/ui/theme-to
 const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(" ");
 const vars = (palette) =>
   Object.fromEntries(Object.entries(palette).map(([k, v]) => [`--ap-${k}`, channels(v)]));
-const dark = { ...vars(MIRA_DARK), "color-scheme": "dark" };
+// --mira-cloud: the welcome's cloud glows stronger on the deep plum (MiraShell.tsx MiraCloud).
+const dark = { ...vars(MIRA_DARK), "--mira-cloud": "1.8", "color-scheme": "dark" };
 
 /**
  * Mira's themes (features/mira/ui/theme-tokens.js, MiraPrefs.tsx): the ap-* colours are CSS
@@ -22,6 +23,10 @@ const miraTheme = plugin(({ addBase }) => {
     },
     // The page behind Mira's own (the site's body is the dark landing's): the overscroll.
     "body:has(.mira-root)": { "background-color": "rgb(var(--ap-paper))" },
+    // The index links in Settings jump rather than glide for anyone who asks for less motion.
+    "@media (prefers-reduced-motion: reduce)": {
+      "html:has(.mira-root)": { "scroll-behavior": "auto" },
+    },
     ".mira-root": { "font-size": "calc(1rem * var(--mira-fs, 1))" },
     '.mira-root[data-mira-text="small"]': { "--mira-fs": String(TEXT_SCALE.small) },
     '.mira-root[data-mira-text="large"]': { "--mira-fs": String(TEXT_SCALE.large) },

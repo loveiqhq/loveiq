@@ -107,7 +107,7 @@ export default function MiraGuidePage() {
 
         <p className="!mt-10 rounded-2xl bg-ap-lilac px-4 py-3 text-[15px]">
           Questions about a practice?{" "}
-          <Link href="/mira" className="font-semibold text-[#561dbd] underline">
+          <Link href="/mira" className="font-semibold text-ap-link underline">
             Talk it through with Mira
           </Link>
           , our AI coach.

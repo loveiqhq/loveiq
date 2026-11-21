@@ -32,7 +32,7 @@ export function MiraAppFrame({
   const [support, setSupport] = useState(false);
   useReloadWhenRestored();
   return (
-    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink selection:bg-[#efe6fd] lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink selection:bg-ap-lilac lg:flex-row">
       <aside className="border-b border-ap-line lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:gap-6 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3 lg:p-0">
           <Wordmark />

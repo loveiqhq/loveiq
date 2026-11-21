@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
+import { useMiraLook } from "./MiraLook";
 import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
+import { accountLook } from "./prefs";
 
 /**
  * Boards 04 (create account), 05 (verify email) and 06 (about you), without the WhatsApp step
@@ -33,12 +35,19 @@ const GOOGLE_ERRORS: Record<string, string> = {
 const DEFAULT_TIME_ZONE = "Europe/Berlin";
 const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
 
-/** The daily nudge comes at the person's own 8:00: a profile still on the default zone gets this browser's. */
-async function keepTimeZone() {
+type SavedLook = { theme?: string | null; text_size?: string | null };
+
+/**
+ * Into an account that exists: the look it saved (Settings › Appearance) comes to this browser,
+ * and the daily nudge comes at the person's own 8:00 (a profile still on the default zone gets
+ * this browser's).
+ */
+async function afterSignIn(adopt: (saved: SavedLook) => void) {
+  const me = await miraApi<{ profile?: SavedLook & { time_zone?: string } }>("/api/mira/me");
+  if (!me.ok || !me.data.profile) return;
+  adopt(me.data.profile);
   const tz = browserTimeZone();
-  if (!tz || tz === DEFAULT_TIME_ZONE) return;
-  const me = await miraApi<{ profile?: { time_zone?: string } }>("/api/mira/me");
-  if (me.ok && me.data.profile?.time_zone === DEFAULT_TIME_ZONE) {
+  if (tz && tz !== DEFAULT_TIME_ZONE && me.data.profile.time_zone === DEFAULT_TIME_ZONE) {
     await miraApi("/api/mira/me", { method: "PATCH", body: { time_zone: tz } });
   }
 }
@@ -60,6 +69,8 @@ export default function SignUpFlow({
   next?: string | null;
 }) {
   const router = useRouter();
+  const { look, adopt } = useMiraLook();
+  const adoptSaved = (saved: SavedLook) => adopt(accountLook(saved, look));
   const backFromGoogle = googleResult === "done";
   const [step, setStep] = useState<Step>(backFromGoogle && needsAbout ? "about" : "account");
   const [email, setEmail] = useState("");
@@ -108,7 +119,7 @@ export default function SignUpFlow({
         if (res.ok) local.saveChat(null);
       }
       if (needsAbout) return;
-      await keepTimeZone();
+      await afterSignIn(adoptSaved);
       goHome();
     })();
     // Once, on arrival.
@@ -159,7 +170,7 @@ export default function SignUpFlow({
       setBusy(false);
       return setStep("about");
     }
-    await keepTimeZone();
+    await afterSignIn(adoptSaved);
     goHome();
   }
 
@@ -187,7 +198,7 @@ export default function SignUpFlow({
     setBusy(true);
     setError(null);
     // This step promises the nudge at "8:00 your time": the zone is kept even when it's skipped.
-    await keepTimeZone();
+    await afterSignIn(adoptSaved);
     goHome();
   }
 
@@ -231,7 +242,7 @@ export default function SignUpFlow({
             <li>Answers that build on what you&apos;ve shared</li>
             <li>Delete everything anytime, in Settings</li>
           </ul>
-          <p className="border-t border-black/10 pt-4 text-[13px] leading-relaxed text-ap-body">
+          <p className="border-t border-ap-line pt-4 text-[13px] leading-relaxed text-ap-body">
             Emails from us use a neutral sender name and subject line, so nothing about your chats
             shows in your inbox.
           </p>

@@ -488,7 +488,7 @@ export default function MiraChat({
   const showChips = ready && empty && !gate;
 
   return (
-    <div className="bg-white font-sans text-ap-ink selection:bg-[#efe6fd]">
+    <div className="bg-white font-sans text-ap-ink selection:bg-ap-lilac">
       {/* Exactly one screen: header, the chat (or the welcome), the composer. Only the messages
           scroll, so the composer stays where the person typed. The legal lines follow below. */}
       <div className="relative flex h-dvh flex-col overflow-hidden">
@@ -657,12 +657,14 @@ export default function MiraChat({
                     >
                       {m.role === "user" ? (
                         <p
+                          dir="auto"
                           className={`max-w-[85%] origin-bottom-right whitespace-pre-wrap rounded-[20px] bg-ap-ground px-4 py-2.5 text-[16px] leading-[1.6] [overflow-wrap:anywhere] sm:max-w-[70%] sm:px-[18px] sm:py-3 ${m.live ? "motion-safe:animate-mira-rise" : ""}`}
                         >
                           {m.content}
                         </p>
                       ) : (
                         <p
+                          dir="auto"
                           className={`whitespace-pre-wrap text-[16px] leading-[1.65] [overflow-wrap:anywhere] sm:max-w-[88%] ${m.live ? "motion-safe:animate-mira-reply" : ""}`}
                         >
                           {m.content}

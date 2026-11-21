@@ -26,7 +26,7 @@ export type SupportCountry = {
 };
 const DATA = crisisJson as unknown as { countries: SupportCountry[]; fallback: SupportCountry };
 const digits = (n: string) => n.replace(/[^\d+]/g, "");
-const LINK = "font-semibold text-[#561dbd] underline";
+const LINK = "font-semibold text-ap-link underline";
 
 /** "Shout: text SHOUT to 85258 · 24/7 · website", with call and text links that work on phones. */
 function LineItem({ line: l }: { line: SupportLine }) {
