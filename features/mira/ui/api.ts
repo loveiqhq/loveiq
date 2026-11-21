@@ -100,6 +100,8 @@ const LOCAL_CONSENT = "mira.consent.v1";
 const LOCAL_STYLE = "mira.style.v1";
 const LOCAL_NPS = "mira.nps.v1";
 const LOCAL_BODY_CHECK = "mira.bodycheck.v1";
+/** When this browser was shown the "Make Mira yours" tip on the coaching-style button. */
+const LOCAL_STYLE_TIP = "mira.tip.style.v1";
 /** "Not now" on the body check offer waits this long before it is offered again. */
 const BODY_CHECK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -156,4 +158,7 @@ export const local = {
     return typeof at === "number" && Date.now() - at < BODY_CHECK_SNOOZE_MS;
   },
   snoozeBodyCheck: () => write(LOCAL_BODY_CHECK, { snoozedAt: Date.now() }),
+  /** The coaching-style tip is shown once per browser. */
+  styleTipSeen: () => read<number>(LOCAL_STYLE_TIP) !== null,
+  saveStyleTipSeen: () => write(LOCAL_STYLE_TIP, Date.now()),
 };

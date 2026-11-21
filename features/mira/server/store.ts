@@ -313,7 +313,10 @@ export type MiraEventName =
   | "body_check_done"
   | "keep_card_shown"
   | "keep_card_keep"
-  | "keep_card_not_now";
+  | "keep_card_not_now"
+  | "style_tip_shown"
+  | "style_tip_opened"
+  | "style_saved";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

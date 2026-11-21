@@ -67,9 +67,39 @@ module.exports = {
           "0%": { transform: "scale(1)", opacity: "0.55" },
           "75%, 100%": { transform: "scale(1.45)", opacity: "0" },
         },
+        // Mira (features/mira/ui): her cloud blooms in and then breathes; words resolve out of a
+        // soft blur (the welcome, each new reply); the person's message rises from the composer.
+        "mira-bloom": {
+          "0%": { opacity: "0", scale: "0.88" },
+          "100%": { opacity: "1", scale: "1" },
+        },
+        "mira-breathe": { "0%, 100%": { scale: "1" }, "50%": { scale: "1.06" } },
+        "mira-in": {
+          "0%": { opacity: "0", transform: "translateY(8px)", filter: "blur(6px)" },
+          "100%": { opacity: "1", transform: "none", filter: "blur(0)" },
+        },
+        "mira-pop": {
+          "0%": { opacity: "0", transform: "scale(0.6)", filter: "blur(4px)" },
+          "100%": { opacity: "1", transform: "none", filter: "blur(0)" },
+        },
+        "mira-rise": {
+          "0%": { opacity: "0", transform: "translateY(10px) scale(0.98)" },
+          "100%": { opacity: "1", transform: "none" },
+        },
+        "mira-dot": {
+          "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.35" },
+          "30%": { transform: "translateY(-3px)", opacity: "1" },
+        },
       },
       animation: {
         "play-pulse": "play-pulse 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
+        "mira-cloud":
+          "mira-bloom 1.4s cubic-bezier(0.16, 1, 0.3, 1) both, mira-breathe 12s ease-in-out 1.4s infinite",
+        "mira-in": "mira-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "mira-reply": "mira-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "mira-pop": "mira-pop 0.7s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "mira-rise": "mira-rise 0.26s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "mira-dot": "mira-dot 1.1s ease-in-out infinite",
       },
     },
   },

@@ -1,34 +1,49 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
 /**
- * The site's LoveIQ logo with the beta mark (brand decision, 18 Nov 2026: "Mira, the AI coach by
- * LoveIQ"; the company's legal name stays in legal texts and footers).
+ * The Applied Psychometrics wordmark with a quiet beta mark (Marcus, 17 Nov: "beta above
+ * Psychometrics"), on every Mira page: Mark's minimal board V2 (21 Nov 2026) has it, and Eman chose
+ * it for all of Mira's pages the same day (it replaced the 18 Nov "LoveIQ for now").
  */
 export function Wordmark() {
   return (
-    <Link
-      href="/mira"
-      aria-label="LoveIQ, beta"
-      className="inline-flex items-center gap-2 text-ap-ink no-underline"
-    >
-      <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
-      <LoveIQWordmark className="text-[22px] tracking-[-0.01em]" loveClassName="text-ap-ink" />
-      <span className="self-start font-sans text-[10px] font-normal tracking-[0.14em] text-ap-quiet">
-        BETA
+    <Link href="/mira" aria-label="Applied Psychometrics, Mira beta" className="no-underline">
+      <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink sm:text-[22px]">
+        <span>
+          Applied{" "}
+          <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
+            BETA
+          </span>
+        </span>
+        <span className="bg-[linear-gradient(105deg,#d05976_20.51%,#c167cf_48.14%,#8887f6_79.16%)] bg-clip-text text-transparent">
+          Psychometrics
+        </span>
       </span>
     </Link>
   );
 }
 
+/**
+ * The soft coral, orchid and lavender cloud behind Mira's welcome (board V2): it blooms in, then
+ * breathes slowly. Still for anyone who asks for less motion.
+ */
+export function MiraCloud({ className = "" }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,0.14),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,0.16),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,0.18),rgba(149,142,246,0)_100%)] blur-[72px] motion-safe:animate-mira-cloud sm:h-[560px] sm:w-[1000px] ${className}`}
+    />
+  );
+}
+
 export const DISCLAIMER =
-  "Mira is an AI coach by LoveIQ, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you're struggling, please reach out to a qualified professional.";
+  "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you're struggling, please reach out to a qualified professional.";
 
 export function MiraFrame({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="min-h-screen bg-white font-sans text-ap-ink">
-      <header className="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-4 py-3 sm:px-8 sm:py-5">
+      <header className="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-4 pb-2 pt-3 sm:px-8 sm:pt-6">
         <Wordmark />
         <div className="flex items-center gap-3">{right}</div>
       </header>
@@ -73,7 +88,8 @@ export function LegalLinks({ className = "" }: { className?: string }) {
   );
 }
 
-export function GradientButton({
+/** Mira's primary action: the board's ink pill (the same black as "Sign in"). */
+export function PrimaryButton({
   children,
   disabled,
   onClick,
@@ -89,7 +105,7 @@ export function GradientButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] to-[#958ef6] px-6 text-[15px] font-bold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition disabled:cursor-not-allowed disabled:from-ap-track disabled:via-ap-track disabled:to-ap-track disabled:text-ap-muted disabled:shadow-none"
+      className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white transition-[transform,background-color] hover:bg-[#2b2338] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
     >
       {children}
     </button>

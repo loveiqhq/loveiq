@@ -67,6 +67,9 @@ const schema = z.discriminatedUnion("type", [
       "keep_card_shown",
       "keep_card_keep",
       "keep_card_not_now",
+      "style_tip_shown",
+      "style_tip_opened",
+      "style_saved",
     ]),
   }),
 ]);

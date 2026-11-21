@@ -233,6 +233,7 @@ function Overview({ data }: { data: Data }) {
       <Scorecard data={data} />
       <Funnel data={data} />
       <KeepCard data={data} />
+      <StyleTipCard data={data} />
       <Sources data={data} />
     </Board>
   );
@@ -241,22 +242,71 @@ function Overview({ data }: { data: Data }) {
 /** The "Keep this chat" card: shown, Keep, an account after it, and Not now. */
 function KeepCard({ data }: { data: Data }) {
   const { shown, kept, accounts, notNow } = data.keepCard;
-  const rows: Array<[string, number, string]> = [
-    ["Shown the card", shown, "People who saw “Keep this chat” in the range"],
-    ["Tapped Keep", kept, "Of those shown it, in the range"],
-    ["Created an account after it", accounts, "Of those who tapped Keep, by the range’s last day"],
-    ["Tapped Not now", notNow, "Of those shown it, in the range"],
-  ];
   return (
-    <Card id="keep-card" labelledBy="h-keep-card">
-      <SectionHead
-        id="h-keep-card"
-        level={3}
-        title="“Keep this chat” card"
-        description="How many people the card reaches, and how many keep their chat by creating an account."
-      />
+    <FunnelCard
+      id="keep-card"
+      title="“Keep this chat” card"
+      description="How many people the card reaches, and how many keep their chat by creating an account."
+      base={shown}
+      rows={[
+        ["Shown the card", shown, "People who saw “Keep this chat” in the range"],
+        ["Tapped Keep", kept, "Of those shown it, in the range"],
+        [
+          "Created an account after it",
+          accounts,
+          "Of those who tapped Keep, by the range’s last day",
+        ],
+        ["Tapped Not now", notNow, "Of those shown it, in the range"],
+      ]}
+      note="People: an account, or a browser before it signs in. Bars and shares are of the people shown the card in the range. An account counts when it was created after the person’s first Keep in the range, by its last day; signing in to an older account is no new one. Recorded from 21 Nov 2026."
+    />
+  );
+}
+
+/** The "Make Mira yours" tip on the chat's coaching-style button: shown, opened, a style saved. */
+function StyleTipCard({ data }: { data: Data }) {
+  const { shown, opened, saved } = data.styleTip;
+  return (
+    <FunnelCard
+      id="style-tip"
+      title="“Make Mira yours” tip"
+      description="How many people the coaching-style tip reaches, and how many open the panel and save a style."
+      base={shown}
+      rows={[
+        ["Shown the tip", shown, "People who saw the tip after a reply of Mira’s, in the range"],
+        ["Opened the panel from it", opened, "Of those shown it, in the range"],
+        [
+          "Saved a coaching style",
+          saved,
+          "Of those shown it, after the tip, by the range’s last day",
+        ],
+      ]}
+      note="The tip shows once per browser, after one of Mira’s replies. People: an account, or a browser before it signs in. Saved styles count from either the tip or the header button. Recorded from 21 Nov 2026."
+    />
+  );
+}
+
+/** One funnel as bars: each row's count and its share of `base`. */
+function FunnelCard({
+  id,
+  title,
+  description,
+  base,
+  rows,
+  note,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  base: number;
+  rows: Array<[label: string, n: number, note: string]>;
+  note: string;
+}) {
+  return (
+    <Card id={id} labelledBy={`h-${id}`}>
+      <SectionHead id={`h-${id}`} level={3} title={title} description={description} />
       <div className="flex max-w-[860px] flex-col gap-3">
-        {rows.map(([label, n, note]) => (
+        {rows.map(([label, n, rowNote]) => (
           <div
             key={label}
             className="grid items-center gap-3"
@@ -264,21 +314,16 @@ function KeepCard({ data }: { data: Data }) {
           >
             <span className="flex flex-col">
               <span className="text-sm font-semibold">{label}</span>
-              <span className="text-xs leading-snug text-ap-muted">{note}</span>
+              <span className="text-xs leading-snug text-ap-muted">{rowNote}</span>
             </span>
-            <Bar pct={share(n, shown)} color={PURPLE} />
+            <Bar pct={share(n, base)} color={PURPLE} />
             <span className="text-right text-sm font-bold tabular-nums">
-              {count(n)} <span className="font-medium text-ap-muted">({pct(share(n, shown))})</span>
+              {count(n)} <span className="font-medium text-ap-muted">({pct(share(n, base))})</span>
             </span>
           </div>
         ))}
       </div>
-      <p className={NOTE}>
-        People: an account, or a browser before it signs in. Bars and shares are of the people shown
-        the card in the range. An account counts when it was created after the person&rsquo;s first
-        Keep in the range, by its last day; signing in to an older account is no new one. Recorded
-        from 21 Nov 2026.
-      </p>
+      <p className={NOTE}>{note}</p>
     </Card>
   );
 }

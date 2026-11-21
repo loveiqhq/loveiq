@@ -6,7 +6,18 @@ import { DISCLAIMER, LegalLinks, Wordmark } from "./MiraShell";
 import { SupportPanel } from "./SupportPanel";
 import { useReloadWhenRestored } from "./api";
 
-/** The signed-in frame of boards 08 to 10: menu on the left, beta note, the page on the right. */
+const PAGES: Array<[href: string, label: string, key?: "home" | "settings"]> = [
+  ["/mira/home", "Home", "home"],
+  ["/mira", "Coach & chats"],
+  ["/mira/home#assessments", "Assessments"],
+  ["/mira/settings", "Settings", "settings"],
+];
+
+/**
+ * The signed-in frame of boards 08 to 10, in the calm chat's language (21 Nov 2026): on phones a
+ * white header with the way back to the chat and one row of tabs that fits; from lg the menu on
+ * the left. The beta note, the support line and the legal links close every page.
+ */
 export function MiraAppFrame({
   active,
   email,
@@ -20,29 +31,39 @@ export function MiraAppFrame({
 }) {
   const [support, setSupport] = useState(false);
   useReloadWhenRestored();
-  const item = (href: string, label: string, key?: string) => (
-    <Link
-      href={href}
-      aria-current={key === active ? "page" : undefined}
-      className={`whitespace-nowrap rounded-xl px-3 py-2 text-[14px] ${key === active ? "bg-ap-lilac font-semibold" : "text-ap-body hover:bg-ap-track"}`}
-    >
-      {label}
-    </Link>
-  );
   return (
-    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
-      {/* On phones and tablets: one compact row of the four pages, so the page itself is on the
-          first screen; the coming-soon items and the account line show from lg up. */}
-      <aside className="flex flex-col gap-3 border-b border-ap-line bg-[#faf9fc] p-4 lg:w-[250px] lg:shrink-0 lg:gap-4 lg:border-b-0 lg:border-r lg:p-5">
-        <Wordmark />
+    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink selection:bg-[#efe6fd] lg:flex-row">
+      <aside className="border-b border-ap-line lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:gap-6 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+        <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3 lg:p-0">
+          <Wordmark />
+          <Link
+            href="/mira"
+            className="inline-flex min-h-[40px] items-center whitespace-nowrap rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white lg:hidden"
+          >
+            Chat with Mira
+          </Link>
+        </div>
         <nav
           aria-label="Mira"
-          className="-mx-1 flex gap-1 overflow-x-auto px-1 lg:flex-col lg:overflow-visible"
+          className="flex gap-5 overflow-x-auto px-4 [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden"
         >
-          {item("/mira/home", "Home", "home")}
-          {item("/mira", "Coach & chats")}
-          {item("/mira/home#assessments", "Assessments")}
-          {item("/mira/settings", "Settings", "settings")}
+          {PAGES.map(([href, label, key]) => {
+            const on = key === active;
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={on ? "page" : undefined}
+                className={`relative whitespace-nowrap py-3 text-[14px] transition-colors lg:rounded-xl lg:px-3 lg:py-2 ${
+                  on
+                    ? "font-semibold after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:rounded-full after:bg-ap-ink lg:bg-ap-ground lg:after:hidden"
+                    : "text-ap-muted hover:text-ap-ink lg:hover:bg-ap-ground"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
           {["Challenges & goals", "Daily journal", "Session recordings"].map((t) => (
             <span
               key={t}
@@ -52,34 +73,40 @@ export function MiraAppFrame({
             </span>
           ))}
         </nav>
-        <button
-          type="button"
-          onClick={() => setSupport(true)}
-          className="text-left text-[13px] text-ap-plum underline lg:mt-auto"
-        >
-          Need support right now?
-        </button>
-        {email ? (
-          <p className="hidden text-[12px] text-ap-muted [overflow-wrap:anywhere] lg:block">
-            {name ? <strong className="block text-ap-ink">{name}</strong> : null}
-            {email}
-          </p>
-        ) : null}
-      </aside>
-      <main className="flex-1 px-4 py-6 sm:px-10">
-        <div className="mb-6 flex flex-col gap-2 rounded-2xl bg-ap-lilac px-4 py-3 text-[14px] sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            <strong>Beta.</strong> Things may change, and your feedback shapes what comes next.
-          </span>
-          <Link href="/mira/feedback" className="font-semibold text-[#561dbd] underline">
-            Share feedback
-          </Link>
+        <div className="hidden lg:mt-auto lg:flex lg:flex-col lg:gap-3">
+          <button
+            type="button"
+            onClick={() => setSupport(true)}
+            className="text-left text-[13px] text-ap-plum underline"
+          >
+            Need support right now?
+          </button>
+          {email ? (
+            <p className="text-[12px] text-ap-muted [overflow-wrap:anywhere]">
+              {name ? <strong className="block text-ap-ink">{name}</strong> : null}
+              {email}
+            </p>
+          ) : null}
         </div>
+      </aside>
+      <main className="flex-1 px-4 py-7 sm:px-10 lg:py-10">
         <div className="max-w-[860px]">{children}</div>
-        <p className="mt-10 max-w-[760px] text-[12px] leading-relaxed text-ap-muted">
-          {DISCLAIMER}
-        </p>
-        <LegalLinks className="mt-6 max-w-[860px]" />
+        <footer className="mt-12 max-w-[760px] text-[12px] leading-relaxed text-ap-muted">
+          <p>
+            Mira is in beta: things may change, and your feedback shapes what comes next.{" "}
+            <Link href="/mira/feedback" className="font-semibold text-ap-ink underline">
+              Share feedback
+            </Link>
+            <span className="lg:hidden">
+              {" · "}
+              <button type="button" onClick={() => setSupport(true)} className="underline">
+                Need support right now?
+              </button>
+            </span>
+          </p>
+          <p className="mt-3">{DISCLAIMER}</p>
+          <LegalLinks className="mt-6" />
+        </footer>
       </main>
       {support ? <SupportPanel highlight={null} onClose={() => setSupport(false)} /> : null}
     </div>

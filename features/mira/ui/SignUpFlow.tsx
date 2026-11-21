@@ -1,10 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
-import { GradientButton, LegalLinks, Wordmark } from "./MiraShell";
+import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
 import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
 
 /**
@@ -204,13 +205,24 @@ export default function SignUpFlow({
   return (
     <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
       {/* On phones the form comes first and this lilac panel follows it. */}
-      <aside className="order-last flex flex-col gap-8 bg-ap-lilac p-6 sm:p-10 md:order-none lg:w-[460px] lg:shrink-0">
-        <div className="hidden md:block">
+      <aside className="relative order-last flex flex-col gap-8 overflow-hidden border-t border-ap-line p-6 sm:p-10 md:order-none lg:w-[460px] lg:shrink-0 lg:border-r lg:border-t-0">
+        <MiraCloud className="opacity-90" />
+        <div className="relative hidden md:block">
           <Wordmark />
         </div>
-        <div className="mt-auto flex flex-col gap-4">
-          <p className="text-[14px] text-ap-body">
-            <strong className="text-ap-ink">Mira</strong> · AI coach · Body confidence
+        <div className="relative mt-auto flex flex-col gap-4">
+          <p className="flex items-center gap-2.5 text-[14px] text-ap-body">
+            <Image
+              src="/images/mira/mira.webp"
+              alt=""
+              width={36}
+              height={36}
+              unoptimized
+              className="h-9 w-9 rounded-full object-cover"
+            />
+            <span>
+              <strong className="text-ap-ink">Mira</strong> · AI coach · Body confidence
+            </span>
           </p>
           <blockquote className="font-serif text-[22px] italic leading-snug sm:text-[26px]">
             {step === "about"
@@ -268,7 +280,7 @@ export default function SignUpFlow({
                   className="font-serif text-[34px] font-medium leading-tight outline-none"
                 >
                   Create your free account{" "}
-                  <span className="inline-block whitespace-nowrap align-middle rounded-full bg-ap-lilac px-3 py-1 font-sans text-[13px] font-semibold text-ap-plum">
+                  <span className="inline-block whitespace-nowrap align-middle rounded-full border border-ap-line px-2.5 py-0.5 font-sans text-[12px] font-semibold tracking-[0.04em] text-ap-muted">
                     Beta version
                   </span>
                 </h1>
@@ -330,12 +342,12 @@ export default function SignUpFlow({
               <Tick checked={shareRated} onChange={setShareRated}>
                 Mira&apos;s team may read replies I rate, to improve Mira.
               </Tick>
-              <GradientButton
+              <PrimaryButton
                 type="submit"
                 disabled={busy || !emailOk || !adult || !terms || !consent}
               >
                 {busy ? "Sending…" : "Send me a code"}
-              </GradientButton>
+              </PrimaryButton>
               {googleEnabled ? (
                 <>
                   <div className="flex items-center gap-3 text-[13px] text-ap-muted">
@@ -396,9 +408,9 @@ export default function SignUpFlow({
                   className="min-h-[56px] rounded-2xl border border-ap-line px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
                 />
               </label>
-              <GradientButton type="submit" disabled={busy || code.length < 6}>
+              <PrimaryButton type="submit" disabled={busy || code.length < 6}>
                 {busy ? "Checking…" : "Verify and continue"}
-              </GradientButton>
+              </PrimaryButton>
               <div className="flex justify-between gap-3 text-[14px] text-ap-muted">
                 <button
                   type="button"
@@ -486,9 +498,9 @@ export default function SignUpFlow({
                 chat. You can change the time, pause or stop it anytime in Settings or from any
                 nudge.
               </p>
-              <GradientButton type="submit" disabled={busy}>
+              <PrimaryButton type="submit" disabled={busy}>
                 {busy ? "Saving…" : "Continue"}
-              </GradientButton>
+              </PrimaryButton>
               <button
                 type="button"
                 disabled={busy}
@@ -551,12 +563,12 @@ function Tick({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-2xl border border-ap-line p-4 text-[14px] leading-snug text-ap-body">
+    <label className="flex cursor-pointer items-start gap-3 py-1 text-[14px] leading-snug text-ap-body">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-[2px] h-4 w-4 shrink-0 accent-[#795fc8]"
+        className="mt-[1px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
       />
       <span>{children}</span>
     </label>

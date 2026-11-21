@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { GradientButton } from "./MiraShell";
+import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { miraApi } from "./api";
 
@@ -124,9 +124,9 @@ export default function MiraFeedback() {
             You may email me with a follow-up question about my feedback
           </label>
           <div className="flex items-center gap-4">
-            <GradientButton type="submit" disabled={busy}>
+            <PrimaryButton type="submit" disabled={busy}>
               {busy ? "Sending…" : "Send feedback"}
-            </GradientButton>
+            </PrimaryButton>
             <span className="text-[13px] text-ap-muted">
               Please don&apos;t include anything you wouldn&apos;t want our team to read.
             </span>

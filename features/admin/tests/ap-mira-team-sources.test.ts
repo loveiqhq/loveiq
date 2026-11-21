@@ -270,6 +270,38 @@ describe("the “Keep this chat” card and the two safety stops", () => {
     });
   });
 
+  it("counts the coaching-style tip: shown, opened from it, a style saved after it", () => {
+    const t = (n: number) => ({ anon: `t${n}` });
+    const d = data(
+      [],
+      [
+        // Opens the panel from the tip and saves; opens and leaves; only saves later, from the
+        // header button; shown and nothing more.
+        ev("style_tip_shown", t(1), "2026-11-22T10:00:00Z"),
+        ev("style_tip_opened", t(1), "2026-11-22T10:00:20Z"),
+        ev("style_saved", t(1), "2026-11-22T10:01:00Z"),
+        ev("style_tip_shown", t(2), "2026-11-23T10:00:00Z"),
+        ev("style_tip_opened", t(2), "2026-11-23T10:00:30Z"),
+        ev("style_tip_shown", t(3), "2026-11-24T10:00:00Z"),
+        ev("style_saved", t(3), "2026-11-26T09:00:00Z"),
+        ev("style_tip_shown", t(4), "2026-11-25T10:00:00Z"),
+        // Saved before the tip; shown before the range; a team browser.
+        ev("style_saved", t(5), "2026-11-22T09:00:00Z"),
+        ev("style_tip_shown", t(5), "2026-11-22T10:00:00Z"),
+        ev("style_tip_shown", t(6), "2026-11-19T10:00:00Z"),
+        ev("style_tip_opened", t(6), "2026-11-19T10:00:10Z"),
+        ev("style_tip_shown", t(7), "2026-11-26T10:00:00Z", { team: true }),
+        ev("style_tip_opened", t(7), "2026-11-26T10:00:10Z", { team: true }),
+      ]
+    );
+    expect(page(d).styleTip).toEqual({ shown: 5, opened: 2, saved: 2 });
+    expect(page(d, "2026-12-01", "2026-12-10").styleTip).toEqual({
+      shown: 0,
+      opened: 0,
+      saved: 0,
+    });
+  });
+
   it("counts declined replies and under-18 stops in the range, the team's left out", () => {
     const d = data(
       [],
