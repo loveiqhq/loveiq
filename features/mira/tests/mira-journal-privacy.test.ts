@@ -20,6 +20,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { journalContext } from "@features/mira/server/journal";
 import { stopForMinor } from "@features/mira/server/minor";
 import { personalInstructions } from "@features/mira/server/prompt";
+import { safeNext } from "@features/mira/server/session";
 
 const UID = "11111111-2222-4333-8444-555555555555";
 const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200 });
@@ -83,5 +84,13 @@ describe("what Mira reads of the journal in a chat", () => {
     const text = personalInstructions({}, { signedIn: true, journal: "THEIR DAILY JOURNAL\n- x" });
     expect(text.split("\n").slice(-2)).toEqual(["THEIR DAILY JOURNAL", "- x"]);
     expect(personalInstructions({}, { signedIn: true })).not.toContain("JOURNAL");
+  });
+});
+
+describe("signing in from the reminder email", () => {
+  it("comes back to the journal, spelt exactly", () => {
+    expect(safeNext("/mira/journal")).toBe("/mira/journal");
+    expect(safeNext("/mira/journal?checkin=1")).toBeNull();
+    expect(safeNext("/mira/journal/../../admin")).toBeNull();
   });
 });

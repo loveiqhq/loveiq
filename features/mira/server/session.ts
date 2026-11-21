@@ -45,7 +45,14 @@ export async function createMiraSupabase() {
 export type MiraAccount = { id: string; email: string };
 
 /** Mira's own signed-in pages, spelt exactly, and a chat by its id (`/mira?chat=<id>`). */
-const NEXT_PAGES = new Set(["/mira", "/mira/home", "/mira/settings", "/mira/feedback"]);
+const NEXT_PAGES = new Set([
+  "/mira",
+  "/mira/home",
+  "/mira/settings",
+  "/mira/feedback",
+  // The daily journal, where its reminder email's button leads.
+  "/mira/journal",
+]);
 const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
 
 /**

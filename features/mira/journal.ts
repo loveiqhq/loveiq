@@ -12,9 +12,9 @@ import { addDays, shortDate } from "@features/admin/server/ap/days";
  */
 export const AREAS = [
   { id: "mood", label: "Mood", hint: "How you feel overall" },
-  { id: "body", label: "Body", hint: "How at home you feel in your body" },
-  { id: "closeness", label: "Closeness", hint: "With a partner, friends or yourself" },
-  { id: "energy", label: "Energy", hint: "Rest, sleep and get-up-and-go" },
+  { id: "body", label: "Body", hint: "At home in your body" },
+  { id: "closeness", label: "Closeness", hint: "Feeling close to someone" },
+  { id: "energy", label: "Energy", hint: "Rest and get-up-and-go" },
 ] as const;
 export type AreaId = (typeof AREAS)[number]["id"];
 
@@ -115,6 +115,27 @@ export function patterns(entries: JournalEntry[], today: string): AreaPattern[] 
     }
     return { id, label, days, avg, n: last.length, before, summary };
   });
+}
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** "Saturday 21 November", spelt out (ICU builds disagree on dates). */
+export function longDate(day: string): string {
+  const [, m = 1, d = 1] = day.split("-").map(Number);
+  return `${WEEKDAYS[weekday(day)]} ${d} ${MONTHS[m - 1]}`;
 }
 
 /** "Sat 21 Nov". */
