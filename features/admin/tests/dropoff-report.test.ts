@@ -15,6 +15,7 @@ import {
   isWorseThanUsual,
   peoplePerArm,
   poissonAtLeast,
+  readout,
   readSurveyTests,
   segmentsOf,
   SURVEY_TESTS,
@@ -31,7 +32,10 @@ import {
   assignEmailQuestionArm,
   EMAIL_QUESTION_TEST_END,
 } from "@shared/experiments/emailQuestionArm";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import {
+  assignQuestionOrderArm,
+  QUESTION_ORDER_TEST_END,
+} from "@shared/experiments/questionOrderArm";
 import { surveyQuestions } from "@/data/survey-data";
 
 const [ORDER_TEST, EMAIL_TEST] = SURVEY_TESTS;
@@ -199,6 +203,17 @@ describe("segmentsOf", () => {
     ]);
     expect(segmentsOf(run({ sessionId: control, startedAt: EMAIL_TEST!.end! - 1 }))).toContain(
       "Email question: current"
+    );
+    // The opening order test ended too: a run begun from its end was asked the new order,
+    // whatever its session id drew, so it is in neither of its segments. One begun just
+    // before is.
+    expect(ORDER_TEST!.end).toBe(Date.parse(QUESTION_ORDER_TEST_END));
+    expect(segmentsOf(run({ sessionId: control, startedAt: ORDER_TEST!.end! }))).toEqual([
+      "All traffic",
+      "Google Ads",
+    ]);
+    expect(segmentsOf(run({ sessionId: control, startedAt: ORDER_TEST!.end! - 1 }))).toContain(
+      "Opening order: new"
     );
     const other = sessionWith("control", "control");
     expect(segmentsOf(run({ sessionId: other }))).toEqual([
@@ -395,6 +410,8 @@ describe("readSurveyTests", () => {
         reached: [EMAIL_QID],
         leftAt: EMAIL_QID,
       }),
+      // After the opening order test ended too: in neither.
+      run({ sessionId: control, startedAt: ORDER_TEST!.end!, leftAt: "00001" }),
     ];
     const [email, order] = readSurveyTests(runs, "2026-11-05");
     expect(email!.arms).toEqual([
@@ -408,12 +425,16 @@ describe("readSurveyTests", () => {
     expect(email!.since).toBe("8 Oct");
     expect(order!.since).toBe("6 Oct");
     expect(email!.needed).toBeNull(); // too few in control to size it
-    // Ended, and says so; the opening order test runs on.
+    // Both ended, and say so.
     expect([email!.until, email!.outcome]).toEqual([
       "4 Nov",
       "the team chose the anonymous one, which everyone gets now",
     ]);
-    expect([order!.until, order!.outcome]).toEqual([null, null]);
+    expect([order!.until, order!.outcome]).toEqual([
+      "21 Nov",
+      "the team chose the new order, which everyone gets now",
+    ]);
+    expect(order!.enoughBy).toBeNull();
   });
 
   it("gives an ended test no day to reach its size by, however short of it", () => {
@@ -429,22 +450,23 @@ describe("readSurveyTests", () => {
     expect(t.enoughBy).toBeNull();
   });
 
-  /** The opening order test runs on: n runs of one order, the first `left` leaving in its opening. */
-  const openingRuns = (sessionId: string, n: number, left: number) => {
-    const order = assignQuestionOrderArm(sessionId);
-    const first = orderAskedQuestions(surveyQuestions, order).find(
-      (q) => q.qId && !HIDDEN_QIDS.has(q.qId)
-    )!.qId;
-    return Array.from({ length: n }, (_, i) => run({ sessionId, leftAt: i < left ? first : null }));
-  };
+  /**
+   * Both survey tests have ended, so the pacing a running test gets is read from the opening
+   * order test as it was while it ran: no end yet, and its arms' counts given directly.
+   */
+  const RUNNING = { ...ORDER_TEST!, end: null, outcome: null };
+  const arms = (
+    current: [people: number, left: number],
+    next: [people: number, left: number]
+  ): Parameters<typeof readout>[2] => [
+    { label: "the current order", people: current[0], left: current[1] },
+    { label: "the new order", people: next[0], left: next[1] },
+  ];
 
   it("paces a test from its launch minute, not from the start of that day", () => {
     // The opening order test launched 6 Oct at 18:18 UTC; to 12 Oct 00:00 Berlin is 5.16
     // days, not 6.
-    const t = readSurveyTests(
-      [...openingRuns(control, 337, 40), ...openingRuns(variant, 337, 30)],
-      "2026-10-12"
-    )[1]!;
+    const t = readout(RUNNING, "in the opening", arms([337, 40], [337, 30]), "2026-10-12");
     const elapsed = (Date.parse("2026-10-11T22:00:00Z") - ORDER_TEST!.launch) / 86_400_000;
     const days =
       (Date.parse(`${t.enoughBy}T12:00:00Z`) - Date.parse("2026-10-12T12:00:00Z")) / 86_400_000;
@@ -454,23 +476,13 @@ describe("readSurveyTests", () => {
   });
 
   it("sizes the test and says when it can be called, then calls it", () => {
-    const many = openingRuns;
-    const early = readSurveyTests(
-      [...many(control, 100, 12), ...many(variant, 100, 6)],
-      "2026-10-12"
-    )[1]!;
+    const early = readout(RUNNING, "in the opening", arms([100, 12], [100, 6]), "2026-10-12");
     expect(early.needed).toBeGreaterThan(100);
     expect(early.enoughBy).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(early.clearDifference).toBeNull();
-    const done = readSurveyTests(
-      [...many(control, 1000, 120), ...many(variant, 1000, 60)],
-      "2026-10-12"
-    )[1]!;
+    const done = readout(RUNNING, "in the opening", arms([1000, 120], [1000, 60]), "2026-10-12");
     expect(done.clearDifference).toBe(true);
-    const flat = readSurveyTests(
-      [...many(control, 1000, 120), ...many(variant, 1000, 118)],
-      "2026-10-12"
-    )[1]!;
+    const flat = readout(RUNNING, "in the opening", arms([1000, 120], [1000, 118]), "2026-10-12");
     expect(flat.clearDifference).toBe(false);
   });
 });

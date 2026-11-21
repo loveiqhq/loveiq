@@ -5,7 +5,8 @@
  * true turns one on without a row (shared/flags/system-flags.ts). In production each stays
  * off until it is cleared. Fatih, 14 Nov: 1, 2 and 5 now (both C13 orders meet them alike);
  * 3, the expert, after the C13 check-in (20 Nov 2026), because C13's control order asks its
- * question too early for it, so only one C13 half would see it; 4 and 6 with Mark's 50/50 of
+ * question too early for it, so only one C13 half would see it (the test has ended since, and
+ * every new run is asked the order where it opens); 4 and 6 with Mark's 50/50 of
  * his new EUR 1.99 page, when both halves meet them, each in its page's words (surveySheets.ts,
  * Mark 16 Nov).
  */

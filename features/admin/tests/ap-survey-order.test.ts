@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { buildSurveyQuestions, runOrder } from "@features/admin/server/ap/survey";
 import type { DropoffRun } from "@features/admin/server/dropoff-report";
 import { askedQuestions } from "@features/admin/server/dropoff-weekly";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import {
+  assignQuestionOrderArm,
+  QUESTION_ORDER_TEST_END,
+} from "@shared/experiments/questionOrderArm";
 
 const order = {
   control: askedQuestions(400, "control").map((q) => q.qId),
@@ -30,12 +33,32 @@ describe("the opening-order test (C13) in the question funnel", () => {
       ["c", ["00001", "01002", "01005", "01006"]],
       ["both", ["00001", "01002"]],
     ]);
-    expect(runOrder("v", first, order)).toBe("variant");
-    expect(runOrder("c", first, order)).toBe("control");
+    const during = Date.parse("2026-10-10T10:00:00Z");
+    expect(runOrder("v", first, order, during)).toBe("variant");
+    expect(runOrder("c", first, order, during)).toBe("control");
     // Left within the shared opening: the arm a fresh run is dealt.
-    expect(runOrder("both", first, order)).toBe(assignQuestionOrderArm("both"));
+    expect(runOrder("both", first, order, during)).toBe(assignQuestionOrderArm("both"));
     // Begun before the test: the survey's order.
-    expect(runOrder("old", first, order)).toBe("control");
+    expect(runOrder("old", first, order, Date.parse("2026-10-01T10:00:00Z"))).toBe("control");
+  });
+
+  it("puts a run begun from the test's end on the new order, unless its questions say otherwise", () => {
+    const end = Date.parse(QUESTION_ORDER_TEST_END);
+    const first = new Map([
+      ["both", ["00001", "01002"]],
+      ["c", ["00001", "01002", "01005", "01006"]],
+    ]);
+    // A session that drew the old order, so only the end can make it the new one.
+    const drewControl = ["both", "x1", "x2", "x3", "x4"].find(
+      (id) => assignQuestionOrderArm(id) === "control"
+    )!;
+    first.set(drewControl, ["00001", "01002"]);
+    expect(runOrder(drewControl, first, order, end - 1)).toBe("control");
+    expect(runOrder(drewControl, first, order, end)).toBe("variant");
+    // No steps to read: the new order from the end, the old one before the test.
+    expect(runOrder("none", first, order, end)).toBe("variant");
+    // A draft begun in the old order and resumed after the end still reads as the old order.
+    expect(runOrder("c", first, order, end + 1)).toBe("control");
   });
 
   it("gives each order its own funnel, so question 6 never counts more than question 5", () => {

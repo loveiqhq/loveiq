@@ -306,8 +306,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // C13 — the opening-order experiment. Resolved once per run by useSurveyState and kept
   // in the draft: the order must not change under a respondent who reloads, goes back or
   // resumes, so a draft begun before C13 keeps the control order (its saved position
-  // would otherwise skip the questions the variant moves forward). A fresh run is
-  // bucketed by its session id; no session id (storage blocked) means control.
+  // would otherwise skip the questions the variant moves forward), and a draft begun in
+  // either arm keeps it. A fresh run is asked the new order (QUESTION_ORDER_WINNER): the
+  // test ended, so its session id no longer decides it, storage blocked included.
   // `?order=control|variant` previews either arm on dev and staging, never on production.
   // The email test's copy goes onto the question in the same pass, so the heading, the
   // screen-reader line and the jump menu all read the same words.

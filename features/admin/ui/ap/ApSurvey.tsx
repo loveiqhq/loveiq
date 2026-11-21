@@ -13,6 +13,8 @@ import type {
   SurveyPayload,
 } from "@features/admin/server/ap/survey-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { QUESTION_ORDER_TEST_END } from "@shared/experiments/questionOrderArm";
+import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
@@ -64,8 +66,14 @@ const DEMO_INFO: Array<{ title: string; k: string }> = [
   { title: "Device", k: "survey.demoDevice" },
 ];
 
-/** Which order the funnel counts in: the survey's own, or the opening-order test's (C13). */
+/** Which order the funnel counts in: the survey's old one, or the opening-order test's (C13). */
 type Order = "survey" | "test";
+
+/**
+ * The Berlin day the opening-order test ended: every run begun since is asked the new order,
+ * so a range reaching it opens on that order's funnel.
+ */
+const ORDER_TEST_END_DAY = reportingDay(new Date(QUESTION_ORDER_TEST_END));
 
 /** A tile's figure as the card's "This period" line writes it; nothing while it is blank. */
 const workedOf = (t: Tile): Worked | undefined =>
@@ -128,9 +136,12 @@ export default function ApSurvey() {
   );
   useHashScroll(Boolean(data));
   const [selected, setSelected] = useState<string | null>(null);
-  const [order, setOrder] = useState<Order>("survey");
+  const [picked, setOrder] = useState<Order | null>(null);
 
   const questions = data?.questions ?? null;
+  // Until one is picked: the new order for a range that reaches the test's end, when every run
+  // began to be asked it, and the old one for a range before it.
+  const order: Order = picked ?? (data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey");
   // The funnel in the order picked: the test's only while the range has runs in it.
   const rows = ((order === "test" ? questions?.test : null) ?? questions)?.rows ?? [];
   // Everyone a question was put to, in either order: what its skips (both orders') are a share of.
@@ -173,12 +184,12 @@ export default function ApSurvey() {
                       })),
                     },
                   })),
-                  // Both orders' funnels while the opening-order test runs, each in its own order.
+                  // Both orders' funnels when the range has runs in the new order, each in its own.
                   ...(questions?.test
                     ? [
-                        { name: "Questions · survey order", table: questionTable(questions.rows) },
+                        { name: "Questions · old order", table: questionTable(questions.rows) },
                         {
-                          name: "Questions · test order (C13)",
+                          name: "Questions · new order (C13)",
                           table: questionTable(questions.test.rows),
                         },
                       ]
@@ -861,8 +872,8 @@ const FUNNEL_GRID =
 /**
  * The design's "Question funnel" (16 Oct 2026): the funnel and the questions table in one.
  * Each question in its order with the people who reached it, the share of the first and of the
- * one before, the people who left there and its median time; a row opens Question detail. While
- * the opening-order test runs (`order` set), each order has its own funnel to pick.
+ * one before, the people who left there and its median time; a row opens Question detail. When
+ * the range has runs in both opening orders (`order` set), each has its own funnel to pick.
  */
 function FunnelSection({
   data,
@@ -952,8 +963,8 @@ function FunnelSection({
             value={order}
             onChange={onOrder}
             options={[
-              { value: "survey", label: `Survey order · ${fmt("count", q.people)} runs` },
-              { value: "test", label: `Test order (C13) · ${fmt("count", q.test.people)} runs` },
+              { value: "survey", label: `Old order · ${fmt("count", q.people)} runs` },
+              { value: "test", label: `New order (C13) · ${fmt("count", q.test.people)} runs` },
             ]}
           />
           <Info k="survey.order" />

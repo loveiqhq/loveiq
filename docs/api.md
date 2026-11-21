@@ -212,7 +212,7 @@ storing it on `survey_submission.utm_tracker`:
 | Key                    | Values                   | Source                                                                                                                                                                 |
 | ---------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `landing_variant`      | the landing arm          | The sticky landing cookie, when present.                                                                                                                               |
-| `question_order_arm`   | `control` \| `variant`   | Derived server-side from `sessionId` (C13 opening-order test).                                                                                                         |
+| `question_order_arm`   | `control` \| `variant`   | `variant` for every run begun since 2026-11-21; during the C13 test, derived from `sessionId`.                                                                         |
 | `contact_question_arm` | `control` \| `anonymous` | The email question's version (`docs/survey.md`): `anonymous` for every run but pay to start's since 2026-11-04; during its test, derived server-side from `sessionId`. |
 
 All three are additive and none is read from the request body, so a client cannot
@@ -237,11 +237,17 @@ Two rules matter for anyone querying this column:
   near the limit loses the newer stamp rather than the older one.
 
 `question_order_arm` and `contact_question_arm` are conveniences for grouping, never the
-record: each is a pure function of `survey_submission.session_id`, so an unstamped
-respondent's arm is recomputed rather than read. One exception: a draft begun before C13
-launched keeps the control order when it is resumed (`resolveDraftQuestionOrderArm`), so its
-`question_order_arm` stamp can say `variant`. Such a session started before the launch, and C13
-readouts count only sessions started after it. `contact_question_arm` followed the session id
+record: each is a pure function of `survey_submission.session_id` (and, for the order, the
+run's start), so an unstamped respondent's arm is recomputed rather than read. One exception:
+a draft begun before C13 launched keeps the control order when it is resumed
+(`resolveDraftQuestionOrderArm`), so its `question_order_arm` stamp can say `variant`. Such a
+session started before the launch, and C13 readouts count only sessions started after it.
+`question_order_arm` followed the session id only during C13 (2026-10-06 to 2026-11-21, its end
+in `questionOrderArm.ts`): since then every new run is asked the new order and stamped
+`variant`, so recompute it only for sessions begun inside that window (`questionOrderArmAt`). A
+run that had not begun by the end (a landing card answered before it, nothing else) begins when
+the survey opens (`beginsNow`), so its start and stamp say the new order it is asked.
+`contact_question_arm` followed the session id
 only during the email question test (2026-10-08 to 2026-11-04): since then every run but pay
 to start's is stamped `anonymous`, so recompute it only for sessions begun inside that window.
 It is the email question's key, named without "email" because the admin's UTM filter matches

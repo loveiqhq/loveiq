@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import { QUESTION_ORDER_WINNER } from "@shared/experiments/questionOrderArm";
 
 /**
  * The landing arm reaching the SUBMISSION, exercised through the route.
@@ -113,8 +113,11 @@ const validBody = () => ({
   sessionId: "550e8400-e29b-41d4-a716-446655440000",
 });
 
-/** The C13 arm the route also stamps on any tracker it sends (derived from the session id). */
-const C13 = { question_order_arm: assignQuestionOrderArm(validBody().sessionId) };
+/**
+ * The C13 arm the route also stamps on any tracker it sends. The body's run began now, after
+ * the opening order test ended, so it is the new order whatever its session id drew.
+ */
+const C13 = { question_order_arm: QUESTION_ORDER_WINNER };
 
 /** The email test's arm for the same session (written out, so a re-split fails). */
 const EMAIL = { contact_question_arm: "anonymous" };

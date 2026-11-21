@@ -79,7 +79,7 @@ import {
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
 import { DESIRE_SHEET_COPY_VERSION } from "@features/survey/surveySheetsCopy";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import { QUESTION_ORDER_TEST_END, questionOrderArmAt } from "@shared/experiments/questionOrderArm";
 
 // --- Helpers ---
 
@@ -897,11 +897,15 @@ describe("POST /api/survey", () => {
      * `assignQuestionOrderArm`, so this also fails if the hash or the salt ever changes.
      * That is the intent: an arm assignment that shifts mid-experiment resplits everyone
      * and invalidates the comparison, so it must not pass quietly.
+     *
+     * Their runs began while the test ran. One begun from its end (QUESTION_ORDER_TEST_END)
+     * was asked the new order whatever its session drew, and is stamped so (below).
      */
     const ARM_FIXTURES = [
       { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
       { sessionId: "00000000-0000-4000-8000-000000000001", arm: "variant" },
     ] as const;
+    const DURING_TEST = "2026-11-10T10:00:00.000Z";
 
     // Located by URL, not by index. An earlier draft of this block sat outside the
     // parent describe, so it missed that describe's `vi.resetAllMocks()` and read
@@ -930,6 +934,7 @@ describe("POST /api/survey", () => {
           makeRequest({
             ...validBody(),
             sessionId,
+            startedAt: DURING_TEST,
             utmTracker: JSON.stringify({ utm_source: "google" }),
           })
         );
@@ -937,18 +942,31 @@ describe("POST /api/survey", () => {
       }
     );
 
-    it("agrees with the pure function the client bucketed with", async () => {
-      // Same check from the other side: whatever the route stamps must equal what
-      // SurveyEngine computed from the same session id. A change to either that does not
-      // move the other is a silent desync between what was shown and what was recorded.
-      await POST(
-        makeRequest({
-          ...validBody(),
-          sessionId: SESSION,
-          utmTracker: JSON.stringify({ utm_source: "google" }),
-        })
+    it.each(ARM_FIXTURES)(
+      "stamps the new order on a run begun from the test's end, whatever it drew ($arm)",
+      async ({ sessionId }) => {
+        await POST(
+          makeRequest({
+            ...validBody(),
+            sessionId,
+            startedAt: QUESTION_ORDER_TEST_END,
+            utmTracker: JSON.stringify({ utm_source: "google" }),
+          })
+        );
+        expect(JSON.parse(rpcTracker()).question_order_arm).toBe("variant");
+      }
+    );
+
+    it("agrees with the pure function the readouts use", async () => {
+      // Whatever the route stamps must equal what the readouts recompute from the same session
+      // id and start. A change to either that does not move the other is a silent desync. That
+      // it is also the order the reader was asked is checked on the client's side, against the
+      // same function (useSurveyState.test.ts, "C13 arm").
+      const body = { ...validBody(), sessionId: SESSION };
+      await POST(makeRequest({ ...body, utmTracker: JSON.stringify({ utm_source: "google" }) }));
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(
+        questionOrderArmAt(SESSION, Date.parse(body.startedAt))
       );
-      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(assignQuestionOrderArm(SESSION));
     });
 
     it("adds the arm to a tracker that already exists", async () => {
@@ -1076,6 +1094,8 @@ describe("POST /api/survey", () => {
         makeRequest({
           ...validBody(),
           sessionId: "00000000-0000-4000-8000-000000000007",
+          // Begun while the opening order test ran, so the arm is the one this session drew.
+          startedAt: "2026-11-10T10:00:00.000Z",
           utmTracker: snug,
         })
       );

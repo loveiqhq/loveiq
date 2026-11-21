@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 import { useSurveyState } from "@features/survey/ui/hooks/useSurveyState";
+import { QUESTION_ORDER_TEST_END, questionOrderArmAt } from "@shared/experiments/questionOrderArm";
 
 // --- localStorage helpers ---
 
@@ -164,6 +165,8 @@ describe("useSurveyState", () => {
     // Hashes to the variant (e2e/surveyArm.ts), so "control" below can only come from
     // the draft rule, never from the coin.
     const VARIANT_ID = "00000000-0000-4000-8000-000000000001";
+    // Hashes to control (e2e/surveyArm.ts), so "variant" can only come from the test's end.
+    const CONTROL_ID = "00000000-0000-4000-8000-000000000007";
     const lastPersisted = () => {
       const writes = ls.setItem.mock.calls.filter(([key]) => key === STORAGE_KEY);
       return JSON.parse(writes.at(-1)![1] as string) as Record<string, unknown>;
@@ -189,10 +192,56 @@ describe("useSurveyState", () => {
       expect(lastPersisted().orderArm).toBe("control");
     });
 
-    it("buckets a fresh run by its session id, and records that", () => {
+    it("asks a fresh run the new order whatever its session drew, and records that", () => {
+      // A session that drew control, so "variant" can only come from the test's end.
+      sessionStorage.setItem("loveiq-survey-session", CONTROL_ID);
       const { result } = renderHook(() => useSurveyState());
       expect(result.current.orderArm).toBe("variant");
       expect(lastPersisted().orderArm).toBe("variant");
+    });
+
+    /**
+     * What the server will stamp (questionOrderArmAt over the session id and the run's start)
+     * must be the order the run is asked, or the stamp says one order and the reader saw the
+     * other. The server reads the same session id and the `startedAt` this state submits.
+     */
+    const stampOf = (sessionId: string, startedAt: string) =>
+      questionOrderArmAt(sessionId, Date.parse(startedAt));
+    const BEFORE_END = new Date(Date.parse(QUESTION_ORDER_TEST_END) - 3 * 86_400_000).toISOString();
+
+    it("begins a landing card's run, answered before the test ended, when the survey opens", () => {
+      sessionStorage.setItem("loveiq-survey-session", CONTROL_ID);
+      ls.store[STORAGE_KEY] = JSON.stringify({
+        answers: { "01002": 3 },
+        currentIndex: 0,
+        startedAt: BEFORE_END,
+        prefilled: ["01002"],
+      });
+      const { result } = renderHook(() => useSurveyState());
+      expect(result.current.orderArm).toBe("variant");
+      expect(Date.parse(result.current.startedAt)).toBeGreaterThanOrEqual(
+        Date.parse(QUESTION_ORDER_TEST_END)
+      );
+      expect(stampOf(CONTROL_ID, result.current.startedAt)).toBe(result.current.orderArm);
+      expect(lastPersisted().startedAt).toBe(result.current.startedAt);
+      // The landing card's answer stays, and stays out of the flow.
+      expect(result.current.answers).toEqual({ "01002": 3 });
+      expect(result.current.prefilled).toEqual(["01002"]);
+    });
+
+    it("keeps the start of a run begun during the test, so its stamp is the arm it recorded", () => {
+      sessionStorage.setItem("loveiq-survey-session", CONTROL_ID);
+      ls.store[STORAGE_KEY] = JSON.stringify({
+        answers: {},
+        currentIndex: 0,
+        startedAt: BEFORE_END,
+        prefilled: [],
+        orderArm: "control",
+      });
+      const { result } = renderHook(() => useSurveyState());
+      expect(result.current.orderArm).toBe("control");
+      expect(result.current.startedAt).toBe(BEFORE_END);
+      expect(stampOf(CONTROL_ID, result.current.startedAt)).toBe(result.current.orderArm);
     });
 
     it("reopens a draft in the arm it recorded", () => {

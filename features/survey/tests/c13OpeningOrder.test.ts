@@ -13,8 +13,12 @@ import {
 } from "@features/survey/ui/questionOrder";
 import {
   assignQuestionOrderArm,
+  beginsNow,
   isQuestionOrderArm,
   QUESTION_ORDER_ARM_KEY,
+  QUESTION_ORDER_TEST_END,
+  QUESTION_ORDER_WINNER,
+  questionOrderArmAt,
   resolveDraftQuestionOrderArm,
   resolveQuestionOrderOverride,
 } from "@shared/experiments/questionOrderArm";
@@ -216,40 +220,73 @@ describe("a draft reopened after C13 launched", () => {
     expect(assignQuestionOrderArm(CONTROL_ID)).toBe("control");
   });
 
-  it("keeps a draft begun before C13 in control, whatever its session hashes to", () => {
+  it("keeps a draft begun before C13 in control", () => {
     // Saved by the build before C13, so no arm is recorded. In the variant, the five
     // questions it moves forward would sit behind this reader's saved position.
-    expect(resolveDraftQuestionOrderArm(VARIANT_ID, pastTheOpening)).toBe("control");
+    expect(resolveDraftQuestionOrderArm(pastTheOpening)).toBe("control");
     // An answer given without moving on is progress too.
-    expect(resolveDraftQuestionOrderArm(VARIANT_ID, { ...fresh, answers: { "00001": "x" } })).toBe(
-      "control"
-    );
+    expect(resolveDraftQuestionOrderArm({ ...fresh, answers: { "00001": "x" } })).toBe("control");
   });
 
-  it("reopens a draft in the arm it recorded", () => {
+  it("reopens a draft in the arm it recorded, the old order included", () => {
     for (const arm of ["control", "variant"] as const) {
-      expect(resolveDraftQuestionOrderArm(VARIANT_ID, { ...pastTheOpening, orderArm: arm })).toBe(
-        arm
-      );
-      expect(resolveDraftQuestionOrderArm(CONTROL_ID, { ...pastTheOpening, orderArm: arm })).toBe(
-        arm
-      );
+      expect(resolveDraftQuestionOrderArm({ ...pastTheOpening, orderArm: arm })).toBe(arm);
+      expect(resolveDraftQuestionOrderArm({ ...fresh, orderArm: arm })).toBe(arm);
     }
   });
 
-  it("buckets a fresh run by its session id, the landing card's answer included", () => {
-    expect(resolveDraftQuestionOrderArm(VARIANT_ID, fresh)).toBe("variant");
-    expect(resolveDraftQuestionOrderArm(CONTROL_ID, fresh)).toBe("control");
+  it("asks a fresh run the new order since the test ended, the landing card's answer included", () => {
+    expect(QUESTION_ORDER_WINNER).toBe("variant");
+    expect(resolveDraftQuestionOrderArm(fresh)).toBe("variant");
     const landingCard = { currentIndex: 0, answers: { "01002": 3 }, prefilled: ["01002"] };
-    expect(resolveDraftQuestionOrderArm(VARIANT_ID, landingCard)).toBe("variant");
+    expect(resolveDraftQuestionOrderArm(landingCard)).toBe("variant");
   });
 
   it("treats an arm it does not recognise as none", () => {
-    expect(resolveDraftQuestionOrderArm(VARIANT_ID, { ...fresh, orderArm: "purple" })).toBe(
-      "variant"
-    );
-    expect(
-      resolveDraftQuestionOrderArm(VARIANT_ID, { ...pastTheOpening, orderArm: "purple" })
-    ).toBe("control");
+    expect(resolveDraftQuestionOrderArm({ ...fresh, orderArm: "purple" })).toBe("variant");
+    expect(resolveDraftQuestionOrderArm({ ...pastTheOpening, orderArm: "purple" })).toBe("control");
+  });
+});
+
+describe("the test's end", () => {
+  const VARIANT_ID = "00000000-0000-4000-8000-000000000001";
+  const CONTROL_ID = "00000000-0000-4000-8000-000000000007";
+  const end = Date.parse(QUESTION_ORDER_TEST_END);
+
+  it("is a real moment after the launch, from the day it was called", () => {
+    expect(Number.isFinite(end)).toBe(true);
+    expect(end).toBeGreaterThan(Date.parse("2026-10-06T18:18:00Z"));
+    expect(end).toBeGreaterThanOrEqual(Date.parse("2026-11-20T00:00:00Z"));
+  });
+
+  it("gives a run begun before it the arm its session drew, and one begun from it the new order", () => {
+    for (const id of [VARIANT_ID, CONTROL_ID]) {
+      expect(questionOrderArmAt(id, end - 1)).toBe(assignQuestionOrderArm(id));
+      expect(questionOrderArmAt(id, end)).toBe("variant");
+      expect(questionOrderArmAt(id, end + 86_400_000)).toBe("variant");
+    }
+    expect(questionOrderArmAt(CONTROL_ID, end - 1)).toBe("control");
+    // A start that is not a number reads as during the test; no session id as control.
+    expect(questionOrderArmAt(CONTROL_ID, Number.NaN)).toBe("control");
+    expect(questionOrderArmAt(null, end - 1)).toBe("control");
+    expect(questionOrderArmAt(null, end)).toBe("variant");
+  });
+
+  it("begins a fresh run now when its draft is dated before the end, and only then", () => {
+    const before = new Date(end - 86_400_000).toISOString();
+    const after = new Date(end + 60_000).toISOString();
+    const landingCard = { currentIndex: 0, answers: { "01002": 3 }, prefilled: ["01002"] };
+    const untouched = { currentIndex: 0, answers: {}, prefilled: [] };
+    // Asked the new order, so under its old date the stamp would be the arm its session drew.
+    expect(beginsNow({ ...landingCard, startedAt: before })).toBe(true);
+    expect(beginsNow({ ...untouched, startedAt: before })).toBe(true);
+    // Dated from the end on: the stamp is the new order already.
+    expect(beginsNow({ ...landingCard, startedAt: after })).toBe(false);
+    // A recorded arm or progress keeps its order, so it keeps its start too.
+    expect(beginsNow({ ...untouched, startedAt: before, orderArm: "control" })).toBe(false);
+    expect(beginsNow({ ...untouched, startedAt: before, currentIndex: 3 })).toBe(false);
+    expect(beginsNow({ ...untouched, startedAt: before, answers: { "00001": "x" } })).toBe(false);
+    // A start that is not a date is replaced by the server's clock, which is past the end.
+    expect(beginsNow({ ...untouched, startedAt: "not a date" })).toBe(false);
   });
 });

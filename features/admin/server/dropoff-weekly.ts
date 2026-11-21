@@ -16,7 +16,7 @@ import { addDays, shortDate } from "@features/admin/server/ap/days";
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
-import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import { QUESTION_ORDER_WINNER, type QuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
 
@@ -90,14 +90,14 @@ export function dropoffWeeks(
 export type QuestionEnds = Map<string, { sessions: number; quits: number }>;
 
 /**
- * The questions people are asked today, in the order they are asked (the control
- * arm of the question-order test), numbered the way the survey counts them.
- * Hidden questions are still defined but no longer asked, so they are left out.
+ * The questions people are asked today, in the order they are asked (the new order, which
+ * every run gets since the question-order test ended), numbered the way the survey counts
+ * them. Hidden questions are still defined but no longer asked, so they are left out.
  */
 export function askedQuestions(
   nameLength: number,
   /** The opening-order test's arm whose order to give (C13); the survey's own by default. */
-  arm: QuestionOrderArm = "control"
+  arm: QuestionOrderArm = QUESTION_ORDER_WINNER
 ): Array<{ qId: string; n: number; name: string }> {
   const names = surveyQuestionNames(nameLength);
   return orderAskedQuestions(surveyQuestions, arm)
@@ -110,7 +110,7 @@ export interface DropoffWeeklyPayload {
   weeks: string[];
   /** Whether the last column is the week in progress. */
   partialLast: boolean;
-  /** n = the question's number in today's (control) order; r = % per week, null under the floor. */
+  /** n = the question's number in today's order (the new one, C13's); r = % per week, null under the floor. */
   rows: Array<{ n: number; q: string; r: Array<number | null> }>;
   floor: number;
   updated: string;
