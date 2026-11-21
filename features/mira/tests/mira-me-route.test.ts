@@ -124,6 +124,17 @@ describe("PATCH /api/mira/me", () => {
     ]);
   });
 
+  it("saves 'Mira may use my check results' with the other 'What Mira may use' switches", async () => {
+    expect((await PATCH(call("PATCH", "", { use_checks: "yes" }))).status).toBe(400);
+    expect((await PATCH(call("PATCH", "", { use_checks: true }))).status).toBe(200);
+    expect(vi.mocked(updateProfile).mock.calls[0]).toEqual(["u1", { use_checks: true }]);
+    expect(logMiraEvent).toHaveBeenCalledWith(
+      "settings_saved",
+      { userId: "u1" },
+      { fields: ["use_checks"] }
+    );
+  });
+
   it("doesn't read the profile when the switch isn't sent", async () => {
     await PATCH(call("PATCH", "", { name: "Lea" }));
     expect(getProfile).not.toHaveBeenCalled();

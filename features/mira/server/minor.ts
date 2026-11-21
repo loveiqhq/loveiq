@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { forgetNotify } from "./coaches";
+import { deleteChecks } from "./checks";
 import { MINOR_COOKIE } from "./config";
 import { deleteGoals } from "./goals";
 import { refreshPublicReviews, withdrawReview } from "./reviews";
@@ -15,7 +16,8 @@ import { deleteRecordings } from "./voice";
  * their browser (a cookie, a year) and their account (mira_user.minor_at) get message G without
  * the model. A crisis message still gets the crisis reply and the lines, because the chat route
  * reads crisis words first. The account's nudges go off, its chats are deleted and no longer
- * kept, and its Settings choices (reply language, appearance) are cleared; the browser forgets its
+ * kept, and its Settings choices (reply language, appearance) are cleared, as are its self-check results
+ * (server/checks.ts); the browser forgets its
  * own chat (MiraChat). Its Notify me requests for coming-soon coaches go too (22 Nov 2026), so
  * nobody under 18 is told a coach for sex is ready.
  *
@@ -64,6 +66,9 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     // Voice sessions (22 Nov 2026): their key points too, not only their words.
     deleteRecordings(userId),
     removePasskeys(userId),
+    // Its self-check results too (health data a minor's account must not keep); the check
+    // routes refuse it from then on (403).
+    deleteChecks(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

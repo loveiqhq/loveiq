@@ -19,9 +19,9 @@
  *       its own detail, an id or a number, never words (22 Nov 2026)
  *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
  *       sees), the body check offered and started (its finish is the server's), the "Keep this
- *       chat" card shown, kept or put off, a theme chosen while signed out, the ask for a
- *       rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
- *       is the server's); only these names, so the server's own KPI events can't be sent
+ *       chat" card shown, kept or put off, the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
+ *       is the server's), a self-check started and the support lines its mood check opened;
+ *       only these names, so the server's own KPI events can't be sent
  *
  * At most DAILY_EVENTS a day per person (account or browser id) and six times that per network
  * (a cleared cookie is a new id), so mira_event can't be flooded or the counts inflated.
@@ -80,13 +80,17 @@ const schema = z.discriminatedUnion("type", [
       "style_tip_shown",
       "style_tip_opened",
       "style_saved",
-      // A theme chosen at the foot of a page while signed out (signed in, PATCH /me logs it).
-      "theme_changed",
       // The thank-you ask for a rating (features/mira/ui/reviews/ReviewAsk.tsx): shown, put off.
       "review_prompt_shown",
       "review_prompt_not_now",
       // Sign-in & security (22 Nov 2026): the passkey offer after a code sign-in was shown.
       "passkey_offer_shown",
+      // The self-checks (22 Nov 2026): a check started, and the support lines its mood check's
+      // question 9 opened (the finish is the server's, app/api/mira/checks).
+      "anxiety_check_started",
+      "mood_check_started",
+      "loneliness_check_started",
+      "check_support_shown",
     ]),
   }),
 ]);

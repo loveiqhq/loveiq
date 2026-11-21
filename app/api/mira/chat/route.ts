@@ -36,6 +36,7 @@ import {
   HISTORY_TURNS,
   MAX_MESSAGE_CHARS,
 } from "@features/mira/server/config";
+import { checksForMira } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { goalsForPrompt } from "@features/mira/server/goals";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
@@ -301,9 +302,11 @@ export async function POST(request: Request) {
         logger.warn({ err }, "mira: goals were not read for the chat");
         return [];
       });
-      const assessment = profile.use_assessment
-        ? await findAssessment(account.email).catch(() => null)
-        : null;
+      const [assessment, checks] = await Promise.all([
+        profile.use_assessment ? findAssessment(account.email).catch(() => null) : null,
+        // Self-check bands only with "Mira may use my check results"; a failed read adds none.
+        checksForMira(account.id).catch(() => []),
+      ]);
       person = {
         signedIn: true,
         name: profile.name,
@@ -312,6 +315,7 @@ export async function POST(request: Request) {
         archetype: assessment?.archetype ?? null,
         replyLanguage: profile.reply_language,
         goals: await goals,
+        checks,
       };
       if (askedChatId && (await ownsChat(account.id, askedChatId))) {
         chatId = askedChatId;

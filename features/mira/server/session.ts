@@ -51,7 +51,18 @@ export type MiraAccount = {
 };
 
 /** Mira's own signed-in pages, spelt exactly, and a chat by its id (`/mira?chat=<id>`). */
-const NEXT_PAGES = new Set(["/mira", "/mira/home", "/mira/settings", "/mira/feedback"]);
+const NEXT_PAGES = new Set([
+  "/mira",
+  "/mira/home",
+  "/mira/settings",
+  "/mira/feedback",
+  // The self-checks (22 Nov 2026, app/mira/assessments).
+  "/mira/assessments",
+  "/mira/assessments/anxiety",
+  "/mira/assessments/mood",
+  "/mira/assessments/loneliness",
+  "/mira/assessments/body",
+]);
 const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
 
 /**

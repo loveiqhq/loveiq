@@ -15,7 +15,7 @@ vi.mock("next/headers", () => ({
 
 import MiraLayout from "@/app/mira/layout";
 import MiraSettings from "@features/mira/ui/MiraSettings";
-import { MiraLookRoot, ThemeSwitch } from "@features/mira/ui/MiraLook";
+import { MiraLookRoot } from "@features/mira/ui/MiraLook";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import { DEFAULT_LOOK } from "@features/mira/ui/prefs";
 
@@ -208,21 +208,6 @@ describe("Appearance", () => {
     expect(await within(section("Appearance")).findByRole("alert")).toHaveTextContent(
       "This browser keeps it"
     );
-  });
-
-  it("lets anyone pick a theme at the foot of a page: signed out it is only counted, never saved", async () => {
-    render(
-      <MiraLookRoot initial={DEFAULT_LOOK} signedIn={false}>
-        <ThemeSwitch />
-      </MiraLookRoot>
-    );
-    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
-    expect(root()).toHaveAttribute("data-mira-theme", "dark");
-    expect(document.cookie).toContain("mira_look=dark.default");
-    await waitFor(() =>
-      expect(calls("POST /api/mira/event")).toEqual([{ type: "track", name: "theme_changed" }])
-    );
-    expect(calls("PATCH /api/mira/me")).toEqual([]);
   });
 
   it("is in the first HTML, read from the cookie: no flash of the wrong theme", async () => {

@@ -118,6 +118,8 @@ export type ProfilePatch = Partial<
     nudges_stopped_at: string | null;
     nudge_stop_reason: string | null;
     minor_at: string;
+    /** "Mira may use my check results" (20261122090000_mira_checks.sql); written, not read here. */
+    use_checks: boolean;
   } & { is_team: true; google_connected_at: string | null } // Sign-in & security (22 Nov 2026): a team browser's passkey sign-in, and Google's confirmation.
 >;
 
@@ -371,7 +373,18 @@ export type MiraEventName =
   | "device_signed_out"
   | "signed_out_everywhere"
   | "email_changed"
-  | "google_connected";
+  | "google_connected"
+  // The self-checks (22 Nov 2026, content/checks.ts): started (the browser), finished (the
+  // server: scale and retake only), the support lines opened by the mood check's question 9, and
+  // "Delete my check results". Never answers, scores or bands.
+  | "anxiety_check_started"
+  | "anxiety_check_done"
+  | "mood_check_started"
+  | "mood_check_done"
+  | "loneliness_check_started"
+  | "loneliness_check_done"
+  | "check_support_shown"
+  | "checks_deleted";
 
 /**
  * The KPI log. Written after the response, so it never slows a reply; a lost row is logged.

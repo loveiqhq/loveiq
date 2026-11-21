@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -104,43 +103,6 @@ export const THEME_CHOICES: Array<[Theme, string]> = [
   ["dark", "Dark"],
   ["system", "System"],
 ];
-
-/**
- * The quiet theme switch at the foot of every Mira page (LegalLinks), for everyone: signed out,
- * it is the only way to choose, and this browser remembers it.
- */
-export function ThemeSwitch() {
-  const { look, change } = useMiraLook();
-  const name = useId();
-  return (
-    <fieldset className="flex items-center gap-0.5">
-      <legend className="sr-only">Theme</legend>
-      {THEME_CHOICES.map(([value, label]) => (
-        <label
-          key={value}
-          title={label}
-          className="relative inline-flex h-11 w-11 cursor-pointer items-center justify-center"
-        >
-          <input
-            type="radio"
-            name={name}
-            value={value}
-            checked={look.theme === value}
-            onChange={() => void change({ theme: value })}
-            className="peer sr-only"
-          />
-          <span
-            aria-hidden="true"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-ap-muted transition-colors duration-200 hover:text-ap-ink peer-checked:bg-ap-ground peer-checked:text-ap-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-ap-purple"
-          >
-            <ThemeIcon theme={value} />
-          </span>
-          <span className="sr-only">{label}</span>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
 
 /** Sun, moon, and a screen for System: one stroke, like the chat's icons. */
 export function ThemeIcon({ theme, size = 16 }: { theme: Theme; size?: number }) {

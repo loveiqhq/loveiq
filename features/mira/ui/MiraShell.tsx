@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ThemeSwitch } from "./MiraLook";
 
 /**
  * The Applied Psychometrics wordmark with a quiet beta mark (Marcus, 17 Nov: "beta above
@@ -81,7 +80,7 @@ const LEGAL_LINKS: Array<[string, string]> = [
 
 /**
  * On every Mira page: the imprint must be one click away, and Google's sign-in review looks for
- * the privacy link on the app's home page. The theme switch sits with them, for everyone.
+ * the privacy link on the app's home page. (The theme is chosen in Settings; System until then.)
  */
 export function LegalLinks({ className = "" }: { className?: string }) {
   return (
@@ -89,7 +88,6 @@ export function LegalLinks({ className = "" }: { className?: string }) {
       className={`flex flex-wrap items-center justify-between gap-x-4 border-t border-ap-line pt-3 ${className}`}
     >
       <LegalNav />
-      <ThemeSwitch />
     </div>
   );
 }

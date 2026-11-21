@@ -18,7 +18,7 @@ const RECIPIENTS = [
   {
     who: "Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)",
     role: "Processor. Its AI model, Claude, writes Mira's replies and her daily nudges.",
-    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in, your goals on the go with this week's ticks and, if you allow it, your LoveIQ result.",
+    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in, your goals on the go with this week's ticks and, if you allow it, your LoveIQ result and the bands of your self-checks (never your answers).",
     basis: "Your explicit consent",
     where:
       "Stored in the USA. It may be processed in the USA, Europe, Asia or Australia. EU standard contractual clauses.",
@@ -62,14 +62,14 @@ const RECIPIENTS = [
   {
     who: "PostHog",
     role: "Processor. Product analytics and session recordings.",
-    gets: "How you use our pages, including what you and Mira write in the chat as it shows on the page.",
+    gets: "How you use our pages, including what you and Mira write in the chat and your self-check answers and results, as they show on the page.",
     basis: "Our legitimate interest",
     where: "EU (Frankfurt). PostHog is in the EU–US Data Privacy Framework.",
   },
   {
     who: "Microsoft: Clarity",
     role: "Independent controller.",
-    gets: "Recordings and heatmaps of how you use our pages, including what you and Mira write in the chat.",
+    gets: "Recordings and heatmaps of how you use our pages, including what you and Mira write in the chat and your self-check answers and results.",
     basis: "Our legitimate interest",
     where: "USA. EU–US Data Privacy Framework.",
   },
@@ -127,7 +127,7 @@ const COLUMNS = [
  * 21 Nov 2026: the reply language and the look (light or dark, text size) with their cookie.
  * 22 Nov 2026: goals (Challenges & goals), in each section below; ratings and quotes
  * (features/mira/reviews.ts), to be checked by Eman; passkeys, signed-in devices and changing
- * the email (Settings › Sign-in & security).
+ * the email (Settings › Sign-in & security); the self-checks (to be checked by Eman).
  */
 export default function MiraPrivacyPage() {
   return (
@@ -212,6 +212,18 @@ export default function MiraPrivacyPage() {
           <li>
             The body check, if you choose to take it: your answers to ten statements about how you
             relate to your body (the Body Appreciation Scale-2), at the start and four weeks later.
+          </li>
+          <li id="self-checks">
+            Your self-checks, if you choose to take them: your answers to the anxiety check (GAD-7),
+            the mood check (PHQ-9) and the loneliness check, with the date. They are health data. We
+            work out your score and band from your answers and show them only to you, with how they
+            change over time. Mira sees only each check&apos;s latest band from the last 90 days,
+            such as &ldquo;mild anxiety&rdquo;, and only if you turn on &ldquo;Mira may use my check
+            results&rdquo;; never your answers or scores. Our statistics count the checks started
+            and finished and when the mood check&apos;s question about thoughts of self-harm showed
+            support lines, never what you answered. Until you finish a check, your answers so far
+            stay only in this browser tab, for up to a day. The checks support self-reflection; they
+            are not a diagnosis.
           </li>
           <li>
             Your goals, if you set any with an account: each goal in your words, how many days a
@@ -302,6 +314,12 @@ export default function MiraPrivacyPage() {
             To keep your goals, show how they build up and let Mira check in on them. This is part
             of coaching you. Legal basis: your explicit consent (Art. 6(1)(a) and Art. 9(2)(a)
             GDPR).
+          </li>
+          <li>
+            To show you your self-checks and, if you allow it, to let Mira tailor her coaching to
+            their bands. Legal basis: your explicit consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR),
+            which you give at sign-up for what you share about your health and confirm when you
+            start your first check.
           </li>
           <li>
             To run your free account: signing in, your settings and the emails that come with it,
@@ -446,8 +464,15 @@ export default function MiraPrivacyPage() {
           <li>
             Your goals and the days you ticked them stay until you delete them on your goals page,
             or delete your account.
+          </li>
+          <li>
             Your rating, and your words if you shared them, stay until you take them back in
             Settings or delete your account. Words our team decides not to show are deleted then.
+          </li>
+          <li>
+            Your self-check answers stay until you delete them (Settings, &ldquo;Delete my check
+            results&rdquo;) or delete your account. If Mira stops coaching you because you are under
+            18, they are deleted too.
           </li>
           <li>
             Mira&apos;s log of labels, steps, ratings and feedback is deleted after 12 months.
@@ -476,9 +501,9 @@ export default function MiraPrivacyPage() {
         <h2>Your choices and rights</h2>
         <ul>
           <li>
-            You can take back your consent at any time. Stop chatting, or delete your chats or your
-            account in Settings. Without an account, start a new chat or clear your browser data.
-            This does not make what we did before unlawful.
+            You can take back your consent at any time. Stop chatting, or delete your chats, your
+            self-check results or your account in Settings. Without an account, start a new chat or
+            clear your browser data. This does not make what we did before unlawful.
           </li>
           <li>
             Daily nudges come with your free account. You can pause or stop them with the link in
