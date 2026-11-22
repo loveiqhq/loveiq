@@ -8,9 +8,10 @@ import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from ".
 
 /**
  * Settings › Sign-in & security (Mark's board "HomeSettings", 22 Nov 2026), for MiraSettings to
- * mount right after "Account" (`<SecuritySettings />`, anchor #security). It loads and saves on its
- * own (/api/mira/security, /passkeys, /email, Google's connect link), so nothing in the page's Save
- * touches it.
+ * mount right after "Account" (`<SecuritySettings />`, in its slot `#security`, which carries the
+ * page's scroll margin like every section, so a link lands below the sticky index). It loads and
+ * saves on its own (/api/mira/security, /passkeys, /email, Google's connect link), so nothing in
+ * the page's Save touches it.
  *
  * Two cards. How you sign in: the emailed code (and changing the address), Google, passkeys (add,
  * rename, remove). Where you're signed in: each device, this one marked, signed out one at a time
@@ -131,7 +132,7 @@ export default function SecuritySettings() {
   }, [router]);
 
   return (
-    <section id="security" aria-labelledby="security-h" className="flex scroll-mt-6 flex-col gap-4">
+    <section aria-labelledby="security-h" className="flex flex-col gap-4">
       <div>
         <h2 id="security-h" className="font-serif text-[22px] font-medium">
           Sign-in &amp; security

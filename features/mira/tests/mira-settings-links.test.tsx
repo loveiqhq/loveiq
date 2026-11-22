@@ -61,7 +61,7 @@ async function openAt(hash: string) {
   window.history.replaceState({}, "", `/mira/settings${hash}`);
   render(
     <MiraSettings
-      security={<section id="security">Sign-in &amp; security</section>}
+      security={<section>Sign-in &amp; security</section>}
       checks={<p>Self-checks</p>}
       sharedReview={<p>Your rating</p>}
       journal={<p>Daily journal</p>}

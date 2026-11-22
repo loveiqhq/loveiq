@@ -121,7 +121,7 @@ describe("Settings sections", () => {
     });
     // Each brings its own heading; the page gives it an index entry and an anchor.
     const at = (id: string) => document.getElementById(id)!;
-    expect(at("security-slot")).toHaveTextContent("Passkeys here");
+    expect(at("security")).toHaveTextContent("Passkeys here");
     expect(at("checks")).toHaveTextContent("Self-checks here");
     expect(at("sharing")).toHaveTextContent("Shared review here");
     expect(at("journal")).toHaveTextContent("Journal settings here");
@@ -143,6 +143,10 @@ describe("Settings sections", () => {
       "#appearance",
       "#data",
     ]);
+    // Every entry lands below the sticky row of links: each target keeps the page's margin.
+    for (const href of links) {
+      expect(document.querySelector(href), href).toHaveClass("scroll-mt-16");
+    }
   });
 
   it("shows the page's shape while loading, and a way to try again when loading fails", async () => {

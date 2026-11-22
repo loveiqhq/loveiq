@@ -397,6 +397,21 @@ describe("Settings › Sign-in & security", () => {
     expect(screen.queryByText("lea@example.com")).toBeNull();
   });
 
+  it("is one #security anchor in Settings, landing below the sticky index like every section", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: {
+        profile: { email: "lea@example.com", style: {}, nudge_time: "08:00", time_zone: "UTC" },
+      },
+    });
+    replies["GET /api/mira/security"] = () => ({ body: SECURITY });
+    render(<MiraSettings security={<SecuritySettings />} />);
+    await screen.findByRole("region", { name: "Devices" });
+    const anchors = document.querySelectorAll("#security");
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]).toHaveClass("scroll-mt-16");
+    expect(anchors[0]).toHaveTextContent("Sign-in & security");
+  });
+
   it("asks to sign in again before a passkey or a new address, long after signing in", async () => {
     await show({ recent: false });
     fireEvent.click(screen.getByRole("button", { name: "Add a passkey" }));

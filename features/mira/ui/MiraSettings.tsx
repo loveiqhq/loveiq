@@ -469,7 +469,7 @@ export default function MiraSettings({
               </SettingsSection>
 
               {security ? (
-                <Slot id="security-slot">
+                <Slot id="security">
                   <EmailChanged.Provider value={emailChanged}>{security}</EmailChanged.Provider>
                 </Slot>
               ) : null}
