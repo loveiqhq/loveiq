@@ -26,6 +26,14 @@ describe("Mira's email footers", () => {
     }
   });
 
+  it("say a newer code replaces the one before (a resend voids it)", () => {
+    for (const mail of [code, signInCodeEmail("12345678", "new-address")]) {
+      for (const part of [visible(mail.html), mail.text]) {
+        expect(part).toContain("It works once, for an hour, and a newer code replaces it.");
+      }
+    }
+  });
+
   it("name the company in full, in the nudge and the sign-in code email", () => {
     for (const part of [nudge.html, nudge.text, code.html, code.text]) {
       expect(part).toContain(ENTITY);

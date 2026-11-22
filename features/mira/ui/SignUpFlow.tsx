@@ -7,7 +7,14 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
 import { useMiraLook } from "./MiraLook";
-import { ADULTS_ONLY, local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
+import {
+  ADULTS_ONLY,
+  NEW_CODE,
+  local,
+  miraApi,
+  rememberSourceForGoogle,
+  useReloadWhenRestored,
+} from "./api";
 import { accountLook } from "./prefs";
 import { PasskeyOffer } from "./account/PasskeyOffer";
 import {
@@ -572,7 +579,7 @@ export default function SignUpFlow({
                   className="underline disabled:opacity-50"
                   disabled={busy}
                   onClick={async () => {
-                    if (await sendCode()) setNotice("A new code is on its way.");
+                    if (await sendCode()) setNotice(NEW_CODE);
                   }}
                 >
                   Send a new code

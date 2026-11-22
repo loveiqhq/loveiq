@@ -48,6 +48,9 @@ function replyTo(): string | null {
 const FOOTER =
   "Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner";
 
+/** A newer code voids the one before (Supabase mints a fresh one; a change keeps one code). */
+const ONCE = "It works once, for an hour, and a newer code replaces it.";
+
 /**
  * A code email: for signing in, or (22 Nov 2026) for confirming a new address in Settings, with
  * the same neutral sender, layout and footer.
@@ -60,13 +63,13 @@ export function signInCodeEmail(code: string, purpose: "sign-in" | "new-address"
       : "Type it on the page you just came from to confirm this email address.";
   const subject = `Your ${what}: ${code}`;
   const text =
-    `Your ${what} is ${code}.\n\n${why} It works once, ` +
-    `for an hour.\n\nIf you did not ask for this, you can ignore this email.\n\n${FOOTER}`;
+    `Your ${what} is ${code}.\n\n${why} ${ONCE}\n\nIf you did not ask for this, you can ignore ` +
+    `this email.\n\n${FOOTER}`;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
     <p style="margin:0 0 16px 0;">Your ${what} is</p>
     <p style="margin:0 0 20px 0; font-size:32px; font-weight:700; letter-spacing:6px;">${escapeHtml(code)}</p>
-    <p style="margin:0 0 16px 0;">${why} It works once, for an hour.</p>
+    <p style="margin:0 0 16px 0;">${why} ${ONCE}</p>
     <p style="margin:0 0 12px 0; font-size:13px; color:#6b6678;">If you did not ask for this, you can ignore this email.</p>
     <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
   </div>`;
@@ -75,17 +78,22 @@ export function signInCodeEmail(code: string, purpose: "sign-in" | "new-address"
 
 /**
  * The note to the old address after a change of email (22 Nov 2026): neutral like every Mira
- * email (nothing about chats), with the new address masked, and who to write to if it wasn't them.
+ * email (nothing about chats), with the new address masked, that this address now starts a new
+ * account (round-2 ID-17), and who to write to if it wasn't them.
  */
+const NEW_ACCOUNT =
+  "From now on, sign in with the new address. This one, by code or with Google, would start a new, empty account.";
 export function emailChangedNotice(maskedNewAddress: string) {
   const subject = "Your sign-in email was changed";
   const text =
     `The email address you sign in with was changed to ${maskedNewAddress}.\n\n` +
+    `${NEW_ACCOUNT}\n\n` +
     `If you made this change, there is nothing more to do.\n\nIf you didn't, write to ` +
     `hello@loveiq.org straight away and we'll help you get your account back.\n\n${FOOTER}`;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
     <p style="margin:0 0 16px 0;">The email address you sign in with was changed to <strong>${escapeHtml(maskedNewAddress)}</strong>.</p>
+    <p style="margin:0 0 16px 0;">${NEW_ACCOUNT}</p>
     <p style="margin:0 0 16px 0;">If you made this change, there is nothing more to do.</p>
     <p style="margin:0 0 16px 0;">If you didn't, write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> straight away and we'll help you get your account back.</p>
     <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>

@@ -146,8 +146,20 @@ describe("Sign-up", () => {
     fireEvent.click(resend);
     expect(resend).toBeDisabled();
     expect(await screen.findByText(/We just sent you a code/)).toBeInTheDocument();
-    expect(screen.queryByText("A new code is on its way.")).toBeNull();
+    expect(screen.queryByText(/A new code is on its way/)).toBeNull();
     expect(calls("POST /api/mira/auth")).toHaveLength(2);
+  });
+
+  it("says the newest code is the one that works after a resend", async () => {
+    render(<SignUpFlow />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    screen.getAllByRole("checkbox").forEach((box) => fireEvent.click(box));
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "A new code is on its way. Only the newest code works."
+    );
   });
 
   it("keeps the browser's time zone when About you is skipped, and leaves by replace", async () => {

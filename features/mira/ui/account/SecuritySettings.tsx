@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { miraApi } from "../api";
+import { NEW_CODE, miraApi } from "../api";
 import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
@@ -48,7 +48,8 @@ type Security = {
 
 /** What Google's connect link came back with (`?google=` on /mira/settings). */
 const GOOGLE_RESULTS: Record<string, { ok: boolean; text: string }> = {
-  connected: { ok: true, text: "Google is connected. You can now continue with Google." },
+  // Only that Google confirmed the address: Continue with Google worked for it before too.
+  connected: { ok: true, text: "Google is connected: it confirmed this address." },
   mismatch: {
     ok: false,
     text: "That Google account has a different address. Choose the Google account with the same email as yours here.",
@@ -170,7 +171,7 @@ export default function SecuritySettings() {
                 emailChanged(email); // the page's Account section and menu too
                 setNotice({
                   ok: true,
-                  text: `Your email is now ${email}. We let your old address know.`,
+                  text: `Your email is now ${email}. Sign in with it from now on: the old one would start a new account. We let your old address know.`,
                 });
                 if (data.passkeys.rpID)
                   syncPasskeyName(data.passkeys.rpID, data.passkeys.userHandle, email);
@@ -276,7 +277,12 @@ function EmailRow({
       }
       action={
         data.emailChange.allowed && !open ? (
-          <button type="button" className={LINK} onClick={() => setOpen(true)}>
+          <button
+            type="button"
+            className={LINK}
+            aria-label="Change email"
+            onClick={() => setOpen(true)}
+          >
             Change
           </button>
         ) : null
@@ -320,6 +326,7 @@ function ChangeEmail({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [reauth, setReauth] = useState(!recent);
   const first = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
@@ -331,12 +338,15 @@ function ChangeEmail({
   async function send() {
     setBusy(true);
     setError(null);
+    setNotice(null);
     const r = await miraApi<{ reauth?: boolean }>("/api/mira/email", {
       body: { action: "start", email: address.trim() },
     });
     setBusy(false);
     if (r.data.reauth) return setReauth(true);
     if (!r.ok) return setError(r.data.error ?? "We couldn't send the code. Please try again.");
+    // A new code replaces the one before: say which one works.
+    if (step === "code") setNotice(NEW_CODE);
     setStep("code");
   }
 
@@ -375,8 +385,10 @@ function ChangeEmail({
             />
           </label>
           <p className="text-[13px] leading-relaxed text-ap-muted">
-            We&apos;ll send a code to the new address to confirm it. Your LoveIQ test result is
-            found by email, so Mira will then use the one taken with the new address.
+            We&apos;ll send a code to the new address to confirm it. Then sign in with the new
+            address: the old one, by code or with Google, would start a new, empty account. Your
+            LoveIQ test result is found by email, so Mira will then use the one taken with the new
+            address.
           </p>
         </>
       ) : (
@@ -399,6 +411,11 @@ function ChangeEmail({
           </label>
         </>
       )}
+      {notice ? (
+        <p role="status" className="text-[14px] text-ap-good-ink">
+          {notice}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
           {error}
@@ -455,7 +472,11 @@ function GoogleRow({ google }: { google: Security["google"] }) {
       action={
         google.connected ? null : (
           // A full-page hand-over to Google, like "Continue with Google" on the sign-in page.
-          <a href="/api/mira/auth/google?connect=1" className={LINK + " inline-flex items-center"}>
+          <a
+            href="/api/mira/auth/google?connect=1"
+            aria-label="Connect Google"
+            className={LINK + " inline-flex items-center"}
+          >
             Connect
           </a>
         )

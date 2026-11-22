@@ -22,6 +22,8 @@ export type ApiResult<T> = {
 export const ADULTS_ONLY = "Mira is only for adults.";
 /** The one answer to a lost sign-in (another device's "Sign out everywhere", or expiry). */
 export const SIGNED_OUT = "You were signed out. Please sign in again.";
+/** After "Send a new code" (sign-in or a new address): the code before no longer works. */
+export const NEW_CODE = "A new code is on its way. Only the newest code works.";
 /** Told on the window whenever a Mira route answers 401, so a page can say so once. */
 const SIGNED_OUT_EVENT = "mira:signed-out";
 

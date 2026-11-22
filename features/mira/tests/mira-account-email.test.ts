@@ -184,6 +184,12 @@ describe("changing the email", () => {
     expect(notice.subject).toBe("Your sign-in email was changed");
     expect(notice.text).toContain("l•••@example.com");
     expect(notice.text).not.toMatch(/lea\.new|Mira|chat/i);
+    // The old address now starts a new account (round-2 ID-17): the note says so, in both parts.
+    for (const part of [notice.text, notice.html.replace(/<[^>]+>/g, "")]) {
+      expect(part).toContain(
+        "From now on, sign in with the new address. This one, by code or with Google, would start a new, empty account."
+      );
+    }
     expect(logMiraEvent).toHaveBeenCalledWith("email_changed", { userId: LEA });
   });
 

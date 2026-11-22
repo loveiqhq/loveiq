@@ -413,21 +413,35 @@ describe("Settings › Sign-in & security", () => {
 
   it("changes the email with a code to the new address", async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    // Before the change: the old address will start a new account (round-2 ID-17).
+    expect(
+      screen.getByText(/the old one, by code or with Google, would start a new, empty account/)
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("New email"), {
       target: { value: "lea.new@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send code" }));
     const code = await screen.findByLabelText("Code from the email");
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(
+      await screen.findByText("A new code is on its way. Only the newest code works.")
+    ).toHaveAttribute("role", "status");
     replies["POST /api/mira/email"] = () => ({
       body: { success: true, email: "lea.new@example.com" },
     });
     fireEvent.change(code, { target: { value: "12345678" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent("Your email is now lea.new@example.com.")
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Your email is now lea.new@example.com. Sign in with it from now on: the old one would start a new account. We let your old address know."
+      )
     );
-    expect(calls("POST /api/mira/email").map((c) => c.action)).toEqual(["start", "confirm"]);
+    expect(calls("POST /api/mira/email").map((c) => c.action)).toEqual([
+      "start",
+      "start",
+      "confirm",
+    ]);
     expect(webauthn.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ signalName: "currentUserDetails", userName: "lea.new@example.com" })
     );
@@ -451,7 +465,7 @@ describe("Settings › Sign-in & security", () => {
     render(<MiraSettings security={<SecuritySettings />} />);
     await screen.findByRole("region", { name: "Devices" });
     expect(screen.getAllByText("lea@example.com").length).toBeGreaterThan(1);
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
     fireEvent.change(screen.getByLabelText("New email"), {
       target: { value: "lea.new@example.com" },
     });
@@ -463,7 +477,7 @@ describe("Settings › Sign-in & security", () => {
       body: { success: true, email: "lea.new@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    await screen.findByText("Your email is now lea.new@example.com. We let your old address know.");
+    await screen.findByText(/^Your email is now lea\.new@example\.com\./);
     // The Account section and the menu's account line too, not only this card.
     const account = screen.getByRole("region", { name: "Account" });
     expect(within(account).getByText("lea.new@example.com")).toBeInTheDocument();
@@ -506,7 +520,7 @@ describe("Settings › Sign-in & security", () => {
       google: { allowed: false, connected: false },
       passkeys: { ...SECURITY.passkeys, allowed: false, list: [] },
     });
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change email" })).toBeNull();
     expect(screen.getByText(/also a LoveIQ team login/)).toBeInTheDocument();
     expect(screen.queryByText("Google")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add a passkey" })).toBeNull();
@@ -521,7 +535,7 @@ describe("Settings › Sign-in & security", () => {
     });
     expect(screen.getByText("Mira is only for adults.")).toBeInTheDocument();
     expect(screen.queryByText(/team login/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change email" })).toBeNull();
     // Never a reason that isn't the reason ("Sign in with the emailed code").
     expect(screen.queryByText(/Passkeys aren.t available/)).toBeNull();
   });
@@ -534,10 +548,20 @@ describe("Settings › Sign-in & security", () => {
     );
     expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("#security");
-    expect(screen.getByRole("link", { name: "Connect" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Connect Google" })).toHaveAttribute(
       "href",
       "/api/mira/auth/google?connect=1"
     );
+  });
+
+  it("calls Google connected only for what it is: Google confirmed the address", async () => {
+    window.history.replaceState(null, "", "/mira/settings?google=connected#security");
+    await show({ google: { allowed: true, connected: true } });
+    // Continue with Google worked before connecting too: nothing promises a change (SIGN-F9).
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Google is connected: it confirmed this address."
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(/now/);
   });
 
   it("can be loaded again after a failure", async () => {
