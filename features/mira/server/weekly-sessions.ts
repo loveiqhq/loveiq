@@ -154,8 +154,9 @@ export function calendarText() {
 }
 
 /**
- * Attendance: the session was opened within 30 minutes of a start its reminder went out for.
- * Marked once per start (joined_at), so opening it twice counts once. True when marked now.
+ * Attendance: the session was opened while it was open (from its reminder, an hour before, to 30
+ * minutes after the start), for a start its reminder went out for. Marked once per start
+ * (joined_at), so opening it twice counts once. True when marked now.
  */
 export async function markJoined(slot: StoredSlot, userId: string, at: Date): Promise<boolean> {
   const start = joinedOccurrence(slot, at);

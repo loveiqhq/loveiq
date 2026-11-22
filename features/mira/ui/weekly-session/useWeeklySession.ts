@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
-import { nextOccurrence } from "@features/mira/server/calendar";
+import { JOIN_AFTER_MS, joinedOccurrence, nextOccurrence } from "@features/mira/server/calendar";
 
 export { slotLabel, zoneLabel } from "@features/mira/server/calendar";
 import { miraApi } from "../api";
@@ -150,11 +150,11 @@ export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) 
 }
 
 /**
- * The slot's next start on its own clock, as the pages say it, and whether it is under way:
- * from 30 minutes before to 30 minutes after its start, the session is open now.
+ * The slot's next start on its own clock, as the pages say it, and whether the session is open
+ * now: from its reminder, an hour before, to 30 minutes after its start, as attendance counts it.
  */
 export function upcoming(slot: SlotView, now: number) {
-  const start = nextOccurrence(slot, new Date(now - 30 * 60_000));
+  const start = nextOccurrence(slot, new Date(now - JOIN_AFTER_MS));
   // The day count on the slot's own calendar (its zone's midnight, not the browser's).
   const dayOf = (d: Date) => {
     const [y, m, day] = new Intl.DateTimeFormat("en-CA", { timeZone: slot.timeZone })
@@ -172,6 +172,6 @@ export function upcoming(slot: SlotView, now: number) {
     weekday: fmt({ weekday: "long" }),
     day: fmt({ day: "numeric" }),
     when: days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`,
-    now: Math.abs(start.getTime() - now) <= 30 * 60_000,
+    now: joinedOccurrence(slot, new Date(now)) !== null,
   };
 }

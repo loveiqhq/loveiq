@@ -95,8 +95,11 @@ export function nextOccurrence(slot: WeeklySlot, from: Date): Date {
 /** Reminders go 30 to 60 minutes before a start; the cron runs every 15 minutes, so twice. */
 export const REMIND_FROM_MS = 60 * MINUTE_MS;
 export const REMIND_UNTIL_MS = 30 * MINUTE_MS;
-/** Opening the session this close to a start, before or after it, is attending that one. */
-export const JOIN_WINDOW_MS = 30 * MINUTE_MS;
+/**
+ * A session is open from its earliest reminder, an hour before its start, to 30 minutes after it:
+ * Home shows "Join now", and opening it then (from the reminder, the calendar or Home) is attending.
+ */
+export const JOIN_AFTER_MS = 30 * MINUTE_MS;
 
 /** The start a reminder is due for now, or null. */
 export function reminderDue(slot: WeeklySlot, now: Date): Date | null {
@@ -105,10 +108,10 @@ export function reminderDue(slot: WeeklySlot, now: Date): Date | null {
   return lead >= REMIND_UNTIL_MS && lead <= REMIND_FROM_MS ? start : null;
 }
 
-/** The start the session was opened for, when it was opened within 30 minutes of one. */
+/** The start a session opened now is for, while one is open (an hour before to 30 minutes after). */
 export function joinedOccurrence(slot: WeeklySlot, at: Date): Date | null {
-  const start = nextOccurrence(slot, new Date(at.getTime() - JOIN_WINDOW_MS));
-  return start.getTime() - at.getTime() <= JOIN_WINDOW_MS ? start : null;
+  const start = nextOccurrence(slot, new Date(at.getTime() - JOIN_AFTER_MS));
+  return start.getTime() - at.getTime() <= REMIND_FROM_MS ? start : null;
 }
 
 // ── The calendar invite (.ics): RFC 5545, with iTIP's methods (RFC 5546) ────────────────────────
