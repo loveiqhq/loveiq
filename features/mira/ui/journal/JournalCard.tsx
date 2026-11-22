@@ -34,6 +34,12 @@ export function JournalCard() {
   const run = streak(days, today);
   const recent = thisWeek(entries, today);
 
+  /** Today's check-in: today as it is at the tap, in a tab open since yesterday too. */
+  function checkIn() {
+    journal.freshToday();
+    setOpen(true);
+  }
+
   async function remind(on: boolean) {
     const time = on ? (settings?.reminderTime ?? DEFAULT_REMINDER) : null;
     setNote(null);
@@ -110,13 +116,13 @@ export function JournalCard() {
                 {doneToday ? (
                   <button
                     type="button"
-                    onClick={() => setOpen(true)}
+                    onClick={checkIn}
                     className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-[#561dbd] transition-colors hover:bg-ap-lilac"
                   >
                     Edit today’s check-in <Icon path={CHECK} />
                   </button>
                 ) : (
-                  <PrimaryButton onClick={() => setOpen(true)}>
+                  <PrimaryButton onClick={checkIn}>
                     <span className="inline-flex items-center gap-2">
                       Do today’s check-in <Icon path={ARROW} />
                     </span>

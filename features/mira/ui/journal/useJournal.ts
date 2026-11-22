@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { JournalEntry, JournalShare } from "@features/mira/journal";
 import { miraApi } from "../api";
 import type { SupportCountry } from "../SupportPanel";
+import { useToday } from "../useToday";
 
 /**
  * The daily journal as one browser view holds it: what GET /api/mira/journal answered, kept in step
@@ -24,8 +25,12 @@ export type Journal = {
   /** Newest first. */
   entries: JournalEntry[];
   settings: JournalSettings | null;
-  /** The person's own today, from this browser's clock ("" until it has run here). */
+  /**
+   * The person's own today, from this browser's clock ("" until it has run here), kept current
+   * when the tab comes back into view; `freshToday` reads it again at the tap that acts on today.
+   */
   today: string;
+  freshToday: () => string;
   reload: () => void;
   save: (entry: JournalEntry) => Promise<SaveResult>;
   remove: (day?: string) => Promise<boolean>;
@@ -52,7 +57,7 @@ export function useJournal(enabled = true): Journal {
   const [status, setStatus] = useState<Journal["status"]>("loading");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [settings, setSettingsState] = useState<JournalSettings | null>(null);
-  const [today, setToday] = useState("");
+  const { today, fresh: freshToday } = useToday();
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -61,8 +66,6 @@ export function useJournal(enabled = true): Journal {
     void miraApi<{ entries: JournalEntry[]; settings: JournalSettings }>("/api/mira/journal").then(
       (r) => {
         if (!live) return;
-        // Today from this browser's clock, read once the page runs here (the server's is UTC).
-        setToday(localToday());
         if (r.status === 401 || r.status === 403) return setStatus("unavailable");
         if (!r.ok) return setStatus("error");
         setEntries([...r.data.entries].sort(byDayDesc));
@@ -118,5 +121,5 @@ export function useJournal(enabled = true): Journal {
     []
   );
 
-  return { status, entries, settings, today, reload, save, remove, setSettings };
+  return { status, entries, settings, today, freshToday, reload, save, remove, setSettings };
 }
