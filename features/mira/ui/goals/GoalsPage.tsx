@@ -582,12 +582,13 @@ function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
   return (
     <section aria-labelledby="your-goals-data-h" className="mt-12 border-t border-ap-line pt-6">
       <h2 id="your-goals-data-h" className="text-[14px] font-semibold">
-        Your goals are private
+        Who sees your goals
       </h2>
       <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-ap-body">
-        Only you see them. When you chat, Mira sees the goals on the go and this week&apos;s ticks,
-        so she can ask how one is going, now and then. We count how many goals people set and tick,
-        never what they say.{" "}
+        You do. When you chat, Mira sees the goals on the go and this week&apos;s ticks, so she can
+        ask how one is going, now and then. As on the rest of our site, our analytics tools record
+        what&apos;s on screen, so they see your goals too. We count how many goals people set and
+        tick, never what they say.{" "}
         <Link href="/mira/privacy" className="underline underline-offset-2">
           How Mira handles your data
         </Link>

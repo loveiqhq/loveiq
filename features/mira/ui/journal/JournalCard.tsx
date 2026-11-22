@@ -104,7 +104,7 @@ export function JournalCard() {
                   ? "Checked in for today. See how your week is shaping up in your journal."
                   : entries.length
                     ? "You haven’t checked in yet today. A few taps across the areas of your life, plus a line if you feel like writing one."
-                    : "A few taps across the areas of your life, plus a line if you feel like writing one. About 30 seconds, and private to you."}
+                    : "A few taps across the areas of your life, plus a line if you feel like writing one. About 30 seconds, and yours to look back on."}
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
                 {doneToday ? (

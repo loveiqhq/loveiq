@@ -24,7 +24,7 @@ const empty = (): Ratings => ({ mood: null, body: null, closeness: null, energy:
 const UNRATED = "Tap one circle in any row to save.";
 
 const NOTE_HINT = {
-  off: "Private. Mira reads your journal only if you allow it in Settings.",
+  off: "Mira reads your journal only if you allow it in Settings.",
   scores: "Mira sees your ratings, not this line.",
   notes: "Mira can read this line too, as you allowed.",
 } as const;
@@ -130,7 +130,7 @@ export function CheckIn({
                 tabIndex={-1}
                 className="mt-5 font-serif text-[26px] font-medium leading-tight outline-none"
               >
-                Saved privately.
+                Saved to your journal.
               </h2>
               <p
                 role="status"
