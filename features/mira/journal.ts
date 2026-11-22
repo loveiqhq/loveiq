@@ -1,4 +1,5 @@
 import { addDays, shortDate } from "@features/admin/server/ap/days";
+import { localDay } from "./server/goal-progress";
 
 /**
  * The daily journal's rules, shared by the browser, the API and AP › Mira (no server imports).
@@ -33,12 +34,13 @@ const HOUR_MS = 3_600_000;
 const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 /**
- * A new check-in is for the person's today, which the browser sends. The server can't know their
- * clock, but it can refuse any day nobody on Earth is living right now (UTC−12 to UTC+14), so an
- * entry can't be made for last week. An existing entry can be edited on any day.
+ * A new check-in is for the person's today, which the browser sends: no earlier than yesterday in
+ * their zone (a check-in begun before their midnight), so a tab left open for days can't make one
+ * for a day long gone, and no later than a day already begun somewhere (UTC+14: a traveller's
+ * browser may be ahead of the zone on file). An existing entry can be edited on any day.
  */
-export function canStart(day: string, now: Date): boolean {
-  return day >= utcDay(now.getTime() - 12 * HOUR_MS) && day <= utcDay(now.getTime() + 14 * HOUR_MS);
+export function canStart(day: string, now: Date, timeZone: string): boolean {
+  return day >= addDays(localDay(now, timeZone), -1) && day <= utcDay(now.getTime() + 14 * HOUR_MS);
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

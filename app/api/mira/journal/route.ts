@@ -3,9 +3,9 @@
  *
  *   GET     → the entries of about the last year (newest first) and the journal's settings
  *   PUT     → saves one day's check-in { day, mood?, body?, closeness?, energy?, note? }: each
- *             area 1 to 5 or null, at least one rated, a one-line note. A new entry only for a day
- *             it is somewhere right now (the browser sends the person's today); an older day only
- *             where an entry exists. A note with crisis words gets the chat's support lines
+ *             area 1 to 5 or null, at least one rated, a one-line note. A new entry only for
+ *             yesterday or today in the person's zone (the browser sends their today); an older
+ *             day only where an entry exists. A note with crisis words gets the chat's support lines
  *             (crisisLines), and is kept.
  *   PATCH   → the settings: { share: "off" | "scores" | "notes" } (what Mira may read) and/or
  *             { reminderTime: "HH:00" | "HH:30" | null } (the daily reminder email)
@@ -168,7 +168,8 @@ export async function PUT(request: Request) {
   };
   let saved: boolean | null = null;
   try {
-    saved = await saveEntry(g.account.id, entry, canStart(entry.day, new Date()));
+    const zone = (await getProfile(g.account.id))?.time_zone ?? "UTC";
+    saved = await saveEntry(g.account.id, entry, canStart(entry.day, new Date(), zone));
   } catch (err) {
     logger.error({ err }, "mira: a journal entry was not saved");
   }
