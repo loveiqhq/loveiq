@@ -210,13 +210,18 @@ export default function SignUpFlow({
   }
 
   // A reload, Back or a discarded tab on "Check your inbox": back to it, with its address and
-  // the optional tick (the verify records it). Once, after the first paint.
+  // the optional tick (the verify records it). The three required ticks come back too: a code
+  // went out only once they were ticked (the route checks them first), and "Send a new code"
+  // sends them again (round-3 R3-ACCT-1). Once, after the first paint.
   useEffect(() => {
     if (step !== "account" || backFromGoogle) return;
     const waiting = waitingCode();
     if (!waiting) return;
     /* eslint-disable react-hooks/set-state-in-effect -- this tab's storage, read after hydration */
     setEmail(waiting.email);
+    setAdult(true);
+    setTerms(true);
+    setConsent(true);
     setUseAssessment(waiting.useAssessment);
     setStep("verify");
     /* eslint-enable react-hooks/set-state-in-effect */

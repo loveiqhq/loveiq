@@ -279,6 +279,24 @@ describe("The code step", () => {
     expect(screen.getByRole("heading", { name: /Create your free account/ })).toBeVisible();
   });
 
+  // Round-3 R3-ACCT-1: the kept step held the address but not the three ticks, so "Send a new
+  // code" after a reload sent them unticked and got "Please check the form and try again."
+  it("sends a new code after a reload: the ticks that got it there come back with it", async () => {
+    await toCodeStep();
+    cleanup();
+    render(<SignUpFlow />);
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    await waitFor(() => expect(calls("POST /api/mira/auth")).toHaveLength(2));
+    expect(calls("POST /api/mira/auth").at(-1)).toMatchObject({
+      action: "start",
+      email: "lea@example.com",
+      adult: true,
+      terms: true,
+      consent: true,
+    });
+  });
+
   it("is left for good with Change email", async () => {
     await toCodeStep();
     fireEvent.click(screen.getByRole("button", { name: "Change email" }));
