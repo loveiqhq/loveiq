@@ -262,8 +262,11 @@ function Empty() {
       <div className="flex-1">
         <p className="font-semibold text-ap-ink">No voice sessions yet</p>
         <p className="mt-0.5 text-[14px] leading-snug text-ap-body">
-          Talk to Mira out loud, and each session waits here as words, with up to three key points.
-          Never as audio.
+          Talk to Mira out loud. While &ldquo;Remember our conversations&rdquo; is on in{" "}
+          <Link href="/mira/settings" className="font-semibold text-ap-plum underline">
+            Settings
+          </Link>
+          , each session waits here as words, with up to three key points. Never as audio.
         </p>
       </div>
       <StartVoiceLink />

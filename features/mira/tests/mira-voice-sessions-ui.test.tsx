@@ -108,6 +108,13 @@ describe("Home's voice sessions card", () => {
     expect(await screen.findByText("No voice sessions yet")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "Start a voice session" })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: "See all" })).toBeNull();
+    // VOI-V8b: kept only with memory on, so the promise says so.
+    expect(screen.getByText(/each session waits here as words/).textContent).toBe(
+      "Talk to Mira out loud. While “Remember our conversations” is on in Settings, each session waits here as words, with up to three key points. Never as audio."
+    );
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe(
+      "/mira/settings"
+    );
   });
 
   it("says when they didn't load, and tries again", async () => {
