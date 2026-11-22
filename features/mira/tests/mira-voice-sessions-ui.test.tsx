@@ -206,6 +206,24 @@ describe("the voice sessions page", () => {
     expect(screen.getByRole("button", { name: "Show older sessions" })).toBeTruthy();
   });
 
+  // kit/load-failed outside a card: Try again keeps the focus while it retries, then the page's
+  // heading has it, never the page itself.
+  it("keeps Try again's focus while the list retries, then gives it to the page's heading", async () => {
+    replies["GET /api/mira/recordings?limit=50"] = () => ({ status: 500, body: {} });
+    render(<RecordingsPage />);
+    const again = await screen.findByRole("button", { name: "Try again" });
+    again.focus();
+    replies["GET /api/mira/recordings?limit=50"] = () => ({
+      body: { recordings: SESSIONS, more: false },
+    });
+    fireEvent.click(again);
+    expect(again).toHaveFocus();
+    expect(again).toHaveAttribute("aria-disabled", "true");
+    const heading = screen.getByRole("heading", { level: 1, name: "Voice sessions" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(rows()).toHaveLength(2);
+  });
+
   // Round 3's 401 loop: a move to sign-in of the page's own could bounce back and forth with
   // /mira/start while that page still saw the session. It is said in place, with the way back.
   it("says a lost sign-in in place, with the way back to this page, and never navigates", async () => {

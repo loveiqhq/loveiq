@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { CHECKS, CHECK_IDS } from "@features/mira/content/checks";
 import { AdultsOnly, SectionLink } from "../kit";
-import { LoadFailed } from "../kit/load-failed";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { CheckIcon, LoveIqTile } from "./icons";
 import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from "./data";
 
@@ -18,6 +18,7 @@ export default function ChecksHomeCard() {
   const { data, error, minor, signedOut, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const body = bodyLine(data?.bodyCheck ?? null);
+  const again = useRetry(!data && !error, retry);
   // Home says a lost sign-in once, above its cards (HAB-16): the card steps aside.
   if (signedOut) return null;
   return (
@@ -27,15 +28,19 @@ export default function ChecksHomeCard() {
       className="scroll-mt-6 rounded-3xl border border-ap-line p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id="your-assessments-h" className="font-serif text-[20px] font-semibold">
+        <h2
+          id="your-assessments-h"
+          tabIndex={-1}
+          className="font-serif text-[20px] font-semibold outline-none"
+        >
           Your assessments
         </h2>
         <SectionLink href="/mira/assessments" what="assessments" />
       </div>
       {minor ? (
         <AdultsOnly className="mt-2" />
-      ) : error ? (
-        <LoadFailed what="Your assessments" onRetry={retry} className="mt-2" />
+      ) : error || again.busy ? (
+        <LoadFailed what="Your assessments" {...again} className="mt-2" />
       ) : null}
       {data ? (
         <ul className="mt-1 flex flex-col divide-y divide-ap-line">
@@ -74,7 +79,7 @@ export default function ChecksHomeCard() {
             />
           ) : null}
         </ul>
-      ) : !error ? (
+      ) : !error && !again.busy ? (
         <div aria-hidden="true" className="mt-3 flex flex-col gap-3">
           {[0, 1, 2, 3].map((i) => (
             <div
