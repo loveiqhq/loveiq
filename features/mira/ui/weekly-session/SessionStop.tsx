@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { miraApi } from "../api";
 import { EmailLinkPage, HEADING, LINK, LinkDoesNotWork } from "../EmailLinkPage";
 import { AdultsOnly } from "../kit";
@@ -26,6 +26,12 @@ export function SessionStop({
   const [state, setState] = useState<"idle" | "busy" | "done" | "none" | "error" | "minor">(
     already ?? "idle"
   );
+  // A new screen's heading takes the focus, so the change is read out and a keyboard starts
+  // there, as on the journal's and the nudges' pages (round-3 R3-DATA-3).
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (state === "done" || state === "none" || state === "minor") heading.current?.focus();
+  }, [state]);
 
   if (!token) {
     return (
@@ -33,11 +39,11 @@ export function SessionStop({
         <LinkDoesNotWork
           elsewhere={
             <>
-              turn reminder emails off, change or cancel your weekly session in{" "}
+              turn reminder emails off, change or cancel your weekly session in your account’s{" "}
               <Link href={SETTINGS} className={LINK}>
                 Settings
-              </Link>{" "}
-              after signing in.
+              </Link>
+              .
             </>
           }
         />
@@ -59,7 +65,9 @@ export function SessionStop({
   if (state === "minor") {
     return (
       <EmailLinkPage>
-        <h1 className={HEADING}>Reminder emails</h1>
+        <h1 ref={heading} tabIndex={-1} className={HEADING}>
+          Reminder emails
+        </h1>
         <AdultsOnly />
       </EmailLinkPage>
     );
@@ -69,14 +77,13 @@ export function SessionStop({
     return (
       <EmailLinkPage>
         <div role="status" className="flex flex-col gap-5">
-          <h1 className={`${HEADING} motion-safe:animate-mira-in`}>
+          <h1 ref={heading} tabIndex={-1} className={`${HEADING} motion-safe:animate-mira-in`}>
             {state === "done" ? "No more reminders" : "Nothing to stop"}
           </h1>
           <p className="text-[15px] leading-relaxed text-ap-body">
             {state === "done"
-              ? "Your weekly session stays in your calendar, and you can still open it whenever you like. "
-              : "There’s no weekly session booked, so no reminders will come. "}
-            To turn reminders back on, change or cancel your session, open{" "}
+              ? "Your weekly session stays in your calendar, and you can still open it whenever you like. To turn reminders back on, change or cancel your session, open "
+              : "There’s no weekly session booked, so no reminders will come. To book one, open "}
             <Link href={SETTINGS} className={LINK}>
               Settings
             </Link>
@@ -105,11 +112,11 @@ export function SessionStop({
         </p>
       ) : null}
       <p className="text-[14px] leading-relaxed text-ap-muted">
-        Your session stays in your calendar. To change or cancel it, open{" "}
+        Your session stays in your calendar. To change or cancel it, open your account’s{" "}
         <Link href={SETTINGS} className={LINK}>
           Settings
-        </Link>{" "}
-        (you’ll sign in first).
+        </Link>
+        .
       </p>
     </EmailLinkPage>
   );

@@ -194,7 +194,13 @@ export default function CheckPage({
         <span aria-hidden="true">/</span> {check.title}
       </nav>
       {minor ? (
-        <AdultsOnly className="mt-6" />
+        <>
+          {/* The page keeps its heading in this state too (round-3 R3-ACCT-8). */}
+          <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+            {check.title}
+          </h1>
+          <AdultsOnly className="mt-4" />
+        </>
       ) : error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
           {error}{" "}

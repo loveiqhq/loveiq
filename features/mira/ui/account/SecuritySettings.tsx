@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { NEW_CODE, miraApi } from "../api";
+import { shortDate } from "../kit/dates";
 import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
@@ -71,8 +72,8 @@ const METHOD: Record<Device["method"], string> = {
   passkey: "a passkey",
 };
 
-const day = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+/** Mira's one short date ("22 Sep", never "Sept"; round-3 R3-ACCT-9). */
+const day = (iso: string) => shortDate(iso);
 /** "09:14", in this browser's zone: two devices signed in the same day look the same without it. */
 const time = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -95,7 +96,7 @@ const LINK =
 const DANGER =
   "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-bad px-5 text-[14px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-bad aria-disabled:cursor-wait aria-disabled:opacity-50";
 const FIELD =
-  "min-h-[48px] w-full rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
+  "min-h-[48px] w-full rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
 
 export default function SecuritySettings() {
   const router = useRouter();
@@ -128,12 +129,15 @@ export default function SecuritySettings() {
   }, [load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  /** Signs out here and back to sign-in, to come straight back to this section of Settings. */
+  /**
+   * Signs out here and back to sign-in, to come straight back to this section of Settings. A full
+   * page load: a client-side hop from a page first loaded at #security came back from the sign-in
+   * as #security#security, at the top of Settings (round-3 R3-ACCT-2).
+   */
   const signInAgain = useCallback(async () => {
     await miraApi("/api/mira/auth", { body: { action: "logout" } });
-    router.replace("/mira/start?next=%2Fmira%2Fsettings%23security");
-    router.refresh();
-  }, [router]);
+    window.location.replace("/mira/start?next=%2Fmira%2Fsettings%23security");
+  }, []);
 
   return (
     <section aria-labelledby="security-h" className="flex flex-col gap-4">
@@ -157,7 +161,7 @@ export default function SecuritySettings() {
       </div>
       {failed ? (
         <div className="rounded-[20px] border border-ap-line p-5 text-[14px] text-ap-body">
-          <p role="alert">We couldn&apos;t load this right now.</p>
+          <p role="alert">Sign-in &amp; security didn&apos;t load.</p>
           <button type="button" className={`${LINK} mt-1`} onClick={() => void load()}>
             Try again
           </button>
@@ -213,7 +217,8 @@ function Card({ title, id, children }: { title: string; id: string; children: Re
       aria-labelledby={id}
       className="flex flex-col rounded-[20px] border border-ap-line bg-white"
     >
-      <h3 id={id} className="px-5 pb-1 pt-5 text-[16px] font-bold">
+      {/* Focusable: where the focus goes when a control in the card goes away (R3-ACCT-6). */}
+      <h3 id={id} tabIndex={-1} className="px-5 pb-1 pt-5 text-[16px] font-bold outline-none">
         {title}
       </h3>
       <div className="flex flex-col divide-y divide-ap-line">{children}</div>
@@ -256,6 +261,42 @@ function Row({
   );
 }
 
+/**
+ * A change of email waiting for its code, kept in this tab for the code's hour with the address
+ * of the account that asked, so a reload or a tab the phone discarded while the person read the
+ * mail comes back to the code field, as the sign-in's code step does (round-3 R3-ACCT-5).
+ */
+const CHANGING = "mira.email.code.v1";
+type Changing = { from: string; address: string; at: number };
+function waitingChange(from: string): string | null {
+  try {
+    const w = JSON.parse(sessionStorage.getItem(CHANGING) ?? "null") as Changing | null;
+    return w?.from === from && Date.now() - w.at < 60 * 60_000 ? w.address : null;
+  } catch {
+    return null;
+  }
+}
+function keepChange(w: Changing | null): void {
+  try {
+    if (w) sessionStorage.setItem(CHANGING, JSON.stringify(w));
+    else sessionStorage.removeItem(CHANGING);
+  } catch {
+    // Blocked storage: a reload starts over, as before.
+  }
+}
+
+/**
+ * When what `shown` opened goes (Cancel, "Not now", done), the focus goes to `back`, the button
+ * that comes back in its place, never to the page (round-3 R3-ACCT-6).
+ */
+function useFocusBack(shown: boolean, back: { current: HTMLElement | null }) {
+  const was = useRef(shown);
+  useEffect(() => {
+    if (was.current && !shown) back.current?.focus();
+    was.current = shown;
+  }, [shown, back]);
+}
+
 function EmailRow({
   data,
   onChanged,
@@ -265,7 +306,12 @@ function EmailRow({
   onChanged: (email: string) => void;
   onReauth: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // Rendered only once the account has loaded in the browser, so this tab's storage is there.
+  const [open, setOpen] = useState(
+    () => data.emailChange.allowed && waitingChange(data.email) !== null
+  );
+  const change = useRef<HTMLButtonElement>(null);
+  useFocusBack(open, change);
   return (
     <Row
       icon={<MailIcon />}
@@ -281,6 +327,7 @@ function EmailRow({
       action={
         data.emailChange.allowed && !open ? (
           <button
+            ref={change}
             type="button"
             className={LINK}
             aria-label="Change email"
@@ -300,8 +347,12 @@ function EmailRow({
       ) : null}
       {open ? (
         <ChangeEmail
+          from={data.email}
           recent={data.recent}
-          onCancel={() => setOpen(false)}
+          onCancel={() => {
+            keepChange(null);
+            setOpen(false);
+          }}
           onReauth={onReauth}
           onChanged={(email) => {
             setOpen(false);
@@ -314,27 +365,38 @@ function EmailRow({
 }
 
 function ChangeEmail({
+  from,
   recent,
   onCancel,
   onChanged,
   onReauth,
 }: {
+  from: string;
   recent: boolean;
   onCancel: () => void;
   onChanged: (email: string) => void;
   onReauth: () => void;
 }) {
-  const [step, setStep] = useState<"address" | "code">("address");
-  const [address, setAddress] = useState("");
+  // Back after a reload: the code step, with the address the code went to (confirming needs no
+  // recent sign-in; a new code would ask for one).
+  const [kept] = useState(() => waitingChange(from));
+  const [step, setStep] = useState<"address" | "code">(kept ? "code" : "address");
+  const [address, setAddress] = useState(kept ?? "");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [reauth, setReauth] = useState(!recent);
+  const [reauth, setReauth] = useState(!recent && !kept);
   const first = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
+  // A step the person opened takes the focus; one that came back with the page doesn't.
+  const restored = useRef(kept !== null);
 
   useEffect(() => {
+    if (restored.current) {
+      restored.current = false;
+      return;
+    }
     (step === "address" ? first : codeField).current?.focus();
   }, [step]);
 
@@ -350,6 +412,7 @@ function ChangeEmail({
     if (!r.ok) return setError(r.data.error ?? "We couldn't send the code. Please try again.");
     // A new code replaces the one before: say which one works.
     if (step === "code") setNotice(NEW_CODE);
+    keepChange({ from, address: address.trim(), at: Date.now() });
     setStep("code");
   }
 
@@ -361,6 +424,7 @@ function ChangeEmail({
     });
     setBusy(false);
     if (!r.ok || !r.data.email) return setError(r.data.error ?? "That code didn't work.");
+    keepChange(null);
     onChanged(r.data.email);
   }
 
@@ -393,7 +457,7 @@ function ChangeEmail({
               required
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className={`${FIELD} bg-white`}
+              className={FIELD}
             />
           </label>
           <p className="text-[13px] leading-relaxed text-ap-muted">
@@ -418,7 +482,7 @@ function ChangeEmail({
               maxLength={8}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              className={`${FIELD} bg-white text-center font-serif text-[24px] tracking-[0.4em]`}
+              className={`${FIELD} text-center font-serif text-[24px] tracking-[0.4em]`}
             />
           </label>
         </>
@@ -516,6 +580,8 @@ function Passkeys({
   const [error, setError] = useState<string | null>(null);
   const [reauth, setReauth] = useState(false);
   const [fresh, setFresh] = useState<string | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  useFocusBack(reauth, addButton);
 
   async function add() {
     if (!data.recent) return setReauth(true);
@@ -578,6 +644,8 @@ function Passkeys({
                   left ?? list.filter((x) => x.id !== p.id),
                   `Removed “${p.label}”. You can still sign in with a code.`
                 );
+                // The item (and the focused button) went: the focus stays in the card.
+                document.getElementById("sign-in-h")?.focus();
               }}
             />
           ))}
@@ -591,6 +659,7 @@ function Passkeys({
       ) : allowed && canPasskey ? (
         <div>
           <button
+            ref={addButton}
             type="button"
             className={PILL}
             aria-disabled={busy || undefined}
@@ -807,6 +876,7 @@ function Devices({
   const cancelAll = useRef<HTMLButtonElement>(null);
   const allOpener = useRef<HTMLButtonElement>(null);
   const asked = useRef(false);
+  const devicesHeading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     if (confirmAll) {
@@ -832,6 +902,8 @@ function Devices({
     if (r.data.signedOut) return onSignedOut();
     const gone = devices.find((d) => d.id === id);
     onGone(id);
+    // Its row (and the focused button) went: the focus stays in the card (R3-ACCT-6).
+    devicesHeading.current?.focus();
     if (gone) onNotice({ ok: true, text: `Signed out on ${gone.device}.` });
   }
 
@@ -842,7 +914,12 @@ function Devices({
       className="flex flex-col rounded-[20px] border border-ap-line bg-white"
     >
       <div className="px-5 pb-2 pt-5">
-        <h3 id="devices-h" className="text-[16px] font-bold">
+        <h3
+          id="devices-h"
+          ref={devicesHeading}
+          tabIndex={-1}
+          className="text-[16px] font-bold outline-none"
+        >
           Devices
         </h3>
         <p className="text-[14px] text-ap-body">
@@ -957,9 +1034,12 @@ function Reauth({
   onReauth: () => void;
   onCancel: () => void;
 }) {
+  // It takes the place of the button that asked: the focus comes with what it says (R3-ACCT-6).
+  const said = useRef<HTMLParagraphElement>(null);
+  useEffect(() => said.current?.focus(), []);
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-ap-lilac p-4 text-[14px] motion-safe:animate-mira-rise">
-      <p role="alert">
+      <p ref={said} role="alert" tabIndex={-1} className="outline-none">
         For your security, please sign in again to {what}. You&apos;ll come straight back here.
       </p>
       <div className="flex flex-wrap gap-3">

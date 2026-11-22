@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import type { Coach, CoachId } from "@features/mira/content/coaches";
+import { SignInAgain } from "../account/SignedOut";
 import { notify, stopNotifying } from "./data";
 import { FOCUS, QUIET_PILL } from "./styles";
 
@@ -151,6 +152,7 @@ export function NotifyButton({
       {error ? (
         <span role="alert" className="text-[13px] text-ap-bad-ink">
           {error}
+          <SignInAgain error={error} />
         </span>
       ) : null}
     </span>

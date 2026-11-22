@@ -147,9 +147,27 @@ describe("The roster (/mira/coaches)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Notify me when Lena is ready" }));
     expect(await screen.findByText("That didn't go through.")).toBeInTheDocument();
+    // Only a lost sign-in offers to sign in again (R3-ACCT-3).
+    expect(screen.queryByRole("link", { name: "Sign in again" })).toBeNull();
     expect(screen.getByRole("button", { name: "Notify me when Lena is ready" })).toHaveTextContent(
       "Notify me"
     );
+  });
+
+  // Round-3 R3-ACCT-3: after a lost sign-in, "Notify me" said "You were signed out. Please sign in
+  // again." with nothing to tap.
+  it("offers Sign in again when Notify me finds the sign-in gone", async () => {
+    window.history.replaceState(null, "", "/mira/coaches");
+    replies["POST /api/mira/event"] = () => ({ status: 401, body: { error: "Please sign in." } });
+    render(<CoachRoster />);
+    fireEvent.click(await screen.findByRole("button", { name: "Notify me when Theo is ready" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent("/mira/coaches")}`
+    );
+    window.history.replaceState(null, "", "/");
   });
 
   it("lets a Notify me be taken back, keeping the keyboard on the coach's button", async () => {

@@ -18,6 +18,7 @@ import {
   getMessages,
   goalTexts,
   listChats,
+  upsertProfileAtSignIn,
 } from "@features/mira/server/store";
 import { fakeDb } from "./fake-db";
 
@@ -138,6 +139,52 @@ describe("deleting a Mira account", () => {
     );
     await expect(deleteAccount(LEA)).rejects.toThrow(/cleanup failed/);
     expect(deletesLogin()).toBe(false);
+  });
+});
+
+// Round-3 R3-ACCT-4 (lead decision): a code sign-in on another device, with the optional box left
+// empty, silently turned "Mira may use my LoveIQ result" off. Only the first sign-up sets it.
+describe("the profile at sign-in", () => {
+  const sent = () =>
+    vi.mocked(supabaseFetch).mock.calls.map(([path, init]) => ({
+      call: `${init?.method ?? "GET"} ${path}`,
+      prefer: (init?.headers as Record<string, string> | undefined)?.Prefer,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    }));
+  const answer = (made: unknown[]) =>
+    vi
+      .mocked(supabaseFetch)
+      .mockImplementation(async (_path, init) =>
+        init?.method === "POST"
+          ? new Response(JSON.stringify(made), { status: 201 })
+          : new Response(JSON.stringify([{ id: LEA.id, use_assessment: true }]), { status: 200 })
+      );
+
+  it("takes the LoveIQ tick when the sign-in makes the account", async () => {
+    answer([{ id: LEA.id, use_assessment: true }]);
+    const p = await upsertProfileAtSignIn(LEA.id, LEA.email, "v2", { useAssessment: true });
+    expect(p).toMatchObject({ use_assessment: true });
+    const [insert, ...rest] = sent();
+    expect(insert).toMatchObject({
+      call: "POST /rest/v1/mira_user?on_conflict=id",
+      // An existing account is left as it is: never merged over.
+      prefer: "resolution=ignore-duplicates,return=representation",
+      body: { id: LEA.id, email: LEA.email, consent_version: "v2", use_assessment: true },
+    });
+    expect(rest).toEqual([]);
+  });
+
+  it("renews a returning account's consent and address, never its LoveIQ choice", async () => {
+    answer([]); // the account was there: the insert did nothing
+    const p = await upsertProfileAtSignIn(LEA.id, LEA.email, "v2", { useAssessment: false });
+    expect(p).toMatchObject({ use_assessment: true }); // as saved in Settings
+    const renew = sent()[1]!;
+    expect(renew).toMatchObject({
+      call: `PATCH /rest/v1/mira_user?id=eq.${LEA.id}`,
+      body: { email: LEA.email, consent_version: "v2" },
+    });
+    expect(renew.body).not.toHaveProperty("use_assessment");
+    expect(renew.body.consent_at).toEqual(expect.any(String));
   });
 });
 

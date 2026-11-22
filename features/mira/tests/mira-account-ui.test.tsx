@@ -59,6 +59,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
   vi.unstubAllGlobals();
   fetchMock.mockClear();
   Object.values(router).forEach((f) => f.mockClear());
@@ -242,6 +243,27 @@ describe("A chat the account doesn't keep", () => {
   });
 });
 
+// Round-3 R3-UXA-6: in Dark on Chromium the sign-up's fields kept the browser's own grey
+// (rgb(59,59,59)), a slab on the plum page; Mira's paper and the field's edge, as the feedback
+// form's (UX-7), and the passkey's Name field in Settings the same.
+describe("Text fields", () => {
+  const paper = (field: HTMLElement) => expect(field).toHaveClass("bg-white", "border-ap-field");
+
+  it("sit on Mira's paper with the field's edge at every step, never the browser's grey", async () => {
+    render(<SignUpFlow />);
+    paper(screen.getByLabelText("Email"));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "lea@example.com" } });
+    tickAll();
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    paper(await screen.findByLabelText("Code from the email"));
+    cleanup();
+    sessionStorage.clear();
+    render(<SignUpFlow googleResult="done" needsAbout />);
+    paper(await screen.findByLabelText("What should Mira call you?"));
+    paper(screen.getByLabelText(/How do you describe your gender/));
+  });
+});
+
 describe("The code step", () => {
   afterEach(() => sessionStorage.clear());
   const toCodeStep = async () => {
@@ -277,6 +299,24 @@ describe("The code step", () => {
     render(<SignUpFlow />);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.getByRole("heading", { name: /Create your free account/ })).toBeVisible();
+  });
+
+  // Round-3 R3-ACCT-1: the kept step held the address but not the three ticks, so "Send a new
+  // code" after a reload sent them unticked and got "Please check the form and try again."
+  it("sends a new code after a reload: the ticks that got it there come back with it", async () => {
+    await toCodeStep();
+    cleanup();
+    render(<SignUpFlow />);
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    await waitFor(() => expect(calls("POST /api/mira/auth")).toHaveLength(2));
+    expect(calls("POST /api/mira/auth").at(-1)).toMatchObject({
+      action: "start",
+      email: "lea@example.com",
+      adult: true,
+      terms: true,
+      consent: true,
+    });
   });
 
   it("is left for good with Change email", async () => {
@@ -582,10 +622,50 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("DELETE /api/mira/security")[1]!.url).toBe("/api/mira/security?device=all");
   });
 
+  // Round-3 R3-ACCT-6: when the control that had the focus went away, the focus fell to the page:
+  // signing out another device, removing a passkey, and the re-sign-in box (opening and Not now).
+  it("never drops the focus on the page when its control goes away", async () => {
+    const devices = await show({ recent: false });
+    const press = (b: HTMLElement) => {
+      b.focus();
+      fireEvent.click(b);
+    };
+    press(within(devices).getByRole("button", { name: "Sign out iPhone · Safari" }));
+    await waitFor(() =>
+      expect(within(devices).getByRole("heading", { name: "Devices" })).toHaveFocus()
+    );
+
+    const how = screen.getByRole("region", { name: "How you sign in" });
+    press(within(how).getByRole("button", { name: "Remove Work laptop" }));
+    press(within(how).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(within(how).getByRole("heading", { name: "How you sign in" })).toHaveFocus()
+    );
+
+    // The re-sign-in box takes the focus with what it says, and Not now gives it back.
+    press(within(how).getByRole("button", { name: "Change email" }));
+    await waitFor(() =>
+      expect(within(how).getByText(/please sign in again to change your email/)).toHaveFocus()
+    );
+    press(within(how).getByRole("button", { name: "Not now" }));
+    await waitFor(() =>
+      expect(within(how).getByRole("button", { name: "Change email" })).toHaveFocus()
+    );
+    press(within(how).getByRole("button", { name: "Add a passkey" }));
+    await waitFor(() =>
+      expect(within(how).getByText(/please sign in again to add a passkey/)).toHaveFocus()
+    );
+    press(within(how).getByRole("button", { name: "Not now" }));
+    await waitFor(() =>
+      expect(within(how).getByRole("button", { name: "Add a passkey" })).toHaveFocus()
+    );
+  });
+
   it("renames and removes a passkey, and tells the passkey manager which still work", async () => {
     await show();
     const how = screen.getByRole("region", { name: "How you sign in" });
     fireEvent.click(within(how).getByRole("button", { name: "Rename Work laptop" }));
+    expect(within(how).getByLabelText("Name")).toHaveClass("bg-white"); // R3-UXA-6
     fireEvent.change(within(how).getByLabelText("Name"), { target: { value: "Office PC" } });
     fireEvent.click(within(how).getByRole("button", { name: "Save" }));
     await within(how).findByText("Office PC", { selector: "p" });
@@ -706,6 +786,54 @@ describe("Settings › Sign-in & security", () => {
     );
   });
 
+  // Round-3 R3-ACCT-5: the code step lived in the page only, so a reload or a tab the phone
+  // discarded while the person read the mail lost it; within production's 10-minute wait a new
+  // send then gets 429 with no field, leaving a working code nowhere to go.
+  it("keeps the change of email's code step through a reload until it is confirmed or cancelled", async () => {
+    const toCode = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+      fireEvent.change(screen.getByLabelText("New email"), {
+        target: { value: "lea.new@example.com" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+      await screen.findByLabelText("Code from the email");
+    };
+    const reload = async (over: Partial<typeof SECURITY> = {}) => {
+      cleanup();
+      await show(over);
+    };
+    await show();
+    await toCode();
+    await reload();
+    expect(screen.getByLabelText("Code from the email")).toBeInTheDocument();
+    expect(screen.getByText("lea.new@example.com")).toBeInTheDocument();
+    // Back with the page, it doesn't take the focus (the person may be elsewhere in Settings).
+    expect(screen.getByLabelText("Code from the email")).not.toHaveFocus();
+    // Confirming needs no recent sign-in, so an older one still gets the field.
+    await reload({ recent: false });
+    expect(screen.getByLabelText("Code from the email")).toBeInTheDocument();
+    // Not for another account signed in in this tab meanwhile.
+    await reload({ email: "kim@example.com" });
+    expect(screen.queryByLabelText("Code from the email")).toBeNull();
+    // Cancel leaves it for good.
+    await reload();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await reload();
+    expect(screen.queryByLabelText("Code from the email")).toBeNull();
+    // So does the change itself.
+    await toCode();
+    replies["POST /api/mira/email"] = () => ({
+      body: { success: true, email: "lea.new@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await screen.findByText(/^Your email is now lea\.new@example\.com\./);
+    await reload();
+    expect(screen.queryByLabelText("Code from the email")).toBeNull();
+  });
+
   it("shows the new address all over Settings at once", async () => {
     replies["GET /api/mira/me"] = () => ({
       body: {
@@ -765,11 +893,17 @@ describe("Settings › Sign-in & security", () => {
       "please sign in again to add a passkey"
     );
     expect(calls("POST /api/mira/passkeys")).toEqual([]);
+    // Round-3 R3-ACCT-2: a client-side hop from a page first loaded at #security came back from
+    // the sign-in as #security#security, at the top of Settings. A full page load instead, as a
+    // fresh sign-in page lands right.
+    const replace = vi.fn();
+    vi.stubGlobal("location", { ...window.location, replace });
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     // "You'll come straight back here": to Sign-in & security, not the top of Settings.
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings%23security")
+      expect(replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings%23security")
     );
+    expect(router.replace).not.toHaveBeenCalled();
     expect(calls("POST /api/mira/auth")).toEqual([expect.objectContaining({ action: "logout" })]);
   });
 
@@ -826,7 +960,7 @@ describe("Settings › Sign-in & security", () => {
   it("can be loaded again after a failure", async () => {
     replies["GET /api/mira/security"] = () => ({ status: 500, body: { error: "x" } });
     render(<SecuritySettings />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load this right now.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in & security didn't load.");
     replies["GET /api/mira/security"] = () => ({ body: SECURITY });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("region", { name: "Devices" });
@@ -838,5 +972,9 @@ describe("Settings › Sign-in & security", () => {
     expect(lastActive(new Date(2026, 10, 21, 23).toISOString(), now)).toBe("Active yesterday");
     expect(lastActive(new Date(2026, 10, 18, 9).toISOString(), now)).toBe("Active 4 days ago");
     expect(lastActive(new Date(2026, 10, 2, 9).toISOString(), now)).toBe("Active on 2 Nov");
+    // Round-3 R3-ACCT-9 (SET-12): the kit's date, "Sep" in every browser (en-GB says "Sept" in
+    // Chromium, Firefox and Node), with the year outside this one.
+    expect(lastActive(new Date(2026, 8, 22, 9).toISOString(), now)).toBe("Active on 22 Sep");
+    expect(lastActive(new Date(2025, 8, 22, 9).toISOString(), now)).toBe("Active on 22 Sep 2025");
   });
 });

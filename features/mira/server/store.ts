@@ -74,9 +74,11 @@ export async function getProfile(id: string): Promise<MiraProfile | null> {
 }
 
 /**
- * Created (or its consent renewed) at every sign-in, with the form's optional tick as given that
- * time (the LoveIQ result); the rest of the profile is kept. `share_rated_replies` is never set
- * any more (the box went on 21 Nov 2026; ratings are thumbs only).
+ * Created at the first sign-in, with the form's optional tick (the LoveIQ result); every later
+ * sign-in renews the consent and the address and keeps the rest, that choice included, which the
+ * person changes in Settings or on Assessments (round-3 R3-ACCT-4, lead decision: an empty box on
+ * another device's sign-in had switched it off). `share_rated_replies` is never set any more (the
+ * box went on 21 Nov 2026; ratings are thumbs only).
  * Signed in from a team browser, the account is the team's from then on (is_team, never unset here).
  */
 export async function upsertProfileAtSignIn(
@@ -86,20 +88,29 @@ export async function upsertProfileAtSignIn(
   choices: { useAssessment: boolean }
 ): Promise<MiraProfile | null> {
   const team = await fromTeamBrowser();
-  const res = await supabaseFetch("/rest/v1/mira_user?on_conflict=id", {
+  const now = new Date().toISOString();
+  const renewed = {
+    email,
+    consent_at: now,
+    consent_version: consentVersion,
+    updated_at: now,
+    ...(team ? { is_team: true } : {}),
+  };
+  // A new account only: an existing one is left as it is (no merge) and answers no row.
+  const made = await supabaseFetch("/rest/v1/mira_user?on_conflict=id", {
     method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify({
-      id,
-      email,
-      consent_at: new Date().toISOString(),
-      consent_version: consentVersion,
-      use_assessment: choices.useAssessment,
-      updated_at: new Date().toISOString(),
-      ...(team ? { is_team: true } : {}),
-    }),
+    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+    body: JSON.stringify({ id, ...renewed, use_assessment: choices.useAssessment }),
   });
-  if (!res.ok) throw new Error(`mira profile upsert failed (${res.status})`);
+  if (!made.ok) throw new Error(`mira profile upsert failed (${made.status})`);
+  const created = (await made.json()) as MiraProfile[];
+  if (created[0]) return created[0];
+  const res = await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(renewed),
+  });
+  if (!res.ok) throw new Error(`mira profile update failed (${res.status})`);
   const out = (await res.json()) as MiraProfile[];
   return out[0] ?? null;
 }

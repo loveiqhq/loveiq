@@ -159,14 +159,17 @@ export async function POST(request: Request) {
       break;
     }
     case "feedback":
-      // Its words and email address are never kept for someone stopped as under 18.
-      if (await isMinor(account?.id ?? null)) return MINOR_REFUSED();
+      // From an account only, as the page asks (round-3 R3-DATA-2): a signed-out answer would
+      // sit in AP's "Beta feedback" where deleting an account can't reach it. Its words and email
+      // address are never kept for someone stopped as under 18.
+      if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+      if (await isMinor(account.id)) return MINOR_REFUSED();
       logMiraEvent("feedback", who, {
         challenges: body.challenges,
         wish: body.wish ?? null,
         other: body.other ?? null,
         mayEmail: body.mayEmail,
-        email: body.mayEmail && account ? account.email : null,
+        email: body.mayEmail ? account.email : null,
       });
       break;
     case "notify": {

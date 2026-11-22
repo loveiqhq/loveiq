@@ -29,6 +29,10 @@ vi.mock("@features/mira/server/nudges", async (original) => ({
   ...(await original<typeof import("@features/mira/server/nudges")>()),
   hadCrisis: (id: string, since: Date) => server.hadCrisis(id, since),
 }));
+const stop = vi.hoisted(() => ({ isMinor: async (_id: string | null): Promise<boolean> => false }));
+vi.mock("@features/mira/server/minor", () => ({
+  isMinor: (id: string | null) => stop.isMinor(id),
+}));
 
 import MiraError from "@/app/mira/error";
 import HomePage from "@/app/mira/home/page";
@@ -36,7 +40,9 @@ import MiraLayout from "@/app/mira/layout";
 import { MiraLookRoot } from "@features/mira/ui/MiraLook";
 import { DEFAULT_LOOK } from "@features/mira/ui/prefs";
 import MissingPage from "@/app/mira/[...missing]/page";
-import MiraNotFound from "@/app/mira/not-found";
+import MiraNotFound, { metadata as notFoundMetadata } from "@/app/mira/not-found";
+import { generateMetadata as checkMetadata } from "@/app/mira/assessments/[check]/page";
+import { generateMetadata as recordingMetadata } from "@/app/mira/recordings/[id]/page";
 import GuideLayout from "@/app/mira/guide/layout";
 import MiraHome from "@features/mira/ui/MiraHome";
 import { MiraAppFrame } from "@features/mira/ui/MiraAppFrame";
@@ -227,7 +233,7 @@ describe("the signed-in frame", () => {
 
   it("opens More as a sheet with the other pages, the current one marked, and closes it", () => {
     frame("settings");
-    fireEvent.click(within(menu()).getByRole("button", { name: "More" }));
+    fireEvent.click(within(menu()).getByRole("button", { name: /^More/ }));
     const sheet = screen.getByRole("dialog", { name: "More" });
     expect(
       within(sheet)
@@ -258,6 +264,32 @@ describe("the signed-in frame", () => {
       within(screen.getByRole("dialog", { name: "More" })).getByRole("link", { name: "Coaches" })
     );
     expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
+  });
+
+  // R3-UXA-12: on a page in More the bar marked More only by its pill and weight.
+  it("says on the bar which of More's pages is open, and nothing more elsewhere", () => {
+    frame("settings");
+    expect(within(menu()).getByRole("button", { name: "More, current: Settings" })).toBeVisible();
+    cleanup();
+    frame("recordings");
+    expect(
+      within(menu()).getByRole("button", { name: "More, current: Voice sessions" })
+    ).toBeVisible();
+    cleanup();
+    frame("journal");
+    expect(within(menu()).getByRole("button", { name: "More" })).toBeVisible();
+  });
+
+  it("marks the bar for the page's focus room below it (R3-UXA-1: global CSS keys on data-mira-bar)", () => {
+    frame("home");
+    expect(menu()).toHaveAttribute("data-mira-bar");
+  });
+
+  // R3-UXA-12 item 3: Mira's copy mixed ' and ’; it writes ’.
+  it("writes its own words with typographic apostrophes", () => {
+    frame("home");
+    expect(screen.getByRole("contentinfo")).toHaveTextContent("If you’re struggling");
+    expect(screen.getByRole("contentinfo").textContent).not.toContain("'");
   });
 
   it("marks nothing as current on a page outside the menu", () => {
@@ -351,12 +383,73 @@ describe("Home", () => {
     render(<MiraHome hour={8} name="Robin" />);
     expect(screen.queryByRole("heading", { name: "Start with Mira" })).toBeNull();
     expect(screen.getByText("Loading your chats")).toBeInTheDocument();
-    expect(await screen.findByText("Your chats didn't load.")).toBeInTheDocument();
+    expect(await screen.findByText("Your chats didn’t load.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Start with Mira" })).toBeNull();
     expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute("href", "/mira");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Continue with Mira" })).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/mira/me")).toHaveLength(2);
+  });
+
+  // R3-UXA-7: the button was swapped for the placeholder at once, dropping focus to the page.
+  it("keeps focus on Try again while it retries, then on the card's heading once it loads", async () => {
+    const meReply = (status: number) =>
+      ({
+        ok: status < 400,
+        status,
+        json: async () =>
+          status < 400
+            ? { profile: { name: "Robin", email: "r@example.com" }, chats: [chat(1)] }
+            : { error: "Unable to load your account." },
+      }) as Response;
+    let answer!: (r: Response) => void;
+    const replies = [
+      Promise.resolve(meReply(500)),
+      Promise.resolve(meReply(500)),
+      new Promise<Response>((r) => (answer = r)),
+    ];
+    const fetchMock = vi.fn((url: string) =>
+      url === "/api/mira/me" ? replies.shift()! : new Promise<Response>(() => undefined)
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MiraHome hour={8} name="Robin" />);
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    retry.focus();
+
+    // A retry that fails again: the same button, still focused, ready again.
+    fireEvent.click(retry);
+    expect(document.activeElement).toBe(retry);
+    await waitFor(() => expect(retry).not.toHaveAttribute("aria-disabled"));
+    expect(document.activeElement).toBe(retry);
+
+    // While a retry runs the button stays, aria-disabled, and a second press waits for it.
+    fireEvent.click(retry);
+    expect(retry).toHaveAttribute("aria-disabled", "true");
+    expect(document.activeElement).toBe(retry);
+    fireEvent.click(retry);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/mira/me")).toHaveLength(3);
+
+    answer(meReply(200));
+    const heading = await screen.findByRole("heading", { name: "Continue with Mira" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
+  // The round-3 audit: Home built its sections three ways (a box with the heading inside, the
+  // heading over a box, no box). Home now lays them out: one anatomy (tailwind.config.js).
+  it("lays every section out one way, its own and each card's", async () => {
+    account({ status: 200, chats: [chat(1)] });
+    const { container } = render(<MiraHome hour={8} name="Robin" />);
+    await screen.findByRole("heading", { name: "Continue with Mira" });
+    const lists = [...container.querySelectorAll(".mira-home-sections")];
+    const sections = lists.flatMap((l) => [...l.children].filter((c) => c.tagName === "SECTION"));
+    // Each card's section is placed in a list that lays it out: journal, goals, the weekly
+    // session, picks, assessments, voice sessions and coaches (some still loading here).
+    expect(
+      sections.map((s) => s.getAttribute("aria-labelledby") ?? s.getAttribute("aria-label"))
+    ).toEqual(expect.arrayContaining(["journal-card-h", "goals-card-h", "mira-voice-sessions"]));
+    // Home's own first section is open too: no box of its own.
+    const first = screen.getByRole("region", { name: "Continue with Mira" });
+    expect(first.className).not.toMatch(/\bborder\b/);
   });
 
   it("invites a person with no chats to start", async () => {
@@ -392,14 +485,21 @@ describe("Home", () => {
     expect(screen.getAllByRole("link", { name: "Sign in again" })).toHaveLength(1);
   });
 
-  it("sends a lost sign-in back to Home after signing in again", async () => {
+  // R3-UXA-2: Home went to sign-in on its own, and the sign-in page, still seeing the session, sent
+  // the person straight back: round and round, about 50 times in 12 s.
+  it("after a 401 never leaves Home on its own: it says so once, with the way back in", async () => {
     // The way back is the page's own address (signInHref), as on every Mira page.
     window.history.replaceState(null, "", "/mira/home");
     account({ status: 401 });
     render(<MiraHome hour={8} name="Robin" />);
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fhome")
-    );
+    const link = await screen.findByRole("link", { name: "Sign in again" });
+    expect(link).toHaveAttribute("href", "/mira/start?next=%2Fmira%2Fhome");
+    expect(screen.getAllByText("You were signed out.")).toHaveLength(1);
+    // Neither a retry nor a placeholder that waits for ever.
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText("Loading your chats")).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
     window.history.replaceState(null, "", "/");
   });
 
@@ -434,6 +534,67 @@ describe("Home", () => {
     expect(earlier).toHaveTextContent("1 Nov");
   });
 
+  // R3-UXA-8: every card said "Mira is only for adults.", seven times down the page, under a card
+  // that still offered "Start with Mira".
+  describe("for an account stopped as under 18", () => {
+    /** /api/mira/me with `minor`, every habit's read refused as the routes refuse it. */
+    function stopped(meMinor: boolean) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.split("?")[0] === "/api/mira/me") {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                profile: { name: "Kim", email: "kim@example.com" },
+                chats: [],
+                minor: meMinor,
+              }),
+            } as Response;
+          }
+          return {
+            ok: false,
+            status: 403,
+            json: async () => ({ error: ADULTS_ONLY, minor: true }),
+          } as Response;
+        })
+      );
+    }
+    const quietPage = () => {
+      expect(screen.getAllByText(ADULTS_ONLY)).toHaveLength(1);
+      expect(screen.queryByRole("heading", { name: /with Mira$/ })).toBeNull();
+      expect(screen.queryByRole("link", { name: "New chat" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Daily journal" })).toBeNull();
+      expect(screen.queryByRole("searchbox")).toBeNull();
+      expect(screen.queryByRole("combobox")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      expect(screen.queryByText(/Wonderful to see you/)).toBeNull();
+    };
+
+    it("says it once, from the first paint, and shows nothing it can't use", async () => {
+      stopped(true);
+      render(<MiraHome minor hour={8} name="Kim" />);
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Good morning, Kim");
+      quietPage();
+      await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+      quietPage();
+    });
+
+    it("says it once too when only the account's read finds the stop", async () => {
+      stopped(true);
+      render(<MiraHome hour={8} name="Kim" />);
+      await waitFor(quietPage);
+    });
+
+    it("keeps the support lines at hand during the quiet after them", () => {
+      stopped(true);
+      render(<MiraHome minor quiet hour={8} name="Kim" />);
+      expect(screen.getAllByText(ADULTS_ONLY)).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "See support lines" })).toBeInTheDocument();
+    });
+  });
+
   it("is neutral while the 14 days after the support lines run, with the lines at hand (CHAT-17)", async () => {
     account();
     render(<MiraHome quiet hour={8} name="Kim" />);
@@ -455,7 +616,7 @@ describe("Home's page (server)", () => {
       return true;
     };
     const el = (await HomePage()) as { props: Record<string, unknown> };
-    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true });
+    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true, minor: false });
     // The same 14 days as the nudges and the journal reminders.
     expect(asked).toEqual([["u1", new Date("2026-11-08T07:30:00Z")]]);
   });
@@ -468,6 +629,25 @@ describe("Home's page (server)", () => {
     };
     const el = (await HomePage()) as { props: Record<string, unknown> };
     expect(el.props).toMatchObject({ name: null, hour: null, quiet: true });
+  });
+
+  it("knows before the first paint that the account was stopped as under 18 (R3-UXA-8)", async () => {
+    session.account = { id: "u1", email: "kim@example.com" };
+    server.profile = { name: "Kim", time_zone: "Europe/Berlin", country: "DE" };
+    server.hadCrisis = async () => false;
+    const asked: Array<string | null> = [];
+    stop.isMinor = async (id) => {
+      asked.push(id);
+      return true;
+    };
+    expect(((await HomePage()) as { props: Record<string, unknown> }).props.minor).toBe(true);
+    expect(asked).toEqual(["u1"]);
+    // Unsure is not stopped (as /api/mira/me answers): the cards then each refuse on their own.
+    stop.isMinor = async () => {
+      throw new Error("down");
+    };
+    expect(((await HomePage()) as { props: Record<string, unknown> }).props.minor).toBe(false);
+    stop.isMinor = async () => false;
   });
 
   it("is quiet only after support lines", async () => {
@@ -492,15 +672,41 @@ describe("Mira's own not-found page (SET-5)", () => {
   it("signed in, says the page isn't here inside the app's frame, with the way Home", async () => {
     session.account = { id: "u1", email: "robin@example.com" };
     render(await MiraNotFound());
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn’t here");
     expect(screen.getByRole("navigation", { name: "Mira" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/mira/home");
+  });
+
+  // R3-UXA-11: /mira/assessments/Anxiety said "Assessment | LoveIQ", a page that isn't there.
+  it("names the tab for what it is, not for the address asked for", async () => {
+    expect(notFoundMetadata.title).toBe("Page not found | LoveIQ");
+    // Next.js shows not-found.tsx's metadata only when generateMetadata itself throws notFound().
+    await expect(checkMetadata({ params: Promise.resolve({ check: "Anxiety" }) })).rejects.toThrow(
+      "not found"
+    );
+    await expect(
+      recordingMetadata({ params: Promise.resolve({ id: "not-a-uuid" }) })
+    ).rejects.toThrow("not found");
+    // Real addresses keep their own titles.
+    expect((await checkMetadata({ params: Promise.resolve({ check: "anxiety" }) })).title).toMatch(
+      / \| LoveIQ$/
+    );
+    expect((await checkMetadata({ params: Promise.resolve({ check: "body" }) })).title).toBe(
+      "Body check | LoveIQ"
+    );
+    expect(
+      (
+        await recordingMetadata({
+          params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+        })
+      ).title
+    ).toBe("Voice session | LoveIQ");
   });
 
   it("signed out, says so in the open frame, with the way to Mira", async () => {
     session.account = null;
     render(await MiraNotFound());
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn’t here");
     expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
     expect(screen.getByRole("link", { name: "Talk to Mira" })).toHaveAttribute("href", "/mira");
   });
@@ -511,7 +717,7 @@ describe("Mira's own error page (SET-17)", () => {
     nav.path = "/mira/assessments/anxiety";
     const retry = vi.fn();
     render(<MiraError error={new Error("boom")} retry={retry} />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page didn't load");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page didn’t load");
     const menu = screen.getByRole("navigation", { name: "Mira" });
     expect(within(menu).getByRole("link", { current: "page" })).toHaveAttribute(
       "href",

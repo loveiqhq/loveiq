@@ -239,6 +239,23 @@ describe("POST /api/mira/chat", () => {
     expect(gates()).toEqual([]);
   });
 
+  // Round-3 R3-CHAT-3: the reply that used the only free message also brought the 12-question
+  // invitation, whose "Shall we start?" nobody could answer without an account.
+  it("brings no intake invitation with the reply that uses the last free message", async () => {
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) => ({
+      allowed: true,
+      remaining: cfg.bucket === "mira-anon-messages" ? 0 : 9,
+      resetAt: new Date(),
+    }));
+    const body = await (await post({ message: "I hide during sex", consent: true })).json();
+    expect(body).toMatchObject({ reply: "That makes sense.", freeLeft: 0 });
+    expect(body.invitation).toBeUndefined();
+    // Nor is Mira told one follows: her reply may ask its own question.
+    expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain(
+      "end your reply without a question"
+    );
+  });
+
   it("stops anonymous messages at the daily cap, per browser and per network", async () => {
     for (const bucket of ["mira-anon-daily", "mira-anon-ip"]) {
       vi.mocked(askModel).mockClear();

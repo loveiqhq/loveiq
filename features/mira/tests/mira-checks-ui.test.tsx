@@ -731,6 +731,50 @@ describe("someone Mira stopped as under 18", () => {
       view.unmount();
     }
   });
+
+  // Round-3 R3-ACCT-8 / R3-UXA-8: a check page in that state had the breadcrumb and the sentence
+  // but no h1 (the title lived in the loaded branch only).
+  it("keeps each check's title as the page's heading", async () => {
+    replies["GET /api/mira/checks"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    for (const id of ["anxiety", "mood", "loneliness"] as const) {
+      const view = render(<CheckPage checkId={id} practice={null} />);
+      expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(checkById(id)!.title);
+      view.unmount();
+    }
+  });
+});
+
+// Round-3 R3-ACCT-3 and R3-HAB-7 (Settings' part): after a lost sign-in, a switch said "You were
+// signed out. Please sign in again." with nothing to tap.
+describe("a switch whose save finds the sign-in gone", () => {
+  it("says so with Sign in again, back to this page, in Settings and on Assessments", async () => {
+    window.history.replaceState(null, "", "/mira/settings#checks-settings");
+    replies["PATCH /api/mira/me"] = () => ({ status: 401, body: { error: "Please sign in." } });
+    const back = `/mira/start?next=${encodeURIComponent("/mira/settings#checks-settings")}`;
+    const settings = render(<ChecksSettings />);
+    fireEvent.click(await screen.findByRole("switch", { name: "Mira may use my check results" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      back
+    );
+    settings.unmount();
+
+    window.history.replaceState(null, "", "/mira/assessments");
+    render(<AssessmentsPage />);
+    fireEvent.click(await screen.findByRole("switch", { name: "Mira may use my LoveIQ result" }));
+    const line = await screen.findByRole("alert");
+    expect(within(line).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent("/mira/assessments")}`
+    );
+    window.history.replaceState(null, "", "/");
+  });
 });
 
 describe("Assessments' 'Mira may use my LoveIQ result'", () => {

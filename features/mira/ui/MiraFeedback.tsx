@@ -20,7 +20,7 @@ const CHALLENGES = [
   "Another challenge",
 ];
 
-export default function MiraFeedback() {
+export default function MiraFeedback({ minor: stopped = false }: { minor?: boolean }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [wish, setWish] = useState("");
   const [other, setOther] = useState("");
@@ -29,8 +29,9 @@ export default function MiraFeedback() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Refused as under 18: the one refusal in place of the form, for good (decision 9).
-  const [minor, setMinor] = useState(false);
+  // Refused as under 18: the one refusal in place of the form, for good (decision 9), from the
+  // start when the page knows it (R3-DATA-5).
+  const [minor, setMinor] = useState(stopped);
 
   async function submit() {
     if (busy) return;

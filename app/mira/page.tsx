@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { guideStarter } from "@features/mira/content/coaches";
 import { starterFor } from "@features/mira/content/checks";
 import { MIRA_TITLE, miraLinkPreview } from "@features/mira/link-preview";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import MiraChat from "@features/mira/ui/MiraChat";
 
@@ -43,11 +44,16 @@ export default async function MiraPage({
       : account
         ? (starterFor(say) ?? null)
         : null;
+  // Stopped as under 18 (this browser's cookie, or the account): the chat starts stopped, so a
+  // new visit never asks for the 18+ tick (round-3 R3-ACCT-8, lead decision). Unsure is not
+  // stopped: the chat route still stops every message.
+  const stopped = await isMinor(account?.id ?? null).catch(() => false);
   return (
     <MiraChat
       signedIn={Boolean(account)}
       initialChatId={account ? chatId : null}
       starter={starter}
+      stopped={stopped}
     />
   );
 }

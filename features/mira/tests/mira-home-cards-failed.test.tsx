@@ -15,17 +15,17 @@ import { NextSessionCard } from "@features/mira/ui/weekly-session/NextSessionCar
 
 /**
  * Round-3 SET-11: with every read failing, Home's habit cards said it three ways, with two styles
- * of Try again and two cards in red. Each now says "<what> didn't load." with the same Try again,
+ * of Try again and two cards in red. Each now says "<what> didn’t load." with the same Try again,
  * never red: nothing the person did is wrong.
  */
 
 const CARDS: Array<[region: string, said: string]> = [
-  ["Daily journal", "Your journal didn't load."],
-  ["Challenges & goals", "Your goals didn't load."],
-  ["Your weekly session", "Your weekly session didn't load."],
-  ["Picked for you", "Your picks didn't load."],
-  ["Your assessments", "Your assessments didn't load."],
-  ["Your coaches", "Your coaches didn't load."],
+  ["Daily journal", "Your journal didn’t load."],
+  ["Challenges & goals", "Your goals didn’t load."],
+  ["Your weekly session", "Your weekly session didn’t load."],
+  ["Picked for you", "Your picks didn’t load."],
+  ["Your assessments", "Your assessments didn’t load."],
+  ["Your coaches", "Your coaches didn’t load."],
 ];
 
 const home = () =>
