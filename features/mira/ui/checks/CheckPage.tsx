@@ -15,7 +15,7 @@ import { MiraAppFrame } from "../MiraAppFrame";
 import { AdultsOnly } from "../kit";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
-import { miraApi } from "../api";
+import { miraApi, signInHref } from "../api";
 import { CheckRunner } from "./CheckRunner";
 import { UseChecksSwitch } from "./ChecksSettings";
 import { TrendChart, trendSummary } from "./TrendChart";
@@ -63,7 +63,11 @@ export default function CheckPage({
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<{ text: string; retry: boolean } | null>(null);
+  const [saveError, setSaveError] = useState<{
+    text: string;
+    retry: boolean;
+    signIn?: boolean;
+  } | null>(null);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [panel, setPanel] = useState<"q9" | "help" | null>(null);
   const supportShown = useRef(false);
@@ -147,6 +151,13 @@ export default function CheckPage({
         text: `You’ve taken this check recently, so it can’t be saved again yet. It opens again on ${shortDate(r.data.nextAt)}.`,
         retry: false,
       });
+    } else if (r.signedOut) {
+      // Nothing to try again: the way back in, and the draft keeps every answer (R3-HAB-7).
+      setSaveError({
+        text: "You were signed out. Your answers are kept in this tab, to finish once you’re back.",
+        retry: false,
+        signIn: true,
+      });
     } else {
       setSaveError({
         text: r.data.error ?? "Your answers didn’t save. Please try again.",
@@ -210,7 +221,11 @@ export default function CheckPage({
           {saveError ? (
             <p role="alert" className="mt-4 max-w-[600px] text-[14px] text-ap-bad-ink">
               {saveError.text}{" "}
-              {saveError.retry ? (
+              {saveError.signIn ? (
+                <a href={signInHref()} className="font-semibold underline">
+                  Sign in again
+                </a>
+              ) : saveError.retry ? (
                 <button
                   type="button"
                   onClick={() => void save(answers)}
@@ -624,7 +639,7 @@ export function BodyCheckPage() {
   const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
   const [answers, setAnswers] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<{ text: string; signIn?: boolean } | null>(null);
   // Which check was taken, kept for the thank-you once the data says nothing is due.
   const [took, setTook] = useState<"baseline" | "week4">("baseline");
   const doneRef = useRef<HTMLHeadingElement | null>(null);
@@ -648,7 +663,10 @@ export function BodyCheckPage() {
     const r = await miraApi("/api/mira/body-check", { body: { answers: all } });
     setSaving(false);
     if (r.ok) setMode("done");
-    else setSaveError(r.data.error ?? "Your answers didn’t save. Please try again.");
+    // A lost sign-in: the way back in, never Try again (R3-HAB-7).
+    else if (r.signedOut) {
+      setSaveError({ text: "You were signed out, so your answers weren’t saved.", signIn: true });
+    } else setSaveError({ text: r.data.error ?? "Your answers didn’t save. Please try again." });
   }
 
   return (
@@ -703,14 +721,20 @@ export function BodyCheckPage() {
             />
             {saveError ? (
               <p role="alert" className="mt-4 text-[14px] text-ap-bad-ink">
-                {saveError}{" "}
-                <button
-                  type="button"
-                  onClick={() => void save(answers)}
-                  className="font-semibold underline"
-                >
-                  Try again
-                </button>
+                {saveError.text}{" "}
+                {saveError.signIn ? (
+                  <a href={signInHref()} className="font-semibold underline">
+                    Sign in again
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void save(answers)}
+                    className="font-semibold underline"
+                  >
+                    Try again
+                  </button>
+                )}
               </p>
             ) : null}
           </>

@@ -236,6 +236,34 @@ describe("taking a check", () => {
     expect(screen.getByText(/One result so far: moderate \(12 of 21\)/)).toBeTruthy();
     expect(sessionStorage.getItem("mira.check.v1:u1:anxiety")).toBeNull();
   });
+
+  // R3-HAB-7: Try again could only fail again. The answers wait in this tab's draft.
+  it("offers the way back in, never Try again, when the sign-in is gone at the save", async () => {
+    window.history.replaceState(null, "", "/mira/assessments/anxiety");
+    replies["POST /api/mira/checks"] = () => ({ status: 401, body: { error: "x" } });
+    sessionStorage.setItem(
+      "mira.check.v1:u1:anxiety",
+      JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
+    );
+    render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
+    tap("Several days");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "You were signed out. Your answers are kept in this tab, to finish once you’re back."
+    );
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fassessments%2Fanxiety"
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    // True: the draft holds every answer for this account.
+    expect(JSON.parse(sessionStorage.getItem("mira.check.v1:u1:anxiety")!).answers).toEqual([
+      2, 2, 2, 2, 2, 1, 1,
+    ]);
+    window.history.replaceState(null, "", "/");
+  });
 });
 
 // EU MDR: a self-check reflects, it doesn't monitor. Two results show only their difference,
@@ -286,6 +314,24 @@ describe("the body check's own page", () => {
       expect(region.textContent).toBe("Thank you. That’s your four-week check done.")
     );
     expect(screen.getByRole("status")).toBe(region);
+  });
+
+  // R3-HAB-7: a lost sign-in has nothing to try again: the way back in instead.
+  it("offers the way back in, never Try again, when the sign-in is gone at the save", async () => {
+    window.history.replaceState(null, "", "/mira/assessments/body");
+    replies["POST /api/mira/body-check"] = () => ({ status: 401, body: { error: "x" } });
+    render(<BodyCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    for (let i = 1; i < 10; i++) keyboard("Seldom", "Next");
+    keyboard("Never", "Save my answers");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out, so your answers weren’t saved.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fassessments%2Fbody"
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    window.history.replaceState(null, "", "/");
   });
 
   it("keeps the answers and offers Try again when the save fails", async () => {
