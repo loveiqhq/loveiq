@@ -8,7 +8,18 @@ vi.mock("@shared/observability/logger", () => ({
 
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { memberByEmail } from "@features/brain/server/sign-in";
-import { claimCodeAttempt, deleteAccount, deleteChats } from "@features/mira/server/store";
+import { SESSION_OPENING } from "@features/mira/server/calendar";
+import {
+  addMessages,
+  claimCodeAttempt,
+  deleteAccount,
+  deleteChat,
+  deleteChats,
+  getMessages,
+  goalTexts,
+  listChats,
+} from "@features/mira/server/store";
+import { fakeDb } from "./fake-db";
 
 const LEA = { id: "6f2c4a1e-1111-4222-8333-944455556666", email: "lea@example.com" };
 const BROWSER = "aBcD1234eFgH5678iJkL9012";
@@ -128,5 +139,114 @@ describe("guessing an emailed code", () => {
     expect(await claimCodeAttempt(LEA.email)).toBe(true);
     const body = JSON.parse(String(vi.mocked(supabaseFetch).mock.calls[0]![1]!.body));
     expect(body).toMatchObject({ p_email: LEA.email, p_max: 25 });
+  });
+});
+
+// Round-2 audit CHAT-17 (lead decision 5) and UX-14: the title a chat is shown with.
+describe("listChats titles", () => {
+  const row = (title: string, created_at: string, time_zone: string | null) => ({
+    id: crypto.randomUUID(),
+    title,
+    updated_at: created_at,
+    created_at,
+    mira_user: time_zone ? { time_zone } : null,
+  });
+
+  it("names a weekly session's chat and a chat opened by crisis words by their date, in the person's zone", async () => {
+    vi.mocked(supabaseFetch).mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          // 01:30 UTC on Wednesday is 20:30 on Tuesday in New York.
+          row(SESSION_OPENING, "2026-11-25T01:30:00Z", "America/New_York"),
+          row("I don’t want to live anymore", "2026-11-22T09:06:00Z", "Europe/Berlin"),
+          row("I only feel okay with the lights off", "2026-11-21T10:00:00Z", "Europe/Berlin"),
+          row(SESSION_OPENING, "2026-11-25T01:30:00Z", null), // no zone: UTC
+        ]),
+        { status: 200 }
+      )
+    );
+    const chats = await listChats(LEA.id);
+    expect(chats.map((c) => c.title)).toEqual([
+      "Weekly session · Tue 24 Nov",
+      "Chat on 22 Nov",
+      "I only feel okay with the lights off",
+      "Weekly session · Wed 25 Nov",
+    ]);
+    expect(Object.keys(chats[0]!)).toEqual(["id", "title", "updated_at"]);
+    expect(String(vi.mocked(supabaseFetch).mock.calls[0]![0])).toContain(
+      "select=id,title,updated_at,created_at,mira_user(time_zone)"
+    );
+  });
+});
+
+// Round-2 audit CHAT-29, lead decision 4: one chat can be deleted, not only all of them.
+describe("deleteChat", () => {
+  const OTHER = "0b1c2d3e-4f50-4617-8829-3a4b5c6d7e8f";
+  const [ONE, TWO, THEIRS] = [
+    "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
+    "7a3d5b2f-2222-4333-8444-a55566667777",
+    "8b4e6c3a-3333-4444-8555-b66677778888",
+  ];
+
+  it("deletes that chat of the account's and nothing else, and refuses anyone else's", async () => {
+    const db = fakeDb({
+      mira_chat: [
+        { id: ONE, user_id: LEA.id, title: "One" },
+        { id: TWO, user_id: LEA.id, title: "Two" },
+        { id: THEIRS, user_id: OTHER, title: "Theirs" },
+      ],
+    });
+    vi.mocked(supabaseFetch).mockImplementation(db.handle);
+    expect(await deleteChat(LEA.id, ONE)).toBe(true);
+    expect(db.tables.mira_chat!.map((c) => c.id)).toEqual([TWO, THEIRS]);
+    expect(await deleteChat(LEA.id, THEIRS)).toBe(false);
+    expect(await deleteChat(LEA.id, "not-a-chat")).toBe(false);
+    expect(db.tables.mira_chat!.map((c) => c.id)).toEqual([TWO, THEIRS]);
+    // The rated replies' words an older event may keep go too, as with Delete all chats.
+    expect(db.calls.some((c) => c.startsWith("PATCH /rest/v1/mira_event?user_id=eq."))).toBe(true);
+  });
+});
+
+// Round-2 audit CHAT-9, lead decision 3: Mira's goal offer is kept with her reply.
+describe("goal offers with Mira's replies", () => {
+  const CHAT = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
+  const STEP = "Leave one soft light on for the first minute";
+  const inserts = () =>
+    vi
+      .mocked(supabaseFetch)
+      .mock.calls.filter(
+        ([p, i]) => i?.method === "POST" && String(p).startsWith("/rest/v1/mira_message")
+      )
+      .map(([, i]) => JSON.parse(String(i!.body)) as Array<Record<string, unknown>>);
+
+  it("stores the offer with the reply and reads it back with the chat", async () => {
+    const db = fakeDb({ mira_chat: [{ id: CHAT, user_id: LEA.id, title: "One" }] });
+    vi.mocked(supabaseFetch).mockImplementation(db.handle);
+    await addMessages(CHAT, [
+      { role: "user", content: "I want to try something small" },
+      { role: "assistant", content: "Try this.", goal: STEP },
+    ]);
+    // PostgREST refuses a bulk insert whose rows don't share their keys (PGRST102).
+    const [rows] = inserts();
+    expect(rows!.map((r) => r.goal)).toEqual([null, STEP]);
+    // Without an offer there is no goal key at all.
+    await addMessages(CHAT, [{ role: "user", content: "and then?" }]);
+    expect(inserts()[1]![0]).not.toHaveProperty("goal");
+    const read = await getMessages(LEA.id, CHAT);
+    expect(read.find((m) => m.role === "assistant")?.goal).toBe(STEP);
+    expect(db.calls).toContainEqual(
+      expect.stringContaining("select=id,role,content,sources,rating,ask,goal&")
+    );
+  });
+
+  it('lists the texts of the account\'s own goals, for "Added"', async () => {
+    const db = fakeDb({
+      mira_goal: [
+        { id: "g1", user_id: LEA.id, text: STEP },
+        { id: "g2", user_id: "someone-else", text: "Not hers" },
+      ],
+    });
+    vi.mocked(supabaseFetch).mockImplementation(db.handle);
+    expect(await goalTexts(LEA.id)).toEqual([STEP]);
   });
 });

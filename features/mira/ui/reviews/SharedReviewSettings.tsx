@@ -200,6 +200,9 @@ export default function SharedReviewSettings() {
               Remove my rating
             </button>
           </div>
+          <p className="text-[13px] text-ap-muted">
+            To change your stars or your words, remove this rating and rate again.
+          </p>
         </div>
       ) : state.canRate ? (
         <div className="rounded-2xl border border-ap-line p-4">

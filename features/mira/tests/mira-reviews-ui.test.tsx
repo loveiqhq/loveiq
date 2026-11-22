@@ -320,6 +320,10 @@ describe("Settings: what you shared", () => {
     expect(await screen.findByText(/You rated Mira 5 out of 5/)).toBeInTheDocument();
     expect(screen.getByText(/Shown on Mira’s pages as Lea, 25–34/)).toBeInTheDocument();
     expect(screen.getByText(/took out a detail that could identify someone/)).toBeInTheDocument();
+    // Round-2 CHAT-7: changing a rating is remove-and-rate-again, and the section says so.
+    expect(
+      screen.getByText("To change your stars or your words, remove this rating and rate again.")
+    ).toBeInTheDocument();
     // The writer sees exactly what changed.
     expect(
       screen.getByText(/You wrote: “My husband Tom noticed I stopped hiding\.”/)

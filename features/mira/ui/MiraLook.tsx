@@ -43,7 +43,23 @@ const LookContext = createContext<LookApi>({
 
 export const useMiraLook = () => useContext(LookContext);
 
-export function MiraLookRoot({ initial, children }: { initial: MiraLook; children: ReactNode }) {
+/**
+ * The signed-in person's country (Settings › Account), read once by app/mira/layout.tsx: the
+ * support lines list it first wherever they are opened (round-2 SET-9). Null signed out or unset.
+ */
+const CountryContext = createContext<string | null>(null);
+
+export const useSupportCountry = () => useContext(CountryContext);
+
+export function MiraLookRoot({
+  initial,
+  country = null,
+  children,
+}: {
+  initial: MiraLook;
+  country?: string | null;
+  children: ReactNode;
+}) {
   const [look, setLook] = useState(initial);
   // The latest look, for a change made before the last one has rendered.
   const latest = useRef(initial);
@@ -62,9 +78,11 @@ export function MiraLookRoot({ initial, children }: { initial: MiraLook; childre
   const api = useMemo(() => ({ look, change, adopt }), [look, change, adopt]);
   return (
     <LookContext.Provider value={api}>
-      <div className="mira-root" data-mira-theme={look.theme} data-mira-text={look.text}>
-        {children}
-      </div>
+      <CountryContext.Provider value={country}>
+        <div className="mira-root" data-mira-theme={look.theme} data-mira-text={look.text}>
+          {children}
+        </div>
+      </CountryContext.Provider>
     </LookContext.Provider>
   );
 }

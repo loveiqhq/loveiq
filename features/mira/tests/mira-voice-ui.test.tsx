@@ -224,6 +224,31 @@ describe("Talk", () => {
     expect(screen.queryByRole("heading", { name: "Before you talk" })).toBeNull();
     expect(screen.getByText(/Speech becomes text on this device/)).toBeTruthy();
   });
+
+  // The first Talk in Chrome can wait up to 20 s on the language download (CHAT-14).
+  it("says so while the browser downloads its speech recognition, and can be cancelled", async () => {
+    let installed: (ok: boolean) => void = () => {};
+    FakeRecognizer.available = vi.fn(async () => "downloadable");
+    FakeRecognizer.install = vi.fn(() => new Promise<boolean>((done) => (installed = done)));
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    await waitFor(() => expect(FakeRecognizer.install).toHaveBeenCalled());
+    const panel = screen.getByRole("region", { name: "Talking with Mira" });
+    // In the status line, so a screen reader says it too.
+    expect(screen.getByRole("status").textContent).toBe("Setting up speech recognition…");
+    expect(panel.textContent).toContain(
+      "Your browser is downloading it to this device. This can take up to 20 seconds."
+    );
+    expect(panel.textContent).not.toMatch(/Starting the microphone|speech service turns/);
+    expect(screen.queryByRole("button", { name: /Mute|End/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("region", { name: "Talking with Mira" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Talk to Mira" })).toBeTruthy();
+    // The download finishing later starts nothing.
+    await act(async () => installed(true));
+    expect(FakeRecognizer.made).toHaveLength(0);
+    expect(calls("POST /api/mira/recordings")).toHaveLength(0);
+  });
 });
 
 describe("the language Talk listens and speaks in", () => {
@@ -309,6 +334,31 @@ describe("a spoken turn", () => {
     expect(screen.getByText("wait I have a question")).toBeTruthy();
   });
 
+  // VOI-V5: the recognizer that listened while she spoke can bring her last words back late.
+  it("doesn't send her own last words, arriving just after she stopped, as the person's turn", async () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    await sayToMira("It's the lights");
+    await waitFor(() => expect(spoken().length).toBeGreaterThan(0));
+    const rec = mic(); // listening while she speaks (Chrome), and on into the person's turn
+    rec.hear(["that makes sense", true]);
+    finishSpeaking();
+    await waitFor(() => expect(screen.getByText("Mira is listening")).toBeTruthy());
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const late = "wanting the lights off is a way of feeling safe";
+    rec.hear(["that makes sense", true], [late, false]);
+    rec.hear(["that makes sense", true], [late, true]);
+    act(() => vi.advanceTimersByTime(TURN_PAUSE_MS + 100));
+    expect(calls("POST /api/mira/chat")).toHaveLength(1);
+    expect(screen.queryByText(late)).toBeNull();
+    // The person's own words after them are their turn.
+    rec.hear(["that makes sense", true], [late, true], ["yes please go on", true]);
+    act(() => vi.advanceTimersByTime(TURN_PAUSE_MS + 100));
+    vi.useRealTimers();
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    expect(calls("POST /api/mira/chat")[1]!.message).toBe("yes please go on");
+  });
+
   it("keeps the microphone off while she speaks in Safari, and a tap on her photo stops her", async () => {
     vi.spyOn(navigator, "vendor", "get").mockReturnValue("Apple Computer, Inc.");
     render(<MiraChat signedIn={false} initialChatId={null} />);
@@ -372,7 +422,14 @@ describe("the end of a session", () => {
     finishSpeaking();
     await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(1));
     const [end] = calls("POST /api/mira/recordings");
-    expect(Object.keys(end!).sort()).toEqual(["chatId", "mode", "session", "startedAt", "turns"]);
+    expect(Object.keys(end!).sort()).toEqual([
+      "chatId",
+      "endedAt",
+      "mode",
+      "session",
+      "startedAt",
+      "turns",
+    ]);
     expect(end).toMatchObject({ mode: "service", turns: 1, chatId: null });
     expect(screen.getByText("Keep talking with Mira, for free")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Talking with Mira" })).toBeNull();
@@ -449,6 +506,35 @@ describe("the end of a session", () => {
     expect(screen.getByText(STOP_G)).toBeTruthy(); // written in the chat
     expect(calls("POST /api/mira/recordings")).toHaveLength(0);
     expect(screen.queryByText(/couldn.t be saved/)).toBeNull();
+  });
+
+  // VOI-V10: the server dated the end from the save, so time away or a late "Try again" counted.
+  it("sends when it ended: when the person left it paused, the same on a later Try again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-22T20:00:00Z"));
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: REPLY, sources: [], chatId: "6f2c4a1e-1111-4222-8333-944455556666" },
+    });
+    replies["POST /api/mira/recordings"] = () => ({ status: 500, body: { error: "Down." } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    talk();
+    await sayToMira("It's the lights");
+    finishSpeaking();
+    await waitFor(() => expect(screen.getByText("Mira is listening")).toBeTruthy());
+    vi.setSystemTime(new Date("2026-11-22T20:05:00Z"));
+    leaveTab();
+    vi.setSystemTime(new Date("2026-11-22T21:05:00Z"));
+    comeBack();
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    await screen.findByText(/couldn.t be saved/);
+    vi.setSystemTime(new Date("2026-11-22T22:00:00Z"));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(2));
+    expect(calls("POST /api/mira/recordings").map((b) => b.endedAt)).toEqual([
+      "2026-11-22T20:05:00.000Z",
+      "2026-11-22T20:05:00.000Z",
+    ]);
   });
 
   it("sends nothing for a session without a turn", async () => {
@@ -696,6 +782,29 @@ describe("the end card", () => {
     await screen.findAllByText(REPLY);
   }
 
+  // VOI-V6b: the setting is named only when it is the reason.
+  it("says a session wasn't kept because of the memory setting only when that was why", async () => {
+    for (const [answer, why] of [
+      [{ kept: false, reason: "memory_off" }, /kept while “Remember our conversations” is on/],
+      [{ kept: false }, /wasn.t kept: its words aren.t in your chats\.$/],
+    ] as const) {
+      notKept();
+      replies["POST /api/mira/recordings"] = () => ({ body: answer });
+      render(<MiraChat signedIn initialChatId={null} />);
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything())
+      );
+      talk();
+      await sayToMira("It's the lights");
+      fireEvent.click(screen.getByRole("button", { name: "End" }));
+      const card = await screen.findByText(/wasn.t kept/);
+      expect(card.textContent).toMatch(why);
+      expect(Boolean(screen.queryByRole("link", { name: "Settings" }))).toBe("reason" in answer);
+      cleanup();
+      fetchMock.mockClear();
+    }
+  });
+
   it("stays with its own chat: 'wasn't kept' doesn't follow into a new chat", async () => {
     notKept();
     render(<MiraChat signedIn initialChatId={null} />);
@@ -706,6 +815,41 @@ describe("the end card", () => {
     await waitFor(() => expect(screen.getByText(/wasn.t kept/)).toBeTruthy());
     await newChatAndType();
     expect(screen.queryByText(/wasn.t kept/)).toBeNull();
+  });
+
+  // It sits at the chat's foot: unscrolled, the saved card ended under the composer's edge (UX-5).
+  it("comes into view as it lands, and again as it grows into the saved card", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled; // jsdom lays nothing out, so it has none
+    try {
+      replies["POST /api/mira/chat"] = () => ({
+        body: { reply: REPLY, sources: [], chatId: "6f2c4a1e-1111-4222-8333-944455556666" },
+      });
+      render(<MiraChat signedIn initialChatId={null} />);
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything())
+      );
+      talk();
+      await sayToMira("It's the lights");
+      const saved = holdAnswers("/api/mira/recordings");
+      fireEvent.click(screen.getByRole("button", { name: "End" }));
+      const saving = screen.getByText("Saving your voice session…");
+      expect(scrolled.mock.contexts.some((el) => (el as Element).contains(saving))).toBe(true);
+      scrolled.mockClear();
+      await act(async () =>
+        saved.current({
+          body: {
+            kept: true,
+            recording: { id: "1c2d3e4f-3333-4444-8555-a66677778888", seconds: 90, you: 50 },
+          },
+        })
+      );
+      const card = screen.getByText(/Voice session saved/);
+      expect(scrolled.mock.contexts.some((el) => (el as Element).contains(card))).toBe(true);
+      expect(scrolled).toHaveBeenLastCalledWith(expect.objectContaining({ block: "nearest" }));
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
 
   it("doesn't come back when the save answers after the new chat began", async () => {

@@ -210,6 +210,33 @@ describe("parseReply", () => {
       refer: false,
       topic: null,
       minor: false,
+      support: false,
+    });
+  });
+
+  // Round-2 audit CHAT-10: the chat shows plain text, so bold came through as asterisks.
+  it("takes markdown bold out, keeping its words and any other asterisk", () => {
+    expect(
+      parseReply("**Übung 4, Freundlichkeit bei Körpersorgen**: try __one__ minute.").text
+    ).toBe("Übung 4, Freundlichkeit bei Körpersorgen: try one minute.");
+    expect(parseReply("Rate it 1 to 5 * no wrong answer").text).toBe(
+      "Rate it 1 to 5 * no wrong answer"
+    );
+    expect(parseReply("snake_case and a lone ** stay").text).toBe("snake_case and a lone ** stay");
+  });
+
+  // Round-2 audit HAB-11: the gentle check-in after a mood check's question 9 had only [[CRISIS]]
+  // to show the support lines, so it was counted as a crisis in the chat.
+  it("reads [[SUPPORT]] as the support lines without a crisis, and never beside one", () => {
+    expect(parseReply("How are you with those thoughts now?\n[[SUPPORT]]")).toMatchObject({
+      text: "How are you with those thoughts now?",
+      support: true,
+      crisis: false,
+    });
+    expect(parseReply(`Please reach out now.\n[[SUPPORT]]\n${CRISIS_TOKEN}`)).toMatchObject({
+      text: "Please reach out now.",
+      support: false,
+      crisis: true,
     });
   });
 
@@ -327,5 +354,16 @@ describe("Mira's instructions", () => {
     );
     expect(known).toContain("Lea");
     expect(known).toContain("Spark Seeker");
+  });
+
+  // Round-2 audit HAB-5: after "Let Mira read my journal" was switched on mid-chat, Mira said
+  // her earlier "I can't see it" had been wrong, as if she could see it before the consent.
+  it("tell a signed-in Mira that what she may read can change mid-chat, and how to say so", () => {
+    const signedIn = personalInstructions({}, { signedIn: true });
+    expect(signedIn).toContain(
+      "If something you said you couldn't see earlier in this chat is here now, they have just allowed it"
+    );
+    expect(signedIn).toContain("never say you were wrong earlier");
+    expect(personalInstructions({}, { signedIn: false })).not.toContain("just allowed it");
   });
 });

@@ -53,6 +53,7 @@ import { askModel } from "@features/mira/server/model";
 import { getMiraAccount } from "@features/mira/server/session";
 import {
   addMessages,
+  createChat,
   deleteChats,
   getMessages,
   getProfile,
@@ -170,6 +171,21 @@ describe("POST /api/mira/chat", () => {
     expect(body.freeLeft).toBeUndefined();
     const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
     expect(buckets).not.toContain("mira-anon-messages");
+  });
+
+  // Round-2 audit CHAT-19: an expired or revoked sign-in made an open chat anonymous, spent the
+  // browser's free message and told an account holder to create an account.
+  it("asks a page that was signed in to sign in again when its sign-in is gone", async () => {
+    const res = await post({ message: "can we continue?", consent: true, signedIn: true });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Please sign in again.", signIn: true });
+    expect(askModel).not.toHaveBeenCalled();
+    const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    expect(buckets).not.toContain("mira-anon-messages");
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    // A crisis message is still answered first, whatever the sign-in.
+    const crisis = await post({ message: "I want to kill myself", consent: true, signedIn: true });
+    expect((await crisis.json()).crisis).toBe(true);
   });
 
   it("records which starter chip opened a chat, as its index and never as text", async () => {
@@ -325,6 +341,70 @@ describe("POST /api/mira/chat", () => {
     expect((await res.json()).messageId).toBeNull();
   });
 
+  // Round-2 audit CHAT-17, lead decision 5: the crisis words became the chat's title on Home.
+  describe("a new chat's title", () => {
+    const remembering = () => {
+      vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(getProfile).mockResolvedValue({
+        id: "u1",
+        email: "lea@example.com",
+        style: {},
+        remember_chats: true,
+        use_assessment: false,
+        time_zone: "Europe/Berlin",
+      } as never);
+    };
+    const NEUTRAL = /^Chat on \d{1,2} [A-Z][a-z]{2}$/;
+    const titled = () => vi.mocked(createChat).mock.calls.map(([, title]) => title);
+
+    it("is the date, never the words, when a crisis message opens it", async () => {
+      remembering();
+      const body = await (
+        await post({ message: "I don’t want to live anymore", consent: true })
+      ).json();
+      expect(titled()[0]).toMatch(NEUTRAL);
+      expect(body.title).toBe(titled()[0]);
+    });
+
+    it("is the date when the reply to its first message brought the support lines", async () => {
+      remembering();
+      vi.mocked(askModel).mockResolvedValueOnce({
+        ok: true,
+        text: "Please reach out now.\n[[CRISIS]]",
+        refused: false,
+      });
+      vi.mocked(askModel).mockResolvedValueOnce({ ok: true, text: "", refused: true });
+      for (const message of ["everything feels dark", "something happened to me"]) {
+        const body = await (await post({ message, consent: true })).json();
+        expect(body.title).toMatch(NEUTRAL);
+      }
+      expect(titled()).toEqual([expect.stringMatching(NEUTRAL), expect.stringMatching(NEUTRAL)]);
+    });
+
+    it("is the first message otherwise, and a weekly session's is named by its date", async () => {
+      remembering();
+      const body = await (await post({ message: "I hide during sex", consent: true })).json();
+      expect(titled()).toEqual(["I hide during sex"]);
+      expect(body.title).toBe("I hide during sex");
+      // Stored as the app's opening line (it finds the session's chat again), shown by its date.
+      const session = await (
+        await post({ message: "I’m here for my weekly session.", consent: true, session: true })
+      ).json();
+      expect(titled()[1]).toBe("I’m here for my weekly session.");
+      expect(session.title).toMatch(/^Weekly session · [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/);
+      // A message in a chat that already exists names nothing.
+      vi.mocked(ownsChat).mockResolvedValueOnce(true);
+      const later = await (
+        await post({
+          message: "and then?",
+          consent: true,
+          chatId: "6f2c4a1e-1111-4222-8333-944455556666",
+        })
+      ).json();
+      expect(later.title).toBeUndefined();
+    });
+  });
+
   it("answers a signed-in crisis message even at the daily cap", async () => {
     vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
     vi.mocked(getProfile).mockResolvedValue({
@@ -358,6 +438,125 @@ describe("POST /api/mira/chat", () => {
     expect(refused.invitation).toBeUndefined();
     const crisis = await (await post({ message: "I want to kill myself", consent: true })).json();
     expect(crisis.invitation).toBeUndefined();
+  });
+
+  // Round-2 audit CHAT-2: the 12-question invitation came back in every new chat (Mira keeps no
+  // answers from one chat to the next), right under a question of Mira's own.
+  describe("the intake invitation, once per account", () => {
+    const remembering = () => {
+      vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(getProfile).mockResolvedValue({
+        id: "u1",
+        email: "lea@example.com",
+        style: {},
+        remember_chats: true,
+        use_assessment: false,
+      } as never);
+    };
+    const offeredBefore = (yes: boolean) =>
+      vi
+        .mocked(supabaseFetch)
+        .mockImplementation(
+          async (path) =>
+            new Response(
+              JSON.stringify(
+                yes &&
+                  String(path).startsWith("/rest/v1/mira_message?role=eq.assistant&content=eq.")
+                  ? [{ id: 3 }]
+                  : []
+              )
+            )
+        );
+    const NO_QUESTION = "end your reply without a question";
+
+    it("comes after the first chat's first reply, which is asked to end without a question", async () => {
+      remembering();
+      offeredBefore(false);
+      const body = await (await post({ message: "I hide during sex", consent: true })).json();
+      expect(body.invitation).toBe(miraConfig.intakeInvitation);
+      expect(vi.mocked(askModel).mock.calls[0]![1]).toContain(NO_QUESTION);
+      const asked = vi.mocked(supabaseFetch).mock.calls.map(([p]) => String(p));
+      expect(asked).toContainEqual(
+        expect.stringContaining(
+          `content=eq.${encodeURIComponent(miraConfig.intakeInvitation)}&select=id,mira_chat!inner(user_id)&mira_chat.user_id=eq.u1&limit=1`
+        )
+      );
+    });
+
+    it("isn't offered again in a new chat once a saved chat holds it", async () => {
+      remembering();
+      offeredBefore(true);
+      const body = await (await post({ message: "I hide during sex", consent: true })).json();
+      expect(body.invitation).toBeUndefined();
+      expect(vi.mocked(addMessages).mock.calls[0]![1].map((m) => m.role)).toEqual([
+        "user",
+        "assistant",
+      ]);
+      expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain(NO_QUESTION);
+    });
+
+    it("is offered when that can't be read, and to anonymous chats, which keep nothing", async () => {
+      remembering();
+      vi.mocked(supabaseFetch).mockImplementation(async (path) =>
+        String(path).startsWith("/rest/v1/mira_message?")
+          ? new Response("{}", { status: 500 })
+          : new Response("[]")
+      );
+      expect((await (await post({ message: "hi", consent: true })).json()).invitation).toBe(
+        miraConfig.intakeInvitation
+      );
+      vi.mocked(getMiraAccount).mockResolvedValue(null);
+      offeredBefore(true);
+      const anon = await (await post({ message: "hi", consent: true })).json();
+      expect(anon.invitation).toBe(miraConfig.intakeInvitation);
+    });
+  });
+
+  // Round-2 audit CHAT-13: after booking with the picker under her weekly question, Mira read her
+  // own question beside "booked… Don't ask the weekly question again" and apologised that it
+  // "was already booked".
+  it("tells Mira a session booked in answer to her weekly question was booked just now", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+    } as never);
+    vi.mocked(supabaseFetch).mockImplementation(
+      async (path) =>
+        new Response(
+          JSON.stringify(
+            String(path).startsWith("/rest/v1/mira_session_slot?")
+              ? [
+                  {
+                    id: "s1",
+                    weekday: 3,
+                    local_time: "19:00",
+                    time_zone: "Europe/Berlin",
+                    sequence: 0,
+                    paused_at: null,
+                  },
+                ]
+              : []
+          )
+        )
+    );
+    const JUST_NOW = "booked it just now with the time picker";
+    await post({
+      message: "Wednesdays at 19:00 works for me.",
+      consent: true,
+      history: openChat,
+      answering: "weekly",
+    });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain(JUST_NOW);
+    // Any other message: booked, no more.
+    vi.mocked(askModel).mockClear();
+    await post({ message: "and then?", consent: true, history: openChat });
+    const personal = vi.mocked(askModel).mock.calls[0]![1];
+    expect(personal).toContain("They have a weekly 15-minute session with you");
+    expect(personal).not.toContain(JUST_NOW);
   });
 
   it("leaves the invitation out when Mira's first reply already asks an intake question", async () => {
@@ -654,6 +853,53 @@ describe("POST /api/mira/chat", () => {
     expect(personal).not.toMatch(/2, ?2, ?2/);
   });
 
+  // Round-2 audit HAB-11: the check-in after a mood check's question 9 was logged as a crisis.
+  it("opens the support lines for the question-9 check-in without counting a crisis", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      country: "GB",
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+    } as never);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    vi.mocked(supabaseFetch).mockImplementation(
+      async (path) =>
+        new Response(
+          JSON.stringify(
+            String(path).includes("use_checks=is.true")
+              ? [
+                  {
+                    mira_check: [
+                      {
+                        scale: "phq9",
+                        answers: [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                        created_at: yesterday,
+                      },
+                    ],
+                  },
+                ]
+              : []
+          )
+        )
+    );
+    vi.mocked(askModel).mockResolvedValueOnce({
+      ok: true,
+      text: "Before anything else: how are you with those thoughts now?\n[[SUPPORT]]",
+      refused: false,
+    });
+    const body = await (await post({ message: "I hide during sex", consent: true })).json();
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("[[SUPPORT]]");
+    expect(body.reply).toBe("Before anything else: how are you with those thoughts now?");
+    expect(body.crisis).toBe(true); // the browser opens the support panel on this
+    expect(body.crisisLines.code).toBe("GB");
+    expect(body.invitation).toBeUndefined(); // never a second ask under it
+    expect(events("crisis_shown")).toEqual([]);
+    expect(events("reply_shown")).toEqual([{ sources: [], crisis: false }]);
+  });
+
   it("asks the model for a topic only on a first message in the person's own words", async () => {
     await post({ message: "I only feel okay with the lights off", consent: true });
     expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("FIRST MESSAGE TOPIC");
@@ -725,6 +971,34 @@ describe("POST /api/mira/chat", () => {
     expect(body.reply).toBe("Has this always been there, or is it more recent?");
     const stored = vi.mocked(addMessages).mock.calls[0]![1];
     expect(stored[1]).toMatchObject({ role: "assistant", ask: "onset" });
+  });
+
+  // Round-2 audit CHAT-9, lead decision 3: the offer is kept with the reply it came with.
+  it("stores Mira's goal offer with her reply", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      style: {},
+      remember_chats: true,
+      use_assessment: false,
+    } as never);
+    vi.mocked(askModel).mockResolvedValueOnce({
+      ok: true,
+      text: "One small step could help.\n[[GOAL:Leave one soft light on]]",
+      refused: false,
+    });
+    const body = await (
+      await post({ message: "what could I try?", consent: true, history: openChat })
+    ).json();
+    expect(body.goal).toBe("Leave one soft light on");
+    const stored = vi.mocked(addMessages).mock.calls[0]![1];
+    expect(stored[1]).toMatchObject({
+      role: "assistant",
+      content: "One small step could help.",
+      goal: "Leave one soft light on",
+    });
+    expect(stored[0]!.goal ?? null).toBeNull();
   });
 
   it("logs which intake question a message answered, by id only, and only a real one", async () => {

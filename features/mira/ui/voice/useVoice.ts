@@ -7,6 +7,7 @@ import {
   chooseMode,
   forSpeech,
   pickVoice,
+  readAfterSpeaking,
   readWhileSpeaking,
   recognitionLang,
   recognizerClass,
@@ -57,7 +58,8 @@ export type SavedSession = {
 export type VoiceEnded = { chatId: string | null } & (
   | { status: "saving" }
   | { status: "saved"; recording: SavedSession }
-  | { status: "not-kept" }
+  /** `memoryOff`: "Remember our conversations" is why, not words missing from the chat. */
+  | { status: "not-kept"; memoryOff: boolean }
   | { status: "failed" }
 );
 
@@ -65,12 +67,19 @@ type SessionEnd = {
   session: string;
   chatId: string | null;
   startedAt: string;
+  /** End, or when the person left it paused: a later save (Try again) doesn't move it. */
+  endedAt: string;
   mode: RecognitionMode;
   turns: number;
 };
 
 /** The silence after the person's words that ends their turn: patient, people pause on this. */
 export const TURN_PAUSE_MS = 1600;
+/**
+ * How long after she stops her own words may still come back from the recognizer (VOI-V5).
+ * ponytail: a fixed window, not measured on real devices; tune it here if Chrome is later.
+ */
+const ECHO_TAIL_MS = 1500;
 /** A turn the chat never answers (the route gives up long before) is let go after this. */
 const THINKING_LIMIT_MS = 90_000;
 
@@ -91,6 +100,8 @@ export function useVoice(options: {
   const [trouble, setTrouble] = useState<VoiceTrouble | null>(null);
   const [pause, setPause] = useState<PauseReason | null>(null);
   const [mode, setMode] = useState<RecognitionMode | null>(null);
+  /** Getting ready waits on the browser fetching its speech recognition for the device. */
+  const [downloading, setDownloading] = useState(false);
   const [ended, setEnded] = useState<VoiceEnded | null>(null);
   /** The device has no voice of its own: her replies stay in writing. */
   const [voiceless, setVoiceless] = useState(false);
@@ -113,6 +124,8 @@ export function useVoice(options: {
     seen: 0,
     heard: "",
     said: "",
+    /** Until then, her words heard late are skipped (readAfterSpeaking). */
+    echoUntil: 0,
     speech: 0,
     /**
      * The session is over once her reply is said: "end" (no free message left), or "forget"
@@ -121,6 +134,8 @@ export function useVoice(options: {
     after: null as "end" | "forget" | null,
     muted: false,
     held: false,
+    /** When leaving the tab paused the session; until Resume, that is when it ended. */
+    awaySince: null as number | null,
     session: null as string | null,
     chatId: null as string | null,
     /** Ended while a turn was on its way: saved when its answer brings the chat's id. */
@@ -212,6 +227,11 @@ export function useVoice(options: {
       set("listening");
     }
     if (m.phase !== "listening") return;
+    if (Date.now() < m.echoUntil) {
+      const late = readAfterSpeaking(results, m.floor, m.said);
+      m.floor = late.floor;
+      if (late.settling) return; // her words, still settling: not the person's turn
+    }
     const text = results
       .slice(m.floor)
       .map((r) => r.text)
@@ -350,6 +370,7 @@ export function useVoice(options: {
 
   function afterSpeaking() {
     setSaying("");
+    if (m.phase === "speaking") m.echoUntil = Date.now() + ECHO_TAIL_MS; // she did speak
     listen(); // which ends the session after her last reply
   }
 
@@ -383,6 +404,7 @@ export function useVoice(options: {
       startedAt: new Date(),
       turns: 0,
       muted: false,
+      awaySince: null,
       after: null,
       quickEnds: 0,
     });
@@ -390,6 +412,7 @@ export function useVoice(options: {
     setTrouble(null);
     setPause(null);
     setInvited(false);
+    setDownloading(false);
     set("preparing");
     const go = (chosen: RecognitionMode) => {
       if (m.phase !== "preparing") return; // ended while it got ready
@@ -400,7 +423,7 @@ export function useVoice(options: {
     };
     // Safari has no on-device check: it starts within the tap.
     if (typeof Recognizer.available !== "function") go("service");
-    else void chooseMode(Recognizer, m.lang).then(go);
+    else void chooseMode(Recognizer, m.lang, () => setDownloading(true)).then(go);
   }
 
   /**
@@ -426,6 +449,7 @@ export function useVoice(options: {
 
   function resume() {
     m.muted = false;
+    m.awaySince = null;
     setPause(null);
     setTrouble(null);
     if (m.phase === "paused" || m.phase === "error") listen();
@@ -473,6 +497,7 @@ export function useVoice(options: {
         session,
         chatId: m.chatId,
         startedAt: m.startedAt.toISOString(),
+        endedAt: new Date(m.awaySince ?? Date.now()).toISOString(),
         mode: m.mode,
         turns: m.turns,
       };
@@ -489,7 +514,7 @@ export function useVoice(options: {
     if (!body) return;
     const chatId = body.chatId;
     if (!keepalive) setEnded({ chatId, status: "saving" });
-    const res = await miraApi<{ kept?: boolean; recording?: SavedSession }>(
+    const res = await miraApi<{ kept?: boolean; recording?: SavedSession; reason?: string }>(
       "/api/mira/recordings",
       { body, keepalive }
     );
@@ -499,7 +524,7 @@ export function useVoice(options: {
       res.ok && res.data.kept && res.data.recording
         ? { chatId, status: "saved", recording: res.data.recording }
         : res.ok
-          ? { chatId, status: "not-kept" }
+          ? { chatId, status: "not-kept", memoryOff: res.data.reason === "memory_off" }
           : { chatId, status: "failed" }
     );
   }
@@ -528,6 +553,7 @@ export function useVoice(options: {
       micOff();
       hush();
       clear("thinking");
+      m.awaySince = Date.now();
       setPause("away");
       set("paused");
     };
@@ -553,6 +579,7 @@ export function useVoice(options: {
     trouble,
     pause,
     mode,
+    downloading,
     ended,
     voiceless,
     /** The session a spoken turn belongs to, sent with it so a kept chat tags its messages. */
