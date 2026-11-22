@@ -243,6 +243,27 @@ describe("A chat the account doesn't keep", () => {
   });
 });
 
+// Round-3 R3-UXA-6: in Dark on Chromium the sign-up's fields kept the browser's own grey
+// (rgb(59,59,59)), a slab on the plum page; Mira's paper and the field's edge, as the feedback
+// form's (UX-7), and the passkey's Name field in Settings the same.
+describe("Text fields", () => {
+  const paper = (field: HTMLElement) => expect(field).toHaveClass("bg-white", "border-ap-field");
+
+  it("sit on Mira's paper with the field's edge at every step, never the browser's grey", async () => {
+    render(<SignUpFlow />);
+    paper(screen.getByLabelText("Email"));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "lea@example.com" } });
+    tickAll();
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    paper(await screen.findByLabelText("Code from the email"));
+    cleanup();
+    sessionStorage.clear();
+    render(<SignUpFlow googleResult="done" needsAbout />);
+    paper(await screen.findByLabelText("What should Mira call you?"));
+    paper(screen.getByLabelText(/How do you describe your gender/));
+  });
+});
+
 describe("The code step", () => {
   afterEach(() => sessionStorage.clear());
   const toCodeStep = async () => {
@@ -644,6 +665,7 @@ describe("Settings › Sign-in & security", () => {
     await show();
     const how = screen.getByRole("region", { name: "How you sign in" });
     fireEvent.click(within(how).getByRole("button", { name: "Rename Work laptop" }));
+    expect(within(how).getByLabelText("Name")).toHaveClass("bg-white"); // R3-UXA-6
     fireEvent.change(within(how).getByLabelText("Name"), { target: { value: "Office PC" } });
     fireEvent.click(within(how).getByRole("button", { name: "Save" }));
     await within(how).findByText("Office PC", { selector: "p" });

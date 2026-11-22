@@ -96,7 +96,7 @@ const LINK =
 const DANGER =
   "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-bad px-5 text-[14px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-bad aria-disabled:cursor-wait aria-disabled:opacity-50";
 const FIELD =
-  "min-h-[48px] w-full rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
+  "min-h-[48px] w-full rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
 
 export default function SecuritySettings() {
   const router = useRouter();
@@ -457,7 +457,7 @@ function ChangeEmail({
               required
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className={`${FIELD} bg-white`}
+              className={FIELD}
             />
           </label>
           <p className="text-[13px] leading-relaxed text-ap-muted">
@@ -482,7 +482,7 @@ function ChangeEmail({
               maxLength={8}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              className={`${FIELD} bg-white text-center font-serif text-[24px] tracking-[0.4em]`}
+              className={`${FIELD} text-center font-serif text-[24px] tracking-[0.4em]`}
             />
           </label>
         </>

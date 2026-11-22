@@ -561,7 +561,7 @@ export default function SignUpFlow({
                   aria-describedby={error === ENTER_EMAIL ? "signup-error" : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="min-h-[48px] rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
               {/* A honeypot: hidden from people and screen readers and out of the tab order, so
@@ -676,7 +676,7 @@ export default function SignUpFlow({
                   maxLength={10}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                  className="min-h-[56px] rounded-2xl border border-ap-field px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
+                  className="min-h-[56px] rounded-2xl border border-ap-field bg-white px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
                 />
               </label>
               <PrimaryButton type="submit" disabled={busy || code.length < 6}>
@@ -778,7 +778,7 @@ export default function SignUpFlow({
                   maxLength={60}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Name or nickname"
-                  className="min-h-[48px] rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
@@ -791,7 +791,7 @@ export default function SignUpFlow({
                   maxLength={40}
                   onChange={(e) => setGender(e.target.value)}
                   placeholder="Woman, man, non-binary, or your own words"
-                  className="min-h-[48px] rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
