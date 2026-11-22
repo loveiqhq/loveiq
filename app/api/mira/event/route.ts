@@ -9,7 +9,8 @@
  *       wording's version
  *   { type: "voice_notice", version }  Talk's tick that the browser's speech service hears what
  *       the person says (22 Nov 2026), logged as voice_notice_agreed with its wording's version
- *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
+ *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10: a challenge or some words
+ *       at least (400 for none)
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach:
  *       its id, or its challenge as Home sent it before 22 Nov 2026, logged as notify_me with the
  *       id (one data model); an account only, or we couldn't tell them when the coach is ready
@@ -52,13 +53,16 @@ const schema = z.discriminatedUnion("type", [
     rating: z.union([z.literal(1), z.literal(-1)]),
     messageId: z.number().int().positive().optional(),
   }),
-  z.object({
-    type: z.literal("feedback"),
-    challenges: z.array(z.string().max(60)).max(12),
-    wish: z.string().trim().max(2000).optional(),
-    other: z.string().trim().max(2000).optional(),
-    mayEmail: z.boolean(),
-  }),
+  z
+    .object({
+      type: z.literal("feedback"),
+      challenges: z.array(z.string().max(60)).max(12),
+      wish: z.string().trim().max(2000).optional(),
+      other: z.string().trim().max(2000).optional(),
+      mayEmail: z.boolean(),
+    })
+    // Every question is optional, but an answer to none of them says nothing (UX-16).
+    .refine((b) => b.challenges.length > 0 || Boolean(b.wish) || Boolean(b.other)),
   z.object({ type: z.literal("notify"), coach: z.string().max(60) }),
   z.object({
     type: z.literal("coaches"),

@@ -73,6 +73,8 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "What made you stop?" })).toHaveFocus()
     );
+    // Its note box sits on the paper colour in both themes, not the browser's grey (UX-7).
+    expect(screen.getByRole("textbox", { name: /Anything else/ })).toHaveClass("bg-white");
     await user.click(screen.getByRole("button", { name: "Back" }));
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Fewer nudges, not none?" })).toHaveFocus()

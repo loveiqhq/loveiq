@@ -281,7 +281,7 @@ export default function MiraNudges({
               maxLength={500}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Tell us in your own words"
-              className="resize-none rounded-lg border border-ap-line px-3 py-2.5 text-[16px] font-normal"
+              className="resize-none rounded-lg border border-ap-line bg-white px-3 py-2.5 text-[16px] font-normal"
             />
           </label>
           <p className="text-[13px] leading-normal text-ap-body">

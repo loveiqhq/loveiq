@@ -31,6 +31,11 @@ export default function MiraFeedback() {
 
   async function submit() {
     if (busy) return;
+    // Every question is optional, but an answer with none of them says nothing (UX-16).
+    if (picked.length === 0 && !wish.trim() && !other.trim()) {
+      setError("Pick a challenge or write a few words first.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const r = await miraApi("/api/mira/event", {
@@ -101,7 +106,7 @@ export default function MiraFeedback() {
               maxLength={2000}
               onChange={(e) => setWish(e.target.value)}
               rows={3}
-              className="rounded-2xl border border-ap-line p-3 text-[16px] font-normal"
+              className="rounded-2xl border border-ap-line bg-white p-3 text-[16px] font-normal"
             />
           </label>
           <label className="flex flex-col gap-2 text-[16px] font-bold">
@@ -111,7 +116,7 @@ export default function MiraFeedback() {
               maxLength={2000}
               onChange={(e) => setOther(e.target.value)}
               rows={3}
-              className="rounded-2xl border border-ap-line p-3 text-[16px] font-normal"
+              className="rounded-2xl border border-ap-line bg-white p-3 text-[16px] font-normal"
             />
           </label>
           <label className="flex items-center gap-3 text-[14px]">
@@ -119,11 +124,11 @@ export default function MiraFeedback() {
               type="checkbox"
               checked={mayEmail}
               onChange={(e) => setMayEmail(e.target.checked)}
-              className="h-4 w-4 accent-ap-purple"
+              className="h-4 w-4 shrink-0 accent-ap-purple"
             />
             You may email me with a follow-up question about my feedback
           </label>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <PrimaryButton type="submit" disabled={busy}>
               {busy ? "Sending…" : "Send feedback"}
             </PrimaryButton>

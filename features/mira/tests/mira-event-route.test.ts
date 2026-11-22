@@ -101,6 +101,27 @@ describe("POST /api/mira/event", () => {
     }
   });
 
+  it("refuses feedback with no challenge and no words, which says nothing (UX-16)", async () => {
+    for (const body of [
+      { type: "feedback", challenges: [], mayEmail: false },
+      { type: "feedback", challenges: [], wish: "   ", other: "", mayEmail: true },
+    ]) {
+      expect((await post(body)).status).toBe(400);
+    }
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    expect(
+      (await post({ type: "feedback", challenges: [], other: "More voices", mayEmail: false }))
+        .status
+    ).toBe(200);
+    expect(loggedProps()).toEqual({
+      challenges: [],
+      wish: null,
+      other: "More voices",
+      mayEmail: false,
+      email: null,
+    });
+  });
+
   it("takes only the moments the browser sees, never the server's own KPI events", async () => {
     for (const name of ["chat_started", "message_sent", "crisis_shown", "signup_completed"]) {
       expect((await post({ type: "track", name })).status).toBe(400);
