@@ -313,10 +313,17 @@ describe("Chat", () => {
       status: 401,
       body: { error: "Please sign in again.", signIn: true },
     });
+    // Round-3 R3-CHAT-11: the link was plain /mira/start, so the sign-in ended on Home.
+    const SAVED_CHAT = "6f2c4a1e-1111-4222-8333-944455556666";
+    window.history.replaceState(null, "", `/mira?chat=${SAVED_CHAT}`);
+    onTestFinished(() => window.history.replaceState(null, "", "/"));
     render(<MiraChat signedIn initialChatId={null} />);
     typeAndSend("hello");
     const link = await screen.findByRole("link", { name: "Sign in again" });
-    expect(link).toHaveAttribute("href", "/mira/start");
+    expect(link).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent(`/mira?chat=${SAVED_CHAT}`)}`
+    );
     // Round-2 audit CHAT-19: the page says it was signed in, so a sign-in that ended meanwhile
     // gets this 401 rather than an anonymous reply, and the words wait in the composer.
     expect(calls("POST /api/mira/chat")[0]).toMatchObject({ message: "hello", signedIn: true });

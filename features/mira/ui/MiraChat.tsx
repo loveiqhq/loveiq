@@ -21,6 +21,7 @@ import { useVoice } from "./voice/useVoice";
 import {
   local,
   miraApi,
+  signInHref,
   useReloadWhenRestored,
   type LocalTurn,
   type Source,
@@ -1303,9 +1304,10 @@ export default function MiraChat({
                       {error.signIn ? (
                         <>
                           {" "}
-                          <Link href="/mira/start" className="font-semibold underline">
+                          {/* Back to this chat afterwards (round-3 R3-CHAT-11). */}
+                          <a href={signInHref()} className="font-semibold underline">
                             Sign in again
-                          </Link>
+                          </a>
                         </>
                       ) : null}
                     </p>
