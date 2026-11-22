@@ -33,9 +33,11 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE IF NOT EXISTS public.mira_passkey (
-  id           text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9_-]{16,1366}$'),
+  id           text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9_-]+$' AND char_length(id) BETWEEN 16 AND 1366),
   user_id      uuid NOT NULL REFERENCES public.mira_user (id) ON DELETE CASCADE,
-  public_key   text NOT NULL CHECK (public_key ~ '^[A-Za-z0-9_-]{16,4096}$'),
+  public_key   text NOT NULL CHECK (
+    public_key ~ '^[A-Za-z0-9_-]+$' AND char_length(public_key) BETWEEN 16 AND 4096
+  ),
   counter      bigint NOT NULL DEFAULT 0 CHECK (counter >= 0),
   transports   text[] NOT NULL DEFAULT '{}' CHECK (cardinality(transports) <= 8),
   backed_up    boolean NOT NULL DEFAULT false,
