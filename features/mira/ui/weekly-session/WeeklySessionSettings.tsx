@@ -108,6 +108,7 @@ export function WeeklySessionSettings() {
             <button
               ref={opener}
               type="button"
+              aria-label="Change your weekly session"
               onClick={() => setSheet(true)}
               className={OUTLINE_PILL}
             >

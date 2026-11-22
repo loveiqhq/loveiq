@@ -66,7 +66,7 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
   it("Home: a move refused by the CSRF check keeps the card and the sheet, and says so", async () => {
     replies["PUT /api/mira/weekly-session"] = CSRF;
     render(<NextSessionCard />);
-    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Change your weekly session" }));
     fireEvent.click(screen.getByRole("radio", { name: "Thursday" }));
     fireEvent.click(screen.getByRole("button", { name: "Move to Thursdays at 19:00" }));
     const sheet = await screen.findByRole("dialog", { name: "Your weekly session" });
@@ -211,7 +211,7 @@ describe("a new time zone alone is a change", () => {
 
   it("on Home: the sheet's button says it moves to the new zone", async () => {
     render(<NextSessionCard />);
-    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Change your weekly session" }));
     expect(screen.getByRole("button", { name: "Keep Tuesdays at 19:00" })).toHaveAttribute(
       "aria-disabled",
       "true"

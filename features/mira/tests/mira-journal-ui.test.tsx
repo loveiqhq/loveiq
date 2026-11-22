@@ -178,7 +178,7 @@ describe("the Home card", () => {
     fireEvent.click(good);
     expect(good).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Tap one circle in any row to save.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose one rating in any row to save.");
     expect(sent("PUT")).toEqual([]);
   });
 
@@ -241,7 +241,7 @@ describe("the Home card", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Tap one circle in any row to save.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose one rating in any row to save.");
   });
 
   it("switches the daily reminder on at 20:00, and back off if it didn't save", async () => {
@@ -277,6 +277,16 @@ describe("the Home card", () => {
     render(<JournalCard />);
     expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Try again|check-in/ })).toBeNull();
+  });
+
+  it("speaks of choosing, never tapping: keyboards and screen readers check in too", async () => {
+    render(<JournalCard />);
+    expect(
+      await screen.findByText(/A few quick ratings across the areas of your life/)
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Do today’s check-in/ }));
+    expect(screen.getByText(/one rating a row, skip any/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/\btaps?\b/i);
   });
 
   it("stays quiet for an account the journal is not for", async () => {

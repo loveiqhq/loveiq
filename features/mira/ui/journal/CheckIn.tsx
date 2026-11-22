@@ -21,7 +21,8 @@ type Ratings = Record<AreaId, number | null>;
 
 const empty = (): Ratings => ({ mood: null, body: null, closeness: null, energy: null });
 
-const UNRATED = "Tap one circle in any row to save.";
+// Words for every way in: a keyboard or screen reader chooses, it doesn't tap (A11Y-16).
+const UNRATED = "Choose one rating in any row to save.";
 
 /** Another tab or device changed the day while this sheet was open: nothing was overwritten. */
 const CHANGED_ELSEWHERE =
@@ -202,7 +203,7 @@ export function CheckIn({
                 {isToday ? "How is life feeling today?" : `How was ${longDate(day).split(" ")[0]}?`}
               </h2>
               <p className="mt-1.5 text-[14px] text-ap-muted">
-                {longDate(day)} · one tap a row, skip any
+                {longDate(day)} · one rating a row, skip any
               </p>
               {/* Nothing goes disabled while it saves (decision 7: that would drop the keyboard's
                   focus): the circles ignore a change and the line is read-only till then. */}

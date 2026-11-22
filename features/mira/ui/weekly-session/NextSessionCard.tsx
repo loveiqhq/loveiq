@@ -200,7 +200,14 @@ export function NextSessionCard() {
             Add to calendar
           </button>
         )}
-        <button ref={opener} type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+        <button
+          ref={opener}
+          type="button"
+          // The whole name says what changes (A11Y-13); it starts with the word on screen.
+          aria-label="Change your weekly session"
+          onClick={() => setSheet(true)}
+          className={OUTLINE_PILL}
+        >
           Change
         </button>
       </div>

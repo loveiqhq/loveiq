@@ -170,7 +170,9 @@ describe("Home's weekly session card", () => {
     );
     fireEvent.click(within(done).getByRole("button", { name: "Done" }));
     // "Choose a time" is gone with the booking: focus goes to what replaced it.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Change" })).toHaveFocus());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Change your weekly session" })).toHaveFocus()
+    );
   });
 
   it("keeps focus in the time group when the arrows reach Another time", async () => {
@@ -211,7 +213,7 @@ describe("Home's weekly session card", () => {
     fireEvent.click(add);
     expect(add).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: "Google Calendar" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change your weekly session" }));
     const sheet = screen.getByRole("dialog", { name: "Your weekly session" });
     expect(within(sheet).getByRole("radio", { name: "Tuesday" })).toBeChecked();
     expect(within(sheet).getByRole("button", { name: "Keep Tuesdays at 19:00" })).toHaveAttribute(
