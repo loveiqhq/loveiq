@@ -158,6 +158,48 @@ describe("Use Face ID next time?", () => {
   });
 });
 
+describe("The sign-up form", () => {
+  it("says what is missing instead of a dead button, and marks the step it is on (A11Y-14)", async () => {
+    render(<SignUpFlow />);
+    const email = screen.getByLabelText("Email");
+    fireEvent.change(email, { target: { value: "lea@" } });
+    tickAll();
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Please enter your email address.");
+    expect(document.activeElement).toBe(email);
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAttribute("aria-describedby", alert.id);
+    expect(calls("POST /api/mira/auth")).toEqual([]);
+    const steps = within(screen.getByRole("list", { name: "Sign-up progress" })).getAllByRole(
+      "listitem"
+    );
+    expect(steps.map((li) => li.getAttribute("aria-current"))).toEqual(["step", null, null]);
+  });
+
+  it("draws its fields' edges at 3:1 (ap-field, A11Y-8)", () => {
+    render(<SignUpFlow />);
+    expect(screen.getByLabelText("Email")).toHaveClass("border-ap-field");
+  });
+
+  it("keeps the passkey button in reach while it works, and a second tap does nothing", async () => {
+    let answer!: (r: { body: unknown }) => void;
+    replies["POST /api/mira/passkeys"] = () => ({ body: { options: { challenge: "c" } } });
+    webauthn.startAuthentication.mockImplementation(
+      () => new Promise((resolve) => (answer = () => resolve({ id: "a-key", rawId: "a-key" })))
+    );
+    render(<SignUpFlow />);
+    const button = screen.getByRole("button", { name: "Sign in with a passkey" });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    expect(button).not.toBeDisabled(); // focusable: a keyboard user isn't thrown out (decision 7)
+    fireEvent.click(button);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(webauthn.startAuthentication).toHaveBeenCalledTimes(1);
+    answer({ body: {} });
+  });
+});
+
 describe("A chat the account doesn't keep", () => {
   // The sign-up card promised "this chat comes with you"; an account with "Remember our
   // conversations" off keeps none, so the page says so before going on (round-2 ID-20).
@@ -578,6 +620,32 @@ describe("Settings › Sign-in & security", () => {
       userID: "dXNlcg",
       allAcceptedCredentialIDs: ["k2", "k3"],
     });
+  });
+
+  it("keeps Add a passkey in reach while the device asks, and a second tap does nothing", async () => {
+    replies["POST /api/mira/passkeys"] = () => ({ body: { options: { challenge: "c" } } });
+    webauthn.startRegistration.mockImplementation(() => new Promise(() => undefined));
+    await show();
+    const add = screen.getByRole("button", { name: "Add a passkey" });
+    fireEvent.click(add);
+    const waiting = await screen.findByRole("button", { name: "Waiting for your device…" });
+    expect(waiting).toHaveAttribute("aria-disabled", "true");
+    expect(waiting).not.toBeDisabled();
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls("POST /api/mira/passkeys")).toHaveLength(1);
+  });
+
+  it("says what is missing in the change of email, instead of a dead button", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    fireEvent.change(screen.getByLabelText("New email"), { target: { value: "lea.new@" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Please enter the new email address."
+    );
+    expect(calls("POST /api/mira/email")).toEqual([]);
+    expect(screen.getByLabelText("New email")).toHaveClass("border-ap-field");
   });
 
   it("tells the passkey manager nothing it can't be sure of", async () => {

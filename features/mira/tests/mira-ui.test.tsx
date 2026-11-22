@@ -179,7 +179,9 @@ describe("Sign-up", () => {
     });
     const resend = screen.getByRole("button", { name: "Send a new code" });
     fireEvent.click(resend);
-    expect(resend).toBeDisabled();
+    // Busy: it keeps its focus (aria-disabled, decision 7) and a second tap sends nothing.
+    expect(resend).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(resend);
     expect(await screen.findByText(/We just sent you a code/)).toBeInTheDocument();
     expect(screen.queryByText(/A new code is on its way/)).toBeNull();
     expect(calls("POST /api/mira/auth")).toHaveLength(2);
@@ -1071,9 +1073,15 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     expect(screen.queryByText(/team may read replies I rate/)).toBeNull(); // the box went (21 Nov)
     fireEvent.click(box(/18 years of age or older/));
     fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
-    expect(send).toHaveAttribute("aria-disabled", "true");
-    fireEvent.click(box(/sex life and health to coach me/));
+    // Never a silently dead button (A11Y-14): it says what is missing and goes to it.
     expect(send).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(send);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Please tick the three boxes to go on."
+    );
+    expect(document.activeElement).toBe(box(/sex life and health to coach me/));
+    expect(calls("POST /api/mira/auth")).toEqual([]);
+    fireEvent.click(box(/sex life and health to coach me/));
     expect(screen.getByRole("link", { name: "terms of use" })).toHaveAttribute(
       "href",
       "/terms-of-use"

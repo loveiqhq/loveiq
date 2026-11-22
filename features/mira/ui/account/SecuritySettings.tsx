@@ -89,13 +89,13 @@ export function lastActive(iso: string, now = Date.now()): string {
 }
 
 const PILL =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-[border-color,transform] hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-[border-color,transform] hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple active:scale-[0.98] aria-disabled:cursor-wait aria-disabled:opacity-50";
 const LINK =
-  "min-h-[44px] rounded text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:opacity-50";
+  "min-h-[44px] rounded text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-50";
 const DANGER =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-bad px-5 text-[14px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-bad disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-bad px-5 text-[14px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-bad aria-disabled:cursor-wait aria-disabled:opacity-50";
 const FIELD =
-  "min-h-[48px] w-full rounded-2xl border border-ap-line px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
+  "min-h-[48px] w-full rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
 
 export default function SecuritySettings() {
   const router = useRouter();
@@ -368,8 +368,17 @@ function ChangeEmail({
   return (
     <form
       className="flex flex-col gap-3 rounded-2xl bg-ap-ground p-4 motion-safe:animate-mira-rise"
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
+        if (busy) return;
+        // Said, never a silently dead button (A11Y-14, as on the sign-in page).
+        if (step === "address" && !/^\S+@\S+\.\S+$/.test(address.trim())) {
+          return setError("Please enter the new email address.");
+        }
+        if (step === "code" && code.length !== 8) {
+          return setError("Please enter the 8-digit code from the email.");
+        }
         void (step === "address" ? send() : confirm());
       }}
     >
@@ -427,11 +436,9 @@ function ChangeEmail({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={
-            busy ||
-            (step === "address" ? !/^\S+@\S+\.\S+$/.test(address.trim()) : code.length !== 8)
-          }
-          className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted"
+          aria-disabled={busy || undefined}
+          onClick={(e) => (busy ? e.preventDefault() : undefined)}
+          className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-60"
         >
           {busy
             ? step === "address"
@@ -442,7 +449,12 @@ function ChangeEmail({
               : "Confirm"}
         </button>
         {step === "code" ? (
-          <button type="button" className={LINK} disabled={busy} onClick={() => void send()}>
+          <button
+            type="button"
+            className={LINK}
+            aria-disabled={busy || undefined}
+            onClick={() => (busy ? undefined : void send())}
+          >
             Send a new code
           </button>
         ) : null}
@@ -578,7 +590,12 @@ function Passkeys({
         <Reauth what="add a passkey" onReauth={onReauth} onCancel={() => setReauth(false)} />
       ) : allowed && canPasskey ? (
         <div>
-          <button type="button" className={PILL} disabled={busy} onClick={() => void add()}>
+          <button
+            type="button"
+            className={PILL}
+            aria-disabled={busy || undefined}
+            onClick={() => (busy ? undefined : void add())}
+          >
             <PlusIcon />
             {busy ? "Waiting for your device…" : "Add a passkey"}
           </button>
@@ -683,7 +700,12 @@ function PasskeyItem({
             />
           </label>
           <div className="flex gap-3">
-            <button type="submit" className={LINK} disabled={busy}>
+            <button
+              type="submit"
+              className={LINK}
+              aria-disabled={busy || undefined}
+              onClick={(e) => (busy ? e.preventDefault() : undefined)}
+            >
               Save
             </button>
             <button
@@ -732,7 +754,12 @@ function PasskeyItem({
         <div className="mt-3 flex flex-col gap-3 border-t border-ap-line pt-3 motion-safe:animate-mira-rise">
           <p className="text-[14px]">Remove this passkey? You can still sign in with a code.</p>
           <div className="flex gap-3">
-            <button type="button" className={DANGER} disabled={busy} onClick={() => void remove()}>
+            <button
+              type="button"
+              className={DANGER}
+              aria-disabled={busy || undefined}
+              onClick={() => (busy ? undefined : void remove())}
+            >
               {busy ? "Removing…" : "Remove"}
             </button>
             <button
@@ -852,9 +879,9 @@ function Devices({
             <button
               type="button"
               className={LINK}
-              disabled={busy !== null}
+              aria-disabled={busy !== null || undefined}
               aria-label={`Sign out ${d.current ? "this device" : d.device}`}
-              onClick={() => void signOut(d.id)}
+              onClick={() => (busy !== null ? undefined : void signOut(d.id))}
             >
               {busy === d.id ? "Signing out…" : "Sign out"}
             </button>
@@ -886,8 +913,8 @@ function Devices({
               <button
                 type="button"
                 className={DANGER}
-                disabled={busy !== null}
-                onClick={() => void signOut("all")}
+                aria-disabled={busy !== null || undefined}
+                onClick={() => (busy !== null ? undefined : void signOut("all"))}
               >
                 {busy === "all" ? "Signing out…" : "Sign out everywhere"}
               </button>

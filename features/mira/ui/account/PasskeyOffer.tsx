@@ -73,9 +73,9 @@ export function PasskeyOffer({
           </PrimaryButton>
           <button
             type="button"
-            onClick={onDone}
-            disabled={state === "busy"}
-            className="min-h-[44px] text-[14px] text-ap-muted underline disabled:opacity-50"
+            aria-disabled={state === "busy" || undefined}
+            onClick={() => (state === "busy" ? undefined : onDone())}
+            className="min-h-[44px] text-[14px] text-ap-muted underline aria-disabled:cursor-wait aria-disabled:opacity-50"
           >
             Not now
           </button>
