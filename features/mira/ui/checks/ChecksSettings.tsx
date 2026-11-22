@@ -59,8 +59,8 @@ export function UseChecksSwitch({
 
 /**
  * Settings › Self-checks (the lead mounts it in MiraSettings): the "Mira may use" switch and
- * "Delete my check results", which deletes every result (the API also does it for an under-18
- * stop). Loads its own data.
+ * "Delete my check results", which deletes every result, the body check's included (the API also
+ * does it for an under-18 stop). Loads its own data.
  */
 export default function ChecksSettings() {
   const { data, error, setData, retry } = useChecks();
@@ -82,7 +82,8 @@ export default function ChecksSettings() {
       </section>
     ) : null;
   }
-  const count = data.checks.reduce((n, c) => n + c.results.length, 0);
+  const bodyChecks = data.bodyCheck?.taken.length ?? 0;
+  const count = data.checks.reduce((n, c) => n + c.results.length, 0) + bodyChecks;
 
   async function remove() {
     setBusy(true);
@@ -94,7 +95,12 @@ export default function ChecksSettings() {
       return;
     }
     setData(
-      (d) => d && { ...d, checks: d.checks.map((c) => ({ ...c, results: [], nextAt: null })) }
+      (d) =>
+        d && {
+          ...d,
+          checks: d.checks.map((c) => ({ ...c, results: [], nextAt: null })),
+          bodyCheck: d.bodyCheck && { taken: [], due: "baseline", nextAt: null },
+        }
     );
     setStatus({ ok: true, text: "Your check results are deleted." });
   }
@@ -111,7 +117,8 @@ export default function ChecksSettings() {
       {confirm ? (
         <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
           <p>
-            Delete all {count} of your check results? Your history and trends go too. This
+            {count === 1 ? "Delete your check result" : `Delete all ${count} of your check results`}
+            {bodyChecks ? ", your body check included" : ""}? Your history and trends go too. This
             can&rsquo;t be undone.
           </p>
           <div className="mt-3 flex flex-wrap gap-3">

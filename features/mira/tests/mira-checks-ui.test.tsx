@@ -438,10 +438,14 @@ describe("Settings › Self-checks", () => {
     expect(box).toBeChecked();
   });
 
-  it("deletes every check result after a confirmation", async () => {
+  it("deletes every check result, the body check's too, after a confirmation that counts them", async () => {
     account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild", support: false }];
+    account.bodyCheck = { taken: [ago(3)], due: null, nextAt: ago(-25) };
     render(<ChecksSettings />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete my check results" }));
+    expect(
+      screen.getByText(/Delete all 2 of your check results, your body check included\?/)
+    ).toBeTruthy();
     expect(sent("DELETE /api/mira/checks")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByText("Your check results are deleted.")).toBeTruthy();
