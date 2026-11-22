@@ -47,6 +47,39 @@ describe("getEmailSiteUrl", () => {
     expect(getEmailSiteUrl()).toBe("https://www.loveiq.org");
   });
 
+  // Staging is a Vercel preview deployment. Its emails sent people to production, where pages and
+  // images new on the branch don't exist yet: the session email's photo was broken and its link a 404.
+  describe("on a Vercel preview deployment (staging is its own site)", () => {
+    const ENV = process.env.VERCEL_ENV;
+    const IMAGES = process.env.EMAIL_IMAGE_BASE_URL;
+    afterEach(() => {
+      if (ENV === undefined) delete process.env.VERCEL_ENV;
+      else process.env.VERCEL_ENV = ENV;
+      if (IMAGES === undefined) delete process.env.EMAIL_IMAGE_BASE_URL;
+      else process.env.EMAIL_IMAGE_BASE_URL = IMAGES;
+    });
+
+    it("keeps its own https address for links and images", () => {
+      process.env.VERCEL_ENV = "preview";
+      delete process.env.EMAIL_IMAGE_BASE_URL;
+      process.env.NEXT_PUBLIC_SITE_URL = "https://staging.loveiq.org/";
+      expect(getEmailSiteUrl()).toBe("https://staging.loveiq.org");
+      expect(getEmailImageBaseUrl()).toBe("https://staging.loveiq.org");
+    });
+
+    it("still refuses plain http", () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.NEXT_PUBLIC_SITE_URL = "http://staging.loveiq.org";
+      expect(getEmailSiteUrl()).toBe("https://www.loveiq.org");
+    });
+
+    it("never in production, where a staging address is a misconfiguration", () => {
+      process.env.VERCEL_ENV = "production";
+      process.env.NEXT_PUBLIC_SITE_URL = "https://staging.loveiq.org";
+      expect(getEmailSiteUrl()).toBe("https://www.loveiq.org");
+    });
+  });
+
   it("allows http://localhost for local dev", () => {
     process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
     expect(getEmailSiteUrl()).toBe("http://localhost:3000");

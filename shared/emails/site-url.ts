@@ -17,7 +17,9 @@ const STAGING_PATTERNS: RegExp[] = [
  * Reads NEXT_PUBLIC_SITE_URL. If the env var is unset, blank, or matches
  * any staging/preview pattern, returns the hardcoded prod URL so a
  * misconfiguration on Vercel (e.g. Production env accidentally pointing to a
- * Preview alias) cannot result in users receiving staging links. Strips the
+ * Preview alias) cannot result in users receiving staging links. On a Vercel
+ * preview deployment (VERCEL_ENV=preview, which is what staging is) an https
+ * value is kept: staging's emails link to, and show images from, staging. Strips the
  * trailing slash so callers can safely template `${siteUrl}/path`.
  *
  * Scope: EMAIL templates only. Page/SEO surfaces (sitemap, robots, OG tags,
@@ -29,6 +31,9 @@ export function getEmailSiteUrl(): string {
   const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (!raw) return PROD_SITE_URL;
   const cleaned = raw.replace(/\/$/, "");
+  // A preview deployment (staging) is its own site: the pages and images new on its branch exist
+  // only there. The safety net above stays for production and for anything unlabelled.
+  if (process.env.VERCEL_ENV === "preview" && cleaned.startsWith("https://")) return cleaned;
   if (STAGING_PATTERNS.some((p) => p.test(cleaned))) {
     return PROD_SITE_URL;
   }
