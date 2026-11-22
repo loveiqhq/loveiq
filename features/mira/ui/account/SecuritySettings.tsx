@@ -128,12 +128,15 @@ export default function SecuritySettings() {
   }, [load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  /** Signs out here and back to sign-in, to come straight back to this section of Settings. */
+  /**
+   * Signs out here and back to sign-in, to come straight back to this section of Settings. A full
+   * page load: a client-side hop from a page first loaded at #security came back from the sign-in
+   * as #security#security, at the top of Settings (round-3 R3-ACCT-2).
+   */
   const signInAgain = useCallback(async () => {
     await miraApi("/api/mira/auth", { body: { action: "logout" } });
-    router.replace("/mira/start?next=%2Fmira%2Fsettings%23security");
-    router.refresh();
-  }, [router]);
+    window.location.replace("/mira/start?next=%2Fmira%2Fsettings%23security");
+  }, []);
 
   return (
     <section aria-labelledby="security-h" className="flex flex-col gap-4">

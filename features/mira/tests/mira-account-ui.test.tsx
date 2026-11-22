@@ -783,11 +783,17 @@ describe("Settings › Sign-in & security", () => {
       "please sign in again to add a passkey"
     );
     expect(calls("POST /api/mira/passkeys")).toEqual([]);
+    // Round-3 R3-ACCT-2: a client-side hop from a page first loaded at #security came back from
+    // the sign-in as #security#security, at the top of Settings. A full page load instead, as a
+    // fresh sign-in page lands right.
+    const replace = vi.fn();
+    vi.stubGlobal("location", { ...window.location, replace });
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     // "You'll come straight back here": to Sign-in & security, not the top of Settings.
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings%23security")
+      expect(replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings%23security")
     );
+    expect(router.replace).not.toHaveBeenCalled();
     expect(calls("POST /api/mira/auth")).toEqual([expect.objectContaining({ action: "logout" })]);
   });
 
