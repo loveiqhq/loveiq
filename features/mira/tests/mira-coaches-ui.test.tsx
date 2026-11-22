@@ -133,11 +133,15 @@ describe("The roster (/mira/coaches)", () => {
     serve({ notified: ["jonas"] });
     render(<CoachRoster />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Jonas/ })).toHaveTextContent("We’ll let you know")
+      expect(screen.getByRole("button", { name: /Jonas is ready/ })).toHaveTextContent(
+        "We’ll let you know"
+      )
     );
     fireEvent.click(screen.getByRole("button", { name: "Notify me when Theo is ready" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Theo/ })).toHaveTextContent("We’ll let you know")
+      expect(screen.getByRole("button", { name: /Theo is ready/ })).toHaveTextContent(
+        "We’ll let you know"
+      )
     );
     expect(events()).toContainEqual({ type: "notify", coach: "theo" });
 
@@ -145,6 +149,31 @@ describe("The roster (/mira/coaches)", () => {
     expect(await screen.findByText("That didn't go through.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notify me when Lena is ready" })).toHaveTextContent(
       "Notify me"
+    );
+  });
+
+  it("lets a Notify me be taken back, keeping the keyboard on the coach's button", async () => {
+    serve({ notified: ["jonas"] });
+    render(<CoachRoster />);
+    const stop = await screen.findByRole("button", { name: "Stop notifying me about Jonas" });
+    fireEvent.click(stop);
+    const ask = screen.getByRole("button", { name: "Notify me when Jonas is ready" });
+    expect(ask).toHaveTextContent("Notify me");
+    expect(ask).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE").map(([url]) => url)
+      ).toEqual(["/api/mira/coaches?notify=jonas"])
+    );
+    expect(await screen.findByText(/We won’t contact you about Jonas/)).toBeInTheDocument();
+
+    // A failed stop puts the request back and says why.
+    replies["DELETE /api/mira/coaches"] = () => ({ status: 500, body: { error: "Not now." } });
+    fireEvent.click(ask);
+    fireEvent.click(await screen.findByRole("button", { name: "Stop notifying me about Jonas" }));
+    expect(await screen.findByText("Not now.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Jonas is ready/ })).toHaveTextContent(
+      "We’ll let you know"
     );
   });
 

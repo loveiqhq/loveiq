@@ -71,6 +71,12 @@ export async function notify(coach: CoachId): Promise<string | null> {
   return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
 }
 
+/** "Notify me" taken back: null when it went through, else what to tell the person. */
+export async function stopNotifying(coach: CoachId): Promise<string | null> {
+  const r = await miraApi(`/api/mira/coaches?notify=${coach}`, { method: "DELETE" });
+  return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
+}
+
 /**
  * A search that finds nothing, counted once it has settled (a pause in typing), once per streak,
  * and never with its words.

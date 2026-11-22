@@ -4,26 +4,59 @@
  * chats' topics (none while it is off: picks from chats follow that switch), the coming-soon
  * coaches they asked to hear about, and their chat titles for Home's search. Their own rows only.
  * Someone Mira stopped as under 18 is refused (403), like Mira's other routes.
+ *
+ * DELETE ?notify=<coach id> — takes back "Notify me" for a coming-soon coach (its requests are
+ * deleted). Never refused for age: taking something back always works.
  */
 import { NextResponse } from "next/server";
-import { readCoachState } from "@features/mira/server/coaches";
+import { COACHES } from "@features/mira/content/coaches";
+import { readCoachState, stopNotify } from "@features/mira/server/coaches";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, listChats } from "@features/mira/server/store";
+import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function limited(request: Request) {
   const rate = await checkRateLimit(getClientIp(request), {
     bucket: "mira-coaches",
     limit: 60,
     windowMs: 60_000,
   });
-  if (!rate.allowed) {
-    return NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
+  return rate.allowed
+    ? null
+    : NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
+}
+
+export async function DELETE(request: Request) {
+  if (!(await verifyCsrfToken(request))) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 403 });
   }
+  const refused = await limited(request);
+  if (refused) return refused;
+  const account = await getMiraAccount();
+  if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  const wanted = new URL(request.url).searchParams.get("notify");
+  const coach = COACHES.find((c) => c.id === wanted && !c.live);
+  if (!coach) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  try {
+    await stopNotify(account.id, coach.id);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "mira: a Notify me was not taken back");
+    return NextResponse.json(
+      { error: "That didn't go through. Please try again." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request: Request) {
+  const refused = await limited(request);
+  if (refused) return refused;
   const account = await getMiraAccount();
   if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   try {

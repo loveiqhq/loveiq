@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Coach, CoachId } from "@features/mira/content/coaches";
-import { notify } from "./data";
+import { notify, stopNotifying } from "./data";
 import { FOCUS, QUIET_PILL } from "./styles";
 
 /** The coaches' shared pieces, in the calm chat's language (MiraShell, MiraChat). */
@@ -53,8 +53,9 @@ export function CoachPortrait({ coach, size }: { coach: Coach; size: number }) {
 }
 
 /**
- * "Notify me" on a coming-soon coach. Shows "We’ll let you know" at once and undoes it if the
- * request fails; stays focusable either way, so a keyboard never loses its place.
+ * "Notify me" on a coming-soon coach, and its "Stop" once asked. Each shows at once and is put
+ * back if the request fails; the coach's button stays focusable either way, and Stop hands the
+ * keyboard back to it, so a keyboard never loses its place.
  */
 export function NotifyButton({
   coach,
@@ -67,40 +68,66 @@ export function NotifyButton({
 }) {
   const [error, setError] = useState<string | null>(null);
   // Announced only after the person's own tap, not for a request made on an earlier visit.
-  const [said, setSaid] = useState(false);
-  async function ask() {
-    if (done) return;
+  const [said, setSaid] = useState("");
+  const main = useRef<HTMLButtonElement | null>(null);
+  async function change(on: boolean) {
+    if (on === done) return;
     setError(null);
-    onChange(coach.id, true);
-    const failed = await notify(coach.id);
+    if (!on) main.current?.focus(); // Stop goes away; the keyboard stays with this coach
+    onChange(coach.id, on);
+    const failed = await (on ? notify(coach.id) : stopNotifying(coach.id));
     if (failed) {
-      onChange(coach.id, false);
+      onChange(coach.id, !on);
       setError(failed);
-    } else setSaid(true);
+    } else {
+      setSaid(
+        on
+          ? `Done. We’ll let you know when ${coach.name} is ready.`
+          : `Stopped. We won’t contact you about ${coach.name}.`
+      );
+    }
   }
   return (
     <span className="inline-flex flex-col items-start gap-1">
-      <button
-        type="button"
-        onClick={() => void ask()}
-        aria-disabled={done || undefined}
-        // The whole name in one label: each card's button says whom it is for.
-        aria-label={
-          done
-            ? `We’ll let you know when ${coach.name} is ready`
-            : `Notify me when ${coach.name} is ready`
-        }
-        className={
-          done
-            ? `inline-flex min-h-[44px] cursor-default items-center gap-2 rounded-full px-1 text-[14px] font-semibold text-ap-good-ink ${FOCUS}`
-            : QUIET_PILL
-        }
-      >
-        {done ? <CheckIcon /> : <BellIcon />}
-        {done ? "We’ll let you know" : "Notify me"}
-      </button>
+      <span className="inline-flex flex-wrap items-center gap-x-1">
+        <button
+          ref={main}
+          type="button"
+          onClick={() => void change(true)}
+          aria-disabled={done || undefined}
+          // The whole name in one label: each card's button says whom it is for.
+          aria-label={
+            done
+              ? `We’ll let you know when ${coach.name} is ready`
+              : `Notify me when ${coach.name} is ready`
+          }
+          className={
+            done
+              ? `inline-flex min-h-[44px] cursor-default items-center gap-2 rounded-full px-1 text-[14px] font-semibold text-ap-good-ink ${FOCUS}`
+              : QUIET_PILL
+          }
+        >
+          {done ? <CheckIcon /> : <BellIcon />}
+          {done ? "We’ll let you know" : "Notify me"}
+        </button>
+        {done ? (
+          <>
+            <span aria-hidden="true" className="text-ap-muted">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() => void change(false)}
+              aria-label={`Stop notifying me about ${coach.name}`}
+              className={`inline-flex min-h-[44px] items-center px-1 text-[14px] font-semibold text-ap-muted underline underline-offset-4 hover:text-ap-ink ${FOCUS}`}
+            >
+              Stop
+            </button>
+          </>
+        ) : null}
+      </span>
       <span aria-live="polite" className="sr-only">
-        {said && done ? `Done. We’ll let you know when ${coach.name} is ready.` : ""}
+        {said}
       </span>
       {error ? (
         <span role="alert" className="text-[13px] text-ap-bad-ink">
