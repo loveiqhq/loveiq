@@ -33,7 +33,7 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
         <span className="col-span-2 col-start-1 row-start-2 bg-[linear-gradient(105deg,#d05976_20.51%,#c167cf_48.14%,#8887f6_79.16%)] bg-clip-text text-transparent">
           Psychometrics
         </span>{" "}
-        <span className="col-start-2 row-start-1 ml-1 justify-self-start font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
+        <span className="col-start-2 row-start-1 ml-1 justify-self-start font-sans text-[9px] font-normal tracking-[0.14em] text-ap-muted">
           BETA
         </span>
       </span>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bandOf, changeSince, type Check } from "@features/mira/content/checks";
-import { shortDate, type CheckResult } from "./data";
+import { bandText, shortDate, type CheckResult } from "./data";
 
 /**
  * A check's results over time: one line across the scale's bands, shaded in one hue from light
@@ -11,8 +11,17 @@ import { shortDate, type CheckResult } from "./data";
  * and on a desk. The sentence above it and the table below it say everything it shows.
  */
 
-/** One hue, light to dark, for the bands (lowest first); the line stays ink on all of them. */
-const TINTS = ["#faf8fd", "#f3eefb", "#ebe3f8", "#e2d6f4", "#d8c9f0"];
+/**
+ * One hue, faint to stronger, for the bands (lowest first): purple over the page, so the bands
+ * deepen on the dark theme too and the ink line and score stay readable on all of them.
+ */
+const TINTS = [
+  "fill-ap-purple/[0.02]",
+  "fill-ap-purple/[0.09]",
+  "fill-ap-purple/[0.15]",
+  "fill-ap-purple/[0.22]",
+  "fill-ap-purple/30",
+];
 const H = 196;
 const PAD = { left: 12, right: 92, top: 22, bottom: 30 };
 
@@ -110,7 +119,7 @@ export function TrendChart({ check, results }: { check: Check; results: CheckRes
                 y={top}
                 width={plotW}
                 height={Math.max(0, bottom - top)}
-                fill={TINTS[Math.min(i, TINTS.length - 1)]}
+                className={TINTS[Math.min(i, TINTS.length - 1)]}
               />
               <BandLabel x={PAD.left + plotW + 10} y={(top + bottom) / 2} label={b.label} />
             </g>
@@ -119,7 +128,7 @@ export function TrendChart({ check, results }: { check: Check; results: CheckRes
         <path
           d={path}
           fill="none"
-          stroke="#161021"
+          className="stroke-ap-ink"
           strokeWidth={2}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -128,13 +137,12 @@ export function TrendChart({ check, results }: { check: Check; results: CheckRes
           const latest = i === points.length - 1;
           return (
             <g key={p.r.at}>
-              <title>{`${shortDate(p.r.at)}: ${bandOf(check, p.r.score).label.toLowerCase()} (${p.r.score})`}</title>
+              <title>{`${shortDate(p.r.at)}: ${bandText(check, p.r).toLowerCase()} (${p.r.score})`}</title>
               <circle
                 cx={p.x}
                 cy={p.y}
                 r={latest ? 6 : 5}
-                fill={latest ? "#161021" : "#ffffff"}
-                stroke={latest ? "#ffffff" : "#161021"}
+                className={latest ? "fill-ap-ink stroke-white" : "fill-white stroke-ap-ink"}
                 strokeWidth={2}
               />
             </g>

@@ -31,7 +31,7 @@ export function TalkButton({
       disabled={disabled}
       aria-label="Talk to Mira"
       title="Talk to Mira out loud"
-      className={`relative flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-ap-ink text-[14px] font-bold text-white transition-[background-color,transform] hover:bg-[#2b2338] active:scale-95 disabled:cursor-not-allowed disabled:bg-ap-muted sm:h-12 ${invited ? "px-4" : "w-11 sm:w-auto sm:px-[18px]"}`}
+      className={`relative flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-ap-ink text-[14px] font-bold text-white transition-[background-color,transform] hover:bg-ap-ink/90 active:scale-95 disabled:cursor-not-allowed disabled:bg-ap-muted sm:h-12 ${invited ? "px-4" : "w-11 sm:w-auto sm:px-[18px]"}`}
     >
       {invited ? (
         <span
@@ -88,7 +88,7 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
             type="checkbox"
             checked={tick}
             onChange={(e) => setTick(e.target.checked)}
-            className="h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+            className="h-[18px] w-[18px] shrink-0 accent-ap-purple"
           />
           I understand
         </label>
@@ -266,7 +266,7 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
         </div>
       </div>
 
-      <p className="mt-2.5 text-[12px] leading-snug text-ap-quiet">
+      <p className="mt-2.5 text-[12px] leading-snug text-ap-muted">
         {voice.voiceless
           ? "This device has no voice of its own for Mira, so she answers in writing. "
           : ""}
@@ -340,7 +340,7 @@ const GHOST =
   "inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground disabled:opacity-40";
 const QUIET = "min-h-[44px] px-3 text-[14px] font-semibold text-ap-muted";
 const INK =
-  "inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[background-color,transform] hover:bg-[#2b2338] active:scale-[0.98]";
+  "inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[background-color,transform] hover:bg-ap-ink/90 active:scale-[0.98]";
 
 function WaveIcon() {
   return (

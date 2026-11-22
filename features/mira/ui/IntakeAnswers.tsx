@@ -8,7 +8,7 @@ type Question = (typeof miraConfig.intakeQuestions)[number];
 
 /** An answer button: a quiet white pill, like the starter prompts (Mark's V2, 21 Nov 2026). */
 export const ANSWER_CHIP =
-  "min-h-[40px] rounded-full border border-ap-line bg-white px-4 text-[14px] text-ap-body transition-colors hover:border-[#d9d4e2] hover:bg-ap-ground";
+  "min-h-[40px] rounded-full border border-ap-line bg-white px-4 text-[14px] text-ap-body transition-colors hover:border-ap-mist hover:bg-ap-ground";
 const chip = ANSWER_CHIP;
 
 /**
@@ -45,7 +45,7 @@ export function IntakeAnswers({
               type="button"
               aria-label={`${n} of 7`}
               onClick={() => onAnswer(`${n} of 7`)}
-              className="min-h-[44px] min-w-[44px] rounded-full border border-ap-line bg-white text-[14px] text-ap-body transition-colors hover:border-[#d9d4e2] hover:bg-ap-ground"
+              className="min-h-[44px] min-w-[44px] rounded-full border border-ap-line bg-white text-[14px] text-ap-body transition-colors hover:border-ap-mist hover:bg-ap-ground"
             >
               {n}
             </button>

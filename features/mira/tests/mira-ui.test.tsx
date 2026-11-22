@@ -571,10 +571,13 @@ describe("Free messages", () => {
     expect(screen.getByText("Try this.")).toBeInTheDocument();
     // New chat would wipe the chat the card promises to bring along.
     for (const b of screen.getAllByRole("button", { name: /New chat/ })) expect(b).toBeDisabled();
-    expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({
-      gate: true,
-      freeLeft: 0,
-    });
+    // Saved by an effect after the card renders: on a busy machine it lands a moment later.
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({
+        gate: true,
+        freeLeft: 0,
+      })
+    );
   });
 
   it("isn't put beside a crisis reply: the person can still write", async () => {

@@ -691,7 +691,7 @@ function Tick({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-[1px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+        className="mt-[1px] h-[18px] w-[18px] shrink-0 accent-ap-purple"
       />
       <span>{children}</span>
     </label>

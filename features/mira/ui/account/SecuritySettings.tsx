@@ -139,7 +139,7 @@ export default function SecuritySettings() {
         <div role="status" aria-live="polite">
           {notice ? (
             <p
-              className={`mt-3 rounded-2xl px-4 py-3 text-[14px] motion-safe:animate-mira-in ${notice.ok ? "bg-[#eef7f2] text-ap-good-ink" : "bg-ap-ground text-ap-body"}`}
+              className={`mt-3 rounded-2xl px-4 py-3 text-[14px] motion-safe:animate-mira-in ${notice.ok ? "bg-ap-good/10 text-ap-good-ink" : "bg-ap-ground text-ap-body"}`}
             >
               {notice.text}
             </p>
@@ -809,7 +809,7 @@ function Devices({
                 type="checkbox"
                 checked={alsoKeys}
                 onChange={(e) => setAlsoKeys(e.target.checked)}
-                className="h-5 w-5 shrink-0 accent-[#795fc8]"
+                className="h-5 w-5 shrink-0 accent-ap-purple"
               />
               <span>
                 Also remove my passkeys{" "}

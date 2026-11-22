@@ -161,8 +161,8 @@ describe("POST: a finished check", () => {
     const res = await save("anxiety", GAD, { score: 0, band: "minimal" });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.result).toMatchObject({ score: 10, band: "moderate" });
-    expect(body).toMatchObject({ previous: null, support: false });
+    expect(body.result).toMatchObject({ score: 10, band: "moderate", support: false });
+    expect(body.previous).toBeNull();
     // Stored as given, by the account's id, without any score.
     expect(db.checks).toEqual([
       { user_id: "u1", scale: "gad7", answers: GAD, created_at: expect.any(String) },
@@ -222,10 +222,10 @@ describe("POST: a finished check", () => {
 
   it("says when the mood check's question 9 needs the support lines, whatever the total", async () => {
     const low = await (await save("mood", PHQ(1))).json();
-    expect(low).toMatchObject({ result: { score: 1, band: "minimal" }, support: true });
+    expect(low.result).toMatchObject({ score: 1, band: "minimal", support: true });
     db.checks = [];
     const none = await (await save("mood", [3, 3, 3, 3, 3, 3, 3, 3, 0])).json();
-    expect(none).toMatchObject({ result: { score: 24, band: "severe" }, support: false });
+    expect(none.result).toMatchObject({ score: 24, band: "severe", support: false });
   });
 
   it("answers with an error when the result could not be stored", async () => {
@@ -265,6 +265,20 @@ describe("GET: the person's checks", () => {
     expect(JSON.stringify(body)).not.toContain("answers");
   });
 
+  it("keeps question 9's support with its result on every later read, whatever the total", async () => {
+    someone("phq9", PHQ(0), ago(30));
+    someone("phq9", PHQ(3), ago(2));
+    someone("gad7", GAD, ago(2));
+    const body = await (await call(GET, "GET")).json();
+    const [anxiety, mood] = body.checks;
+    expect(mood.results).toEqual([
+      { at: db.checks[0]!.created_at, score: 0, band: "minimal", support: false },
+      { at: db.checks[1]!.created_at, score: 3, band: "minimal", support: true },
+    ]);
+    expect(anxiety.results).toMatchObject([{ score: 10, support: false }]);
+    expect(JSON.stringify(body)).not.toContain("answers");
+  });
+
   it("shows the visitor's country's support lines when the account has none", async () => {
     db.user.country = null;
     const body = await (await call(GET, "GET", undefined, { "x-vercel-ip-country": "GB" })).json();
@@ -299,14 +313,70 @@ describe("what Mira may use", () => {
     someone("ucla3", [3, 3, 3], ago(120)); // too old to describe them now
     const checks = await checksForMira("u1");
     expect(checks).toEqual([
-      { title: "Mood check", name: "PHQ-9", band: "minimal symptoms of depression", daysAgo: 0 },
-      { title: "Anxiety check", name: "GAD-7", band: "moderate anxiety", daysAgo: 2 },
+      {
+        title: "Mood check",
+        name: "PHQ-9",
+        band: "minimal symptoms of depression",
+        daysAgo: 0,
+        support: true,
+      },
+      {
+        title: "Anxiety check",
+        name: "GAD-7",
+        band: "moderate anxiety",
+        daysAgo: 2,
+        support: false,
+      },
     ]);
     const text = personalInstructions({}, { signedIn: true, checks });
     expect(text).toContain("- Anxiety check (GAD-7), 2 days ago: moderate anxiety.");
-    expect(text).toContain("- Mood check (PHQ-9), today: minimal symptoms of depression.");
     expect(text).toMatch(/Never diagnose/);
     expect(text).not.toMatch(/Loneliness|\b10\b|answers? (were|was)/);
     expect(personalInstructions({}, { signedIn: true, checks: [] })).not.toContain("Self-checks");
+  });
+
+  it("never calls a check with question 9 above 'Not at all' minimal alone: it is rail 14", async () => {
+    db.user.use_checks = true;
+    someone("phq9", PHQ(1), ago(3));
+    const text = personalInstructions({}, { signedIn: true, checks: await checksForMira("u1") });
+    expect(text).toContain(
+      "- Mood check (PHQ-9), 3 days ago: minimal symptoms of depression, and in that same check they said they have had thoughts of being better off dead or of hurting themselves (question 9)."
+    );
+    expect(text).not.toContain("minimal symptoms of depression.");
+    expect(text).toContain(
+      "Thoughts of being better off dead or of hurting themselves in a check are rail 14 whatever its band: follow your crisis rules, and never call that check minimal or reassure them about it."
+    );
+    // Without that answer, no such line.
+    db.checks = [];
+    someone("phq9", PHQ(0), ago(3));
+    const calm = personalInstructions({}, { signedIn: true, checks: await checksForMira("u1") });
+    expect(calm).toContain("- Mood check (PHQ-9), 3 days ago: minimal symptoms of depression.");
+    expect(calm).not.toMatch(/rail 14|better off dead/);
+  });
+});
+
+describe("a 'yes' to the mood check's question 9", () => {
+  it("is never forgotten once the save's response is gone: later reads and Mira's context keep it", async () => {
+    db.user.use_checks = true;
+    const saved = await (await save("mood", [0, 0, 0, 0, 0, 0, 0, 0, 3])).json();
+    expect(saved.result).toMatchObject({ score: 3, band: "minimal", support: true });
+    // A reload, Home's link, another device: the result still carries it.
+    const later = await (await call(GET, "GET")).json();
+    expect(later.checks[1].results).toEqual([
+      { at: saved.result.at, score: 3, band: "minimal", support: true },
+    ]);
+    const forMira = await checksForMira("u1");
+    expect(forMira).toEqual([
+      {
+        title: "Mood check",
+        name: "PHQ-9",
+        band: "minimal symptoms of depression",
+        daysAgo: 0,
+        support: true,
+      },
+    ]);
+    expect(personalInstructions({}, { signedIn: true, checks: forMira })).toMatch(
+      /today: minimal symptoms of depression, and in that same check they said they have had thoughts of being better off dead/
+    );
   });
 });

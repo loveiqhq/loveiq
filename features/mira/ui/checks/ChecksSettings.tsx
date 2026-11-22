@@ -7,7 +7,8 @@ import { useChecks } from "./data";
 /**
  * "Mira may use my check results" (mira_user.use_checks, off by default), one of the "What Mira
  * may use" switches (PATCH /api/mira/me): saved on change, put back if the save fails. Mira then
- * sees each check's latest band, never answers or scores.
+ * sees each check's latest band and whether the mood check's question 9 opened the support lines
+ * (server/checks.ts checksForMira), never scores or other answers.
  */
 export function UseChecksSwitch({
   on,
@@ -35,8 +36,8 @@ export function UseChecksSwitch({
         <span>
           <span className="block text-[15px] font-bold">Mira may use my check results</span>
           <span className="text-[14px] text-ap-body">
-            She sees only each check&rsquo;s latest band, like &ldquo;mild&rdquo;, to tailor her
-            coaching. Never your answers.
+            She sees each check&rsquo;s latest band, like &ldquo;mild&rdquo;, and whether your last
+            mood check opened the support lines. Never your scores or other answers.
           </span>
         </span>
         <input
@@ -44,7 +45,7 @@ export function UseChecksSwitch({
           checked={on}
           disabled={busy}
           onChange={(e) => void toggle(e.target.checked)}
-          className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
+          className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
         />
       </label>
       {error ? (
@@ -62,11 +63,25 @@ export function UseChecksSwitch({
  * stop). Loads its own data.
  */
 export default function ChecksSettings() {
-  const { data, setData } = useChecks();
+  const { data, error, setData, retry } = useChecks();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  if (!data) return null;
+  if (!data) {
+    return error ? (
+      <section aria-labelledby="checks-settings-h" className="flex flex-col gap-3">
+        <h2 id="checks-settings-h" className="font-serif text-[22px] font-medium">
+          Self-checks
+        </h2>
+        <p role="alert" className="text-[14px] text-ap-bad-ink">
+          {error}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
+        </p>
+      </section>
+    ) : null;
+  }
   const count = data.checks.reduce((n, c) => n + c.results.length, 0);
 
   async function remove() {

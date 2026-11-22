@@ -69,7 +69,7 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
               </PrimaryButton>
               <Link
                 href="/mira/journal"
-                className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+                className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-ap-link underline-offset-4 hover:underline"
               >
                 Keep them
               </Link>
@@ -89,7 +89,7 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
             </p>
             <Link
               href="/mira/journal"
-              className="inline-flex min-h-[44px] w-fit items-center text-[15px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+              className="inline-flex min-h-[44px] w-fit items-center text-[15px] font-semibold text-ap-link underline-offset-4 hover:underline"
             >
               Open your journal
             </Link>

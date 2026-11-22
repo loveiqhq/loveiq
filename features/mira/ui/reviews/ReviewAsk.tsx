@@ -205,7 +205,7 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
                       height="28"
                       viewBox="0 0 24 24"
                       className={`pointer-events-none rounded-full transition-[color,transform] duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ap-lavender peer-focus-visible:ring-offset-2 ${
-                        lit ? "text-ap-orange" : "text-[#d9d4e2]"
+                        lit ? "text-ap-orange" : "text-ap-mist"
                       } ${stars === n ? "motion-safe:animate-mira-pop" : ""}`}
                       fill="currentColor"
                     >
@@ -273,7 +273,7 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
                       type="checkbox"
                       checked={consent}
                       onChange={(e) => setConsent(e.target.checked)}
-                      className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+                      className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-ap-purple"
                     />
                     <span>{CONSENT_TEXT}</span>
                   </label>

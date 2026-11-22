@@ -204,6 +204,9 @@ describe("Picked for you (Home)", () => {
       "/mira/coaches#coach-ana",
     ]);
     expect(links[0]).toHaveTextContent("Because you talked about hiding your body during intimacy");
+    // picks_shown is logged by an effect after the picks render: wait for it before the click,
+    // or a busy machine logs the click first.
+    await waitFor(() => expect(coachEvents()).toEqual(["picks_shown:chats"]));
     fireEvent.click(links[2]!);
     await waitFor(() =>
       expect(coachEvents()).toEqual(["picks_shown:chats", "pick_clicked:coach-ana"])
