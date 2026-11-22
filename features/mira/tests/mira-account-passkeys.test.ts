@@ -460,6 +460,7 @@ describe("a passkey from a browser Mira stopped as under 18", () => {
   // A passkey's account always exists already: the browser's cookie alone never stops or wipes it.
   it("is refused, and the account it belongs to is left as it was", async () => {
     const key = await addPasskey();
+    const before = { ...db.tables.mira_passkey![0]! };
     browser = new Map([["mira_minor", "1"]]);
     expect(await signInWith(key)).toMatchObject({
       status: 403,
@@ -468,6 +469,31 @@ describe("a passkey from a browser Mira stopped as under 18", () => {
     expect(db.tables.mira_user![0]!.minor_at ?? null).toBeNull();
     expect(db.tables.mira_passkey).toHaveLength(1);
     expect(verifyOtp).not.toHaveBeenCalled();
+    // Nobody signed in: Settings must not say the passkey was "last used today".
+    expect(db.tables.mira_passkey![0]!.counter).toBe(before.counter);
+    expect(db.tables.mira_passkey![0]!.last_used_at ?? null).toBeNull();
+  });
+
+  it("a refused sign-in of any kind leaves the passkey as unused as it was", async () => {
+    const key = await addPasskey();
+    const unused = () => expect(db.tables.mira_passkey![0]!.last_used_at ?? null).toBeNull();
+    db.tables.mira_user![0]!.minor_at = new Date().toISOString();
+    expect((await signInWith(key)).status).toBe(403);
+    unused();
+    db.tables.mira_user![0]!.minor_at = null;
+    db.tables.mira_user![0]!.email = "staff@loveiq.org";
+    logins.set(LEA, "staff@loveiq.org");
+    expect((await signInWith(key)).status).toBe(403);
+    unused();
+    logins.delete(LEA);
+    db.tables.mira_user![0]!.email = "lea@example.com";
+    db.tables.mira_user![0]!.consent_version = "older";
+    expect((await signInWith(key)).status).toBe(409); // ticks first
+    unused();
+    // A real sign-in marks it.
+    const ticks = { adult: true, terms: true, consent: true, useAssessment: false };
+    expect((await signInWith(key, {}, { ticks })).status).toBe(200);
+    expect(db.tables.mira_passkey![0]!.last_used_at).toEqual(expect.any(String));
   });
 });
 

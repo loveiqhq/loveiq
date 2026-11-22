@@ -315,11 +315,10 @@ async function signIn(
     return fail(DIDNT_WORK, 400);
   }
   if (!verified.verified) return fail(DIDNT_WORK, 400);
-  if (!(await markPasskeyUsed(passkey, verified.authenticationInfo.newCounter))) {
-    logger.warn("mira: a passkey's counter moved during its sign-in");
-    return fail(DIDNT_WORK, 400);
-  }
 
+  // Every refusal comes before the counter moves: a passkey is marked used only by a sign-in that
+  // happens (Settings shows when each was last used). The challenge is already spent, so a refused
+  // answer can't be sent again.
   const userId = passkey.user_id;
   const profile = await getProfile(userId);
   if (!profile) return fail(DIDNT_WORK, 400);
@@ -340,6 +339,12 @@ async function signIn(
     return fail("Please tick the three boxes, then use your passkey again.", 409, {
       needsConsent: true,
     });
+  }
+  // Compare and set, right before the session: two sign-ins racing with one counter (a cloned
+  // authenticator's sign) can't both pass.
+  if (!(await markPasskeyUsed(passkey, verified.authenticationInfo.newCounter))) {
+    logger.warn("mira: a passkey's counter moved during its sign-in");
+    return fail(DIDNT_WORK, 400);
   }
 
   const code = await mintSignInCode(email);
