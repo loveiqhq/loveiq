@@ -903,6 +903,26 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     );
   });
 
+  // Decision 9: the account was stopped as under 18 (elsewhere) while this chat was open.
+  it("closes on a save refused as under 18, and the chat says Mira is only for adults", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    replies["PATCH /api/mira/me"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Coaching style" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "How Mira coaches you" })).toBeNull()
+    );
+    expect(screen.getByText("Mira is only for adults.")).toBeVisible();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(tracked()).not.toContain("style_saved");
+  });
+
   it("counts a saved style", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     replies["PATCH /api/mira/me"] = () => ({ body: { success: true } });

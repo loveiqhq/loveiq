@@ -11,6 +11,7 @@ import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { track } from "./coaches/data";
 import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
+import { ADULTS_ONLY } from "./kit";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import { ReviewsWelcome } from "./reviews/PublicReviews";
@@ -631,6 +632,14 @@ export default function MiraChat({
     for (const k of changed) merged[k] = next[k] ?? 3;
     if (signedIn) {
       const res = await miraApi("/api/mira/me", { method: "PATCH", body: { style: merged } });
+      if (res.minor) {
+        // Stopped as under 18 meanwhile (another device): no error to try again, the panel goes
+        // and the chat says the one refusal (decision 9), as its other asks stop.
+        setStyleOpen(false);
+        setMinor(true);
+        setNotice(ADULTS_ONLY);
+        return null;
+      }
       if (!res.ok) return res.data.error ?? "Unable to save. Please try again.";
     } else local.saveStyle(merged);
     setStyle(merged);
