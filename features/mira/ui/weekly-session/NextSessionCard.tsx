@@ -153,6 +153,12 @@ export function NextSessionCard() {
               ? `${slotLabel(slot)}, ${zoneLabel(slot.timeZone)}. Fifteen minutes, whenever you’re ready.`
               : `${next.when} · 15 minutes with Mira · ${zoneLabel(slot.timeZone)}`}
           </p>
+          {slot.remindersOnHold && !slot.paused ? (
+            // Home stays neutral while this lasts: the why is in Settings.
+            <p className="mt-1 text-[13px] text-ap-muted">
+              Reminder emails are on hold for now. They start again on their own.
+            </p>
+          ) : null}
           {slot.paused ? (
             <p className="mt-1 text-[13px] text-ap-muted">
               Reminder emails are paused.{" "}

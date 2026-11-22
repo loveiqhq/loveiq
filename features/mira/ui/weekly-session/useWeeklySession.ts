@@ -20,6 +20,8 @@ export type SlotView = {
   paused: boolean;
   next: string;
   googleUrl: string;
+  /** No reminder emails for now: support lines were shown in the last 14 days. */
+  remindersOnHold?: boolean;
 };
 /** `minor`: the under-18 stop's 403, the only one that hides sessions (a CSRF refusal is a 403 too). */
 type View = { slot: SlotView | null; timeZone: string; minor?: boolean };

@@ -225,6 +225,19 @@ describe("Home's weekly session card", () => {
     expect(screen.getByRole("link", { name: "Join now" })).toHaveAttribute("href", "/mira/session");
   });
 
+  it("says truthfully when reminder emails are on hold for now, in neutral words", async () => {
+    replies["GET /api/mira/weekly-session"] = has({
+      ...SLOT,
+      remindersOnHold: true,
+    } as typeof SLOT);
+    render(<NextSessionCard />);
+    expect(
+      await screen.findByText("Reminder emails are on hold for now. They start again on their own.")
+    ).toBeInTheDocument();
+    // Home stays neutral: nothing about why.
+    expect(document.body.textContent).not.toMatch(/support|crisis/i);
+  });
+
   it("says when reminders are paused, and turns them back on", async () => {
     replies["GET /api/mira/weekly-session"] = has({ ...SLOT, paused: true });
     replies["PATCH /api/mira/weekly-session"] = () => ({
@@ -252,6 +265,27 @@ describe("Home's weekly session card", () => {
 });
 
 describe("Settings' weekly session section", () => {
+  it("says when reminder emails are on hold after support lines, and that they come back", async () => {
+    replies["GET /api/mira/weekly-session"] = has({
+      ...SLOT,
+      remindersOnHold: true,
+    } as typeof SLOT);
+    render(<WeeklySessionSettings />);
+    expect(
+      await screen.findByText(/on hold for up to two weeks after the support lines came up/)
+    ).toBeInTheDocument();
+    // Paused by the person: nothing to say about a hold.
+    cleanup();
+    replies["GET /api/mira/weekly-session"] = has({
+      ...SLOT,
+      paused: true,
+      remindersOnHold: true,
+    } as typeof SLOT);
+    render(<WeeklySessionSettings />);
+    expect(await screen.findByText("Tuesdays at 19:00")).toBeInTheDocument();
+    expect(screen.queryByText(/on hold/)).toBeNull();
+  });
+
   it("pauses the reminders at once, and cancels after a confirmation", async () => {
     replies["GET /api/mira/weekly-session"] = has(SLOT);
     replies["PATCH /api/mira/weekly-session"] = () => ({

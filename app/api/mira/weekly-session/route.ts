@@ -2,8 +2,11 @@
  * /api/mira/weekly-session — the signed-in person's weekly session (features/mira/server/
  * weekly-sessions.ts): one weekly slot, 15 minutes, with a calendar invite and reminders.
  *
- *   GET                → { slot: null | { weekday, time, timeZone, paused, next, googleUrl },
- *                          timeZone } (the profile's zone, to book in)
+ *   GET                → { slot: null | { weekday, time, timeZone, paused, next, googleUrl,
+ *                          remindersOnHold }, timeZone } (the profile's zone, to book in).
+ *                          remindersOnHold: support lines were shown in the last 14 days, so the
+ *                          reminder job skips this person's reminders (session-emails.ts); PUT
+ *                          and PATCH answer it too.
  *   GET ?format=ics    → the invite as a download (METHOD:PUBLISH), for Apple or Outlook
  *   PUT { weekday, time, timeZone, source }  → books it, or moves it; emails the invite
  *   PATCH { paused }   → reminder emails off or back on (the slot and calendar entry stay)
@@ -18,7 +21,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sessionIcs } from "@features/mira/server/calendar";
 import { isMinor } from "@features/mira/server/minor";
-import { from, isValidTimeZone } from "@features/mira/server/nudges";
+import { CRISIS_QUIET_DAYS, from, hadCrisis, isValidTimeZone } from "@features/mira/server/nudges";
 import { cancellationIcs, sendSessionEmail } from "@features/mira/server/session-emails";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
@@ -29,6 +32,7 @@ import {
   saveSlot,
   setPaused,
   slotView,
+  type StoredSlot,
 } from "@features/mira/server/weekly-sessions";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -82,6 +86,17 @@ async function guard(request: Request, write: boolean) {
 
 const noStore = { headers: { "Cache-Control": "no-store" } };
 
+/**
+ * The slot as the pages show it, and whether its reminders are on hold: the reminder job sends
+ * none for 14 days after support lines were shown (session-emails.ts), and the booking email
+ * promised them, so the pages say so. Unreadable: nothing is claimed.
+ */
+async function view(slot: StoredSlot, userId: string) {
+  const since = new Date(Date.now() - CRISIS_QUIET_DAYS * 86_400_000);
+  const remindersOnHold = await hadCrisis(userId, since).catch(() => false);
+  return { ...slotView(slot), remindersOnHold };
+}
+
 export async function GET(request: Request) {
   try {
     const g = await guard(request, false);
@@ -111,7 +126,10 @@ export async function GET(request: Request) {
     }
     const [slot, profile] = await Promise.all([getSlot(g.account.id), getProfile(g.account.id)]);
     return NextResponse.json(
-      { slot: slot ? slotView(slot) : null, timeZone: profile?.time_zone ?? "Europe/Berlin" },
+      {
+        slot: slot ? await view(slot, g.account.id) : null,
+        timeZone: profile?.time_zone ?? "Europe/Berlin",
+      },
       noStore
     );
   } catch (err) {
@@ -144,7 +162,7 @@ export async function PUT(request: Request) {
     }
     return NextResponse.json(
       {
-        slot: slotView(saved.slot),
+        slot: await view(saved.slot, account.id),
         timeZone: saved.slot.timeZone,
         change: saved.change,
         emailed,
@@ -170,7 +188,10 @@ export async function PATCH(request: Request) {
       { userId: g.account.id },
       { source: "app" }
     );
-    return NextResponse.json({ slot: slotView(slot), timeZone: slot.timeZone }, noStore);
+    return NextResponse.json(
+      { slot: await view(slot, g.account.id), timeZone: slot.timeZone },
+      noStore
+    );
   } catch (err) {
     logger.error({ err }, "mira: could not change the weekly session's reminders");
     return NextResponse.json({ error: "Unable to save." }, { status: 500 });

@@ -115,6 +115,12 @@ export function WeeklySessionSettings() {
               void run(() => setPaused(!on), on ? "Reminders are on." : "Reminders are paused.")
             }
           />
+          {slot.remindersOnHold && !slot.paused ? (
+            <p className="text-[14px] text-ap-body">
+              Reminder emails are on hold for up to two weeks after the support lines came up, so
+              none goes out for now. They start again on their own.
+            </p>
+          ) : null}
           {confirm ? (
             <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
               <p>
