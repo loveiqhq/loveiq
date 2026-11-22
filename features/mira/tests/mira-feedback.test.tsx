@@ -8,6 +8,7 @@ vi.mock("@features/mira/ui/api", () => ({
   useReloadWhenRestored: () => undefined,
 }));
 
+import { COACHES } from "@features/mira/content/coaches";
 import { miraApi } from "@features/mira/ui/api";
 import MiraFeedback from "@features/mira/ui/MiraFeedback";
 
@@ -30,12 +31,12 @@ describe("the beta feedback form", () => {
     await user.click(screen.getByRole("button", { name: "Send feedback" }));
     expect(miraApi).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Low desire" }));
+    await user.click(screen.getByRole("button", { name: "Libido challenges" }));
     await user.click(screen.getByRole("button", { name: "Send feedback" }));
     expect(miraApi).toHaveBeenCalledWith("/api/mira/event", {
       body: {
         type: "feedback",
-        challenges: ["Low desire"],
+        challenges: ["Libido challenges"],
         wish: undefined,
         other: undefined,
         mayEmail: true,
@@ -57,17 +58,34 @@ describe("the beta feedback form", () => {
     });
   });
 
-  it("draws its fields on the paper colour, never the browser's grey (UX-7)", () => {
+  it("draws its fields on the paper colour with a visible edge, never the browser's grey (UX-7, A11Y-8)", () => {
     render(<MiraFeedback />);
-    for (const box of screen.getAllByRole("textbox")) expect(box).toHaveClass("bg-white");
+    for (const box of screen.getAllByRole("textbox")) {
+      expect(box).toHaveClass("bg-white");
+      expect(box).toHaveClass("border-ap-field"); // 3:1 against the page in both themes
+    }
+  });
+
+  it("names each challenge as the coaches page does, one name per thing (SET-11)", () => {
+    render(<MiraFeedback />);
+    for (const { challenge } of COACHES) {
+      expect(screen.getByRole("button", { name: challenge })).toBeVisible();
+    }
+    for (const old of ["Low desire", "Different levels of desire", "Saying what I want"]) {
+      expect(screen.queryByRole("button", { name: old })).toBeNull();
+    }
+    // The challenges no coach covers yet stay on offer.
+    for (const more of ["Performance pressure", "Trust after cheating", "Another challenge"]) {
+      expect(screen.getByRole("button", { name: more })).toBeVisible();
+    }
   });
 
   it("keeps the checkbox its size and the Send pill on one line on a phone (A11Y-17, UX-8)", () => {
     render(<MiraFeedback />);
     expect(screen.getByRole("checkbox", { name: /You may email me/ })).toHaveClass("shrink-0");
-    // The note beside the pill wraps under it instead of squeezing its label onto two lines.
-    expect(screen.getByRole("button", { name: "Send feedback" }).parentElement).toHaveClass(
-      "flex-wrap"
-    );
+    // The pill never shrinks, and the note beside it wraps under it instead of squeezing it.
+    const pill = screen.getByRole("button", { name: "Send feedback" }).parentElement!;
+    expect(pill).toHaveClass("shrink-0");
+    expect(pill.parentElement).toHaveClass("flex-wrap");
   });
 });

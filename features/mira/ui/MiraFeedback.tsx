@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { COACHES } from "@features/mira/content/coaches";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { miraApi } from "./api";
 
-/** Board 10, "Help us shape what comes next": challenges, wishes and open feedback. */
+/**
+ * Board 10, "Help us shape what comes next": challenges, wishes and open feedback. Each coach's
+ * challenge by the name the coaches page gives it (SET-11: one name per thing), then the ones no
+ * coach covers yet.
+ */
 const CHALLENGES = [
-  "Body confidence",
-  "Low desire",
-  "Different levels of desire",
-  "Saying what I want",
-  "Desire in a long relationship",
-  "Arousal & orgasm",
+  ...COACHES.map((c) => c.challenge),
   "Performance pressure",
   "Trust after cheating",
   "Another challenge",
@@ -106,7 +106,7 @@ export default function MiraFeedback() {
               maxLength={2000}
               onChange={(e) => setWish(e.target.value)}
               rows={3}
-              className="rounded-2xl border border-ap-line bg-white p-3 text-[16px] font-normal"
+              className="rounded-2xl border border-ap-field bg-white p-3 text-[16px] font-normal"
             />
           </label>
           <label className="flex flex-col gap-2 text-[16px] font-bold">
@@ -116,7 +116,7 @@ export default function MiraFeedback() {
               maxLength={2000}
               onChange={(e) => setOther(e.target.value)}
               rows={3}
-              className="rounded-2xl border border-ap-line bg-white p-3 text-[16px] font-normal"
+              className="rounded-2xl border border-ap-field bg-white p-3 text-[16px] font-normal"
             />
           </label>
           <label className="flex items-center gap-3 text-[14px]">
@@ -129,9 +129,12 @@ export default function MiraFeedback() {
             You may email me with a follow-up question about my feedback
           </label>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <PrimaryButton type="submit" disabled={busy}>
-              {busy ? "Sending…" : "Send feedback"}
-            </PrimaryButton>
+            {/* Never squeezed by the note beside it, so its label stays on one line (UX-8). */}
+            <span className="shrink-0">
+              <PrimaryButton type="submit" disabled={busy}>
+                {busy ? "Sending…" : "Send feedback"}
+              </PrimaryButton>
+            </span>
             <span className="text-[13px] text-ap-muted">
               Please don&apos;t include anything you wouldn&apos;t want our team to read.
             </span>
