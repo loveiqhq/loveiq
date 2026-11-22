@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
@@ -424,6 +424,33 @@ describe("Chat", () => {
     );
   });
 
+  // Round-2 audit A11Y-11: the whole list was one live region, so readers repeated the person's
+  // own words and read the answer buttons as text.
+  it("announces only Mira's new reply, never the person's words or the buttons", async () => {
+    let answer: (r: Response) => void = () => {};
+    const usual = fetchMock.getMockImplementation()!;
+    // The chat's reply is held back until the test lets it through; everything else answers.
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) =>
+      url === "/api/mira/chat" ? new Promise<Response>((done) => (answer = done)) : usual(url, init)
+    );
+    onTestFinished(() => void fetchMock.mockImplementation(usual));
+    render(<MiraChat signedIn initialChatId={null} />);
+    const conversation = screen.getByRole("region", { name: "Conversation" });
+    expect(conversation).not.toHaveAttribute("aria-live");
+    const said = document.querySelector<HTMLElement>(".sr-only[aria-live='polite']")!;
+    typeAndSend("I feel tense");
+    await waitFor(() => expect(said).toHaveTextContent("Mira is writing…"));
+    answer({
+      ok: true,
+      status: 200,
+      json: async () => ({ reply: "That sounds hard.", invitation: miraConfig.intakeInvitation }),
+    } as Response);
+    await screen.findByRole("button", { name: miraConfig.intakeReplyButtons[0] });
+    expect(said).toHaveTextContent(`Mira: That sounds hard. ${miraConfig.intakeInvitation}`);
+    expect(said).not.toHaveTextContent("I feel tense");
+    expect(said).not.toHaveTextContent(miraConfig.intakeReplyButtons[0]!);
+  });
+
   it("doesn't send on the Enter that ends an input-method composition", async () => {
     render(<MiraChat signedIn initialChatId={null} />);
     const box = screen.getByLabelText("Message Mira");
@@ -676,7 +703,7 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
       expect.objectContaining({ message: miraConfig.starterChips[0] }),
     ]);
     // The prompt went away with the welcome: focus is on the conversation, not lost.
-    expect(document.activeElement?.getAttribute("aria-live")).toBe("polite");
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Conversation" }));
   });
 
   it("asks again in a browser that ticked an older wording, and not after this one", async () => {

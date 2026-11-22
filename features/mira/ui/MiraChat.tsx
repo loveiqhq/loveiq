@@ -705,6 +705,20 @@ export default function MiraChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, [session, signedIn]);
 
+  // What a screen reader hears: that Mira is writing, then her new reply (with her invitation),
+  // never the person's own words or the buttons and cards (round-2 audit A11Y-11).
+  let fresh = messages.length;
+  while (fresh > 0 && messages[fresh - 1]!.role === "assistant" && messages[fresh - 1]!.live)
+    fresh--;
+  const said = sending
+    ? "Mira is writing…"
+    : fresh < messages.length
+      ? `Mira: ${messages
+          .slice(fresh)
+          .map((m) => m.content)
+          .join(" ")}`
+      : "";
+
   const empty = !started || atStart;
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
   const unloaded = Boolean(error?.retry);
@@ -834,9 +848,12 @@ export default function MiraChat({
             {/* Wider screens: the welcome, the composer and the prompts sit together in the
                 middle (the board); the spacers give way to the chat once it starts. */}
             {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
+            {/* Not a live region (round-2 audit A11Y-11: readers repeated the person's own words
+                and read the buttons as text): `said` below announces Mira's new reply. */}
             <div
               ref={listRef}
-              aria-live="polite"
+              role="region"
+              aria-label="Conversation"
               tabIndex={-1}
               className={
                 empty
@@ -1043,7 +1060,6 @@ export default function MiraChat({
                         unoptimized
                         className="h-6 w-6 rounded-full object-cover"
                       />
-                      <span className="sr-only">Mira is writing…</span>
                       <span aria-hidden="true" className="flex items-center gap-1.5">
                         {[0, 140, 280].map((delay) => (
                           <span
@@ -1075,6 +1091,9 @@ export default function MiraChat({
               ) : null}
             </div>
 
+            <p aria-live="polite" className="sr-only">
+              {said}
+            </p>
             <div className="mx-auto w-full max-w-[760px] shrink-0 px-3 pt-1 sm:px-6 sm:pt-0">
               {/* A voice session keeps its panel (and End) while Mira says her last free reply;
                   the sign-up card follows once the session ends, above the composer, which
