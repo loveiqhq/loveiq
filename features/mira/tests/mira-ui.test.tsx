@@ -401,6 +401,29 @@ describe("Chat", () => {
     });
   });
 
+  // Round-2 audit CHAT-5: Mira cites a guide practice by its address, which couldn't be tapped,
+  // and named the production site on staging.
+  it("turns the guide's address in Mira's reply into a link to this site's guide, and nothing else", async () => {
+    replies["POST /api/mira/chat"] = () => ({
+      body: {
+        reply:
+          "The full steps are at loveiq.org/mira/guide#practice-1. The whole guide: https://www.loveiq.org/mira/guide, not example.com/mira/guide.",
+      },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    const practice = await screen.findByRole("link", { name: "loveiq.org/mira/guide#practice-1" });
+    expect(practice).toHaveAttribute("href", "/mira/guide#practice-1");
+    expect(screen.getByRole("link", { name: "https://www.loveiq.org/mira/guide" })).toHaveAttribute(
+      "href",
+      "/mira/guide"
+    );
+    expect(screen.queryByRole("link", { name: /example\.com/ })).toBeNull();
+    expect(practice.closest("p")).toHaveTextContent(
+      "The full steps are at loveiq.org/mira/guide#practice-1. The whole guide: https://www.loveiq.org/mira/guide, not example.com/mira/guide."
+    );
+  });
+
   it("doesn't send on the Enter that ends an input-method composition", async () => {
     render(<MiraChat signedIn initialChatId={null} />);
     const box = screen.getByLabelText("Message Mira");

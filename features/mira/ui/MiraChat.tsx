@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { SESSION_OPENING } from "@features/mira/server/calendar";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
@@ -893,7 +893,7 @@ export default function MiraChat({
                           dir="auto"
                           className={`whitespace-pre-wrap text-[16px] leading-[1.65] [overflow-wrap:anywhere] sm:max-w-[88%] ${m.live ? "motion-safe:animate-mira-reply" : ""}`}
                         >
-                          {m.content}
+                          {withGuideLinks(m.content)}
                         </p>
                       )}
                       {m.role === "assistant" &&
@@ -1377,6 +1377,28 @@ const ICON_BUTTON =
 /** A rating is final: once one thumb is chosen, the other says it's unavailable (CHAT-6). */
 const RATE_BUTTON =
   "inline-flex h-9 min-w-[36px] items-center justify-center rounded-full hover:bg-ap-ground hover:text-ap-body aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-ap-muted";
+
+/**
+ * Mira cites a guide practice by its address, "loveiq.org/mira/guide#practice-1" (prompt.ts): it
+ * becomes a link to this site's own guide (staging's on staging), so it can be tapped (round-2
+ * audit CHAT-5). Nothing else in her words is ever a link.
+ */
+const GUIDE_ADDRESS = /(?:https?:\/\/)?(?:www\.)?loveiq\.org(\/mira\/guide(?:#practice-[1-7])?)/g;
+
+function withGuideLinks(text: string): ReactNode {
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const m of text.matchAll(GUIDE_ADDRESS)) {
+    out.push(
+      text.slice(at, m.index),
+      <Link key={m.index} href={m[1]!} className="font-semibold text-ap-link underline">
+        {m[0]}
+      </Link>
+    );
+    at = m.index + m[0].length;
+  }
+  return out.length ? [...out, text.slice(at)] : text;
+}
 
 function SlidersIcon() {
   return (
