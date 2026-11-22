@@ -20,11 +20,15 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { shortDate } from "@features/admin/server/ap/days";
+import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION, HISTORY_TURNS, MAX_MESSAGE_CHARS } from "@features/mira/server/config";
 import { recordSession, signOutDevices } from "@features/mira/server/devices";
+import { localDay } from "@features/mira/server/goal-progress";
 import { isStaffEmail } from "@features/mira/server/google";
 import { carryMinorStop, isMinor } from "@features/mira/server/minor";
 import { MAX_PASSKEYS, listPasskeys } from "@features/mira/server/passkeys";
+import { isCrisisMessage } from "@features/mira/server/safety";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
 import {
   SIGN_IN_CODE,
@@ -73,10 +77,19 @@ const MAX_REPLY_CHARS = 4000;
 const CARRIES_PER_DAY = 5;
 
 const email = z.string().trim().toLowerCase().email().max(320);
-// The page sends up to 48 turns; carryChat keeps what the chat itself allows.
+// The page sends up to 48 turns; carryChat keeps what the chat itself allows. `crisis`: the
+// browser's mark on a reply that opened the support lines (only ever makes a title neutral).
 const carrySchema = z
-  .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(8000) }))
+  .array(
+    z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string().min(1).max(8000),
+      crisis: z.boolean().optional(),
+    })
+  )
   .max(HISTORY_TURNS * 2);
+/** The fixed replies that open the support lines: the crisis message and a declined reply's. */
+const SUPPORT_REPLIES = new Set([miraConfig.crisisMessage, miraConfig.refusalMessage]);
 
 const schema = z.discriminatedUnion("action", [
   z.object({
@@ -119,12 +132,16 @@ async function sentNothing(): Promise<NextResponse> {
  * Moves the anonymous chat into the account, within the chat's own limits: its newest
  * HISTORY_TURNS turns, each no longer than the chat lets it be. At most CARRIES_PER_DAY a day
  * per account, so this can't be used to fill the database. The new chat's id, null when there
- * is nothing to keep, or "limited".
+ * is nothing to keep, or "limited". Named after its first message, unless that message has
+ * crisis words or the first reply opened the support lines: then by its date in the person's
+ * zone, "Chat on 22 Nov", never those words (round-2 CHAT-17, lead decision 5, as the chat
+ * route names its chats).
  */
 async function carryChat(
   accountId: string,
   remember: boolean,
-  turns: Turn[]
+  turns: Turn[],
+  timeZone?: string | null
 ): Promise<string | null | "limited"> {
   const kept = turns.slice(-HISTORY_TURNS).map((t) => ({
     role: t.role,
@@ -138,7 +155,17 @@ async function carryChat(
   });
   if (!quota.allowed) return "limited";
   const firstUser = kept.find((t) => t.role === "user")?.content ?? "New chat";
-  const chatId = await createChat(accountId, firstUser.replace(/\s+/g, " ").slice(0, 80));
+  const firstReply = turns.slice(-HISTORY_TURNS).find((t) => t.role === "assistant");
+  const supportShown =
+    isCrisisMessage(firstUser) ||
+    firstReply?.crisis === true ||
+    SUPPORT_REPLIES.has(firstReply?.content ?? "");
+  // ponytail: the chat route's chat-titles.ts neutralTitle builds the same title; use it here once
+  // both are on one branch.
+  const title = supportShown
+    ? `Chat on ${shortDate(localDay(new Date(), timeZone ?? "UTC"))}`
+    : firstUser.replace(/\s+/g, " ").slice(0, 80);
+  const chatId = await createChat(accountId, title);
   await addMessages(chatId, kept);
   return chatId;
 }
@@ -180,7 +207,7 @@ export async function POST(request: Request) {
       const profile = await getProfile(account.id);
       const turns = body.carry.filter((t) => t.content.trim());
       const remember = profile?.remember_chats !== false;
-      const chatId = await carryChat(account.id, remember, turns);
+      const chatId = await carryChat(account.id, remember, turns, profile?.time_zone);
       if (chatId === "limited") return tryLater();
       // Not kept as "Remember our conversations" is off: the page says so (round-2 ID-20).
       return NextResponse.json({ success: true, chatId, ...(remember ? {} : { memoryOff: true }) });
@@ -338,7 +365,7 @@ export async function POST(request: Request) {
     const remember = !minor && profile?.remember_chats !== false;
     // A chat came along but the account keeps none: the page says so (round-2 ID-20).
     const memoryOff = carry.length > 0 && !minor && profile?.remember_chats === false;
-    const chatId = await carryChat(account.id, remember, carry);
+    const chatId = await carryChat(account.id, remember, carry, profile?.time_zone);
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },

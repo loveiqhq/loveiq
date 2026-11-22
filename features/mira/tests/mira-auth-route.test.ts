@@ -33,6 +33,12 @@ vi.mock("@features/mira/server/minor", () => ({
   carryMinorStop: vi.fn().mockResolvedValue(false),
 }));
 vi.mock("@features/mira/server/google", () => ({ isStaffEmail: vi.fn().mockResolvedValue(false) }));
+// The crisis-word check stands in for itself: "MARKED" plays a message with crisis words, so the
+// title rule is tested without writing any (safety.ts has its own tests).
+vi.mock("@features/mira/server/safety", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/mira/server/safety")>()),
+  isCrisisMessage: (text: string) => text.includes("MARKED"),
+}));
 vi.mock("@features/mira/server/passkeys", () => ({
   MAX_PASSKEYS: 10,
   listPasskeys: vi.fn().mockResolvedValue([]),
@@ -53,6 +59,7 @@ vi.mock("@features/mira/server/store", () => ({
 }));
 
 import { POST } from "@/app/api/mira/auth/route";
+import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { alertCodeCap } from "@features/mira/server/alerts";
 import { addressKey, sendSignInCode } from "@features/mira/server/sign-in";
@@ -244,6 +251,32 @@ describe("POST /api/mira/auth", () => {
       memoryOff: true,
     });
     expect(createChat).not.toHaveBeenCalled();
+  });
+
+  it("names a carried chat by its date when its start brought the support lines (CHAT-17)", async () => {
+    getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    const dated = /^Chat on \d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/;
+    const title = () => vi.mocked(createChat).mock.calls.at(-1)![1];
+    // The first message has crisis words.
+    await post({ action: "carry", carry: [{ role: "user", content: "MARKED words" }] });
+    expect(title()).toMatch(dated);
+    // The first reply was the fixed support reply, or the browser marked it as one.
+    const opened = (reply: Record<string, unknown>) =>
+      post({ action: "carry", carry: [{ role: "user", content: "about my body" }, reply] });
+    await opened({ role: "assistant", content: miraConfig.crisisMessage });
+    expect(title()).toMatch(dated);
+    await opened({ role: "assistant", content: "A model reply.", crisis: true });
+    expect(title()).toMatch(dated);
+    // Otherwise its first message, as before; a code sign-in's carry too.
+    await opened({ role: "assistant", content: "A model reply." });
+    expect(title()).toBe("about my body");
+    await post({
+      action: "verify",
+      email: "lea@example.com",
+      code: "12345678",
+      carry: [{ role: "user", content: "MARKED words" }],
+    });
+    expect(title()).toMatch(dated);
   });
 
   it("says when a code sign-in kept no chat because the account remembers none", async () => {

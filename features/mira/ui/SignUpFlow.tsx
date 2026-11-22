@@ -70,9 +70,14 @@ async function afterSignIn(adopt: (saved: SavedLook) => void) {
   }
 }
 
-/** The anonymous chat as the sign-in carries it: role and words only. */
+/**
+ * The anonymous chat as the sign-in carries it: role and words, and the mark of a reply that
+ * opened the support lines (the chat is then named by its date, never by those words).
+ */
 const carriedChat = () =>
-  (local.chat()?.turns ?? []).map(({ role, content }) => ({ role, content })).slice(-48);
+  (local.chat()?.turns ?? [])
+    .map(({ role, content, crisis }) => ({ role, content, ...(crisis ? { crisis: true } : {}) }))
+    .slice(-48);
 
 /**
  * "Check your inbox", kept in this tab for the code's hour, so a reload, Back or a tab the phone
