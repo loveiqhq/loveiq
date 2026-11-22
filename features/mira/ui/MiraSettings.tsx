@@ -171,10 +171,21 @@ export default function MiraSettings({
     ["appearance", "Appearance"],
     ["data", "Your data"],
   ];
+  const ready = p !== null;
   const active = useActiveSection(
     sections.map(([id]) => id),
-    Boolean(p)
+    ready
   );
+
+  // A link into a section (#weekly from the session emails, #security back from Google) lands
+  // on it once it exists: the sections come after the profile, so the browser's own jump on
+  // arrival found nothing to go to.
+  useEffect(() => {
+    if (!ready) return;
+    const section = document.getElementById(window.location.hash.slice(1));
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    section?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+  }, [ready]);
 
   function load() {
     void miraApi<{ profile: Profile }>("/api/mira/me").then((r) => {

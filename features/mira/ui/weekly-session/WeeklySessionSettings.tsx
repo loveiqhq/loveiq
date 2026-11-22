@@ -11,7 +11,8 @@ const OUTLINE_PILL =
  * Settings' "Weekly session" section (board 08c's "Session reminders"): the booked time with a
  * way to change it, reminder emails on or off, and cancelling. Each control saves at once, apart
  * from the page's Save button. Fetches its own data; renders nothing for an account Mira stopped
- * as under 18. Its id is the anchor the session emails' "Change or cancel" link opens.
+ * as under 18. Settings mounts it in the anchor the session emails' "Change or cancel" link
+ * opens (#weekly).
  */
 export function WeeklySessionSettings() {
   const { state, load, book, setPaused, cancel } = useWeeklySession();

@@ -62,8 +62,9 @@ const NEXT_PAGES = new Set([
   "/mira/assessments/mood",
   "/mira/assessments/loneliness",
   "/mira/assessments/body",
-  // The daily journal, where its reminder email's button leads.
+  // The daily journal, and its check-in, where the reminder email's button leads.
   "/mira/journal",
+  "/mira/journal?checkin=1",
   // The weekly session's link (calendar invite, reminder): back to it after sign-in.
   "/mira/session",
   // The pages past the MVP (22 Nov 2026): back to the one that sent the person to sign in.
