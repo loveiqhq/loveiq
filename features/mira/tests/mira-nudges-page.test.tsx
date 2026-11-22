@@ -3,8 +3,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("t=signed-token"),
+// The link's token comes from the `mira_link` cookie proxy.ts sets (decision 10), never the address.
+const jar = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
+  }),
 }));
 vi.mock("@features/mira/ui/api", () => ({ miraApi: vi.fn() }));
 
@@ -35,20 +39,34 @@ afterEach(cleanup);
 
 describe("the nudge preferences page (boards 2 to 4b)", () => {
   it("shows a link we did not sign as broken at once, with no request that could only fail", async () => {
-    const open = async (t: string) =>
-      render(await NudgesPage({ searchParams: Promise.resolve({ t }) }));
+    /** The page as an email link opens it: its token in the cookie, maybe an old `?t=` too. */
+    const open = async (cookie: string | null, address?: string) => {
+      jar.clear();
+      if (cookie !== null) jar.set("mira_link", cookie);
+      // Next still hands the page its address; it must take nothing from it.
+      const page = NudgesPage as (p: { searchParams: Promise<{ t?: string }> }) => Promise<never>;
+      render(await page({ searchParams: Promise.resolve({ t: address }) }));
+    };
+    const signed = makeToken("prefs", "11111111-2222-4333-8444-555555555555")!;
     await open("11111111-2222-4333-8444-555555555555.forged");
+    expect(screen.getByRole("heading", { name: "This link doesn’t work anymore" })).toBeVisible();
+    cleanup();
+    // A token left in the address counts for nothing: the cookie is the only way in.
+    await open(null, signed);
     expect(screen.getByRole("heading", { name: "This link doesn’t work anymore" })).toBeVisible();
     expect(miraApi).not.toHaveBeenCalled();
     cleanup();
-    await open(makeToken("prefs", "11111111-2222-4333-8444-555555555555")!);
+    await open(signed);
     expect(await screen.findByRole("heading", { name: "Fewer nudges, not none?" })).toBeVisible();
     expect(miraApi).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(miraApi).mock.calls[0]![0]).toBe(
+      `/api/mira/nudges/preferences?t=${encodeURIComponent(signed)}`
+    );
   });
 
   it("moves focus to each new screen's heading, and the reason screen has a way back", async () => {
     const user = userEvent.setup();
-    render(<MiraNudges />);
+    render(<MiraNudges token="signed-token" />);
     const choose = await screen.findByRole("heading", { name: "Fewer nudges, not none?" });
     await waitFor(() => expect(choose).toHaveFocus());
     await user.click(screen.getByRole("button", { name: "Stop all nudges" }));
@@ -63,7 +81,7 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
 
   it("thanks only someone who told us why, and Talk to Mira opens the chat", async () => {
     const user = userEvent.setup();
-    render(<MiraNudges />);
+    render(<MiraNudges token="signed-token" />);
     await user.click(await screen.findByRole("button", { name: "Stop all nudges" }));
     await user.click(screen.getByRole("radio", { name: "Too many emails" }));
     await user.click(screen.getByRole("button", { name: "Skip and stop nudges" }));
@@ -78,7 +96,7 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
 
   it("says that journal and session reminders stop too, before and after, and where they come back", async () => {
     const user = userEvent.setup();
-    render(<MiraNudges />);
+    render(<MiraNudges token="signed-token" />);
     await user.click(await screen.findByRole("button", { name: "Stop all nudges" }));
     expect(
       screen.getByText(

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { LINK_COOKIE } from "@features/mira/email-link";
 import { miraLinkPreview } from "@features/mira/link-preview";
 import { readToken } from "@features/mira/server/nudges";
 import { MiraFrame } from "@features/mira/ui/MiraShell";
@@ -13,17 +15,14 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * The page behind "Stop reminders" in every weekly-session email. The link's token is checked
+ * The page behind "Stop reminders" in every weekly-session email. The link's token arrives in the
+ * `mira_link` cookie, never the address (proxy.ts, features/mira/email-link.ts), and is checked
  * here (for its own purpose only), so one we did not sign shows "This link doesn't work" without
  * a request that could only fail.
  */
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ t?: string | string[] }>;
-}) {
-  const { t } = await searchParams;
-  const token = typeof t === "string" && readToken("session-stop", t) ? t : null;
+export default async function Page() {
+  const t = (await cookies()).get(LINK_COOKIE)?.value ?? null;
+  const token = t && readToken("session-stop", t) ? t : null;
   return (
     <MiraFrame>
       <SessionStop token={token} />

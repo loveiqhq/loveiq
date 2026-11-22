@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import nudgeConfig from "@features/mira/content/nudges.json";
 import { PrimaryButton, LegalLinks, Wordmark } from "./MiraShell";
@@ -10,7 +9,8 @@ import { miraApi } from "./api";
 /**
  * Marcus's nudge unsubscribe boards (18 Nov 2026): 2 "Fewer nudges, not none?", 3 "What made you
  * stop?", 4a "Mira won't email you anymore", 4b "Saved". Reached from any of the three footer
- * links in a nudge email; the signed token in the link stands for the person.
+ * links in a nudge email; the signed token in the link stands for the person. The page hands it
+ * over from its cookie (app/mira/nudges/page.tsx): it is never in the address.
  */
 
 type Prefs = {
@@ -50,8 +50,13 @@ const SAVED_COPY: Record<Choice | "resume", { title: string; line: string }> = {
 };
 
 /** `invalid`: the page found the link was not one we signed, so nothing is asked of the API. */
-export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
-  const token = useSearchParams().get("t") ?? "";
+export default function MiraNudges({
+  token,
+  invalid = false,
+}: {
+  token: string;
+  invalid?: boolean;
+}) {
   const [screen, setScreen] = useState<Screen>(invalid ? "invalid" : "loading");
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [choice, setChoice] = useState<Choice>("twice_weekly");
