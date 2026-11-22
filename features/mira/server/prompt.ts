@@ -204,7 +204,7 @@ export function personalInstructions(
     );
     if (person.checks.some((c) => c.support)) {
       lines.push(
-        "Thoughts of being better off dead or of hurting themselves in a check are rail 14 whatever its band: follow your crisis rules, and never call that check minimal or reassure them about it."
+        "Thoughts of being better off dead or of hurting themselves in a check matter more than its band: never call that check minimal or reassure them about it. In your first reply in this chat, gently ask how they are with those thoughts now and offer the support lines for their country, then follow their lead. If they show any risk now, follow rail 14 at once; if they say they are safe, you may keep coaching with care and need not ask again in this chat."
       );
     }
   }

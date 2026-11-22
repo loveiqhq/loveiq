@@ -335,7 +335,7 @@ describe("what Mira may use", () => {
     expect(personalInstructions({}, { signedIn: true, checks: [] })).not.toContain("Self-checks");
   });
 
-  it("never calls a check with question 9 above 'Not at all' minimal alone: it is rail 14", async () => {
+  it("never calls a check with question 9 above 'Not at all' minimal: Mira checks in once, rail 14 if there is risk now", async () => {
     db.user.use_checks = true;
     someone("phq9", PHQ(1), ago(3));
     const text = personalInstructions({}, { signedIn: true, checks: await checksForMira("u1") });
@@ -343,9 +343,9 @@ describe("what Mira may use", () => {
       "- Mood check (PHQ-9), 3 days ago: minimal symptoms of depression, and in that same check they said they have had thoughts of being better off dead or of hurting themselves (question 9)."
     );
     expect(text).not.toContain("minimal symptoms of depression.");
-    expect(text).toContain(
-      "Thoughts of being better off dead or of hurting themselves in a check are rail 14 whatever its band: follow your crisis rules, and never call that check minimal or reassure them about it."
-    );
+    expect(text).toContain("never call that check minimal or reassure them about it");
+    expect(text).toContain("gently ask how they are with those thoughts now");
+    expect(text).toContain("If they show any risk now, follow rail 14 at once");
     // Without that answer, no such line.
     db.checks = [];
     someone("phq9", PHQ(0), ago(3));
