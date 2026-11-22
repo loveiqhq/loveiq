@@ -236,6 +236,31 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     );
   });
 
+  // CHAT-15: a session held in German got English key points.
+  it("asks for the key points in the session's language: the one Mira replies in, else the one spoken", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+    vi.mocked(getProfile).mockResolvedValueOnce({
+      id: LEA.id,
+      remember_chats: true,
+      reply_language: "de",
+    } as never);
+    await ended(request("/api/mira/recordings", "POST", END));
+    const german = vi.mocked(askModel).mock.calls[0]![1];
+    expect(german).toContain("Write them in German, the language Mira replies in.");
+    expect(german).not.toMatch(/English/);
+
+    vi.mocked(askModel).mockClear();
+    vi.mocked(getProfile).mockResolvedValueOnce({
+      id: LEA.id,
+      remember_chats: true,
+      reply_language: null,
+    } as never);
+    await ended(request("/api/mira/recordings", "POST", END));
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain(
+      "Write them in the language the session was held in (English when you can't tell)."
+    );
+  });
+
   it("writes no key points for a session where a stop rail fired, and asks no model", async () => {
     tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = [
       turn("user", "I want to kill myself", "2026-11-22T20:21:00Z"),
@@ -474,13 +499,15 @@ describe("/api/mira/recordings/[id]", () => {
     expect(askModel).not.toHaveBeenCalled();
   });
 
-  it("writes the key points again only when there are none", async () => {
+  it("writes the key points again only when there are none, in the session's language", async () => {
     tables[`GET /rest/v1/mira_voice_session?id=eq.${SESSION}&user_id=eq.${LEA.id}`] = [
       { ...RECORDING, key_points: null },
     ];
     tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+    vi.mocked(getProfile).mockResolvedValueOnce({ id: LEA.id, reply_language: "fr" } as never);
     const body = await (await rewrite(request(url, "POST"), params(SESSION))).json();
     expect(body.keyPoints).toHaveLength(2);
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("Write them in French");
     tables[`GET /rest/v1/mira_voice_session?id=eq.${SESSION}&user_id=eq.${LEA.id}`] = [RECORDING];
     expect((await rewrite(request(url, "POST"), params(SESSION))).status).toBe(409);
   });

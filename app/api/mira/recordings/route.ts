@@ -134,7 +134,7 @@ export async function POST(request: Request) {
 
     // Kept even when the key points can't be written now: the session page can ask again.
     const points = (await mayWriteKeyPoints(account.id))
-      ? await writeKeyPoints(account.id, spoken, started + KEY_POINTS_MS)
+      ? await writeKeyPoints(account.id, spoken, started + KEY_POINTS_MS, profile.reply_language)
       : null;
     if (points) await saveKeyPoints(account.id, session, points);
     logMiraEvent("voice_session_ended", who, {
