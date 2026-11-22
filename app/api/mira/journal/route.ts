@@ -1,7 +1,9 @@
 /**
  * /api/mira/journal — the signed-in account's daily journal (features/mira/server/journal.ts).
  *
- *   GET     → the entries of about the last year (newest first) and the journal's settings
+ *   GET     → the entries of about the last year (newest first) and the journal's settings,
+ *             with `remindersOnHold`: support lines were shown in the last 14 days, so the
+ *             reminder job skips this person for now
  *   PUT     → saves one day's check-in { day, mood?, body?, closeness?, energy?, note?, base }:
  *             each area 1 to 5 or null, at least one rated, a one-line note. `base` is the version
  *             the browser started from: null for a new check-in, or the entry's `updated_at` (GET
@@ -31,6 +33,7 @@ import {
 } from "@features/mira/server/journal";
 import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
+import { CRISIS_QUIET_DAYS, hadCrisis } from "@features/mira/server/nudges";
 import { isCrisisMessage } from "@features/mira/server/safety";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
@@ -117,7 +120,14 @@ export async function GET(request: Request) {
   try {
     const journal = await readJournal(g.account.id);
     if (!journal) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
-    return NextResponse.json(journal, { headers: { "Cache-Control": "no-store" } });
+    // The reminder job skips 14 days after support lines (runJournalReminders), so the screens
+    // say so, as the weekly session's do (R3-HAB-5). Unreadable: nothing is claimed.
+    const since = new Date(Date.now() - CRISIS_QUIET_DAYS * 86_400_000);
+    const remindersOnHold = await hadCrisis(g.account.id, since).catch(() => false);
+    return NextResponse.json(
+      { ...journal, settings: { ...journal.settings, remindersOnHold } },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     logger.error({ err }, "mira: could not read a journal");
     return NextResponse.json({ error: "Unable to load your journal." }, { status: 500 });

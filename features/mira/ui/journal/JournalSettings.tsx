@@ -139,42 +139,51 @@ export function JournalSettings({
             desc="One short email at the time you choose, never with anything you wrote. One a day at most."
             more={
               s.reminderTime ? (
-                <label className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
-                  <span className="font-semibold">Time</span>
-                  <span className="relative flex">
-                    <select
-                      value={s.reminderTime}
-                      onChange={(e) =>
-                        change(
-                          { reminderTime: e.target.value },
-                          `Reminder moved to ${e.target.value}.`
-                        )
-                      }
-                      className="min-h-[44px] appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] tabular-nums text-ap-ink outline-none focus:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
-                    >
-                      {[...new Set([s.reminderTime, ...TIMES])].sort().map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ap-muted"
-                    >
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </span>
-                  <span className="text-ap-muted">{zoneLabel(s.timeZone)}</span>
-                </label>
+                <>
+                  {s.remindersOnHold ? (
+                    // The reminder job skips these 14 days, as the weekly session's (R3-HAB-5).
+                    <p className="mt-2 text-[14px] text-ap-body">
+                      Reminder emails are on hold for up to two weeks after the support lines came
+                      up, so none goes out for now. They start again on their own.
+                    </p>
+                  ) : null}
+                  <label className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+                    <span className="font-semibold">Time</span>
+                    <span className="relative flex">
+                      <select
+                        value={s.reminderTime}
+                        onChange={(e) =>
+                          change(
+                            { reminderTime: e.target.value },
+                            `Reminder moved to ${e.target.value}.`
+                          )
+                        }
+                        className="min-h-[44px] appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] tabular-nums text-ap-ink outline-none focus:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
+                      >
+                        {[...new Set([s.reminderTime, ...TIMES])].sort().map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ap-muted"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </span>
+                    <span className="text-ap-muted">{zoneLabel(s.timeZone)}</span>
+                  </label>
+                </>
               ) : null
             }
           >

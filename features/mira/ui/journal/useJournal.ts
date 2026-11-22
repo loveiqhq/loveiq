@@ -17,6 +17,8 @@ export type JournalSettings = {
   /** "20:00" in the person's time zone, or null: no reminder. */
   reminderTime: string | null;
   timeZone: string;
+  /** No reminder email for now: support lines were shown in the last 14 days (R3-HAB-5). */
+  remindersOnHold?: boolean;
 };
 
 /** An entry as the server gave it, with its version (`updated_at`), which an edit names as its base. */

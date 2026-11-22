@@ -144,6 +144,12 @@ export function JournalCard() {
                   }
                 />
               </div>
+              {settings?.reminderTime && settings.remindersOnHold ? (
+                // Home stays neutral while this lasts: the why is in Settings (R3-HAB-5).
+                <p className="mt-2 text-[13px] text-ap-muted">
+                  Reminder emails are on hold for now. They start again on their own.
+                </p>
+              ) : null}
               <p
                 role="status"
                 className={`text-[13px] ${note ? "mt-2" : ""} ${note?.bad ? "text-ap-bad-ink" : "text-ap-muted"}`}

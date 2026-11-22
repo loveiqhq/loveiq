@@ -285,6 +285,28 @@ describe("the Home card", () => {
     expect(remind).toHaveAttribute("aria-checked", "true");
   });
 
+  // R3-HAB-5: the reminder job skips 14 days after the support lines; Home says so neutrally.
+  it("says truthfully when the daily reminder is on hold for now, in neutral words", async () => {
+    replies = journalReply([], { reminderTime: "20:00", remindersOnHold: true });
+    render(<JournalCard />);
+    expect(
+      await screen.findByText("Reminder emails are on hold for now. They start again on their own.")
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/support/i);
+  });
+
+  it("says nothing of a hold while the reminder is off, or nothing holds it", async () => {
+    replies = journalReply([], { reminderTime: null, remindersOnHold: true });
+    const { unmount } = render(<JournalCard />);
+    await screen.findByRole("switch", { name: /Remind me daily/ });
+    expect(screen.queryByText(/on hold/)).toBeNull();
+    unmount();
+    replies = journalReply([], { reminderTime: "20:00", remindersOnHold: false });
+    render(<JournalCard />);
+    await screen.findByRole("switch", { name: /Remind me daily/ });
+    expect(screen.queryByText(/on hold/)).toBeNull();
+  });
+
   it("says when the journal didn't load, and tries again", async () => {
     replies = { "GET /api/mira/journal": () => ({ status: 500, body: { error: "x" } }) };
     render(<JournalCard />);
@@ -392,6 +414,17 @@ describe("the journal's settings", () => {
     expect(options[0]).toBe("06:00");
     expect(options.at(-1)).toBe("23:00");
     expect(options.every((t) => /:(00|30)$/.test(t!))).toBe(true);
+  });
+
+  it("say why the daily reminder is on hold, and that it comes back on its own", async () => {
+    replies = journalReply([], { reminderTime: "20:00", remindersOnHold: true });
+    render(<JournalSettings />);
+    expect(
+      await screen.findByText(
+        "Reminder emails are on hold for up to two weeks after the support lines came up, so none goes out for now. They start again on their own."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Remind me daily" })).toBeChecked();
   });
 
   it("ask before deleting as everywhere in Mira, and Keep it hands focus back", async () => {
