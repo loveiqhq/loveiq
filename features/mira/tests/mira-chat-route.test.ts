@@ -440,6 +440,78 @@ describe("POST /api/mira/chat", () => {
     expect(crisis.invitation).toBeUndefined();
   });
 
+  // Round-2 audit CHAT-2: the 12-question invitation came back in every new chat (Mira keeps no
+  // answers from one chat to the next), right under a question of Mira's own.
+  describe("the intake invitation, once per account", () => {
+    const remembering = () => {
+      vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(getProfile).mockResolvedValue({
+        id: "u1",
+        email: "lea@example.com",
+        style: {},
+        remember_chats: true,
+        use_assessment: false,
+      } as never);
+    };
+    const offeredBefore = (yes: boolean) =>
+      vi
+        .mocked(supabaseFetch)
+        .mockImplementation(
+          async (path) =>
+            new Response(
+              JSON.stringify(
+                yes &&
+                  String(path).startsWith("/rest/v1/mira_message?role=eq.assistant&content=eq.")
+                  ? [{ id: 3 }]
+                  : []
+              )
+            )
+        );
+    const NO_QUESTION = "end your reply without a question";
+
+    it("comes after the first chat's first reply, which is asked to end without a question", async () => {
+      remembering();
+      offeredBefore(false);
+      const body = await (await post({ message: "I hide during sex", consent: true })).json();
+      expect(body.invitation).toBe(miraConfig.intakeInvitation);
+      expect(vi.mocked(askModel).mock.calls[0]![1]).toContain(NO_QUESTION);
+      const asked = vi.mocked(supabaseFetch).mock.calls.map(([p]) => String(p));
+      expect(asked).toContainEqual(
+        expect.stringContaining(
+          `content=eq.${encodeURIComponent(miraConfig.intakeInvitation)}&select=id,mira_chat!inner(user_id)&mira_chat.user_id=eq.u1&limit=1`
+        )
+      );
+    });
+
+    it("isn't offered again in a new chat once a saved chat holds it", async () => {
+      remembering();
+      offeredBefore(true);
+      const body = await (await post({ message: "I hide during sex", consent: true })).json();
+      expect(body.invitation).toBeUndefined();
+      expect(vi.mocked(addMessages).mock.calls[0]![1].map((m) => m.role)).toEqual([
+        "user",
+        "assistant",
+      ]);
+      expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain(NO_QUESTION);
+    });
+
+    it("is offered when that can't be read, and to anonymous chats, which keep nothing", async () => {
+      remembering();
+      vi.mocked(supabaseFetch).mockImplementation(async (path) =>
+        String(path).startsWith("/rest/v1/mira_message?")
+          ? new Response("{}", { status: 500 })
+          : new Response("[]")
+      );
+      expect((await (await post({ message: "hi", consent: true })).json()).invitation).toBe(
+        miraConfig.intakeInvitation
+      );
+      vi.mocked(getMiraAccount).mockResolvedValue(null);
+      offeredBefore(true);
+      const anon = await (await post({ message: "hi", consent: true })).json();
+      expect(anon.invitation).toBe(miraConfig.intakeInvitation);
+    });
+  });
+
   it("leaves the invitation out when Mira's first reply already asks an intake question", async () => {
     vi.mocked(askModel).mockResolvedValueOnce({
       ok: true,

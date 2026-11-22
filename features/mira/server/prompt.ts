@@ -174,7 +174,7 @@ export function spokenInstruction(): string {
 export function personalInstructions(
   style: CoachingStyle | null | undefined,
   person: PersonContext,
-  opts: { topic?: boolean; voice?: boolean } = {}
+  opts: { topic?: boolean; voice?: boolean; invitation?: boolean } = {}
 ): string {
   const lines: string[] = ["ABOUT THIS CONVERSATION"];
   lines.push(
@@ -216,6 +216,13 @@ export function personalInstructions(
   if (person.goals?.length) lines.push("", goalsInstructions(person.goals));
   if (person.journal) lines.push("", person.journal);
   if (opts.topic) lines.push("", topicInstruction());
+  // One question at a time (round-2 audit CHAT-2): the invitation asks its own.
+  if (opts.invitation) {
+    lines.push(
+      "",
+      "The app follows this first reply with its invitation to the intake questions, which ends with a question of its own, so end your reply without a question."
+    );
+  }
   if (opts.voice) lines.push("", spokenInstruction());
   return lines.join("\n");
 }

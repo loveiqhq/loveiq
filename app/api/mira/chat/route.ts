@@ -39,6 +39,7 @@ import {
 import { checksForMira } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { goalsForPrompt } from "@features/mira/server/goals";
+import { invitationShown } from "@features/mira/server/intake";
 import { journalContext } from "@features/mira/server/journal";
 import { neutralTitle, shownTitle } from "@features/mira/server/chat-titles";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
@@ -418,6 +419,13 @@ export async function POST(request: Request) {
   }
 
   const isFirst = turns.length === 0;
+  // Sanjin's intake invitation follows a first reply in the account's first chat only (round-2
+  // audit CHAT-2); never after a weekly session's opening: it is their session, not a first chat.
+  // Offered when that can't be read.
+  const inviting =
+    isFirst &&
+    !opening &&
+    !(account && remember && (await invitationShown(account.id).catch(() => false)));
   // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
   // A weekly session's opening line is the app's, neither (null).
   const chip = isFirst && !opening ? miraConfig.starterChips.indexOf(message) : null;
@@ -433,7 +441,11 @@ export async function POST(request: Request) {
   const result = await askModel(
     STABLE_INSTRUCTIONS,
     [
-      personalInstructions(style, person, { topic: chip === -1, voice: Boolean(voice) }),
+      personalInstructions(style, person, {
+        topic: chip === -1,
+        voice: Boolean(voice),
+        invitation: inviting,
+      }),
       ...(weekly === undefined ? [] : [weeklySessionInstructions(weekly)]),
       ...(opening ? [sessionOpeningInstructions(weekly ?? null, earlier)] : []),
     ].join("\n\n"),
@@ -471,13 +483,10 @@ export async function POST(request: Request) {
     goal = out.goal ?? null; // parseReply never offers one beside a crisis or an under-18 stop
   }
 
-  // Sanjin's intake invitation follows Mira's first reply as its own message (with reply buttons).
-  // Not when her first reply already asked an intake question: that question's buttons come first.
-  // Nor after a weekly session's opening: it is their session, not a first chat.
+  // The invitation is its own message after Mira's reply (with reply buttons). Not when her reply
+  // already asked an intake question: that question's buttons come first.
   const invitation =
-    isFirst && !crisis && !refused && !minor && !ask && !opening
-      ? miraConfig.intakeInvitation
-      : null;
+    inviting && !crisis && !refused && !minor && !ask ? miraConfig.intakeInvitation : null;
 
   // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
   const lines = crisis || refused;
