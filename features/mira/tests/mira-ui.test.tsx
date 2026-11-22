@@ -266,6 +266,70 @@ describe("Chat", () => {
     ).toEqual(["Chat on 22 Nov", "Lights off"]);
   });
 
+  // Round-2 audit CHAT-29, lead decision 4: one chat can be deleted.
+  describe("deleting this chat", () => {
+    const list = [
+      { id: SAVED, title: "Lights off", updated_at: "2026-11-22T10:00:00Z" },
+      { id: "7a3d5b2f-2222-4333-8444-a55566667777", title: "Mirror", updated_at: "2026-11-21" },
+      { id: "8b4e6c3a-3333-4444-8555-b66677778888", title: "Clothes", updated_at: "2026-11-20" },
+    ];
+    const open = async () => {
+      replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: list } });
+      replies[`GET /api/mira/chats/${SAVED}`] = () => ({
+        body: { messages: [{ id: 1, role: "user", content: "an earlier line" }] },
+      });
+      render(<MiraChat signedIn initialChatId={SAVED} />);
+      await screen.findByText("an earlier line");
+    };
+    const deletes = () => fetchMock.mock.calls.filter(([, i]) => i?.method === "DELETE");
+
+    it("asks first, then deletes it, takes it off the list at once and says so", async () => {
+      await open();
+      fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
+      const ask = screen.getByRole("dialog", { name: "Delete this chat?" });
+      fireEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(deletes()).toHaveLength(0);
+
+      replies[`DELETE /api/mira/chats/${SAVED}`] = () => ({ body: { success: true } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+      expect(await screen.findByText("Chat deleted.")).toBeInTheDocument();
+      expect(deletes().map(([url]) => url)).toEqual([`/api/mira/chats/${SAVED}`]);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.queryByText("an earlier line")).toBeNull();
+      const nav = screen.getByRole("navigation", { name: "Your chats" });
+      expect(
+        within(nav)
+          .getAllByRole("link")
+          .map((a) => a.textContent)
+      ).toEqual(["Mirror", "Clothes"]);
+      expect(window.location.search).toBe("");
+    });
+
+    it("keeps the chat and says so when the delete doesn't go through", async () => {
+      await open();
+      replies[`DELETE /api/mira/chats/${SAVED}`] = () => ({
+        status: 500,
+        body: { error: "Unable to delete this chat." },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+      expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent(
+        "Unable to delete this chat."
+      );
+      expect(screen.getByText("an earlier line")).toBeInTheDocument();
+    });
+
+    it("isn't offered for a chat that isn't saved", async () => {
+      replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", chatId: null } });
+      render(<MiraChat signedIn initialChatId={null} />);
+      typeAndSend("hi");
+      await screen.findByText("Try this.");
+      expect(screen.queryByRole("button", { name: "Delete this chat" })).toBeNull();
+    });
+  });
+
   it("doesn't send on the Enter that ends an input-method composition", async () => {
     render(<MiraChat signedIn initialChatId={null} />);
     const box = screen.getByLabelText("Message Mira");

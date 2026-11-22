@@ -135,6 +135,9 @@ export default function MiraChat({
   const [minor, setMinor] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  // "Delete this chat" (round-2 audit CHAT-29): its confirm step, open ("ask") or deleting ("busy").
+  const [deleting, setDeleting] = useState<"ask" | "busy" | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // The logo while the sign-up card shows: back to the start without losing the chat the card
   // promises to bring along (a message sent from there goes on in that chat, which comes back).
   const [atStart, setAtStart] = useState(false);
@@ -542,6 +545,29 @@ export default function MiraChat({
       setGate(true);
       void miraApi("/api/mira/event", { body: { type: "track", name: "gate_shown" } });
     }
+  }
+
+  /**
+   * The confirm step's Delete: the open saved chat goes (its messages and voice sessions with it),
+   * leaves the list at once, and a new chat begins. One already gone (404) ends the same way.
+   */
+  async function deleteThisChat() {
+    if (!chatId || deleting === "busy") return;
+    const id = chatId;
+    setDeleting("busy");
+    setDeleteError(null);
+    const res = await miraApi(`/api/mira/chats/${id}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 404) {
+      setDeleting("ask");
+      setDeleteError(res.data.error ?? "That didn't go through. Please try again.");
+      return;
+    }
+    setDeleting(null);
+    setChats((all) => all.filter((c) => c.id !== id));
+    newChat();
+    setNotice("Chat deleted.");
+    // The button that opened the step went with the chat: focus goes to the conversation.
+    window.setTimeout(() => listRef.current?.focus({ preventScroll: true }), 0);
   }
 
   /** The logo: back to Mira's start. A new chat, unless that would wipe the one sign-up keeps. */
@@ -976,6 +1002,22 @@ export default function MiraChat({
                       </span>
                     </div>
                   ) : null}
+                  {/* A saved chat can be deleted on its own (Settings deletes them all). Here,
+                      at its end, rather than in a header that has no room on a small phone. */}
+                  {signedIn && chatId && !sending && !voiceOn ? (
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleting("ask");
+                        }}
+                        className="min-h-[44px] px-3 text-[13px] text-ap-muted underline underline-offset-4 hover:text-ap-body"
+                      >
+                        Delete this chat
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1232,6 +1274,44 @@ export default function MiraChat({
               className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted"
             >
               Start chatting
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+      {deleting ? (
+        <Modal label="Delete this chat?" onClose={() => setDeleting(null)}>
+          <h2
+            data-autofocus
+            tabIndex={-1}
+            className="font-serif text-[22px] font-medium outline-none"
+          >
+            Delete this chat?
+          </h2>
+          <p className="mt-2 text-[14px] leading-snug text-ap-body">
+            Its messages, and any voice session in it, are deleted for good. This can&apos;t be
+            undone. Your other chats stay.
+          </p>
+          {deleteError ? (
+            <p role="alert" className="mt-3 text-[14px] text-ap-bad-ink">
+              {deleteError}
+            </p>
+          ) : null}
+          <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setDeleting(null)}
+              className="min-h-[44px] rounded-full border border-ap-line px-5 text-[15px] font-semibold"
+            >
+              Cancel
+            </button>
+            {/* Not `disabled` while deleting: focus stays on it (it ignores the second press). */}
+            <button
+              type="button"
+              aria-disabled={deleting === "busy"}
+              onClick={() => void deleteThisChat()}
+              className="min-h-[44px] rounded-full bg-ap-bad px-5 text-[15px] font-semibold text-white aria-disabled:opacity-50"
+            >
+              {deleting === "busy" ? "Deleting…" : "Delete"}
             </button>
           </div>
         </Modal>

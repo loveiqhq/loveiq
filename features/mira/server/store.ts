@@ -275,6 +275,22 @@ async function forgetEventText(userId: string, all: boolean): Promise<void> {
   }
 }
 
+/**
+ * Deletes one of the account's chats: its messages and any voice session in it go with it (ON
+ * DELETE CASCADE), and so does the text of rated replies an older KPI row may keep (as with every
+ * chat, below: those rows don't say which chat they came from). False when it isn't theirs.
+ */
+export async function deleteChat(userId: string, chatId: string): Promise<boolean> {
+  if (!isUuid(chatId)) return false;
+  await forgetEventText(userId, false);
+  const res = await supabaseFetch(
+    `/rest/v1/mira_chat?id=eq.${enc(chatId)}&user_id=eq.${enc(userId)}&select=id`,
+    { method: "DELETE", headers: { Prefer: "return=representation" } }
+  );
+  if (!res.ok) throw new Error(`mira chat delete failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length > 0;
+}
+
 /** Deletes every stored chat (and so its messages), and the rated replies' text kept with them. */
 export async function deleteChats(userId: string): Promise<void> {
   await forgetEventText(userId, false);
@@ -331,6 +347,8 @@ export type MiraEventName =
   | "notify_me"
   | "settings_saved"
   | "chats_deleted"
+  // One chat deleted (round-2 audit CHAT-29): no id, no words.
+  | "chat_deleted"
   | "account_deleted"
   | "nudge_sent"
   | "nudge_clicked"
