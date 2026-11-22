@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
+  SUPPORT_HEADLINE,
   bandOf,
   checkById,
   nextTakeAt,
@@ -44,9 +45,6 @@ type Saved = {
   result: CheckResult;
   previous: { at: string; score: number } | null;
 };
-
-/** Under a result whose question 9 (the last) opened the support lines: the total is not the story. */
-const NOT_THE_SCORE = "Your answer to the last question matters more than this score.";
 
 const EYEBROW = "font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ap-muted";
 const PLUM_LINK =
@@ -488,20 +486,17 @@ function Result({
           tabIndex={-1}
           className={`mt-3 font-serif text-[27px] font-medium leading-snug text-ap-ink outline-none [text-wrap:balance] sm:text-[32px] ${saved ? "motion-safe:animate-mira-in" : ""}`}
         >
-          {band.headline}
+          {support ? SUPPORT_HEADLINE : band.headline}
         </h1>
         <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[14px] text-ap-body">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 font-semibold text-ap-ink ring-1 ring-ap-line">
-            {band.label}
+            {bandText(check, last)}
           </span>
           <span className="tabular-nums">
             {last.score} of {check.max}
           </span>
           {change ? <span>{change[0]!.toUpperCase() + change.slice(1)}</span> : null}
         </p>
-        {support ? (
-          <p className="mt-3 text-[15px] font-semibold leading-snug text-ap-ink">{NOT_THE_SCORE}</p>
-        ) : null}
       </header>
 
       {/* A low band's words are reassurance ("holding up"), which that answer outweighs. */}
@@ -579,7 +574,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
       </h2>
       <p className="mt-2 text-[14px] leading-relaxed text-ap-body">
         {trendSummary(check, results)}
-        {results.at(-1)?.support ? ` ${NOT_THE_SCORE}` : ""}
+        {results.at(-1)?.support ? ` ${SUPPORT_HEADLINE}` : ""}
       </p>
       <div className="mt-4 rounded-2xl border border-ap-line p-3">
         <TrendChart check={check} results={results} />

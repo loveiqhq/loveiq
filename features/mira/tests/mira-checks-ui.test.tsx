@@ -238,10 +238,13 @@ describe("the mood check's question 9", () => {
       "/mira?say=support"
     );
     expect(tracked()).toEqual(["check_support_shown"]);
-    // Behind it, the result keeps the support at the top, with a minimal total.
+    // Behind it, the result keeps the support at the top; its minimal total is never the headline.
     await screen.findByRole("region", { name: "You don’t have to carry this alone" });
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/minimal/);
-    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+    const headline = screen.getByRole("heading", { level: 1 });
+    expect(headline.textContent).toBe(NOT_THE_SCORE);
+    expect(headline.textContent).not.toMatch(/minimal/i);
+    // The band only beside the score, as the cards show it.
+    expect(within(headline.closest("header")!).getByText("Minimal · support for you")).toBeTruthy();
   });
 
   it("keeps its support at the top on every later visit, never 'minimal' alone", async () => {
@@ -256,10 +259,9 @@ describe("the mood check's question 9", () => {
     render(<CheckPage checkId="mood" practice={null} />);
     // A reload or Home's link: no save response, the stored result alone carries it.
     const top = await screen.findByRole("region", { name: "You don’t have to carry this alone" });
-    expect(top.compareDocumentPosition(screen.getByRole("heading", { level: 1 }))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+    const headline = screen.getByRole("heading", { level: 1 });
+    expect(top.compareDocumentPosition(headline)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(headline.textContent).toBe(NOT_THE_SCORE);
     // No "holding up" reassurance beside it, and the professional step comes first.
     expect(screen.queryByText(checkById("mood")!.bands[0]!.daily)).toBeNull();
     expect(screen.queryByText(checkById("mood")!.bands[0]!.intimacy)).toBeNull();
