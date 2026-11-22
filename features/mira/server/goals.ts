@@ -164,17 +164,25 @@ export async function deleteGoals(userId: string): Promise<void> {
 }
 
 /**
- * Ticks a goal for a day (once, however often it is tapped) or takes the tick back. The tick
- * carries its person, and the log's composite key refuses one whose goal is someone else's:
- * false then.
+ * Ticks one of the account's goals on the go for a day (once, however often it is tapped) or
+ * takes the tick back. The goal is read in the account's own scope first, so someone else's id
+ * answers "missing" exactly as a random one does, whatever its owner ticked (the log's key would
+ * skip a duplicate before its foreign key is checked); a goal put away or done ("inactive", as a
+ * tab opened before may still offer it) gets no tick. ponytail: a put-away between the read and
+ * the write still lands one tick; a single conditional statement (an RPC) closes it if it matters.
  */
 export async function setTick(
   userId: string,
   goalId: string,
   day: Day,
   done: boolean
-): Promise<boolean> {
-  if (!isUuid(goalId)) return false;
+): Promise<"ticked" | "missing" | "inactive"> {
+  if (!isUuid(goalId)) return "missing";
+  const [goal] = await read<GoalRow>(
+    `/rest/v1/mira_goal?id=eq.${enc(goalId)}&user_id=eq.${enc(userId)}&select=${COLS}`
+  );
+  if (!goal) return "missing";
+  if (!isActive(goal)) return "inactive";
   const res = done
     ? await supabaseFetch("/rest/v1/mira_goal_log?on_conflict=goal_id,day", {
         method: "POST",
@@ -185,9 +193,9 @@ export async function setTick(
         `/rest/v1/mira_goal_log?goal_id=eq.${enc(goalId)}&user_id=eq.${enc(userId)}&day=eq.${enc(day)}`,
         { method: "DELETE" }
       );
-  if (done && res.status === 409) return false; // the foreign key: no goal of theirs
+  if (done && res.status === 409) return "missing"; // deleted meanwhile: the composite key
   if (!res.ok) throw new Error(`mira goal tick failed (${res.status})`);
-  return true;
+  return "ticked";
 }
 
 /** The account's goals on the go as Mira is told of them, with the week in their time zone. */

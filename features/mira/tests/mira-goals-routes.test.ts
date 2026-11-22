@@ -18,7 +18,7 @@ vi.mock("@features/mira/server/goals", async (actual) => ({
   updateGoal: vi.fn(),
   deleteGoal: vi.fn().mockResolvedValue(true),
   deleteGoals: vi.fn().mockResolvedValue(undefined),
-  setTick: vi.fn().mockResolvedValue(true),
+  setTick: vi.fn().mockResolvedValue("ticked"),
 }));
 
 import { DELETE as deleteAll, GET, POST } from "@/app/api/mira/goals/route";
@@ -262,8 +262,17 @@ describe("POST /api/mira/goals/[id]/log", () => {
       expect((await log({ day, done: true })).status, day).toBe(400);
     }
     expect(setTick).not.toHaveBeenCalled();
-    vi.mocked(setTick).mockResolvedValueOnce(false);
+    vi.mocked(setTick).mockResolvedValueOnce("missing");
     expect((await log({ day: today, done: true })).status).toBe(404);
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("says when the goal was put away or done meanwhile, and counts no tick", async () => {
+    vi.mocked(setTick).mockResolvedValueOnce("inactive");
+    const res = await log({ day: today, done: true });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toMatch(/put away or marked done/);
+    expect(logMiraEvent).not.toHaveBeenCalled();
   });
 
   it("needs the CSRF token, an account and a slower hand", async () => {

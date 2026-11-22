@@ -140,23 +140,49 @@ describe("deleting goals", () => {
 });
 
 describe("setTick", () => {
+  const mine = ["GET /rest/v1/mira_goal?", 200, [row()]] as [string, number, unknown];
+  const writes = () => calls().filter((c) => !c.call.startsWith("GET "));
+
   it("ticks a day once, however often it is tapped, in the person's name", async () => {
-    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe(true);
-    const [tick] = calls();
+    answers = [mine];
+    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe("ticked");
+    expect(calls()[0]!.call).toContain(`/rest/v1/mira_goal?id=eq.${GOAL}&user_id=eq.${LEA}&`);
+    const [tick] = writes();
     expect(tick!.call).toBe("POST /rest/v1/mira_goal_log?on_conflict=goal_id,day");
     expect(tick!.body).toEqual({ goal_id: GOAL, user_id: LEA, day: "2026-11-21" });
-    const init = vi.mocked(supabaseFetch).mock.calls[0]![1]!;
+    const init = vi.mocked(supabaseFetch).mock.calls[1]![1]!;
     expect(init.headers).toMatchObject({ Prefer: "resolution=ignore-duplicates" });
   });
 
-  it("refuses a tick on someone else's goal (the database's composite key)", async () => {
-    answers = [["POST /rest/v1/mira_goal_log", 409, { code: "23503" }]];
-    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe(false);
+  it("finds no goal of someone else's, even one its owner ticked that day, and writes nothing", async () => {
+    // The person's scope has no such goal: their answer is a random id's (round-2 audit DATA-2).
+    for (const done of [true, false]) {
+      expect(await setTick(LEA, GOAL, "2026-11-21", done)).toBe("missing");
+    }
+    expect(writes()).toEqual([]);
+  });
+
+  it("ticks no goal that was put away or done, as a tab opened before may still offer it", async () => {
+    for (const over of [
+      { archived_at: "2026-11-21T08:00:00Z" },
+      { completed_at: "2026-11-21T08:00:00Z" },
+    ]) {
+      answers = [["GET /rest/v1/mira_goal?", 200, [row(over)]]];
+      expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe("inactive");
+      expect(await setTick(LEA, GOAL, "2026-11-21", false)).toBe("inactive");
+    }
+    expect(writes()).toEqual([]);
+  });
+
+  it("refuses a tick whose goal went between the read and the write (the composite key)", async () => {
+    answers = [mine, ["POST /rest/v1/mira_goal_log", 409, { code: "23503" }]];
+    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe("missing");
   });
 
   it("takes a tick back only from the person's own goal and day", async () => {
-    expect(await setTick(LEA, GOAL, "2026-11-21", false)).toBe(true);
-    expect(calls()[0]!.call).toBe(
+    answers = [mine];
+    expect(await setTick(LEA, GOAL, "2026-11-21", false)).toBe("ticked");
+    expect(writes()[0]!.call).toBe(
       `DELETE /rest/v1/mira_goal_log?goal_id=eq.${GOAL}&user_id=eq.${LEA}&day=eq.2026-11-21`
     );
   });

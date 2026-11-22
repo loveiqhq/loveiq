@@ -249,6 +249,19 @@ describe("the goals page", () => {
     expect((input as HTMLInputElement).value).toBe("");
   });
 
+  it("says so when a stale tab ticks a goal put away elsewhere, and keeps no tick", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    replies["POST /api/mira/goals/g1/log"] = () => ({
+      status: 409,
+      body: { error: "This goal was put away or marked done somewhere else. Reload to see it." },
+    });
+    render(<GoalsPage />);
+    const tick = await screen.findByRole("button", { name: /Did it today/ });
+    fireEvent.click(tick);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/put away or marked done/);
+    expect(tick.getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("asks for words before adding an empty goal", async () => {
     render(<GoalsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Add goal" }));
