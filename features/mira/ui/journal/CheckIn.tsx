@@ -204,7 +204,9 @@ export function CheckIn({
               <p className="mt-1.5 text-[14px] text-ap-muted">
                 {longDate(day)} · one tap a row, skip any
               </p>
-              <fieldset disabled={phase === "saving"} className="mt-5 flex flex-col gap-5">
+              {/* Nothing goes disabled while it saves (decision 7: that would drop the keyboard's
+                  focus): the circles ignore a change and the line is read-only till then. */}
+              <fieldset aria-busy={phase === "saving"} className="mt-5 flex flex-col gap-5">
                 {AREAS.map((area, i) => (
                   <Scale
                     key={area.id}
@@ -214,6 +216,7 @@ export function CheckIn({
                     hint={area.hint}
                     value={ratings[area.id]}
                     onChange={(v) => {
+                      if (phase === "saving") return;
                       setError(null);
                       setRatings((r) => ({ ...r, [area.id]: v }));
                     }}
@@ -230,6 +233,7 @@ export function CheckIn({
                     enterKeyHint="done"
                     placeholder="What stood out?"
                     aria-describedby={`${id}-note-hint`}
+                    readOnly={phase === "saving"}
                     onChange={(e) => setNote([...e.target.value].slice(0, NOTE_MAX).join(""))}
                     className="mt-2 min-h-[48px] w-full rounded-2xl border border-ap-field bg-white px-4 text-[16px] caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
                   />

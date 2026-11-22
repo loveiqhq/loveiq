@@ -124,7 +124,8 @@ export function CheckRunner({
         }}
         className="mt-7 motion-safe:animate-mira-reply"
       >
-        <fieldset disabled={saving}>
+        {/* Not disabled while it saves (decision 7: focus would drop); answers wait instead. */}
+        <fieldset aria-busy={saving}>
           <legend className="w-full">
             <span className="block text-[14px] leading-relaxed text-ap-muted">
               {check.instructions}
@@ -154,9 +155,9 @@ export function CheckRunner({
                   name={`${check.id}-${index}`}
                   value={o.value}
                   checked={picked === o.value}
-                  onChange={() => setPicked(o.value)}
+                  onChange={() => !saving && setPicked(o.value)}
                   onClick={() => {
-                    if (!tapped.current) return;
+                    if (!tapped.current || saving) return;
                     tapped.current = false;
                     setPicked(o.value);
                     cancelPending();
@@ -180,9 +181,9 @@ export function CheckRunner({
           {index > 0 ? (
             <button
               type="button"
-              onClick={back}
-              disabled={saving}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-2 text-[15px] font-semibold text-ap-ink hover:text-ap-plum disabled:text-ap-quiet"
+              onClick={() => !saving && back()}
+              aria-disabled={saving || undefined}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-2 text-[15px] font-semibold text-ap-ink hover:text-ap-plum aria-disabled:text-ap-quiet"
             >
               <span aria-hidden="true">←</span> Back
             </button>

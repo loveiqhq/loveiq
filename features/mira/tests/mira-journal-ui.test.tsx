@@ -111,6 +111,39 @@ describe("the Home card", () => {
     expect(screen.getByRole("listitem", { name: "Today: checked in" })).toBeInTheDocument();
   });
 
+  it("keeps focus where it is while saving: nothing goes disabled, changes wait", async () => {
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    // The save is held until released.
+    let release = () => undefined as void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((done) => {
+          release = () =>
+            done({
+              ok: true,
+              status: 200,
+              json: async () => ({ success: true, updatedAt: "2026-11-22T10:00:00Z" }),
+            } as Response);
+        })
+    );
+    const mood = within(screen.getByRole("radiogroup", { name: "Mood" }));
+    fireEvent.click(mood.getByRole("radio", { name: "4, Good" }));
+    const note = screen.getByLabelText(/A line for the day/);
+    note.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Saving…" });
+    // Decision 7: a disabled control would drop the keyboard's focus.
+    expect(note).not.toBeDisabled();
+    expect(note).toHaveFocus();
+    expect(note).toHaveAttribute("readonly");
+    expect(mood.getByRole("radio", { name: "1, Very low" })).not.toBeDisabled();
+    fireEvent.click(mood.getByRole("radio", { name: "1, Very low" }));
+    expect(mood.getByRole("radio", { name: "4, Good" })).toBeChecked();
+    release();
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+  });
+
   it("keeps the first check-in's line for the very first one only", async () => {
     replies = journalReply([entry(day(-3), { mood: 3 })]);
     render(<JournalCard />);

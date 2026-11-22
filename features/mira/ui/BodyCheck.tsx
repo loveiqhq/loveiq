@@ -124,7 +124,8 @@ export function BodyCheck({
       ) : null}
       {step === "offer" || step === "done" ? null : (
         <Modal label="Body check" onClose={() => onClose(false)}>
-          <fieldset disabled={step === "saving"}>
+          {/* Not disabled while it saves (decision 7): answer() ignores taps till then. */}
+          <fieldset aria-busy={step === "saving"}>
             <legend className="text-[12px] font-semibold uppercase tracking-wide text-ap-muted">
               Body check · statement {index + 1} of {items.length}
             </legend>
@@ -154,7 +155,7 @@ export function BodyCheck({
               {index > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setStep(index - 1)}
+                  onClick={() => step !== "saving" && setStep(index - 1)}
                   className="min-h-[44px] text-[14px] text-ap-plum underline"
                 >
                   Back

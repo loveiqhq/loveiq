@@ -161,6 +161,47 @@ describe("taking a check", () => {
     await screen.findByRole("heading", { level: 1 });
   });
 
+  it("keeps the answers and Back focusable while it saves, ignoring them till then", async () => {
+    sessionStorage.setItem(
+      "mira.check.v1:u1:anxiety",
+      JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
+    );
+    render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
+    tap("Several days");
+    // The save is held until released.
+    let release = () => undefined as void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((done) => {
+          release = () =>
+            done({
+              ok: true,
+              status: 200,
+              json: async () => ({
+                result: {
+                  at: new Date().toISOString(),
+                  score: 11,
+                  band: "moderate",
+                  support: false,
+                },
+                previous: null,
+              }),
+            } as Response);
+        })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    await screen.findByRole("button", { name: "Saving…" });
+    const back = screen.getByRole("button", { name: /Back/ });
+    expect(back).not.toBeDisabled();
+    expect(back).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("radio", { name: "Not at all" })).not.toBeDisabled();
+    fireEvent.click(back);
+    expect(question()).toMatch(/Question 7 of 7/);
+    release();
+    await screen.findByRole("heading", { level: 1 });
+  });
+
   it("sends only the answers and shows the result in words, with the next steps", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
