@@ -127,6 +127,7 @@ import { upcoming } from "@features/mira/ui/weekly-session/useWeeklySession";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile } from "@features/mira/server/store";
+import { isEmailSuppressed, isUndeliverable } from "@shared/emails/suppression";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
 process.env.UNSUBSCRIBE_SECRET = "test-secret-for-mira-sessions-0123456789";
@@ -180,6 +181,8 @@ beforeEach(() => {
     time_zone: "Europe/Berlin",
   } as never);
   vi.mocked(isMinor).mockResolvedValue(false);
+  vi.mocked(isEmailSuppressed).mockResolvedValue(false);
+  vi.mocked(isUndeliverable).mockResolvedValue(false);
   vi.mocked(checkRateLimit).mockResolvedValue({
     allowed: true,
     remaining: 9,
@@ -276,5 +279,36 @@ describe("attendance counts from the reminder to 30 minutes after the start", ()
     expect(at("2026-11-24T17:04:00Z")).toBe(true);
     expect(at("2026-11-24T18:30:00Z")).toBe(true);
     expect(at("2026-11-24T18:31:00Z")).toBe(false);
+  });
+});
+
+describe("reminders the person asked for reach anyone whose mail arrives", () => {
+  const remindAt = async (now: string) => {
+    await book();
+    candidates.rows = [
+      {
+        ...db.tables.mira_session_slot![0],
+        user_id: LEA.id,
+        mira_user: { email: LEA.email, minor_at: null },
+      },
+    ];
+    send.mockClear();
+    return runSessionReminders(new Date(now));
+  };
+
+  it("an unsubscribe from LoveIQ's other emails doesn't stop them", async () => {
+    vi.mocked(isEmailSuppressed).mockResolvedValue(true); // "unsubscribed" on the shared list
+    vi.mocked(isUndeliverable).mockResolvedValue(false);
+    expect(await remindAt("2026-11-24T17:02:00Z")).toMatchObject({ sent: 1 });
+    expect(lastEmail().mail.subject).toBe("See you at 19:00");
+  });
+
+  it("an address that bounced or complained gets none", async () => {
+    vi.mocked(isUndeliverable).mockResolvedValue(true);
+    expect(await remindAt("2026-11-24T17:02:00Z")).toMatchObject({
+      sent: 0,
+      skipped: { undeliverable: 1 },
+    });
+    expect(send).not.toHaveBeenCalled();
   });
 });

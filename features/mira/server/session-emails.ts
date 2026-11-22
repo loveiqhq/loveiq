@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
-import { isEmailSuppressed, isUndeliverable } from "@shared/emails/suppression";
+import { isUndeliverable } from "@shared/emails/suppression";
 import { escapeHtml } from "@shared/format/html-escape";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -346,9 +346,11 @@ export type ReminderRunSummary = {
 
 /**
  * One reminder per start, 30 to 60 minutes before it: every booked slot with reminders on, of a
- * person not stopped as under 18 (the read's filter, checked again here), not to suppressed
- * addresses. The start is claimed before the email goes (UNIQUE slot_id, starts_at), so the
- * window's two runs send it once; a failed send gives the claim back for the second run.
+ * person not stopped as under 18 (the read's filter, checked again here). Reminders are what the
+ * person booked, so like the invite they skip only an address that bounced or complained, not an
+ * unsubscribe from LoveIQ's other emails; the session emails' own stop pauses them. The start is
+ * claimed before the email goes (UNIQUE slot_id, starts_at), so the window's two runs send it
+ * once; a failed send gives the claim back for the second run.
  */
 export async function runSessionReminders(
   now = new Date(),
@@ -398,8 +400,8 @@ export async function runSessionReminders(
       continue;
     }
     try {
-      if (await isEmailSuppressed(person.email)) {
-        skip("suppressed");
+      if (await isUndeliverable(person.email)) {
+        skip("undeliverable");
         continue;
       }
       const claimed = await supabaseFetch(
