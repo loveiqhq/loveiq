@@ -7,6 +7,7 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
+import { track } from "./coaches/data";
 import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
@@ -87,13 +88,17 @@ export default function MiraChat({
 }: {
   signedIn: boolean;
   initialChatId: string | null;
-  /** The guide's "Ask Mira about this": the composer starts with it; only the person sends it. */
+  /**
+   * The words for `?ask=N` (the guide's "Ask Mira about this") or `?say=<check>`, which the page
+   * builds from the id: they wait in the composer while the address still asks for them, and only
+   * the person sends them.
+   */
   starter?: string | null;
   /** Opened from the weekly session's link: a new chat that Mira opens as the session. */
   session?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState(starter ?? "");
+  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
@@ -240,14 +245,27 @@ export default function MiraChat({
     });
   }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
 
-  // "Ask Mira to help" on the goals card (/mira?prompt=goal): the question waits in the
-  // composer, unsent, and the address loses the parameter so a reload doesn't bring it back.
+  // A starter from the address waits in the composer, unsent: "Ask Mira to help" on the goals
+  // card (?prompt=goal), the guide's "Ask Mira about this" (?ask=N, counted once as guide_ask) and
+  // a check's "Talk to Mira" (?say=…). The address then loses it, so neither a reload nor Back
+  // (which can bring this page back from the router's cache, starter and all) puts it there
+  // again or counts it twice.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("prompt") !== "goal") return;
-    window.history.replaceState(null, "", "/mira");
-    setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
-    inputRef.current?.focus();
-  }, []);
+    const url = new URL(window.location.href);
+    const asked = url.searchParams;
+    const goal = asked.get("prompt") === "goal";
+    const practice = asked.get("ask");
+    if (!goal && practice === null && !asked.has("say")) return;
+    for (const key of ["prompt", "ask", "say"]) asked.delete(key);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    if (goal) {
+      setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
+      inputRef.current?.focus();
+    } else if (starter) {
+      setInput(starter);
+      if (practice !== null) track("guide_ask", practice);
+    }
+  }, [starter]);
 
   // The composer grows with what is typed, up to about six lines, then scrolls inside.
   useEffect(() => {

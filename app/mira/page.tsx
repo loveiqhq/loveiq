@@ -5,7 +5,6 @@ import { starterFor } from "@features/mira/content/checks";
 import { MIRA_TITLE, miraLinkPreview } from "@features/mira/link-preview";
 import { getMiraAccount } from "@features/mira/server/session";
 import MiraChat from "@features/mira/ui/MiraChat";
-import GuideAskCount from "@features/mira/ui/coaches/GuideAskCount";
 
 export const metadata: Metadata = {
   title: MIRA_TITLE,
@@ -19,7 +18,8 @@ export const dynamic = "force-dynamic";
  * Boards 01, 01b, 03 and 08a: Mira's chat, anonymous or signed in. `?ask=N` (the guide's "Ask
  * Mira about this", practice N of 7) and `?say=<check>` (a self-check's "Talk to Mira about
  * this") start a new chat with a fixed starter in the composer, built here from the id, so a link
- * can never put other words there.
+ * can never put other words there. The chat places it (and counts the guide's ask) once, then
+ * takes the parameter out of the address.
  */
 export default async function MiraPage({
   searchParams,
@@ -43,19 +43,11 @@ export default async function MiraPage({
       : account
         ? (starterFor(say) ?? null)
         : null;
-  const view = (
+  return (
     <MiraChat
       signedIn={Boolean(account)}
       initialChatId={account ? chatId : null}
       starter={starter}
     />
-  );
-  return starter && practice ? (
-    <>
-      {view}
-      <GuideAskCount practice={practice} />
-    </>
-  ) : (
-    view
   );
 }
