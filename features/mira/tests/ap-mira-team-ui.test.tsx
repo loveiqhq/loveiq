@@ -20,6 +20,11 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "csrf-1" }));
+const site = vi.hoisted(() => ({ production: false }));
+vi.mock("@shared/env/is-non-prod-deploy", async (actual) => ({
+  ...(await actual<typeof import("@shared/env/is-non-prod-deploy")>()),
+  isProductionSite: () => site.production,
+}));
 
 import ApMira from "@features/admin/ui/ap/ApMira";
 
@@ -153,6 +158,17 @@ describe("AP › Mira, 21 Nov 2026", () => {
     expect(card.textContent).toContain("“Shown the sign-up card”");
     expect(within(card).queryByText("Shown the card")).toBeNull();
     expect(screen.getByText("Shown the sign-up card")).toBeTruthy();
+  });
+
+  it("names production's database only on the live site (DATA-8)", () => {
+    render(<ApMira />);
+    expect(screen.getByText(/This deployment’s database \(Mira’s tables\)/)).toBeTruthy();
+    expect(screen.queryByText(/Production database/)).toBeNull();
+    cleanup();
+    site.production = true;
+    render(<ApMira />);
+    expect(screen.getByText(/Production database \(Mira’s tables\)/)).toBeTruthy();
+    site.production = false;
   });
 
   it("shows a team browser as such, and says users can ask for a copy, not export", () => {

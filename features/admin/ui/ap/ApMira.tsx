@@ -6,6 +6,7 @@ import { shortDate } from "@features/admin/server/ap/days";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { CohortRow, MiraPayload } from "@features/admin/server/ap/mira";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
@@ -78,7 +79,8 @@ export default function ApMira() {
         <Busy busy={loading}>
           <RangeLine
             data={data}
-            sources="Production database (Mira's tables)"
+            // Staging reads its own database: never call that production's (DATA-8).
+            sources={`${isProductionSite() ? "Production database" : "This deployment’s database"} (Mira’s tables)`}
             trend={data.tiles.conversations?.trend}
           />
           <Overview data={data} />
