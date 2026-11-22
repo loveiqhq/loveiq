@@ -160,6 +160,7 @@ export default function MiraChat({
   const referred = useRef(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   /** The index of the reply that just arrived, for the scroll to its start. */
   const replyAt = useRef<number | null>(null);
   useReloadWhenRestored();
@@ -172,6 +173,25 @@ export default function MiraChat({
     replyLanguage,
   });
   const voiceOn = voice.phase !== "off";
+
+  // A voice session's panel goes when the session ends (End, the notice's "Not now", a stop), and
+  // the button that had the focus goes with it: focus goes back to Talk, or to the message box
+  // when Talk isn't there (round 2, from the voice stream's audit). Not when something else took
+  // it meanwhile (a dialog, or the person).
+  const hadVoice = useRef(false);
+  useEffect(() => {
+    if (voiceOn) {
+      hadVoice.current = true;
+      return;
+    }
+    if (!hadVoice.current) return;
+    hadVoice.current = false;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const talkButton = formRef.current?.querySelector<HTMLButtonElement>(
+      'button[type="button"]:not(:disabled)'
+    );
+    (talkButton ?? inputRef.current)?.focus();
+  }, [voiceOn]);
 
   /**
    * A saved chat, opened by its link (Home, the list, a nudge): on screen; gone (deleted: said so,
@@ -1074,6 +1094,7 @@ export default function MiraChat({
                     className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
                   >
                     <form
+                      ref={formRef}
                       className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
                       onSubmit={(e) => {
                         e.preventDefault();

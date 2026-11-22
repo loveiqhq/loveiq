@@ -8,7 +8,7 @@ const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
-import { CONSENT_VERSION } from "@features/mira/server/config";
+import { CONSENT_VERSION, VOICE_NOTICE_VERSION } from "@features/mira/server/config";
 import { StyleScales } from "@features/mira/ui/CoachingStylePanel";
 import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
@@ -793,6 +793,54 @@ describe("How Mira coaches you", () => {
     const ring = screen.getByRole("radio", { name: "Tone 1 of 5" }).nextElementSibling!;
     expect(ring.className).toContain("border-ap-muted");
     expect(ring.className).not.toContain("border-ap-mist");
+  });
+});
+
+// From the voice stream's audit (round 2): when a voice session ended, its panel went with the
+// focused End or "Not now", and keyboard focus fell to the page.
+describe("after a voice session", () => {
+  class Recognizer {
+    lang = "";
+    continuous = false;
+    interimResults = false;
+    maxAlternatives = 1;
+    onresult = null;
+    onerror = null;
+    onend = null;
+    start() {}
+    stop() {}
+    abort() {}
+  }
+  beforeEach(() => {
+    vi.stubGlobal("SpeechRecognition", Recognizer);
+    vi.stubGlobal("speechSynthesis", { speak: vi.fn(), cancel: vi.fn(), getVoices: () => [] });
+    vi.spyOn(navigator, "vendor", "get").mockReturnValue("Google Inc.");
+    giveConsent();
+  });
+  const talk = () => screen.getByRole("button", { name: "Talk to Mira" });
+  const press = (name: string) => {
+    const b = screen.getByRole("button", { name });
+    b.focus();
+    fireEvent.click(b);
+  };
+
+  it("gives the focus back to Talk when the notice is put off", async () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await screen.findByRole("button", { name: "Talk to Mira" });
+    press("Talk to Mira");
+    await screen.findByRole("heading", { name: "Before you talk" });
+    press("Not now");
+    await waitFor(() => expect(document.activeElement).toBe(talk()));
+  });
+
+  it("gives the focus back to Talk when the session is ended", async () => {
+    localStorage.setItem("mira.voice.notice.v1", JSON.stringify({ version: VOICE_NOTICE_VERSION }));
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await screen.findByRole("button", { name: "Talk to Mira" });
+    press("Talk to Mira");
+    await screen.findByRole("button", { name: "End" });
+    press("End");
+    await waitFor(() => expect(document.activeElement).toBe(talk()));
   });
 });
 
