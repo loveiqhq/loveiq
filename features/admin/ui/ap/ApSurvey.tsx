@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
 import type { Table, Tile } from "@features/admin/server/ap/common";
-import { delta, EMPTY, fmt, tenths } from "@features/admin/server/ap/format";
+import { delta, EMPTY, fmt, rateRank, tenths } from "@features/admin/server/ap/format";
 import type { SheetFigures } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type {
@@ -681,17 +681,21 @@ function QuestionDetail({
     setShown(q.id);
     setDim("none");
     setOther(countable[0]?.id ?? "");
+    answerTip.close();
   }
   const canSplit = ["scale", "single", "multiple", "country"].includes(q.type);
   const query = useMemo(
     () => ({ ...params, q: q.id, dim, ...(dim === "question" && other ? { other } : {}) }),
     [params, q.id, dim, other]
   );
-  const { data, loading, error } = useAdminFetch<AnswerSplit>(
-    "/api/admin/ap/survey/answers",
-    query,
-    canSplit
-  );
+  const {
+    data: fetched,
+    loading,
+    error,
+  } = useAdminFetch<AnswerSplit>("/api/admin/ap/survey/answers", query, canSplit);
+  // The last answers stay in the hook until the next arrive: another question's are not these
+  // (review, 22 Nov 2026: the block no longer rebuilds per question, which used to clear them).
+  const data = fetched && fetched.qid === q.id ? fetched : null;
   // Skips are all traffic's in both orders (the steps carry neither): a share of all it was put to.
   const skipShare = shownBoth ? q.skipped / shownBoth : null;
   // Under a filter the funnel can't follow, every figure here is all traffic's too.
@@ -1007,8 +1011,9 @@ function FunnelSection({
   const asked0 = rows.filter((r) => r.n > 0);
   const sheetsAfter = new Map<string, SheetSpot[]>();
   // Only for a range that reaches the sheets (they went live on 17 Nov 2026).
-  // Not under a source or device filter either: the sheets' events carry neither, and an all-traffic
-  // row between filtered questions would read as theirs.
+  // Not under a source or device filter either: the sheets are read from PostHog, which those
+  // filters (on the database's runs) don't narrow, and an all-traffic row between filtered
+  // questions would read as theirs.
   const allTraffic = !q || q.segment === "All traffic";
   if (!first && !term && data.sheets.seen && allTraffic)
     for (const spot of sheetSpots(rows)) {
@@ -1459,7 +1464,7 @@ const asShown = (k: FunnelKey, v: number) =>
   k === "time"
     ? Math.round(v / 1000)
     : k === "drop" || k === "ofStart" || k === "ofPrev"
-      ? tenths(v)
+      ? rateRank(v)
       : v;
 
 /** Highest first, % of prev. lowest first, the question A to Z; a blank last whichever way. */

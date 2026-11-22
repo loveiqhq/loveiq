@@ -49,6 +49,17 @@ function rate(a: number): string {
 }
 
 /**
+ * A rate's place as `rate` writes it: its tenth of a percent, with "<0.1%" between "0.0%" and
+ * "0.1%" and ">99.9%" between "99.9%" and "100.0%". Rates that read the same tie; no others do.
+ */
+export function rateRank(a: number): number {
+  const t = tenths(a);
+  if (t === 0 && a > 1e-9) return 0.5;
+  if (t === 1000 && Number(a.toPrecision(12)) < 1) return 999.5;
+  return t;
+}
+
+/**
  * "12,608", "€1,199", "€29.00", "€0.002", "€2.39", "6.4%", "6:40", "0:02.9", "2.4 days".
  * `digits` sets the decimals of every unit but "pct": a rate always has one.
  */

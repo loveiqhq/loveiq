@@ -102,11 +102,21 @@ const page = (
   });
 const payload = page("2026-11-21");
 
-const view = { payload };
+const view: {
+  payload: typeof payload;
+  /** What the answers call holds: the hook keeps the last answers while the next load. */
+  answers: AnswerSplit | null;
+  answersLoading: boolean;
+} = { payload, answers: null, answersLoading: false };
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (url: string) => ({
-    data: url === "/api/admin/ap/survey" ? view.payload : null,
-    loading: false,
+    data:
+      url === "/api/admin/ap/survey"
+        ? view.payload
+        : url === "/api/admin/ap/survey/answers"
+          ? view.answers
+          : null,
+    loading: url === "/api/admin/ap/survey/answers" ? view.answersLoading : false,
     error: null,
     refetch: () => {},
   }),
@@ -115,6 +125,7 @@ vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ pa
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 vi.mock("@features/admin/ui/ap/csv", () => ({ exportTables: () => {} }));
 
+import type { AnswerSplit } from "@features/admin/server/ap/answers";
 import ApSurvey, { FUNNEL_SORT, sortFunnel } from "@features/admin/ui/ap/ApSurvey";
 
 Element.prototype.scrollIntoView = vi.fn();
@@ -396,6 +407,26 @@ describe("sorting the funnel by two columns (Mark, 17 Nov 2026)", () => {
     expect(FUNNEL_SORT.ofPrev.option).toBe("% of prev., lowest first");
   });
 
+  it("never ties a rate that reads differently: <0.1% sits above 0.0%, >99.9% below 100.0%", () => {
+    const step = (n: number, drop: number, ofPrev: number, time: number) => ({
+      r: { n } as QuestionRow,
+      text: `q${n}`,
+      reached: 100,
+      ofStart: null,
+      ofPrev,
+      exits: 0,
+      drop,
+      time,
+    });
+    const order = (s: ReturnType<typeof step>[]) => s.map((x) => x.r.n);
+    // 1 exit of 2,500 reads "<0.1%": above a true "0.0%" whatever the second key says.
+    const drops = [step(1, 0, 1, 30000), step(2, 1 / 2500, 1, 1000)];
+    expect(order(sortFunnel(drops, "drop", "time"))).toEqual([2, 1]);
+    // % of prev., lowest first: ">99.9%" comes before "100.0%".
+    const prev = [step(1, 0, 1, 0), step(2, 0, 2499 / 2500, 0)];
+    expect(order(sortFunnel(prev, "ofPrev", null))).toEqual([2, 1]);
+  });
+
   it("treats rows that read the same as tied, so the second key decides (review, 22 Nov 2026)", () => {
     const step = (n: number, drop: number, time: number) => ({
       r: { n } as QuestionRow,
@@ -435,6 +466,35 @@ describe("the Question dropdown in Question detail (Mark, 16–17 Nov 2026)", ()
     expect(now).toBe(pick);
     expect(document.activeElement).toBe(pick);
     expect(now.value).toBe("03008");
+  });
+
+  it("never shows the last question's answers under a newly picked one while its own load", () => {
+    view.answers = {
+      qid: "01002",
+      question: "Right now, I feel satisfied with my sex life.",
+      type: "scale",
+      multiple: false,
+      segments: [{ name: "All submissions", n: 12 }],
+      hidden: [],
+      answers: [{ label: "7 · Completely true", shares: [0.5] }],
+      gap: null,
+      respondents: 12,
+      finished: 12,
+    };
+    render(<ApSurvey />);
+    const pick = screen.getByRole("combobox", { name: "Question" }) as HTMLSelectElement;
+    fireEvent.change(pick, { target: { value: "01002" } });
+    expect(document.getElementById("question-detail")!.textContent).toContain(
+      "7 · Completely true"
+    );
+    // The next question is picked; the hook still holds 01002's answers while 03008's load.
+    view.answersLoading = true;
+    fireEvent.change(pick, { target: { value: "03008" } });
+    const detail = document.getElementById("question-detail")!;
+    expect(detail.textContent).not.toContain("7 · Completely true");
+    expect(detail.textContent).toContain("Loading the answers…");
+    view.answers = null;
+    view.answersLoading = false;
   });
 
   it("starts a newly picked question unsplit", () => {

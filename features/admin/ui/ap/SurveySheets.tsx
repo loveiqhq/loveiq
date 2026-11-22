@@ -54,7 +54,8 @@ export default function SheetsSection({
         // Which runs these are, when the range has both orders: the funnel's pick, two sections up
         // (review, 22 Nov 2026).
         description={
-          data.questions?.test
+          // Both orders in the range, or the questions unread (the order is then the page's pick).
+          !data.questions || data.questions.test
             ? `Runs in ${order === "test" ? "the new order (C13)" : "the old order"}, as picked in the Question funnel.`
             : undefined
         }

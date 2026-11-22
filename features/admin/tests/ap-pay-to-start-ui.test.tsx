@@ -628,6 +628,16 @@ describe("Funnel and paywall (Marcus, 19 Nov 2026)", () => {
       expect(a.getByRole("button", { name: `About ${name}` })).toBeTruthy();
   });
 
+  it("says 'in this range', never 'since switch-on', when the range starts after it", () => {
+    view.payload = { ...withPeriods, gateTest: { ...running, startsLater: true } };
+    render(<ApPayToStart />);
+    const test = within(document.getElementById("paywall-test")!);
+    expect(test.getByText("Paid €1.99 in this range")).toBeTruthy();
+    expect(test.queryByText("Paid €1.99 since switch-on")).toBeNull();
+    expect(test.getAllByText("Sample in this range")).toHaveLength(2);
+    expect(test.queryByText("Sample so far")).toBeNull();
+  });
+
   it("says which stretch each funnel is read over, and exports the test", () => {
     view.payload = withPeriods;
     render(<ApPayToStart />);

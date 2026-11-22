@@ -143,9 +143,10 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
 
 - AP-Analytics, Focus: "Completion → pre-unlock", EUR 1.99 sales per finished survey and the
   revenue per sale. The Payment page's segments and the Landing page's arms carry the rate.
-- AP-Analytics, Funnel and paywall (Pay to start until 21 Nov 2026): the gate as a funnel of its
+- AP-Analytics, Funnel and paywall (Pay to start until Marcus's rename of 19 Nov 2026): the gate as a funnel of its
   own ("EUR 1.99 after the survey") beside the free survey before the paywall, from its cohort (stamped at the survey's
-  submit; the old-user campaign's later stamps stay with pay after the report). The free
+  submit; the old-user campaign's later stamps are not the gate's, and since the free funnel
+  here is read over 1–22 Oct they no longer show on this page). The free
   landing's visits, ads and survey starts go to the gate by day: on the day it is switched,
   by its share of that day's finished surveys.
 - The pre-report map names the price to a reader the gate will stop: "Read your opening

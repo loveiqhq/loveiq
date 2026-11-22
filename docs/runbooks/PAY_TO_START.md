@@ -137,8 +137,8 @@ payment; either entitlement works on its own.
 
 ## Reading it
 
-AP-Analytics → Assessment A → Funnel and paywall (renamed from Pay to start on 21 Nov 2026,
-when pay to start was paused) no longer shows the pay-to-start funnels: it puts the free survey
+AP-Analytics → Assessment A → Funnel and paywall (renamed from Pay to start by Marcus on 19 Nov
+2026, when pay to start was paused) no longer shows the pay-to-start funnels: it puts the free survey
 before the paywall (1–22 Oct 2026) beside EUR 1.99 after the survey (the pre-unlock gate,
 `docs/runbooks/PRE_UNLOCK.md`), with the running paywall test on top. Until then it put every
 funnel that sells the report side by side, with visit → paying customer, revenue per visit and
@@ -154,8 +154,9 @@ traffic only" reads the ad clicks as visits and a buyer as paid traffic when the
 tracker (`prepaid_report_access.utm_tracker`) holds a Google Ads click.
 
 The Dashboard's funnel comparison and the Landing page's pay-to-start table read the same
-figures (`payToStartFor` in `features/admin/server/ap/pay-to-start.ts`), so the three pages
-agree. Elsewhere in Assessment A a buyer's finished survey and payments count under All funnels
+figures (`payToStartFor` in `features/admin/server/ap/pay-to-start.ts`) for the range. Funnel
+and paywall reads its free funnel over 1–22 Oct 2026 whatever the range (Marcus, 19 Nov), so
+only a range of exactly those days makes its "Before the paywall" column agree with them. Elsewhere in Assessment A a buyer's finished survey and payments count under All funnels
 and leave under the Funnel filter's Free survey (its ad spend is then blank: the account's spend
 includes pay to start's campaigns); a section whose records can't tell a buyer apart (the
 survey's question funnel, the report's chapters and tour) says so instead. The Payment page's

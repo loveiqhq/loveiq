@@ -142,7 +142,8 @@ export default function TimeDropSection({
 }) {
   const q = data.questions;
   // Pins only for a range that reaches the sheets, and not under a source or device filter: the
-  // drop-out bars follow it, the sheets' events can't.
+  // drop-out bars follow it, while the sheets are read from PostHog, which the filters (on the
+  // database's survey runs) don't narrow.
   const chart = timeDropChart(rows, {
     sheets: data.sheets.seen !== null && (q?.segment ?? "All traffic") === "All traffic",
   });
@@ -188,10 +189,12 @@ export default function TimeDropSection({
           <Info k="survey.order" />
         </div>
       )}
+      {/* The steps' read (ap_survey_steps) takes only the dates: the rows do carry a device
+          (device_type), so "they record none", said here until 22 Nov 2026, was not the reason. */}
       <AllTraffic
         note={
           data.narrowed &&
-          `Median times are all traffic's whatever the filters: the survey's steps record no source or device. Drop-out follows the filters as the question funnel below does.${data.sheets.seen ? " The sheets' pins show with all traffic only." : ""}`
+          `Median times are all traffic's whatever the filters: they are read over every survey run. Drop-out follows the filters as the question funnel below does.${data.sheets.seen ? " The sheets' pins show with all traffic only." : ""}`
         }
       />
       {data.questionsError ? (

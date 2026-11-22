@@ -911,7 +911,7 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="flex justify-between text-xs text-ap-body">
-                      <span>Sample so far</span>
+                      <span>{t.startsLater ? "Sample in this range" : "Sample so far"}</span>
                       <span className="tabular-nums">
                         {fmt("count", sample)} of ~{NEEDED_PER_HALF} finishers
                       </span>
@@ -935,7 +935,7 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact
-              label="Paid €1.99 since switch-on"
+              label={t.startsLater ? "Paid €1.99 in this range" : "Paid €1.99 since switch-on"}
               value={`${fmt("count", paid)} ${paid === 1 ? "reader" : "readers"}`}
               sub="Both halves together. Gift unlocks (€0) left out."
             />
