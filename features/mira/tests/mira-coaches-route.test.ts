@@ -262,11 +262,11 @@ describe("POST /api/mira/event for coaches", () => {
 });
 
 describe("The under-18 stop", () => {
-  it("forgets the account's Notify me requests, so nobody under 18 is told a coach is ready", async () => {
+  it("forgets the account's Notify me requests and the finder's outcomes, so nobody under 18 is told a coach is ready", async () => {
     await stopForMinor(LEA.id);
     const deletes = db.fetch.mock.calls.filter(([, init]) => init?.method === "DELETE");
     expect(deletes.map(([p]) => String(p))).toContain(
-      `/rest/v1/mira_event?user_id=eq.${LEA.id}&name=eq.notify_me`
+      `/rest/v1/mira_event?user_id=eq.${LEA.id}&name=in.(notify_me,finder_done)`
     );
   });
 });

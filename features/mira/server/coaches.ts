@@ -43,10 +43,13 @@ export async function readCoachState(
 }
 
 /**
- * Forgets the account's Notify me requests (the under-18 stop, minor.ts): nobody under 18 is
- * ever told a coach for sex is ready.
+ * Forgets the account's Notify me requests and which coach the finder suggested (finder_done),
+ * at the under-18 stop (minor.ts): nobody under 18 is ever told a coach for sex is ready, and
+ * nothing is kept of what they were looking for.
  */
 export async function forgetNotify(userId: string): Promise<void> {
-  const res = await supabaseFetch(`${mine(userId)}&name=eq.notify_me`, { method: "DELETE" });
+  const res = await supabaseFetch(`${mine(userId)}&name=in.(notify_me,finder_done)`, {
+    method: "DELETE",
+  });
   if (!res.ok) throw new Error(`mira notify-me delete failed (${res.status})`);
 }
