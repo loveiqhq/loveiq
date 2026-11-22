@@ -211,11 +211,14 @@ describe("a new time zone alone is a change", () => {
   it("on Home: the sheet's button says it moves to the new zone", async () => {
     render(<NextSessionCard />);
     fireEvent.click(await screen.findByRole("button", { name: "Change" }));
-    expect(screen.getByRole("button", { name: "Keep Tuesdays at 19:00" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Keep Tuesdays at 19:00" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Use New York time" }));
     expect(
       screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
-    ).toBeEnabled();
+    ).not.toHaveAttribute("aria-disabled");
   });
 });
 

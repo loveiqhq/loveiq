@@ -174,7 +174,7 @@ export function spokenInstruction(): string {
 export function personalInstructions(
   style: CoachingStyle | null | undefined,
   person: PersonContext,
-  opts: { topic?: boolean; voice?: boolean } = {}
+  opts: { topic?: boolean; voice?: boolean; invitation?: boolean } = {}
 ): string {
   const lines: string[] = ["ABOUT THIS CONVERSATION"];
   lines.push(
@@ -182,6 +182,13 @@ export function personalInstructions(
       ? "The person has a free account; this chat is kept if they chose that in Settings."
       : "The person is chatting anonymously. Do not ask for their email or name."
   );
+  // Round-2 audit HAB-5: the context below gives no hint that a choice was just made, so Mira
+  // blamed herself for an earlier "I can't see it" that was true when she said it.
+  if (person.signedIn) {
+    lines.push(
+      "What you may read below (their journal, their self-check results, their LoveIQ result) follows choices they can change in Settings at any moment, also during this chat. If something you said you couldn't see earlier in this chat is here now, they have just allowed it: thank them or simply use it, and never say you were wrong earlier, as what you said was true then. If something you could read earlier is gone, they turned it off: leave it out."
+    );
+  }
   lines.push(replyLanguageInstruction(person.replyLanguage));
   if (person.name) lines.push(`Their name, as they want to be called: ${person.name}.`);
   if (person.gender)
@@ -204,7 +211,7 @@ export function personalInstructions(
     );
     if (person.checks.some((c) => c.support)) {
       lines.push(
-        "Thoughts of being better off dead or of hurting themselves in a check matter more than its band: never call that check minimal or reassure them about it. In your first reply in this chat, gently ask how they are with those thoughts now and offer the support lines for their country, then follow their lead. If they show any risk now, follow rail 14 at once; if they say they are safe, you may keep coaching with care and need not ask again in this chat."
+        "Thoughts of being better off dead or of hurting themselves in a check matter more than its band: never call that check minimal or reassure them about it. In your first reply in this chat, gently ask how they are with those thoughts now and offer the support lines for their country: end that reply with [[SUPPORT]] on its own line, and the app shows them (don't write numbers or service names yourself). Then follow their lead. If they show any risk now, follow rail 14 at once, with [[CRISIS]] instead; if they say they are safe, you may keep coaching with care and need not ask again in this chat."
       );
     }
   }
@@ -216,6 +223,13 @@ export function personalInstructions(
   if (person.goals?.length) lines.push("", goalsInstructions(person.goals));
   if (person.journal) lines.push("", person.journal);
   if (opts.topic) lines.push("", topicInstruction());
+  // One question at a time (round-2 audit CHAT-2): the invitation asks its own.
+  if (opts.invitation) {
+    lines.push(
+      "",
+      "The app follows this first reply with its invitation to the intake questions, which ends with a question of its own, so end your reply without a question."
+    );
+  }
   if (opts.voice) lines.push("", spokenInstruction());
   return lines.join("\n");
 }
@@ -256,13 +270,18 @@ type Turn = { role: "user" | "assistant"; content: string };
 /**
  * Added to every signed-in message: whether a weekly session is booked. Only the app books one
  * (the time picker), so Mira never says a session, an invite or a reminder exists before this
- * says so.
+ * says so. `justBooked`: this message answers her weekly question, which she asks only while
+ * nothing is booked, so a booked slot was booked with the picker a moment ago (round-2 audit
+ * CHAT-13: without this she read her own question beside "booked" and apologised).
  */
-export function weeklySessionInstructions(slot: BookedSlot | null): string {
+export function weeklySessionInstructions(
+  slot: BookedSlot | null,
+  { justBooked = false }: { justBooked?: boolean } = {}
+): string {
   return [
     "WEEKLY SESSION",
     slot
-      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
+      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.${justBooked ? " They booked it just now with the time picker under your weekly question, and their message is their answer to it: it wasn't booked before, so don't apologise or say it already was." : ""}`
       : "Nothing is booked. To offer a weekly session, ask the weekly question with its marker, [[ASK:weekly]]: the app shows a time picker that books it and emails the calendar invite. Only the picker books: never say a session is booked, or that an invite or reminder is coming, until this section says it is booked.",
   ].join("\n");
 }

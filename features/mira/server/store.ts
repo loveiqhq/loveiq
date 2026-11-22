@@ -3,6 +3,7 @@ import { memberByEmail } from "@features/brain/server/sign-in";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 import { fromTeamBrowser, requestExtras } from "./attribution";
+import { shownTitle } from "./chat-titles";
 import { isStaffEmail } from "./google";
 import type { CoachEvent } from "@features/mira/content/coaches";
 import { refreshPublicReviews } from "./reviews";
@@ -49,6 +50,8 @@ export type StoredMessage = {
   rating: number | null;
   /** The intake question this reply of Mira's asked (its answers show as buttons). */
   ask: string | null;
+  /** The small goal this reply of Mira's offered ("Add as a goal"; migration 20261122120000). */
+  goal: string | null;
 };
 
 const enc = encodeURIComponent;
@@ -134,9 +137,16 @@ export async function updateProfile(id: string, patch: ProfilePatch): Promise<vo
 }
 
 export async function listChats(userId: string): Promise<ChatSummary[]> {
-  return rows<ChatSummary>(
-    `/rest/v1/mira_chat?user_id=eq.${enc(userId)}&select=id,title,updated_at&order=updated_at.desc&limit=50`
+  const found = await rows<
+    ChatSummary & { created_at?: string; mira_user?: { time_zone?: string | null } | null }
+  >(
+    `/rest/v1/mira_chat?user_id=eq.${enc(userId)}&select=id,title,updated_at,created_at,mira_user(time_zone)&order=updated_at.desc&limit=50`
   );
+  return found.map((c) => ({
+    id: c.id,
+    title: shownTitle(c.title, new Date(c.created_at ?? c.updated_at), c.mira_user?.time_zone),
+    updated_at: c.updated_at,
+  }));
 }
 
 export async function ownsChat(userId: string, chatId: string): Promise<boolean> {
@@ -155,7 +165,7 @@ export async function getMessages(
 ): Promise<StoredMessage[]> {
   if (!(await ownsChat(userId, chatId))) return [];
   const newest = await rows<StoredMessage>(
-    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id,role,content,sources,rating,ask&order=id.desc&limit=${limit}`
+    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id,role,content,sources,rating,ask,goal&order=id.desc&limit=${limit}`
   );
   return newest.reverse();
 }
@@ -180,8 +190,13 @@ export async function addMessages(
     ask?: string | null;
     /** A spoken turn's voice session (features/mira/server/voice.ts); only sent when there is one. */
     voiceSession?: string | null;
+    /** The small goal a reply of Mira's offered (round-2 audit CHAT-9); only sent when there is one. */
+    goal?: string | null;
   }>
 ): Promise<number[]> {
+  // Every row of one insert has the same keys (PostgREST refuses others), so the goal key goes
+  // on all of them when one has an offer, and on none otherwise.
+  const offers = messages.some((m) => m.goal);
   const res = await supabaseFetch("/rest/v1/mira_message?select=id", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -193,6 +208,7 @@ export async function addMessages(
         sources: m.sources ?? null,
         ask: m.ask ?? null,
         ...(m.voiceSession ? { voice_session: m.voiceSession } : {}),
+        ...(offers ? { goal: m.goal ?? null } : {}),
       }))
     ),
   });
@@ -202,6 +218,17 @@ export async function addMessages(
     body: JSON.stringify({ updated_at: new Date().toISOString() }),
   });
   return ((await res.json()) as Array<{ id: number }>).map((r) => r.id);
+}
+
+/**
+ * The texts of the account's goals, whatever their state, so a reopened chat shows "Added" under
+ * an offer they already took (round-2 audit CHAT-9). Texts as stored: the goals route tidies the
+ * spaces as parseReply does, so an offer and its goal match exactly.
+ */
+export async function goalTexts(userId: string): Promise<string[]> {
+  return (
+    await rows<{ text: string }>(`/rest/v1/mira_goal?user_id=eq.${enc(userId)}&select=text`)
+  ).map((g) => g.text);
 }
 
 /** A thumbs up or down on one of the account's own stored replies. */
@@ -267,6 +294,22 @@ async function forgetEventText(userId: string, all: boolean): Promise<void> {
   }
 }
 
+/**
+ * Deletes one of the account's chats: its messages and any voice session in it go with it (ON
+ * DELETE CASCADE), and so does the text of rated replies an older KPI row may keep (as with every
+ * chat, below: those rows don't say which chat they came from). False when it isn't theirs.
+ */
+export async function deleteChat(userId: string, chatId: string): Promise<boolean> {
+  if (!isUuid(chatId)) return false;
+  await forgetEventText(userId, false);
+  const res = await supabaseFetch(
+    `/rest/v1/mira_chat?id=eq.${enc(chatId)}&user_id=eq.${enc(userId)}&select=id`,
+    { method: "DELETE", headers: { Prefer: "return=representation" } }
+  );
+  if (!res.ok) throw new Error(`mira chat delete failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length > 0;
+}
+
 /** Deletes every stored chat (and so its messages), and the rated replies' text kept with them. */
 export async function deleteChats(userId: string): Promise<void> {
   await forgetEventText(userId, false);
@@ -323,6 +366,8 @@ export type MiraEventName =
   | "notify_me"
   | "settings_saved"
   | "chats_deleted"
+  // One chat deleted (round-2 audit CHAT-29): no id, no words.
+  | "chat_deleted"
   | "account_deleted"
   | "nudge_sent"
   | "nudge_clicked"

@@ -124,9 +124,11 @@ export function Modal({
 }
 
 /**
- * "Need support right now?" and the crisis panel. When Mira's safety rule fired, the person's
- * country (from the server) comes first; every other country's lines follow, so nobody is
- * left with the wrong list. `children`, when given, come first under the heading: the words for
+ * "Need support right now?" and the crisis panel. `highlight`'s country comes first: the one the
+ * server named when Mira's safety rule fired, else the account's "Where you're based" (its hint
+ * promises that country's lines first; round-2 audit SET-9), and "Somewhere else" first for a
+ * country not on the list. Every other country's lines follow, so nobody is left with the wrong
+ * list. `children`, when given, come first under the heading: the words for
  * the moment that opened it (the mood check's question 9, ui/checks/CheckPage.tsx).
  */
 export function SupportPanel({
