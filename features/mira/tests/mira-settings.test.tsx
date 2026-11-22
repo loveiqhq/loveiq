@@ -36,11 +36,11 @@ const PROFILE = {
 };
 
 type Reply = { status?: number; body: unknown };
-let replies: Record<string, (body: Record<string, unknown>) => Reply>;
+let replies: Record<string, (body: Record<string, unknown>) => Reply | Promise<Reply>>;
 const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
   const key = `${init.method ?? "GET"} ${url.split("?")[0]}`;
   const body = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
-  const r = replies[key]?.(body) ?? { body: { success: true } };
+  const r = (await replies[key]?.(body)) ?? { body: { success: true } };
   const status = r.status ?? 200;
   return { ok: status < 400, status, json: async () => r.body } as Response;
 });
@@ -65,6 +65,22 @@ afterEach(() => {
 });
 
 const root = () => document.querySelector(".mira-root") as HTMLElement;
+/** PATCH /api/mira/me held until the test answers each one, in the order they went out. */
+function holdSaves() {
+  const held: Array<{ body: Record<string, unknown>; answer: (status: number) => void }> = [];
+  replies["PATCH /api/mira/me"] = (body) =>
+    new Promise((resolve) =>
+      held.push({
+        body,
+        answer: (status) =>
+          resolve({
+            status,
+            body: status < 400 ? { success: true } : { error: "Unable to save." },
+          }),
+      })
+    );
+  return held;
+}
 async function openSettings(slots = {}, signedIn = true) {
   render(
     <MiraLookRoot initial={DEFAULT_LOOK} signedIn={signedIn}>
@@ -181,6 +197,39 @@ describe("Saving", () => {
       ])
     );
     expect(section("Language")).toHaveTextContent("stays in English for now");
+  });
+
+  it("never lets an earlier refused save undo a later one of the same field", async () => {
+    const held = holdSaves();
+    await openSettings();
+    const select = screen.getByLabelText("Mira replies in");
+    fireEvent.change(select, { target: { value: "de" } });
+    fireEvent.change(select, { target: { value: "fr" } });
+    await waitFor(() => expect(held).toHaveLength(1)); // one at a time
+    await act(async () => held[0]!.answer(500));
+    expect(within(section("Language")).queryByRole("alert")).toBeNull(); // "fr" is on its way
+    await waitFor(() => expect(held).toHaveLength(2));
+    expect(held[1]!.body).toEqual({ reply_language: "fr" });
+    await act(async () => held[1]!.answer(200));
+    expect(await within(section("Language")).findByText("Saved")).toBeInTheDocument();
+    expect(select).toHaveValue("fr");
+    expect(within(section("Language")).queryByRole("alert")).toBeNull();
+  });
+
+  it("still puts back what the server kept when the later save is the refused one", async () => {
+    const held = holdSaves();
+    await openSettings();
+    const select = screen.getByLabelText("Mira replies in");
+    fireEvent.change(select, { target: { value: "de" } });
+    fireEvent.change(select, { target: { value: "fr" } });
+    await waitFor(() => expect(held).toHaveLength(1));
+    await act(async () => held[0]!.answer(200));
+    await waitFor(() => expect(held).toHaveLength(2));
+    await act(async () => held[1]!.answer(500));
+    expect(await within(section("Language")).findByRole("alert")).toHaveTextContent(
+      "Unable to save."
+    );
+    expect(select).toHaveValue("de");
   });
 
   it("resets the coaching style to balanced in one save", async () => {

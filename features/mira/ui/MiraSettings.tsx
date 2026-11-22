@@ -150,8 +150,11 @@ export default function MiraSettings({
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
   // The account's typed details changed since they were loaded or saved.
   const [accountDirty, setAccountDirty] = useState(false);
-  // Saves go out one after another, so the last change made is the one kept.
+  // Saves go out one after another, so the last change made is the one kept; each field
+  // remembers its latest change, so an earlier save's answer never undoes or reports over it.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const saves = useRef(0);
+  const latest = useRef(new Map<string, number>());
   const { look, change } = useMiraLook();
 
   const sections: Array<[SectionId, string]> = [
@@ -195,22 +198,33 @@ export default function MiraSettings({
   const setStatus = (id: SectionId, s: Status | null) =>
     setStatusMap((cur) => ({ ...cur, [id]: s ?? undefined }));
 
+  /**
+   * Saves `body` once the saves before it are answered. With the answer come the fields no later
+   * change has taken over since: only those may be put back or reported.
+   */
+  async function save(body: Record<string, unknown>) {
+    const n = ++saves.current;
+    for (const k of Object.keys(body)) latest.current.set(k, n);
+    const send = () => miraApi("/api/mira/me", { method: "PATCH", body });
+    const next = queue.current.then(send, send);
+    queue.current = next;
+    const r = await next;
+    return { r, current: Object.keys(body).filter((k) => latest.current.get(k) === n) };
+  }
+
   /** Shows `fields` at once and saves them; a refused save puts the stored values back. */
   async function autosave(section: SectionId, fields: Partial<Profile>) {
     setP((cur) => (cur ? { ...cur, ...fields } : cur));
     setStatus(section, { kind: "saving" });
-    const send = () => miraApi("/api/mira/me", { method: "PATCH", body: fields });
-    const next = queue.current.then(send, send);
-    queue.current = next;
-    const r = await next;
-    if (r.ok) {
-      if (stored.current) stored.current = { ...stored.current, ...fields };
-      return setStatus(section, { kind: "saved" });
-    }
+    const { r, current } = await save(fields);
+    if (r.ok && stored.current) stored.current = { ...stored.current, ...fields };
+    // A later change of these fields is on its way: its answer decides.
+    if (current.length === 0) return;
+    if (r.ok) return setStatus(section, { kind: "saved" });
     const was = stored.current;
     if (was) {
       const back = Object.fromEntries(
-        Object.keys(fields).map((k) => [k, was[k as keyof Profile]])
+        current.map((k) => [k, was[k as keyof Profile]])
       ) as Partial<Profile>;
       setP((cur) => (cur ? { ...cur, ...back } : cur));
     }
