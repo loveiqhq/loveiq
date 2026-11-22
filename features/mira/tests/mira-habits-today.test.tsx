@@ -73,7 +73,7 @@ describe("Home's journal card left open past midnight", () => {
       })
     );
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-    await screen.findByText("Saved privately.");
+    await screen.findByText("Saved to your journal.");
     expect(sent("PUT", "/api/mira/journal")).toEqual([
       { day: "2026-11-24", mood: 4, body: null, closeness: null, energy: null, note: null },
     ]);
@@ -97,7 +97,7 @@ describe("Home's journal card left open past midnight", () => {
     expect(mood.getByRole("radio", { name: "2, Low" })).not.toBeChecked();
     fireEvent.click(mood.getByRole("radio", { name: "5, Very good" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-    await screen.findByText("Saved privately.");
+    await screen.findByText("Saved to your journal.");
     expect(sent("PUT", "/api/mira/journal")[0]).toMatchObject({ day: "2026-11-24", note: null });
   });
 
@@ -142,7 +142,7 @@ describe("the journal page left open past midnight", () => {
       })
     );
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-    await screen.findByText("Saved privately.");
+    await screen.findByText("Saved to your journal.");
     expect(sent("PUT", "/api/mira/journal")[0]).toMatchObject({ day: "2026-11-24", energy: 3 });
   });
 });
