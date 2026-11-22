@@ -20,11 +20,10 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { shortDate } from "@features/admin/server/ap/days";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION, HISTORY_TURNS, MAX_MESSAGE_CHARS } from "@features/mira/server/config";
 import { recordSession, signOutDevices } from "@features/mira/server/devices";
-import { localDay } from "@features/mira/server/goal-progress";
+import { neutralTitle } from "@features/mira/server/chat-titles";
 import { isStaffEmail } from "@features/mira/server/google";
 import { carryMinorStop, isMinor } from "@features/mira/server/minor";
 import { MAX_PASSKEYS, listPasskeys } from "@features/mira/server/passkeys";
@@ -160,10 +159,8 @@ async function carryChat(
     isCrisisMessage(firstUser) ||
     firstReply?.crisis === true ||
     SUPPORT_REPLIES.has(firstReply?.content ?? "");
-  // ponytail: the chat route's chat-titles.ts neutralTitle builds the same title; use it here once
-  // both are on one branch.
   const title = supportShown
-    ? `Chat on ${shortDate(localDay(new Date(), timeZone ?? "UTC"))}`
+    ? neutralTitle(new Date(), timeZone)
     : firstUser.replace(/\s+/g, " ").slice(0, 80);
   const chatId = await createChat(accountId, title);
   await addMessages(chatId, kept);
