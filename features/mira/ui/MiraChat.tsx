@@ -75,6 +75,8 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
+/** A reply that ends by asking the person something (any script's question mark, then quotes). */
+const endsAsking = (text: string) => /[?？؟][\s"'”’»)]*$/u.test(text);
 export { SESSION_OPENING };
 
 /**
@@ -488,6 +490,7 @@ export default function MiraChat({
       !res.data.invitation &&
       !res.data.ask &&
       !res.data.goal && // one ask at a time: Mira's goal offer goes first (round-2 audit CHAT-4)
+      !endsAsking(res.data.reply) && // and her own question (round-3 R3-CHAT-9): a later reply
       !crisisIn(withReply) &&
       !local.bodyCheckSnoozed()
     ) {

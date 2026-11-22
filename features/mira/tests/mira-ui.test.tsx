@@ -825,6 +825,29 @@ describe("Body check", () => {
   });
 
   // Round-2 audit CHAT-4: it stacked under Mira's goal offer, two asks at once.
+  // Round-3 R3-CHAT-9: her plain replies often end with a question of her own, and the card came
+  // right under it: two asks at once.
+  it("waits while Mira's reply ends with her own question, and comes with a later one", async () => {
+    signedInDue("baseline");
+    let n = 0;
+    const said = [
+      "When does the feeling arrive, as you undress?",
+      "¿Y cuándo llega?", // a question in another script's mark too
+      "メモしておきますね？",
+      "That makes sense.",
+    ];
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: said[n++] } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    for (const words of said.slice(0, 3)) {
+      typeAndSend("hello");
+      await screen.findByText(words);
+      expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    }
+    typeAndSend("hello");
+    expect(await screen.findByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
   it("isn't offered with a reply that offers a goal", async () => {
     signedInDue("baseline");
     reply({ goal: "Leave one soft light on" });
