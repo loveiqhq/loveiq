@@ -394,6 +394,19 @@ describe("Saving", () => {
     expect(select).toHaveValue("de");
   });
 
+  // Round-3 (frame fixer's note): a 401 on load sent Settings to sign-in by itself, which can
+  // bounce back and forth with /mira/start while the page still sees the session (R3-UXA-2 on
+  // Home). It now says so in place, with the link, and never navigates on its own.
+  it("never leaves for sign-in by itself when its first read answers 401", async () => {
+    replies["GET /api/mira/me"] = () => ({ status: 401, body: { error: "Please sign in." } });
+    window.history.replaceState({}, "", "/mira/settings");
+    render(<MiraSettings />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it("says so when the sign-in ran out, with a way back here, instead of a page that can't save", async () => {
     replies["PATCH /api/mira/me"] = () => ({ status: 401, body: { error: "Please sign in." } });
     window.history.replaceState({}, "", "/mira/settings#notifications");

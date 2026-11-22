@@ -18,7 +18,7 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { MiraFrame, PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
+import { miraApi, useSignedOut, type ApiResult } from "./api";
 import { AdultsOnly, ConfirmDelete } from "./kit";
 import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
@@ -209,8 +209,10 @@ export default function MiraSettings({
 
   function load() {
     void miraApi<{ profile: Profile; minor?: boolean }>("/api/mira/me").then((r) => {
-      if (r.status === 401) router.replace(signInHref());
-      else if (r.ok) {
+      // A 401 shows SignedOutNotice (useSignedOut hears it) and never navigates by itself: a
+      // redirect can bounce with /mira/start while the page still sees the session.
+      if (r.status === 401) return;
+      if (r.ok) {
         stored.current = r.data.profile;
         setMinor(r.data.minor === true);
         setP(r.data.profile);
@@ -218,7 +220,6 @@ export default function MiraSettings({
     });
   }
   // Once, on arrival.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
   // "Delete…" swaps the buttons for the question (the kit's ConfirmDelete, which opens on "Keep
