@@ -299,9 +299,9 @@ export default function MiraPrivacyPage() {
           <li>
             &ldquo;Picked for you&rdquo; on your Home page suggests practices from the guide, and
             sometimes a coach, from the topics of your own chats (the labels above). It uses only
-            the chats you had while signed in, never one from before you last deleted your chats,
-            and nothing while &ldquo;Remember our conversations&rdquo; is off. It shows only on your
-            Home page, which our analytics tools also record.
+            the chats you had while signed in, never one from before you last deleted all your
+            chats, and nothing while &ldquo;Remember our conversations&rdquo; is off. It shows only
+            on your Home page, which our analytics tools also record.
           </li>
           <li>
             The search on your Home page runs in your browser: what you type is not sent to our

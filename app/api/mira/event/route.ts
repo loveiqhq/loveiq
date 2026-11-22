@@ -21,8 +21,9 @@
  *       and the guide's "Ask Mira about this" (features/mira/content/coaches.ts): each name with
  *       its own detail, an id or a number, never words (22 Nov 2026)
  *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
- *       sees), the body check offered and started (its finish is the server's), the "Keep this
- *       chat" card shown, kept or put off, the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
+ *       sees), the body check offered and started (its finish is the server's), the retired "Keep
+ *       this chat" card's three (no page sends them since decision 2; an older open page still
+ *       may), the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
  *       is the server's), a self-check started and the support lines its mood check opened (a
  *       pure count: logged without the account or the browser id); only these names, so the
  *       server's own KPI events can't be sent
