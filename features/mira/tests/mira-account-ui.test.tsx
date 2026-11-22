@@ -154,6 +154,48 @@ describe("Use Face ID next time?", () => {
   });
 });
 
+describe("A chat the account doesn't keep", () => {
+  // The sign-up card promised "this chat comes with you"; an account with "Remember our
+  // conversations" off keeps none, so the page says so before going on (round-2 ID-20).
+  const chat = () =>
+    localStorage.setItem(
+      "mira.chat.v1",
+      JSON.stringify({ turns: [{ role: "user", content: "hello" }], freeLeft: 0 })
+    );
+
+  it("by code: says it wasn't kept and why, then goes on", async () => {
+    chat();
+    await codeSignIn({ success: true, chatId: null, memoryOff: true });
+    const heading = await screen.findByRole("heading", { name: "Your earlier chat wasn't kept" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.getByText(/“Remember our conversations” is off/)).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/home"));
+  });
+
+  it("with a passkey, and back from Google, the same", async () => {
+    chat();
+    replies["POST /api/mira/passkeys"] = (b) =>
+      b.action === "sign-in-options"
+        ? { body: { options: { challenge: "c" } } }
+        : { body: { success: true, needsProfile: false } };
+    replies["POST /api/mira/auth"] = () => ({
+      body: { success: true, chatId: null, memoryOff: true },
+    });
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { time_zone: "Europe/Berlin" } } });
+    render(<SignUpFlow />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+    await screen.findByRole("heading", { name: "Your earlier chat wasn't kept" });
+    cleanup();
+    chat();
+    render(<SignUpFlow googleResult="done" needsAbout />);
+    await screen.findByRole("heading", { name: "Your earlier chat wasn't kept" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "About you" });
+  });
+});
+
 describe("The code step", () => {
   afterEach(() => sessionStorage.clear());
   const toCodeStep = async () => {

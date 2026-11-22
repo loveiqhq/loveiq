@@ -179,9 +179,11 @@ export async function POST(request: Request) {
       }
       const profile = await getProfile(account.id);
       const turns = body.carry.filter((t) => t.content.trim());
-      const chatId = await carryChat(account.id, profile?.remember_chats !== false, turns);
+      const remember = profile?.remember_chats !== false;
+      const chatId = await carryChat(account.id, remember, turns);
       if (chatId === "limited") return tryLater();
-      return NextResponse.json({ success: true, chatId });
+      // Not kept as "Remember our conversations" is off: the page says so (round-2 ID-20).
+      return NextResponse.json({ success: true, chatId, ...(remember ? {} : { memoryOff: true }) });
     } catch (err) {
       logger.error({ err }, "mira: the chat was not carried into the account");
       return NextResponse.json({ error: "We couldn't bring your chat along." }, { status: 500 });
@@ -334,6 +336,8 @@ export async function POST(request: Request) {
     const minor = stopped || (await isMinor(account.id).catch(() => false));
     const carry = body.carry?.filter((t) => t.content.trim()) ?? [];
     const remember = !minor && profile?.remember_chats !== false;
+    // A chat came along but the account keeps none: the page says so (round-2 ID-20).
+    const memoryOff = carry.length > 0 && !minor && profile?.remember_chats === false;
     const chatId = await carryChat(account.id, remember, carry);
     logMiraEvent(
       "signup_completed",
@@ -362,6 +366,7 @@ export async function POST(request: Request) {
       needsProfile: !profile?.name,
       chatId: chatId === "limited" ? null : chatId,
       offerPasskey,
+      ...(memoryOff ? { memoryOff: true } : {}),
     });
   } catch (err) {
     logger.error({ err }, "mira: the chat was not carried in at sign-in");

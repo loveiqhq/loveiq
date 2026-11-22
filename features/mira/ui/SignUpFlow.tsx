@@ -33,7 +33,7 @@ import {
  * code sign-in on a device that can make one, "Use Face ID next time?" once (account/).
  */
 
-type Step = "account" | "verify" | "passkey" | "about" | "minor";
+type Step = "account" | "verify" | "passkey" | "kept" | "about" | "minor";
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: "account", label: "Account" },
   { key: "verify", label: "Verify" },
@@ -154,6 +154,8 @@ export default function SignUpFlow({
   // Passkeys: shown only where the browser has them; where the offer goes on to.
   const passkeys = usePasskeysWork();
   const afterOffer = useRef<"about" | "home">("home");
+  // Where "Continue" goes after "Your earlier chat wasn't kept".
+  const afterKept = useRef<() => unknown>(() => undefined);
   const ticks = useRef({ adult, terms, consent, useAssessment });
   // A passkey's answer reads the boxes as they are then (ticked while it waited).
   useEffect(() => {
@@ -181,6 +183,16 @@ export default function SignUpFlow({
    * instead of "About you" or Home, every route refusing from here on; the browser forgets its
    * chat and its 18+ tick, as the chat does at the stop.
    */
+  /**
+   * The sign-up card promised "this chat comes with you", but this account keeps no chats
+   * ("Remember our conversations" off): say so, then go on (round-2 ID-20).
+   */
+  function notKept(then: () => unknown) {
+    afterKept.current = then;
+    setBusy(false);
+    setStep("kept");
+  }
+
   function refusedAsMinor(signedIn: boolean) {
     local.forget();
     setMinorSignedIn(signedIn);
@@ -211,13 +223,20 @@ export default function SignUpFlow({
     }
     const carry = carriedChat();
     void (async () => {
+      const goOn = async () => {
+        if (needsAbout) return setStep("about");
+        await afterSignIn(adoptSaved);
+        goHome();
+      };
       if (carry.length) {
-        const res = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
+        const res = await miraApi<{ memoryOff?: boolean }>("/api/mira/auth", {
+          body: { action: "carry", carry },
+        });
         if (res.ok) local.saveChat(null);
+        if (res.data.memoryOff) return notKept(goOn);
       }
       if (needsAbout) return;
-      await afterSignIn(adoptSaved);
-      goHome();
+      await goOn();
     })();
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,6 +274,7 @@ export default function SignUpFlow({
       chatId?: string | null;
       offerPasskey?: boolean;
       minor?: boolean;
+      memoryOff?: boolean;
     }>("/api/mira/auth", {
       body: {
         action: "verify",
@@ -271,17 +291,22 @@ export default function SignUpFlow({
     keepWaiting(null);
     if (res.data.minor) return refusedAsMinor(true);
     local.saveChat(null);
-    if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
-      afterOffer.current = res.data.needsProfile ? "about" : "home";
-      setBusy(false);
-      return setStep("passkey");
-    }
-    if (res.data.needsProfile) {
-      setBusy(false);
-      return setStep("about");
-    }
-    await afterSignIn(adoptSaved);
-    goHome();
+    const goOn = async () => {
+      if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
+        afterOffer.current = res.data.needsProfile ? "about" : "home";
+        setBusy(false);
+        return setStep("passkey");
+      }
+      if (res.data.needsProfile) {
+        setBusy(false);
+        return setStep("about");
+      }
+      setBusy(true);
+      await afterSignIn(adoptSaved);
+      goHome();
+    };
+    if (res.data.memoryOff) return notKept(goOn);
+    await goOn();
   }
 
   /** After the offer, wherever the sign-in was going. */
@@ -300,16 +325,23 @@ export default function SignUpFlow({
     setBusy(true);
     setError(null);
     const carry = carriedChat();
+    const goOn = async () => {
+      if (needsProfile) {
+        setBusy(false);
+        return setStep("about");
+      }
+      setBusy(true);
+      await afterSignIn(adoptSaved);
+      goHome();
+    };
     if (carry.length) {
-      const moved = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
+      const moved = await miraApi<{ memoryOff?: boolean }>("/api/mira/auth", {
+        body: { action: "carry", carry },
+      });
       if (moved.ok) local.saveChat(null);
+      if (moved.data.memoryOff) return notKept(goOn);
     }
-    if (needsProfile) {
-      setBusy(false);
-      return setStep("about");
-    }
-    await afterSignIn(adoptSaved);
-    goHome();
+    await goOn();
   }
 
   // The email field offers the browser's passkeys while the form shows (conditional mediation),
@@ -386,7 +418,9 @@ export default function SignUpFlow({
   }
 
   // The offer belongs to the code check: the progress stays on Verify.
-  const current = STEPS.findIndex((s) => s.key === (step === "passkey" ? "verify" : step));
+  const current = STEPS.findIndex(
+    (s) => s.key === (step === "passkey" || step === "kept" ? "verify" : step)
+  );
   const emailOk = /^\S+@\S+\.\S+$/.test(email.trim());
   // Google sign-in leaves the page, so the optional ticks and `next` ride along on the link.
   const googleHref =
@@ -644,6 +678,25 @@ export default function SignUpFlow({
 
           {step === "passkey" ? (
             <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
+          ) : null}
+
+          {step === "kept" ? (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h1
+                  ref={heading}
+                  tabIndex={-1}
+                  className="font-serif text-[34px] font-medium leading-tight outline-none"
+                >
+                  Your earlier chat wasn&apos;t kept
+                </h1>
+                <p className="mt-2 text-[15px] text-ap-body">
+                  “Remember our conversations” is off for this account, so Mira keeps no chats. You
+                  can turn it on in Settings.
+                </p>
+              </div>
+              <PrimaryButton onClick={() => void afterKept.current()}>Continue</PrimaryButton>
+            </div>
           ) : null}
 
           {step === "minor" ? (

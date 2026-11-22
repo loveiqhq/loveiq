@@ -238,10 +238,30 @@ describe("POST /api/mira/auth", () => {
 
     vi.mocked(getProfile).mockResolvedValueOnce({ name: "Lea", remember_chats: false } as never);
     vi.mocked(createChat).mockClear();
+    // Not kept, and why: the page says so instead of dropping it without a word (ID-20).
     expect(await (await post({ action: "carry", carry: turns })).json()).toMatchObject({
       chatId: null,
+      memoryOff: true,
     });
     expect(createChat).not.toHaveBeenCalled();
+  });
+
+  it("says when a code sign-in kept no chat because the account remembers none", async () => {
+    vi.mocked(upsertProfileAtSignIn).mockResolvedValueOnce({
+      name: "Lea",
+      remember_chats: false,
+    } as never);
+    const carry = [{ role: "user", content: "I avoid mirrors" }];
+    const res = await post({ action: "verify", email: "lea@example.com", code: "12345678", carry });
+    expect(await res.json()).toMatchObject({ chatId: null, memoryOff: true });
+    expect(createChat).not.toHaveBeenCalled();
+    // Nothing to keep, nothing to say.
+    vi.mocked(upsertProfileAtSignIn).mockResolvedValueOnce({
+      name: "Lea",
+      remember_chats: false,
+    } as never);
+    const empty = await post({ action: "verify", email: "lea@example.com", code: "12345678" });
+    expect(await empty.json()).not.toHaveProperty("memoryOff");
   });
 
   describe("code emails", () => {
