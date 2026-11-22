@@ -212,7 +212,8 @@ async function warnIfWriteRejected(path: string, method: string, res: Response):
    * when the database was simply too slow at that moment.
    */
   const timedOut = code === "57014";
-  logger[level](
+  const log = level === "warn" ? logger.warn.bind(logger) : logger.error.bind(logger);
+  log(
     {
       path: path.split("?")[0],
       method,
