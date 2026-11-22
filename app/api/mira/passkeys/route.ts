@@ -33,6 +33,7 @@ import { anonId } from "@features/mira/server/anon";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { deviceLabel, isRecentSignIn, recordSession } from "@features/mira/server/devices";
+import { loginEmail } from "@features/mira/server/email-change";
 import { isStaffEmail } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
 import {
@@ -323,8 +324,12 @@ async function signIn(
   const profile = await getProfile(userId);
   if (!profile) return fail(DIDNT_WORK, 400);
   if (await isMinor(userId)) return fail(ADULTS_ONLY, 403);
+  // The login's own address, never the profile's copy (which a change of email may have left
+  // behind): a code minted for an address no login has would make a new login.
+  const email = await loginEmail(userId);
+  if (!email) return fail("We couldn't sign you in. Please try again.", 500);
   // Staff sign in by emailed code only, as with Google (their session would also open admin).
-  if (await isStaffEmail(profile.email)) {
+  if (await isStaffEmail(email)) {
     return fail("Please sign in with your email for this address. We'll send you a code.", 403);
   }
   const t = body.ticks;
@@ -335,11 +340,11 @@ async function signIn(
     });
   }
 
-  const code = await mintSignInCode(profile.email);
+  const code = await mintSignInCode(email);
   if (!code) return fail("We couldn't sign you in. Please try again.", 500);
   const supabase = await createMiraSupabase();
   const { data, error } = await supabase.auth.verifyOtp({
-    email: profile.email,
+    email,
     token: code,
     type: "email",
   });
@@ -352,7 +357,7 @@ async function signIn(
     // The form's ticks, when given, are recorded like any sign-in's; otherwise the consent on
     // file is this wording's already and stays as it was given.
     if (ticked) {
-      await upsertProfileAtSignIn(userId, profile.email, CONSENT_VERSION, {
+      await upsertProfileAtSignIn(userId, email, CONSENT_VERSION, {
         useAssessment: t!.useAssessment,
       });
     } else if (await fromTeamBrowser()) {
