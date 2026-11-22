@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { coachById, suggestedCoaches, type CoachId } from "@features/mira/content/coaches";
+import { SectionLink } from "../kit";
 import { useCoachData } from "./data";
-import { ChevronIcon, CoachPortrait, NotifyButton } from "./parts";
+import { CoachPortrait, NotifyButton } from "./parts";
 import { FOCUS, INK_PILL, QUIET_PILL } from "./styles";
 
 const MIRA = coachById("mira");
@@ -35,13 +36,7 @@ export default function CoachesCard() {
         <h2 id="coaches-h" className="font-serif text-[24px] font-medium leading-tight">
           Your coaches
         </h2>
-        <Link
-          href="/mira/coaches"
-          className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 text-[14px] font-semibold text-ap-plum transition-colors hover:text-ap-ink ${FOCUS}`}
-        >
-          See all coaches
-          <ChevronIcon />
-        </Link>
+        <SectionLink href="/mira/coaches" what="coaches" />
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-2">
         <article

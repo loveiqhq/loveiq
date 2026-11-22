@@ -68,7 +68,7 @@ describe("the Home card", () => {
     expect(dots.at(-1)).toBe("Today: not yet");
     expect(dots.at(-2)).toMatch(/: checked in$/);
     expect(dots.at(0)).toMatch(/: no check-in$/);
-    expect(screen.getByRole("link", { name: /Open journal/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "See all check-ins" })).toHaveAttribute(
       "href",
       "/mira/journal"
     );

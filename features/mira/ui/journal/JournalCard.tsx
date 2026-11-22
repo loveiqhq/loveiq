@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { streak } from "@features/mira/journal";
 import { PrimaryButton } from "../MiraShell";
+import { SectionLink } from "../kit";
 import { CheckIn } from "./CheckIn";
 import {
   ARROW,
@@ -67,12 +67,7 @@ export function JournalCard() {
         <h2 id="journal-card-h" className="font-serif text-[24px] font-medium leading-tight">
           Daily journal
         </h2>
-        <Link
-          href="/mira/journal"
-          className="inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline"
-        >
-          Open journal <Icon path={ARROW} className="h-4 w-4" />
-        </Link>
+        <SectionLink href="/mira/journal" what="check-ins" />
       </div>
 
       <div className="relative mt-3 overflow-hidden rounded-[28px] border border-ap-line bg-white p-5 sm:p-7">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { localDay, progress } from "../../server/goal-progress";
+import { SectionLink } from "../kit";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import { ChallengePills, FOCUS, TickButton, WeekLine, onTheGo } from "./parts";
 import { useGoals, type Goal } from "./useGoals";
@@ -42,12 +43,7 @@ export default function GoalsCard() {
           Challenges &amp; goals
         </h2>
         {g.load === "ready" && g.goals.length > 0 ? (
-          <Link
-            href="/mira/goals"
-            className={`-mr-2 inline-flex min-h-[44px] items-center rounded-full px-2 text-[14px] font-semibold text-ap-plum hover:underline ${FOCUS}`}
-          >
-            All goals
-          </Link>
+          <SectionLink href="/mira/goals" what="goals" />
         ) : null}
       </div>
       <div className="mt-3">

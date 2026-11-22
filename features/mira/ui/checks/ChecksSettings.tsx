@@ -147,7 +147,7 @@ export default function ChecksSettings() {
         <button
           type="button"
           disabled
-          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-quiet"
+          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-muted"
         >
           No check results to delete
         </button>
