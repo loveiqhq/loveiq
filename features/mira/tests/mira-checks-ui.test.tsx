@@ -130,6 +130,29 @@ describe("taking a check", () => {
     expect(screen.getByRole("radio", { name: "Not at all" })).toBeChecked();
   });
 
+  it("lets the last answer be checked or changed before anything is saved", async () => {
+    sessionStorage.setItem(
+      "mira.check.v1:u1:anxiety",
+      JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
+    );
+    render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
+    tap("Nearly every day");
+    await new Promise((r) => setTimeout(r, 320));
+    // Picked, not saved: still the last question, with Back and "See my result".
+    expect(sent("POST /api/mira/checks")).toEqual([]);
+    expect(question()).toMatch(/Question 7 of 7/);
+    expect(screen.getByRole("radio", { name: "Nearly every day" })).toBeChecked();
+    expect(screen.getByRole("button", { name: /Back/ })).toBeTruthy();
+    tap("Several days");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    await waitFor(() =>
+      expect(sent("POST /api/mira/checks")).toEqual([
+        { check: "anxiety", answers: [2, 2, 2, 2, 2, 1, 1] },
+      ])
+    );
+  });
+
   it("sends only the answers and shows the result in words, with the next steps", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
@@ -144,6 +167,7 @@ describe("taking a check", () => {
     render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
     fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
     tap("Several days");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
     const heading = await screen.findByRole("heading", { level: 1 });
     expect(heading.textContent).toBe(
       "Your answers suggest moderate anxiety over the last two weeks."
@@ -238,7 +262,12 @@ describe("the mood check's question 9", () => {
       "/mira?say=support"
     );
     expect(tracked()).toEqual(["check_support_shown"]);
-    // Behind it, the result keeps the support at the top; its minimal total is never the headline.
+    // The lines open at once; the answer itself waits until the person has seen it.
+    expect(sent("POST /api/mira/checks")).toEqual([]);
+    fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("radio", { name: "Several days" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    // Then the result keeps the support at the top; its minimal total is never the headline.
     await screen.findByRole("region", { name: "You don’t have to carry this alone" });
     const headline = screen.getByRole("heading", { level: 1 });
     expect(headline.textContent).toBe(NOT_THE_SCORE);
@@ -309,6 +338,7 @@ describe("the mood check's question 9", () => {
     render(<CheckPage checkId="mood" practice={null} />);
     fireEvent.click(await screen.findByRole("button", { name: "Continue from question 9" }));
     tap("Not at all");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
     await screen.findByRole("heading", { level: 1 });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(tracked()).toEqual([]);

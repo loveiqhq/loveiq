@@ -9,8 +9,10 @@ import { PrimaryButton } from "../MiraShell";
  * above its question, its answers as large pills, a quiet progress line. A tap answers and moves
  * on after a beat, so the choice is seen; the keyboard picks with the arrows (a native radio
  * group) and moves on with Enter or Next, so passing over an answer never commits it. Back keeps
- * every answer. Each answer goes to `onAnswer` at once, so the page can keep the draft and open
- * the support lines the moment the mood check's question 9 is answered.
+ * every answer. The last answer waits for "See my result", so it can be checked or changed
+ * before anything is saved (a retake is two weeks away). Each answer goes to `onAnswer` at once,
+ * so the page can keep the draft and open the support lines the moment the mood check's question 9
+ * is answered.
  */
 export function CheckRunner({
   check,
@@ -65,6 +67,14 @@ export function CheckRunner({
     }
     setIndex(index + 1);
     setPicked(next[index + 1]);
+  }
+
+  /** A tap on the last question: passed on at once, saved only with "See my result". */
+  function pickLast(value: number) {
+    const next = [...answers];
+    next[index] = value;
+    setAnswers(next);
+    onAnswer(next, index);
   }
 
   function back() {
@@ -146,9 +156,9 @@ export function CheckRunner({
                     tapped.current = false;
                     setPicked(o.value);
                     cancelPending();
-                    // A beat to see the choice land before the next question; the last one goes
-                    // at once (the mood check's question 9 must open the support lines with no wait).
-                    if (last) commit(o.value);
+                    // A beat to see the choice land before the next question. The last one stays
+                    // to be seen (its support lines, for the mood check's question 9, open now).
+                    if (last) pickLast(o.value);
                     else pending.current = window.setTimeout(() => commit(o.value), 240);
                   }}
                   className="peer sr-only"
