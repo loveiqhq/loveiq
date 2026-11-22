@@ -701,6 +701,12 @@ export default function SignUpFlow({
                     keepWaiting(null);
                     setStep("account");
                     setCode("");
+                    // A restored step brought the ticks back for its resend; whoever types an
+                    // address next must tick them themselves (consent is never pre-ticked).
+                    setAdult(false);
+                    setTerms(false);
+                    setConsent(false);
+                    setUseAssessment(false);
                   }}
                 >
                   Change email

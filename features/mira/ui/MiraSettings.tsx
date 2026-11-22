@@ -351,6 +351,11 @@ export default function MiraSettings({
         text: r.data.error ?? "Unable to sign out. Please try again.",
       });
     }
+    // Nothing of a pending sign-in or change of email stays in this tab for the next person.
+    try {
+      sessionStorage.removeItem("mira.signin.code.v1");
+      sessionStorage.removeItem("mira.email.code.v1");
+    } catch {}
     router.replace("/mira");
     router.refresh();
   }

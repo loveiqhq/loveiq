@@ -394,6 +394,19 @@ describe("Saving", () => {
     expect(select).toHaveValue("de");
   });
 
+  // Round-3 security review: a pending code sign-in or change of email (this tab's storage, with
+  // addresses in it) stayed after "Sign out", readable by the next person on the tab.
+  it("forgets a pending sign-in and change of email on Sign out", async () => {
+    sessionStorage.setItem("mira.signin.code.v1", JSON.stringify({ email: "a@example.com" }));
+    sessionStorage.setItem("mira.email.code.v1", JSON.stringify({ address: "b@example.com" }));
+    replies["POST /api/mira/auth"] = () => ({ body: { success: true } });
+    await openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira"));
+    expect(sessionStorage.getItem("mira.signin.code.v1")).toBeNull();
+    expect(sessionStorage.getItem("mira.email.code.v1")).toBeNull();
+  });
+
   // Round-3 (frame fixer's note): a 401 on load sent Settings to sign-in by itself, which can
   // bounce back and forth with /mira/start while the page still sees the session (R3-UXA-2 on
   // Home). It now says so in place, with the link, and never navigates on its own.

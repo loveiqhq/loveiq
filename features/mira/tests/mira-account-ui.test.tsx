@@ -275,6 +275,20 @@ describe("The code step", () => {
     await screen.findByRole("heading", { name: "Check your inbox" });
   };
 
+  // Round-3 security review: the restored step brings the ticks back so a resend works, and
+  // "Change email" then showed the 18+, terms and health-data boxes already ticked, for whoever
+  // types an address next on that tab. Consent is never pre-ticked (GDPR Recital 32, Planet49).
+  it("never shows the boxes ticked after Change email from a restored step", async () => {
+    await toCodeStep();
+    cleanup();
+    render(<SignUpFlow />);
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    const boxes = await screen.findAllByRole("checkbox");
+    expect(boxes.length).toBeGreaterThanOrEqual(4);
+    for (const box of boxes) expect(box).not.toBeChecked();
+  });
+
   it("comes back after a reload, Back or a discarded tab, with its address", async () => {
     await toCodeStep();
     cleanup(); // the page goes; this tab's storage stays
