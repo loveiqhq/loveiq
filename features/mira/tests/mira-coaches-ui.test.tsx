@@ -177,6 +177,23 @@ describe("The roster (/mira/coaches)", () => {
     );
   });
 
+  // R3-HAB-11: at 320 px with Large text the dot ended one line and "Stop" began the next. The
+  // row no longer wraps: the dot and Stop are one unit beside the label, which wraps on its own.
+  it("keeps Stop beside 'We’ll let you know', its dot with it, on a row that never splits them", async () => {
+    serve({ notified: ["jonas"] });
+    render(<CoachRoster />);
+    const stop = await screen.findByRole("button", { name: "Stop notifying me about Jonas" });
+    const unit = stop.parentElement!;
+    expect(unit.textContent).toBe("·Stop");
+    expect(unit).toHaveClass("shrink-0", "whitespace-nowrap");
+    const row = unit.parentElement!;
+    const label = within(row).getByRole("button", {
+      name: "We’ll let you know when Jonas is ready",
+    });
+    expect(row).not.toHaveClass("flex-wrap");
+    expect(label).toHaveClass("min-w-0", "text-left");
+  });
+
   // R3-HAB-6: on a slow network a Stop sent beside its Notify landed first and kept the request.
   it("sends a Stop only once its Notify has landed, and says Stopped only after the server", async () => {
     let release = () => undefined as void;

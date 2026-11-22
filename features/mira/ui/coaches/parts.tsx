@@ -105,7 +105,9 @@ export function NotifyButton({
   }
   return (
     <span className="inline-flex flex-col items-start gap-1">
-      <span className="inline-flex flex-wrap items-center gap-x-1">
+      {/* Never wraps: past the room it has, the label wraps inside its button, and Stop keeps its
+          place beside it (round-3 R3-HAB-11). */}
+      <span className="inline-flex items-center gap-x-1">
         <button
           ref={main}
           type="button"
@@ -119,7 +121,7 @@ export function NotifyButton({
           }
           className={
             done
-              ? `inline-flex min-h-[44px] cursor-default items-center gap-2 rounded-full px-1 text-[14px] font-semibold text-ap-good-ink ${FOCUS}`
+              ? `inline-flex min-h-[44px] min-w-0 cursor-default items-center gap-2 rounded-full px-1 text-left text-[14px] font-semibold text-ap-good-ink ${FOCUS}`
               : QUIET_PILL
           }
         >
@@ -127,7 +129,8 @@ export function NotifyButton({
           {done ? "We’ll let you know" : "Notify me"}
         </button>
         {done ? (
-          <>
+          // One unit: the dot never ends a line without its Stop.
+          <span className="inline-flex shrink-0 items-center gap-x-1 whitespace-nowrap">
             <span aria-hidden="true" className="text-ap-muted">
               ·
             </span>
@@ -139,7 +142,7 @@ export function NotifyButton({
             >
               Stop
             </button>
-          </>
+          </span>
         ) : null}
       </span>
       <span aria-live="polite" className="sr-only">
