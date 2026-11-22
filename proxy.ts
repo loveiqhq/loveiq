@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createSupabaseMiddleware } from "@shared/auth/supabase-middleware";
+import { ADMIN_TEAM_EMAIL } from "@shared/auth/admin-team";
 import logger from "@shared/observability/logger";
 import {
   LANDING_VARIANT_COOKIE,
@@ -747,7 +748,10 @@ export async function proxy(request: NextRequest) {
         return url;
       };
 
-      if (!user) {
+      // The admin opens only for the team account (Eman, 22 Nov 2026: "only login with password").
+      // A session made anywhere else on the site (a Jarvis code, a teammate's own account) shares
+      // this cookie but is not an admin sign-in.
+      if (!user || user.email?.toLowerCase() !== ADMIN_TEAM_EMAIL) {
         if (isApiAdmin) {
           return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
         }
@@ -762,11 +766,13 @@ export async function proxy(request: NextRequest) {
       const lastActivityRaw = request.cookies.get("__admin_activity")?.value;
       const lastActivity = lastActivityRaw ? parseInt(lastActivityRaw, 10) : NaN;
       const now = Date.now();
-      if (Number.isFinite(lastActivity) && now - lastActivity > ADMIN_IDLE_TIMEOUT_MS) {
-        // Idle — force re-auth. JSON 401 for API callers, redirect for pages. The stale stamp
-        // is KEPT: deleting it (as this did until 22 Nov 2026) made the next request stampless,
-        // which skips this check, so a reload walked straight back in. Only a sign-in writes
-        // a fresh one.
+      if (!Number.isFinite(lastActivity) || now - lastActivity > ADMIN_IDLE_TIMEOUT_MS) {
+        // Idle — force re-auth. JSON 401 for API callers, redirect for pages. NO stamp is idle
+        // too: every sign-in writes one, and it lives 7 days while the session cookie lasts 400
+        // and refreshes, so a stampless session idled past a week (until 22 Nov 2026 it was let
+        // in). The stale stamp is KEPT for the same reason: deleting it, as this did, made the
+        // next request stampless and a reload walked straight back in. Only a sign-in writes a
+        // fresh one.
         if (isApiAdmin) {
           return NextResponse.json(
             { error: "Session idle — please re-authenticate." },
@@ -776,17 +782,9 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(signIn("idle_timeout"));
       }
       // Bump activity. SameSite=lax + secure in prod. httpOnly because the
-      // client never reads it and the Edge middleware is the only writer.
-      //
-      // maxAge MUST outlive the Supabase session, NOT merely the 30-min idle
-      // window. If the cookie expired before the session, a long-idle request
-      // would arrive with NO `__admin_activity` cookie → lastActivity = NaN →
-      // the idle check below is SKIPPED → the admin is let straight back in on
-      // a still-valid Supabase session, silently defeating the timeout for the
-      // exact walked-away-laptop case it targets. 7 days comfortably exceeds
-      // any realistic idle-but-still-authenticated window (and Supabase's own
-      // session cookie expiry bounds anything longer), so the absence of the
-      // cookie reliably coincides with an absent session (handled by !user).
+      // client never reads it and the proxy and the sign-in are its only writers.
+      // A missing stamp is refused above, so its 7-day maxAge only bounds how
+      // long a browser keeps it.
       response.cookies.set("__admin_activity", String(now), {
         httpOnly: true,
         sameSite: "lax",

@@ -93,8 +93,9 @@ export async function POST(request: NextRequest) {
     logger.error({ err, ip }, "Admin login: failed to check admin_users");
   }
   if (!allowed) {
-    const denied = wrong();
-    await createAdminAuthClient(request, denied).auth.signOut({ scope: "local" });
+    // The session is ended at Supabase through a throwaway answer, so the one sent carries no
+    // cookie of it and matches a wrong password's.
+    await createAdminAuthClient(request, NextResponse.json({})).auth.signOut({ scope: "local" });
     logger.warn({ ip }, "Admin login: the team account is not in admin_users");
     await notifySlack({
       channel: "ops",
@@ -102,13 +103,12 @@ export async function POST(request: NextRequest) {
       text: ":warning: Admin login *denied*: the team account is not in admin_users",
       username: "ops_alerts",
     });
-    return denied;
+    return wrong();
   }
 
   await finishAdminSignIn({
     request,
     response,
-    supabase,
     user: { id: data.user.id, email: data.user.email ?? ADMIN_TEAM_EMAIL },
     via: "password",
   });

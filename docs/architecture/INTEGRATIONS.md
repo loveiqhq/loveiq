@@ -76,7 +76,7 @@
 - Supabase Auth - Password authentication for the admin panel: one team account, `ap-team@loveiq.org` (since 2026-11-22)
   - SDK/Client: `@supabase/supabase-js` + `@supabase/ssr`
   - Flow: Admin enters the team password → `POST /api/admin/login` → `signInWithPassword` → session cookie set
-  - Access control: `admin_users` table in Supabase acts as email allowlist
+  - Access control: the admin opens only for the team account (`ap-team@loveiq.org`, the team password), which must be in the `admin_users` table
   - Session management: Server-side via `@supabase/ssr` cookie helpers (`features/admin/server/supabase-server.ts`, `shared/auth/supabase-middleware.ts`)
   - Role support: `features/admin/server/roles.ts` (role-based access control)
   - Audit logging: `features/admin/server/audit.ts`

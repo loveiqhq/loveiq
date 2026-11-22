@@ -162,9 +162,12 @@ describe("POST /api/admin/login (the team password, 22 Nov 2026)", () => {
   it("ends the new session when the team account is no longer an admin, answering as for a wrong password", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
     const res = await POST(request({ password: RIGHT }));
-    // The same answer as a wrong guess: it never tells a guesser they were right.
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "Incorrect password." });
+    // The same answer as a wrong guess, headers included: it never tells a guesser they were right.
+    const guess = await POST(request({ password: "wrong" }));
+    expect(res.status).toBe(guess.status);
+    expect(await res.json()).toEqual(await guess.json());
+    expect(res.headers.getSetCookie()).toEqual(guess.headers.getSetCookie());
+    expect(res.headers.getSetCookie()).toEqual([]);
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(mockAudit).not.toHaveBeenCalled();
     expect(mockSlack).toHaveBeenCalledWith(expect.objectContaining({ kind: "admin_login_denied" }));

@@ -132,7 +132,7 @@ When reviewing PRs, pay special attention to:
 - ❌ Broken authentication (admin panel uses Supabase Auth: the team password since 2026-11-22)
 - ❌ Sensitive data exposure (logging secrets, error messages)
 - ❌ XXE (not applicable - no XML parsing)
-- ❌ Broken access control (admin panel uses email allowlist via `admin_users` table)
+- ❌ Broken access control (the admin opens only for the team account, signed in with the team password, and only while it is in `admin_users`)
 - ❌ Security misconfiguration (missing headers, insecure defaults)
 - ❌ Known vulnerable components (outdated dependencies)
 - ❌ Insufficient logging (no security event tracking)

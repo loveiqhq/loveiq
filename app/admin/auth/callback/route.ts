@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  ADMIN_TEAM_EMAIL,
   createAdminAuthClient as createCallbackClient,
   finishAdminSignIn,
 } from "@features/admin/server/sign-in";
@@ -10,9 +11,11 @@ import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack
 import { ADMIN_HOME, safeAdminNext } from "@shared/url/admin-next";
 
 /**
- * The one-time link's landing: an operator's way in (a link minted with the service key, e.g.
- * for a signed-in check). The team signs in with the team password (app/api/admin/login);
- * nothing emails these links any more (22 Nov 2026).
+ * The one-time link's landing: an operator's way in (a link minted with the service key for the
+ * team account, e.g. for a signed-in check). The team signs in with the team password
+ * (app/api/admin/login); nothing emails these links any more, and the admin opens only for the
+ * team account (22 Nov 2026). Sign-outs here are this browser's only: the team account's other
+ * sessions are the teammates'.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -73,31 +76,34 @@ export async function GET(request: NextRequest) {
     // Sign out — need a fresh redirect so signOut cookies propagate
     const loginRedirect = NextResponse.redirect(new URL("/admin/login?error=no_email", origin));
     const signOutClient = createCallbackClient(request, loginRedirect);
-    await signOutClient.auth.signOut();
+    await signOutClient.auth.signOut({ scope: "local" });
     return loginRedirect;
   }
 
-  // Check admin_users allowlist
-  const res = await supabaseFetch(
-    `/rest/v1/admin_users?email=eq.${encodeURIComponent(user.email)}&select=email,role&limit=1`
-  );
-  const admins = await res.json();
+  // Only the team account, and only while it is on the admin_users allowlist.
+  const team = user.email.toLowerCase() === ADMIN_TEAM_EMAIL;
+  const res = team
+    ? await supabaseFetch(
+        `/rest/v1/admin_users?email=eq.${encodeURIComponent(ADMIN_TEAM_EMAIL)}&select=email,role&limit=1`
+      )
+    : null;
+  const admins: unknown = res ? await res.json() : [];
 
-  if (!res.ok || !Array.isArray(admins) || admins.length === 0) {
-    // Not in allowlist — sign out with cookies on the error redirect
+  if (!res?.ok || !Array.isArray(admins) || admins.length === 0) {
+    // Not allowed — sign out with cookies on the error redirect
     const loginRedirect = NextResponse.redirect(
       new URL("/admin/login?error=not_authorized", origin)
     );
     const signOutClient = createCallbackClient(request, loginRedirect);
-    await signOutClient.auth.signOut();
+    await signOutClient.auth.signOut({ scope: "local" });
     logger.info(
       { email: user.email, ip: getClientIp(request) },
-      "Admin login denied: not in allowlist"
+      "Admin login denied: not the team account, or not in allowlist"
     );
     await notifySlack({
       channel: "ops",
       kind: "admin_login_denied",
-      text: `:warning: Admin login *denied* — ${escapeSlack(maskEmail(user.email))} not in allowlist`,
+      text: `:warning: Admin login *denied* — ${escapeSlack(maskEmail(user.email))} is not the team account, or not in the allowlist`,
       username: "ops_alerts",
     });
     return loginRedirect;
@@ -106,7 +112,6 @@ export async function GET(request: NextRequest) {
   await finishAdminSignIn({
     request,
     response: redirectToAdmin,
-    supabase,
     user: { id: user.id, email: user.email },
     via: "link",
   });

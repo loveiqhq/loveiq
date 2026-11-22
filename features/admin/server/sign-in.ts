@@ -1,23 +1,18 @@
 /**
- * What every admin sign-in does once Supabase holds a session for an allowlisted admin: the
- * team password (app/api/admin/login) and an operator's one-time link (app/admin/auth/callback).
+ * What every admin sign-in does once Supabase holds a session for the team account: the team
+ * password (app/api/admin/login) and an operator's one-time link (app/admin/auth/callback).
  */
 import { createHmac } from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { logAdminAction } from "@features/admin/server/audit";
+import { ADMIN_TEAM_EMAIL } from "@shared/auth/admin-team";
 import { getClientIp } from "@shared/http/ratelimit";
 import { TEAM_COOKIE, teamCookieOptions } from "@shared/http/team-cookie";
-import logger from "@shared/observability/logger";
-import { escapeSlack, notifySlack } from "@shared/observability/slack";
+import { notifySlack } from "@shared/observability/slack";
 
-/**
- * The one admin account the team password opens (Eman, 22 Nov 2026: "only login with password
- * just like on staging"). A Supabase Auth user with that password, in `admin_users` as admin,
- * in production's and staging's projects alike. Nothing is ever emailed to it.
- */
-export const ADMIN_TEAM_EMAIL = "ap-team@loveiq.org";
+export { ADMIN_TEAM_EMAIL };
 
 /**
  * The password Supabase holds for the team account: the typed password mixed with the
@@ -66,19 +61,17 @@ export function createAdminAuthClient(request: NextRequest, response: NextRespon
 /**
  * The bookkeeping after a sign-in: the audit row and the #ops post, the cookies the admin's pages
  * read (PostHog's admin id, the idle clock, the team browser mark), and a fresh CSRF token for
- * the new privilege. A personal link also signs that person out everywhere else (T-15); the team
- * password never does, or each teammate's sign-in would end everyone else's.
+ * the new privilege. It never ends other sessions: they are the teammates' (T-15's one session
+ * per person ended with personal sign-ins, 22 Nov 2026).
  */
 export async function finishAdminSignIn({
   request,
   response,
-  supabase,
   user,
   via,
 }: {
   request: NextRequest;
   response: NextResponse;
-  supabase: ReturnType<typeof createAdminAuthClient>;
   user: { id: string; email: string };
   via: "password" | "link";
 }): Promise<void> {
@@ -90,7 +83,7 @@ export async function finishAdminSignIn({
     text:
       via === "password"
         ? ":lock: Admin login with the team password"
-        : `:lock: Admin login — *${escapeSlack(user.email)}*`,
+        : ":lock: Admin login with an operator's one-time link",
     username: "ops_alerts",
   });
 
@@ -124,18 +117,4 @@ export async function finishAdminSignIn({
     maxAge: 0,
   });
   response.cookies.delete("__csrf");
-
-  // T-15: one live session per person. Never for the team account (an operator's link to it),
-  // whose other sessions are the teammates'.
-  if (via === "link" && user.email.toLowerCase() !== ADMIN_TEAM_EMAIL) {
-    // Best-effort, a failure never blocks the sign-in.
-    try {
-      await supabase.auth.signOut({ scope: "others" });
-    } catch (err) {
-      logger.warn(
-        { err, email: user.email },
-        "T-15: failed to revoke other admin sessions on login"
-      );
-    }
-  }
 }

@@ -287,17 +287,24 @@ Eman's decision (22 Nov 2026): the admin signs in with one password for the whol
 
 - **How it works.** `/admin/login` asks only for the password. `POST /api/admin/login` (CSRF first,
   5 tries a minute per address) has Supabase Auth check it as the password of the team account
-  `ap-team@loveiq.org` (set in `features/admin/server/sign-in.ts`), mixed first with the server-only
-  secret `ADMIN_TEAM_PASSWORD_SECRET` (HMAC-SHA256). Supabase's own sign-in endpoint is open to
-  anyone with the project's public key, so the team password alone must open nothing there: every
-  sign-in goes through the route. The account must be in `admin_users` (role `admin`), or the new
-  session is ended at once and the answer is the wrong password's, so it never tells a guesser they
-  were right. The session is an ordinary admin session: the proxy's gate, the 30-minute idle
-  sign-out and the roles work as before. Every sign-in writes a `login` row to `admin_audit_log` and
-  posts "Admin login with the team password" to #ops. A sign-in never ends the other sessions (T-15
-  is for personal links only, never a link to the team account), or each teammate's sign-in would
-  sign out everyone else. For the same reason, signing out ends only that browser's session
-  (`signOut({ scope: "local" })`).
+  `ap-team@loveiq.org` (`shared/auth/admin-team.ts`), mixed first with the server-only secret
+  `ADMIN_TEAM_PASSWORD_SECRET` (HMAC-SHA256). Supabase's own sign-in endpoint is open to anyone with
+  the project's public key, so the team password alone opens nothing there. The account must be in
+  `admin_users` (role `admin`): if it is not, the new session is ended and the answer is a wrong
+  password's (same status, body and headers). Every sign-in writes a `login` row to
+  `admin_audit_log` and posts "Admin login with the team password" to #ops.
+- **Only the team account opens the admin.** `proxy.ts` refuses any other session on every
+  `/admin` page and `/api/admin` call, and the one-time link's callback refuses any other account.
+  A session made elsewhere on the site (a Jarvis sign-in code, a teammate's own account, still in
+  `admin_users`) shares the cookie but opens nothing. So the ways in are the password, and an
+  operator's one-time link for the team account (`generate_link` with the service key, never
+  emailed).
+- **Shared account, so nothing ends the teammates' sessions:** not a sign-in, not a sign-out
+  (`signOut({ scope: "local" })`, this browser only), not the callback's refusals (also local).
+- **Idle.** After 30 minutes without activity, or with no activity stamp at all (every sign-in
+  writes one; it lives 7 days, the session cookie 400), the proxy sends the browser back to the
+  sign-in and keeps refusing until a sign-in writes a fresh stamp. The Supabase session itself
+  stays, opening nothing.
 - **The session cookies** are `httpOnly` (forced in `sign-in.ts`, the proxy's refresh in
   `shared/auth/supabase-middleware.ts` and `features/admin/server/supabase-server.ts`; the SDK's own
   default leaves them readable by page scripts, and nothing in the browser reads them).
@@ -310,17 +317,21 @@ Eman's decision (22 Nov 2026): the admin signs in with one password for the whol
   database, `pass` column included. Supabase holds only the mixed value (bcrypt), the same in
   production and staging. The secret is in Vercel (loveiq-web: production, preview, development;
   loveiq-staging: production, preview) and in Eman's Keychain (`loveiq-admin-team-password-secret`).
-- **Change it** (a leaver, or a leak): compute the value Supabase must hold,
+- **Keep `ap-team@loveiq.org` an address nobody receives mail at.** Supabase emails a sign-in or
+  recovery link to an account's address to anyone who asks with the public key, so a mailbox,
+  group or catch-all for it would be a way in without the password.
+- **Change it** (a leaver, or a leak): pick a new random password of 29+ characters (a password
+  generator's, never a memorable one), compute the value Supabase must hold,
   `node -e 'console.log(require("crypto").createHmac("sha256", process.env.ADMIN_TEAM_PASSWORD_SECRET).update(process.argv[1]).digest("base64url"))' '<new password>'`
   with the secret in the environment, set it on `ap-team@loveiq.org` in both projects
   (`PUT /auth/v1/admin/users/<id>` with the service key, `{"password": "<that value>"}`), end its
   open sessions (`DELETE FROM auth.sessions WHERE user_id = '<id>'`), then update the Notion row.
-  Changing the secret itself needs the same `PUT` with the new mix, and a redeploy.
-- **Operators** can still mint a one-time link with the service key (`generate_link`, never
-  emailed) for a signed-in check; `/admin/auth/callback` takes it.
+  A leaver's own account opens nothing in the admin already. Changing the secret itself needs the
+  same `PUT` with the new mix, and a redeploy.
 - **Jarvis shares the session cookie.** `/jarvis/connect` reads the same Supabase session, so a
   browser signed in to the admin says "`ap-team@loveiq.org` cannot use Jarvis" there; its "Sign
-  out" (this browser only) and the person's own code fix it.
+  out" (this browser only) and the person's own code fix it, after which the admin asks for the
+  password again.
 
 ## Admin sign-in return path (`next`)
 
