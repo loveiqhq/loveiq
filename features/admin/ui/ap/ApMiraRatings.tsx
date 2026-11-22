@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { shortDate } from "@features/admin/server/ap/days";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { MiraPayload } from "@features/admin/server/ap/mira";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { redacted } from "@features/mira/reviews";
+import {
+  REJECT_REASONS,
+  REJECT_REASON_LABEL,
+  redacted,
+  type RejectReason,
+} from "@features/mira/reviews";
 import type { QuoteToReview } from "@features/mira/server/reviews";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
@@ -19,8 +24,9 @@ const count = (n: number) => fmt("count", n);
 const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
- * AP › Mira's "Ratings" card (features/admin/server/ap/mira-ratings.ts): the thank-you ask, what
- * it brings, what Mira's pages show of it, and the quotes the team reads before anything shows.
+ * AP › Mira's "Ratings" card (features/admin/server/ap/mira-ratings.ts): ratings from Settings
+ * and the thank-you ask, what Mira's pages show of them, and the quotes the team reads before
+ * anything shows.
  */
 export function RatingsCard({ data }: { data: MiraPayload }) {
   const r = data.ratings;
@@ -32,7 +38,7 @@ export function RatingsCard({ data }: { data: MiraPayload }) {
         id="h-ratings"
         level={3}
         title="Ratings"
-        description="The thank-you ask in the chat, after a 9 or 10 on the recommend question or a third thumbs-up in one chat: who rates Mira, the words they share, and what her pages show."
+        description="Ratings from Settings, open to anyone who has talked with Mira, and from the thank-you ask in the chat (after a 9 or 10 on the recommend question or a third thumbs-up in one chat): who rates her, the words they share, and what her pages show."
         right={
           <span className="font-serif text-[24px] font-semibold tabular-nums">
             {r.average === null ? EMPTY : `★ ${fmt("ratio", r.average)}`}
@@ -62,7 +68,7 @@ export function RatingsCard({ data }: { data: MiraPayload }) {
             label: "Ratings given",
             unit: "count",
             value: r.given,
-            note: `${fmt("pct", r.asked ? r.given / r.asked : null)} of the asks`,
+            note: `${fmt("pct", r.asked ? r.afterAsk / r.asked : null)} of the asks · ${count(r.fromSettings)} from Settings`,
           }}
         />
         <StatBox
@@ -98,11 +104,12 @@ export function RatingsCard({ data }: { data: MiraPayload }) {
       <QuoteReview />
       <p className={NOTE}>
         Asks, “Not now”, ratings given and withdrawals are counted in the range, the team&rsquo;s
-        left out. The average and the quotes are of the range&rsquo;s ratings that still stand: a
-        rating taken back leaves them, and counts as a withdrawal. A person rates once; the ask
-        shows at most once in 30 days per browser, never near a crisis, an under-18 stop, a referral
-        or the body check. Mira&rsquo;s pages count only signed-in people who are not the
-        team&rsquo;s and not under 18. Recorded from 22 Nov 2026.
+        left out. Where ratings came from (after an ask or in Settings), the average and the quotes
+        are of the range&rsquo;s ratings that still stand: a rating taken back leaves them, and
+        counts as a withdrawal. A person rates once, and only after three messages of their own to
+        Mira; the ask shows at most once in 30 days per browser, never near a crisis, an under-18
+        stop, a referral or the body check. Mira&rsquo;s pages count every rating, high or low,
+        except the team&rsquo;s and those of anyone under 18. Recorded from 22 Nov 2026.
       </p>
     </Card>
   );
@@ -111,12 +118,16 @@ export function RatingsCard({ data }: { data: MiraPayload }) {
 /**
  * The words people agreed to show: approve them as written, or with anything that could identify
  * someone replaced by a visible […] (the only edit their consent allows), reject them, or take
- * an approved one down. Rejecting deletes the words.
+ * an approved one down, each only for one of REJECT_REASONS, never because the words are
+ * critical (no selective publication, UWG Annex no. 23c). Rejecting deletes the words; the
+ * writer sees the reason in Settings.
  */
 function QuoteReview() {
   const url = "/api/admin/ap/mira/reviews";
   const { data, error, refetch } = useAdminFetch<{ quotes?: QuoteToReview[] }>(url);
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
+  // The quote whose reason is being picked, before it is rejected or taken down.
+  const [rejecting, setRejecting] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const quotes = data?.quotes ?? [];
@@ -124,7 +135,9 @@ function QuoteReview() {
   const shown = quotes.filter((q) => q.status === "approved");
 
   async function decide(
-    body: { id: number; decision: "approve"; text: string } | { id: number; decision: "reject" }
+    body:
+      | { id: number; decision: "approve"; text: string }
+      | { id: number; decision: "reject"; reason: RejectReason }
   ) {
     setBusy(true);
     setFailed(null);
@@ -137,8 +150,20 @@ function QuoteReview() {
     setBusy(false);
     if (!res?.ok) return setFailed(out?.error ?? "Not saved. Please try again.");
     setEditing(null);
+    setRejecting(null);
     refetch();
   }
+
+  /** "Reject…" or "Take down…": the reasons in place of the buttons. */
+  const whyNot = (q: QuoteToReview, verb: "Reject" | "Take down") => (
+    <ReasonPicker
+      id={q.id}
+      verb={verb}
+      busy={busy}
+      onCancel={() => setRejecting(null)}
+      onPick={(reason) => void decide({ id: q.id, decision: "reject", reason })}
+    />
+  );
 
   const who = (q: QuoteToReview) => (
     <>
@@ -153,6 +178,11 @@ function QuoteReview() {
       <h4 className="m-0 font-serif text-lg font-semibold text-ap-ink">
         Quotes to read{waiting.length ? ` (${waiting.length})` : ""}
       </h4>
+      <p className={NOTE}>
+        Critical or negative words are never a reason to reject or take down a quote. Approve them
+        like any other; a quote goes only if we can&rsquo;t remove identifying details, it is
+        harmful or abusive, it isn&rsquo;t about Mira, or it is spam or a duplicate.
+      </p>
       {error ? (
         <p className="m-0 text-sm text-ap-bad-ink">The quotes could not be loaded: {error}</p>
       ) : waiting.length === 0 ? (
@@ -196,50 +226,58 @@ function QuoteReview() {
                     &ldquo;{q.quote}&rdquo;
                   </blockquote>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {edit ? (
-                    <>
-                      <BlackButton
-                        disabled={busy || !cutOk}
-                        onClick={() =>
-                          void decide({ id: q.id, decision: "approve", text: edit.text })
-                        }
-                      >
-                        Approve with this cut
-                      </BlackButton>
-                      <button type="button" className={SECONDARY} onClick={() => setEditing(null)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <BlackButton
-                        disabled={busy}
-                        onClick={() =>
-                          void decide({ id: q.id, decision: "approve", text: q.quote })
-                        }
-                      >
-                        Approve
-                      </BlackButton>
-                      <button
-                        type="button"
-                        className={SECONDARY}
-                        disabled={busy}
-                        onClick={() => setEditing({ id: q.id, text: q.quote })}
-                      >
-                        Take out a detail…
-                      </button>
-                      <button
-                        type="button"
-                        className={SECONDARY}
-                        disabled={busy}
-                        onClick={() => void decide({ id: q.id, decision: "reject" })}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                </div>
+                {rejecting === q.id ? (
+                  whyNot(q, "Reject")
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {edit ? (
+                      <>
+                        <BlackButton
+                          disabled={busy || !cutOk}
+                          onClick={() =>
+                            void decide({ id: q.id, decision: "approve", text: edit.text })
+                          }
+                        >
+                          Approve with this cut
+                        </BlackButton>
+                        <button
+                          type="button"
+                          className={SECONDARY}
+                          onClick={() => setEditing(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <BlackButton
+                          disabled={busy}
+                          onClick={() =>
+                            void decide({ id: q.id, decision: "approve", text: q.quote })
+                          }
+                        >
+                          Approve
+                        </BlackButton>
+                        <button
+                          type="button"
+                          className={SECONDARY}
+                          disabled={busy}
+                          onClick={() => setEditing({ id: q.id, text: q.quote })}
+                        >
+                          Take out a detail…
+                        </button>
+                        <button
+                          type="button"
+                          className={SECONDARY}
+                          disabled={busy}
+                          onClick={() => setRejecting(q.id)}
+                        >
+                          Reject…
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -257,20 +295,26 @@ function QuoteReview() {
                 className="flex flex-wrap items-center justify-between gap-3 border-b border-ap-line py-2 last:border-b-0"
               >
                 <span className="min-w-0 flex-1 text-sm">
+                  <span aria-hidden="true">{"★".repeat(q.stars) + "☆".repeat(5 - q.stars)}</span>
+                  <span className="sr-only">{q.stars} of 5 stars</span>{" "}
                   <span className="font-serif italic">&ldquo;{q.published}&rdquo;</span>{" "}
                   <span className="text-ap-muted">
                     — {q.name}
                     {q.age ? `, ${q.age}` : ""}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  className={SECONDARY}
-                  disabled={busy}
-                  onClick={() => void decide({ id: q.id, decision: "reject" })}
-                >
-                  Take down
-                </button>
+                {rejecting === q.id ? (
+                  <div className="basis-full">{whyNot(q, "Take down")}</div>
+                ) : (
+                  <button
+                    type="button"
+                    className={SECONDARY}
+                    disabled={busy}
+                    onClick={() => setRejecting(q.id)}
+                  >
+                    Take down…
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -282,5 +326,53 @@ function QuoteReview() {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** Why a quote isn't shown: one of the four reasons, picked before the button works. */
+function ReasonPicker({
+  id,
+  verb,
+  busy,
+  onCancel,
+  onPick,
+}: {
+  id: number;
+  verb: "Reject" | "Take down";
+  busy: boolean;
+  onCancel: () => void;
+  onPick: (reason: RejectReason) => void;
+}) {
+  const [reason, setReason] = useState<RejectReason | null>(null);
+  const first = useRef<HTMLInputElement | null>(null);
+  // Opened from a button that is now gone: the first reason takes the focus.
+  useEffect(() => first.current?.focus(), []);
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-1 rounded-[12px] border border-ap-line px-4 pb-3 pt-2 sm:max-w-[440px]">
+      <legend className="px-1 text-sm font-semibold text-ap-ink">
+        Why not show it? Never because it&rsquo;s critical.
+      </legend>
+      {REJECT_REASONS.map((r, i) => (
+        <label key={r} className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm">
+          <input
+            ref={i === 0 ? first : undefined}
+            type="radio"
+            name={`mira-quote-${id}-reason`}
+            checked={reason === r}
+            onChange={() => setReason(r)}
+            className="h-4 w-4 shrink-0 accent-ap-purple"
+          />
+          {REJECT_REASON_LABEL[r]}
+        </label>
+      ))}
+      <div className="mt-1 flex flex-wrap gap-2">
+        <BlackButton disabled={busy || !reason} onClick={() => reason && onPick(reason)}>
+          {verb}
+        </BlackButton>
+        <button type="button" className={SECONDARY} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </fieldset>
   );
 }

@@ -1,7 +1,8 @@
 /**
- * AP › Mira's "Ratings" card (22 Nov 2026): the thank-you ask in the chat (after a 9 or 10 on
- * the recommend question, or a third thumbs-up in one chat), the ratings and words it brings,
- * and what Mira's pages show of them (features/mira/reviews.ts).
+ * AP › Mira's "Ratings" card (22 Nov 2026): ratings from Settings (open to anyone who has talked
+ * with Mira) and the thank-you ask in the chat (after a 9 or 10 on the recommend question, or a
+ * third thumbs-up in one chat), the words they bring, and what Mira's pages show of them
+ * (features/mira/reviews.ts).
  *
  * What people did comes from the event log (review_prompt_shown, review_prompt_not_now,
  * review_given, review_withdrawn), the team's left out as everywhere on the page. What stands now
@@ -15,13 +16,15 @@ import type { Prepared } from "./mira";
 
 export interface MiraReviewRow extends ReviewRow {
   user_id: string;
+  /** Where it was given: Settings, or the chat's ask. */
+  via: "settings" | "ask";
   created_at: string;
   reviewed_at: string | null;
 }
 
 /** The select that reads them (fetchMira). */
 export const REVIEW_SELECT =
-  "id,user_id,stars,quote_status,published_quote,display_name,age_range,consent_at,from_team,created_at,reviewed_at,mira_user!inner(email,is_team,minor_at)";
+  "id,user_id,stars,quote_status,published_quote,display_name,age_range,consent_at,from_team,via,created_at,reviewed_at,mira_user!inner(email,is_team,minor_at)";
 
 export interface Ratings {
   /** False when mira_review could not be read: the figures from it are then empty, not zero. */
@@ -34,6 +37,9 @@ export interface Ratings {
   /** The range's ratings that still stand: their average, how many, and how many have words. */
   average: number | null;
   averaged: number;
+  /** Of those, how many were given after the chat's ask and how many in Settings. */
+  afterAsk: number;
+  fromSettings: number;
   words: number;
   /** Quotes approved in the range (still shown), and quotes waiting for the team now. */
   approved: number;
@@ -67,6 +73,8 @@ export function ratingsOf(
     withdrawn: events("review_withdrawn").length,
     average: inRange.length ? inRange.reduce((n, r) => n + r.stars, 0) / inRange.length : null,
     averaged: inRange.length,
+    afterAsk: inRange.filter((r) => r.via !== "settings").length,
+    fromSettings: inRange.filter((r) => r.via === "settings").length,
     words: inRange.filter((r) => r.quote_status !== "none").length,
     approved: shown.filter((r) => r.reviewed_at && within(Date.parse(r.reviewed_at))).length,
     waiting: real.filter((r) => r.quote_status === "pending").length,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AGE_RANGES,
   NAME_MAX,
@@ -11,14 +11,16 @@ import {
   ageLabel,
 } from "@features/mira/reviews";
 import { miraApi } from "../api";
+import { HowWeCheck } from "./PublicReviews";
 
 /**
- * The thank-you ask (22 Nov 2026), in the chat, at a good moment only: after a 9 or 10 on the
+ * The thank-you ask (22 Nov 2026), in the chat, at a good moment: after a 9 or 10 on the
  * recommend question, or the third thumbs-up in one chat (MiraChat decides; never near a crisis,
- * an under-18 stop, a referral or the body check, and only for a signed-in person). Stars first,
- * then, if the person likes, one sentence for others, which leaves the browser only with its own
- * consent ticked. A person rates once; this browser is asked at most once in 30 days, and "Not
- * now" waits as long.
+ * an under-18 stop, a referral or the body check, and only for a signed-in person who has talked
+ * with Mira). It is one way in, never the only one: anyone who has talked with Mira can rate her
+ * at any time in Settings (SharedReviewSettings, the same RatingForm), every rating counts, high
+ * or low, and the ask says so ("How we check reviews"). A person rates once; this browser is
+ * asked at most once in 30 days, and "Not now" waits as long.
  */
 
 /** Days before this browser is asked again, after an ask or a "Not now". */
@@ -59,15 +61,8 @@ const FIELD =
 
 export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: () => void }) {
   const [ready, setReady] = useState(false);
-  const [stars, setStars] = useState(0);
-  const [hover, setHover] = useState(0);
-  const [quote, setQuote] = useState("");
   const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ words: boolean } | null>(null);
+  const [done, setDone] = useState<{ words: boolean; name: string } | null>(null);
   const close = useRef(onClose);
   const title = useRef<HTMLParagraphElement | null>(null);
   const thanks = useRef<HTMLParagraphElement | null>(null);
@@ -75,20 +70,23 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
   // focus. After a thumbs-up the button stays, so the focus does too.
   const takeFocus = useRef(from === "nps");
 
-  // Only someone who hasn't rated yet is asked; the first name offered to sign with comes along.
+  // Only someone who may rate (not rated yet, and talked with Mira) is asked; the first name
+  // offered to sign with comes along.
   useEffect(() => {
     let live = true;
-    void miraApi<{ review?: unknown; name?: string | null }>("/api/mira/reviews/mine").then((r) => {
-      if (!live) return;
-      if (!r.ok || r.data.review) {
-        if (takeFocus.current) document.getElementById("mira-input")?.focus();
-        return close.current();
+    void miraApi<{ canRate?: boolean; name?: string | null }>("/api/mira/reviews/mine").then(
+      (r) => {
+        if (!live) return;
+        if (!r.ok || !r.data.canRate) {
+          if (takeFocus.current) document.getElementById("mira-input")?.focus();
+          return close.current();
+        }
+        setName(r.data.name ?? "");
+        setReady(true);
+        markAsked();
+        void miraApi("/api/mira/event", { body: { type: "track", name: "review_prompt_shown" } });
       }
-      setName(r.data.name ?? "");
-      setReady(true);
-      markAsked();
-      void miraApi("/api/mira/event", { body: { type: "track", name: "review_prompt_shown" } });
-    });
+    );
     return () => {
       live = false;
     };
@@ -104,36 +102,6 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
   }, [done]);
 
   if (!ready) return null;
-  const words = quote.trim().replace(/\s+/g, " ");
-  const share = words.length > 0 && consent;
-  const signed = name.trim();
-  const nameOk = signed.length > 0 && signed.length <= NAME_MAX && NAME_PATTERN.test(signed);
-
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    if (!stars || busy || (share && !nameOk)) return;
-    setBusy(true);
-    setError(null);
-    const res = await miraApi("/api/mira/reviews", {
-      body: {
-        stars,
-        ...(share
-          ? {
-              words: {
-                quote: words,
-                name: signed,
-                ageRange: age || null,
-                consent: REVIEW_CONSENT_VERSION,
-              },
-            }
-          : {}),
-      },
-    });
-    setBusy(false);
-    // 409: rated already, on another device. Either way it's in.
-    if (res.ok || res.status === 409) return setDone({ words: share && res.ok });
-    setError(res.data.error ?? "Your rating didn't save. Please try again.");
-  }
 
   function notNow() {
     void miraApi("/api/mira/event", { body: { type: "track", name: "review_prompt_not_now" } });
@@ -156,7 +124,7 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
             tabIndex={-1}
             className="font-serif text-[17px] font-semibold outline-none"
           >
-            Thank you{done.words ? `, ${signed}` : ""}.
+            Thank you{done.words ? `, ${done.name}` : ""}.
           </p>
           <p className="mt-1 text-[14px] leading-normal text-ap-body">
             {done.words ? "Our team reads every quote before it shows. " : ""}You can see or take
@@ -168,152 +136,232 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
           </p>
         </div>
       ) : (
-        <form onSubmit={send} noValidate>
-          <p
-            ref={title}
-            id="mira-review-title"
-            tabIndex={-1}
-            className="font-serif text-[17px] font-semibold outline-none"
-          >
-            {heading}
-          </p>
-          <p className="mt-1 text-[14px] leading-normal text-ap-body">
-            Would you rate Mira? It helps others decide whether to talk to her.
-          </p>
-          <fieldset className="mt-2.5">
-            <legend className="sr-only">Your rating, 1 to 5 stars</legend>
-            <div className="-ml-2 flex" onMouseLeave={() => setHover(0)}>
-              {[1, 2, 3, 4, 5].map((n) => {
-                const lit = n <= (hover || stars);
-                return (
-                  <label
-                    key={n}
-                    onMouseEnter={() => setHover(n)}
-                    className="relative grid h-11 w-11 cursor-pointer place-items-center"
-                  >
-                    <input
-                      type="radio"
-                      name="mira-review-stars"
-                      value={n}
-                      checked={stars === n}
-                      onChange={() => setStars(n)}
-                      className="peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-full"
-                    />
-                    <svg
-                      aria-hidden="true"
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      className={`pointer-events-none rounded-full transition-[color,transform] duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ap-lavender peer-focus-visible:ring-offset-2 ${
-                        lit ? "text-ap-orange" : "text-[#d9d4e2]"
-                      } ${stars === n ? "motion-safe:animate-mira-pop" : ""}`}
-                      fill="currentColor"
-                    >
-                      <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
-                    </svg>
-                    <span className="sr-only">
-                      {n} {n === 1 ? "star" : "stars"}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+        <>
+          <RatingForm
+            via="ask"
+            name={name}
+            onSent={setDone}
+            head={
+              <>
+                <p
+                  ref={title}
+                  id="mira-review-title"
+                  tabIndex={-1}
+                  className="font-serif text-[17px] font-semibold outline-none"
+                >
+                  {heading}
+                </p>
+                <p className="mt-1 text-[14px] leading-normal text-ap-body">
+                  Would you rate Mira? It helps others decide whether to talk to her.
+                </p>
+              </>
+            }
+            extra={
+              <button
+                type="button"
+                onClick={notNow}
+                className="min-h-[44px] px-3.5 text-[14px] font-semibold text-ap-muted"
+              >
+                Not now
+              </button>
+            }
+          />
+          {/* How ratings are collected: the ask comes at good moments, so it says so. */}
+          <HowWeCheck align="start" />
+        </>
+      )}
+    </section>
+  );
+}
 
-          {stars ? (
-            <div className="mt-2 flex flex-col gap-3 motion-safe:animate-mira-in">
-              <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
-                <span>
-                  A sentence for others, if you like{" "}
-                  <span className="font-normal text-ap-muted">(optional)</span>
-                </span>
-                <textarea
-                  value={quote}
-                  onChange={(e) => setQuote(e.target.value)}
-                  maxLength={QUOTE_MAX}
-                  rows={2}
-                  placeholder="What has Mira helped you with?"
-                  className="min-h-[76px] resize-none rounded-2xl border border-ap-line px-4 py-3 text-[16px] font-normal leading-snug text-ap-ink outline-none transition-colors placeholder:text-ap-muted focus:border-ap-lavender"
+/**
+ * Stars first; then, if the person likes, one sentence for others, which leaves the browser only
+ * with its own consent ticked. The chat's thank-you ask and Settings' "Rate Mira" both use it, so
+ * the words and their consent are the same wherever someone rates.
+ */
+export function RatingForm({
+  via,
+  name: offered,
+  head,
+  extra,
+  onSent,
+}: {
+  via: "ask" | "settings";
+  /** The first name offered to sign with (the profile's), or "". */
+  name: string;
+  /** The heading and the question, at the top of the form. */
+  head: ReactNode;
+  /** Beside Send: the ask's "Not now". */
+  extra?: ReactNode;
+  /** In, or in already from another device (409). `words`: they went with it, signed `name`. */
+  onSent: (sent: { words: boolean; name: string }) => void;
+}) {
+  const [stars, setStars] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [quote, setQuote] = useState("");
+  const [name, setName] = useState(offered);
+  const [age, setAge] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const words = quote.trim().replace(/\s+/g, " ");
+  const share = words.length > 0 && consent;
+  const signed = name.trim();
+  const nameOk = signed.length > 0 && signed.length <= NAME_MAX && NAME_PATTERN.test(signed);
+
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    if (!stars || busy || (share && !nameOk)) return;
+    setBusy(true);
+    setError(null);
+    const res = await miraApi("/api/mira/reviews", {
+      body: {
+        stars,
+        via,
+        ...(share
+          ? {
+              words: {
+                quote: words,
+                name: signed,
+                ageRange: age || null,
+                consent: REVIEW_CONSENT_VERSION,
+              },
+            }
+          : {}),
+      },
+    });
+    setBusy(false);
+    // 409: rated already, on another device. Either way it's in.
+    if (res.ok || res.status === 409) return onSent({ words: share && res.ok, name: signed });
+    setError(res.data.error ?? "Your rating didn't save. Please try again.");
+  }
+
+  return (
+    <form onSubmit={send} noValidate>
+      {head}
+      <fieldset className="mt-2.5">
+        <legend className="sr-only">Your rating, 1 to 5 stars</legend>
+        <div className="-ml-2 flex" onMouseLeave={() => setHover(0)}>
+          {[1, 2, 3, 4, 5].map((n) => {
+            const lit = n <= (hover || stars);
+            return (
+              <label
+                key={n}
+                onMouseEnter={() => setHover(n)}
+                className="relative grid h-11 w-11 cursor-pointer place-items-center"
+              >
+                <input
+                  type="radio"
+                  name="mira-review-stars"
+                  value={n}
+                  checked={stars === n}
+                  onChange={() => setStars(n)}
+                  className="peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-full"
                 />
+                <svg
+                  aria-hidden="true"
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  className={`pointer-events-none rounded-full transition-[color,transform] duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ap-lavender peer-focus-visible:ring-offset-2 ${
+                    lit ? "text-ap-orange" : "text-[#d9d4e2]"
+                  } ${stars === n ? "motion-safe:animate-mira-pop" : ""}`}
+                  fill="currentColor"
+                >
+                  <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
+                </svg>
+                <span className="sr-only">
+                  {n} {n === 1 ? "star" : "stars"}
+                </span>
               </label>
-              {words ? (
-                <div className="flex flex-col gap-3 rounded-2xl bg-ap-ground p-3.5 motion-safe:animate-mira-in">
-                  <div className="flex flex-wrap gap-3">
-                    <label className="flex min-w-[150px] flex-1 flex-col gap-1.5 text-[13px] font-semibold">
-                      Shown as
-                      <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        maxLength={NAME_MAX}
-                        autoComplete="given-name"
-                        placeholder="First name or initials"
-                        className={FIELD}
-                      />
-                    </label>
-                    <label className="flex min-w-[130px] flex-col gap-1.5 text-[13px] font-semibold">
-                      <span>
-                        Age range <span className="font-normal text-ap-muted">(optional)</span>
-                      </span>
-                      <select
-                        value={age}
-                        onChange={(e) => setAge(e.target.value)}
-                        className={FIELD}
-                      >
-                        <option value="">Don&apos;t show</option>
-                        {AGE_RANGES.map((a) => (
-                          <option key={a} value={a}>
-                            {ageLabel(a)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <label className="flex items-start gap-3 text-[13px] leading-snug text-ap-body">
-                    <input
-                      type="checkbox"
-                      checked={consent}
-                      onChange={(e) => setConsent(e.target.checked)}
-                      className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
-                    />
-                    <span>{CONSENT_TEXT}</span>
-                  </label>
-                  {!consent ? (
-                    <p className="text-[12px] text-ap-muted">
-                      Without the tick, only your stars are sent.
-                    </p>
-                  ) : !nameOk ? (
-                    <p className="text-[12px] text-ap-bad-ink">
-                      Add a first name or initials (letters only).
-                    </p>
-                  ) : null}
-                </div>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {stars ? (
+        <div className="mt-2 flex flex-col gap-3 motion-safe:animate-mira-in">
+          <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
+            <span>
+              A sentence for others, if you like{" "}
+              <span className="font-normal text-ap-muted">(optional)</span>
+            </span>
+            <textarea
+              value={quote}
+              onChange={(e) => setQuote(e.target.value)}
+              maxLength={QUOTE_MAX}
+              rows={2}
+              placeholder="What was talking with Mira like?"
+              className="min-h-[76px] resize-none rounded-2xl border border-ap-line px-4 py-3 text-[16px] font-normal leading-snug text-ap-ink outline-none transition-colors placeholder:text-ap-muted focus:border-ap-lavender"
+            />
+          </label>
+          {words ? (
+            <div className="flex flex-col gap-3 rounded-2xl bg-ap-ground p-3.5 motion-safe:animate-mira-in">
+              <div className="flex flex-wrap gap-3">
+                <label className="flex min-w-[150px] flex-1 flex-col gap-1.5 text-[13px] font-semibold">
+                  Shown as
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={NAME_MAX}
+                    autoComplete="given-name"
+                    placeholder="First name or initials"
+                    className={FIELD}
+                  />
+                </label>
+                <label className="flex min-w-[130px] flex-col gap-1.5 text-[13px] font-semibold">
+                  <span>
+                    Age range <span className="font-normal text-ap-muted">(optional)</span>
+                  </span>
+                  <select value={age} onChange={(e) => setAge(e.target.value)} className={FIELD}>
+                    <option value="">Don&apos;t show</option>
+                    {AGE_RANGES.map((a) => (
+                      <option key={a} value={a}>
+                        {ageLabel(a)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="flex items-start gap-3 text-[13px] leading-snug text-ap-body">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+                />
+                <span>{CONSENT_TEXT}</span>
+              </label>
+              {!consent ? (
+                <p className="text-[12px] text-ap-muted">
+                  Without the tick, only your stars are sent.
+                </p>
+              ) : !nameOk ? (
+                <p className="text-[12px] text-ap-bad-ink">
+                  Add a first name or initials (letters only).
+                </p>
               ) : null}
             </div>
           ) : null}
+        </div>
+      ) : null}
 
-          <div className="mt-3 flex items-center justify-end gap-1">
-            <button
-              type="button"
-              onClick={notNow}
-              className="min-h-[44px] px-3.5 text-[14px] font-semibold text-ap-muted"
-            >
-              Not now
-            </button>
-            <button
-              type="submit"
-              disabled={!stars || busy || (share && !nameOk)}
-              className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
-            >
-              {busy ? "Sending…" : "Send"}
-            </button>
-          </div>
-          {error ? (
-            <p role="alert" className="mt-2 text-right text-[13px] text-ap-bad-ink">
-              {error}
-            </p>
-          ) : null}
-        </form>
-      )}
-    </section>
+      <div className="mt-3 flex items-center justify-end gap-1">
+        {extra}
+        <button
+          type="submit"
+          disabled={!stars || busy || (share && !nameOk)}
+          className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
+        >
+          {busy ? "Sending…" : "Send"}
+        </button>
+      </div>
+      {error ? (
+        <p role="alert" className="mt-2 text-right text-[13px] text-ap-bad-ink">
+          {error}
+        </p>
+      ) : null}
+    </form>
   );
 }

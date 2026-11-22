@@ -1,8 +1,9 @@
 /**
  * /api/mira/reviews/mine — what the signed-in person shared about Mira (Settings, and the ask).
  *
- *   GET                  → { review: MyReview | null, name }: their rating and words with their
- *                          status, and the first name the ask offers to sign with
+ *   GET                  → { review: MyReview | null, name, canRate }: their rating and words
+ *                          with their status, the first name the ask offers to sign with, and
+ *                          whether they may rate now (not yet rated, and talked with Mira)
  *   DELETE ?what=words   → takes their words back (the rating stays)
  *   DELETE ?what=all     → removes the rating and the words
  *   Either way they show nowhere from the next request (features/mira/server/reviews.ts).
@@ -12,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { NAME_MAX, NAME_PATTERN } from "@features/mira/reviews";
 import { isMinor } from "@features/mira/server/minor";
-import { getMyReview, withdrawReview } from "@features/mira/server/reviews";
+import { getMyReview, hasTalkedWithMira, withdrawReview } from "@features/mira/server/reviews";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -59,12 +60,13 @@ export async function GET(request: Request) {
   const g = await guard(request, false);
   if ("error" in g) return g.error;
   try {
-    const [review, profile] = await Promise.all([
+    const [review, profile, talked] = await Promise.all([
       getMyReview(g.account.id),
       getProfile(g.account.id).catch(() => null),
+      hasTalkedWithMira(g.account.id),
     ]);
     return NextResponse.json(
-      { review, name: firstName(profile?.name) },
+      { review, name: firstName(profile?.name), canRate: !review && talked },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
