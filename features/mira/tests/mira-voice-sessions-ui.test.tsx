@@ -3,8 +3,19 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const router = { replace: vi.fn(), push: vi.fn(), refresh: vi.fn() };
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  redirect: (to: string) => {
+    throw new Error(`redirect ${to}`);
+  },
+  notFound: () => {
+    throw new Error("not found");
+  },
+}));
+// The session pages' sign-in check: signed out unless a test says otherwise.
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => null }));
 
+import RecordingPage from "@/app/mira/recordings/[id]/page";
 import RecordingDetail from "@features/mira/ui/recordings/RecordingDetail";
 import RecordingsPage, { RecordingsCard } from "@features/mira/ui/recordings/Recordings";
 
@@ -350,6 +361,16 @@ describe("one voice session", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid request.");
     expect(screen.queryByText("Mira is only for adults.")).toBeNull();
+  });
+
+  it("sends a signed-out visit to sign in, then back to this session, not the list", async () => {
+    await expect(RecordingPage({ params: Promise.resolve({ id: ID }) })).rejects.toThrow(
+      `redirect /mira/start?next=${encodeURIComponent(`/mira/recordings/${ID}`)}`
+    );
+    // An address that can't be a session is no page, signed in or not.
+    await expect(RecordingPage({ params: Promise.resolve({ id: "x/../y" }) })).rejects.toThrow(
+      "not found"
+    );
   });
 
   it("says when it isn't there, with the way back", async () => {

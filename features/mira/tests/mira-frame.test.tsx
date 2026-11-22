@@ -350,11 +350,14 @@ describe("Home", () => {
   });
 
   it("sends a lost sign-in back to Home after signing in again", async () => {
+    // The way back is the page's own address (signInHref), as on every Mira page.
+    window.history.replaceState(null, "", "/mira/home");
     account({ status: 401 });
     render(<MiraHome hour={8} name="Robin" />);
     await waitFor(() =>
       expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fhome")
     );
+    window.history.replaceState(null, "", "/");
   });
 
   it("opens every chat on any screen, not only the latest four (CHAT-26)", async () => {

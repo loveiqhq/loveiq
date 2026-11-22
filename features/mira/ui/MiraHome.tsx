@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { useSupportCountry } from "./MiraLook";
 import { SupportPanel } from "./SupportPanel";
-import { miraApi } from "./api";
+import { miraApi, signInHref } from "./api";
 import ChecksHomeCard from "./checks/ChecksHomeCard";
 import CoachesCard from "./coaches/CoachesCard";
 import HomeSearch from "./coaches/HomeSearch";
@@ -80,7 +80,8 @@ export default function MiraHome({
     let live = true;
     void miraApi<Me>("/api/mira/me").then((r) => {
       if (!live) return;
-      if (r.status === 401) router.replace("/mira/start?next=%2Fmira%2Fhome");
+      // A lost sign-in signs in again and comes back here, as on every Mira page.
+      if (r.status === 401) router.replace(signInHref());
       else if (r.ok) setMe(r.data);
       else setFailed(true);
     });
