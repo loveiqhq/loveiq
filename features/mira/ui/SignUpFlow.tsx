@@ -600,7 +600,7 @@ export default function SignUpFlow({
                   How Mira handles your data
                 </Link>
               </Tick>
-              <p className="-mb-2 text-[13px] text-ap-muted">Optional</p>
+              <p className="-mb-2 text-[13px] text-ap-muted">Optional, for a new account</p>
               <Tick checked={useAssessment} onChange={setUseAssessment}>
                 Use my LoveIQ test result to tailor my coaching.
               </Tick>

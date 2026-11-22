@@ -108,9 +108,12 @@ export function fakeDb(
     if (method === "POST") {
       const items = (Array.isArray(body) ? body : [body]) as Row[];
       const upsert = prefer.includes("resolution=merge-duplicates");
+      // ON CONFLICT DO NOTHING: an existing row is left as it is and not returned.
+      const ignore = prefer.includes("resolution=ignore-duplicates");
       const written: Row[] = [];
       for (const item of items) {
         const at = rows.findIndex((r) => item[key] !== undefined && r[key] === item[key]);
+        if (at >= 0 && ignore) continue;
         if (at >= 0 && !upsert) return json({ code: "23505", message: "duplicate key" }, 409);
         const row: Row =
           at >= 0

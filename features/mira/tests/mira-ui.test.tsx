@@ -1407,6 +1407,8 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     const send = screen.getByRole("button", { name: "Send me a code" });
     const assessment = box(/Use my LoveIQ test result to tailor my coaching/);
     expect(assessment).not.toBeChecked();
+    // Round-3 R3-ACCT-4: only a new account takes it; a returning sign-in keeps the saved choice.
+    expect(screen.getByText("Optional, for a new account")).toBeInTheDocument();
     expect(screen.queryByText(/team may read replies I rate/)).toBeNull(); // the box went (21 Nov)
     fireEvent.click(box(/18 years of age or older/));
     fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
