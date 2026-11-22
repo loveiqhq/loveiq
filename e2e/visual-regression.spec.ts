@@ -18,7 +18,7 @@ import { test, expect } from "@playwright/test";
 //   survey-intro            last reviewed: 2026-08-23 — Linux baseline
 //   glossary-page           last reviewed: 2026-11-08 — Linux baseline, glossary phase 0 (#706)
 //   glossary-term-page      last reviewed: 2026-11-08 — Linux baseline, glossary phase 0 (#706)
-//   admin-login             last reviewed: 2026-08-23 — Linux baseline
+//   admin-login             last reviewed: 2026-11-22 — Linux baseline, the team-password form (#767, made by visual-regression.yml, update_baselines)
 //   nav-mobile-menu-open    last reviewed: 2026-10-13 — Linux baseline (Mobile Chrome), phone hero of #573
 //
 // The committed `*-win32.png` set predates the Linux baselines and is only used
