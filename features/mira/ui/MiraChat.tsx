@@ -126,6 +126,10 @@ export default function MiraChat({
   );
   // A calm line about the chat itself (it isn't here any more), read out as a status.
   const [notice, setNotice] = useState<string | null>(null);
+  // What a screen reader hears from the hidden live line: that Mira is writing, then her new reply
+  // (with her invitation), never the person's own words or the buttons and cards (round-2 audit
+  // A11Y-11). Set as each send goes, so a turn taken back never reads the reply before it again.
+  const [said, setSaid] = useState("");
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const [gate, setGate] = useState(false);
   const [consented, setConsented] = useState(signedIn);
@@ -375,6 +379,7 @@ export default function MiraChat({
     setMessages(next);
     setInput("");
     setSending(true);
+    setSaid("Mira is writing…");
     const res = await miraApi<{
       reply?: string;
       sources?: Source[];
@@ -410,6 +415,13 @@ export default function MiraChat({
     setSending(false);
     if (opts.voice) voice.answered(res); // she says the reply, or listens again
     if (res.data.gate) {
+      // Never sent (a crisis message never gets here: the server answers it): the words go back
+      // in the box and the page says why, rather than a message left waiting for a reply that
+      // can't come (round-3 R3-CHAT-4).
+      setMessages(messages);
+      setInput(message);
+      setSaid("");
+      setNotice(NOT_SENT);
       setGate(true);
       setFreeLeft(0);
       return;
@@ -418,6 +430,7 @@ export default function MiraChat({
       if (opts.session) local.saveSessionOpened(null); // not opened: a later visit tries again
       setMessages(messages);
       setInput(message);
+      setSaid(""); // the alert below says what went wrong
       setError({
         text: res.data.error ?? "Mira couldn't answer just now. Please try again.",
         signIn: res.status === 401 && res.data.signIn === true,
@@ -442,6 +455,7 @@ export default function MiraChat({
     ];
     replyAt.current = next.length;
     setMessages(withReply);
+    setSaid(`Mira: ${[res.data.reply, res.data.invitation].filter(Boolean).join(" ")}`);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
     // composer stays, and the server answers a crisis message whatever the limits. Nor after an
@@ -668,9 +682,9 @@ export default function MiraChat({
   const started = messages.length > 0;
   const last = messages.at(-1);
   // The sign-up card, never right under a reply that brought the support lines, nor after an
-  // under-18 stop; a later message that needs the account brings it back.
+  // under-18 stop; a later message that needs the account (held back, NOT_SENT) brings it back.
   const lastHadLines = last?.role === "assistant" && last.crisis === true;
-  const showGate = gate && !minor && !lastHadLines;
+  const showGate = gate && !minor && (!lastHadLines || notice === NOT_SENT);
 
   // A tapped prompt (or the consent step it opened) goes away with the welcome: focus moves to
   // the conversation rather than being lost, without opening a phone's keyboard.
@@ -718,20 +732,6 @@ export default function MiraChat({
     void send(SESSION_OPENING, { session: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, [session, signedIn]);
-
-  // What a screen reader hears: that Mira is writing, then her new reply (with her invitation),
-  // never the person's own words or the buttons and cards (round-2 audit A11Y-11).
-  let fresh = messages.length;
-  while (fresh > 0 && messages[fresh - 1]!.role === "assistant" && messages[fresh - 1]!.live)
-    fresh--;
-  const said = sending
-    ? "Mira is writing…"
-    : fresh < messages.length
-      ? `Mira: ${messages
-          .slice(fresh)
-          .map((m) => m.content)
-          .join(" ")}`
-      : "";
 
   const empty = !started || atStart;
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
@@ -1413,6 +1413,8 @@ const CHIP =
   "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-ap-mist hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
 const FREE_LABEL =
   ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
+/** A message after the free one(s), back in the box (R3-CHAT-4). */
+const NOT_SENT = "That message wasn't sent: create a free account to send it.";
 const ICON_BUTTON =
   "relative inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10 sm:w-auto sm:px-3";
 /** A rating is final: once one thumb is chosen, the other says it's unavailable (CHAT-6). */

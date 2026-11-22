@@ -958,11 +958,12 @@ describe("Welcome", () => {
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns).toHaveLength(2);
-    // The composer stays there too: what is sent from it belongs to that chat, which comes back.
+    // The composer stays there too: what is sent from it belongs to that chat, which comes back
+    // (and a message the account must send waits in the box, R3-CHAT-4).
     replies["POST /api/mira/chat"] = () => ({ body: { gate: true, freeLeft: 0 } });
     typeAndSend("one more thing");
-    expect(await screen.findByText("one more thing")).toBeInTheDocument();
-    expect(screen.getByText("Try this.")).toBeInTheDocument();
+    expect(await screen.findByText("Try this.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("one more thing");
     expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
   });
 
@@ -1210,13 +1211,36 @@ describe("Free messages", () => {
     expect(screen.queryByText("Keep talking with Mira, for free")).toBeNull();
     typeAndSend("and then?");
     expect(await screen.findByText("Keep talking with Mira, for free")).toBeInTheDocument();
-    // The message stays in the chat that comes along with the account.
-    expect(screen.getByText("and then?")).toBeInTheDocument();
     expect(calls("POST /api/mira/chat").map((b) => b.message)).toEqual([
       "hi",
       "everything feels dark",
       "and then?",
     ]);
+  });
+
+  // Round-3 R3-CHAT-4: the gated message stayed as a sent bubble with no reply, the live line
+  // went quiet after "Mira is writing…", and nothing said it never reached Mira.
+  it("puts a message the free account must send back in the box, and says so", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = (b) =>
+      b.message === "hi"
+        ? { body: { reply: "Try this.", freeLeft: 0 } }
+        : { body: { gate: true, freeLeft: 0 } };
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Keep talking with Mira, for free");
+    const said = document.querySelector<HTMLElement>(".sr-only[aria-live='polite']")!;
+    typeAndSend("and then?");
+    const notSent = await screen.findByText(
+      "That message wasn't sent: create a free account to send it."
+    );
+    expect(notSent).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("and then?");
+    // No bubble left waiting for a reply, here or in the chat the account brings along.
+    expect(document.querySelectorAll("[data-msg]")).toHaveLength(2);
+    await waitFor(() => expect(localStorage.getItem("mira.chat.v1")).not.toContain("and then?"));
+    // Nor is the reply before it read out a second time.
+    expect(said).toHaveTextContent("");
   });
 
   it("isn't put beside a crisis reply: the person can still write", async () => {
