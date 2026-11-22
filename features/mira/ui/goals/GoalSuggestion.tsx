@@ -13,10 +13,21 @@ export const GOAL_STARTER = "Could you help me find a first small goal for this 
 /**
  * "Add as a goal" under a reply of Mira's that offers one ([[GOAL:…]], safety.ts). Signed in:
  * one tap saves it, marked as Mira's suggestion, then "Added". Signed out: goals live in the
- * free account, so the tap explains that and leads to the usual sign-up.
+ * free account, so the tap explains that and leads to the usual sign-up. A reopened chat shows
+ * it again (the offer is kept with the reply), as "Added" when the goals already hold it.
  */
-export function GoalSuggestion({ text, signedIn }: { text: string; signedIn: boolean }) {
-  const [state, setState] = useState<"offer" | "saving" | "added" | "account">("offer");
+export function GoalSuggestion({
+  text,
+  signedIn,
+  added = false,
+}: {
+  text: string;
+  signedIn: boolean;
+  added?: boolean;
+}) {
+  const [state, setState] = useState<"offer" | "saving" | "added" | "account">(
+    added ? "added" : "offer"
+  );
   const [error, setError] = useState<string | null>(null);
 
   async function add() {

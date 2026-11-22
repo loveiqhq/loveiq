@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { PrimaryButton } from "./MiraShell";
 import { Modal } from "./SupportPanel";
@@ -12,8 +12,13 @@ export type Style = Partial<
 type Scale = { key: keyof Style; label: string; left: string; right: string };
 const SCALES = miraConfig.styleScales as Scale[];
 
-/** Board 03 "How Mira coaches you": five lines, the middle is balanced. */
+/**
+ * Board 03 "How Mira coaches you": five lines, the middle is balanced. Each line is a native radio
+ * group (as the journal's check-in), so it is one Tab stop and the arrow keys move the choice; the
+ * unselected points are ringed in muted, 4.5:1 on the page (round-2 audit A11Y-9 / CHAT-12).
+ */
 export function StyleScales({ value, onChange }: { value: Style; onChange: (v: Style) => void }) {
+  const id = useId();
   return (
     <div className="flex flex-col divide-y divide-ap-line rounded-2xl border border-ap-line px-4">
       {SCALES.map((s) => {
@@ -21,21 +26,26 @@ export function StyleScales({ value, onChange }: { value: Style; onChange: (v: S
         return (
           <fieldset key={s.key} className="py-3">
             <legend className="text-[14px] font-bold">{s.label}</legend>
-            <div role="radiogroup" aria-label={s.label} className="mt-1 flex justify-between">
+            <div className="mt-1 flex justify-between">
               {[1, 2, 3, 4, 5].map((n) => (
-                <button
+                <label
                   key={n}
-                  type="button"
-                  role="radio"
-                  aria-checked={n === v}
-                  aria-label={`${s.label} ${n} of 5`}
-                  onClick={() => onChange({ ...value, [s.key]: n })}
-                  className="flex h-11 w-11 items-center justify-center"
+                  className="flex h-11 w-11 cursor-pointer items-center justify-center"
                 >
-                  <span
-                    className={`rounded-full border-2 ${n === v ? "h-5 w-5 border-ap-purple bg-ap-purple" : "h-3.5 w-3.5 border-ap-mist bg-white"}`}
+                  <input
+                    type="radio"
+                    name={`${id}-${s.key}`}
+                    value={n}
+                    checked={n === v}
+                    onChange={() => onChange({ ...value, [s.key]: n })}
+                    aria-label={`${s.label} ${n} of 5`}
+                    className="peer sr-only"
                   />
-                </button>
+                  <span
+                    aria-hidden="true"
+                    className={`rounded-full border-2 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple ${n === v ? "h-5 w-5 border-ap-purple bg-ap-purple" : "h-3.5 w-3.5 border-ap-muted bg-white"}`}
+                  />
+                </label>
               ))}
             </div>
             <div className="flex justify-between gap-3 text-[13px]">
