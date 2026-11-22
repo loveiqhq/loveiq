@@ -261,6 +261,16 @@ describe("AP Payment · #11, the €1.99 page test", () => {
     expect(build([], [], { from: "2026-10-27", to: "2026-11-24", today: "2026-11-25" }).note).toBe(
       "Since 17 Nov 2026 · live"
     );
+    // Only a range starting after the switch-on makes its figures the range's, not the test's.
+    expect(
+      build([], [], { from: "2026-11-18", to: "2026-11-24", today: "2026-11-25" }).startsLater
+    ).toBe(true);
+    expect(build([], [], { from: DAY, to: "2026-11-20", today: "2026-11-25" }).startsLater).toBe(
+      false
+    );
+    expect(
+      build([], [], { from: "2026-10-27", to: "2026-11-24", today: "2026-11-25" }).startsLater
+    ).toBe(false);
   });
 
   it("writes no long dash in anything it shows", () => {

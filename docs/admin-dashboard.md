@@ -44,16 +44,27 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 | Survey                 | `/admin/ap/assessment-a/survey`          | [`ApSurvey.tsx`](../features/admin/ui/ap/ApSurvey.tsx)                 | `GET /api/admin/ap/survey`, `GET /api/admin/ap/survey/answers`                    |
 | Report                 | `/admin/ap/assessment-a/report`          | [`ApReport.tsx`](../features/admin/ui/ap/ApReport.tsx)                 | `GET /api/admin/ap/report`                                                        |
 | Payment                | `/admin/ap/assessment-a/payment`         | [`ApPayment.tsx`](../features/admin/ui/ap/ApPayment.tsx)               | `GET /api/admin/ap/payment`                                                       |
-| Pay to start           | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
+| Funnel and paywall     | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
 | Unlock feedback        | `/admin/ap/assessment-a/unlock-feedback` | [`ApUnlockFeedback.tsx`](../features/admin/ui/ap/ApUnlockFeedback.tsx) | `GET /api/admin/ap/unlock-feedback`                                               |
 | Mira (beta)            | `/admin/ap/mira`                         | [`ApMira.tsx`](../features/admin/ui/ap/ApMira.tsx)                     | `GET /api/admin/ap/mira`                                                          |
 | Emails (Assessment A)  | `/admin/ap/assessment-a/emails`          | [`ApEmails.tsx`](../features/admin/ui/ap/ApEmails.tsx)                 | `GET /api/admin/ap/emails?scope=assessment`                                       |
 | Catalog (data sources) | `/admin/ap/sources`                      | [`ApSources.tsx`](../features/admin/ui/ap/ApSources.tsx)               | `GET`/`PUT /api/admin/ap/catalog`, `GET /api/admin/ap/catalog/rows`               |
 | Raw data explorer      | `/admin/ap/explorer`                     | [`ApExplorer.tsx`](../features/admin/ui/ap/ApExplorer.tsx)             | `GET /api/admin/ap/explorer`, `POST /api/admin/ap/explorer/unlock`, saved filters |
 
-Pay to start sets each funnel's steps out as funnel bands, with the market's reference rate
+Funnel and paywall is the Pay to start page, renamed by Marcus on 19 Nov 2026 when pay to start
+was paused. The running paywall test (#11) sits on top, with the same readout as Payment's. Under
+it, the free funnel before the paywall (1–22 Oct 2026, whatever the range) and the €1.99 page's
+funnel over the range: each funnel's steps as funnel bands, with the market's reference rate
 beside ours where a source exists (named under the cards), its money with profit per paying
-customer and per survey completion (Traffic's formula), and an info card on every figure.
+customer and per survey completion (Traffic's formula), and an info card on every figure. The
+pay-to-start funnels are still built (`payToStartFor`) for the Dashboard and Landing.
+
+Survey shows Mark's sheets between the questions (his Survey copy board, 17–18 Nov 2026): a
+Sheets section above the demographics, each sheet's row in the question funnel (in survey order),
+and numbered pins on the time and drop-out charts. Their figures come from the sheets' own PostHog
+events (`survey_sheet_shown`, `survey_sheet_closed`), sent by every browser that doesn't block
+PostHog. The
+question funnel sorts by two columns, and Question detail has a question dropdown.
 Landing's pay-to-start table counts "Started survey" from `prepaid_report_access.survey_started_at`,
 recorded from 28 Oct 2026. Traffic shows each search ad as searchers see it, with its
 keywords' spend, cost per survey, payment rate and revenue per survey.

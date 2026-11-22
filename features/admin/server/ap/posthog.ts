@@ -10,6 +10,7 @@
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { countryCodesByTier } from "@features/pricing/logic/reportPricing";
+import { isSurveySheetId, type SurveySheetId } from "@features/survey/surveySheets";
 import { hogqlTable } from "@features/ux-review/server/review";
 import logger from "@shared/observability/logger";
 
@@ -418,6 +419,146 @@ export async function fetchSurveyIntroClicks(
       silhouette: silhouette ?? 0,
     },
   };
+}
+
+/** The first day a sheet between the survey's questions opened on the live site (17 Nov 2026). */
+export const SHEETS_FROM = "2026-11-17";
+
+/** What PostHog saw of the sheets between the survey's questions, one sheet or all of them. */
+export interface SheetFigures {
+  /** People it opened for, in the range (PostHog's person: once however many runs). */
+  saw: number;
+  /** Of them, those whose outcome is known: they closed it, or opened it 30 minutes ago or more. */
+  settled: number;
+  /** Opened it, never closed it, and 30 minutes have passed: they left the survey on it. */
+  leftOpen: number;
+  /** Closed it, by "Keep going", the scrim, a swipe, Esc, Back or the map's Previous. */
+  closed: number;
+  /** How long it stayed open before it was closed, the median over those who closed it. */
+  medianMs: number | null;
+  /** Closed it with its box ticked: the State of Desire sheet's "Email me a 5€ off code". */
+  ticked: number;
+}
+
+export interface SurveySheetsSeen {
+  /** Each sheet PostHog saw open for these runs; a sheet nobody met is missing. */
+  bySheet: Partial<Record<SurveySheetId, SheetFigures>>;
+  /** Every sheet together: the same figures over all of them. */
+  all: SheetFigures;
+}
+
+/** The sheets in each question order's runs, as the page's question funnel splits them. */
+export type SurveySheetsByOrder = Record<"survey" | "test", SurveySheetsSeen>;
+
+const NO_SHEET: SheetFigures = {
+  saw: 0,
+  settled: 0,
+  leftOpen: 0,
+  closed: 0,
+  medianMs: null,
+  ticked: 0,
+};
+
+/**
+ * The sheets between the survey's questions (features/survey/surveySheets.ts), from their own
+ * events: survey_sheet_shown when one opens (once per run), survey_sheet_closed when it goes,
+ * with how long it was open and, for the State of Desire sheet, whether its box was ticked.
+ * PostHog is not consent-gated on the site, so it sees nearly every survey run (not blockers').
+ *
+ * Counted as the question funnel counts: the runs begun in the range (a person's first survey
+ * event, looked for up to 30 days back), split by the order their questions came in. A run in
+ * the new order (C13's, everyone's since the test ended) answers 03011 before 01005; one in the
+ * old order, 01005 first; every run answers one of them third, before any sheet. A person counts
+ * once per sheet. Left with it open: never closed it and answered nothing after it opened (a
+ * reload while it was open never reopens it and sends no close, yet the run carries on). A sheet
+ * opened in the last 30 minutes and not closed yet is still being read, neither left nor settled. Mark's measures (17 Nov 2026), signed off with the sheets' Test
+ * Repository row at the 19 Nov sync.
+ */
+export async function fetchSurveySheets(
+  from: string,
+  to: string
+): Promise<PostHogResult<SurveySheetsByOrder>> {
+  const { since, until } = windowOf({ from, to });
+  const staff = await notStaff();
+  const settledAt = "now() - INTERVAL 30 MINUTE";
+  // Left with it open: never closed it, answered nothing after it opened (a reload while it was
+  // open never reopens it and sends no close, but the run carries on), and 30 minutes have passed.
+  const figures = `count() AS saw,
+           countIf(closes > 0 OR went_on OR shown_at < ${settledAt}) AS settled,
+           countIf(closes = 0 AND NOT went_on AND shown_at < ${settledAt}) AS left_open,
+           countIf(closes > 0) AS closed,
+           quantileIf(0.5)(ms, closes > 0) AS median_ms,
+           countIf(ticked = 1) AS ticked`;
+  const q = `
+    WITH runs AS (
+      SELECT person_id,
+             minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
+             maxIf(timestamp, event = 'survey_answer') AS last_answer
+      FROM events
+      WHERE event IN ('survey_started', 'survey_answer')
+        AND properties.$host = '${HOST}'
+        AND timestamp >= ${at(since)} - INTERVAL 30 DAY AND timestamp < ${at(until)} + INTERVAL 1 DAY${staff}
+      GROUP BY person_id
+      HAVING began >= ${at(since)} AND began < ${at(until)}
+    ),
+    per AS (
+      SELECT person_id,
+             toString(properties.sheet) AS sheet,
+             countIf(event = 'survey_sheet_shown') AS shows,
+             minIf(timestamp, event = 'survey_sheet_shown') AS shown_at,
+             countIf(event = 'survey_sheet_closed') AS closes,
+             maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms,
+             maxIf(if(toString(properties.ticked) = 'true', 1, 0), event = 'survey_sheet_closed') AS ticked
+      FROM events
+      WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
+        AND properties.$host = '${HOST}'
+        AND timestamp >= ${at(since)} AND timestamp < ${at(until)} + INTERVAL 1 DAY${staff}
+      GROUP BY person_id, sheet
+    ),
+    seen AS (
+      SELECT per.*,
+             runs.last_answer > per.shown_at AS went_on,
+             multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
+                     toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
+      FROM per INNER JOIN runs ON per.person_id = runs.person_id
+      WHERE per.shows > 0
+    )
+    SELECT * FROM (
+      SELECT run_order, sheet, ${figures} FROM seen WHERE run_order != '' GROUP BY run_order, sheet
+      UNION ALL
+      SELECT run_order, '' AS sheet, ${figures} FROM seen WHERE run_order != '' GROUP BY run_order
+    )
+    LIMIT 30`;
+  const r = await rows(q, 30);
+  if (!r.ok) return r;
+  const empty = (): { bySheet: Array<[SurveySheetId, SheetFigures]>; all: SheetFigures } => ({
+    bySheet: [],
+    all: NO_SHEET,
+  });
+  const orders = { survey: empty(), test: empty() };
+  for (const row of r.value) {
+    const [order, sheet, saw, settled, leftOpen, closed, medianMs, ticked] = row;
+    if (order !== "survey" && order !== "test") continue;
+    const figures: SheetFigures = {
+      saw: Number(saw) || 0,
+      settled: Number(settled) || 0,
+      leftOpen: Number(leftOpen) || 0,
+      closed: Number(closed) || 0,
+      // PostHog writes a median of nothing as NaN (or null): no close, no time.
+      medianMs: Number(closed) > 0 && Number.isFinite(Number(medianMs)) ? Number(medianMs) : null,
+      ticked: Number(ticked) || 0,
+    };
+    const into = order === "test" ? orders.test : orders.survey;
+    if (sheet === "") into.all = figures;
+    else if (isSurveySheetId(sheet)) into.bySheet.push([sheet, figures]);
+  }
+  const done = (o: ReturnType<typeof empty>): SurveySheetsSeen => ({
+    bySheet: Object.fromEntries(o.bySheet),
+    all: o.all,
+  });
+  return { ok: true, value: { survey: done(orders.survey), test: done(orders.test) } };
 }
 
 export interface ReportReturns {

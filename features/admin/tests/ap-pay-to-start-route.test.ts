@@ -30,9 +30,16 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import { GET } from "@/app/api/admin/ap/pay-to-start/route";
-import { clearFactsCache } from "@features/admin/server/ap/facts";
+import { clearFactsCache, fetchFacts } from "@features/admin/server/ap/facts";
 import { clearTeamCache } from "@features/admin/server/ap/team";
-import { freeAdsOnly, type PtsPayload } from "@features/admin/server/ap/pay-to-start";
+import {
+  freeAdsOnly,
+  funnelAndPaywall,
+  payToStartFor,
+  type FunnelPaywallPayload,
+  type PtsPayload,
+} from "@features/admin/server/ap/pay-to-start";
+import { reportingDay } from "@shared/time/reporting-day";
 import { spendBlocked } from "@features/admin/server/ap/metrics";
 
 import { sub } from "./ap-fixtures";
@@ -42,6 +49,20 @@ const req = () =>
     "http://localhost/api/admin/ap/pay-to-start?period=custom&from=2026-10-20&to=2026-10-20"
   );
 
+/**
+ * Every funnel as the builder gives it (payToStartFor): what Focus and Landing read, and what this
+ * page showed before Marcus made it Funnel and paywall (19 Nov 2026), which keeps two of them.
+ */
+const figures = async (): Promise<PtsPayload> => {
+  const range = { from: "2026-10-20", to: "2026-10-20" };
+  const body = await payToStartFor(
+    range,
+    await fetchFacts(range.from, range.to),
+    reportingDay(new Date())
+  );
+  if (!body) throw new Error("payToStartFor gave nothing");
+  return body;
+};
 const json = (body: unknown, init?: ResponseInit) =>
   new Response(JSON.stringify(body), { status: 200, ...init });
 
@@ -199,9 +220,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
       { day: "2026-10-20", offer: "full", utm_source: "google" },
       { day: "2026-10-20", offer: "pre", utm_source: null },
     ];
-    const res = await GET(req());
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as PtsPayload;
+    const body = await figures();
     const by = (k: string) => body.funnels.find((f) => f.key === k)!;
     // 700 was paid for first, 702 bought with a 100% code and 704 paid then refunded: pay to
     // start's. 701's and 703's browsers never paid: free surveys like anyone's, with sub 1.
@@ -309,7 +328,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     ];
     // The team's accounts (ap_team_user): 9002 is fatih@loveiq.org.
     rows["/rest/v1/ap_team_user?"] = [{ id: 9002 }];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const after = body.funnels.find((f) => f.key === "after")!;
     // 10 starts; only 701's is a paid buyer's that ap_facts counted.
     expect(after.steps.find((s) => s.label === "Survey started")!.n).toBe(9);
@@ -351,7 +370,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
       // E07's gift and the feedback grant are EUR 0: never revenue.
       { personal_report_id: 9700, amount: 0, plan: "initial", journey: null },
     ];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const pre = body.funnels.find((f) => f.key === "pre")!;
     expect(pre.all).toMatchObject({ paid: 1, finished: 1, revenue: 21.98 });
     expect(pre.steps.find((s) => s.label === "Report opened")!.n).toBe(1);
@@ -389,7 +408,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
       { survey_submission_id: 700 },
       { survey_submission_id: 1 },
     ];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const p = paths();
     const full = p.find((x) => x.startsWith("/rest/v1/payment?status=eq.refunded"))!;
     const part = p.find((x) => x.startsWith("/rest/v1/payment?status=eq.succeeded"))!;
@@ -429,7 +448,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     rows["/rest/v1/payment_webhook_event?event_type=eq.charge.dispute.created"] = [
       { stripe_payment_intent_id: "pi_9" },
     ];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const p = paths();
     expect(p.find((x) => x.startsWith("/rest/v1/prepaid_report_access?"))).toContain(
       "stripe_payment_intent_id"
@@ -450,9 +469,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
       mockFetchAllRows.mockImplementation(async (path: string) =>
         path.startsWith(failing) ? null : respond(path)
       );
-      const res = await GET(req());
-      expect(res.status, failing).toBe(200);
-      const body = (await res.json()) as PtsPayload;
+      const body = await figures();
       for (const f of body.funnels) expect(f.refunds, `${failing} ${f.key}`).toBeUndefined();
     }
   });
@@ -466,7 +483,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
         initial_gate_seen_at: "2026-10-20T10:01:00Z",
       },
     ];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const gate = body.funnels.find((f) => f.key === "gate")!;
     expect(gate.live).toBe(true);
     expect(gate.all.finished).toBe(1);
@@ -495,7 +512,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
       // Since #700 the browser's own Back opens it too: a way out, never an Unlock press.
       { survey_submission_id: 1, event_type: "initial_gate_browser_back", place: null },
     ];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const gate = body.funnels.find((f) => f.key === "gate")!;
     const step = (label: string) => gate.steps.find((s) => s.label === label)!;
     expect(step("Pressed Unlock").n).toBe(1);
@@ -523,7 +540,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     rows["/rest/v1/analytics_event?survey_submission_id"] = [
       { survey_submission_id: 1, event_type: "initial_gate_back", place: null },
     ];
-    const body = (await (await GET(req())).json()) as PtsPayload;
+    const body = await figures();
     const gate = body.funnels.find((f) => f.key === "gate")!;
     expect(gate.steps.find((s) => s.label === "Saw the €1.99 page")!.detail).toBe(
       "1 pressed “Not ready to unlock yet” · 0 pressed the browser's Back"
@@ -534,9 +551,7 @@ describe("GET /api/admin/ap/pay-to-start", () => {
     mockFetchAllRows.mockImplementation(async (path: string) =>
       path.startsWith("/rest/v1/funnel_event?") ? null : respond(path)
     );
-    const res = await GET(req());
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as PtsPayload;
+    const body = await figures();
     expect(body.notes).toContain("Pay to start's visits could not be read just now.");
     expect(body.funnels.find((f) => f.key === "full")!.all.visits).toBeNull();
   });
@@ -612,5 +627,170 @@ describe("Free survey's ad spend (freeAdsOnly)", () => {
     expect(mockAds).not.toHaveBeenCalled();
     // Without the check, still blank as before.
     expect(spendBlocked(scope)).toMatch(/whole Google Ads account's/);
+  });
+});
+
+describe("GET: Marcus's Funnel and paywall (19 Nov 2026)", () => {
+  const apFactsBodies = () =>
+    mockSupabaseFetch.mock.calls
+      .filter(([path]) => path === "/rest/v1/rpc/ap_facts")
+      .map(([, init]) => String((init as RequestInit | undefined)?.body ?? ""));
+
+  it("keeps the free funnel before the paywall (1–22 Oct) and the €1.99 page's, never pay to start", async () => {
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FunnelPaywallPayload;
+    expect(body.funnels.map((f) => f.key)).toEqual(["after", "gate"]);
+    expect(body.funnels[0]).toMatchObject({
+      label: "Before the paywall",
+      period: "Free report · 1 Oct – 22 Oct 2026",
+    });
+    expect(body.funnels[1]!.label).toBe("€1.99 after the survey");
+    expect(body.notes.filter((n) => /pay[- ]to[- ]start|Pay after the report/i.test(n))).toEqual(
+      []
+    );
+    // The free funnel is read over its own stretch, whatever the range picked.
+    expect(apFactsBodies().some((b) => b.includes("2026-10-01") && b.includes("2026-10-22"))).toBe(
+      true
+    );
+    // #11 began on 17 Nov: a range before it says why, and reads none of its rows.
+    expect(body.gateTest.arms).toEqual([]);
+    expect(body.gateTest.why).toMatch(/^Not running in this range/);
+    expect(
+      mockFetchAllRows.mock.calls.some(([path]) =>
+        String(path).startsWith("/rest/v1/survey_submission?status=eq.completed")
+      )
+    ).toBe(false);
+  });
+
+  it("reads #11 per half from its first day, as AP › Payment does", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      path === "/rest/v1/rpc/ap_facts"
+        ? json(
+            facts({
+              subs: [
+                sub({ id: 801, day: "2026-11-18", at: "2026-11-18T10:00:00Z" }),
+                sub({ id: 802, day: "2026-11-18", at: "2026-11-18T11:00:00Z" }),
+              ],
+            })
+          )
+        : path.startsWith("/rest/v1/ap_team_user?")
+          ? json(respond(path))
+          : json(null, { status: 404 })
+    );
+    rows["/rest/v1/survey_submission?status=eq.completed"] = [
+      { id: 801, session_id: null, utm_tracker: JSON.stringify({ gate_reveal_arm: "control" }) },
+      { id: 802, session_id: null, utm_tracker: JSON.stringify({ gate_reveal_arm: "reveal" }) },
+    ];
+    rows["/rest/v1/personal_report?initial_gate_seen_at"] = [{ survey_submission_id: 802 }];
+    const res = await GET(
+      new Request(
+        "http://localhost/api/admin/ap/pay-to-start?period=custom&from=2026-11-17&to=2026-11-21"
+      )
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FunnelPaywallPayload;
+    expect(body.gateTest.why).toBeNull();
+    expect(body.gateTest.arms.map((a) => [a.arm, a.finishers, a.reached])).toEqual([
+      ["control", 1, 0],
+      ["reveal", 1, 1],
+    ]);
+    expect(body.gateTest.verdict).toMatch(/^Not enough data to call this yet/);
+  });
+
+  it("still loads the page when #11's halves can't be read, and says so in its section", async () => {
+    mockFetchAllRows.mockImplementation(async (path: string) =>
+      path.startsWith("/rest/v1/survey_submission?status=eq.completed") ? null : respond(path)
+    );
+    const res = await GET(
+      new Request(
+        "http://localhost/api/admin/ap/pay-to-start?period=custom&from=2026-11-17&to=2026-11-21"
+      )
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FunnelPaywallPayload;
+    expect(body.gateTest.why).toBe("Who is in which half could not be read just now.");
+    expect(body.funnels.map((f) => f.key)).toEqual(["after", "gate"]);
+  });
+});
+
+describe("funnelAndPaywall: the week chart's free line ends where the €1.99 page's begins", () => {
+  it("blanks the free funnel from the gate's first week, keeping the weeks before it", () => {
+    const fig = (cac: number | null, cvr: number | null, roas: number | null) => ({
+      cac,
+      cvr,
+      roas,
+    });
+    const none = fig(null, null, null);
+    const week = (from: string, after: ReturnType<typeof fig>, gate: ReturnType<typeof fig>) => ({
+      from,
+      to: from,
+      label: from,
+      funnels: { after, full: none, pre: none, gate },
+    });
+    const current: PtsPayload = {
+      range: { from: "2026-10-19", to: "2026-11-08" },
+      funnels: [],
+      weeks: [
+        week("2026-10-19", fig(20, 0.05, 0.2), none),
+        // 26 Oct: the page went on on the 27th; a finisher outside its cohort is not "before".
+        week("2026-10-26", fig(90, 0.001, 0.01), fig(95, 0.002, 0.02)),
+        week("2026-11-02", fig(400, 0.0005, 0.005), fig(50, 0.004, 0.04)),
+      ],
+      notes: [],
+    };
+    const out = funnelAndPaywall(
+      current,
+      { ...current, weeks: [] },
+      {
+        test: "#11",
+        note: "",
+        arms: [],
+        lift: null,
+        confidence: null,
+        liftWhy: null,
+        verdict: "",
+        why: "x",
+      }
+    );
+    expect(out.weeks.map((w) => w.funnels.after)).toEqual([fig(20, 0.05, 0.2), none, none]);
+    expect(out.weeks.map((w) => w.funnels.gate)).toEqual(current.weeks.map((w) => w.funnels.gate));
+    // A range wholly before the page keeps every free week.
+    const early = { ...current, weeks: [current.weeks[0]!] };
+    expect(funnelAndPaywall(early, early, out.gateTest).weeks[0]!.funnels.after).toEqual(
+      fig(20, 0.05, 0.2)
+    );
+  });
+});
+
+describe("funnelAndPaywall: the notes of both stretches", () => {
+  it("keeps the free funnel's own notes, named by its stretch, and drops pay to start's", () => {
+    const shell = (notes: string[]): PtsPayload => ({
+      range: { from: "2026-11-17", to: "2026-11-21" },
+      funnels: [],
+      weeks: [],
+      notes,
+    });
+    const out = funnelAndPaywall(
+      shell(["Today is still running: its figures are so far, and the ads lag a few hours."]),
+      shell([
+        "Google Ads could not be read just now.",
+        "No ad in this range lands on a pay-to-start page yet.",
+      ]),
+      {
+        test: "#11",
+        note: "",
+        arms: [],
+        lift: null,
+        confidence: null,
+        liftWhy: null,
+        verdict: "",
+        why: "x",
+      }
+    );
+    expect(out.notes).toEqual([
+      "Today is still running: its figures are so far, and the ads lag a few hours.",
+      "Before the paywall (1 Oct – 22 Oct 2026): Google Ads could not be read just now.",
+    ]);
   });
 });

@@ -89,6 +89,11 @@ export interface GateTestBlock {
   verdict: string;
   /** Why the section is blank, or null. */
   why: string | null;
+  /**
+   * The range starts after the switch-on, so its figures are the range's, not the whole test's
+   * ("cut to this range"): the page says "in this range", never "since switch-on".
+   */
+  startsLater?: boolean;
 }
 
 /**
@@ -272,5 +277,6 @@ export function buildGateTest(input: {
     liftWhy: why,
     verdict,
     why: null,
+    startsLater: rangeFrom > start,
   };
 }
