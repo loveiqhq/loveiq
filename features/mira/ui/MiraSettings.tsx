@@ -18,7 +18,7 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { MiraFrame, PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
+import { miraApi, useSignedOut, type ApiResult } from "./api";
 import { AdultsOnly, ConfirmDelete } from "./kit";
 import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
@@ -209,16 +209,17 @@ export default function MiraSettings({
 
   function load() {
     void miraApi<{ profile: Profile; minor?: boolean }>("/api/mira/me").then((r) => {
-      if (r.status === 401) router.replace(signInHref());
-      else if (r.ok) {
+      // A 401 shows SignedOutNotice (useSignedOut hears it) and never navigates by itself: a
+      // redirect can bounce with /mira/start while the page still sees the session.
+      if (r.status === 401) return;
+      if (r.ok) {
         stored.current = r.data.profile;
         setMinor(r.data.minor === true);
         setP(r.data.profile);
-      } else setLoadError(r.data.error ?? "We couldn't load your settings.");
+      } else setLoadError(r.data.error ?? "Your settings didn't load.");
     });
   }
   // Once, on arrival.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
   // "Delete…" swaps the buttons for the question (the kit's ConfirmDelete, which opens on "Keep
@@ -350,6 +351,11 @@ export default function MiraSettings({
         text: r.data.error ?? "Unable to sign out. Please try again.",
       });
     }
+    // Nothing of a pending sign-in or change of email stays in this tab for the next person.
+    try {
+      sessionStorage.removeItem("mira.signin.code.v1");
+      sessionStorage.removeItem("mira.email.code.v1");
+    } catch {}
     router.replace("/mira");
     router.refresh();
   }
@@ -413,7 +419,11 @@ export default function MiraSettings({
               </div>
             ) : null}
             <SectionIndex sections={sections} active={active} variant="row" />
-            <div className="mt-8 flex flex-col gap-12">
+            {/* A control the keyboard focuses scrolls clear of the phones' sticky row, as the
+                anchors do (WCAG 2.4.11, round-3 R3-UXA-1). On what scrolls under the row, never
+                the row itself. Once the frame's --mira-scroll-top hook is in, it can set that
+                instead. */}
+            <div className="mt-8 flex flex-col gap-12 [&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16">
               {!minor ? (
                 <>
                   <SettingsSection
@@ -811,22 +821,45 @@ function useLandOnSection(ready: boolean) {
  * The section in view: the one crossing a line a quarter down the screen. Null until the
  * browser can tell (no IntersectionObserver: no highlight, the links still work).
  */
+/** Where a section becomes the one being read: just under where a link lands it (40 px from xl,
+ *  64 px under the phones' sticky row). */
+const READ_LINE = 120;
+
+/**
+ * The section the index marks: the last whose top has reached READ_LINE (the first before any
+ * has), and at the page's end the last section once its top is in view, as it can't scroll up to
+ * the line. Round-3 R3-ACCT-7: a band 25–30 % down the screen missed a short section a link had
+ * landed at the top, so the next one was marked, and "Your data" never was on a desktop.
+ */
 function useActiveSection(ids: SectionId[], ready: boolean): SectionId | null {
   const [active, setActive] = useState<SectionId | null>(null);
   const key = ids.join(" ");
   useEffect(() => {
-    if (!ready || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) setActive(e.target.id as SectionId);
-      },
-      { rootMargin: "-25% 0px -70% 0px" }
-    );
-    for (const id of key.split(" ")) {
-      const el = document.getElementById(id);
-      if (el) io.observe(el);
-    }
-    return () => io.disconnect();
+    if (!ready) return;
+    const list = key.split(" ") as SectionId[];
+    const top = (id: SectionId) =>
+      document.getElementById(id)?.getBoundingClientRect().top ?? Infinity;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      let current = list[0] ?? null;
+      for (const id of list) if (top(id) <= READ_LINE) current = id;
+      const last = list.at(-1);
+      const end = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (last && end && top(last) < window.innerHeight) current = last;
+      setActive(current);
+    };
+    const later = () => {
+      frame ||= requestAnimationFrame(measure);
+    };
+    later();
+    window.addEventListener("scroll", later, { passive: true });
+    window.addEventListener("resize", later);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", later);
+      window.removeEventListener("resize", later);
+    };
   }, [key, ready]);
   return active;
 }
@@ -860,9 +893,11 @@ function SectionIndex({
         aria-label="Settings sections"
         className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden"
       >
+        {/* Its edges fade, so a label cut there reads as more to scroll to (round-3
+            R3-UXA-10), as the chat's prompt row does. */}
         <ol
           ref={row}
-          className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex overflow-x-auto [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {sections.map(([id, label]) => (
             <li key={id} className="shrink-0">

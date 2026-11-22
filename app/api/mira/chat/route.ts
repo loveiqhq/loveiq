@@ -420,11 +420,13 @@ export async function POST(request: Request) {
 
   const isFirst = turns.length === 0;
   // Sanjin's intake invitation follows a first reply in the account's first chat only (round-2
-  // audit CHAT-2); never after a weekly session's opening: it is their session, not a first chat.
-  // Offered when that can't be read.
+  // audit CHAT-2); never after a weekly session's opening: it is their session, not a first chat;
+  // nor with the reply that uses the last free message, as nobody could answer it without an
+  // account (round-3 R3-CHAT-3). Offered when that can't be read.
   const inviting =
     isFirst &&
     !opening &&
+    freeLeft !== 0 &&
     !(account && remember && (await invitationShown(account.id).catch(() => false)));
   // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
   // A weekly session's opening line is the app's, neither (null).
@@ -531,7 +533,10 @@ export async function POST(request: Request) {
   }
 
   if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
-  if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
+  // With its chat's id, so the picks forget it when that chat is deleted (round-3 R3-DATA-1).
+  if (chip === -1 && out?.topic && !crisis) {
+    logMiraEvent("chat_topic", who, { topic: out.topic, ...(chatId ? { chat: chatId } : {}) });
+  }
   if (answering && INTAKE_IDS.has(answering))
     logMiraEvent("intake_answered", who, { q: answering });
   // A reply that was only markers gets the refusal message: it referred nobody.

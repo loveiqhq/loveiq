@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { JournalShare } from "@features/mira/journal";
 import { zoneLabel } from "@features/mira/server/calendar";
 import { AdultsOnly } from "../kit";
-import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch } from "./parts";
+import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch, refocus } from "./parts";
 import { useJournal, type Journal } from "./useJournal";
 
 /** On the hour or half hour, 6:00 to 23:00: the nudge cron runs twice an hour. */
@@ -33,6 +33,7 @@ export function JournalSettings({
   const id = useId();
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const heading = useRef<HTMLHeadingElement | null>(null);
   const s = j.settings;
 
   async function change(
@@ -51,6 +52,8 @@ export function JournalSettings({
     const ok = await j.remove();
     if (!ok) return "Unable to delete right now. Please try again.";
     setStatus({ text: "Your journal is deleted." });
+    // Its button goes with the journal: focus stays in this section (R3-HAB-4).
+    refocus(() => heading.current);
     return null;
   }
 
@@ -60,7 +63,12 @@ export function JournalSettings({
       aria-labelledby={`${id}-h`}
       className="flex flex-col gap-3 font-sans text-ap-ink"
     >
-      <h2 id={`${id}-h`} className="font-serif text-[22px] font-medium">
+      <h2
+        ref={heading}
+        id={`${id}-h`}
+        tabIndex={-1}
+        className="font-serif text-[22px] font-medium outline-none"
+      >
         {title}
       </h2>
       {j.status === "loading" ? (
@@ -131,42 +139,51 @@ export function JournalSettings({
             desc="One short email at the time you choose, never with anything you wrote. One a day at most."
             more={
               s.reminderTime ? (
-                <label className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
-                  <span className="font-semibold">Time</span>
-                  <span className="relative flex">
-                    <select
-                      value={s.reminderTime}
-                      onChange={(e) =>
-                        change(
-                          { reminderTime: e.target.value },
-                          `Reminder moved to ${e.target.value}.`
-                        )
-                      }
-                      className="min-h-[44px] appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] tabular-nums text-ap-ink outline-none focus:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
-                    >
-                      {[...new Set([s.reminderTime, ...TIMES])].sort().map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ap-muted"
-                    >
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </span>
-                  <span className="text-ap-muted">{zoneLabel(s.timeZone)}</span>
-                </label>
+                <>
+                  {s.remindersOnHold ? (
+                    // The reminder job skips these 14 days, as the weekly session's (R3-HAB-5).
+                    <p className="mt-2 text-[14px] text-ap-body">
+                      Reminder emails are on hold for up to two weeks after the support lines came
+                      up, so none goes out for now. They start again on their own.
+                    </p>
+                  ) : null}
+                  <label className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+                    <span className="font-semibold">Time</span>
+                    <span className="relative flex">
+                      <select
+                        value={s.reminderTime}
+                        onChange={(e) =>
+                          change(
+                            { reminderTime: e.target.value },
+                            `Reminder moved to ${e.target.value}.`
+                          )
+                        }
+                        className="min-h-[44px] appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] tabular-nums text-ap-ink outline-none focus:border-ap-purple"
+                      >
+                        {[...new Set([s.reminderTime, ...TIMES])].sort().map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ap-muted"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </span>
+                    <span className="text-ap-muted">{zoneLabel(s.timeZone)}</span>
+                  </label>
+                </>
               ) : null
             }
           >

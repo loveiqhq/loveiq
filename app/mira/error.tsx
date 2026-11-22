@@ -46,9 +46,7 @@ export default function MiraError({ error, retry }: { error: unknown; retry: () 
   }, [error]);
   const body = (
     <div className="max-w-[560px] pb-6 pt-2">
-      <h1 className="font-serif text-[34px] font-medium leading-tight">
-        This page didn&apos;t load
-      </h1>
+      <h1 className="font-serif text-[34px] font-medium leading-tight">This page didn’t load</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-ap-body">
         It may be the connection, or a fault on our side.
       </p>

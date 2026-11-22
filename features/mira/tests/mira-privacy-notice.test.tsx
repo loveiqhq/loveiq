@@ -35,9 +35,19 @@ describe("Mira's privacy notice, made true", () => {
     expect(text).toContain("If you don't write to Mira for 12 months, they are all deleted.");
   });
 
-  it("says picks skip chats from before all chats were deleted: deleting one keeps its topic", () => {
-    // Deleting one chat (DELETE /api/mira/chats/[id]) leaves its topic id in the log.
-    expect(text).toContain("never one from before you last deleted all your chats");
+  // Round-3 R3-DATA-1: each topic carries its chat's id, and picks count only chats still there.
+  it("says a deleted chat stops counting for picks at once, as do all chats before a delete-all", () => {
+    expect(text).toContain("a chat you delete stops counting");
+    expect(text).toContain("every chat from before you last deleted all your chats");
+  });
+
+  // Round-3 R3-DATA-4: the email links' cookie (mira_link, proxy.ts: one hour, sent only to its
+  // page) and the under-18 browser mark (mira_minor, a year) were named nowhere.
+  it("names the email links' cookie and the under-18 browser mark", () => {
+    expect(text).toContain(
+      "When you open a link from one of Mira's emails to stop reminders or change your nudges, a cookie keeps the link's key for an hour, sent only to that page, so the key stays out of the page's address."
+    );
+    expect(text).toContain("a cookie marks that browser for a year");
   });
 
   it("keeps the promises the code now keeps: a request covers everything, deletion unlinks", () => {

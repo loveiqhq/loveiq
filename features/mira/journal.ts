@@ -25,6 +25,9 @@ export const SCALE = ["Very low", "Low", "Okay", "Good", "Very good"] as const;
 /** A one-line note, at most this long (the table's check). */
 export const NOTE_MAX = 280;
 
+/** What one read brings back, in days: a year and a bit, enough for every streak the beta can have. */
+export const DAYS_READ = 400;
+
 export type JournalEntry = { day: string; note: string | null } & Record<AreaId, number | null>;
 
 /** Who may read the journal besides the person: nobody, Mira the ratings, Mira the notes too. */
@@ -38,9 +41,13 @@ const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * their zone (a check-in begun before their midnight), so a tab left open for days can't make one
  * for a day long gone, and no later than a day already begun somewhere (UTC+14: a traveller's
  * browser may be ahead of the zone on file). An existing entry can be edited on any day.
+ * `restore`: an entry another tab or device deleted while this one edited it, put back on the
+ * second Save the sheet asked for (R3-HAB-1): any day the journal loads (DAYS_READ, a day's slack
+ * for a zone ahead of UTC), never an older one.
  */
-export function canStart(day: string, now: Date, timeZone: string): boolean {
-  return day >= addDays(localDay(now, timeZone), -1) && day <= utcDay(now.getTime() + 14 * HOUR_MS);
+export function canStart(day: string, now: Date, timeZone: string, restore = false): boolean {
+  const from = addDays(localDay(now, timeZone), restore ? -DAYS_READ - 1 : -1);
+  return day >= from && day <= utcDay(now.getTime() + 14 * HOUR_MS);
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

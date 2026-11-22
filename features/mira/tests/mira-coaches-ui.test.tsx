@@ -147,9 +147,27 @@ describe("The roster (/mira/coaches)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Notify me when Lena is ready" }));
     expect(await screen.findByText("That didn't go through.")).toBeInTheDocument();
+    // Only a lost sign-in offers to sign in again (R3-ACCT-3).
+    expect(screen.queryByRole("link", { name: "Sign in again" })).toBeNull();
     expect(screen.getByRole("button", { name: "Notify me when Lena is ready" })).toHaveTextContent(
       "Notify me"
     );
+  });
+
+  // Round-3 R3-ACCT-3: after a lost sign-in, "Notify me" said "You were signed out. Please sign in
+  // again." with nothing to tap.
+  it("offers Sign in again when Notify me finds the sign-in gone", async () => {
+    window.history.replaceState(null, "", "/mira/coaches");
+    replies["POST /api/mira/event"] = () => ({ status: 401, body: { error: "Please sign in." } });
+    render(<CoachRoster />);
+    fireEvent.click(await screen.findByRole("button", { name: "Notify me when Theo is ready" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent("/mira/coaches")}`
+    );
+    window.history.replaceState(null, "", "/");
   });
 
   it("lets a Notify me be taken back, keeping the keyboard on the coach's button", async () => {
@@ -175,6 +193,66 @@ describe("The roster (/mira/coaches)", () => {
     expect(screen.getByRole("button", { name: /Jonas is ready/ })).toHaveTextContent(
       "We’ll let you know"
     );
+  });
+
+  // R3-HAB-11: at 320 px with Large text the dot ended one line and "Stop" began the next. The
+  // row no longer wraps: the dot and Stop are one unit beside the label, which wraps on its own.
+  it("keeps Stop beside 'We’ll let you know', its dot with it, on a row that never splits them", async () => {
+    serve({ notified: ["jonas"] });
+    render(<CoachRoster />);
+    const stop = await screen.findByRole("button", { name: "Stop notifying me about Jonas" });
+    const unit = stop.parentElement!;
+    expect(unit.textContent).toBe("·Stop");
+    expect(unit).toHaveClass("shrink-0", "whitespace-nowrap");
+    const row = unit.parentElement!;
+    const label = within(row).getByRole("button", {
+      name: "We’ll let you know when Jonas is ready",
+    });
+    expect(row).not.toHaveClass("flex-wrap");
+    expect(label).toHaveClass("min-w-0", "text-left");
+  });
+
+  // R3-HAB-6: on a slow network a Stop sent beside its Notify landed first and kept the request.
+  it("sends a Stop only once its Notify has landed, and says Stopped only after the server", async () => {
+    let release = () => undefined as void;
+    let held = Promise.resolve();
+    const hold = () => (held = new Promise<void>((done) => (release = done)));
+    const usual = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+      if (url === "/api/mira/event" && String(init.body).includes('"notify"')) await held;
+      return usual(url, init);
+    });
+    const deletes = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
+    try {
+      render(<CoachRoster />);
+      hold();
+      fireEvent.click(await screen.findByRole("button", { name: "Notify me when Theo is ready" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop notifying me about Theo" }));
+      expect(screen.getByRole("button", { name: /Theo is ready/ })).toHaveTextContent("Notify me");
+      await act(() => new Promise((r) => setTimeout(r, 30)));
+      // The Notify is still on its way: nothing taken back yet, and nothing said.
+      expect(deletes()).toEqual([]);
+      expect(screen.queryByText(/We won’t contact you about Theo/)).toBeNull();
+      release();
+      expect(await screen.findByText("Stopped. We won’t contact you about Theo.")).toBeTruthy();
+      expect(deletes().map(([url]) => url)).toEqual(["/api/mira/coaches?notify=theo"]);
+      expect(screen.getByRole("button", { name: /Theo is ready/ })).toHaveTextContent("Notify me");
+
+      // A Notify that fails after its Stop was pressed is old news: the Stop's outcome is said.
+      replies["POST /api/mira/event"] = (b) =>
+        b.type === "notify"
+          ? { status: 500, body: { error: "That didn't go through." } }
+          : { body: {} };
+      hold();
+      fireEvent.click(screen.getByRole("button", { name: "Notify me when Lena is ready" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop notifying me about Lena" }));
+      release();
+      expect(await screen.findByText("Stopped. We won’t contact you about Lena.")).toBeTruthy();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("button", { name: /Lena is ready/ })).toHaveTextContent("Notify me");
+    } finally {
+      fetchMock.mockImplementation(usual);
+    }
   });
 
   it("finds a challenge in two taps and is honest that the coach isn't here yet", async () => {
@@ -206,13 +284,19 @@ describe("The roster (/mira/coaches)", () => {
     expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
   });
 
-  it("sends a lost sign-in to sign in and back to the roster (HAB-16)", async () => {
+  // HAB-16, and round 3's 401 loop: said in place with the way back, never a move of its own (the
+  // sign-in page may still see the session and send the person straight back).
+  it("says a lost sign-in in place, with the way back to the roster, and never navigates", async () => {
     window.history.replaceState(null, "", "/mira/coaches#finder");
     serve({}, 401);
     render(<CoachRoster />);
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fcoaches%23finder")
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fcoaches%23finder"
     );
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it("offers no coach to someone Mira stopped as under 18", async () => {

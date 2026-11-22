@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { addDays } from "@features/admin/server/ap/days";
 import { longDate, week, type JournalEntry, type WeekDot } from "@features/mira/journal";
 import { ConfirmDelete } from "../kit";
@@ -40,6 +40,26 @@ export function refocus(to: () => HTMLElement | null | undefined): void {
     if (!document.activeElement || document.activeElement === document.body) to()?.focus();
   });
 }
+
+/**
+ * After a row left a list (deleted, done, put away, brought back), focus goes to the first button
+ * of the row now in its place, or of the last row when it was the end, else to `fallback` (the
+ * list's heading): never to the page (round-3 R3-HAB-4).
+ */
+export function refocusRow(
+  list: RefObject<HTMLElement | null>,
+  index: number,
+  fallback: () => HTMLElement | null | undefined
+): void {
+  refocus(() => {
+    const rows = list.current?.children;
+    const row = rows?.[Math.min(index, rows.length - 1)];
+    return row?.querySelector<HTMLElement>("button") ?? fallback();
+  });
+}
+
+/** A heading focus can land on (tabIndex -1), by id: refocus's and refocusRow's fallbacks. */
+export const byId = (id: string) => document.getElementById(id);
 
 /**
  * A deletion asked first, as everywhere in Mira (kit ConfirmDelete, round-2 UX-9): the button,
@@ -104,8 +124,9 @@ export const DEFAULT_REMINDER = "20:00";
 export { CHECK };
 
 /**
- * The board's switch (52 × 30, plum when on) inside a 44 px tall target. Its accessible name is
- * its own text (`label`) or the element `labelledBy` names.
+ * The switch (48 × 28, plum when on, as Settings' own: one size everywhere, round-3 R3-HAB-8)
+ * inside a 44 px tall target. Its accessible name is its own text (`label`) or the element
+ * `labelledBy` names.
  */
 export function Switch({
   checked,
@@ -136,10 +157,10 @@ export function Switch({
     >
       <span
         aria-hidden="true"
-        className={`flex h-[30px] w-[52px] shrink-0 items-center rounded-full p-[3px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-60 ${checked ? "bg-ap-purple" : "bg-ap-muted/75"}`}
+        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-50 ${checked ? "bg-ap-purple" : "bg-ap-muted/75"}`}
       >
         <span
-          className={`h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.25)] transition-transform duration-200 ease-out motion-reduce:transition-none ${checked ? "translate-x-[22px]" : ""}`}
+          className={`h-5 w-5 rounded-full bg-white shadow-ap transition-transform duration-200 ease-out motion-reduce:transition-none ${checked ? "translate-x-5" : ""}`}
         />
       </span>
       {label}

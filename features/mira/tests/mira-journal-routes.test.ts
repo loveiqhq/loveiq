@@ -128,9 +128,49 @@ describe("GET /api/mira/journal", () => {
       entries: [
         { day: "2026-11-21", mood: 4, body: null, closeness: 3, energy: null, note: "A walk" },
       ],
-      settings: { share: "scores", reminderTime: "20:00", timeZone: "Europe/Berlin" },
+      settings: {
+        share: "scores",
+        reminderTime: "20:00",
+        timeZone: "Europe/Berlin",
+        remindersOnHold: false,
+      },
     });
     for (const c of calls()) expect(c.path).toMatch(new RegExp(`(user_id|[?&]id)=eq.${LEA.id}&`));
+  });
+
+  // R3-HAB-5: the reminder job skips anyone shown the support lines in the last 14 days, so
+  // the screens can say the reminder is on hold, as the weekly session's do (CHAT-18).
+  it("says the reminder is on hold after support lines in the last 14 days", async () => {
+    const user = json([
+      { journal_share: "off", journal_reminder_time: "20:00", time_zone: "Europe/Berlin" },
+    ]);
+    answer = (path) =>
+      path.startsWith("/rest/v1/mira_user")
+        ? user.clone()
+        : path.startsWith("/rest/v1/mira_event")
+          ? json([{ id: 7 }])
+          : undefined;
+    const held = (await (await GET(call("GET"))).json()) as { settings: Record<string, unknown> };
+    expect(held.settings.remindersOnHold).toBe(true);
+    const shown = calls().find((c) => c.path.startsWith("/rest/v1/mira_event"))!;
+    expect(shown.path).toContain("name=eq.crisis_shown");
+    const since = Date.parse(decodeURIComponent(/created_at=gte\.([^&]+)/.exec(shown.path)![1]!));
+    expect(Date.now() - since).toBeGreaterThan(14 * 86_400_000 - 60_000);
+    expect(Date.now() - since).toBeLessThan(14 * 86_400_000 + 60_000);
+
+    // A hold that can't be read claims nothing, and the journal still loads.
+    answer = (path) =>
+      path.startsWith("/rest/v1/mira_user")
+        ? user.clone()
+        : path.startsWith("/rest/v1/mira_event")
+          ? json({ message: "down" }, 500)
+          : undefined;
+    const res = await GET(call("GET"));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { settings: Record<string, unknown> }).settings).toMatchObject({
+      reminderTime: "20:00",
+      remindersOnHold: false,
+    });
   });
 });
 
@@ -490,6 +530,37 @@ describe("a new check-in is only for yesterday or today in the person's own zone
         method: "POST",
         path: "/rest/v1/mira_journal_entry?on_conflict=user_id,day&select=day",
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // R3-HAB-1: another tab deleted an older day while this one edited it. The sheet said "Save
+  // again to keep what's here", so a second Save that says so (`restore`) puts the day back.
+  it("puts back an older day another tab deleted, when the second Save says so", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-24T11:30:00Z") });
+    try {
+      vi.mocked(getProfile).mockResolvedValue({ time_zone: "Europe/Berlin" } as never);
+      answer = (_path, init) =>
+        init.method === "POST" ? json([{ day: "2026-11-18" }]) : undefined;
+      const back = { day: "2026-11-18", mood: 2, note: "Kept", base: null, restore: true };
+      const res = await PUT(call("PUT", "", back));
+      expect(res.status).toBe(200);
+      expect(writes()).toEqual([
+        expect.objectContaining({
+          method: "POST",
+          body: expect.objectContaining({ user_id: LEA.id, day: "2026-11-18", note: "Kept" }),
+        }),
+      ]);
+      // Never a day still to come, nor one older than the journal ever loads (a year and a bit),
+      // and nothing but `true` asks for it.
+      const ahead = { day: "2026-11-27", mood: 2, base: null, restore: true };
+      expect((await PUT(call("PUT", "", ahead))).status).toBe(404);
+      const ancient = { day: "2024-09-01", mood: 2, base: null, restore: true };
+      expect((await PUT(call("PUT", "", ancient))).status).toBe(404);
+      const loose = { day: "2026-11-18", mood: 2, base: null, restore: "yes" };
+      expect((await PUT(call("PUT", "", loose))).status).toBe(400);
+      expect(writes()).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

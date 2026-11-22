@@ -1,6 +1,7 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { coachIdFor, COACHES, type CoachId } from "@features/mira/content/coaches";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { listChats } from "./store";
 
 /**
  * What Home's "Picked for you" and "Your coaches" know about one person: only the rows of Mira's
@@ -10,7 +11,9 @@ import miraConfig from "@features/mira/content/mira-config.json";
  * account at sign-up therefore feeds no pick: its topic was logged under the browser.
  *
  * - their chats' topics (chat_topic, the [[TOPIC:id]] marker: an id, never words), newest first,
- *   none from before their last "Delete all chats"
+ *   none from before their last "Delete all chats", and only of chats they still have (each topic
+ *   carries its chat's id since 22 Nov 2026): a deleted chat's topic never names it on Home, and a
+ *   topic logged without a chat (remembering off, or older rows) counts for nothing
  * - the coming-soon coaches they asked to hear about (notify_me), Home's older labels included
  */
 type Row = { name: string; props: Record<string, unknown> | null; created_at: string };
@@ -22,16 +25,20 @@ const mine = (userId: string) => `/rest/v1/mira_event?user_id=eq.${encodeURIComp
 export async function readCoachState(
   userId: string
 ): Promise<{ topics: string[]; notified: CoachId[] }> {
-  const res = await supabaseFetch(
-    `${mine(userId)}&name=in.(chat_topic,chats_deleted,notify_me)` +
-      "&select=name,props,created_at&order=id.desc&limit=500"
-  );
+  const [res, chats] = await Promise.all([
+    supabaseFetch(
+      `${mine(userId)}&name=in.(chat_topic,chats_deleted,notify_me)` +
+        "&select=name,props,created_at&order=id.desc&limit=500"
+    ),
+    listChats(userId),
+  ]);
   if (!res.ok) throw new Error(`mira coaches read failed (${res.status})`);
   const own = (await res.json()) as Row[];
+  const kept = new Set(chats.map((c) => c.id));
   const at = (r: Row) => Date.parse(r.created_at);
   const cut = Math.max(-Infinity, ...own.filter((r) => r.name === "chats_deleted").map(at));
   const topics = own
-    .filter((r) => r.name === "chat_topic" && at(r) > cut)
+    .filter((r) => r.name === "chat_topic" && at(r) > cut && kept.has(String(r.props?.chat)))
     .sort((a, b) => at(b) - at(a))
     .map((r) => String(r.props?.topic ?? ""))
     .filter((t) => TOPICS.has(t));

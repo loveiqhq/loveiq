@@ -10,8 +10,13 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ check: string }> };
 
+/** No such check: the not-found page's metadata, not "Assessment | LoveIQ" (R3-UXA-11). */
+const isCheck = (check: string) =>
+  check === "body" || CHECK_IDS.includes(check as (typeof CHECK_IDS)[number]);
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { check } = await params;
+  if (!isCheck(check)) notFound();
   const title = `${check === "body" ? "Body check" : (checkById(check)?.title ?? "Assessment")} | LoveIQ`;
   return {
     title,
@@ -27,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  */
 export default async function Page({ params }: Props) {
   const { check } = await params;
-  if (check !== "body" && !CHECK_IDS.includes(check as (typeof CHECK_IDS)[number])) notFound();
+  if (!isCheck(check)) notFound();
   if (!(await getMiraAccount())) {
     redirect(`/mira/start?next=${encodeURIComponent(`/mira/assessments/${check}`)}`);
   }

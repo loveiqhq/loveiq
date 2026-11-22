@@ -94,6 +94,10 @@ export function SlotPicker({
   // This device's zone is only known in the browser.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setHere(browserZone()), []);
+  // The zone the picker opened on. Once this device's is chosen, the same button offers that one
+  // back, so it never vanishes from under the keyboard's focus (R3-HAB-2).
+  const [first] = useState(timeZone);
+  const swap = here === timeZone ? first : here;
 
   return (
     <div className="flex flex-col gap-4">
@@ -153,6 +157,9 @@ export function SlotPicker({
         {other ? (
           <label className="mt-3 flex items-center gap-3 text-[14px] text-ap-body motion-safe:animate-mira-reply">
             Your time
+            {/* The global ring (tailwind.config.js) needs :focus-visible, which WebKit never
+                matches on a time field (its editor is inside it): the same ring on :focus, one
+                outline either way, never a second ring. */}
             <input
               type="time"
               step={300}
@@ -164,23 +171,24 @@ export function SlotPicker({
                   time: /^([01]\d|2[0-3]):[0-5]\d$/.test(e.target.value) ? e.target.value : null,
                 })
               }
-              className="min-h-[44px] rounded-full border border-ap-field bg-white px-4 text-[16px] tabular-nums text-ap-ink outline-none transition-colors focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              className="min-h-[44px] rounded-full border border-ap-field bg-white px-4 text-[16px] tabular-nums text-ap-ink outline-none transition-colors focus:border-ap-purple focus:outline focus:outline-2 focus:outline-offset-0 focus:outline-ap-purple"
             />
           </label>
         ) : null}
       </fieldset>
 
       <p className="text-[13px] leading-snug text-ap-muted">
-        Times are {zoneLabel(timeZone)}.
-        {here && here !== timeZone && clocksDiffer(here, timeZone) ? (
+        {/* Said when it changes: the button beside it keeps the focus. */}
+        <span aria-live="polite">Times are {zoneLabel(timeZone)}.</span>
+        {swap && swap !== timeZone && clocksDiffer(swap, timeZone) ? (
           <>
             {" "}
             <button
               type="button"
-              onClick={() => onTimeZone(here)}
+              onClick={() => onTimeZone(swap)}
               className="inline-flex min-h-[32px] items-center font-semibold text-ap-plum underline underline-offset-2"
             >
-              Use {zoneLabel(here)}
+              Use {zoneLabel(swap)}
             </button>
           </>
         ) : null}

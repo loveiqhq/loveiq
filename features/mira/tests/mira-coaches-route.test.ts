@@ -88,10 +88,21 @@ beforeEach(() => {
 });
 
 describe("readCoachState: the person's own topics and Notify me", () => {
+  // Round-3 R3-DATA-1: after "Delete this chat", Home kept naming that chat's topic ("Because you
+  // talked about…"), on a phone others may see. Only topics of chats the account still has count.
+  it("never picks a topic from a deleted chat, or one logged without a chat", async () => {
+    own = [
+      row("chat_topic", { topic: "weight", chat: "c1" }, "2026-11-21T09:00:00Z"),
+      row("chat_topic", { topic: "hiding", chat: "c-deleted" }, "2026-11-21T08:00:00Z"),
+      row("chat_topic", { topic: "clothes" }, "2026-11-20T09:00:00Z"),
+    ];
+    expect((await readCoachState(LEA.id)).topics).toEqual(["weight"]);
+  });
+
   it("lists the topics of the chats written under their account, newest first", async () => {
     own = [
-      row("chat_topic", { topic: "weight" }, "2026-11-21T09:00:00Z"),
-      row("chat_topic", { topic: "hiding" }, "2026-11-20T09:00:00Z"),
+      row("chat_topic", { topic: "weight", chat: "c1" }, "2026-11-21T09:00:00Z"),
+      row("chat_topic", { topic: "hiding", chat: "c1" }, "2026-11-20T09:00:00Z"),
     ];
     expect((await readCoachState(LEA.id)).topics).toEqual(["weight", "hiding"]);
     expect(String(db.fetch.mock.calls[0]![0])).toContain(`mira_event?user_id=eq.${LEA.id}&`);
@@ -100,10 +111,10 @@ describe("readCoachState: the person's own topics and Notify me", () => {
   it("never lets another person's topics, under a browser id the account shares, shape its picks", async () => {
     // Lea signed up from a borrowed laptop; its browser id also carries its owner's chat topics.
     own = [
-      row("chat_topic", { topic: "clothes" }, "2026-11-21T09:00:00Z"),
+      row("chat_topic", { topic: "clothes", chat: "c1" }, "2026-11-21T09:00:00Z"),
       row("signup_completed", { method: "email" }, "2026-11-19T09:05:00Z", BROWSER),
     ];
-    browser = [row("chat_topic", { topic: "hiding" }, "2026-11-19T09:00:00Z", BROWSER)];
+    browser = [row("chat_topic", { topic: "hiding", chat: "c1" }, "2026-11-19T09:00:00Z", BROWSER)];
     const { topics } = await readCoachState(LEA.id);
     expect(topics).toEqual(["clothes"]);
     expect(
@@ -116,18 +127,18 @@ describe("readCoachState: the person's own topics and Notify me", () => {
 
   it("forgets the topics of chats the person deleted", async () => {
     own = [
-      row("chat_topic", { topic: "clothes" }, "2026-11-21T09:00:00Z"),
+      row("chat_topic", { topic: "clothes", chat: "c1" }, "2026-11-21T09:00:00Z"),
       row("chats_deleted", {}, "2026-11-20T12:00:00Z"),
-      row("chat_topic", { topic: "weight" }, "2026-11-20T09:00:00Z"),
+      row("chat_topic", { topic: "weight", chat: "c1" }, "2026-11-20T09:00:00Z"),
     ];
     expect((await readCoachState(LEA.id)).topics).toEqual(["clothes"]);
   });
 
   it("keeps each topic once and only Mira's own topic ids", async () => {
     own = [
-      row("chat_topic", { topic: "hiding" }, "2026-11-21T09:00:00Z"),
-      row("chat_topic", { topic: "<script>" }, "2026-11-21T08:00:00Z"),
-      row("chat_topic", { topic: "hiding" }, "2026-11-20T09:00:00Z"),
+      row("chat_topic", { topic: "hiding", chat: "c1" }, "2026-11-21T09:00:00Z"),
+      row("chat_topic", { topic: "<script>", chat: "c1" }, "2026-11-21T08:00:00Z"),
+      row("chat_topic", { topic: "hiding", chat: "c1" }, "2026-11-20T09:00:00Z"),
     ];
     expect((await readCoachState(LEA.id)).topics).toEqual(["hiding"]);
   });
@@ -147,7 +158,7 @@ describe("GET /api/mira/coaches", () => {
   const get = () => GET(new Request("http://localhost/api/mira/coaches"));
 
   it("answers only a signed-in person, about themselves", async () => {
-    own = [row("chat_topic", { topic: "hiding" }, "2026-11-21T09:00:00Z")];
+    own = [row("chat_topic", { topic: "hiding", chat: "c1" }, "2026-11-21T09:00:00Z")];
     const res = await get();
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
@@ -167,7 +178,7 @@ describe("GET /api/mira/coaches", () => {
   });
 
   it("uses no topic while “Remember our conversations” is off", async () => {
-    own = [row("chat_topic", { topic: "hiding" }, "2026-11-21T09:00:00Z")];
+    own = [row("chat_topic", { topic: "hiding", chat: "c1" }, "2026-11-21T09:00:00Z")];
     vi.mocked(getProfile).mockResolvedValue({
       name: null,
       email: LEA.email,

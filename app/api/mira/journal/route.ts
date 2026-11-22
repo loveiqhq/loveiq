@@ -1,13 +1,17 @@
 /**
  * /api/mira/journal — the signed-in account's daily journal (features/mira/server/journal.ts).
  *
- *   GET     → the entries of about the last year (newest first) and the journal's settings
+ *   GET     → the entries of about the last year (newest first) and the journal's settings,
+ *             with `remindersOnHold`: support lines were shown in the last 14 days, so the
+ *             reminder job skips this person for now
  *   PUT     → saves one day's check-in { day, mood?, body?, closeness?, energy?, note?, base }:
  *             each area 1 to 5 or null, at least one rated, a one-line note. `base` is the version
  *             the browser started from: null for a new check-in, or the entry's `updated_at` (GET
  *             gives it, a save answers it as `updatedAt`). A new entry only for yesterday or today
  *             in the person's zone (the browser sends their today); an older day only where an
- *             entry exists (404). Never over a day another tab or device changed meanwhile: 409
+ *             entry exists (404), or with `restore: true` (a day another tab deleted while this
+ *             one edited it, put back on the second Save; within the days GET reads, never a day
+ *             still to come). Never over a day another tab or device changed meanwhile: 409
  *             { conflict, current } with the day as it is now (null: deleted). A note with crisis
  *             words gets the chat's support lines (crisisLines), and is kept.
  *   PATCH   → the settings: { share: "off" | "scores" | "notes" } (what Mira may read) and/or
@@ -29,6 +33,7 @@ import {
 } from "@features/mira/server/journal";
 import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
+import { CRISIS_QUIET_DAYS, hadCrisis } from "@features/mira/server/nudges";
 import { isCrisisMessage } from "@features/mira/server/safety";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
@@ -55,6 +60,8 @@ const putSchema = z
       .nullable()
       .optional(),
     base: z.iso.datetime({ offset: true }).nullable(),
+    // The second Save after another tab deleted this day: put it back, an older day too.
+    restore: z.literal(true).optional(),
   })
   .strict()
   .refine((b) => AREAS.some((a) => typeof b[a.id] === "number"), "Rate at least one area");
@@ -113,7 +120,14 @@ export async function GET(request: Request) {
   try {
     const journal = await readJournal(g.account.id);
     if (!journal) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
-    return NextResponse.json(journal, { headers: { "Cache-Control": "no-store" } });
+    // The reminder job skips 14 days after support lines (runJournalReminders), so the screens
+    // say so, as the weekly session's do (R3-HAB-5). Unreadable: nothing is claimed.
+    const since = new Date(Date.now() - CRISIS_QUIET_DAYS * 86_400_000);
+    const remindersOnHold = await hadCrisis(g.account.id, since).catch(() => false);
+    return NextResponse.json(
+      { ...journal, settings: { ...journal.settings, remindersOnHold } },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     logger.error({ err }, "mira: could not read a journal");
     return NextResponse.json({ error: "Unable to load your journal." }, { status: 500 });
@@ -198,7 +212,8 @@ export async function PUT(request: Request) {
   let saved: SaveOutcome | null = null;
   try {
     const zone = (await getProfile(g.account.id))?.time_zone ?? "UTC";
-    saved = await saveEntry(g.account.id, entry, canStart(entry.day, new Date(), zone), b.base);
+    const start = canStart(entry.day, new Date(), zone, b.restore);
+    saved = await saveEntry(g.account.id, entry, start, b.base);
   } catch (err) {
     logger.error({ err }, "mira: a journal entry was not saved");
   }

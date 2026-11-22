@@ -1,15 +1,26 @@
 // @vitest-environment jsdom
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, redirect: vi.fn() }));
+/** This browser's cookies, for the chat page itself (the under-18 mark lives here). */
+const cookieJar = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (cookieJar.has(name) ? { name, value: cookieJar.get(name) } : undefined),
+  }),
+}));
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => null }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION, VOICE_NOTICE_VERSION } from "@features/mira/server/config";
 import { StyleScales } from "@features/mira/ui/CoachingStylePanel";
+import MiraPage from "@/app/mira/page";
 import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
@@ -313,10 +324,17 @@ describe("Chat", () => {
       status: 401,
       body: { error: "Please sign in again.", signIn: true },
     });
+    // Round-3 R3-CHAT-11: the link was plain /mira/start, so the sign-in ended on Home.
+    const SAVED_CHAT = "6f2c4a1e-1111-4222-8333-944455556666";
+    window.history.replaceState(null, "", `/mira?chat=${SAVED_CHAT}`);
+    onTestFinished(() => window.history.replaceState(null, "", "/"));
     render(<MiraChat signedIn initialChatId={null} />);
     typeAndSend("hello");
     const link = await screen.findByRole("link", { name: "Sign in again" });
-    expect(link).toHaveAttribute("href", "/mira/start");
+    expect(link).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent(`/mira?chat=${SAVED_CHAT}`)}`
+    );
     // Round-2 audit CHAT-19: the page says it was signed in, so a sign-in that ended meanwhile
     // gets this 401 rather than an anonymous reply, and the words wait in the composer.
     expect(calls("POST /api/mira/chat")[0]).toMatchObject({ message: "hello", signedIn: true });
@@ -350,6 +368,35 @@ describe("Chat", () => {
     typeAndSend("hello");
     await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
     expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
+  });
+
+  // Round-3 R3-ACCT-8 (lead decision): a stopped browser's next visit opened the usual welcome,
+  // and its first message the "I'm 18 or older" tick again. The page reads the stop's cookie and
+  // the chat starts stopped: the one refusal, no prompts, no tick; the composer stays, as a
+  // crisis message is still answered.
+  it("starts stopped for a browser stopped as under 18, never asking for the 18+ tick", async () => {
+    cookieJar.set("mira_minor", "1");
+    onTestFinished(() => cookieJar.clear());
+    const page = (await MiraPage({ searchParams: Promise.resolve({}) })) as ReactElement<{
+      stopped?: boolean;
+    }>;
+    expect(page.props.stopped).toBe(true);
+    cookieJar.clear();
+    const usual = (await MiraPage({ searchParams: Promise.resolve({}) })) as ReactElement<{
+      stopped?: boolean;
+    }>;
+    expect(usual.props.stopped).toBe(false);
+
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: miraConfig.minorMessage, sources: [], minor: true },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} stopped />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    typeAndSend("hello");
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
+    expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
+    expect(screen.queryByText(/free message|free account/)).toBeNull();
   });
 
   // Round-2 audit CHAT-16: a saved chat that couldn't load opened as an empty new chat, silently.
@@ -387,6 +434,23 @@ describe("Chat", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("an earlier line")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  // Round-3 R3-CHAT-10: a send that also failed replaced the load's error, and the screen became
+  // the welcome with its prompts, Try again gone, as if this were a new chat.
+  it("still says the chat didn't load after a send that failed too", async () => {
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({ status: 500, body: {} });
+    replies["POST /api/mira/chat"] = () => ({ status: 502, body: { error: "Mira is busy." } });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    await screen.findByRole("button", { name: "Try again" });
+    typeAndSend("hello");
+    expect(await screen.findByText("Mira is busy.")).toBeInTheDocument();
+    expect(screen.getByText(/This chat didn't load/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("hello");
+    expect(calls("POST /api/mira/chat")[0]!.chatId).toBe(SAVED); // still this chat
   });
 
   it("lists a new chat under the title the server gave it, never words it held back", async () => {
@@ -486,20 +550,29 @@ describe("Chat", () => {
     };
     const deletes = () => fetchMock.mock.calls.filter(([, i]) => i?.method === "DELETE");
 
+    // Round-3 R3-UXA-9 (UX-9): it was a dialog with Cancel · Delete, unlike every other delete;
+    // now the kit's question, opening on "Keep it". R3-CHAT-5: after Delete, focus fell to the
+    // page (it was moved while the dialog still made the page inert).
+    const ask = () => screen.getByRole("group", { name: /^Delete this chat\?/ });
     it("asks first, then deletes it, takes it off the list at once and says so", async () => {
       await open();
       fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
-      const ask = screen.getByRole("dialog", { name: "Delete this chat?" });
-      fireEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
-      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(ask()).toHaveTextContent("Your other chats stay. This can't be undone.");
+      expect(within(ask()).getByRole("button", { name: "Keep it" })).toHaveFocus();
+      fireEvent.click(within(ask()).getByRole("button", { name: "Keep it" }));
+      expect(screen.queryByRole("group", { name: /^Delete this chat\?/ })).toBeNull();
       expect(deletes()).toHaveLength(0);
+      // Kept: the focus is back on the button that asked.
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Delete this chat" })).toHaveFocus()
+      );
 
       replies[`DELETE /api/mira/chats/${SAVED}`] = () => ({ body: { success: true } });
       fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
-      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+      fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
       expect(await screen.findByText("Chat deleted.")).toBeInTheDocument();
       expect(deletes().map(([url]) => url)).toEqual([`/api/mira/chats/${SAVED}`]);
-      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.queryByRole("group", { name: /^Delete this chat\?/ })).toBeNull();
       expect(screen.queryByText("an earlier line")).toBeNull();
       const nav = screen.getByRole("navigation", { name: "Your chats" });
       expect(
@@ -508,6 +581,10 @@ describe("Chat", () => {
           .map((a) => a.textContent)
       ).toEqual(["Mirror", "Clothes"]);
       expect(window.location.search).toBe("");
+      // Gone with the chat, the button hands the focus to the conversation, never the page.
+      await waitFor(() =>
+        expect(screen.getByRole("region", { name: "Conversation" })).toHaveFocus()
+      );
     });
 
     it("keeps the chat and says so when the delete doesn't go through", async () => {
@@ -517,8 +594,8 @@ describe("Chat", () => {
         body: { error: "Unable to delete this chat." },
       });
       fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
-      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
-      expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent(
+      fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
+      expect(await within(ask()).findByRole("alert")).toHaveTextContent(
         "Unable to delete this chat."
       );
       expect(screen.getByText("an earlier line")).toBeInTheDocument();
@@ -727,7 +804,9 @@ describe("Body check", () => {
   });
 
   // The card closed itself 4 s after its thank-you, and every way out left the focus on the page.
-  it("ends in the composer, and its thank-you stays until its own Close", async () => {
+  // Round-3 R3-HAB-10: after the last answer the focus still fell to the page (moved while the
+  // dialog made it inert); it goes to the thank-you, then to the composer on Close.
+  it("lands on its thank-you, which stays until its own Close, then in the composer", async () => {
     signedInDue("baseline");
     reply();
     render(<MiraChat signedIn initialChatId={null} />);
@@ -747,7 +826,7 @@ describe("Body check", () => {
       expect(screen.getByText(thanks)).toBeVisible();
       await act(async () => vi.advanceTimersByTime(10_000));
       expect(screen.getByText(thanks)).toBeVisible(); // no timer takes it away
-      expect(screen.getByLabelText("Message Mira")).toHaveFocus();
+      expect(screen.getByText(thanks)).toHaveFocus();
     } finally {
       vi.useRealTimers();
     }
@@ -810,6 +889,29 @@ describe("Body check", () => {
   });
 
   // Round-2 audit CHAT-4: it stacked under Mira's goal offer, two asks at once.
+  // Round-3 R3-CHAT-9: her plain replies often end with a question of her own, and the card came
+  // right under it: two asks at once.
+  it("waits while Mira's reply ends with her own question, and comes with a later one", async () => {
+    signedInDue("baseline");
+    let n = 0;
+    const said = [
+      "When does the feeling arrive, as you undress?",
+      "¿Y cuándo llega?", // a question in another script's mark too
+      "メモしておきますね？",
+      "That makes sense.",
+    ];
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: said[n++] } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    for (const words of said.slice(0, 3)) {
+      typeAndSend("hello");
+      await screen.findByText(words);
+      expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    }
+    typeAndSend("hello");
+    expect(await screen.findByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
   it("isn't offered with a reply that offers a goal", async () => {
     signedInDue("baseline");
     reply({ goal: "Leave one soft light on" });
@@ -958,11 +1060,12 @@ describe("Welcome", () => {
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns).toHaveLength(2);
-    // The composer stays there too: what is sent from it belongs to that chat, which comes back.
+    // The composer stays there too: what is sent from it belongs to that chat, which comes back
+    // (and a message the account must send waits in the box, R3-CHAT-4).
     replies["POST /api/mira/chat"] = () => ({ body: { gate: true, freeLeft: 0 } });
     typeAndSend("one more thing");
-    expect(await screen.findByText("one more thing")).toBeInTheDocument();
-    expect(screen.getByText("Try this.")).toBeInTheDocument();
+    expect(await screen.findByText("Try this.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("one more thing");
     expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
   });
 
@@ -1115,6 +1218,18 @@ describe("How Mira coaches you", () => {
     expect(ring.className).toContain("border-ap-muted");
     expect(ring.className).not.toContain("border-ap-mist");
   });
+
+  // Round-3 R3-CHAT-8: a fieldset's legend is drawn in its top border, so each scale's heading
+  // broke the divider above it ("Depth ————"). Floated, it is an ordinary first line inside.
+  it("keeps each scale's heading off the divider line", () => {
+    render(<StyleScales value={{}} onChange={() => {}} />);
+    for (const name of ["Guidance", "Depth"]) {
+      const legend = within(screen.getByRole("group", { name })).getByText(name);
+      expect(legend.tagName).toBe("LEGEND");
+      expect(legend).toHaveClass("float-left", "w-full");
+      expect(legend.nextElementSibling).toHaveClass("clear-left");
+    }
+  });
 });
 
 // From the voice stream's audit (round 2): when a voice session ended, its panel went with the
@@ -1144,6 +1259,16 @@ describe("after a voice session", () => {
     b.focus();
     fireEvent.click(b);
   };
+
+  // Round-3 R3-ACCT-8: Talk opened "Before your first message" for a browser with no tick on
+  // file, which is every browser stopped as under 18.
+  it("never asks a stopped browser for the 18+ tick before Talk either", async () => {
+    localStorage.removeItem("mira.consent.v1"); // the stop forgets it
+    render(<MiraChat signedIn={false} initialChatId={null} stopped />);
+    press(talk().getAttribute("aria-label")!);
+    expect(await screen.findByRole("heading", { name: "Before you talk" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
+  });
 
   it("gives the focus back to Talk when the notice is put off", async () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
@@ -1210,13 +1335,36 @@ describe("Free messages", () => {
     expect(screen.queryByText("Keep talking with Mira, for free")).toBeNull();
     typeAndSend("and then?");
     expect(await screen.findByText("Keep talking with Mira, for free")).toBeInTheDocument();
-    // The message stays in the chat that comes along with the account.
-    expect(screen.getByText("and then?")).toBeInTheDocument();
     expect(calls("POST /api/mira/chat").map((b) => b.message)).toEqual([
       "hi",
       "everything feels dark",
       "and then?",
     ]);
+  });
+
+  // Round-3 R3-CHAT-4: the gated message stayed as a sent bubble with no reply, the live line
+  // went quiet after "Mira is writing…", and nothing said it never reached Mira.
+  it("puts a message the free account must send back in the box, and says so", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = (b) =>
+      b.message === "hi"
+        ? { body: { reply: "Try this.", freeLeft: 0 } }
+        : { body: { gate: true, freeLeft: 0 } };
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Keep talking with Mira, for free");
+    const said = document.querySelector<HTMLElement>(".sr-only[aria-live='polite']")!;
+    typeAndSend("and then?");
+    const notSent = await screen.findByText(
+      "That message wasn't sent: create a free account to send it."
+    );
+    expect(notSent).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("and then?");
+    // No bubble left waiting for a reply, here or in the chat the account brings along.
+    expect(document.querySelectorAll("[data-msg]")).toHaveLength(2);
+    await waitFor(() => expect(localStorage.getItem("mira.chat.v1")).not.toContain("and then?"));
+    // Nor is the reply before it read out a second time.
+    expect(said).toHaveTextContent("");
   });
 
   it("isn't put beside a crisis reply: the person can still write", async () => {
@@ -1261,6 +1409,8 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     const send = screen.getByRole("button", { name: "Send me a code" });
     const assessment = box(/Use my LoveIQ test result to tailor my coaching/);
     expect(assessment).not.toBeChecked();
+    // Round-3 R3-ACCT-4: only a new account takes it; a returning sign-in keeps the saved choice.
+    expect(screen.getByText("Optional, for a new account")).toBeInTheDocument();
     expect(screen.queryByText(/team may read replies I rate/)).toBeNull(); // the box went (21 Nov)
     fireEvent.click(box(/18 years of age or older/));
     fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
@@ -1321,5 +1471,26 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     );
     await signIn();
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith(next));
+  });
+});
+
+// Round-3 SET-11 residual: a read that failed was said two ways, "…didn't load" and "We couldn't
+// load your…". One way on every screen: "<what> didn't load."
+describe("Mira's wording", () => {
+  const files = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) return files(full);
+      return /\.tsx?$/.test(name) ? [full] : [];
+    });
+
+  it("says a failed load one way on every screen", () => {
+    const found = [...files("features/mira/ui"), ...files("app/mira")].flatMap((f) =>
+      readFileSync(f, "utf8")
+        .split("\n")
+        .filter((line) => /couldn(’|'|&apos;)t load/.test(line))
+        .map((line) => `${f}: ${line.trim()}`)
+    );
+    expect(found).toEqual([]);
   });
 });

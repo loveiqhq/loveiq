@@ -5,6 +5,7 @@ import { streak } from "@features/mira/journal";
 import { PrimaryButton } from "../MiraShell";
 import { useSignedOut } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { CheckIn } from "./CheckIn";
 import {
   ARROW,
@@ -90,16 +91,7 @@ export function JournalCard() {
             <Skeleton className="h-11 w-full max-w-[360px]" />
           </div>
         ) : status === "error" ? (
-          <div className="relative">
-            <p className="text-[15px] text-ap-body">Your journal didn’t load just now.</p>
-            <button
-              type="button"
-              onClick={journal.reload}
-              className="mt-3 min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold"
-            >
-              Try again
-            </button>
-          </div>
+          <LoadFailed what="Your journal" onRetry={journal.reload} className="relative" />
         ) : status === "minor" ? (
           <AdultsOnly className="relative" />
         ) : (
@@ -144,6 +136,12 @@ export function JournalCard() {
                   }
                 />
               </div>
+              {settings?.reminderTime && settings.remindersOnHold ? (
+                // Home stays neutral while this lasts: the why is in Settings (R3-HAB-5).
+                <p className="mt-2 text-[13px] text-ap-muted">
+                  Reminder emails are on hold for now. They start again on their own.
+                </p>
+              ) : null}
               <p
                 role="status"
                 className={`text-[13px] ${note ? "mt-2" : ""} ${note?.bad ? "text-ap-bad-ink" : "text-ap-muted"}`}

@@ -9,7 +9,18 @@ import { AdultsOnly, ConfirmDelete } from "../kit";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
-import { ARROW, CHECK, Icon, Skeleton, WeekDots, dayName, refocus, thisWeek } from "./parts";
+import {
+  ARROW,
+  CHECK,
+  Icon,
+  Skeleton,
+  WeekDots,
+  byId,
+  dayName,
+  refocus,
+  refocusRow,
+  thisWeek,
+} from "./parts";
 import { useJournal } from "./useJournal";
 
 /** Shown at once, then more on request. */
@@ -30,9 +41,12 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
   const [dismissed, setDismissed] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const [said, setSaid] = useState<{ text: string; bad?: boolean } | null>(null);
+  // A delete that failed: said in its own question, which stays open.
+  const [failed, setFailed] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const checkInRef = useRef<HTMLDivElement | null>(null);
+  const daysList = useRef<HTMLOListElement | null>(null);
 
   const openDay = day ?? (startCheckIn && !dismissed && status === "ready" && today ? today : null);
   const doneToday = entries.some((e) => e.day === today);
@@ -42,16 +56,16 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
   );
   const recent = thisWeek(entries, today);
 
-  async function remove(d: string) {
+  /** Focus goes to the day now in its place, or to the start once none is left (R3-HAB-4). */
+  async function remove(d: string, i: number) {
     setBusy(true);
+    setFailed(null);
     const ok = await journal.remove(d);
     setBusy(false);
+    if (!ok) return setFailed("Unable to delete right now. Please try again.");
     setConfirm(null);
-    setSaid(
-      ok
-        ? { text: `${dayName(d, today)}: check-in deleted.` }
-        : { text: "Unable to delete right now. Please try again.", bad: true }
-    );
+    setSaid(`${dayName(d, today)}: check-in deleted.`);
+    refocusRow(daysList, i, () => byId("journal-start-h"));
   }
 
   const checkInButton = doneToday ? (
@@ -120,10 +134,18 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
               <WeekDots days={entries.map((e) => e.day)} today={today} />
             </div>
           </div>
+          {/* Outside "Day by day", so deleting the last day is said too (R3-HAB-4). */}
+          <p role="status" className={`text-[14px] text-ap-muted ${said ? "mt-4" : ""}`}>
+            {said}
+          </p>
 
           {entries.length === 0 ? (
             <section aria-labelledby="journal-start-h" className="mt-12 max-w-[56ch]">
-              <h2 id="journal-start-h" className="font-serif text-[24px] font-medium">
+              <h2
+                id="journal-start-h"
+                tabIndex={-1}
+                className="font-serif text-[24px] font-medium outline-none"
+              >
                 Your patterns start here
               </h2>
               <p className="mt-2 text-[15px] leading-relaxed text-ap-body">
@@ -164,24 +186,22 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
                 <h2 id="journal-days-h" className="font-serif text-[24px] font-medium">
                   Day by day
                 </h2>
-                <p
-                  role="status"
-                  className={`mt-1 min-h-[20px] text-[14px] ${said?.bad ? "text-ap-bad-ink" : "text-ap-muted"}`}
-                >
-                  {said?.text}
-                </p>
-                <ol className="mt-2 divide-y divide-ap-line border-y border-ap-line">
-                  {entries.slice(0, shown).map((e) => (
+                <ol ref={daysList} className="mt-3 divide-y divide-ap-line border-y border-ap-line">
+                  {entries.slice(0, shown).map((e, i) => (
                     <Day
                       key={e.day}
                       entry={e}
                       name={dayName(e.day, today)}
                       confirming={confirm === e.day}
                       busy={busy}
+                      error={failed}
                       onEdit={() => setDay(e.day)}
-                      onAsk={() => setConfirm(e.day)}
+                      onAsk={() => {
+                        setFailed(null);
+                        setConfirm(e.day);
+                      }}
                       onCancel={() => setConfirm(null)}
-                      onDelete={() => remove(e.day)}
+                      onDelete={() => remove(e.day, i)}
                     />
                   ))}
                 </ol>
@@ -227,6 +247,7 @@ function Day({
   name,
   confirming,
   busy,
+  error,
   onEdit,
   onAsk,
   onCancel,
@@ -236,6 +257,8 @@ function Day({
   name: string;
   confirming: boolean;
   busy: boolean;
+  /** Why the delete didn't go through, in its open question. */
+  error: string | null;
   onEdit: () => void;
   onAsk: () => void;
   onCancel: () => void;
@@ -284,6 +307,7 @@ function Day({
           <ConfirmDelete
             question="Delete this check-in? This can’t be undone."
             busy={busy}
+            error={error}
             onConfirm={onDelete}
             onKeep={() => {
               // Back to the button that asked, which stays in place.

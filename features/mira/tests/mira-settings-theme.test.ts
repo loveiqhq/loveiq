@@ -218,3 +218,139 @@ describe("field borders (A11Y-8, WCAG 1.4.11)", () => {
     }
   });
 });
+
+describe("the phone's bar and keyboard focus (round 3)", () => {
+  /** Below lg, where the bar is fixed to the bottom (MiraAppFrame). */
+  const PHONE = "not all and (min-width: 1024px)";
+
+  it("is 60px at Default and Small text and grows with Large, so each place stays 48px or more (R3-UXA-4)", async () => {
+    const css = await compile("");
+    expect(decls(css, ":root", "--mira-bar")).toEqual(["60px"]);
+    expect(decls(css, ':root:has(.mira-root[data-mira-text="large"])', "--mira-bar")).toEqual([
+      "69px",
+    ]);
+    // Small text no longer shrinks it (60px × 0.9 left each place 47px tall).
+    let shrunk = false;
+    postcss.parse(css).walkDecls("--mira-bar", (d) => {
+      if ((d.parent as postcss.Rule).selector.includes("small")) shrunk = true;
+    });
+    expect(shrunk).toBe(false);
+  });
+
+  it("scrolls a control with keyboard focus clear of the bar, its safe area and a cookie banner under it (R3-UXA-1)", async () => {
+    const css = await compile("");
+    expect(decls(css, ":root:has([data-mira-bar])", "scroll-padding-bottom", PHONE)).toEqual([
+      "calc(var(--mira-bar) + env(safe-area-inset-bottom) + var(--liq-consent-h, 0px) + 8px)",
+    ]);
+    // Only below lg: from lg the menu is the column on the left, nothing covers the page.
+    expect(decls(css, ":root:has([data-mira-bar])", "scroll-padding-bottom")).toEqual([]);
+  });
+
+  it("lets a page with a sticky header keep focus and jumps below it: --mira-scroll-top", async () => {
+    const css = await compile("scroll-mt-16");
+    expect(decls(css, ":where(.mira-root) *", "scroll-margin-top")).toEqual([
+      "var(--mira-scroll-top, 0px)",
+    ]);
+    // No weight of its own: a component's scroll-mt-* still wins.
+    expect(css.indexOf(".scroll-mt-16")).toBeGreaterThan(css.indexOf(":where(.mira-root) *"));
+  });
+});
+
+describe("one focus style (round 3)", () => {
+  const RING = "2px solid rgb(var(--ap-purple))";
+  /** Each `prop` declared by rules whose selector passes `pick`, with the selectors. */
+  function find(css: string, pick: (selector: string) => boolean, prop: string) {
+    const found: Array<[string, string]> = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (pick(rule.selector)) rule.walkDecls(prop, (d) => found.push([rule.selector, d.value]));
+    });
+    return found;
+  }
+
+  it("rings any control that brings none of its own in Mira's purple, never the browser's (R3-UXA-3)", async () => {
+    const css = await compile("outline-none focus-visible:outline-ap-purple");
+    expect(decls(css, ":where(.mira-root) :focus-visible", "outline")).toEqual([RING]);
+    expect(decls(css, ":where(.mira-root) :focus-visible", "outline-offset")).toEqual(["2px"]);
+    // No weight of its own: outline-none and a component's own focus classes, later, still win.
+    expect(css.indexOf(".outline-none")).toBeGreaterThan(
+      css.indexOf(":where(.mira-root) :focus-visible")
+    );
+  });
+
+  it("rings a focused text field, more than its edge turning purple (R3-UXA-5)", async () => {
+    const css = await compile("");
+    const fields = find(css, (s) => s.includes("textarea") && s.includes(".border"), "outline");
+    // Text fields with an edge, and the bordered box around a borderless one (the composer), each
+    // its own rule: a browser without :has() must still ring the fields.
+    expect(fields.map(([s]) => s)).toEqual([
+      expect.stringMatching(
+        /^\.mira-root :is\(input:not\(.*checkbox.*radio.*\), textarea, select\)\.border:focus-visible$/
+      ),
+      ".mira-root .border:has(> textarea:not(.border):focus-visible)",
+    ]);
+    for (const [, value] of fields) expect(value).toBe(RING);
+    // It must outweigh a field's outline-none and focus-visible:outline-offset-2.
+    expect(find(css, (s) => s.includes("textarea"), "outline-offset").map(([, v]) => v)).toEqual([
+      "0px",
+      "0px",
+    ]);
+  });
+
+  it("stays whole inside a sideways scroller, and on the site's skip link on Mira's pages", async () => {
+    const css = await compile("overflow-x-auto");
+    // A ring outside a control in a sideways row (the chat's prompts) lost its top and bottom.
+    expect(decls(css, ".mira-root .overflow-x-auto :focus-visible", "outline-offset")).toEqual([
+      "-2px",
+    ]);
+    // The skip link lives in the site's layout, outside .mira-root.
+    expect(
+      decls(css, ':root:has(.mira-root) a[href="#main-content"]:focus-visible', "outline")
+    ).toEqual([RING]);
+  });
+
+  it("is 3:1 or more on every surface a control sits on, in both themes", () => {
+    for (const [theme, t] of [
+      ["light", tokens.AP_LIGHT],
+      ["dark", tokens.MIRA_DARK],
+    ] as const) {
+      for (const bg of ["paper", "ground", "lilac", "track"] as const) {
+        expect(contrast(t.purple, t[bg]), `${theme}: ring on ${bg}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+});
+
+describe("Home's sections (round 3)", () => {
+  /** Each `prop` of rules whose selector holds `part`, in order. */
+  function values(css: string, part: string, prop: string): string[] {
+    const found: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.selector.includes(part)) rule.walkDecls(prop, (d) => found.push(d.value));
+    });
+    return found;
+  }
+
+  it("are one anatomy: a card's own outer box goes, its one h2 is the section heading", async () => {
+    // MiraHome's section lists carry the class; Tailwind emits the rules only then.
+    const css = await compile(
+      "mira-home-sections border p-5 rounded-3xl text-[20px] font-semibold"
+    );
+    expect(decls(css, ".mira-home-sections > section", "border-width")).toEqual(["0"]);
+    expect(decls(css, ".mira-home-sections > section", "padding")).toEqual(["0"]);
+    expect(decls(css, ".mira-home-sections > section", "margin")).toEqual(["0"]);
+    // Directly under the section (Picked for you) or in its first row (the others, wrapped with
+    // a subline or not), at Lora 24px medium like Daily journal, scaled with the text size.
+    const heading = postcss
+      .parse(css)
+      .nodes.filter((n): n is postcss.Rule => n.type === "rule" && n.selector.includes("h2"))
+      .find((r) => r.selector.includes("mira-home-sections"))!;
+    expect(heading.selector.split(",").map((s) => s.trim())).toEqual([
+      ".mira-home-sections > section > h2",
+      ".mira-home-sections > section > div:first-child h2",
+    ]);
+    expect(values(css, "mira-home-sections > section > h2", "font-size")).toEqual([
+      "calc(24px * var(--mira-fs, 1))",
+    ]);
+    expect(values(css, "mira-home-sections > section > h2", "font-weight")).toEqual(["500"]);
+  });
+});

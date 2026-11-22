@@ -239,6 +239,23 @@ describe("POST /api/mira/chat", () => {
     expect(gates()).toEqual([]);
   });
 
+  // Round-3 R3-CHAT-3: the reply that used the only free message also brought the 12-question
+  // invitation, whose "Shall we start?" nobody could answer without an account.
+  it("brings no intake invitation with the reply that uses the last free message", async () => {
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, cfg) => ({
+      allowed: true,
+      remaining: cfg.bucket === "mira-anon-messages" ? 0 : 9,
+      resetAt: new Date(),
+    }));
+    const body = await (await post({ message: "I hide during sex", consent: true })).json();
+    expect(body).toMatchObject({ reply: "That makes sense.", freeLeft: 0 });
+    expect(body.invitation).toBeUndefined();
+    // Nor is Mira told one follows: her reply may ask its own question.
+    expect(vi.mocked(askModel).mock.calls[0]![1]).not.toContain(
+      "end your reply without a question"
+    );
+  });
+
   it("stops anonymous messages at the daily cap, per browser and per network", async () => {
     for (const bucket of ["mira-anon-daily", "mira-anon-ip"]) {
       vi.mocked(askModel).mockClear();
@@ -927,6 +944,32 @@ describe("POST /api/mira/chat", () => {
     } as never);
     await post({ message: "hi", consent: true });
     expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("Reply in German");
+  });
+
+  // Round-3 R3-DATA-1: the topic carries its chat's id, so the picks forget it with that chat.
+  it("logs a saved chat's topic with the chat's id", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: true,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-18",
+    });
+    vi.mocked(askModel).mockResolvedValue({
+      ok: true,
+      text: "That sounds hard.\n[[TOPIC:hiding]]",
+      refused: false,
+    });
+    await post({ message: "I only feel okay with the lights off", consent: true });
+    expect(events("chat_topic")).toEqual([
+      { topic: "hiding", chat: "6f2c4a1e-1111-4222-8333-944455556666" },
+    ]);
   });
 
   it("logs a new chat's topic as its id, never the words, and never for a starter chip", async () => {

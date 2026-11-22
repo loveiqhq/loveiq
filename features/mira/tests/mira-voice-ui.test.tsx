@@ -303,6 +303,31 @@ describe("a spoken turn", () => {
     expect(listening()).toHaveLength(1);
   });
 
+  // Round-3 R3-CHAT-12: the chat's hidden live line said "Mira is writing…" beside the panel's
+  // own "Mira is thinking", then read the whole reply while the device voice said it.
+  it("keeps the chat's live line quiet while she says the reply, and reads it when she can't", async () => {
+    const live = () => document.querySelector<HTMLElement>(".sr-only[aria-live='polite']")!;
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    const answer = holdChatAnswers();
+    talk();
+    await sayToMira("I only feel okay with the lights off");
+    expect(screen.getByText("Mira is thinking")).toBeTruthy();
+    expect(live()).toHaveTextContent("");
+    act(() => answer.current({ body: { reply: REPLY, sources: [], freeLeft: 5 } }));
+    await waitFor(() => expect(spoken()).toEqual(["That makes sense."]));
+    expect(live()).toHaveTextContent("");
+    cleanup();
+
+    // A device with no voice for her: she answers in writing, so the reply is read out.
+    vi.spyOn(synth, "getVoices").mockReturnValue([]);
+    fetchMock.mockImplementation(route);
+    fetchMock.mockClear();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    await sayToMira("I only feel okay with the lights off");
+    await waitFor(() => expect(live()).toHaveTextContent(`Mira: ${REPLY}`));
+  });
+
   it("ends the turn after a pause in the person's words", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     render(<MiraChat signedIn={false} initialChatId={null} />);

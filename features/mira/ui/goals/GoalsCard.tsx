@@ -5,6 +5,7 @@ import { useState } from "react";
 import { localDay, progress } from "../../server/goal-progress";
 import { useSignedOut } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import { ChallengePills, FOCUS, TickButton, WeekLine, onTheGo } from "./parts";
 import { useGoals, type Goal } from "./useGoals";
@@ -71,16 +72,7 @@ export default function GoalsCard() {
       ) : g.load === "minor" ? (
         <AdultsOnly className="mt-4" />
       ) : g.load === "error" ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <p className="text-[14px] text-ap-body">{g.loadError}</p>
-          <button
-            type="button"
-            onClick={g.reload}
-            className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS}`}
-          >
-            Try again
-          </button>
-        </div>
+        <LoadFailed what="Your goals" onRetry={g.reload} className="mt-4" />
       ) : active.length > 0 ? (
         <ul className="mt-4 flex flex-col divide-y divide-ap-line">
           {active.slice(0, ON_HOME).map((goal) => {

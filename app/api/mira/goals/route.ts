@@ -4,8 +4,8 @@
  *   GET     → the person's goals in the order they were set, each with the days it was ticked
  *   POST    → a new goal { text, weeklyTarget?: 1 to 7 or null, via?: "hand" | "mira" } ("mira":
  *             "Add as a goal" under one of Mira's replies); 409 with MAX_ACTIVE_GOALS on the go.
- *             The same words as a goal on the go (any case) answer that goal, uncounted: a
- *             second tap or device makes no second goal
+ *             The same words as a goal on the go (any case) answer that goal with `existing:
+ *             true`, uncounted and unchanged: a second tap or device makes no second goal
  *   DELETE  → every goal of the person's, and their ticks
  *
  * Everything is scoped to the signed-in account (features/mira/server/goals.ts). An account or
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
       );
     }
     if (!made.existing) logMiraEvent("goal_set", { userId: account.id }, { via, target });
-    return NextResponse.json({ goal: made.goal });
+    return NextResponse.json({ goal: made.goal, existing: made.existing });
   } catch (err) {
     logger.error({ err }, "mira: a goal was not saved");
     return NextResponse.json(

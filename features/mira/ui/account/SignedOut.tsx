@@ -1,6 +1,6 @@
 "use client";
 
-import { signInHref } from "../api";
+import { SIGNED_OUT, signInHref } from "../api";
 
 /**
  * The one answer to a lost sign-in on a signed-in page (round-2 HAB-16): what happened and a way
@@ -21,5 +21,22 @@ export function SignedOutNotice() {
         Sign in again
       </a>
     </div>
+  );
+}
+
+/**
+ * The way back in beside a save's own error line (round-3 R3-ACCT-3): " Sign in again", back to
+ * this page and section, when that error is the lost sign-in (every 401 comes back as SIGNED_OUT,
+ * ui/api.ts); nothing for any other error.
+ */
+export function SignInAgain({ error }: { error: string | null }) {
+  if (error !== SIGNED_OUT) return null;
+  return (
+    <>
+      {" "}
+      <a href={signInHref()} className="font-semibold underline">
+        Sign in again
+      </a>
+    </>
   );
 }

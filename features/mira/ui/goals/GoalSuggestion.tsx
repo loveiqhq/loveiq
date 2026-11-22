@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { miraApi } from "../api";
 import { ANSWER_CHIP } from "../IntakeAnswers";
 import { CheckDot, FOCUS, PlusIcon, TargetIcon } from "./parts";
@@ -29,8 +29,19 @@ export function GoalSuggestion({
     added ? "added" : "offer"
   );
   const [error, setError] = useState<string | null>(null);
+  // After the person's own tap, what replaced the button takes the focus, never the page (round-3
+  // R3-CHAT-6); a reopened chat's "Added" doesn't.
+  const replaced = useRef<HTMLParagraphElement | null>(null);
+  const tapped = useRef(false);
+  useEffect(() => {
+    if (state === "saving") return;
+    if (tapped.current && state !== "offer") replaced.current?.focus();
+    tapped.current = false;
+  }, [state]);
 
   async function add() {
+    if (state !== "offer") return; // busy: the tap is ignored (decision 7)
+    tapped.current = true;
     if (!signedIn) return setState("account");
     setState("saving");
     setError(null);
@@ -52,7 +63,11 @@ export function GoalSuggestion({
         </span>
       </p>
       {state === "added" ? (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] font-semibold text-ap-ink">
+        <p
+          ref={replaced}
+          tabIndex={-1}
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] font-semibold text-ap-ink outline-none"
+        >
           <CheckDot done pop />
           Added to your goals
           <Link
@@ -64,7 +79,11 @@ export function GoalSuggestion({
         </p>
       ) : state === "account" ? (
         <div className="flex flex-col gap-3 motion-safe:animate-mira-in sm:flex-row sm:items-center sm:gap-4">
-          <p className="flex-1 text-[14px] leading-normal text-ap-body">
+          <p
+            ref={replaced}
+            tabIndex={-1}
+            className="flex-1 text-[14px] leading-normal text-ap-body outline-none"
+          >
             Goals live in your free account, so Mira can check in on them with you.
           </p>
           <Link
@@ -79,8 +98,9 @@ export function GoalSuggestion({
           <button
             type="button"
             onClick={() => void add()}
-            disabled={state === "saving"}
-            className={`${ANSWER_CHIP} inline-flex min-h-[44px] items-center gap-1.5 font-semibold text-ap-ink disabled:opacity-60 ${FOCUS}`}
+            // Not `disabled` while it saves (decision 7): it keeps the focus and ignores taps.
+            aria-disabled={state === "saving" || undefined}
+            className={`${ANSWER_CHIP} inline-flex min-h-[44px] items-center gap-1.5 font-semibold text-ap-ink aria-disabled:opacity-60 ${FOCUS}`}
           >
             <PlusIcon />
             {state === "saving" ? "Adding…" : "Add as a goal"}

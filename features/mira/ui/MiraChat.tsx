@@ -11,7 +11,7 @@ import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { track } from "./coaches/data";
 import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
-import { ADULTS_ONLY } from "./kit";
+import { ADULTS_ONLY, ConfirmDelete } from "./kit";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import { ReviewsWelcome } from "./reviews/PublicReviews";
@@ -21,6 +21,7 @@ import { useVoice } from "./voice/useVoice";
 import {
   local,
   miraApi,
+  signInHref,
   useReloadWhenRestored,
   type LocalTurn,
   type Source,
@@ -75,6 +76,8 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
+/** A reply that ends by asking the person something (any script's question mark, then quotes). */
+const endsAsking = (text: string) => /[?？؟][\s"'”’»)]*$/u.test(text);
 export { SESSION_OPENING };
 
 /**
@@ -100,9 +103,15 @@ export default function MiraChat({
   initialChatId,
   starter = null,
   session = false,
+  stopped = false,
 }: {
   signedIn: boolean;
   initialChatId: string | null;
+  /**
+   * This browser or account was stopped as under 18 (app/mira/page.tsx reads it): the chat starts
+   * as after a stop, with the one refusal and no 18+ tick, prompts or sign-up asks.
+   */
+  stopped?: boolean;
   /**
    * The words for `?ask=N` (the guide's "Ask Mira about this") or `?say=<check>`, which the page
    * builds from the id: they wait in the composer while the address still asks for them, and only
@@ -120,12 +129,16 @@ export default function MiraChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // `retry`: the saved chat didn't load (Try again loads it).
-  const [error, setError] = useState<{ text: string; signIn?: boolean; retry?: boolean } | null>(
-    null
-  );
+  const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
+  // The saved chat didn't load: said with Try again, whatever else fails meanwhile (a send's
+  // error doesn't replace it), and it stays the chat being continued (CHAT-16, R3-CHAT-10).
+  const [unloaded, setUnloaded] = useState(false);
   // A calm line about the chat itself (it isn't here any more), read out as a status.
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(stopped ? ADULTS_ONLY : null);
+  // What a screen reader hears from the hidden live line: that Mira is writing, then her new reply
+  // (with her invitation), never the person's own words or the buttons and cards (round-2 audit
+  // A11Y-11). Set as each send goes, so a turn taken back never reads the reply before it again.
+  const [said, setSaid] = useState("");
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const [gate, setGate] = useState(false);
   const [consented, setConsented] = useState(signedIn);
@@ -144,12 +157,13 @@ export default function MiraChat({
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
   // Said they are under 18: nothing of this chat is kept in the browser any more.
-  const [minor, setMinor] = useState(false);
+  const [minor, setMinor] = useState(stopped);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  // "Delete this chat" (round-2 audit CHAT-29): its confirm step, open ("ask") or deleting ("busy").
+  // "Delete this chat" (round-2 audit CHAT-29): its question, open ("ask") or deleting ("busy").
   const [deleting, setDeleting] = useState<"ask" | "busy" | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteOpener = useRef<HTMLButtonElement | null>(null);
   // The logo while the sign-up card shows: back to the start without losing the chat the card
   // promises to bring along (a message sent from there goes on in that chat, which comes back).
   const [atStart, setAtStart] = useState(false);
@@ -213,6 +227,7 @@ export default function MiraChat({
     );
     if (chat.ok) {
       setError(null);
+      setUnloaded(false);
       setMessages(
         chat.data.messages.map((m) => ({
           role: m.role,
@@ -228,12 +243,10 @@ export default function MiraChat({
       setChatId(null);
       window.history.replaceState(null, "", "/mira");
       setNotice("That chat isn't here any more. It may have been deleted.");
+    } else if (chat.status === 401) {
+      setError({ text: "Please sign in again.", signIn: true });
     } else {
-      setError(
-        chat.status === 401
-          ? { text: "Please sign in again.", signIn: true }
-          : { text: "This chat didn't load. Please try again.", retry: true }
-      );
+      setUnloaded(true);
     }
   }, []);
 
@@ -375,6 +388,8 @@ export default function MiraChat({
     setMessages(next);
     setInput("");
     setSending(true);
+    // A spoken turn has the voice panel's own status ("Mira is thinking"), so not this line too.
+    setSaid(opts.voice ? "" : "Mira is writing…");
     const res = await miraApi<{
       reply?: string;
       sources?: Source[];
@@ -409,7 +424,17 @@ export default function MiraChat({
     });
     setSending(false);
     if (opts.voice) voice.answered(res); // she says the reply, or listens again
+    // Said out loud: not read out by the live line as well (round-3 R3-CHAT-12). A device with no
+    // voice for her answers in writing, and that reply is read out.
+    const spoken = Boolean(opts.voice) && voice.speaking();
     if (res.data.gate) {
+      // Never sent (a crisis message never gets here: the server answers it): the words go back
+      // in the box and the page says why, rather than a message left waiting for a reply that
+      // can't come (round-3 R3-CHAT-4).
+      setMessages(messages);
+      setInput(message);
+      setSaid("");
+      setNotice(NOT_SENT);
       setGate(true);
       setFreeLeft(0);
       return;
@@ -418,6 +443,7 @@ export default function MiraChat({
       if (opts.session) local.saveSessionOpened(null); // not opened: a later visit tries again
       setMessages(messages);
       setInput(message);
+      setSaid(""); // the alert below says what went wrong
       setError({
         text: res.data.error ?? "Mira couldn't answer just now. Please try again.",
         signIn: res.status === 401 && res.data.signIn === true,
@@ -442,6 +468,9 @@ export default function MiraChat({
     ];
     replyAt.current = next.length;
     setMessages(withReply);
+    setSaid(
+      spoken ? "" : `Mira: ${[res.data.reply, res.data.invitation].filter(Boolean).join(" ")}`
+    );
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
     // composer stays, and the server answers a crisis message whatever the limits. Nor after an
@@ -467,6 +496,7 @@ export default function MiraChat({
       !res.data.invitation &&
       !res.data.ask &&
       !res.data.goal && // one ask at a time: Mira's goal offer goes first (round-2 audit CHAT-4)
+      !endsAsking(res.data.reply) && // and her own question (round-3 R3-CHAT-9): a later reply
       !crisisIn(withReply) &&
       !local.bodyCheckSnoozed()
     ) {
@@ -518,9 +548,12 @@ export default function MiraChat({
     return ok;
   }
 
-  /** Talk: the first-message consent comes first, as for typing ("" marks it as Talk's). */
+  /**
+   * Talk: the first-message consent comes first, as for typing ("" marks it as Talk's); never
+   * after an under-18 stop, as for typing (round-3 R3-ACCT-8).
+   */
   function talk() {
-    if (consented) voice.start();
+    if (consented || minor) voice.start();
     else setPending("");
   }
 
@@ -579,6 +612,7 @@ export default function MiraChat({
     setMessages([]);
     setChatId(null);
     setError(null);
+    setUnloaded(false);
     setNotice(null);
     setNps(null);
     window.history.replaceState(null, "", "/mira");
@@ -609,9 +643,20 @@ export default function MiraChat({
     setChats((all) => all.filter((c) => c.id !== id));
     newChat();
     setNotice("Chat deleted.");
-    // The button that opened the step went with the chat: focus goes to the conversation.
-    window.setTimeout(() => listRef.current?.focus({ preventScroll: true }), 0);
   }
+
+  // The question opens on "Keep it" (the kit's ConfirmDelete, as every delete in Mira: round-3
+  // R3-UXA-9). Once it goes, the focus goes back to "Delete this chat", or to the conversation when
+  // the button went with the chat: never to the page (R3-CHAT-5). After the commit, so it lands.
+  const askedToDelete = useRef(false);
+  useEffect(() => {
+    if (deleting) askedToDelete.current = true;
+    else if (askedToDelete.current) {
+      askedToDelete.current = false;
+      if (deleteOpener.current) deleteOpener.current.focus();
+      else listRef.current?.focus({ preventScroll: true });
+    }
+  }, [deleting]);
 
   /** The logo: back to Mira's start. A new chat, unless that would wipe the one sign-up keeps. */
   function goToStart() {
@@ -668,9 +713,9 @@ export default function MiraChat({
   const started = messages.length > 0;
   const last = messages.at(-1);
   // The sign-up card, never right under a reply that brought the support lines, nor after an
-  // under-18 stop; a later message that needs the account brings it back.
+  // under-18 stop; a later message that needs the account (held back, NOT_SENT) brings it back.
   const lastHadLines = last?.role === "assistant" && last.crisis === true;
-  const showGate = gate && !minor && !lastHadLines;
+  const showGate = gate && !minor && (!lastHadLines || notice === NOT_SENT);
 
   // A tapped prompt (or the consent step it opened) goes away with the welcome: focus moves to
   // the conversation rather than being lost, without opening a phone's keyboard.
@@ -719,26 +764,11 @@ export default function MiraChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, [session, signedIn]);
 
-  // What a screen reader hears: that Mira is writing, then her new reply (with her invitation),
-  // never the person's own words or the buttons and cards (round-2 audit A11Y-11).
-  let fresh = messages.length;
-  while (fresh > 0 && messages[fresh - 1]!.role === "assistant" && messages[fresh - 1]!.live)
-    fresh--;
-  const said = sending
-    ? "Mira is writing…"
-    : fresh < messages.length
-      ? `Mira: ${messages
-          .slice(fresh)
-          .map((m) => m.content)
-          .join(" ")}`
-      : "";
-
   const empty = !started || atStart;
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
-  const unloaded = Boolean(error?.retry);
   // A chat opened by its link loads first: the welcome would only flash before it.
   const showWelcome = empty && (ready || !initialChatId) && !unloaded;
-  const showChips = ready && empty && !gate && !unloaded;
+  const showChips = ready && empty && !gate && !unloaded && !minor;
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-ap-lilac">
@@ -1088,18 +1118,30 @@ export default function MiraChat({
                   {/* A saved chat can be deleted on its own (Settings deletes them all). Here,
                       at its end, rather than in a header that has no room on a small phone. */}
                   {signedIn && chatId && !sending && !voiceOn ? (
-                    <div className="flex justify-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeleteError(null);
-                          setDeleting("ask");
-                        }}
-                        className="min-h-[44px] px-3 text-[13px] text-ap-muted underline underline-offset-4 hover:text-ap-body"
-                      >
-                        Delete this chat
-                      </button>
-                    </div>
+                    deleting ? (
+                      <ConfirmDelete
+                        question="Delete this chat? Its messages, and any voice session in it, are deleted for good. Your other chats stay. This can't be undone."
+                        action={deleting === "busy" ? "Deleting…" : "Delete"}
+                        busy={deleting === "busy"}
+                        error={deleteError}
+                        onConfirm={() => void deleteThisChat()}
+                        onKeep={() => setDeleting(null)}
+                      />
+                    ) : (
+                      <div className="flex justify-center">
+                        <button
+                          ref={deleteOpener}
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleting("ask");
+                          }}
+                          className="min-h-[44px] px-3 text-[13px] text-ap-muted underline underline-offset-4 hover:text-ap-body"
+                        >
+                          Delete this chat
+                        </button>
+                      </div>
+                    )
                   ) : null}
                 </div>
               ) : null}
@@ -1251,31 +1293,34 @@ export default function MiraChat({
               >
                 {notice}
               </p>
-              {error ? (
+              {error || (unloaded && chatId) ? (
                 <div className="mt-2 text-center">
-                  <p role="alert" className="text-[13px] text-ap-bad-ink">
-                    {error.text}
-                    {error.signIn ? (
-                      <>
-                        {" "}
-                        <Link href="/mira/start" className="font-semibold underline">
-                          Sign in again
-                        </Link>
-                      </>
-                    ) : null}
-                    {error.retry && chatId ? (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          onClick={() => void openChat(chatId)}
-                          className="font-semibold underline"
-                        >
-                          Try again
-                        </button>
-                      </>
-                    ) : null}
-                  </p>
+                  {unloaded && chatId ? (
+                    <p role="alert" className="text-[13px] text-ap-bad-ink">
+                      This chat didn&apos;t load. Please try again.{" "}
+                      <button
+                        type="button"
+                        onClick={() => void openChat(chatId)}
+                        className="font-semibold underline"
+                      >
+                        Try again
+                      </button>
+                    </p>
+                  ) : null}
+                  {error ? (
+                    <p role="alert" className="text-[13px] text-ap-bad-ink">
+                      {error.text}
+                      {error.signIn ? (
+                        <>
+                          {" "}
+                          {/* Back to this chat afterwards (round-3 R3-CHAT-11). */}
+                          <a href={signInHref()} className="font-semibold underline">
+                            Sign in again
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
                   <p className="mt-0.5 text-[12px] text-ap-muted">
                     If you&apos;re in danger right now, open{" "}
                     <button
@@ -1352,44 +1397,6 @@ export default function MiraChat({
           </div>
         </Modal>
       ) : null}
-      {deleting ? (
-        <Modal label="Delete this chat?" onClose={() => setDeleting(null)}>
-          <h2
-            data-autofocus
-            tabIndex={-1}
-            className="font-serif text-[22px] font-medium outline-none"
-          >
-            Delete this chat?
-          </h2>
-          <p className="mt-2 text-[14px] leading-snug text-ap-body">
-            Its messages, and any voice session in it, are deleted for good. This can&apos;t be
-            undone. Your other chats stay.
-          </p>
-          {deleteError ? (
-            <p role="alert" className="mt-3 text-[14px] text-ap-bad-ink">
-              {deleteError}
-            </p>
-          ) : null}
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setDeleting(null)}
-              className="min-h-[44px] rounded-full border border-ap-line px-5 text-[15px] font-semibold"
-            >
-              Cancel
-            </button>
-            {/* Not `disabled` while deleting: focus stays on it (it ignores the second press). */}
-            <button
-              type="button"
-              aria-disabled={deleting === "busy"}
-              onClick={() => void deleteThisChat()}
-              className="min-h-[44px] rounded-full bg-ap-bad px-5 text-[15px] font-semibold text-white aria-disabled:opacity-50"
-            >
-              {deleting === "busy" ? "Deleting…" : "Delete"}
-            </button>
-          </div>
-        </Modal>
-      ) : null}
       {styleOpen ? (
         <CoachingStylePanel value={style} onClose={() => setStyleOpen(false)} onSave={saveStyle} />
       ) : null}
@@ -1413,6 +1420,8 @@ const CHIP =
   "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-ap-mist hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
 const FREE_LABEL =
   ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
+/** A message after the free one(s), back in the box (R3-CHAT-4). */
+const NOT_SENT = "That message wasn't sent: create a free account to send it.";
 const ICON_BUTTON =
   "relative inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10 sm:w-auto sm:px-3";
 /** A rating is final: once one thumb is chosen, the other says it's unavailable (CHAT-6). */
