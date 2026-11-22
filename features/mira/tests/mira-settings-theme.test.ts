@@ -296,6 +296,18 @@ describe("one focus style (round 3)", () => {
     ]);
   });
 
+  it("stays whole inside a sideways scroller, and on the site's skip link on Mira's pages", async () => {
+    const css = await compile("overflow-x-auto");
+    // A ring outside a control in a sideways row (the chat's prompts) lost its top and bottom.
+    expect(decls(css, ".mira-root .overflow-x-auto :focus-visible", "outline-offset")).toEqual([
+      "-2px",
+    ]);
+    // The skip link lives in the site's layout, outside .mira-root.
+    expect(
+      decls(css, ':root:has(.mira-root) a[href="#main-content"]:focus-visible', "outline")
+    ).toEqual([RING]);
+  });
+
   it("is 3:1 or more on every surface a control sits on, in both themes", () => {
     for (const [theme, t] of [
       ["light", tokens.AP_LIGHT],

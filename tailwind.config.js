@@ -61,6 +61,14 @@ const miraTheme = plugin(({ addBase }) => {
     // and theme, and all but vanished on the ink pill in Dark. No weight of its own, so
     // outline-none and a component's own focus classes still win.
     ":where(.mira-root) :focus-visible": { outline: RING, "outline-offset": "2px" },
+    // Inside a sideways scroller the ring is drawn inside the control: the scroller cut the top
+    // and bottom off a ring outside it (the chat's prompts, the coaches' filters).
+    ".mira-root .overflow-x-auto :focus-visible": { "outline-offset": "-2px" },
+    // The site's skip link sits outside .mira-root; on Mira's pages it takes her ring too.
+    ':root:has(.mira-root) a[href="#main-content"]:focus-visible': {
+      outline: RING,
+      "outline-offset": "2px",
+    },
     // A text field (R3-UXA-5) gets the ring hugging its edge: its edge turning purple alone was a
     // 1.4:1 change in Light. A borderless field in a bordered box (the chat's composer) rings the
     // box, in a rule of its own so a browser without :has() still rings the fields.
