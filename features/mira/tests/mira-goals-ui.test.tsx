@@ -77,9 +77,8 @@ describe("Home's goals card", () => {
       "/mira/goals#new"
     );
     expect(screen.getByText("Body confidence")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Add a challenge" }).getAttribute("href")).toBe(
-      "/mira/coaches"
-    );
+    // No "Add a challenge" until a second one can be picked: it led to coaches who can't be.
+    expect(screen.queryByRole("link", { name: /challenge/i })).toBeNull();
   });
 
   it("shows three goals on the go with this week, and the way to the rest", async () => {

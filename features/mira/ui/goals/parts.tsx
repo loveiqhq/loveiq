@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { addDays, weekStart, type Day, type Progress } from "../../server/goal-progress";
 import type { Goal } from "./useGoals";
 
@@ -43,7 +42,10 @@ const short = (day: Day) =>
 export const FOCUS =
   "outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
 
-/** Mira's challenge, any a goal names, and the way to more (the coaches page). */
+/**
+ * Mira's challenge and any a goal names. No "Add a challenge" until a person can pick a second
+ * one: it led to the coaches page, where none can be added yet (round-2 audit HAB-2).
+ */
 export function ChallengePills({ goals }: { goals: Goal[] }) {
   const ids = [...new Set(["body-confidence", ...goals.map((g) => g.challenge)])];
   return (
@@ -56,15 +58,6 @@ export function ChallengePills({ goals }: { goals: Goal[] }) {
           {CHALLENGES[id] ?? id}
         </li>
       ))}
-      <li>
-        <Link
-          href="/mira/coaches"
-          className={`relative inline-flex min-h-[32px] items-center gap-1.5 rounded-full border border-dashed border-ap-mist px-3 text-[13px] font-semibold text-ap-ink transition-colors after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:border-ap-lavender hover:bg-ap-ground ${FOCUS}`}
-        >
-          <PlusIcon size={14} />
-          Add a challenge
-        </Link>
-      </li>
     </ul>
   );
 }
@@ -200,12 +193,12 @@ export function WeekBars({ p, target, today }: { p: Progress; target: number | n
   );
 }
 
-export function PlusIcon({ size = 16 }: { size?: number }) {
+export function PlusIcon() {
   return (
     <svg
       aria-hidden="true"
-      width={size}
-      height={size}
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
