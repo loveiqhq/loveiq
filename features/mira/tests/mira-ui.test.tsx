@@ -690,6 +690,44 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     expect(localStorage.getItem("mira.tip.style.v1")).not.toBeNull();
   });
 
+  // Round-2 audit SET-3, the chat's side: the panel saved the whole style from the copy the page
+  // loaded, so a change made meanwhile in Settings or another tab went back without a word.
+  it("saves only what the panel changed, onto the newest saved style", async () => {
+    let reads = 0;
+    replies["GET /api/mira/me"] = () => ({
+      body: {
+        profile: { style: ++reads === 1 ? { guidance: 2 } : { guidance: 2, depth: 4 } },
+        chats: [],
+      },
+    });
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Coaching style" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Tone 5 of 5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")).toHaveLength(1));
+    expect(calls("PATCH /api/mira/me")[0]).toEqual({
+      style: { guidance: 2, depth: 4, tone: 5 },
+    });
+  });
+
+  it("keeps a style another tab of this browser saved, when anonymous", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    localStorage.setItem("mira.style.v1", JSON.stringify({ depth: 4 })); // the other tab
+    fireEvent.click(screen.getByRole("button", { name: "Coaching style" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Tone 5 of 5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("mira.style.v1")!)).toEqual({ depth: 4, tone: 5 })
+    );
+  });
+
   it("counts a saved style", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     replies["PATCH /api/mira/me"] = () => ({ body: { success: true } });

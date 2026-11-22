@@ -65,6 +65,7 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const SKIP_ANSWER = "I’d rather skip this one.";
+const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
 export { SESSION_OPENING };
 
 /**
@@ -577,12 +578,25 @@ export default function MiraChat({
     else newChat();
   }
 
+  /**
+   * The panel's Save: only the scales changed in it, onto the newest saved style, so a change made
+   * meanwhile in Settings or another tab isn't undone (round-2 audit SET-3). A point moved back to
+   * balanced is sent as 3, so it replaces what was there either way.
+   */
   async function saveStyle(next: Style): Promise<string | null> {
+    const changed = STYLE_KEYS.filter((k) => (next[k] ?? 3) !== (style[k] ?? 3));
+    let saved: Style = style;
     if (signedIn) {
-      const res = await miraApi("/api/mira/me", { method: "PATCH", body: { style: next } });
+      const me = await miraApi<{ profile: { style: Style | null } }>("/api/mira/me");
+      if (me.ok) saved = me.data.profile.style ?? {};
+    } else saved = local.style() ?? {};
+    const merged: Style = { ...saved };
+    for (const k of changed) merged[k] = next[k] ?? 3;
+    if (signedIn) {
+      const res = await miraApi("/api/mira/me", { method: "PATCH", body: { style: merged } });
       if (!res.ok) return res.data.error ?? "Unable to save. Please try again.";
-    } else local.saveStyle(next);
-    setStyle(next);
+    } else local.saveStyle(merged);
+    setStyle(merged);
     setStyleOpen(false);
     void miraApi("/api/mira/event", { body: { type: "track", name: "style_saved" } });
     return null;
