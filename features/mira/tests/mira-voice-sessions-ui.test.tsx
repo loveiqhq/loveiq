@@ -130,11 +130,36 @@ describe("the voice sessions page", () => {
     render(<RecordingsPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Voice sessions" })).toBeTruthy();
     await waitFor(() => expect(rows()).toHaveLength(2));
-    expect(screen.getByText("Showing your 50 latest sessions.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show older sessions" })).toBeTruthy();
     cleanup();
     replies["GET /api/mira/recordings?limit=50"] = () => ({ status: 401, body: {} });
     render(<RecordingsPage />);
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/start"));
+  });
+
+  // VOI-V9: only the 50 newest could be opened or deleted, though the notice says each can.
+  it("reaches every session: Show older sessions adds the ones before the last shown", async () => {
+    const OLDER = {
+      ...SESSIONS[1]!,
+      id: "3e4f5061-5555-4666-8777-c88899990000",
+      startedAt: "2026-10-20T12:00:00Z",
+    };
+    const older = `GET /api/mira/recordings?limit=50&before=${encodeURIComponent(SESSIONS[1]!.startedAt)}`;
+    // Set first: the fake answers with the first key a request starts with.
+    replies[older] = () => ({ status: 500, body: {} });
+    replies["GET /api/mira/recordings?limit=50"] = () => ({
+      body: { recordings: SESSIONS, more: true },
+    });
+    render(<RecordingsPage />);
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button", { name: "Show older sessions" }));
+    expect(await screen.findByText("Older sessions didn't load.")).toBeTruthy();
+    replies[older] = () => ({ body: { recordings: [OLDER], more: false } });
+    fireEvent.click(screen.getByRole("button", { name: "Show older sessions" }));
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    expect(rows()[2]!.getAttribute("href")).toBe(`/mira/recordings/${OLDER.id}`);
+    expect(screen.queryByText("Older sessions didn't load.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show older sessions" })).toBeNull();
   });
 });
 

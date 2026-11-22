@@ -76,9 +76,15 @@ export function sessionStart(claimed: Date, firstTurn: Date): Date {
   return new Date(Math.max(t, firstTurn.getTime() - LEAD_IN_MS));
 }
 
-export async function listRecordings(userId: string, limit: number): Promise<Recording[]> {
+/** Newest first; `before`: only those that began before it (the next page of an older list). */
+export async function listRecordings(
+  userId: string,
+  limit: number,
+  before?: string
+): Promise<Recording[]> {
+  const older = before ? `&started_at=lt.${enc(before)}` : "";
   return rows<Recording>(
-    `/rest/v1/mira_voice_session?user_id=eq.${enc(userId)}&select=${COLS}&order=started_at.desc&limit=${limit}`
+    `/rest/v1/mira_voice_session?user_id=eq.${enc(userId)}${older}&select=${COLS}&order=started_at.desc&limit=${limit}`
   );
 }
 

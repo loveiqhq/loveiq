@@ -12,8 +12,9 @@
  *        the page closing), it is saved once. With memory off the answer is
  *        { kept: false, reason: "memory_off" }; a session whose words aren't in the chat gets
  *        { kept: false }.
- *   GET ?limit=1..50  the account's sessions, newest first, each with the start of the one before
- *        it (Home's card, /mira/recordings).
+ *   GET ?limit=1..50&before=<time>  the account's sessions, newest first, each with the start of
+ *        the one before it (Home's card, /mira/recordings); `before`, the start of the last one
+ *        shown, gives the next, older page ("Show older sessions").
  *
  * Audio never reaches us: the browser turns speech into text before anything is sent. Someone
  * Mira stopped as under 18 (server/minor.ts) is refused (403), like on Mira's other routes.
@@ -186,12 +187,15 @@ export async function GET(request: Request) {
   }
   const account = await getMiraAccount();
   if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
-  const asked = Number(new URL(request.url).searchParams.get("limit"));
+  const query = new URL(request.url).searchParams;
+  const asked = Number(query.get("limit"));
   const limit = Number.isInteger(asked) && asked >= 1 && asked <= 50 ? asked : 50;
+  // The next page: the sessions that began before the last one shown ("Show older sessions").
+  const before = z.string().datetime({ offset: true }).safeParse(query.get("before")).data;
   try {
     if (await isMinor(account.id)) return ADULTS_ONLY();
     // One more than shown: the start of the session before the last one shown.
-    const found = await listRecordings(account.id, limit + 1);
+    const found = await listRecordings(account.id, limit + 1, before);
     return NextResponse.json(
       {
         recordings: found.slice(0, limit).map((r, i) => ({

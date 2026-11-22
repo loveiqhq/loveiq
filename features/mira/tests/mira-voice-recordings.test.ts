@@ -446,6 +446,24 @@ describe("GET /api/mira/recordings", () => {
   });
 });
 
+describe("GET /api/mira/recordings, older pages (VOI-V9)", () => {
+  it("lists the sessions that began before the last one shown, so every session can be reached", async () => {
+    const before = "2026-11-22T20:20:00.000+00:00";
+    await list(
+      request(`/api/mira/recordings?limit=50&before=${encodeURIComponent(before)}`, "GET")
+    );
+    const path = called("GET /rest/v1/mira_voice_session")[0]!.call;
+    expect(path).toContain(`started_at=lt.${encodeURIComponent(before)}`);
+    expect(path).toContain(`user_id=eq.${LEA.id}`);
+    expect(path).toContain("limit=51");
+  });
+
+  it("ignores a 'before' that isn't a time", async () => {
+    await list(request("/api/mira/recordings?limit=50&before=yesterday", "GET"));
+    expect(called("GET /rest/v1/mira_voice_session")[0]!.call).not.toContain("started_at=lt.");
+  });
+});
+
 describe("/api/mira/recordings/[id]", () => {
   const url = `/api/mira/recordings/${SESSION}`;
 
