@@ -14,7 +14,21 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+vi.mock("@shared/observability/logger", () => ({ default: { warn: vi.fn(), error: vi.fn() } }));
+
+// The booked session, as the stop page reads it before offering to stop its reminders.
+const booked = vi.hoisted(() => ({
+  slot: { paused: false } as { paused: boolean } | null | Error,
+}));
+vi.mock("@features/mira/server/weekly-sessions", () => ({
+  getSlot: vi.fn(async () => {
+    if (booked.slot instanceof Error) throw booked.slot;
+    return booked.slot;
+  }),
+}));
+
 import JournalReminderPage from "@/app/mira/journal/reminder/page";
+import NudgesPage from "@/app/mira/nudges/page";
 import SessionStopPage from "@/app/mira/session/stop/page";
 import { makeToken } from "@features/mira/server/nudges";
 
@@ -27,6 +41,7 @@ const fetchMock = vi.fn(
 );
 beforeEach(() => {
   jar.clear();
+  booked.slot = { paused: false };
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
@@ -75,6 +90,54 @@ describe("the journal reminder's stop page", () => {
   it("ignores a token in the address: without the cookie the link doesn't work", async () => {
     await open(JournalReminderPage, makeToken("journal-stop", ID)!);
     expect(screen.queryByRole("button", { name: "Stop reminders" })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * CHAT-23, UX-13: one situation, so one headline, one sentence and one frame. The tokens never
+ * expire, so nothing says "anymore"; a page opened again after its cookie's hour lands here too,
+ * hence "Open it again from the email".
+ */
+describe("the three pages behind email links", () => {
+  it("say a link that doesn't work the same way, in the same frame, each with where else to go", async () => {
+    for (const [page, name, href] of [
+      [NudgesPage, "Settings › Notifications", "/mira/settings#notifications"],
+      [JournalReminderPage, "your journal", "/mira/journal"],
+      [SessionStopPage, "Settings", "/mira/settings#weekly"],
+    ] as const) {
+      await open(page as never); // no cookie: a link cut short, or opened again after its hour
+      expect(screen.getByRole("heading", { level: 1 }).textContent, name).toBe(
+        "This link doesn’t work"
+      );
+      expect(
+        screen.getByText(/^It may be incomplete\. Open it again from the email, or /)
+      ).toBeVisible();
+      expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+      expect(screen.getByRole("banner")).toHaveTextContent("Email preferences");
+      expect(document.body.textContent).not.toMatch(/anymore/);
+      cleanup();
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a weekly session's stop page, opened again", () => {
+  it("says the reminders are already off, or that nothing is booked, instead of offering to stop them", async () => {
+    jar.set("mira_link", makeToken("session-stop", ID)!);
+    booked.slot = { paused: true };
+    await open(SessionStopPage);
+    expect(screen.getByRole("heading", { name: "No more reminders" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Stop reminder emails" })).toBeNull();
+    cleanup();
+    booked.slot = null;
+    await open(SessionStopPage);
+    expect(screen.getByRole("heading", { name: "Nothing to stop" })).toBeVisible();
+    cleanup();
+    // Unreadable: the button stays, as before, and the stop itself still works.
+    booked.slot = new Error("supabase down");
+    await open(SessionStopPage);
+    expect(screen.getByRole("button", { name: "Stop reminder emails" })).toBeVisible();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

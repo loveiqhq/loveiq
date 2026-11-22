@@ -49,11 +49,11 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
     };
     const signed = makeToken("prefs", "11111111-2222-4333-8444-555555555555")!;
     await open("11111111-2222-4333-8444-555555555555.forged");
-    expect(screen.getByRole("heading", { name: "This link doesn’t work anymore" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "This link doesn’t work" })).toBeVisible();
     cleanup();
     // A token left in the address counts for nothing: the cookie is the only way in.
     await open(null, signed);
-    expect(screen.getByRole("heading", { name: "This link doesn’t work anymore" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "This link doesn’t work" })).toBeVisible();
     expect(miraApi).not.toHaveBeenCalled();
     cleanup();
     await open(signed);
