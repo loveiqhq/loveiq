@@ -87,6 +87,8 @@ describe("the Home card", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    // The very first check-in has its own line.
+    expect(screen.getByText("Your first check-in. Come back any day.")).toBeInTheDocument();
     expect(sent("PUT")).toEqual([
       {
         url: "/api/mira/journal",
@@ -107,6 +109,30 @@ describe("the Home card", () => {
     const edit = screen.getByRole("button", { name: /Edit today’s check-in/ });
     await waitFor(() => expect(edit).toHaveFocus());
     expect(screen.getByRole("listitem", { name: "Today: checked in" })).toBeInTheDocument();
+  });
+
+  it("keeps the first check-in's line for the very first one only", async () => {
+    replies = journalReply([entry(day(-3), { mood: 3 })]);
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const mood = screen.getByRole("radiogroup", { name: "Mood" });
+    fireEvent.click(within(mood).getByRole("radio", { name: "4, Good" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    expect(screen.queryByText("Your first check-in. Come back any day.")).toBeNull();
+    expect(screen.getByText("Every check-in adds to the picture.")).toBeInTheDocument();
+  });
+
+  it("counts the note's characters as a person does, an emoji as one, up to 280", async () => {
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const line = screen.getByLabelText(/A line for the day/) as HTMLInputElement;
+    fireEvent.change(line, { target: { value: `${"a".repeat(273)}${"😀".repeat(6)}` } });
+    expect(line).toHaveAccessibleDescription(/1 character left\.$/);
+    fireEvent.change(line, { target: { value: `${"a".repeat(276)}${"😀".repeat(6)}` } });
+    // Kept to 280 characters (the database's own count), not 280 UTF-16 units.
+    expect([...line.value]).toHaveLength(280);
+    expect(line).toHaveAccessibleDescription(/0 characters left\.$/);
   });
 
   it("asks for one rating before saving, and lets a second tap clear a row", async () => {

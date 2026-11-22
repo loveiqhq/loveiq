@@ -69,6 +69,8 @@ export function CheckIn({
   const [note, setNote] = useState(existing?.note ?? "");
   // The version this sheet started from: a save never lands on one it hasn't seen (HAB-13).
   const [base, setBase] = useState<string | null>(existing?.updated_at ?? null);
+  // Read as the sheet opens: once saved, the journal holds this check-in too.
+  const [firstEver] = useState(journal.entries.length === 0);
   const [phase, setPhase] = useState<"edit" | "saving" | "done">("edit");
   const [error, setError] = useState<string | null>(null);
   // A note with crisis words: the support lines (this country first), open until closed.
@@ -118,9 +120,10 @@ export function CheckIn({
     setPhase("done");
   }
 
+  // Characters as a person counts them, and as the database and the API do: an emoji is one.
+  const left = NOTE_MAX - [...note].length;
   const days = journal.entries.map((e) => e.day);
   const run = streak(days, journal.today);
-  const firstEver = !existing && journal.entries.length === 1;
 
   return (
     <>
@@ -223,12 +226,11 @@ export function CheckIn({
                   <input
                     id={`${id}-note`}
                     value={note}
-                    maxLength={NOTE_MAX}
                     autoComplete="off"
                     enterKeyHint="done"
                     placeholder="What stood out?"
                     aria-describedby={`${id}-note-hint`}
-                    onChange={(e) => setNote(e.target.value)}
+                    onChange={(e) => setNote([...e.target.value].slice(0, NOTE_MAX).join(""))}
                     className="mt-2 min-h-[48px] w-full rounded-2xl border border-ap-line bg-white px-4 text-[16px] caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
                   />
                   <p
@@ -236,9 +238,7 @@ export function CheckIn({
                     className="mt-1.5 text-[12px] leading-relaxed text-ap-muted"
                   >
                     {NOTE_HINT[share]}
-                    {note.length >= NOTE_MAX - 40
-                      ? ` ${NOTE_MAX - note.length} characters left.`
-                      : ""}
+                    {left <= 40 ? ` ${left} character${left === 1 ? "" : "s"} left.` : ""}
                   </p>
                 </div>
               </fieldset>

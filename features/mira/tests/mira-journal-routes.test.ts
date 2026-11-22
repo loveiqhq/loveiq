@@ -233,6 +233,18 @@ describe("PUT /api/mira/journal", () => {
     expect(events().filter((e) => e.name === "crisis_shown")).toHaveLength(2);
   });
 
+  it("counts a note in characters as the database does: an emoji is one", async () => {
+    answer = (_path, init) => (init.method === "POST" ? json([{ day: today() }]) : undefined);
+    // 280 characters, 290 UTF-16 units.
+    const note = `${"a".repeat(270)}${"😀".repeat(10)}`;
+    expect((await PUT(call("PUT", "", { day: today(), mood: 3, note, base: null }))).status).toBe(
+      200
+    );
+    const over = `${note}b`;
+    const res = await PUT(call("PUT", "", { day: today(), mood: 3, note: over, base: null }));
+    expect(res.status).toBe(400);
+  });
+
   it("answers a plain note without support lines", async () => {
     answer = (_path, init) => (init.method === "POST" ? json([{ day: today() }]) : undefined);
     const out = await (
