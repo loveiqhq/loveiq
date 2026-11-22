@@ -182,8 +182,8 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             With a free account: your email address, the name and gender you give, the country you
-            choose, your coaching style, your settings and your time zone. We also keep each consent
-            you gave, when you gave it and which wording you saw.
+            choose, your coaching style, your settings and your time zone. We also keep when you
+            last gave your consent and which wording you saw.
           </li>
           <li>
             The language you want Mira to reply in, if you choose one, and how Mira looks for you
@@ -249,7 +249,8 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             For your daily nudges: when each was sent, whether it reached you, whether you opened it
-            and whether you clicked its button.
+            and whether you clicked its button. If you stop them: the reason you pick and anything
+            you add in your own words.
           </li>
           <li>
             If you book a weekly session: the day, time and time zone you choose, when each reminder
@@ -493,8 +494,8 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             With an account, Mira saves your chats while &ldquo;Remember our conversations&rdquo; is
-            on. They stay until you delete them in Settings or delete your account, and at most 12
-            months after the last message you wrote.
+            on. They stay until you delete them in Settings or delete your account. If you
+            don&apos;t write to Mira for 12 months, they are all deleted.
           </li>
           <li>
             If you turn &ldquo;Remember our conversations&rdquo; off, Mira stops saving new chats.
@@ -519,9 +520,9 @@ export default function MiraPrivacyPage() {
             18, they are deleted too.
           </li>
           <li>
-            Mira&apos;s log of labels, steps, ratings and feedback is deleted after 12 months.
-            Deleting your account deletes any words in the log, and the rest is no longer linked to
-            you.
+            Mira&apos;s log of labels, steps, ratings, feedback and reasons for stopping nudges is
+            deleted after 12 months. Deleting your account deletes any words in the log, and the
+            rest is no longer linked to you.
           </li>
           <li>
             A weekly session stays until you cancel it or delete your account, and its reminder

@@ -159,8 +159,8 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A18 — Mira ratings, feedback and the log of steps
 
-- **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id); never a reply's text (the optional box that kept it went on 2026-11-21)
-- **Basis**: (f) legitimate interest for steps, thumbs, feedback and scores: improving Mira. Balancing: no words in the log except the person's own feedback, team browsers left out, kept 12 months, objection by email
+- **Data**: thumbs on replies, feedback (own words; the email only with permission), the recommend score, the reason and an optional note in the person's own words when they stop nudges, the log of steps (`mira_event`: names, times, small properties, a random browser id or the account id); never a reply's text (the optional box that kept it went on 2026-11-21)
+- **Basis**: (f) legitimate interest for steps, thumbs, feedback and scores: improving Mira. Balancing: no words in the log except the person's own feedback and the note they may add when stopping nudges, team browsers left out, kept 12 months, objection by email
 - **Weekly sessions (from 2026-11-21)**: the log also holds a session booked or cancelled, each reminder sent, and a reminded session opened within 30 minutes of its start (`mira_session_reminder.joined_at`, the minutes from the start as a number). Same basis and balancing: times only
 - **Retention**: 12 months; deleting the account deletes the words and unlinks the rest
 - **Withdraw**: delete the account, or ask; an Art. 21 objection by email
