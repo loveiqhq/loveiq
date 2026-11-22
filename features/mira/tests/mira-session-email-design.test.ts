@@ -22,6 +22,13 @@ describe("the weekly session's emails (22 Nov 2026 design)", () => {
     expect(e.html).toMatch(/>Nov<\/div>[\s\S]*?>24<\/div>[\s\S]*?>Tue<\/div>/);
   });
 
+  // Round-2 HAB-8: a change of zone alone must say the zone in the sentence, not only in the card.
+  it("name the zone when the time moves", () => {
+    const ny = { weekday: 2, time: "19:00", timeZone: "America/New_York" };
+    const e = sessionEmail("moved", { slot: ny, links, googleUrl: "https://g/x", now });
+    expect(e.text).toContain("Done: from now on we meet every Tuesday at 19:00, New York time.");
+  });
+
   it("read the date where the session is, not where the server is", () => {
     // Monday 23:30 in Los Angeles is already Tuesday in UTC.
     const la = { weekday: 1, time: "23:30", timeZone: "America/Los_Angeles" };

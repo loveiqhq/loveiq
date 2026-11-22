@@ -1,15 +1,20 @@
 /**
  * /api/mira/recordings — talking to Mira by voice (features/mira/ui/voice), kept as words.
  *
- *   POST { session, chatId?, startedAt, mode, turns }  a voice session ended. Signed out it is
- *        only counted (voice_session_ended: its length, how speech became text, its turns; never
- *        words). Signed in with "Remember our conversations" on, its turns (stored by the chat
- *        route, tagged with the session) become a session to look back on: times, the talk share
- *        by words, the recognition mode and up to three key points from Mira's model, under the
- *        same rules as her replies (none for a session in which the support lines showed, by its
- *        words or the KPI log). Sent again (the End tap and the page closing), it is saved once.
- *   GET ?limit=1..50  the account's sessions, newest first, each with the start of the one before
- *        it (Home's card, /mira/recordings).
+ *   POST { session, chatId?, startedAt, endedAt?, mode, turns }  a voice session ended, at
+ *        `endedAt` by the browser's clock (never after the save, nor before its last turn). Signed
+ *        out it is only counted (voice_session_ended: its length, how speech became text, its
+ *        turns; never words). Signed in with "Remember our conversations" on, its turns (stored by
+ *        the chat route, tagged with the session) become a session to look back on: times, the
+ *        talk share by words, the recognition mode and up to three key points from Mira's model,
+ *        in the session's language, under the same rules as her replies (none for a session in
+ *        which the support lines showed, by its words or the KPI log). Sent again (the End tap and
+ *        the page closing), it is saved once. With memory off the answer is
+ *        { kept: false, reason: "memory_off" }; a session whose words aren't in the chat gets
+ *        { kept: false }.
+ *   GET ?limit=1..50&before=<time>  the account's sessions, newest first, each with the start of
+ *        the one before it (Home's card, /mira/recordings); `before`, the start of the last one
+ *        shown, gives the next, older page ("Show older sessions").
  *
  * Audio never reaches us: the browser turns speech into text before anything is sent. Someone
  * Mira stopped as under 18 (server/minor.ts) is refused (403), like on Mira's other routes.
@@ -52,6 +57,8 @@ const schema = z
     session: z.string().uuid(),
     chatId: z.string().uuid().nullable().optional(),
     startedAt: z.string().datetime({ offset: true }),
+    /** When it ended in the browser: End, or the moment the person left it paused. */
+    endedAt: z.string().datetime({ offset: true }).optional(),
     mode: z.enum(["device", "service"]),
     turns: z.number().int().min(1).max(500),
   })
@@ -81,21 +88,25 @@ export async function POST(request: Request) {
   }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
-  const { session, chatId, startedAt, mode, turns } = parsed.data;
-  const now = new Date();
-  const secondsFrom = (from: Date) =>
-    Math.min(MAX_SESSION_SECONDS, Math.max(0, Math.round((now.getTime() - from.getTime()) / 1000)));
+  const { session, chatId, startedAt, endedAt, mode, turns } = parsed.data;
+  // When it ended: the browser's clock, never after this save. A "Try again" much later, or time
+  // away before End, is not session time.
+  const now = Date.now();
+  const endAt = endedAt ? Math.min(Date.parse(endedAt), now) : now;
+  const secondsFrom = (from: number, to = endAt) =>
+    Math.min(MAX_SESSION_SECONDS, Math.max(0, Math.round((to - from) / 1000)));
 
   try {
     const account = await getMiraAccount();
-    const counted = (who: { anonId?: string; userId?: string }) => {
+    /** Not kept, only counted; `memory_off` when the setting is why (the end card names it). */
+    const counted = (who: { anonId?: string; userId?: string }, reason?: "memory_off") => {
       logMiraEvent("voice_session_ended", who, {
-        seconds: secondsFrom(new Date(startedAt)),
+        seconds: secondsFrom(Date.parse(startedAt)),
         mode,
         turns,
         kept: false,
       });
-      return NextResponse.json({ kept: false });
+      return NextResponse.json(reason ? { kept: false, reason } : { kept: false });
     };
     if (await isMinor(account?.id ?? null)) return ADULTS_ONLY();
     if (!account) return counted({ anonId: await anonId() });
@@ -103,18 +114,17 @@ export async function POST(request: Request) {
     const profile = await getProfile(account.id);
     if (!profile) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
     // Kept like the chat it happened in: only while "Remember our conversations" is on.
-    if (!profile.remember_chats || !chatId || !(await ownsChat(account.id, chatId))) {
-      return counted(who);
-    }
+    if (!profile.remember_chats) return counted(who, "memory_off");
+    if (!chatId || !(await ownsChat(account.id, chatId))) return counted(who);
     const known = await getRecording(account.id, session);
     if (known) return NextResponse.json({ kept: true, recording: summary(known) });
     const spoken = await sessionTurns(chatId, session);
     if (spoken.length === 0) return counted(who);
 
     const start = sessionStart(new Date(startedAt), new Date(spoken[0]!.created_at));
-    // The database stamped the turns; a server clock a little behind it must not end a session
-    // before it began.
-    const end = new Date(Math.max(now.getTime(), start.getTime()));
+    // Never before its last turn: the database stamped the turns, and a clock (the browser's or
+    // this server's) a little behind it must not end a session before it was over.
+    const end = new Date(Math.max(endAt, Date.parse(spoken.at(-1)!.created_at)));
     const words = (role: "user" | "assistant") =>
       spoken.filter((t) => t.role === role).reduce((n, t) => n + countWords(t.content), 0);
     const recording: Recording = {
@@ -122,7 +132,7 @@ export async function POST(request: Request) {
       chat_id: chatId,
       started_at: start.toISOString(),
       ended_at: end.toISOString(),
-      seconds: secondsFrom(start),
+      seconds: secondsFrom(start.getTime(), end.getTime()),
       user_words: words("user"),
       mira_words: words("assistant"),
       recognition: mode,
@@ -132,11 +142,19 @@ export async function POST(request: Request) {
     const { key_points: _none, opened_at: _new, ...row } = recording;
     await saveRecording({ ...row, user_id: account.id });
 
-    // Kept even when the key points can't be written now: the session page can ask again.
-    const points = (await mayWriteKeyPoints(account.id))
-      ? await writeKeyPoints(account.id, spoken, started + KEY_POINTS_MS)
-      : null;
-    if (points) await saveKeyPoints(account.id, session, points);
+    // Kept even when the key points can't be written now: the session page can ask again. Their
+    // failure fails nothing else, so the session is always counted (a retry finds it saved and
+    // counts nothing).
+    let points: string[] | null = null;
+    try {
+      points = (await mayWriteKeyPoints(account.id))
+        ? await writeKeyPoints(account.id, spoken, started + KEY_POINTS_MS, profile.reply_language)
+        : null;
+      if (points) await saveKeyPoints(account.id, session, points);
+    } catch (err) {
+      logger.error({ err }, "mira: a voice session's key points were not written");
+      points = null;
+    }
     logMiraEvent("voice_session_ended", who, {
       seconds: recording.seconds,
       mode,
@@ -169,12 +187,15 @@ export async function GET(request: Request) {
   }
   const account = await getMiraAccount();
   if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
-  const asked = Number(new URL(request.url).searchParams.get("limit"));
+  const query = new URL(request.url).searchParams;
+  const asked = Number(query.get("limit"));
   const limit = Number.isInteger(asked) && asked >= 1 && asked <= 50 ? asked : 50;
+  // The next page: the sessions that began before the last one shown ("Show older sessions").
+  const before = z.string().datetime({ offset: true }).safeParse(query.get("before")).data;
   try {
     if (await isMinor(account.id)) return ADULTS_ONLY();
     // One more than shown: the start of the session before the last one shown.
-    const found = await listRecordings(account.id, limit + 1);
+    const found = await listRecordings(account.id, limit + 1, before);
     return NextResponse.json(
       {
         recordings: found.slice(0, limit).map((r, i) => ({

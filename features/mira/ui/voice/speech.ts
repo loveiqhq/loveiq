@@ -61,14 +61,18 @@ export function recognizerClass(): RecognizerClass | null {
   return found;
 }
 
+/** The longest Talk waits for the browser to fetch a language for the device (the panel says so). */
+export const INSTALL_WAIT_MS = 20_000;
+
 /**
  * On the device when the browser can (and fetches the language once, which needs the tap that
- * started this), else the browser's service. A download that hangs falls back after a while.
+ * started this; `installing` hears when that wait begins), else the browser's service. A
+ * download that hangs falls back after INSTALL_WAIT_MS.
  */
 export async function chooseMode(
   Recognizer: RecognizerClass,
   lang: string,
-  waitMs = 20_000
+  installing?: () => void
 ): Promise<RecognitionMode> {
   if (typeof Recognizer.available !== "function") return "service";
   const options = { langs: [lang], processLocally: true };
@@ -76,7 +80,8 @@ export async function chooseMode(
     const status = await Recognizer.available(options);
     if (status === "available") return "device";
     if (status === "unavailable" || typeof Recognizer.install !== "function") return "service";
-    const timeout = new Promise<boolean>((done) => setTimeout(() => done(false), waitMs));
+    installing?.();
+    const timeout = new Promise<boolean>((done) => setTimeout(() => done(false), INSTALL_WAIT_MS));
     return (await Promise.race([Recognizer.install(options), timeout])) ? "device" : "service";
   } catch {
     return "service";
@@ -181,8 +186,12 @@ export function sentences(text: string): string[] {
   return out;
 }
 
+/** Words in any script, Japanese or Thai (written without spaces) too: the browser's own splitter. */
+const WORDS = new Intl.Segmenter(undefined, { granularity: "word" });
 const wordsOf = (s: string) =>
-  (s.toLowerCase().match(/[a-z0-9']+/g) ?? []).map((w) => w.replace(/'s$|s$/, ""));
+  Array.from(WORDS.segment(s.toLowerCase()))
+    .filter((w) => w.isWordLike)
+    .map((w) => w.segment.replace(/'s$|s$/, ""));
 
 /** Mostly Mira's own words, heard back through the speakers (allowing for mishearing). */
 export function isEcho(heard: string, said: string): boolean {
@@ -209,4 +218,23 @@ export function readWhileSpeaking(
     if (r.final && next === i) next = i + 1;
   }
   return { floor: next, bargeIn: false };
+}
+
+/**
+ * Just after she stops: the recognizer can still bring back her last words (it runs behind the
+ * speakers). Results of two or more of her words are skipped once settled, and wait while not;
+ * anything else, a one-word "okay" too, is the person's.
+ */
+export function readAfterSpeaking(
+  results: ReadonlyArray<{ text: string; final: boolean }>,
+  floor: number,
+  said: string
+): { floor: number; settling: boolean } {
+  let next = floor;
+  for (; next < results.length; next++) {
+    const r = results[next]!;
+    if (wordsOf(r.text).length < 2 || !isEcho(r.text, said)) break;
+    if (!r.final) return { floor: next, settling: true };
+  }
+  return { floor: next, settling: false };
 }

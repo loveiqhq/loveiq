@@ -43,7 +43,23 @@ function useSessions(limit: number) {
     setLoad({ state: "loading" });
     setAttempt((n) => n + 1);
   };
-  return { load, retry };
+  /** The next page: the sessions that began before the last one shown. False: it didn't load. */
+  const loadOlder = async (): Promise<boolean> => {
+    const last = load.state === "ready" ? load.recordings.at(-1) : undefined;
+    if (!last) return true;
+    const res = await miraApi<List>(
+      `/api/mira/recordings?limit=${limit}&before=${encodeURIComponent(last.startedAt)}`
+    );
+    if (res.status === 401) router.replace("/mira/start");
+    if (!res.ok) return false;
+    setLoad((l) =>
+      l.state === "ready"
+        ? { ...l, recordings: [...l.recordings, ...res.data.recordings], more: res.data.more }
+        : l
+    );
+    return true;
+  };
+  return { load, retry, loadOlder };
 }
 
 const START = "/mira?talk=1";
@@ -246,8 +262,11 @@ function Empty() {
       <div className="flex-1">
         <p className="font-semibold text-ap-ink">No voice sessions yet</p>
         <p className="mt-0.5 text-[14px] leading-snug text-ap-body">
-          Talk to Mira out loud, and each session waits here as words, with up to three key points.
-          Never as audio.
+          Talk to Mira out loud. While &ldquo;Remember our conversations&rdquo; is on in{" "}
+          <Link href="/mira/settings" className="font-semibold text-ap-plum underline">
+            Settings
+          </Link>
+          , each session waits here as words, with up to three key points. Never as audio.
         </p>
       </div>
       <StartVoiceLink />
@@ -324,9 +343,15 @@ export function RecordingsCard() {
   );
 }
 
-/** /mira/recordings: every session, newest first. */
+/** /mira/recordings: every session, newest first, fifty at a time. */
 export default function RecordingsPage() {
-  const { load, retry } = useSessions(50);
+  const { load, retry, loadOlder } = useSessions(50);
+  const [older, setOlder] = useState<"idle" | "loading" | "failed">("idle");
+  async function showOlder() {
+    if (older === "loading") return;
+    setOlder("loading");
+    setOlder((await loadOlder()) ? "idle" : "failed");
+  }
   return (
     <MiraAppFrame active="recordings">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -349,7 +374,21 @@ export default function RecordingsPage() {
             <>
               <Rows list={load.recordings} />
               {load.more ? (
-                <p className="mt-4 text-[13px] text-ap-muted">Showing your 50 latest sessions.</p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={showOlder}
+                    aria-busy={older === "loading"}
+                    className="inline-flex min-h-[44px] items-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink hover:bg-ap-ground"
+                  >
+                    {older === "loading" ? "Loading…" : "Show older sessions"}
+                  </button>
+                  {older === "failed" ? (
+                    <p role="alert" className="text-[14px] text-ap-bad-ink">
+                      Older sessions didn&apos;t load.
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </>
           ) : (

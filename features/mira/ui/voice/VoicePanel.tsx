@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { INSTALL_WAIT_MS } from "./speech";
 import type { Voice, VoiceTrouble } from "./useVoice";
 
 /**
@@ -120,11 +121,17 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
   const listening = phase === "listening";
   const speaking = phase === "speaking";
   const paused = phase === "paused";
+  const preparing = phase === "preparing";
   const [title, sub] =
     phase === "error" && trouble
       ? TROUBLE[trouble]
-      : phase === "preparing"
-        ? ["Getting ready…", "Starting the microphone."]
+      : preparing
+        ? voice.downloading // the title, as the status line, says the wait out loud too
+          ? [
+              "Setting up speech recognition…",
+              `Your browser is downloading it to this device. This can take up to ${INSTALL_WAIT_MS / 1000} seconds.`,
+            ]
+          : ["Getting ready…", "Starting the microphone."]
         : phase === "thinking"
           ? ["Mira is thinking", ""]
           : speaking
@@ -244,6 +251,11 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
                 Try again
               </button>
             </>
+          ) : preparing ? (
+            // Nothing has begun yet: nothing to mute or end, only a wait to call off.
+            <button type="button" onClick={voice.end} className={GHOST}>
+              Cancel
+            </button>
           ) : (
             <>
               {paused && pause !== "muted" ? (
@@ -255,7 +267,6 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
                   type="button"
                   onClick={voice.toggleMute}
                   aria-pressed={pause === "muted"}
-                  disabled={phase === "preparing"}
                   className={GHOST}
                 >
                   <MicIcon off={pause === "muted"} size={16} />
@@ -270,20 +281,39 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
         </div>
       </div>
 
-      <p className="mt-2.5 text-[12px] leading-snug text-ap-muted">
-        {voice.voiceless
-          ? "This device has no voice of its own for Mira, so she answers in writing. "
-          : ""}
-        {voice.mode === "device"
-          ? "Speech becomes text on this device. Mira gets only the words, never audio."
-          : "Your browser's speech service turns speech into text. Mira gets only the words, never audio."}
-      </p>
+      {/* Where speech becomes text is known once Talk is ready. */}
+      {preparing ? null : (
+        <p className="mt-2.5 text-[12px] leading-snug text-ap-muted">
+          {voice.voiceless
+            ? "This device has no voice of its own for Mira, so she answers in writing. "
+            : ""}
+          {voice.mode === "device"
+            ? "Speech becomes text on this device. Mira gets only the words, never audio."
+            : "Your browser's speech service turns speech into text. Mira gets only the words, never audio."}
+        </p>
+      )}
     </section>
   );
 }
 
 /** After End, in the chat: where the session went (signed in), with a way back to it. */
 export function VoiceEnded({ voice }: { voice: Voice }) {
+  const card = useRef<HTMLDivElement>(null);
+  const status = voice.ended?.status;
+  // It lands at the chat's foot, under the composer's edge unless brought into view: as it
+  // lands, and as "saving" grows into the saved card (UX-5).
+  useEffect(() => {
+    const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? true;
+    card.current?.scrollIntoView?.({ block: "nearest", behavior: calm ? "auto" : "smooth" });
+  }, [status]);
+  return voice.ended ? (
+    <div ref={card}>
+      <EndCard voice={voice} />
+    </div>
+  ) : null;
+}
+
+function EndCard({ voice }: { voice: Voice }) {
   const ended = voice.ended;
   if (!ended) return null;
   if (ended.status === "saving") {
@@ -304,7 +334,7 @@ export function VoiceEnded({ voice }: { voice: Voice }) {
     );
   }
   if (ended.status === "not-kept") {
-    return (
+    return ended.memoryOff ? (
       <p role="status" className={CARD}>
         This voice session wasn&apos;t kept: sessions are kept while &ldquo;Remember our
         conversations&rdquo; is on in{" "}
@@ -312,6 +342,12 @@ export function VoiceEnded({ voice }: { voice: Voice }) {
           Settings
         </Link>
         .
+      </p>
+    ) : (
+      // The setting is on, but the words never reached the chat (its first answer failed, or
+      // the chat couldn't store them).
+      <p role="status" className={CARD}>
+        This voice session wasn&apos;t kept: its words aren&apos;t in your chats.
       </p>
     );
   }

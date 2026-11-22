@@ -1,6 +1,7 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import miraConfig from "../content/mira-config.json";
+import { REPLY_LANGUAGES } from "../reply-languages";
 import { GLOBAL_DAILY_MESSAGES } from "./config";
 import { askModel, type MiraTurn } from "./model";
 import { STABLE_INSTRUCTIONS } from "./prompt";
@@ -75,9 +76,15 @@ export function sessionStart(claimed: Date, firstTurn: Date): Date {
   return new Date(Math.max(t, firstTurn.getTime() - LEAD_IN_MS));
 }
 
-export async function listRecordings(userId: string, limit: number): Promise<Recording[]> {
+/** Newest first; `before`: only those that began before it (the next page of an older list). */
+export async function listRecordings(
+  userId: string,
+  limit: number,
+  before?: string
+): Promise<Recording[]> {
+  const older = before ? `&started_at=lt.${enc(before)}` : "";
   return rows<Recording>(
-    `/rest/v1/mira_voice_session?user_id=eq.${enc(userId)}&select=${COLS}&order=started_at.desc&limit=${limit}`
+    `/rest/v1/mira_voice_session?user_id=eq.${enc(userId)}${older}&select=${COLS}&order=started_at.desc&limit=${limit}`
   );
 }
 
@@ -184,9 +191,19 @@ export async function deleteRecordings(userId: string): Promise<void> {
   await write(`/rest/v1/mira_voice_session?user_id=eq.${enc(userId)}`, "DELETE");
 }
 
-/** Asked of Mira's own model, after her rules, so the same safety rules shape the key points. */
-export const KEY_POINTS_INSTRUCTIONS = `SESSION KEY POINTS
-The voice session in this conversation has ended. The app, not the person, asks you for its key points: the person will read them later, next to the session's words. Write at most three, each on its own line starting with "- ": one short sentence each (15 words at most), in plain English, speaking to the person ("You noticed…", "We tried…"), only about what was actually said. No new advice, no names, no markers and no Sources line. If the session raised one of your stop rails, or held nothing worth keeping, reply with the single word NONE.`;
+/**
+ * Asked of Mira's own model, after her rules, so the same safety rules shape the key points. In
+ * the session's language, as her replies were: the one the person chose for them, else the one
+ * spoken (prompt.ts replyLanguageInstruction).
+ */
+export function keyPointsInstructions(replyLanguage: string | null | undefined): string {
+  const chosen = REPLY_LANGUAGES.find((l) => l.code === replyLanguage);
+  const language = chosen
+    ? `Write them in ${chosen.name}, the language Mira replies in.`
+    : "Write them in the language the session was held in (English when you can't tell).";
+  return `SESSION KEY POINTS
+The voice session in this conversation has ended. The app, not the person, asks you for its key points: the person will read them later, next to the session's words. Write at most three, each on its own line starting with "- ": one short sentence each (15 words at most), in plain words, speaking to the person ("You noticed…", "We tried…"), only about what was actually said. ${language} No new advice, no names, no markers and no Sources line. If the session raised one of your stop rails, or held nothing worth keeping, reply with the single word NONE.`;
+}
 
 /** What the model gets of a session: the newest turns that fit, then the app's request. */
 const MAX_TRANSCRIPT_CHARS = 24_000;
@@ -272,7 +289,8 @@ async function supportShown(userId: string, turns: ReadonlyArray<SpokenTurn>): P
 export async function writeKeyPoints(
   userId: string,
   transcript: ReadonlyArray<SpokenTurn>,
-  until: number
+  until: number,
+  replyLanguage: string | null | undefined
 ): Promise<string[] | null> {
   if (transcript.length === 0 || heldAStop(transcript)) return [];
   const shown = await supportShown(userId, transcript).catch(() => null);
@@ -280,7 +298,7 @@ export async function writeKeyPoints(
   if (shown) return [];
   const result = await askModel(
     STABLE_INSTRUCTIONS,
-    KEY_POINTS_INSTRUCTIONS,
+    keyPointsInstructions(replyLanguage),
     keyPointsTurns(transcript),
     until
   );
