@@ -19,7 +19,15 @@ import { miraApi } from "../api";
 import { CheckRunner } from "./CheckRunner";
 import { UseChecksSwitch } from "./ChecksSettings";
 import { TrendChart, trendSummary } from "./TrendChart";
-import { FRAME_TAB, drafts, shortDate, useChecks, type CheckResult, type ChecksData } from "./data";
+import {
+  FRAME_TAB,
+  bandText,
+  drafts,
+  shortDate,
+  useChecks,
+  type CheckResult,
+  type ChecksData,
+} from "./data";
 
 /**
  * /mira/assessments/<check>: a self-check's own page. Before the first check ever, a plain note on
@@ -38,8 +46,10 @@ export type Practice = { number: number; name: string; time: string; bestFor: st
 type Saved = {
   result: CheckResult;
   previous: { at: string; score: number } | null;
-  support: boolean;
 };
+
+/** Under a result whose question 9 (the last) opened the support lines: the total is not the story. */
+const NOT_THE_SCORE = "Your answer to the last question matters more than this score.";
 
 const EYEBROW = "font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ap-muted";
 const PLUM_LINK =
@@ -229,7 +239,7 @@ export default function CheckPage({
           practice={practice}
           headingRef={headingRef}
           onStart={begin}
-          onHelp={() => setPanel(saved?.support ? "q9" : "help")}
+          onHelp={() => setPanel(summary.results.at(-1)!.support ? "q9" : "help")}
           onUseChecks={(on) => setData((d) => d && { ...d, useChecks: on })}
         />
       ) : null}
@@ -401,7 +411,9 @@ function Result({
   const band = bandOf(check, last.score);
   const before = results.length > 1 ? results.at(-2)! : null;
   const change = before ? changeSince(check, before.score, last.score) : null;
-  const help = band.professional || saved?.support;
+  // Question 9 above "Not at all", on this visit or any later one (the stored result says so).
+  const support = last.support;
+  const help = band.professional || support;
   const steps: ReactNode[] = [];
   if (help) {
     steps.push(
@@ -438,7 +450,7 @@ function Result({
   }
   return (
     <article className="mt-6">
-      {saved?.support ? (
+      {support ? (
         <section
           aria-labelledby="q9-h"
           className="mb-6 max-w-[680px] rounded-3xl border border-[#d9c8f6] bg-ap-lilac p-5 motion-safe:animate-mira-in"
@@ -494,18 +506,24 @@ function Result({
             </span>
           ) : null}
         </p>
+        {support ? (
+          <p className="mt-3 text-[15px] font-semibold leading-snug text-ap-ink">{NOT_THE_SCORE}</p>
+        ) : null}
       </header>
 
-      <div className="mt-6 grid max-w-[680px] gap-5 sm:grid-cols-2">
-        <section>
-          <h2 className={EYEBROW}>In daily life</h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.daily}</p>
-        </section>
-        <section>
-          <h2 className={EYEBROW}>For body confidence and intimacy</h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.intimacy}</p>
-        </section>
-      </div>
+      {/* A low band's words are reassurance ("holding up"), which that answer outweighs. */}
+      {support && !band.professional ? null : (
+        <div className="mt-6 grid max-w-[680px] gap-5 sm:grid-cols-2">
+          <section>
+            <h2 className={EYEBROW}>In daily life</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.daily}</p>
+          </section>
+          <section>
+            <h2 className={EYEBROW}>For body confidence and intimacy</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.intimacy}</p>
+          </section>
+        </div>
+      )}
 
       <section aria-labelledby="next-h" className="mt-10 max-w-[680px]">
         <h2 id="next-h" className="font-serif text-[22px] font-medium">
@@ -568,6 +586,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
       </h2>
       <p className="mt-2 text-[14px] leading-relaxed text-ap-body">
         {trendSummary(check, results)}
+        {results.at(-1)?.support ? ` ${NOT_THE_SCORE}` : ""}
       </p>
       <div className="mt-4 rounded-2xl border border-ap-line p-3">
         <TrendChart check={check} results={results} />
@@ -591,7 +610,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
           {[...results].reverse().map((r) => (
             <tr key={r.at} className="border-t border-ap-line">
               <td className="py-2.5">{shortDate(r.at)}</td>
-              <td className="py-2.5">{bandOf(check, r.score).label}</td>
+              <td className="py-2.5">{bandText(check, r)}</td>
               <td className="py-2.5 text-right tabular-nums">
                 {r.score} <span className="text-ap-muted">of {check.max}</span>
               </td>

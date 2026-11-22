@@ -196,9 +196,17 @@ export function personalInstructions(
     const ago = (d: number) => (d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`);
     lines.push(
       "Self-checks they took in the app and allowed you to use (the latest of each; a questionnaire's band, never a diagnosis):",
-      ...person.checks.map((c) => `- ${c.title} (${c.name}), ${ago(c.daysAgo)}: ${c.band}.`),
+      ...person.checks.map(
+        (c) =>
+          `- ${c.title} (${c.name}), ${ago(c.daysAgo)}: ${c.band}${c.support ? ", and in that same check they said they have had thoughts of being better off dead or of hurting themselves (question 9)" : ""}.`
+      ),
       "Use them only to tailor your pace, tone and suggestions. Never diagnose, name a condition or quote a score, and bring them up only when it truly helps. Where a band is high, gently suggesting a doctor or therapist fits your rules."
     );
+    if (person.checks.some((c) => c.support)) {
+      lines.push(
+        "Thoughts of being better off dead or of hurting themselves in a check are rail 14 whatever its band: follow your crisis rules, and never call that check minimal or reassure them about it."
+      );
+    }
   }
   const styleLines = styleInstructions(style);
   if (styleLines.length > 0) {

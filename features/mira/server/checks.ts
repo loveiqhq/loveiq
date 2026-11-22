@@ -1,5 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { bandOf, checkByScale, scoreOf } from "../content/checks";
+import { bandOf, checkByScale, scoreOf, supportNow } from "../content/checks";
 
 /**
  * The self-checks' storage (supabase/migrations/20261122090000_mira_checks.sql): every read and
@@ -77,16 +77,23 @@ export async function deleteChecks(userId: string): Promise<void> {
   if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
 }
 
-export type CheckForMira = { title: string; name: string; band: string; daysAgo: number };
+export type CheckForMira = {
+  title: string;
+  name: string;
+  band: string;
+  daysAgo: number;
+  /** The mood check's question 9 above "Not at all" (supportNow): never told as its band alone. */
+  support: boolean;
+};
 
 /** A band older than this no longer describes the person, so Mira isn't told it. */
 export const MIRA_CHECK_DAYS = 90;
 
 /**
  * What Mira's context may say about the self-checks (server/prompt.ts): each check's latest band
- * from the last 90 days, only when the person turned on "Mira may use my check results". Never
- * the answers or the score; none at all with the switch off (the filter is on the account row,
- * so no result is even read).
+ * from the last 90 days, and whether its question 9 opened the support lines, only when the person
+ * turned on "Mira may use my check results". Never the answers or the score; none at all with the
+ * switch off (the filter is on the account row, so no result is even read).
  */
 export async function checksForMira(userId: string, now = new Date()): Promise<CheckForMira[]> {
   const since = new Date(now.getTime() - MIRA_CHECK_DAYS * DAY_MS).toISOString();
@@ -106,6 +113,7 @@ export async function checksForMira(userId: string, now = new Date()): Promise<C
       name: check.name,
       band: bandOf(check, scoreOf(check, r.answers)).mira,
       daysAgo: Math.max(0, Math.floor((now.getTime() - Date.parse(r.created_at)) / DAY_MS)),
+      support: supportNow(check, r.answers),
     });
   }
   return out;

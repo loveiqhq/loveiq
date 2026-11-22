@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CHECKS, CHECK_IDS, bandOf, changeSince, type Check } from "@features/mira/content/checks";
+import { CHECKS, CHECK_IDS, changeSince, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
 import { UseChecksSwitch } from "./ChecksSettings";
 import { CheckIcon, LoveIqTile } from "./icons";
 import {
   FRAME_TAB,
+  bandText,
   bodyLine,
   checkLine,
   shortDate,
@@ -224,7 +225,7 @@ function CheckCard({
       {last ? (
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[18px] font-bold leading-tight">{bandOf(check, last.score).label}</p>
+            <p className="text-[18px] font-bold leading-tight">{bandText(check, last)}</p>
             <p className="text-[13px] text-ap-muted">
               {shortDate(last.at)}
               {change && change.diff !== 0

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bandOf, changeSince, type Check } from "@features/mira/content/checks";
-import { shortDate, type CheckResult } from "./data";
+import { bandText, shortDate, type CheckResult } from "./data";
 
 /**
  * A check's results over time: one line across the scale's bands, shaded in one hue from light
@@ -128,7 +128,7 @@ export function TrendChart({ check, results }: { check: Check; results: CheckRes
           const latest = i === points.length - 1;
           return (
             <g key={p.r.at}>
-              <title>{`${shortDate(p.r.at)}: ${bandOf(check, p.r.score).label.toLowerCase()} (${p.r.score})`}</title>
+              <title>{`${shortDate(p.r.at)}: ${bandText(check, p.r).toLowerCase()} (${p.r.score})`}</title>
               <circle
                 cx={p.x}
                 cy={p.y}

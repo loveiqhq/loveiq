@@ -2,14 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { bandOf, type Check, type CheckId } from "@features/mira/content/checks";
+import { SUPPORT_NOTE, bandOf, type Check, type CheckId } from "@features/mira/content/checks";
 import { miraApi } from "../api";
 
 /** The menu tab these pages mark (MiraAppFrame). */
 export const FRAME_TAB = "assessments" as const;
 
 /** What GET /api/mira/checks answers (app/api/mira/checks/route.ts). */
-export type CheckResult = { at: string; score: number; band: string };
+export type CheckResult = {
+  at: string;
+  score: number;
+  band: string;
+  /** The mood check's question 9 above "Not at all": its support goes wherever the result does. */
+  support: boolean;
+};
 export type CheckSummary = { id: CheckId; results: CheckResult[]; nextAt: string | null };
 export type ChecksData = {
   account: string;
@@ -97,6 +103,10 @@ export function shortDate(iso: string): string {
   });
 }
 
+/** A result's band as a card or the history shows it, never without the support question 9 opened. */
+export const bandText = (check: Check, r: CheckResult): string =>
+  `${bandOf(check, r.score).label}${r.support ? ` · ${SUPPORT_NOTE}` : ""}`;
+
 /** A check as a card shows it: never taken, part done in this tab, taken (open again later), or open again. */
 export type CheckState =
   | { kind: "new" }
@@ -124,12 +134,12 @@ export function checkLine(check: Check, state: CheckState): { status: string; ac
       };
     case "taken":
       return {
-        status: `${bandOf(check, state.last.score).label} · ${shortDate(state.last.at)}`,
+        status: `${bandText(check, state.last)} · ${shortDate(state.last.at)}`,
         action: "View",
       };
     case "due":
       return {
-        status: `${bandOf(check, state.last.score).label} · ${shortDate(state.last.at)} · ready to retake`,
+        status: `${bandText(check, state.last)} · ${shortDate(state.last.at)} · ready to retake`,
         action: "Retake",
       };
   }

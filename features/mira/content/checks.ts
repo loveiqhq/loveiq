@@ -331,6 +331,13 @@ export const SUPPORT_STARTER =
   "I just did the mood check and things feel really hard right now. Can we talk?";
 
 /**
+ * Beside the band of a result whose question 9 opened the support lines (supportNow), wherever
+ * the result is shown (the cards, the history): its total can read "minimal" while that answer
+ * matters most.
+ */
+export const SUPPORT_NOTE = "support for you";
+
+/**
  * The chat's message box for `/mira?say=<id>`: a check's starter or the support one, put there
  * for the person to send or change; anything else puts nothing there.
  */

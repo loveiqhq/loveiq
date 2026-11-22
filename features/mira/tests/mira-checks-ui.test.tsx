@@ -17,6 +17,7 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 import MiraPage from "@/app/mira/page";
 import { SUPPORT_STARTER, checkById } from "@features/mira/content/checks";
 import { getMiraAccount } from "@features/mira/server/session";
+import AssessmentsPage from "@features/mira/ui/checks/AssessmentsPage";
 import CheckPage from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
 import ChecksSettings from "@features/mira/ui/checks/ChecksSettings";
@@ -27,6 +28,7 @@ import type { ChecksData } from "@features/mira/ui/checks/data";
 const DAY = 24 * 60 * 60 * 1000;
 const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 const PRACTICE = { number: 2, name: "Body scan", time: "5–10 minutes", bestFor: "Overthinking" };
+const NOT_THE_SCORE = "Your answer to the last question matters more than this score.";
 
 let account: ChecksData;
 type Reply = { status?: number; body: unknown };
@@ -129,9 +131,8 @@ describe("taking a check", () => {
   it("sends only the answers and shows the result in words, with the next steps", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
-        result: { at: new Date().toISOString(), score: 12, band: "moderate" },
+        result: { at: new Date().toISOString(), score: 12, band: "moderate", support: false },
         previous: null,
-        support: false,
       },
     });
     sessionStorage.setItem(
@@ -166,9 +167,8 @@ describe("the mood check's question 9", () => {
   it("opens the support lines the moment it is answered above 'Not at all', whatever the total", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
-        result: { at: new Date().toISOString(), score: 1, band: "minimal" },
+        result: { at: new Date().toISOString(), score: 1, band: "minimal", support: true },
         previous: null,
-        support: true,
       },
     });
     sessionStorage.setItem(
@@ -190,14 +190,63 @@ describe("the mood check's question 9", () => {
     // Behind it, the result keeps the support at the top, with a minimal total.
     await screen.findByRole("region", { name: "You don’t have to carry this alone" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/minimal/);
+    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+  });
+
+  it("keeps its support at the top on every later visit, never 'minimal' alone", async () => {
+    account.checks[1] = {
+      id: "mood",
+      results: [
+        { at: ago(30), score: 2, band: "minimal", support: false },
+        { at: ago(2), score: 3, band: "minimal", support: true },
+      ],
+      nextAt: new Date(Date.now() + 12 * DAY).toISOString(),
+    };
+    render(<CheckPage checkId="mood" practice={null} />);
+    // A reload or Home's link: no save response, the stored result alone carries it.
+    const top = await screen.findByRole("region", { name: "You don’t have to carry this alone" });
+    expect(top.compareDocumentPosition(screen.getByRole("heading", { level: 1 }))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+    // No "holding up" reassurance beside it, and the professional step comes first.
+    expect(screen.queryByText(checkById("mood")!.bands[0]!.daily)).toBeNull();
+    expect(screen.queryByText(checkById("mood")!.bands[0]!.intimacy)).toBeNull();
+    const steps = within(screen.getByRole("region", { name: "Next steps" }));
+    expect(steps.getAllByRole("listitem")[0]!.textContent).toMatch(/Talk to someone who can help/);
+    // The history says it too: the result's row, and the summary of the latest.
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows[1]!.textContent).toMatch(/Minimal · support for you/);
+    expect(rows[2]!.textContent).not.toMatch(/support/);
+    expect(screen.getByRole("region", { name: "Over time" }).textContent).toMatch(
+      /minimal \(3 of 27\).*Your answer to the last question/
+    );
+    // Its panel is question 9's, with the warm words and the way to Mira.
+    fireEvent.click(steps.getByRole("button", { name: /See support lines/ }));
+    expect(screen.getByRole("dialog", { name: "Support right now" }).textContent).toMatch(
+      /Thank you for answering honestly/
+    );
+  });
+
+  it("shows a calm result without any of it", async () => {
+    account.checks[1] = {
+      id: "mood",
+      results: [{ at: ago(2), score: 3, band: "minimal", support: false }],
+      nextAt: new Date(Date.now() + 12 * DAY).toISOString(),
+    };
+    render(<CheckPage checkId="mood" practice={null} />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByText(checkById("mood")!.bands[0]!.daily)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "You don’t have to carry this alone" })).toBeNull();
+    expect(screen.queryByText(NOT_THE_SCORE)).toBeNull();
+    expect(screen.queryByText("Talk to someone who can help")).toBeNull();
   });
 
   it("stays closed for 'Not at all'", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
-        result: { at: new Date().toISOString(), score: 0, band: "minimal" },
+        result: { at: new Date().toISOString(), score: 0, band: "minimal", support: false },
         previous: null,
-        support: false,
       },
     });
     sessionStorage.setItem(
@@ -213,16 +262,39 @@ describe("the mood check's question 9", () => {
   });
 });
 
+describe("a result whose question 9 opened the support lines, on the cards", () => {
+  it("never reads just 'Minimal' on Home or on the Assessments page", async () => {
+    account.checks[1] = {
+      id: "mood",
+      results: [{ at: ago(2), score: 3, band: "minimal", support: true }],
+      nextAt: new Date(Date.now() + 12 * DAY).toISOString(),
+    };
+    const home = render(<ChecksHomeCard />);
+    const card = within(await screen.findByRole("region", { name: "Your assessments" }));
+    expect(card.getByText(/^Mood check$/).closest("li")!.textContent).toMatch(
+      /Minimal · support for you · .*View/
+    );
+    home.unmount();
+    render(<AssessmentsPage />);
+    const mood = (await screen.findByRole("heading", { name: "Mood check" })).closest("article")!;
+    expect(mood.textContent).toMatch(/Minimal · support for you/);
+  });
+});
+
 describe("the Home card", () => {
   it("shows each assessment's state and where its link goes", async () => {
     account.assessment = { archetype: "Spark Seeker", takenAt: ago(40), reportPath: "/report/t" };
     account.checks = [
       {
         id: "anxiety",
-        results: [{ at: ago(3), score: 7, band: "mild" }],
+        results: [{ at: ago(3), score: 7, band: "mild", support: false }],
         nextAt: new Date(Date.now() + 11 * DAY).toISOString(),
       },
-      { id: "mood", results: [{ at: ago(20), score: 11, band: "moderate" }], nextAt: null },
+      {
+        id: "mood",
+        results: [{ at: ago(20), score: 11, band: "moderate", support: false }],
+        nextAt: null,
+      },
       { id: "loneliness", results: [], nextAt: null },
     ];
     account.bodyCheck = {
@@ -281,7 +353,7 @@ describe("Settings › Self-checks", () => {
   });
 
   it("deletes every check result after a confirmation", async () => {
-    account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild" }];
+    account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild", support: false }];
     render(<ChecksSettings />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete my check results" }));
     expect(sent("DELETE /api/mira/checks")).toEqual([]);
