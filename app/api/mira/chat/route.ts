@@ -420,11 +420,13 @@ export async function POST(request: Request) {
 
   const isFirst = turns.length === 0;
   // Sanjin's intake invitation follows a first reply in the account's first chat only (round-2
-  // audit CHAT-2); never after a weekly session's opening: it is their session, not a first chat.
-  // Offered when that can't be read.
+  // audit CHAT-2); never after a weekly session's opening: it is their session, not a first chat;
+  // nor with the reply that uses the last free message, as nobody could answer it without an
+  // account (round-3 R3-CHAT-3). Offered when that can't be read.
   const inviting =
     isFirst &&
     !opening &&
+    freeLeft !== 0 &&
     !(account && remember && (await invitationShown(account.id).catch(() => false)));
   // Which starter chip opened the chat, as its index (-1: the person's own words), never text.
   // A weekly session's opening line is the app's, neither (null).
