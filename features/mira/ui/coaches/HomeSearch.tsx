@@ -89,7 +89,7 @@ export default function HomeSearch() {
         autoComplete="off"
         enterKeyHint="search"
         placeholder="Search coaches, guides, chats"
-        className="h-12 w-full rounded-full border border-ap-field bg-white pl-11 pr-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus-visible:border-ap-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
+        className="h-12 w-full rounded-full border border-ap-field bg-white pl-11 pr-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus-visible:border-ap-lavender"
       />
       {showing ? (
         <div className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-[20px] border border-ap-line bg-white shadow-[0_18px_40px_-18px_rgba(22,16,33,0.35)] motion-safe:animate-mira-reply">

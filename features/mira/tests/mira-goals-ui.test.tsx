@@ -83,6 +83,37 @@ describe("focus rings in the habits' screens", () => {
     );
     expect(bare).toEqual([]);
   });
+
+  // Round 3: Mira's one focus ring (tailwind.config.js) hugs every bordered text field; a field's
+  // own ring or outline offset beside it drew a second edge (the session picker's time field).
+  it("leave text fields to Mira's one ring, with no ring or outline offset of their own", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const dirs = ["goals", "journal", "checks", "coaches", "weekly-session"];
+    // Each field's own tag up to its className: never past the tag's end or into another tag
+    // (an onChange's "=>" is inside the tag, so ">" alone can't end it).
+    const tag = /<(input|select|textarea)\b((?:(?!\/>|<)[\s\S])*?)className="([^"]*)"/g;
+    const fields = dirs.flatMap((d) =>
+      readdirSync(`features/mira/ui/${d}`)
+        .filter((f) => /\.tsx$/.test(f))
+        .flatMap((f) =>
+          [...readFileSync(`features/mira/ui/${d}/${f}`, "utf8").matchAll(tag)]
+            .filter((m) => /(^|\s)border(\s|$)/.test(m[3]!))
+            .map((m) => ({ where: `${d}/${f} <${m[1]}>`, classes: m[3]! }))
+        )
+    );
+    // The time field, the reminder's select, both searches, the goal and the check-in's line.
+    expect(fields.length).toBeGreaterThanOrEqual(6);
+    expect(fields.map((x) => x.where)).toEqual(
+      expect.arrayContaining([
+        "weekly-session/SlotPicker.tsx <input>",
+        "journal/JournalSettings.tsx <select>",
+      ])
+    );
+    const own = fields.filter((x) =>
+      /(focus|focus-visible):(ring|outline-offset-[1-9])/.test(x.classes)
+    );
+    expect(own.map((x) => x.where)).toEqual([]);
+  });
 });
 
 describe("Home's goals card", () => {

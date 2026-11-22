@@ -158,7 +158,7 @@ export function JournalSettings({
                             `Reminder moved to ${e.target.value}.`
                           )
                         }
-                        className="min-h-[44px] appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] tabular-nums text-ap-ink outline-none focus:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
+                        className="min-h-[44px] appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] tabular-nums text-ap-ink outline-none focus:border-ap-purple"
                       >
                         {[...new Set([s.reminderTime, ...TIMES])].sort().map((t) => (
                           <option key={t} value={t}>
