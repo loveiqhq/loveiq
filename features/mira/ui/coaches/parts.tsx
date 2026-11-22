@@ -53,6 +53,18 @@ export function CoachPortrait({ coach, size }: { coach: Coach; size: number }) {
 }
 
 /**
+ * Each coach's requests go one at a time, in the order asked, whichever button sent them: on a
+ * slow network a Stop never overtakes the Notify it takes back (round-3 R3-HAB-6).
+ */
+const inLine = new Map<CoachId, Promise<unknown>>();
+function inTurn(coach: CoachId, send: () => Promise<string | null>): Promise<string | null> {
+  const run = (inLine.get(coach) ?? Promise.resolve()).then(send);
+  const settled = run.catch(() => null);
+  inLine.set(coach, settled);
+  return run;
+}
+
+/**
  * "Notify me" on a coming-soon coach, and its "Stop" once asked. Each shows at once and is put
  * back if the request fails; the coach's button stays focusable either way, and Stop hands the
  * keyboard back to it, so a keyboard never loses its place.
@@ -70,12 +82,16 @@ export function NotifyButton({
   // Announced only after the person's own tap, not for a request made on an earlier visit.
   const [said, setSaid] = useState("");
   const main = useRef<HTMLButtonElement | null>(null);
+  const taps = useRef(0);
   async function change(on: boolean) {
     if (on === done) return;
     setError(null);
     if (!on) main.current?.focus(); // Stop goes away; the keyboard stays with this coach
     onChange(coach.id, on);
-    const failed = await (on ? notify(coach.id) : stopNotifying(coach.id));
+    const tap = ++taps.current;
+    const failed = await inTurn(coach.id, () => (on ? notify(coach.id) : stopNotifying(coach.id)));
+    // A later tap has the last word: only its outcome is shown and said, once the server answered.
+    if (tap !== taps.current) return;
     if (failed) {
       onChange(coach.id, !on);
       setError(failed);

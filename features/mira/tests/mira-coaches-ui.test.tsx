@@ -177,6 +177,49 @@ describe("The roster (/mira/coaches)", () => {
     );
   });
 
+  // R3-HAB-6: on a slow network a Stop sent beside its Notify landed first and kept the request.
+  it("sends a Stop only once its Notify has landed, and says Stopped only after the server", async () => {
+    let release = () => undefined as void;
+    let held = Promise.resolve();
+    const hold = () => (held = new Promise<void>((done) => (release = done)));
+    const usual = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+      if (url === "/api/mira/event" && String(init.body).includes('"notify"')) await held;
+      return usual(url, init);
+    });
+    const deletes = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
+    try {
+      render(<CoachRoster />);
+      hold();
+      fireEvent.click(await screen.findByRole("button", { name: "Notify me when Theo is ready" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop notifying me about Theo" }));
+      expect(screen.getByRole("button", { name: /Theo is ready/ })).toHaveTextContent("Notify me");
+      await act(() => new Promise((r) => setTimeout(r, 30)));
+      // The Notify is still on its way: nothing taken back yet, and nothing said.
+      expect(deletes()).toEqual([]);
+      expect(screen.queryByText(/We won’t contact you about Theo/)).toBeNull();
+      release();
+      expect(await screen.findByText("Stopped. We won’t contact you about Theo.")).toBeTruthy();
+      expect(deletes().map(([url]) => url)).toEqual(["/api/mira/coaches?notify=theo"]);
+      expect(screen.getByRole("button", { name: /Theo is ready/ })).toHaveTextContent("Notify me");
+
+      // A Notify that fails after its Stop was pressed is old news: the Stop's outcome is said.
+      replies["POST /api/mira/event"] = (b) =>
+        b.type === "notify"
+          ? { status: 500, body: { error: "That didn't go through." } }
+          : { body: {} };
+      hold();
+      fireEvent.click(screen.getByRole("button", { name: "Notify me when Lena is ready" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop notifying me about Lena" }));
+      release();
+      expect(await screen.findByText("Stopped. We won’t contact you about Lena.")).toBeTruthy();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("button", { name: /Lena is ready/ })).toHaveTextContent("Notify me");
+    } finally {
+      fetchMock.mockImplementation(usual);
+    }
+  });
+
   it("finds a challenge in two taps and is honest that the coach isn't here yet", async () => {
     render(<CoachRoster />);
     fireEvent.click(screen.getByRole("button", { name: "Not sure? Find my challenge" }));
