@@ -47,7 +47,18 @@ export default function SheetsSection({
   const tapped = figures?.bySheet.desire;
   return (
     <Card id="sheets" labelledBy="h-sheets">
-      <SectionHead id="h-sheets" title="Sheets" info="survey.sheets" />
+      <SectionHead
+        id="h-sheets"
+        title="Sheets"
+        info="survey.sheets"
+        // Which runs these are, when the range has both orders: the funnel's pick, two sections up
+        // (review, 22 Nov 2026).
+        description={
+          data.questions?.test
+            ? `Runs in ${order === "test" ? "the new order (C13)" : "the old order"}, as picked in the Question funnel.`
+            : undefined
+        }
+      />
       <AllTraffic
         note={
           data.narrowed &&

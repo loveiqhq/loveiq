@@ -336,17 +336,29 @@ describe("ApPayToStart", () => {
   });
 
   it("says when a live funnel has no week in the range, rather than key a line drawn nowhere", () => {
+    // What the server sends now: the free funnel before the paywall (read over 1–22 Oct, so no
+    // week in a later range) beside the live €1.99 page.
+    const after = payload.funnels.find((f) => f.key === "after")!;
+    const gate = payload.funnels.find((f) => f.key === "gate")!;
     view.payload = {
       ...payload,
+      funnels: [
+        { ...after, label: "Before the paywall", period: "Free report · 1 Oct – 22 Oct 2026" },
+        { ...gate, live: true },
+      ],
       weeks: payload.weeks.map((w) => ({
         ...w,
-        funnels: { ...w.funnels, full: { cac: null, cvr: null, roas: null } },
+        funnels: {
+          ...w.funnels,
+          after: { cac: null, cvr: null, roas: null },
+          gate: { cac: 50, cvr: 0.004, roas: 0.04 },
+        },
       })),
     };
     render(<ApPayToStart />);
-    expect(screen.getByText("Pay to start · €29.99 · no week in this range")).toBeTruthy();
-    // A funnel with a line keeps its plain label.
-    expect(screen.queryByText("Pay after the report · no week in this range")).toBeNull();
+    expect(screen.getByText("Before the paywall · no week in this range")).toBeTruthy();
+    // The funnel with a line keeps its plain name in the key.
+    expect(screen.queryByText("€1.99 after the survey · no week in this range")).toBeNull();
   });
 
   it("draws a line per funnel by week, the gate's legend saying it is off", () => {
@@ -604,7 +616,8 @@ describe("Funnel and paywall (Marcus, 19 Nov 2026)", () => {
     expect(a.getByText("38")).toBeTruthy();
     expect(a.getByText("of 40 finishers")).toBeTruthy();
     expect(a.getByText("10.0%")).toBeTruthy();
-    expect(a.getByText("38 of ~170 readers")).toBeTruthy();
+    // Counted as the test is sized: free finishers (40), not page views (38).
+    expect(a.getByText("40 of ~170 finishers")).toBeTruthy();
     const b = within(test.getByRole("region", { name: "New page: Core Archetype shown" }));
     expect(b.getByText("14.3%")).toBeTruthy();
     expect(test.getByText("10 readers")).toBeTruthy();
@@ -620,6 +633,17 @@ describe("Funnel and paywall (Marcus, 19 Nov 2026)", () => {
     render(<ApPayToStart />);
     expect(screen.getAllByText("Free report · 1 Oct – 22 Oct 2026").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    // Each funnel's column and steps carry its stretch: the free one is 1–22 Oct whatever the file's dates.
+    const metrics = exported.sections.find((x) => x.name === "Funnel metrics, paid + organic")!;
+    expect(metrics.table.columns.map((c) => c.label)).toContain(
+      "Before the paywall (Free report · 1 Oct – 22 Oct 2026)"
+    );
+    const steps = exported.sections.find((x) => x.name === "Step by step")!;
+    expect(
+      steps.table.rows.some(
+        (r) => r.label === "Before the paywall (Free report · 1 Oct – 22 Oct 2026)"
+      )
+    ).toBe(true);
     const t = exported.sections.find((x) => x.name === "Paywall test · #11 · New €1.99 page")!;
     expect(t.table.rows.map((r) => [r.label, ...r.values])).toEqual([
       ["Today's €1.99 page", 40, 38, 4, 0.1, 1],

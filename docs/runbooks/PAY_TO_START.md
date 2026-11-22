@@ -137,10 +137,12 @@ payment; either entitlement works on its own.
 
 ## Reading it
 
-AP-Analytics → Assessment A → Pay to start puts every funnel that sells the report side by
-side: pay after the report, pay to start at EUR 29.99 and at EUR 1.99, and EUR 1.99 after the
-survey (the pre-unlock gate, `docs/runbooks/PRE_UNLOCK.md`), with visit → paying customer,
-revenue per visit and ROAS first. Each funnel's ads are Google Ads' spend on the page an ad
+AP-Analytics → Assessment A → Funnel and paywall (renamed from Pay to start on 21 Nov 2026,
+when pay to start was paused) no longer shows the pay-to-start funnels: it puts the free survey
+before the paywall (1–22 Oct 2026) beside EUR 1.99 after the survey (the pre-unlock gate,
+`docs/runbooks/PRE_UNLOCK.md`), with the running paywall test on top. Until then it put every
+funnel that sells the report side by side, with visit → paying customer, revenue per visit and
+ROAS first. Each funnel's ads are Google Ads' spend on the page an ad
 lands on (`landing_page_view`, by day). Each offer's visits are `funnel_event` rows labelled
 `pay_to_start` with the page's `offer` (`full` or `pre`, migration `20261023150000`), written
 from 23 Oct 2026; earlier visits to the two pages carry no offer, count in neither column, and

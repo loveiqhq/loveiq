@@ -279,7 +279,6 @@ export default function ApSurvey() {
 
           {current && questions && (
             <QuestionDetail
-              key={current.id}
               q={current}
               total={rows.filter((r) => r.n > 0).length}
               rows={rows}
@@ -675,6 +674,14 @@ function QuestionDetail({
     (r) => r.id !== q.id && ["scale", "single", "multiple", "country"].includes(r.type)
   );
   const [other, setOther] = useState<string>(countable[0]?.id ?? "");
+  // A new question starts unsplit, as when this block was rebuilt per question. The block itself
+  // stays, so the Question dropdown in it keeps focus while it is used (review, 22 Nov 2026).
+  const [shown, setShown] = useState(q.id);
+  if (shown !== q.id) {
+    setShown(q.id);
+    setDim("none");
+    setOther(countable[0]?.id ?? "");
+  }
   const canSplit = ["scale", "single", "multiple", "country"].includes(q.type);
   const query = useMemo(
     () => ({ ...params, q: q.id, dim, ...(dim === "question" && other ? { other } : {}) }),
@@ -1403,8 +1410,9 @@ function FunnelSection({
       ))}
       {data.sheets.seen && !allTraffic && (
         <p className="m-0 text-xs leading-relaxed text-ap-muted">
-          The sheets show between the questions with all traffic only: their events carry no source
-          or device. They are in the Sheets section below.
+          The sheets show between the questions with all traffic only: they are read from PostHog,
+          while the filters narrow the survey runs in our database. They are in the Sheets section
+          below.
         </p>
       )}
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
@@ -1442,6 +1450,18 @@ export const FUNNEL_SORT: Record<FunnelKey, { label: string; option: string }> =
 
 type FunnelStep = { r: QuestionRow } & Record<FunnelKey, number | string | null>;
 
+/**
+ * A figure as the table shows it: a rate to a tenth of a percent, a time to the second. Two rows
+ * that read the same are tied, so the second key decides between them (Mark: "highest bounce,
+ * then highest median", 17 Nov; review, 22 Nov 2026: hidden decimals used to decide instead).
+ */
+const asShown = (k: FunnelKey, v: number) =>
+  k === "time"
+    ? Math.round(v / 1000)
+    : k === "drop" || k === "ofStart" || k === "ofPrev"
+      ? tenths(v)
+      : v;
+
 /** Highest first, % of prev. lowest first, the question A to Z; a blank last whichever way. */
 function byKey(k: FunnelKey) {
   return (a: FunnelStep, b: FunnelStep) => {
@@ -1450,7 +1470,8 @@ function byKey(k: FunnelKey) {
     if (x === null) return y === null ? 0 : 1;
     if (y === null) return -1;
     if (k === "text") return String(x).localeCompare(String(y));
-    return k === "ofPrev" ? Number(x) - Number(y) : Number(y) - Number(x);
+    const [p, q] = [asShown(k, Number(x)), asShown(k, Number(y))];
+    return k === "ofPrev" ? p - q : q - p;
   };
 }
 
@@ -1594,7 +1615,8 @@ function SheetFunnelRow({
       <span
         role="cell"
         title="Bounce rate: left while the sheet was open, of those it opened for"
-        className={`px-3 py-2 text-right text-[13px] tabular-nums ${overFive(bounce) ? "font-bold text-ap-bad" : "text-ap-body"}`}
+        // The ink: the brighter red reads 4.49:1 on the sheet row's lilac (review, 22 Nov 2026).
+        className={`px-3 py-2 text-right text-[13px] tabular-nums ${overFive(bounce) ? "font-bold text-ap-bad-ink" : "text-ap-body"}`}
       >
         {fmt("pct", bounce)}
       </span>

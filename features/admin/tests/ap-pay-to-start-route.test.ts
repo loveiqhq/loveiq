@@ -714,6 +714,55 @@ describe("GET: Marcus's Funnel and paywall (19 Nov 2026)", () => {
   });
 });
 
+describe("funnelAndPaywall: the week chart's free line ends where the €1.99 page's begins", () => {
+  it("blanks the free funnel from the gate's first week, keeping the weeks before it", () => {
+    const fig = (cac: number | null, cvr: number | null, roas: number | null) => ({
+      cac,
+      cvr,
+      roas,
+    });
+    const none = fig(null, null, null);
+    const week = (from: string, after: ReturnType<typeof fig>, gate: ReturnType<typeof fig>) => ({
+      from,
+      to: from,
+      label: from,
+      funnels: { after, full: none, pre: none, gate },
+    });
+    const current: PtsPayload = {
+      range: { from: "2026-10-19", to: "2026-11-08" },
+      funnels: [],
+      weeks: [
+        week("2026-10-19", fig(20, 0.05, 0.2), none),
+        // 26 Oct: the page went on on the 27th; a finisher outside its cohort is not "before".
+        week("2026-10-26", fig(90, 0.001, 0.01), fig(95, 0.002, 0.02)),
+        week("2026-11-02", fig(400, 0.0005, 0.005), fig(50, 0.004, 0.04)),
+      ],
+      notes: [],
+    };
+    const out = funnelAndPaywall(
+      current,
+      { ...current, weeks: [] },
+      {
+        test: "#11",
+        note: "",
+        arms: [],
+        lift: null,
+        confidence: null,
+        liftWhy: null,
+        verdict: "",
+        why: "x",
+      }
+    );
+    expect(out.weeks.map((w) => w.funnels.after)).toEqual([fig(20, 0.05, 0.2), none, none]);
+    expect(out.weeks.map((w) => w.funnels.gate)).toEqual(current.weeks.map((w) => w.funnels.gate));
+    // A range wholly before the page keeps every free week.
+    const early = { ...current, weeks: [current.weeks[0]!] };
+    expect(funnelAndPaywall(early, early, out.gateTest).weeks[0]!.funnels.after).toEqual(
+      fig(20, 0.05, 0.2)
+    );
+  });
+});
+
 describe("funnelAndPaywall: the notes of both stretches", () => {
   it("keeps the free funnel's own notes, named by its stretch, and drops pay to start's", () => {
     const shell = (notes: string[]): PtsPayload => ({

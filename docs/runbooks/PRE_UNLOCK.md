@@ -143,8 +143,8 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
 
 - AP-Analytics, Focus: "Completion → pre-unlock", EUR 1.99 sales per finished survey and the
   revenue per sale. The Payment page's segments and the Landing page's arms carry the rate.
-- AP-Analytics, Pay to start: the gate as a funnel of its own ("EUR 1.99 after the survey")
-  beside pay after the report and pay to start, from its cohort (stamped at the survey's
+- AP-Analytics, Funnel and paywall (Pay to start until 21 Nov 2026): the gate as a funnel of its
+  own ("EUR 1.99 after the survey") beside the free survey before the paywall, from its cohort (stamped at the survey's
   submit; the old-user campaign's later stamps stay with pay after the report). The free
   landing's visits, ads and survey starts go to the gate by day: on the day it is switched,
   by its share of that day's finished surveys.
@@ -154,7 +154,7 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
 - The behaviour checks (`features/ux-signals`) know the gate (27.10): its checkout, return and
   unlock (plan `initial`) are never the report's paywall or payment, and a visit that went no
   further than the gate, or its checkout, ends at "gate". The proof walks keep its events.
-- AP-Analytics, Pay to start, the gate's funnel: "Pressed Unlock" (on the card, on the bar,
+- AP-Analytics, Funnel and paywall, the gate's funnel: "Pressed Unlock" (on the card, on the bar,
   and since 28.10 on the gate's exit page: `place` `exit_card` / `exit_sticky`) and, under "Saw
   the €1.99 page", who pressed "Not ready to unlock yet" and who pressed the browser's own Back
   there, from the page's own events (`initial_gate_cta_click` with its `place`,

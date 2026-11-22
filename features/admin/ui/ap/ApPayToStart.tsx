@@ -828,14 +828,18 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
 const isWholeWeek = (w: { from: string; to: string }) =>
   (Date.parse(`${w.to}T12:00:00Z`) - Date.parse(`${w.from}T12:00:00Z`)) / 86_400_000 === 6;
 
-/** The page as a spreadsheet: both traffic views, the steps, and the weeks. */
-/** What the test needs to be called (its Test Repository row, signed off at the 19 Nov sync). */
+/**
+ * What the test needs to be called, in free finishers per half: its Test Repository row ("Core
+ * Archetype on the €1.99 paywall page vs. today's", signed off at the 19 Nov sync) puts a doubling
+ * from the baseline (19 of 185 finishers paid, 10.3%, 27 Oct–17 Nov) at about 155–185 per half,
+ * about 5 weeks at ~35 a week; 170 is its middle.
+ */
 const NEEDED_PER_HALF = 170;
 
 /**
  * Marcus's "Paywall test: Core Archetype before paying" (19 Nov 2026), the running #11: a card per
  * half with who saw the EUR 1.99 page, who paid and the pay rate (the decider: paid over free
- * finishers), how far the half is towards the readers it needs, then the facts to read it by and
+ * finishers), how far the half is towards the finishers it needs, then the facts to read it by and
  * the verdict in plain words. The same readout as AP › Payment's.
  */
 function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: string }) {
@@ -862,7 +866,8 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
         <>
           <div className="grid gap-4 md:grid-cols-2">
             {t.arms.map((a, i) => {
-              const seen = a.reached ?? a.finishers;
+              // The sample is counted as the test is sized: free finishers (review, 22 Nov 2026).
+              const sample = a.finishers;
               return (
                 <section
                   key={a.arm}
@@ -908,7 +913,7 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
                     <span className="flex justify-between text-xs text-ap-body">
                       <span>Sample so far</span>
                       <span className="tabular-nums">
-                        {fmt("count", seen)} of ~{NEEDED_PER_HALF} readers
+                        {fmt("count", sample)} of ~{NEEDED_PER_HALF} finishers
                       </span>
                     </span>
                     <span
@@ -918,7 +923,7 @@ function PaywallTest({ t, to }: { t: FunnelPaywallPayload["gateTest"]; to: strin
                       <span
                         className="block h-full rounded-full"
                         style={{
-                          width: `${Math.min(100, (seen / NEEDED_PER_HALF) * 100).toFixed(1)}%`,
+                          width: `${Math.min(100, (sample / NEEDED_PER_HALF) * 100).toFixed(1)}%`,
                           background: a.control ? "#9c95a3" : "#5a42a6",
                         }}
                       />
@@ -989,10 +994,14 @@ function Fact({ label, value, sub }: { label: string; value: string; sub: string
   );
 }
 
+/** The page as a spreadsheet: the test, both traffic views, the steps, and the weeks. */
 function toCsv(d: FunnelPaywallPayload): Array<{ name: string; table: Table }> {
+  // Each funnel with its own stretch: the free one is read over 1–22 Oct whatever the range, so
+  // a column under the file's dates says which it covers (review, 22 Nov 2026).
+  const named = (f: PtsFunnel) => (f.period ? `${f.label} (${f.period})` : f.label);
   const head = [
     { label: "Measure", unit: "text" as const },
-    ...d.funnels.map((f) => ({ label: f.label, unit: "text" as const })),
+    ...d.funnels.map((f) => ({ label: named(f), unit: "text" as const })),
   ];
   const metrics = (traffic: Traffic): Table => ({
     columns: head,
@@ -1034,7 +1043,7 @@ function toCsv(d: FunnelPaywallPayload): Array<{ name: string; table: Table }> {
           .filter((f) => f.live)
           .flatMap((f) =>
             f.steps.map((s) => ({
-              label: f.label,
+              label: named(f),
               values: [s.label, s.n, s.n !== null && f.all.visits ? s.n / f.all.visits : null],
             }))
           ),

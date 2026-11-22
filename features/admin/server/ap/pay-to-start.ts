@@ -291,7 +291,7 @@ const PAY_TO_START_NOTE = /pay[- ]to[- ]start|Pay after the report/i;
  * paused, so its two funnels leave the page; the free funnel before the paywall is read over
  * BEFORE_PAYWALL whatever the range (`before`), beside the EUR 1.99 page's funnel over the range
  * (`current`), and the running paywall test sits on top. The week chart keeps the range's own
- * weeks: the free funnel's line ends where the EUR 1.99 page's begins.
+ * weeks, the free funnel's line ending where the EUR 1.99 page's begins.
  */
 export function funnelAndPaywall(
   current: PtsPayload,
@@ -321,13 +321,27 @@ export function funnelAndPaywall(
         ]
       : []),
   ];
+  // The free funnel's line ends where the EUR 1.99 page's begins: from the first week the page has
+  // a figure, a finisher outside its cohort is not "before the paywall", so the line stops there
+  // (review, 22 Nov 2026: such weeks were drawn and exported under that name).
+  const has = (v: Record<string, number | null> | undefined) =>
+    !!v && Object.values(v).some((x) => x !== null);
+  const firstGate = current.weeks.findIndex((w) => has(w.funnels.gate));
+  const weeks =
+    firstGate < 0
+      ? current.weeks
+      : current.weeks.map((w, i) =>
+          i < firstGate
+            ? w
+            : { ...w, funnels: { ...w.funnels, after: { cac: null, cvr: null, roas: null } } }
+        );
   const kept = (notes: string[]) => notes.filter((n) => !PAY_TO_START_NOTE.test(n));
   // The free funnel's own stretch can lack what the range has (Google Ads unreadable, say): its
   // notes are kept too, named by its stretch.
   const beforeNotes = kept(before.notes)
     .filter((n) => !current.notes.includes(n))
     .map((n) => `Before the paywall (${rangeLabel(BEFORE_PAYWALL.from, BEFORE_PAYWALL.to)}): ${n}`);
-  return { ...current, funnels, notes: [...kept(current.notes), ...beforeNotes], gateTest };
+  return { ...current, funnels, weeks, notes: [...kept(current.notes), ...beforeNotes], gateTest };
 }
 
 /** Which offer an ad's landing page sells, from its path; null for every other page. */

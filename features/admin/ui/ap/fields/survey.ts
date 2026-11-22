@@ -973,7 +973,7 @@ const SHEET_EVENTS: FieldDef["tables"] = [
     columns:
       "event (survey_sheet_shown, survey_sheet_closed, survey_started, survey_answer), properties.sheet, properties.ms_open, properties.ticked, properties.question_id, person_id, timestamp, properties.$host",
     filters:
-      "Period, by when the run began (Berlin days), as the question funnel counts; the order picked above, from whether the run answered 03011 or 01005 first. Nothing else: the sheets' events carry no source or device.",
+      "Period, by when the run began (Berlin days), as the question funnel counts; the order picked above, from whether the run answered 03011 or 01005 first. Nothing else: the sheets are read from PostHog, while the page's other filters narrow the survey runs in our database.",
     watch:
       "PostHog is not consent-gated on the site, so it sees nearly every survey run; a browser that blocks it is missing. The sheets went live on 17 Nov 2026 (the expert's and State of Desire's on 18 Nov).",
   },

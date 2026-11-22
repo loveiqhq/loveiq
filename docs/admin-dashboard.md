@@ -62,7 +62,8 @@ pay-to-start funnels are still built (`payToStartFor`) for the Dashboard and Lan
 Survey shows Mark's sheets between the questions (his Survey copy board, 17–18 Nov 2026): a
 Sheets section above the demographics, each sheet's row in the question funnel (in survey order),
 and numbered pins on the time and drop-out charts. Their figures come from the sheets' own PostHog
-events (`survey_sheet_shown`, `survey_sheet_closed`), which every visitor's browser sends. The
+events (`survey_sheet_shown`, `survey_sheet_closed`), sent by every browser that doesn't block
+PostHog. The
 question funnel sorts by two columns, and Question detail has a question dropdown.
 Landing's pay-to-start table counts "Started survey" from `prepaid_report_access.survey_started_at`,
 recorded from 28 Oct 2026. Traffic shows each search ad as searchers see it, with its

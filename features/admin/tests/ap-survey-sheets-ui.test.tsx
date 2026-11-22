@@ -266,10 +266,28 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
     expect(funnelRows().some((r) => r.hasAttribute("data-sheet"))).toBe(false);
     expect(document.querySelector("#time-drop [data-sheet]")).toBeNull();
     expect(
-      screen.getByText(/The sheets show between the questions with all traffic only/)
+      screen.getByText(
+        /The sheets show between the questions with all traffic only: they are read from PostHog, while the filters narrow the survey runs in our database\./
+      )
     ).toBeTruthy();
     // The Sheets section still has them.
     expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(7);
+  });
+
+  it("says which order's runs the Sheets section counts, and follows the funnel's pick", () => {
+    render(<ApSurvey />);
+    const sheets = document.getElementById("sheets")!;
+    expect(sheets.textContent).toContain(
+      "Runs in the new order (C13), as picked in the Question funnel."
+    );
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Question order" })).getByRole("button", {
+        name: /Old order/,
+      })
+    );
+    expect(document.getElementById("sheets")!.textContent).toContain(
+      "Runs in the old order, as picked in the Question funnel."
+    );
   });
 
   it("says why the Sheets section counts all traffic under a filter (the true reason)", () => {
@@ -361,12 +379,13 @@ describe("sorting the funnel by two columns (Mark, 17 Nov 2026)", () => {
       drop,
       time,
     });
+    // Median times in ms, as the funnel carries them.
     const steps = [
-      step(1, 0, 3, 1),
-      step(2, 0.1, 1, 0.9),
-      step(3, 0, 9, 0.95),
-      step(4, null, 5, null),
-      step(5, 0, 9, 1),
+      step(1, 0, 3000, 1),
+      step(2, 0.1, 1000, 0.9),
+      step(3, 0, 9000, 0.95),
+      step(4, null, 5000, null),
+      step(5, 0, 9000, 1),
     ];
     const order = (s: typeof steps) => s.map((x) => x.r.n);
     expect(order(sortFunnel(steps, null, null))).toEqual([1, 2, 3, 4, 5]);
@@ -375,6 +394,28 @@ describe("sorting the funnel by two columns (Mark, 17 Nov 2026)", () => {
     // % of prev.: lowest first.
     expect(order(sortFunnel(steps, "ofPrev", null))).toEqual([2, 3, 1, 5, 4]);
     expect(FUNNEL_SORT.ofPrev.option).toBe("% of prev., lowest first");
+  });
+
+  it("treats rows that read the same as tied, so the second key decides (review, 22 Nov 2026)", () => {
+    const step = (n: number, drop: number, time: number) => ({
+      r: { n } as QuestionRow,
+      text: `q${n}`,
+      reached: 100,
+      ofStart: null,
+      ofPrev: null,
+      exits: 0,
+      drop,
+      time,
+    });
+    // 4/77 and 3/58 both read "5.2%"; 2.4 s and 2.6 s read "2 s" and "3 s".
+    const steps = [step(1, 4 / 77, 2000), step(2, 3 / 58, 30000), step(3, 0.06, 1000)];
+    const order = (s: typeof steps) => s.map((x) => x.r.n);
+    expect(order(sortFunnel(steps, "drop", "time"))).toEqual([3, 2, 1]);
+    // A tenth of a percent apart is not a tie.
+    const apart = [step(1, 0.053, 2000), step(2, 0.052, 30000)];
+    expect(order(sortFunnel(apart, "drop", "time"))).toEqual([1, 2]);
+    // Times to the second: 2.4 s and 2.6 s differ as shown (2 s, 3 s).
+    expect(order(sortFunnel([step(1, 0, 2400), step(2, 0, 2600)], "time", null))).toEqual([2, 1]);
   });
 });
 
@@ -385,9 +426,27 @@ describe("the Question dropdown in Question detail (Mark, 16–17 Nov 2026)", ()
     const groups = [...pick.querySelectorAll("optgroup")].map((g) => g.label);
     expect(groups[0]).toBe("Name");
     expect(groups).toContain("Desire & arousal");
+    pick.focus();
     fireEvent.change(pick, { target: { value: "03008" } });
     const detail = document.getElementById("question-detail")!;
     expect(detail.textContent).toContain("Survey · Question detail · 03008");
-    expect(pick.value).toBe("03008");
+    // The same control, still focused: arrowing through the list keeps the keyboard on it.
+    const now = screen.getByRole("combobox", { name: "Question" }) as HTMLSelectElement;
+    expect(now).toBe(pick);
+    expect(document.activeElement).toBe(pick);
+    expect(now.value).toBe("03008");
+  });
+
+  it("starts a newly picked question unsplit", () => {
+    render(<ApSurvey />);
+    const split = screen.getByRole("combobox", { name: /Compare answers by/ }) as HTMLSelectElement;
+    fireEvent.change(split, { target: { value: "device" } });
+    expect(split.value).toBe("device");
+    fireEvent.change(screen.getByRole("combobox", { name: "Question" }), {
+      target: { value: "03008" },
+    });
+    expect(
+      (screen.getByRole("combobox", { name: /Compare answers by/ }) as HTMLSelectElement).value
+    ).toBe("none");
   });
 });
