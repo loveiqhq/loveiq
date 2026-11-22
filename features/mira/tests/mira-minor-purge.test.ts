@@ -23,6 +23,12 @@ const deleted = () =>
     .mock.calls.filter(([, init]) => init?.method === "DELETE")
     .map(([path]) => String(path).split("?")[0]);
 
+const deletedPaths = () =>
+  vi
+    .mocked(supabaseFetch)
+    .mock.calls.filter(([, init]) => init?.method === "DELETE")
+    .map(([path]) => String(path));
+
 beforeEach(() => vi.clearAllMocks());
 
 describe("stopForMinor", () => {
@@ -32,4 +38,13 @@ describe("stopForMinor", () => {
       expect.arrayContaining(["/rest/v1/mira_body_check", "/rest/v1/mira_email_change"])
     );
   });
+
+  // 22 Nov 2026 safety fixes: the account's KPI rows that say something about the person go too.
+  it("deletes the account's own records of the mood check's question-9 support panel", async () => {
+    await stopForMinor(LEA);
+    expect(deletedPaths()).toContain(
+      `/rest/v1/mira_event?user_id=eq.${LEA}&name=eq.check_support_shown`
+    );
+  });
 });
+

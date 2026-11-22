@@ -163,4 +163,23 @@ describe("POST /api/mira/event", () => {
     await post({ type: "rating", rating: 1 });
     expect(loggedProps()).toEqual({ rating: 1 });
   });
+
+  // Mira's privacy notice promises a count only: the panel the mood check's question 9 opened is
+  // logged with no account and no browser id, so it can never be tied to a person.
+  it("counts the mood check's support panel without anyone's id, signed in or not", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    expect((await post({ type: "track", name: "check_support_shown" })).status).toBe(200);
+    vi.mocked(getMiraAccount).mockResolvedValue(null);
+    expect((await post({ type: "track", name: "check_support_shown" })).status).toBe(200);
+    expect(vi.mocked(logMiraEvent).mock.calls).toEqual([
+      ["check_support_shown", {}],
+      ["check_support_shown", {}],
+    ]);
+    // Other moments keep their person.
+    await post({ type: "track", name: "mood_check_started" });
+    expect(vi.mocked(logMiraEvent).mock.calls[2]).toEqual([
+      "mood_check_started",
+      { anonId: "anon_test_123456789" },
+    ]);
+  });
 });

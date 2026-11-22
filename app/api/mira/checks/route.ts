@@ -10,7 +10,8 @@
  *   POST   { check, answers } → scores and stores a finished check. Refused (409) before the
  *            check's retake date (14 days, 28 for loneliness), so a result covers its own two
  *            weeks; the browser never sends a score.
- *   DELETE → deletes every check result
+ *   DELETE → deletes every check result, and the account's records of question 9's support panel
+ *            from before that panel was counted without anyone's id
  *
  * Someone Mira stopped as under 18 (server/minor.ts) gets 403 on every method, as their data is
  * gone. KPI events carry ids only: which check and whether it was a retake, never answers, scores

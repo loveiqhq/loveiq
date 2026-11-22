@@ -20,8 +20,9 @@
  *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
  *       sees), the body check offered and started (its finish is the server's), the "Keep this
  *       chat" card shown, kept or put off, the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
- *       is the server's), a self-check started and the support lines its mood check opened;
- *       only these names, so the server's own KPI events can't be sent
+ *       is the server's), a self-check started and the support lines its mood check opened (a
+ *       pure count: logged without the account or the browser id); only these names, so the
+ *       server's own KPI events can't be sent
  *
  * At most DAILY_EVENTS a day per person (account or browser id) and six times that per network
  * (a cleared cookie is a new id), so mira_event can't be flooded or the counts inflated.
@@ -173,7 +174,8 @@ export async function POST(request: Request) {
       logMiraEvent("consent_given", who, { version: body.version });
       break;
     case "track":
-      logMiraEvent(body.name, who);
+      // The privacy notice promises a count only: question 9's panel names no account or browser.
+      logMiraEvent(body.name, body.name === "check_support_shown" ? {} : who);
       break;
   }
   return NextResponse.json({ success: true });
