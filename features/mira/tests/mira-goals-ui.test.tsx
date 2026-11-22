@@ -309,6 +309,18 @@ describe("the goals page", () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
   });
 
+  it("lists a goal once when the same words come back as the goal already on the go", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    replies["POST /api/mira/goals"] = () => ({ body: { goal: LIGHT } });
+    render(<GoalsPage />);
+    const input = await screen.findByLabelText("Your goal, in your own words");
+    fireEvent.change(input, { target: { value: LIGHT.text } });
+    fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
+    await waitFor(() => expect(calls("POST /api/mira/goals")).toHaveLength(1));
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe(""));
+    expect(screen.getAllByRole("heading", { name: LIGHT.text })).toHaveLength(1);
+  });
+
   it("asks for words before adding an empty goal", async () => {
     render(<GoalsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Add goal" }));

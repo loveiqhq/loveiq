@@ -85,7 +85,9 @@ export function useGoals() {
       body: { text, weeklyTarget, via },
     });
     if (!r.ok || !r.data.goal) return r.data.error ?? "Your goal didn't save. Please try again.";
-    setGoals((all) => [...all, r.data.goal]);
+    // The same words as a goal on the go answer that goal: never listed twice.
+    const made = r.data.goal;
+    setGoals((all) => (all.some((g) => g.id === made.id) ? all : [...all, made]));
     return null;
   }
 

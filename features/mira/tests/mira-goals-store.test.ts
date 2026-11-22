@@ -65,14 +65,17 @@ describe("listGoals", () => {
 describe("createGoal", () => {
   it("adds the goal to the person's account", async () => {
     answers = [["POST /rest/v1/mira_goal", 201, [row()]]];
-    const goal = await createGoal(LEA, { text: "Walk", weeklyTarget: 3, via: "hand" });
-    expect(goal).toMatchObject({ id: GOAL, days: [] });
+    const made = await createGoal(LEA, { text: "Walk", weeklyTarget: 3, via: "hand" });
+    expect(made).toMatchObject({ goal: { id: GOAL, days: [] }, existing: false });
     const insert = calls().find((c) => c.call.startsWith("POST"))!;
     expect(insert.body).toEqual({ user_id: LEA, text: "Walk", weekly_target: 3, via: "hand" });
   });
 
   it("keeps a few goals on the go, not a list: none past the cap", async () => {
-    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({ id: `g${i}` }));
+    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({
+      ...row({ id: `g${i}`, text: `Goal ${i}` }),
+      log: [],
+    }));
     answers = [["GET /rest/v1/mira_goal?", 200, active]];
     expect(await createGoal(LEA, { text: "One more", weeklyTarget: null, via: "hand" })).toBe(
       "full"
@@ -80,6 +83,20 @@ describe("createGoal", () => {
     expect(calls().some((c) => c.call.startsWith("POST"))).toBe(false);
     expect(calls()[0]!.call).toContain(`user_id=eq.${LEA}`);
     expect(calls()[0]!.call).toContain("archived_at=is.null&completed_at=is.null");
+  });
+
+  it("gives back the goal on the go with the same words, any case, instead of a second", async () => {
+    answers = [
+      [
+        "GET /rest/v1/mira_goal?",
+        200,
+        [{ ...row({ text: "Walk ten minutes" }), log: [{ day: "2026-11-21" }] }],
+      ],
+    ];
+    // "Add as a goal" tapped twice, or on two devices.
+    const made = await createGoal(LEA, { text: "walk TEN minutes", weeklyTarget: 2, via: "mira" });
+    expect(made).toMatchObject({ goal: { id: GOAL, days: ["2026-11-21"] }, existing: true });
+    expect(calls().some((c) => c.call.startsWith("POST"))).toBe(false);
   });
 });
 
@@ -112,7 +129,10 @@ describe("updateGoal", () => {
   });
 
   it("brings a goal back only within the cap", async () => {
-    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({ id: `g${i}` }));
+    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({
+      ...row({ id: `g${i}`, text: `Goal ${i}` }),
+      log: [],
+    }));
     answers = [
       ["GET /rest/v1/mira_goal?id=eq.", 200, [row({ completed_at: "2026-11-20T10:00:00Z" })]],
       ["GET /rest/v1/mira_goal?user_id=eq.", 200, active],

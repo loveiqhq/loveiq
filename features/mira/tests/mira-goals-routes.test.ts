@@ -69,7 +69,7 @@ beforeEach(() => {
   vi.mocked(isMinor).mockResolvedValue(false);
   vi.mocked(verifyCsrfToken).mockResolvedValue(true);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true, remaining: 9, resetAt: new Date() });
-  vi.mocked(createGoal).mockResolvedValue({ ...row, days: [] });
+  vi.mocked(createGoal).mockResolvedValue({ goal: { ...row, days: [] }, existing: false });
   vi.mocked(updateGoal).mockResolvedValue(row);
 });
 
@@ -117,6 +117,14 @@ describe("POST /api/mira/goals", () => {
       { via: "mira", target: 3 }
     );
     expect(logged()).not.toContain("soft light");
+  });
+
+  it("makes one goal of the same words twice: the second answers the first, counted once", async () => {
+    vi.mocked(createGoal).mockResolvedValueOnce({ goal: { ...row, days: [] }, existing: true });
+    const res = await create({ text: WORDS, via: "mira" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ goal: { ...row, days: [] } });
+    expect(logMiraEvent).not.toHaveBeenCalled();
   });
 
   it("sets one by hand with no target unless told otherwise", async () => {
