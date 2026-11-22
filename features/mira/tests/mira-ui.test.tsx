@@ -706,9 +706,9 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     expect(screen.queryByText(/team may read replies I rate/)).toBeNull(); // the box went (21 Nov)
     fireEvent.click(box(/18 years of age or older/));
     fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
-    expect(send).toBeDisabled();
+    expect(send).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(box(/sex life and health to coach me/));
-    expect(send).toBeEnabled();
+    expect(send).not.toHaveAttribute("aria-disabled");
     expect(screen.getByRole("link", { name: "terms of use" })).toHaveAttribute(
       "href",
       "/terms-of-use"

@@ -119,10 +119,16 @@ function LegalNav() {
   );
 }
 
-/** Mira's primary action: the board's ink pill (the same black as "Sign in"). */
+/**
+ * Mira's primary action: the board's ink pill (the same black as "Sign in"). Never natively
+ * disabled (round-2 decision 7): that drops keyboard focus to the page while a save runs and takes
+ * the button out of Tab's order. While `disabled` it is `aria-disabled`, keeps focus and its click
+ * does nothing; a submit button's click is cancelled too, which also stops Enter in a field
+ * (implicit submission is a click on the form's default button).
+ */
 export function PrimaryButton({
   children,
-  disabled,
+  disabled = false,
   onClick,
   type = "button",
 }: {
@@ -134,9 +140,16 @@ export function PrimaryButton({
   return (
     <button
       type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
+      aria-disabled={disabled || undefined}
+      onClick={(e) => {
+        if (disabled) e.preventDefault();
+        else onClick?.();
+      }}
+      className={`inline-flex min-h-[48px] items-center justify-center rounded-full px-6 text-[15px] font-bold transition-[transform,background-color] ${
+        disabled
+          ? "cursor-not-allowed bg-ap-track text-ap-muted"
+          : "bg-ap-ink text-white hover:bg-ap-ink/90 active:scale-[0.98]"
+      }`}
     >
       {children}
     </button>

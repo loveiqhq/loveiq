@@ -131,7 +131,11 @@ describe("Use Face ID next time?", () => {
     );
     await codeSignIn({ success: true, offerPasskey: true, needsProfile: true });
     fireEvent.click(await screen.findByRole("button", { name: "Use Touch ID" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Use Touch ID" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Use Touch ID" })).not.toHaveAttribute(
+        "aria-disabled"
+      )
+    );
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     await screen.findByRole("heading", { name: "About you" });
