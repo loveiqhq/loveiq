@@ -65,6 +65,9 @@ const pairs = (p: Palette): Array<[string, string, string, number]> => [
   ["Journal week: a checked-in day's tick on its tint", p.purple, over(p.purple, 0.1, p.paper), 3],
   // Recordings: the weekday over each voice session's date.
   ["Recordings: the weekday", p.pii, p.paper, 4.5],
+  // The chat's message box (A11Y-8): its edge, and its edge while it has the focus.
+  ["Chat message box: its edge on the page", p.field, p.paper, 3],
+  ["Chat message box: its focused edge on the page", p.purple, p.paper, 3],
   // The logo's BETA, "Your chats" and other small labels (muted, not quiet).
   ["Small labels (BETA, 'Your chats') on the page", p.muted, p.paper, 4.5],
   ["Small labels on a grey surface", p.muted, p.ground, 4.5],

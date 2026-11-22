@@ -199,6 +199,17 @@ describe("Sign-up", () => {
 });
 
 describe("Chat", () => {
+  // A11Y-8 (WCAG 1.4.11): the pill's edge is the field's own token, 3:1 or more on the page in
+  // both themes, and so is its focused edge (lavender is 2.98:1 on white): pairs in
+  // mira-theme-contrast.test.ts.
+  it("draws the message box's edge in the field colour, and its focused edge in purple", () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    const box = screen.getByLabelText("Message Mira").closest("form")!;
+    const edges = box.className.split(/\s+/).filter((c) => /^(focus-within:)?border-ap-/.test(c));
+    expect(edges).toEqual(["border-ap-field", "focus-within:border-ap-purple"]);
+    expect(box).toHaveClass("rounded-[28px]");
+  });
+
   it("offers to sign in again on a 401, and the support panel under any error", async () => {
     replies["POST /api/mira/chat"] = () => ({
       status: 401,

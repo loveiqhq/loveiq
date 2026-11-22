@@ -1129,9 +1129,11 @@ export default function MiraChat({
                   <div
                     className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
                   >
+                    {/* The pill's edge is a field's (A11Y-8): 3:1 or more on the page in both
+                        themes, and so is its focused purple (lavender is under 3:1 on white). */}
                     <form
                       ref={formRef}
-                      className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
+                      className="flex items-end gap-1.5 rounded-[28px] border border-ap-field bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-purple sm:py-2 sm:pl-6 sm:pr-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void send(input);
