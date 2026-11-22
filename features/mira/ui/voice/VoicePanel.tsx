@@ -83,14 +83,18 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
           your voice into text, under that company&apos;s terms. Mira never receives or keeps any
           audio: only the text, like a typed message.
         </p>
-        <label className="mt-3 flex min-h-[44px] items-center gap-3 text-[14px] text-ap-ink">
+        <label className="mt-3 flex min-h-[44px] items-start gap-3 text-[14px] leading-snug text-ap-ink">
           <input
             type="checkbox"
             checked={tick}
             onChange={(e) => setTick(e.target.checked)}
-            className="h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+            className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
           />
-          I understand
+          <span>
+            I agree that my browser&apos;s speech service (for example Apple&apos;s or
+            Google&apos;s) hears what I say to Mira, under that company&apos;s terms, possibly
+            outside the EU.
+          </span>
         </label>
         <div className="mt-2 flex items-center justify-end gap-1">
           <button

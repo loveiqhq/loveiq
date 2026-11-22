@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 
-import { CONSENT_VERSION } from "@features/mira/server/config";
+import { CONSENT_VERSION, VOICE_NOTICE_VERSION } from "@features/mira/server/config";
 import MiraChat from "@features/mira/ui/MiraChat";
 import { TURN_PAUSE_MS } from "@features/mira/ui/voice/useVoice";
 
@@ -87,6 +87,9 @@ const calls = (key: string) =>
     .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
 
 const REPLY = "That makes sense. Wanting the lights off is a way of feeling safe.";
+/** The notice's tick, word for word. */
+const AGREE =
+  "I agree that my browser's speech service (for example Apple's or Google's) hears what I say to Mira, under that company's terms, possibly outside the EU.";
 
 beforeEach(() => {
   FakeRecognizer.made = [];
@@ -107,7 +110,7 @@ beforeEach(() => {
   vi.spyOn(navigator, "vendor", "get").mockReturnValue("Google Inc.");
   localStorage.clear();
   localStorage.setItem("mira.consent.v1", JSON.stringify({ version: CONSENT_VERSION }));
-  localStorage.setItem("mira.voice.notice.v1", "1");
+  localStorage.setItem("mira.voice.notice.v1", JSON.stringify({ version: VOICE_NOTICE_VERSION }));
 });
 afterEach(() => {
   cleanup();
@@ -154,14 +157,33 @@ describe("Talk", () => {
     expect(screen.getByText(/Mira never receives or keeps any audio/)).toBeTruthy();
     expect(FakeRecognizer.made).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Start talking" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("checkbox", { name: "I understand" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: AGREE }));
+    expect(calls("POST /api/mira/event").filter((b) => b.type === "voice_notice")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Start talking" }));
+    // The agreement is recorded with its wording's version.
+    expect(calls("POST /api/mira/event").filter((b) => b.type === "voice_notice")).toEqual([
+      { type: "voice_notice", version: "mira-voice-2026-11-22" },
+    ]);
     expect(mic()).toMatchObject({ started: true, continuous: true, interimResults: true });
     expect(mic().lang).toMatch(/^en-/);
     expect(mic().processLocally).toBeUndefined();
     expect(screen.getByRole("status", { name: "" }).textContent).toContain("Mira is listening");
     // Asked once: the next session starts listening straight away.
-    expect(localStorage.getItem("mira.voice.notice.v1")).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem("mira.voice.notice.v1")!)).toEqual({
+      version: "mira-voice-2026-11-22",
+    });
+  });
+
+  it("asks again when the notice's wording changed since this browser agreed", async () => {
+    for (const before of ["1", JSON.stringify({ version: "mira-voice-2026-01-01" })]) {
+      localStorage.setItem("mira.voice.notice.v1", before);
+      const { unmount } = render(<MiraChat signedIn={false} initialChatId={null} />);
+      talk();
+      expect(screen.getByRole("heading", { name: "Before you talk" })).toBeTruthy();
+      expect(screen.getByRole("checkbox", { name: AGREE })).not.toBeChecked();
+      expect(FakeRecognizer.made).toHaveLength(0);
+      unmount();
+    }
   });
 
   it("listens on the device where the browser can, fetching the language once, with no notice", async () => {

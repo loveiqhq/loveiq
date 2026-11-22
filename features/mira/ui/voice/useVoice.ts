@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { VOICE_NOTICE_VERSION } from "../../server/config";
 import { local, miraApi } from "../api";
 import {
   chooseMode,
@@ -385,10 +386,16 @@ export function useVoice(options: {
     else void chooseMode(Recognizer, m.lang).then(go);
   }
 
-  /** The notice's "Start talking": read once, then the browser's service listens. */
+  /**
+   * The notice's "Start talking", its tick given: kept in this browser and recorded with the
+   * wording's version, then the browser's service listens.
+   */
   function agree() {
     if (m.phase !== "notice") return;
     local.saveVoiceNoticeSeen();
+    void miraApi("/api/mira/event", {
+      body: { type: "voice_notice", version: VOICE_NOTICE_VERSION },
+    });
     listen();
   }
 

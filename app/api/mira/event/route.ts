@@ -7,6 +7,8 @@
  *       rate" box went; a text an older page still sends is dropped by the schema).
  *   { type: "consent", version }  the first-message consent, logged as consent_given with its
  *       wording's version
+ *   { type: "voice_notice", version }  Talk's tick that the browser's speech service hears what
+ *       the person says (22 Nov 2026), logged as voice_notice_agreed with its wording's version
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach:
  *       its id, or its challenge as Home sent it before 22 Nov 2026, logged as notify_me with the
@@ -67,6 +69,10 @@ const schema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("consent"),
     version: z.string().regex(/^mira-[\d-]{10,13}$/), // mira-2026-11-21, mira-2026-11-21-2
+  }),
+  z.object({
+    type: z.literal("voice_notice"),
+    version: z.string().regex(/^mira-voice-\d{4}-\d{2}-\d{2}(-\d{1,2})?$/), // mira-voice-2026-11-22
   }),
   z.object({
     type: z.literal("track"),
@@ -172,6 +178,9 @@ export async function POST(request: Request) {
       break;
     case "consent":
       logMiraEvent("consent_given", who, { version: body.version });
+      break;
+    case "voice_notice":
+      logMiraEvent("voice_notice_agreed", who, { version: body.version });
       break;
     case "track":
       // The privacy notice promises a count only: question 9's panel names no account or browser.

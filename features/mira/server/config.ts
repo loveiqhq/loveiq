@@ -43,6 +43,13 @@ export const CONSENT_VERSION = "mira-2026-11-21-2"; // the optional rating box w
  */
 export const USE_CHECKS_VERSION = "mira-checks-2026-11-22";
 
+/**
+ * The wording of Talk's notice about the browser's speech service (ui/voice/VoicePanel.tsx),
+ * kept in the browser once agreed and recorded as voice_notice_agreed. Bump it when that wording
+ * changes: a browser that agreed to an older one is asked again.
+ */
+export const VOICE_NOTICE_VERSION = "mira-voice-2026-11-22";
+
 export const DEFAULT_MODEL = "claude-sonnet-5-5";
 export const DEFAULT_FALLBACK_MODEL = "claude-haiku-5-5";
 export const MODEL_EFFORT = "low";

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { captureUtmFromUrl, getStoredUtm } from "@shared/url/utm";
-import { SOURCE_COOKIE, SOURCE_HEADER } from "../server/config";
+import { SOURCE_COOKIE, SOURCE_HEADER, VOICE_NOTICE_VERSION } from "../server/config";
 
 export type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } };
 
@@ -106,7 +106,7 @@ const LOCAL_NPS = "mira.nps.v1";
 const LOCAL_BODY_CHECK = "mira.bodycheck.v1";
 /** When this browser was shown the "Make Mira yours" tip on the coaching-style button. */
 const LOCAL_STYLE_TIP = "mira.tip.style.v1";
-/** When this browser's person read the one-time notice about their browser's speech service. */
+/** The version of the notice about the browser's speech service this browser's person agreed to. */
 const LOCAL_VOICE_NOTICE = "mira.voice.notice.v1";
 /** "Not now" on the body check offer waits this long before it is offered again. */
 const BODY_CHECK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
@@ -167,7 +167,12 @@ export const local = {
   /** The coaching-style tip is shown once per browser. */
   styleTipSeen: () => read<number>(LOCAL_STYLE_TIP) !== null,
   saveStyleTipSeen: () => write(LOCAL_STYLE_TIP, Date.now()),
-  /** Talking to Mira: the browser's speech service notice is shown before its first use only. */
-  voiceNoticeSeen: () => read<number>(LOCAL_VOICE_NOTICE) !== null,
-  saveVoiceNoticeSeen: () => write(LOCAL_VOICE_NOTICE, Date.now()),
+  /**
+   * Talking to Mira: the notice about the browser's speech service is agreed to once per browser,
+   * and asked again when its wording's version changes (an older agreement, or one from before
+   * versions, doesn't count).
+   */
+  voiceNoticeSeen: () =>
+    read<{ version?: unknown }>(LOCAL_VOICE_NOTICE)?.version === VOICE_NOTICE_VERSION,
+  saveVoiceNoticeSeen: () => write(LOCAL_VOICE_NOTICE, { version: VOICE_NOTICE_VERSION }),
 };
