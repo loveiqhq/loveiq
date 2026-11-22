@@ -262,6 +262,35 @@ describe("the goals page", () => {
     expect(tick.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("keeps the days stepper focused at its ends, ignoring a press past them", async () => {
+    render(<GoalsPage />);
+    const more = await screen.findByRole("button", { name: "More days" });
+    more.focus();
+    for (let i = 0; i < 8; i++) fireEvent.click(more);
+    expect(screen.getByText("Every day")).toBeTruthy();
+    expect(more).toHaveAttribute("aria-disabled", "true");
+    expect(more).not.toBeDisabled();
+    expect(more).toHaveFocus();
+    const fewer = screen.getByRole("button", { name: "Fewer days" });
+    fewer.focus();
+    for (let i = 0; i < 8; i++) fireEvent.click(fewer);
+    expect(screen.getByText("No set days")).toBeTruthy();
+    expect(fewer).toHaveAttribute("aria-disabled", "true");
+    expect(fewer).toHaveFocus();
+  });
+
+  it("opens a goal's delete question on Keep it, and Keep it hands focus back", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    render(<GoalsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: `Edit: ${LIGHT.text}` }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete goal" }));
+    const keep = screen.getByRole("button", { name: "Keep it" });
+    await waitFor(() => expect(keep).toHaveFocus());
+    fireEvent.click(keep);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete goal" })).toHaveFocus());
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  });
+
   it("asks for words before adding an empty goal", async () => {
     render(<GoalsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Add goal" }));

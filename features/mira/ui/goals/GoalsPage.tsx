@@ -431,7 +431,8 @@ function DaysStepper({
 }) {
   const id = useId();
   const n = value ?? 0;
-  const round = `flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-ap-ink transition-colors hover:bg-ap-ground disabled:cursor-not-allowed disabled:text-ap-quiet disabled:hover:bg-white ${FOCUS}`;
+  // At an end the button says so (aria-disabled) and ignores the press, keeping keyboard focus.
+  const round = `flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-ap-ink transition-colors hover:bg-ap-ground aria-disabled:cursor-not-allowed aria-disabled:text-ap-quiet aria-disabled:hover:bg-white ${FOCUS}`;
   return (
     <div role="group" aria-labelledby={`${id}-label`} className="flex flex-col gap-2">
       <span id={`${id}-label`} className="text-[14px] font-semibold">
@@ -441,8 +442,8 @@ function DaysStepper({
         <button
           type="button"
           aria-label="Fewer days"
-          disabled={n === 0}
-          onClick={() => onChange(n - 1 || null)}
+          aria-disabled={n === 0 || undefined}
+          onClick={() => n > 0 && onChange(n - 1 || null)}
           className={round}
         >
           <MinusIcon />
@@ -456,8 +457,8 @@ function DaysStepper({
         <button
           type="button"
           aria-label="More days"
-          disabled={n === 7}
-          onClick={() => onChange(n + 1)}
+          aria-disabled={n === 7 || undefined}
+          onClick={() => n < 7 && onChange(n + 1)}
           className={round}
         >
           <PlusIcon />
@@ -467,39 +468,63 @@ function DaysStepper({
   );
 }
 
-/** Deleting one goal, with a word of warning first. */
-function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string) => void }) {
+/**
+ * A deletion behind a question. The question opens on its way out (Keep), which takes focus;
+ * Keep puts focus back on the button that asked. `run` answers null, or the message to show.
+ */
+function Confirm({
+  label,
+  question,
+  action,
+  keep,
+  className,
+  run,
+}: {
+  label: string;
+  question: string;
+  action: string;
+  keep: string;
+  className: string;
+  run: () => Promise<string | null>;
+}) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const keepRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (asking) keepRef.current?.focus();
+  }, [asking]);
   if (!asking) {
     return (
-      <button
-        type="button"
-        onClick={() => setAsking(true)}
-        className={`${DANGER_BUTTON} sm:ml-auto`}
-      >
-        Delete goal
+      <button ref={opener} type="button" onClick={() => setAsking(true)} className={className}>
+        {label}
       </button>
     );
   }
   return (
     <div className="flex w-full flex-wrap items-center gap-2 rounded-2xl border border-ap-bad p-3 text-[14px]">
-      <p className="flex-1 basis-[200px]">
-        Delete this goal and its ticks? This can&apos;t be undone.
-      </p>
+      <p className="flex-1 basis-[200px]">{question}</p>
       <button
         type="button"
         onClick={async () => {
-          const err = await g.remove(goal);
+          setError(null);
+          const err = await run();
           if (err) setError(err);
-          else say("Goal deleted.");
         }}
         className={`min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white ${FOCUS}`}
       >
-        Delete
+        {action}
       </button>
-      <button type="button" onClick={() => setAsking(false)} className={TEXT_BUTTON}>
-        Keep it
+      <button
+        ref={keepRef}
+        type="button"
+        onClick={() => {
+          setAsking(false);
+          requestAnimationFrame(() => opener.current?.focus());
+        }}
+        className={TEXT_BUTTON}
+      >
+        {keep}
       </button>
       {error ? (
         <p role="alert" className="w-full text-[13px] text-ap-bad-ink">
@@ -507,6 +532,24 @@ function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string)
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** Deleting one goal, with a word of warning first. */
+function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string) => void }) {
+  return (
+    <Confirm
+      label="Delete goal"
+      question="Delete this goal and its ticks? This can't be undone."
+      action="Delete"
+      keep="Keep it"
+      className={`${DANGER_BUTTON} sm:ml-auto`}
+      run={async () => {
+        const err = await g.remove(goal);
+        if (!err) say("Goal deleted.");
+        return err;
+      }}
+    />
   );
 }
 
@@ -577,8 +620,6 @@ function PastGoals({
 
 /** Who sees the goals, and deleting all of them. */
 function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   return (
     <section aria-labelledby="your-goals-data-h" className="mt-12 border-t border-ap-line pt-6">
       <h2 id="your-goals-data-h" className="text-[14px] font-semibold">
@@ -594,41 +635,20 @@ function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
         </Link>
       </p>
       {g.goals.length > 0 ? (
-        asking ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-ap-bad p-3 text-[14px]">
-            <p className="flex-1 basis-[220px]">
-              Delete all your goals and their ticks? This can&apos;t be undone.
-            </p>
-            <button
-              type="button"
-              onClick={async () => {
-                const err = await g.removeAll();
-                setAsking(false);
-                if (err) setError(err);
-                else say("All your goals are deleted.");
-              }}
-              className={`min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white ${FOCUS}`}
-            >
-              Delete all
-            </button>
-            <button type="button" onClick={() => setAsking(false)} className={TEXT_BUTTON}>
-              Keep them
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAsking(true)}
-            className={`${DANGER_BUTTON} -ml-3 mt-1`}
-          >
-            Delete all goals
-          </button>
-        )
-      ) : null}
-      {error ? (
-        <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
-          {error}
-        </p>
+        <div className="mt-3">
+          <Confirm
+            label="Delete all goals"
+            question="Delete all your goals and their ticks? This can't be undone."
+            action="Delete all"
+            keep="Keep them"
+            className={`${DANGER_BUTTON} -ml-3`}
+            run={async () => {
+              const err = await g.removeAll();
+              if (!err) say("All your goals are deleted.");
+              return err;
+            }}
+          />
+        </div>
       ) : null}
     </section>
   );
