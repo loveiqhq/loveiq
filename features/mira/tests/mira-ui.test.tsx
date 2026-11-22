@@ -574,6 +574,18 @@ describe("Body check", () => {
     expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   });
 
+  // Round-2 audit CHAT-4: it stacked under Mira's goal offer, two asks at once.
+  it("isn't offered with a reply that offers a goal", async () => {
+    signedInDue("baseline");
+    reply({ goal: "Leave one soft light on" });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    await screen.findByRole("button", { name: "Add as a goal" });
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    expect(events()).not.toContain("body_check_offered");
+  });
+
   it("isn't offered with a reply that asks an intake question, or when nothing is due", async () => {
     signedInDue("baseline");
     reply({ ask: "onset" });

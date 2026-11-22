@@ -461,6 +461,7 @@ export default function MiraChat({
       !res.data.crisis &&
       !res.data.invitation &&
       !res.data.ask &&
+      !res.data.goal && // one ask at a time: Mira's goal offer goes first (round-2 audit CHAT-4)
       !crisisIn(withReply) &&
       !local.bodyCheckSnoozed()
     ) {
