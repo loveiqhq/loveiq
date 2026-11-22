@@ -65,6 +65,26 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
+describe("focus rings in the habits' screens", () => {
+  it("leave a paper-coloured gap, never a white one in Dark", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const dirs = ["goals", "journal", "checks", "coaches", "weekly-session"];
+    const files = dirs.flatMap((d) =>
+      readdirSync(`features/mira/ui/${d}`)
+        .filter((f) => /\.tsx?$/.test(f))
+        .map((f) => `features/mira/ui/${d}/${f}`)
+    );
+    const bare = files.flatMap((f) =>
+      readFileSync(f, "utf8")
+        .split("\n")
+        .flatMap((line, i) =>
+          /ring-offset-2/.test(line) && !/ring-offset-white/.test(line) ? [`${f}:${i + 1}`] : []
+        )
+    );
+    expect(bare).toEqual([]);
+  });
+});
+
 describe("Home's goals card", () => {
   it("teaches a first goal: ask Mira (written, not sent) or write your own", async () => {
     render(<GoalsCard />);

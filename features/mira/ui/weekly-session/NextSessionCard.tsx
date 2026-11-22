@@ -10,9 +10,9 @@ import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySes
 
 const SECTION = "rounded-3xl border border-ap-line p-5";
 const OUTLINE_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50";
 const INK_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
 /**
  * Home's weekly session card: the next session's day and time with a way into a calendar and a

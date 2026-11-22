@@ -45,11 +45,11 @@ function clocksDiffer(a: string, b: string): boolean {
 
 /** A radio styled as the chat's answer chip; selected in the multi-select's lilac. */
 const RADIO_CHIP =
-  "inline-flex min-h-[44px] min-w-[52px] cursor-pointer select-none items-center justify-center rounded-full border border-ap-field bg-white px-3.5 text-[14px] tabular-nums text-ap-body transition-colors duration-150 hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-lilac peer-checked:font-semibold peer-checked:text-ap-ink peer-focus-visible:ring-2 peer-focus-visible:ring-ap-purple peer-focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] min-w-[52px] cursor-pointer select-none items-center justify-center rounded-full border border-ap-field bg-white px-3.5 text-[14px] tabular-nums text-ap-body transition-colors duration-150 hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-lilac peer-checked:font-semibold peer-checked:text-ap-ink peer-focus-visible:ring-2 peer-focus-visible:ring-ap-purple peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white";
 const LEGEND = "text-[13px] font-semibold text-ap-ink";
 export const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 const LINK_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
 /** Add the session to a calendar: Google's own form, or the invite as a file (Apple, Outlook). */
 export function CalendarLinks({
@@ -164,7 +164,7 @@ export function SlotPicker({
                   time: /^([01]\d|2[0-3]):[0-5]\d$/.test(e.target.value) ? e.target.value : null,
                 })
               }
-              className="min-h-[44px] rounded-full border border-ap-field bg-white px-4 text-[16px] tabular-nums text-ap-ink outline-none transition-colors focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2"
+              className="min-h-[44px] rounded-full border border-ap-field bg-white px-4 text-[16px] tabular-nums text-ap-ink outline-none transition-colors focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             />
           </label>
         ) : null}

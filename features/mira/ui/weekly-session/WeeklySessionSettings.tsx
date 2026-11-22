@@ -8,7 +8,7 @@ import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
 const OUTLINE_PILL =
-  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50";
 
 /**
  * Settings' "Weekly session" section (board 08c's "Session reminders"): the booked time with a

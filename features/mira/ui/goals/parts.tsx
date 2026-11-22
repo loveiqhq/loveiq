@@ -37,7 +37,7 @@ export function weekCaption(p: Progress, target: number | null, aimShown = false
 }
 
 export const FOCUS =
-  "outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
 /**
  * Mira's challenge and any a goal names. No "Add a challenge" until a person can pick a second
