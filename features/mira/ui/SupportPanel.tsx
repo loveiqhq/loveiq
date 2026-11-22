@@ -150,7 +150,10 @@ export function Modal({
         const { clientX: x, clientY: y } = e;
         if (x < box.left || x > box.right || y < box.top || y > box.bottom) onClose();
       }}
-      className="mb-4 mt-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-[560px] overflow-y-auto rounded-3xl bg-white p-6 text-ap-ink shadow-xl backdrop:bg-black/30 sm:mb-auto"
+      // On phones it sits on the bottom bar where the page has one (--mira-dock, MiraAppFrame), so
+      // the bar's labels never show cut beneath it (round-3 R3-UXA-12); elsewhere 1rem above the
+      // edge, as before. From sm it is centred.
+      className="mb-[var(--mira-dock,1rem)] mt-auto max-h-[calc(100dvh-var(--mira-dock,1rem)-1.5rem)] w-[calc(100%-2rem)] max-w-[560px] overflow-y-auto rounded-3xl bg-white p-6 text-ap-ink shadow-xl backdrop:bg-black/30 sm:mb-auto sm:max-h-[90dvh]"
     >
       {children}
     </dialog>
