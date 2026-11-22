@@ -672,6 +672,24 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // Round-2 audit CHAT-6: the first thumb is final, but the other one looked live.
+  it("shows the other thumb as unavailable once a reply is rated", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    giveConsent();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    const up = await screen.findByRole("button", { name: "Helpful" });
+    expect(up).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Not helpful" }));
+    await waitFor(() => expect(up).toHaveAttribute("aria-disabled", "true"));
+    expect(screen.getByRole("button", { name: "Not helpful" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    fireEvent.click(up);
+    expect(ratings()).toHaveLength(1);
+  });
+
   it("sends the thumbs only when a reply is rated, never its words", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     giveConsent();

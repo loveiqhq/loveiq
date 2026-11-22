@@ -932,6 +932,7 @@ export default function MiraChat({
                             type="button"
                             aria-label="Helpful"
                             aria-pressed={m.rated === 1}
+                            aria-disabled={m.rated === -1 || undefined}
                             onClick={() => rate(m, 1)}
                             className={`${RATE_BUTTON} ${m.rated === 1 ? "text-ap-purple" : ""}`}
                           >
@@ -941,6 +942,7 @@ export default function MiraChat({
                             type="button"
                             aria-label="Not helpful"
                             aria-pressed={m.rated === -1}
+                            aria-disabled={m.rated === 1 || undefined}
                             onClick={() => rate(m, -1)}
                             className={`${RATE_BUTTON} ${m.rated === -1 ? "text-ap-purple" : ""}`}
                           >
@@ -1372,8 +1374,9 @@ const FREE_LABEL =
   ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
 const ICON_BUTTON =
   "relative inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-ap-body transition-colors hover:bg-ap-ground disabled:opacity-40 min-[360px]:h-10 min-[360px]:w-10 sm:w-auto sm:px-3";
+/** A rating is final: once one thumb is chosen, the other says it's unavailable (CHAT-6). */
 const RATE_BUTTON =
-  "inline-flex h-9 min-w-[36px] items-center justify-center rounded-full hover:bg-ap-ground hover:text-ap-body";
+  "inline-flex h-9 min-w-[36px] items-center justify-center rounded-full hover:bg-ap-ground hover:text-ap-body aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-ap-muted";
 
 function SlidersIcon() {
   return (
