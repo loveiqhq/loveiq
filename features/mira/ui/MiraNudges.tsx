@@ -252,7 +252,7 @@ export default function MiraNudges({
               What made you stop?
             </h1>
             <p className="text-[15px] leading-relaxed text-ap-body">
-              One tap helps Mira write better nudges. It’s optional.
+              Your answer helps Mira write better nudges. It’s optional.
             </p>
           </div>
           <fieldset className="flex flex-col gap-2">

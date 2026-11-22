@@ -73,6 +73,11 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "What made you stop?" })).toHaveFocus()
     );
+    // Words for every way of choosing, not only a finger (A11Y-16).
+    expect(
+      screen.getByText("Your answer helps Mira write better nudges. It’s optional.")
+    ).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/\btap\b/i);
     // Its note box sits on the paper colour in both themes, not the browser's grey (UX-7).
     expect(screen.getByRole("textbox", { name: /Anything else/ })).toHaveClass("bg-white");
     await user.click(screen.getByRole("button", { name: "Back" }));
