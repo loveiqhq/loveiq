@@ -141,6 +141,18 @@ describe("Support panel", () => {
     expect(document.documentElement.style.overflow).toBe("");
   });
 
+  // In WebKit a tap focuses nothing, so the page itself was the opener and closing the panel left
+  // the focus there: the opener is the button the tap landed on.
+  it("gives focus back to its button though the tap focused nothing (WebKit)", () => {
+    render(<Opener />);
+    const opener = screen.getByRole("button", { name: "Need support right now?" });
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.click(opener);
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Support right now" }), { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("stays open on a tap on the dimmed page: it carries the support lines", () => {
     render(<Opener />);
     fireEvent.click(screen.getByRole("button", { name: "Need support right now?" }));
@@ -223,6 +235,62 @@ describe("Mira's dialogs (Modal)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(screen.getByRole("button", { name: "Edit it" })).toHaveFocus());
+  });
+
+  // An opener outside any section (the frame's footer) that went with the panel: the focus goes
+  // to the control now in its place on the page, never to the page itself.
+  it("never leaves the focus on the page when its opener went", async () => {
+    function Footer() {
+      const [open, setOpen] = useState(false);
+      const [asked, setAsked] = useState(false);
+      return (
+        <footer>
+          <a href="#feedback">Share feedback</a>
+          {asked ? null : (
+            <button type="button" onClick={() => setOpen(true)}>
+              Ask once
+            </button>
+          )}
+          <a href="#privacy">Privacy</a>
+          {open ? (
+            <Modal
+              label="Once"
+              onClose={() => {
+                setOpen(false);
+                setAsked(true);
+              }}
+            >
+              <p>Asked.</p>
+            </Modal>
+          ) : null}
+        </footer>
+      );
+    }
+    render(<Footer />);
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(screen.getByRole("button", { name: "Ask once" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Once" }), { key: "Escape" });
+    await waitFor(() => expect(screen.getByRole("link", { name: "Privacy" })).toHaveFocus());
+  });
+
+  it("gives the focus to the main part's first control when nothing focused or tapped opened it", async () => {
+    function Shown() {
+      const [open, setOpen] = useState(true);
+      return (
+        <main>
+          <a href="#home">Home</a>
+          {open ? (
+            <Modal label="Shown" onClose={() => setOpen(false)}>
+              <p>Shown on its own.</p>
+            </Modal>
+          ) : null}
+        </main>
+      );
+    }
+    (document.activeElement as HTMLElement | null)?.blur();
+    render(<Shown />);
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Shown" }), { key: "Escape" });
+    await waitFor(() => expect(screen.getByRole("link", { name: "Home" })).toHaveFocus());
   });
 });
 
