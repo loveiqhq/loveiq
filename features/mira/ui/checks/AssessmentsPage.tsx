@@ -6,6 +6,7 @@ import { CHECKS, CHECK_IDS, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { AdultsOnly } from "../kit";
 import { miraApi } from "../api";
+import { SignInAgain } from "../account/SignedOut";
 import { SwitchRow, UseChecksSwitch } from "./ChecksSettings";
 import { CheckIcon, LoveIqTile } from "./icons";
 import {
@@ -189,6 +190,7 @@ export default function AssessmentsPage() {
           {useError ? (
             <p role="alert" className="text-[13px] text-ap-bad-ink">
               {useError}
+              <SignInAgain error={useError} />
             </p>
           ) : null}
         </section>

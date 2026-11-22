@@ -48,7 +48,7 @@ export default function PicksCard() {
       ) : state.status === "error" ? (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p role="alert" className="text-[14px] text-ap-body">
-            We couldn’t load your picks.
+            Your picks didn’t load.
           </p>
           <button type="button" onClick={retry} className={QUIET_PILL}>
             Try again

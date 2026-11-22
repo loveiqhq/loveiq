@@ -6,6 +6,7 @@ import { REJECT_REASON_LABEL } from "@features/mira/reviews";
 import type { MyReview } from "@features/mira/server/reviews";
 import { miraApi } from "../api";
 import { AdultsOnly } from "../kit";
+import { shortDate } from "../kit/dates";
 import { RatingForm } from "./ReviewAsk";
 
 /**
@@ -136,7 +137,7 @@ export default function SharedReviewSettings() {
         </div>
       ) : state === "failed" ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
-          We couldn’t load what you shared.{" "}
+          What you shared didn’t load.{" "}
           <button type="button" onClick={() => void load()} className="font-semibold underline">
             Try again
           </button>
@@ -149,13 +150,7 @@ export default function SharedReviewSettings() {
               <span className="text-ap-mist">{"★".repeat(5 - review.stars)}</span>
             </span>
             <span>
-              You rated Mira {review.stars} out of 5 on{" "}
-              {new Date(review.createdAt).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}
-              .
+              You rated Mira {review.stars} out of 5 on {shortDate(review.createdAt)}.
             </span>
           </p>
           {review.status === "pending" || review.status === "approved" ? (

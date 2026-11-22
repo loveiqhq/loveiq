@@ -588,6 +588,8 @@ export function useVoice(options: {
     voiceless,
     /** The session a spoken turn belongs to, sent with it so a kept chat tags its messages. */
     sessionId: () => m.session,
+    /** Saying a reply out loud right now (read at once after `answered`, before a render). */
+    speaking: () => m.phase === "speaking",
     start,
     agree,
     answered,

@@ -25,8 +25,10 @@ export function StyleScales({ value, onChange }: { value: Style; onChange: (v: S
         const v = value[s.key] ?? 3;
         return (
           <fieldset key={s.key} className="py-3">
-            <legend className="text-[14px] font-bold">{s.label}</legend>
-            <div className="mt-1 flex justify-between">
+            {/* Floated: a legend is otherwise drawn in its fieldset's top border, here the
+                divider above it (round-3 R3-CHAT-8). */}
+            <legend className="float-left w-full text-[14px] font-bold">{s.label}</legend>
+            <div className="clear-left flex justify-between pt-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <label
                   key={n}

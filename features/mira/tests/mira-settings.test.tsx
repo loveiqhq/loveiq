@@ -151,6 +151,53 @@ describe("Settings sections", () => {
     }
   });
 
+  // Round-3 R3-ACCT-7: on desktop the index watched a band 25–30 % down the screen, so a short
+  // section a link landed at the top was never marked (the next one was), nor was "Your data".
+  it("marks the section a link lands on, however short, and the last one at the page's end", async () => {
+    await openSettings();
+    const tops: Record<string, number> = {
+      account: -900,
+      language: 40, // landed by #language, and only 110 px tall
+      coaching: 150,
+      privacy: 700,
+      notifications: 1200,
+      appearance: 1600,
+      data: 1900,
+    };
+    for (const id of Object.keys(tops)) {
+      vi.spyOn(document.getElementById(id)!, "getBoundingClientRect").mockImplementation(() =>
+        DOMRect.fromRect({ x: 0, y: tops[id]!, width: 600, height: 100 })
+      );
+    }
+    const page = vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(4000);
+    const marked = () =>
+      screen
+        .getAllByRole("navigation", { name: "Settings sections" })
+        .map((nav) => within(nav).getByRole("link", { current: true }).getAttribute("href"));
+    act(() => void window.dispatchEvent(new Event("scroll")));
+    await waitFor(() => expect(marked()).toEqual(["#language", "#language"]));
+
+    // The end of the page: the last section, whose top can't reach the line.
+    Object.assign(tops, { appearance: 120 - 400, data: 420 });
+    page.mockReturnValue(window.innerHeight + window.scrollY);
+    act(() => void window.dispatchEvent(new Event("scroll")));
+    await waitFor(() => expect(marked()).toEqual(["#data", "#data"]));
+  });
+
+  // Round-3 R3-UXA-10 and R3-UXA-1 (Settings' half): the phones' sticky index row cut its labels
+  // mid-word at both edges with no cue, and going back up, a focused control landed under it.
+  it("fades the phones' index row at its edges, and keeps a focused control clear of it", async () => {
+    await openSettings();
+    const row = screen.getAllByRole("navigation", { name: "Settings sections" })[0]!;
+    expect(row).toHaveClass("sticky", "xl:hidden");
+    expect(row.querySelector("ol")!.className).toMatch(/\[mask-image:linear-gradient\(to_right,/);
+    // What scrolls under the row gives every control in it a top margin for focus scrolling,
+    // the row's own links none (they stick, so a margin there would only jump the page).
+    const content = document.getElementById("account")!.parentElement!;
+    expect(content).toHaveClass("[&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16");
+    expect(row.contains(content)).toBe(false);
+  });
+
   it("after an under-18 stop, says so once and keeps only what still works", async () => {
     replies["GET /api/mira/me"] = () => ({ body: { profile: { ...PROFILE }, minor: true } });
     render(

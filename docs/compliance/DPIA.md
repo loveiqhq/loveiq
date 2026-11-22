@@ -262,8 +262,10 @@ are left out of Mira's statistics.
   (export by the account; erased with the account) and purged by an under-18 stop.
 - Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
   the display choice (`mira_look` cookie, one year, Mira's pages only: light, dark or system and the
-  text size, with or without an account), IP and email addresses as rate-limit keys (Upstash),
-  request logs (Vercel).
+  text size, with or without an account), an email link's signed token (`mira_link` cookie,
+  httpOnly, one hour, sent only to the link's own page, so the token stays out of page addresses;
+  decision 10 of 2026-11-22), the under-18 mark of a browser (`mira_minor` cookie, httpOnly, one
+  year), IP and email addresses as rate-limit keys (Upstash), request logs (Vercel).
 - Sign-in and security (from 2026-11-22): passkeys (`mira_passkey`: credential id, public key,
   signature counter, transports, synced or not, a label, made and last used; no biometric data,
   which never leaves the device); signed-in devices (`mira_session`: the Supabase session id, how

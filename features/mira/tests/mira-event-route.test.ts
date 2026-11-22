@@ -104,6 +104,7 @@ describe("POST /api/mira/event", () => {
   });
 
   it("refuses feedback with no challenge and no words, which says nothing (UX-16)", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
     for (const body of [
       { type: "feedback", challenges: [], mayEmail: false },
       { type: "feedback", challenges: [], wish: "   ", other: "", mayEmail: true },
@@ -138,13 +139,16 @@ describe("POST /api/mira/event", () => {
       expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     }
     expect(logMiraEvent).not.toHaveBeenCalled();
-    // Signed out, the browser's own stop counts the same.
-    vi.mocked(getMiraAccount).mockResolvedValue(null);
-    const anonymous = await post({ type: "feedback", challenges: [], other: "x", mayEmail: false });
-    expect(anonymous.status).toBe(403);
-    expect(isMinor).toHaveBeenLastCalledWith(null);
-    expect(logMiraEvent).not.toHaveBeenCalled();
     vi.mocked(isMinor).mockResolvedValue(false);
+  });
+
+  // Round-3 R3-DATA-2: the page asks for an account, but any browser could post feedback, and a
+  // signed-out answer would be listed in AP's "Beta feedback", beyond reach of account deletion.
+  it("takes beta feedback from an account only, as Notify me", async () => {
+    const res = await post({ type: "feedback", challenges: [], other: "x", mayEmail: true });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Please sign in." });
+    expect(logMiraEvent).not.toHaveBeenCalled();
   });
 
   it("takes only the moments the browser sees, never the server's own KPI events", async () => {

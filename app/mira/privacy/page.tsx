@@ -131,6 +131,7 @@ const COLUMNS = [
  * 22 Nov 2026, after the privacy audit: what the analytics tools see (nothing on Mira's pages is
  * masked, DPIA M5), the team's data tool, every email Resend sends, the voice tick, the
  * self-checks' counts and the under-18 stop in full.
+ * Round 3 (R3-DATA-4): the email links' cookie (mira_link) and the under-18 browser mark.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -261,6 +262,9 @@ export default function MiraPrivacyPage() {
           <li>
             A random id in a cookie on this browser, kept for a year. Without an account it counts
             your free message and links your steps. When you sign in, a cookie keeps you signed in.
+            When you open a link from one of Mira&apos;s emails to stop reminders or change your
+            nudges, a cookie keeps the link&apos;s key for an hour, sent only to that page, so the
+            key stays out of the page&apos;s address.
           </li>
           <li>
             Short-lived counters with your IP address, email address or browser id, to stop abuse.
@@ -670,11 +674,11 @@ export default function MiraPrivacyPage() {
         <p className="mt-3">
           Mira is only for people aged 18 or older. If you tell Mira you are under 18, she stops
           coaching for good on that account or in that browser. In a browser without an account, the
-          chat there is cleared. In an account, she turns her emails off, forgets its reply language
-          and look, and deletes what it keeps: its chats, goals, journal, self-check and body check
-          results, voice sessions, rating and words, passkeys, weekly session, requests to hear
-          about coaches and the coach the finder suggested, and a change of email waiting for its
-          code.
+          chat there is cleared, and a cookie marks that browser for a year. In an account, she
+          turns her emails off, forgets its reply language and look, and deletes what it keeps: its
+          chats, goals, journal, self-check and body check results, voice sessions, rating and
+          words, passkeys, weekly session, requests to hear about coaches and the coach the finder
+          suggested, and a change of email waiting for its code.
         </p>
 
         <h2>Mira is not a therapist</h2>

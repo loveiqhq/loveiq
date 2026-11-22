@@ -97,7 +97,7 @@ export default function CoachesCard() {
             ) : state.status === "error" ? (
               <div className="flex flex-wrap items-center gap-3 py-3">
                 <p role="alert" className="text-[14px] text-ap-body">
-                  We couldn’t load your coaches.
+                  Your coaches didn’t load.
                 </p>
                 <button type="button" onClick={retry} className={QUIET_PILL}>
                   Try again

@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { miraApi } from "../api";
+import { SignInAgain } from "../account/SignedOut";
 import { AskFirst, Switch } from "../journal/parts";
 import { SettingsSection } from "../MiraSettings";
 import { AdultsOnly } from "../kit";
@@ -50,6 +51,7 @@ export function UseChecksSwitch({
       {error ? (
         <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
           {error}
+          <SignInAgain error={error} />
         </p>
       ) : null}
     </div>

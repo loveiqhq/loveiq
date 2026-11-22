@@ -12,6 +12,7 @@ import MiraChat from "@features/mira/ui/MiraChat";
 import { MiraRatingLine, ReviewsWelcome } from "@features/mira/ui/reviews/PublicReviews";
 import { CONSENT_TEXT, ReviewAsk, reviewAskDue } from "@features/mira/ui/reviews/ReviewAsk";
 import SharedReviewSettings from "@features/mira/ui/reviews/SharedReviewSettings";
+import { shortDate } from "@features/mira/ui/kit/dates";
 
 /** Mira's rating screens against a stand-in for her API (the routes are tested on their own). */
 type Reply = { status?: number; body: unknown };
@@ -324,6 +325,17 @@ describe("Settings: what you shared", () => {
     ).toHaveTextContent("Our team’s reason: Harmful or abusive.");
   });
 
+  // Round-3 R3-ACCT-9 (SET-12): its own en-GB date said "22 Sept" in Chromium and Firefox.
+  it("dates the rating the way every Mira date reads", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: { review: { ...mine, createdAt: "2026-09-22T10:00:00Z" }, name: "Lea" },
+    });
+    render(<SharedReviewSettings />);
+    const line = await screen.findByText(/You rated Mira 5 out of 5/);
+    expect(line).toHaveTextContent(`on ${shortDate("2026-09-22T10:00:00Z")}.`);
+    expect(line).toHaveTextContent(/on 22 Sep( 2026)?\./);
+  });
+
   it("shows the rating and where the words stand, and takes the words back", async () => {
     replies["GET /api/mira/reviews/mine"] = () => ({ body: { review: mine, name: "Lea" } });
     render(<SharedReviewSettings />);
@@ -437,6 +449,6 @@ describe("Settings: what you shared", () => {
     cleanup();
     replies["GET /api/mira/reviews/mine"] = () => ({ status: 500, body: { error: "x" } });
     render(<SharedReviewSettings />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn’t load what you shared.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("What you shared didn’t load.");
   });
 });
