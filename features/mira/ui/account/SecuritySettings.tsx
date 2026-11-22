@@ -73,6 +73,9 @@ const METHOD: Record<Device["method"], string> = {
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+/** "09:14", in this browser's zone: two devices signed in the same day look the same without it. */
+const time = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 /** "Active today", "Active 3 days ago", "Active on 2 Nov". */
 export function lastActive(iso: string, now = Date.now()): string {
@@ -607,11 +610,19 @@ function PasskeyItem({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
+  // The question opens on its safe answer (its red button has the opener's name in its place, so
+  // a double press would remove), and Cancel gives the focus back to what opened it.
+  const cancelRemove = useRef<HTMLButtonElement>(null);
+  const removeOpener = useRef<HTMLButtonElement>(null);
+  const backToOpener = useRef(false);
 
   useEffect(() => {
     if (mode === "rename") field.current?.select();
-    if (mode === "remove") confirmButton.current?.focus();
+    if (mode === "remove") cancelRemove.current?.focus();
+    if (mode === "view" && backToOpener.current) {
+      backToOpener.current = false;
+      removeOpener.current?.focus();
+    }
   }, [mode]);
 
   async function rename() {
@@ -705,6 +716,7 @@ function PasskeyItem({
                 Rename
               </button>
               <button
+                ref={removeOpener}
                 type="button"
                 className={LINK}
                 aria-label={`Remove ${passkey.label}`}
@@ -720,16 +732,18 @@ function PasskeyItem({
         <div className="mt-3 flex flex-col gap-3 border-t border-ap-line pt-3 motion-safe:animate-mira-rise">
           <p className="text-[14px]">Remove this passkey? You can still sign in with a code.</p>
           <div className="flex gap-3">
-            <button
-              ref={confirmButton}
-              type="button"
-              className={DANGER}
-              disabled={busy}
-              onClick={() => void remove()}
-            >
+            <button type="button" className={DANGER} disabled={busy} onClick={() => void remove()}>
               {busy ? "Removing…" : "Remove"}
             </button>
-            <button type="button" className={PILL} onClick={() => setMode("view")}>
+            <button
+              ref={cancelRemove}
+              type="button"
+              className={PILL}
+              onClick={() => {
+                backToOpener.current = true;
+                setMode("view");
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -760,11 +774,21 @@ function Devices({
   // "Also remove my passkeys": a passkey someone else added would outlive every sign-out.
   const [alsoKeys, setAlsoKeys] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
+  // As for removing a passkey: the question opens on Cancel (the red "Sign out everywhere" sits
+  // where its opener was, so a double press would sign every device out), and Cancel gives the
+  // focus back to the opener.
+  const cancelAll = useRef<HTMLButtonElement>(null);
+  const allOpener = useRef<HTMLButtonElement>(null);
+  const asked = useRef(false);
 
   useEffect(() => {
-    if (confirmAll) confirmButton.current?.focus();
+    if (confirmAll) {
+      asked.current = true;
+      cancelAll.current?.focus();
+    } else if (asked.current) allOpener.current?.focus();
   }, [confirmAll]);
+  // This device first; then the rest, most recently seen first.
+  const listed = [...devices].sort((a, b) => Number(b.current) - Number(a.current));
 
   async function signOut(id: string | "all") {
     setBusy(id);
@@ -799,7 +823,7 @@ function Devices({
         </p>
       </div>
       <ul className="flex flex-col divide-y divide-ap-line border-t border-ap-line">
-        {devices.map((d) => (
+        {listed.map((d) => (
           <li key={d.id} className="flex items-start gap-3 px-5 py-4">
             <span
               aria-hidden="true"
@@ -822,7 +846,7 @@ function Devices({
                   .join(" · ")}
               </p>
               <p className="text-[12px] text-ap-muted">
-                Signed in {day(d.created_at)} with {METHOD[d.method]}
+                Signed in {day(d.created_at)} at {time(d.created_at)} with {METHOD[d.method]}
               </p>
             </div>
             <button
@@ -860,7 +884,6 @@ function Devices({
             </label>
             <div className="flex flex-wrap gap-3">
               <button
-                ref={confirmButton}
                 type="button"
                 className={DANGER}
                 disabled={busy !== null}
@@ -868,13 +891,23 @@ function Devices({
               >
                 {busy === "all" ? "Signing out…" : "Sign out everywhere"}
               </button>
-              <button type="button" className={PILL} onClick={() => setConfirmAll(false)}>
+              <button
+                ref={cancelAll}
+                type="button"
+                className={PILL}
+                onClick={() => setConfirmAll(false)}
+              >
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <button type="button" className={PILL} onClick={() => setConfirmAll(true)}>
+          <button
+            ref={allOpener}
+            type="button"
+            className={PILL}
+            onClick={() => setConfirmAll(true)}
+          >
             Sign out everywhere
           </button>
         )}

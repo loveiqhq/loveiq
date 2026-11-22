@@ -370,6 +370,34 @@ describe("Settings › Sign-in & security", () => {
     expect(passkey("Work laptop")).toHaveTextContent("On this device only");
   });
 
+  it("lists this device first, and tells look-alike devices apart by when they signed in", async () => {
+    const phone = (id: string, current: boolean, created: string) => ({
+      id,
+      method: "passkey",
+      device: "Android phone · Chrome",
+      city: "Berlin",
+      created_at: created,
+      last_seen_at: current ? "2026-11-22T08:00:00Z" : "2026-11-22T09:00:00Z",
+      current,
+    });
+    const devices = await show({
+      devices: [
+        phone("old", false, "2026-11-22T08:05:00Z"),
+        phone("here", true, "2026-11-22T09:14:00Z"),
+      ],
+    });
+    const at = (iso: string) =>
+      new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const rows = within(devices).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("This device");
+    expect(rows[0]).toHaveTextContent(
+      `Signed in 22 Nov at ${at("2026-11-22T09:14:00Z")} with a passkey`
+    );
+    expect(rows[1]).toHaveTextContent(
+      `Signed in 22 Nov at ${at("2026-11-22T08:05:00Z")} with a passkey`
+    );
+  });
+
   it("signs out another device in place, and this one out of the page", async () => {
     const devices = await show();
     fireEvent.click(within(devices).getByRole("button", { name: "Sign out iPhone · Safari" }));
@@ -379,9 +407,17 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("DELETE /api/mira/security")[0]!.url).toBe("/api/mira/security?device=d2");
     expect(screen.getByRole("status")).toHaveTextContent("Signed out on iPhone · Safari.");
     replies["DELETE /api/mira/security"] = () => ({ body: { success: true, signedOut: true } });
-    fireEvent.click(within(devices).getByRole("button", { name: "Sign out everywhere" }));
+    const opener = within(devices).getByRole("button", { name: "Sign out everywhere" });
+    fireEvent.click(opener);
+    // The question opens on its safe answer: its red button has the opener's name in the
+    // opener's place, so a double press or key repeat would sign every device out (A11Y-10).
+    const cancel = within(devices).getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+    fireEvent.click(cancel);
+    const reopened = within(devices).getByRole("button", { name: "Sign out everywhere" });
+    await waitFor(() => expect(document.activeElement).toBe(reopened));
+    fireEvent.click(reopened);
     const confirm = within(devices).getAllByRole("button", { name: "Sign out everywhere" })[0]!;
-    await waitFor(() => expect(document.activeElement).toBe(confirm));
     fireEvent.click(confirm);
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/start"));
     expect(calls("DELETE /api/mira/security")[1]!.url).toBe("/api/mira/security?device=all");
@@ -431,6 +467,16 @@ describe("Settings › Sign-in & security", () => {
     await show();
     const how = screen.getByRole("region", { name: "How you sign in" });
     replies["DELETE /api/mira/passkeys"] = () => ({ status: 404, body: { error: "Not found." } });
+    fireEvent.click(within(how).getByRole("button", { name: "Remove Work laptop" }));
+    // Asked on its safe answer, and Cancel gives the focus back to what opened it.
+    const cancel = within(how).getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+    fireEvent.click(cancel);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(how).getByRole("button", { name: "Remove Work laptop" })
+      )
+    );
     fireEvent.click(within(how).getByRole("button", { name: "Remove Work laptop" }));
     fireEvent.click(within(how).getByRole("button", { name: "Remove" }));
     await waitFor(() =>

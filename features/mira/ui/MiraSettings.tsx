@@ -203,10 +203,19 @@ export default function MiraSettings({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
-  // "Delete…" swaps the buttons for the question: focus goes to its safe answer.
+  // "Delete…" swaps the buttons for the question: focus goes to its safe answer, and back to the
+  // button that asked once the question goes (Cancel, or done).
   const cancel = useRef<HTMLButtonElement | null>(null);
+  const openers = useRef<Partial<Record<"chats" | "account", HTMLButtonElement | null>>>({});
+  const asked = useRef<"chats" | "account" | null>(null);
   useEffect(() => {
-    if (confirm) cancel.current?.focus();
+    if (confirm) {
+      asked.current = confirm;
+      cancel.current?.focus();
+    } else if (asked.current) {
+      openers.current[asked.current]?.focus();
+      asked.current = null;
+    }
   }, [confirm]);
 
   const setStatus = (id: SectionId, s: Status | null) =>
@@ -701,6 +710,9 @@ export default function MiraSettings({
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
                       type="button"
+                      ref={(b) => {
+                        openers.current.chats = b;
+                      }}
                       onClick={() => setConfirm("chats")}
                       className="min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold hover:border-ap-quiet"
                     >
@@ -708,6 +720,9 @@ export default function MiraSettings({
                     </button>
                     <button
                       type="button"
+                      ref={(b) => {
+                        openers.current.account = b;
+                      }}
                       onClick={() => setConfirm("account")}
                       className="min-h-[44px] rounded-full border border-ap-bad px-5 text-[14px] font-semibold text-ap-bad-ink"
                     >

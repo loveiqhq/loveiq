@@ -281,6 +281,19 @@ describe("Saving", () => {
     expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
   });
 
+  it("asks before deleting on its safe answer, and Cancel gives the focus back", async () => {
+    await openSettings();
+    const opener = screen.getByRole("button", { name: "Delete all chats" });
+    fireEvent.click(opener);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }))
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete all chats" }))
+    );
+  });
+
   it("resets the coaching style to balanced in one save", async () => {
     await openSettings();
     fireEvent.click(screen.getByRole("button", { name: "Reset to balanced" }));
