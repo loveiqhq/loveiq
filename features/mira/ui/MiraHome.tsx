@@ -203,7 +203,7 @@ export default function MiraHome({
                   setRetrying(true);
                   setAttempt((n) => n + 1);
                 }}
-                className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS_RING}`}
+                className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold aria-disabled:cursor-wait aria-disabled:opacity-60 ${FOCUS_RING}`}
               >
                 Try again
               </button>
