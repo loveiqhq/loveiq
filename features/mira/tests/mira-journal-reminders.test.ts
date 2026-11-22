@@ -62,6 +62,7 @@ const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200 });
 let candidates: unknown[];
 let entryToday: boolean;
 let crisis: boolean;
+let checks: Array<{ scale: string; answers: number[] }>;
 let claimed: boolean;
 const writes = () =>
   vi
@@ -74,6 +75,7 @@ beforeEach(() => {
   candidates = [person(A, "Europe/Berlin", "20:00")];
   entryToday = false;
   crisis = false;
+  checks = [];
   claimed = true;
   vi.mocked(fetchAllRows).mockImplementation(async () => candidates as never);
   vi.mocked(isEmailSuppressed).mockResolvedValue(false);
@@ -82,6 +84,7 @@ beforeEach(() => {
     if (path.startsWith("/rest/v1/mira_journal_entry"))
       return json(entryToday ? [{ day: "2026-11-21" }] : []);
     if (path.startsWith("/rest/v1/mira_event")) return json(crisis ? [{ id: 1 }] : []);
+    if (path.startsWith("/rest/v1/mira_check")) return json(checks);
     if (init?.method === "PATCH" && path.includes("journal_reminded_on"))
       return json(claimed ? [{ id: A }] : []);
     return json([]);
@@ -149,6 +152,17 @@ describe("the daily journal reminder", () => {
       .find((p) => p.startsWith("/rest/v1/mira_event"))!;
     expect(crisisRead).toContain(`user_id=eq.${A}&name=eq.crisis_shown&created_at=gte.`);
     expect(decodeURIComponent(crisisRead)).toContain("2026-11-07T19:05:00.000Z");
+    expect(send).not.toHaveBeenCalled();
+    // The mood check's question 9 above "Not at all" counts the same, from the results.
+    crisis = false;
+    checks = [{ scale: "phq9", answers: [0, 0, 0, 0, 0, 0, 0, 0, 2] }];
+    expect(await runJournalReminders(NOW)).toMatchObject({ skipped: { "recent-crisis": 1 } });
+    const checkRead = vi
+      .mocked(supabaseFetch)
+      .mock.calls.map(([p]) => String(p))
+      .find((p) => p.startsWith("/rest/v1/mira_check"))!;
+    expect(checkRead).toContain(`user_id=eq.${A}&`);
+    expect(decodeURIComponent(checkRead)).toContain("created_at=gte.2026-11-07T19:05:00.000Z");
     expect(send).not.toHaveBeenCalled();
   });
 

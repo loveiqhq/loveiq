@@ -77,6 +77,23 @@ export async function deleteChecks(userId: string): Promise<void> {
   if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
 }
 
+/**
+ * Whether one of the account's results since `since` answered the mood check's question 9 above
+ * "Not at all" (supportNow): the nudge and journal emails keep the same quiet after it as after
+ * support lines in the chat (server/nudges.ts hadCrisis). Read from the results themselves, as the
+ * panel's own event carries no account.
+ */
+export async function supportSince(userId: string, since: Date): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/mira_check?user_id=eq.${enc(userId)}&created_at=gte.${enc(since.toISOString())}&select=scale,answers`
+  );
+  if (!res.ok) throw new Error(`mira check support read failed (${res.status})`);
+  return ((await res.json()) as CheckRow[]).some((r) => {
+    const check = checkByScale(r.scale);
+    return check !== undefined && supportNow(check, r.answers);
+  });
+}
+
 export type CheckForMira = {
   title: string;
   name: string;
