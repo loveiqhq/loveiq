@@ -35,7 +35,7 @@ import { CONSENT_VERSION } from "@features/mira/server/config";
 import { deviceLabel, isRecentSignIn, recordSession } from "@features/mira/server/devices";
 import { loginEmail } from "@features/mira/server/email-change";
 import { isStaffEmail } from "@features/mira/server/google";
-import { carryMinorStop, isMinor } from "@features/mira/server/minor";
+import { isMinor } from "@features/mira/server/minor";
 import {
   CHALLENGE_COOKIE,
   CHALLENGE_PATH,
@@ -323,11 +323,9 @@ async function signIn(
   const userId = passkey.user_id;
   const profile = await getProfile(userId);
   if (!profile) return fail(DIDNT_WORK, 400);
-  if (await isMinor(userId)) {
-    // A browser Mira stopped as under 18: the account whose passkey this is takes the stop too.
-    await carryMinorStop(userId);
-    return fail(ADULTS_ONLY, 403);
-  }
+  // A browser or an account Mira stopped as under 18. A passkey's account already exists, so the
+  // browser's cookie alone never stops or wipes it (carryMinorStop); this browser stays stopped.
+  if (await isMinor(userId)) return fail(ADULTS_ONLY, 403);
   // The login's own address, never the profile's copy (which a change of email may have left
   // behind): a code minted for an address no login has would make a new login.
   const email = await loginEmail(userId);

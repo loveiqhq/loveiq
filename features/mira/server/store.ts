@@ -26,6 +26,8 @@ export type MiraProfile = {
   use_assessment: boolean;
   consent_at: string;
   consent_version: string;
+  /** When the account's first sign-in made it (the database's clock); absent if a read left it out. */
+  created_at?: string;
   nudges_on: boolean;
   nudge_time: "08:00" | "19:00" | "21:30";
   time_zone: string;

@@ -315,11 +315,11 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-  // A browser Mira stopped as under 18 brings the stop to the account, and its chat isn't kept.
-  const minor = await carryMinorStop(account.id);
+  // A browser Mira stopped as under 18: a new account takes the stop, and its chat isn't kept.
+  const stopped = await carryMinorStop(account.id, profile?.created_at);
   try {
     const carry = body.carry?.filter((t) => t.content.trim()) ?? [];
-    const remember = !minor && profile?.remember_chats !== false;
+    const remember = !stopped && profile?.remember_chats !== false;
     const chatId = await carryChat(account.id, remember, carry);
     logMiraEvent(
       "signup_completed",

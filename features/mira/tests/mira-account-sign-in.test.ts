@@ -50,7 +50,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { packStart } from "@features/mira/server/google";
 import { getMiraAccount } from "@features/mira/server/session";
 import { mintSignInCode } from "@features/mira/server/sign-in";
-import { logMiraEvent } from "@features/mira/server/store";
+import { logMiraEvent, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 const LEA = "6f2c4a1e-1111-4222-8333-944455556666";
@@ -201,9 +201,8 @@ describe("a Google sign-in", () => {
 });
 
 describe("a sign-in from a browser Mira stopped as under 18", () => {
-  it("brings the stop to the account the code signs in to, and keeps nothing of its chat", async () => {
-    browser.set("mira_minor", "1");
-    const res = await auth(
+  const verifyCarrying = () =>
+    auth(
       new Request("https://www.loveiq.org/api/mira/auth", {
         method: "POST",
         headers: { "user-agent": MAC, "Content-Type": "application/json" },
@@ -215,6 +214,19 @@ describe("a sign-in from a browser Mira stopped as under 18", () => {
         }),
       })
     );
+
+  // The profile the sign-in wrote: made just now, or long ago.
+  const profileMade = (createdAt: string) =>
+    vi
+      .mocked(upsertProfileAtSignIn)
+      .mockResolvedValueOnce({ name: null, remember_chats: true, created_at: createdAt } as never);
+  const NOW = () => new Date().toISOString();
+  const LONG_AGO = "2026-01-05T10:00:00.000Z";
+
+  it("brings the stop to the new account the code makes, and keeps nothing of its chat", async () => {
+    profileMade(NOW());
+    browser.set("mira_minor", "1");
+    const res = await verifyCarrying();
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ offerPasskey: false, chatId: null });
     expect(db.tables.mira_user![0]).toMatchObject({
@@ -225,13 +237,34 @@ describe("a sign-in from a browser Mira stopped as under 18", () => {
     expect(db.tables.mira_chat ?? []).toEqual([]);
   });
 
-  it("brings the stop to the account Google signs in to", async () => {
+  // A shared browser where someone else was stopped, or a cookie set from elsewhere: the cookie
+  // alone never deletes an existing account's data. This browser stays stopped.
+  it("never stops or wipes an existing account, and carries none of the browser's chat", async () => {
+    profileMade(LONG_AGO);
+    db.tables.mira_chat = [{ id: "c-old", user_id: LEA, title: "Before" }];
+    browser.set("mira_minor", "1");
+    const res = await verifyCarrying();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ offerPasskey: false, chatId: null });
+    expect(db.tables.mira_user![0]!.minor_at).toBeNull();
+    expect(db.tables.mira_chat).toEqual([{ id: "c-old", user_id: LEA, title: "Before" }]);
+  });
+
+  it("brings the stop to the new account Google makes, never to an existing one", async () => {
     browser.set("mira_minor", "1");
     browser.set("mira-google", packStart(S, { useAssessment: false, next: null }));
     googleSays("lea@gmail.com");
-    await googleCallback(
-      new Request(`https://www.loveiq.org/api/mira/auth/google/callback?code=c&state=${S.state}`)
-    );
+    const signIn = () =>
+      googleCallback(
+        new Request(`https://www.loveiq.org/api/mira/auth/google/callback?code=c&state=${S.state}`)
+      );
+    profileMade(LONG_AGO);
+    await signIn();
+    expect(db.tables.mira_user![0]!.minor_at).toBeNull();
+    profileMade(NOW());
+    browser.set("mira-google", packStart(S, { useAssessment: false, next: null }));
+    googleSays("lea@gmail.com"); // a Response's body reads once
+    await signIn();
     expect(db.tables.mira_user![0]!.minor_at).toEqual(expect.any(String));
   });
 

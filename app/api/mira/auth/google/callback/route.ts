@@ -120,8 +120,8 @@ export async function GET(request: Request) {
       useAssessment: start.useAssessment,
     });
     await recordSession(data.session?.access_token, account.id, "google", request.headers);
-    // A browser Mira stopped as under 18 brings the stop to the account (server/minor.ts).
-    await carryMinorStop(account.id);
+    // A browser Mira stopped as under 18: a new account takes the stop (server/minor.ts).
+    await carryMinorStop(account.id, profile?.created_at);
     // Settings shows Google as connected; only a label, so a failed write doesn't stop the sign-in.
     await updateProfile(account.id, { google_connected_at: new Date().toISOString() }).catch(
       (err: unknown) => logger.warn({ err }, "mira: Google's confirmation was not saved")

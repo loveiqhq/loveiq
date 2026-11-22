@@ -43,14 +43,24 @@ export async function isMinor(userId: string | null): Promise<boolean> {
   return ((await res.json()) as unknown[]).length > 0;
 }
 
+/** How new a Mira profile must be to count as made by this sign-in (clocks may differ a little). */
+const NEW_ACCOUNT_MS = 5 * 60_000;
+
 /**
  * A sign-in from a browser Mira stopped as under 18 (the stop came while signed out, so only its
- * cookie has it): the account takes the stop too, or it would hold on this browser only. True
- * when it did.
+ * cookie has it). A Mira account this sign-in made takes the stop, as it has nothing of its own
+ * yet. An existing one is never stopped or wiped on the cookie alone: it may be someone else's on
+ * a shared browser, and the cookie isn't signed. This browser stays stopped (isMinor) and the
+ * account stays as it was. True when the browser is stopped, so the caller keeps none of its chat.
  */
-export async function carryMinorStop(userId: string): Promise<boolean> {
+export async function carryMinorStop(
+  userId: string,
+  profileCreatedAt: string | undefined
+): Promise<boolean> {
   if ((await cookies()).get(MINOR_COOKIE)?.value !== "1") return false;
-  await stopForMinor(userId);
+  if (Date.now() - Date.parse(profileCreatedAt ?? "") < NEW_ACCOUNT_MS) {
+    await stopForMinor(userId);
+  }
   return true;
 }
 

@@ -457,15 +457,16 @@ describe("signing in with a passkey", () => {
 });
 
 describe("a passkey from a browser Mira stopped as under 18", () => {
-  it("is refused, and the account it belongs to takes the stop too", async () => {
+  // A passkey's account always exists already: the browser's cookie alone never stops or wipes it.
+  it("is refused, and the account it belongs to is left as it was", async () => {
     const key = await addPasskey();
     browser = new Map([["mira_minor", "1"]]);
     expect(await signInWith(key)).toMatchObject({
       status: 403,
       body: { error: "Mira is only for adults." },
     });
-    expect(db.tables.mira_user![0]!.minor_at).toEqual(expect.any(String));
-    expect(db.tables.mira_passkey).toEqual([]);
+    expect(db.tables.mira_user![0]!.minor_at ?? null).toBeNull();
+    expect(db.tables.mira_passkey).toHaveLength(1);
     expect(verifyOtp).not.toHaveBeenCalled();
   });
 });
