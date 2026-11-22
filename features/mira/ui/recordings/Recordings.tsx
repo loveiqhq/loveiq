@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
+import { SectionLink } from "../kit";
 import { canRecognizeSpeech } from "../voice/speech";
 
 /**
@@ -311,10 +312,13 @@ function Rows({ list }: { list: SessionRow[] }) {
   );
 }
 
-/** Home's card: the latest three sessions, "See all" and "Start a voice session". */
+/**
+ * Home's card: the latest three sessions, with every Home card's "See all →" in its header
+ * (UX-10), and "Start a voice session" after them.
+ */
 export function RecordingsCard() {
   const { load, retry } = useSessions(3);
-  const ready = load.state === "ready" ? load : null;
+  const any = load.state === "ready" && load.recordings.length > 0;
   return (
     <section aria-labelledby="mira-voice-sessions" className="mt-8 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -324,21 +328,16 @@ export function RecordingsCard() {
           </h2>
           <p className="text-[13px] text-ap-muted">Kept as words, never audio.</p>
         </div>
-        {ready && ready.recordings.length > 0 ? (
-          <div className="flex items-center gap-2">
-            <Link
-              href="/mira/recordings"
-              className="inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline"
-            >
-              See all
-            </Link>
-            <StartVoiceLink />
-          </div>
-        ) : null}
+        {any ? <SectionLink href="/mira/recordings" what="voice sessions" /> : null}
       </div>
       {load.state === "loading" ? <Skeleton rows={2} /> : null}
       {load.state === "failed" ? <Failed retry={retry} /> : null}
-      {ready ? ready.recordings.length ? <Rows list={ready.recordings} /> : <Empty /> : null}
+      {load.state === "ready" ? any ? <Rows list={load.recordings} /> : <Empty /> : null}
+      {any ? (
+        <div>
+          <StartVoiceLink />
+        </div>
+      ) : null}
     </section>
   );
 }

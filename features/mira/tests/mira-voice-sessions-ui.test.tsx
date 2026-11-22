@@ -94,12 +94,17 @@ describe("Home's voice sessions card", () => {
     expect(within(latest!).getByText("since the last").previousSibling?.textContent).toBe("2 days");
     expect(within(first!).getByText("first session")).toBeTruthy();
     expect(within(first!).getAllByText("<1 min").length).toBeGreaterThan(0);
-    expect(within(card).getByRole("link", { name: "See all" }).getAttribute("href")).toBe(
-      "/mira/recordings"
-    );
-    expect(
-      within(card).getByRole("link", { name: "Start a voice session" }).getAttribute("href")
-    ).toBe("/mira?talk=1");
+    // UX-10: every Home card's one "See all →", in its header before the sessions; the way to
+    // start one comes after them, no longer squeezed in beside it.
+    const seeAll = within(card).getByRole("link", { name: "See all voice sessions" });
+    expect(seeAll.getAttribute("href")).toBe("/mira/recordings");
+    expect(seeAll.textContent).toBe("See all voice sessions");
+    const start = within(card).getByRole("link", { name: "Start a voice session" });
+    expect(start.getAttribute("href")).toBe("/mira?talk=1");
+    const before = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(seeAll, latest!)).toBe(true);
+    expect(before(first!, start)).toBe(true);
   });
 
   it("has a next step when there are none yet", async () => {
@@ -107,7 +112,7 @@ describe("Home's voice sessions card", () => {
     render(<RecordingsCard />);
     expect(await screen.findByText("No voice sessions yet")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "Start a voice session" })).toHaveLength(1);
-    expect(screen.queryByRole("link", { name: "See all" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /See all/ })).toBeNull();
     // VOI-V8b: kept only with memory on, so the promise says so.
     expect(screen.getByText(/each session waits here as words/).textContent).toBe(
       "Talk to Mira out loud. While “Remember our conversations” is on in Settings, each session waits here as words, with up to three key points. Never as audio."
