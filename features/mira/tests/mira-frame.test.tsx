@@ -392,14 +392,21 @@ describe("Home", () => {
     expect(screen.getAllByRole("link", { name: "Sign in again" })).toHaveLength(1);
   });
 
-  it("sends a lost sign-in back to Home after signing in again", async () => {
+  // R3-UXA-2: Home went to sign-in on its own, and the sign-in page, still seeing the session, sent
+  // the person straight back: round and round, about 50 times in 12 s.
+  it("after a 401 never leaves Home on its own: it says so once, with the way back in", async () => {
     // The way back is the page's own address (signInHref), as on every Mira page.
     window.history.replaceState(null, "", "/mira/home");
     account({ status: 401 });
     render(<MiraHome hour={8} name="Robin" />);
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fhome")
-    );
+    const link = await screen.findByRole("link", { name: "Sign in again" });
+    expect(link).toHaveAttribute("href", "/mira/start?next=%2Fmira%2Fhome");
+    expect(screen.getAllByText("You were signed out.")).toHaveLength(1);
+    // Neither a retry nor a placeholder that waits for ever.
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText("Loading your chats")).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
     window.history.replaceState(null, "", "/");
   });
 

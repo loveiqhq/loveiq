@@ -2,13 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { useSupportCountry } from "./MiraLook";
 import { SupportPanel } from "./SupportPanel";
 import { SignedOutNotice } from "./account/SignedOut";
-import { miraApi, signInHref, useSignedOut } from "./api";
+import { miraApi, useSignedOut } from "./api";
 import ChecksHomeCard from "./checks/ChecksHomeCard";
 import CoachesCard from "./coaches/CoachesCard";
 import HomeSearch from "./coaches/HomeSearch";
@@ -69,7 +68,6 @@ export default function MiraHome({
   /** Support lines showed in the last 14 days: a neutral greeting, the lines at hand (CHAT-17). */
   quiet?: boolean;
 }) {
-  const router = useRouter();
   const country = useSupportCountry();
   const [me, setMe] = useState<Me | null>(null);
   const [failed, setFailed] = useState(false);
@@ -82,15 +80,16 @@ export default function MiraHome({
     let live = true;
     void miraApi<Me>("/api/mira/me").then((r) => {
       if (!live) return;
-      // A lost sign-in signs in again and comes back here, as on every Mira page.
-      if (r.status === 401) router.replace(signInHref());
-      else if (r.ok) setMe(r.data);
-      else setFailed(true);
+      // A lost sign-in is said once, above the cards (SignedOutNotice, with the way back in), and
+      // never a move to sign-in on Home's own: the sign-in page may still see the session and send
+      // the person straight back, round and round (round-3 R3-UXA-2).
+      if (r.ok) setMe(r.data);
+      else if (!r.signedOut) setFailed(true);
     });
     return () => {
       live = false;
     };
-  }, [router, attempt]);
+  }, [attempt]);
 
   // Until the chats are known, the card claims nothing: not "Start with Mira" to a person with
   // chats (SET-4). A failed read says so, with a retry; "New chat" works either way.
@@ -128,128 +127,134 @@ export default function MiraHome({
         </div>
       </header>
 
-      {/* A lost sign-in found by any card's call: said once here, as the cards go quiet (HAB-16). */}
+      {/* A lost sign-in found by any call: said once here, as the cards go quiet (HAB-16). */}
       {signedOut ? <SignedOutNotice /> : null}
 
-      <section
-        aria-labelledby="continue-h"
-        aria-busy={loading}
-        className="mt-7 rounded-3xl border border-ap-line p-5 motion-safe:animate-mira-rise"
-      >
-        <div className="flex items-center gap-3">
-          <Image
-            src="/images/mira/mira.webp"
-            alt=""
-            width={48}
-            height={48}
-            unoptimized
-            className="h-12 w-12 shrink-0 rounded-full object-cover"
-          />
-          <div className="min-w-0 flex-1">
-            <h2 id="continue-h" className="font-serif text-[22px] font-medium leading-tight">
+      {signedOut ? null : (
+        <section
+          aria-labelledby="continue-h"
+          aria-busy={loading}
+          className="mt-7 rounded-3xl border border-ap-line p-5 motion-safe:animate-mira-rise"
+        >
+          <div className="flex items-center gap-3">
+            <Image
+              src="/images/mira/mira.webp"
+              alt=""
+              width={48}
+              height={48}
+              unoptimized
+              className="h-12 w-12 shrink-0 rounded-full object-cover"
+            />
+            <div className="min-w-0 flex-1">
+              <h2 id="continue-h" className="font-serif text-[22px] font-medium leading-tight">
+                {loading ? (
+                  <>
+                    <span className="sr-only">Loading your chats</span>
+                    <span aria-hidden="true" className={`${SKELETON} my-1 h-5 w-48 max-w-full`} />
+                  </>
+                ) : latest || failed ? (
+                  "Continue with Mira"
+                ) : (
+                  "Start with Mira"
+                )}
+              </h2>
               {loading ? (
-                <>
-                  <span className="sr-only">Loading your chats</span>
-                  <span aria-hidden="true" className={`${SKELETON} my-1 h-5 w-48 max-w-full`} />
-                </>
-              ) : latest || failed ? (
-                "Continue with Mira"
+                <span aria-hidden="true" className={`${SKELETON} mt-1.5 h-3 w-32 max-w-full`} />
               ) : (
-                "Start with Mira"
+                <p className="text-[13px] text-ap-muted">
+                  Body confidence
+                  {latest
+                    ? ` · last chat ${when(latest.updated_at).toLowerCase()}`
+                    : " · your coach"}
+                </p>
               )}
-            </h2>
-            {loading ? (
-              <span aria-hidden="true" className={`${SKELETON} mt-1.5 h-3 w-32 max-w-full`} />
-            ) : (
-              <p className="text-[13px] text-ap-muted">
-                Body confidence
-                {latest ? ` · last chat ${when(latest.updated_at).toLowerCase()}` : " · your coach"}
-              </p>
-            )}
+            </div>
           </div>
-        </div>
-        {loading ? (
-          <span aria-hidden="true" className={`${SKELETON} mt-4 h-[50px] !rounded-2xl`} />
-        ) : failed ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <p className="text-[15px] text-ap-body">Your chats didn&apos;t load.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setFailed(false);
-                setAttempt((n) => n + 1);
-              }}
-              className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS_RING}`}
-            >
-              Try again
-            </button>
-          </div>
-        ) : latest ? (
-          <Link
-            href={`/mira?chat=${latest.id}`}
-            className="mt-4 block rounded-2xl bg-ap-ground px-4 py-3 text-[15px] text-ap-body transition-colors hover:bg-ap-track"
-          >
-            <span className="line-clamp-2 [overflow-wrap:anywhere]">{latest.title}</span>
-          </Link>
-        ) : (
-          <p className="mt-4 text-[15px] text-ap-body">
-            Feel more at home in your body, in and out of the bedroom.
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap gap-3">
-          {latest ? (
-            <Link
-              href={`/mira?chat=${latest.id}`}
-              className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
-            >
-              Open chat
-            </Link>
-          ) : null}
-          <Link
-            href="/mira"
-            className={
-              latest
-                ? "inline-flex min-h-[44px] items-center rounded-full border border-ap-line px-5 text-[14px] font-semibold"
-                : "inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
-            }
-          >
-            New chat
-          </Link>
-        </div>
-        {earlier.length ? (
-          <>
-            <ul
-              id="earlier-chats"
-              aria-label="Earlier chats"
-              className="mt-4 flex flex-col divide-y divide-ap-line border-t border-ap-line"
-            >
-              {(allChats ? earlier : earlier.slice(0, EARLIER)).map((c) => (
-                <li key={c.id}>
-                  <Link
-                    href={`/mira?chat=${c.id}`}
-                    className="flex min-h-[44px] items-center justify-between gap-3 py-2 text-[14px]"
-                  >
-                    <span className="truncate">{c.title}</span>
-                    <span className="shrink-0 text-[12px] text-ap-muted">{when(c.updated_at)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {/* Every chat, on any screen (CHAT-26): the chat's own list shows only from lg. */}
-            {earlier.length > EARLIER ? (
+          {loading ? (
+            <span aria-hidden="true" className={`${SKELETON} mt-4 h-[50px] !rounded-2xl`} />
+          ) : failed ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <p className="text-[15px] text-ap-body">Your chats didn&apos;t load.</p>
               <button
                 type="button"
-                aria-expanded={allChats}
-                aria-controls="earlier-chats"
-                onClick={() => setAllChats(!allChats)}
-                className={`-mx-2 mt-1 min-h-[44px] rounded-full px-2 text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline ${FOCUS_RING}`}
+                onClick={() => {
+                  setFailed(false);
+                  setAttempt((n) => n + 1);
+                }}
+                className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS_RING}`}
               >
-                {allChats ? "Show fewer chats" : "Show more chats"}
+                Try again
               </button>
+            </div>
+          ) : latest ? (
+            <Link
+              href={`/mira?chat=${latest.id}`}
+              className="mt-4 block rounded-2xl bg-ap-ground px-4 py-3 text-[15px] text-ap-body transition-colors hover:bg-ap-track"
+            >
+              <span className="line-clamp-2 [overflow-wrap:anywhere]">{latest.title}</span>
+            </Link>
+          ) : (
+            <p className="mt-4 text-[15px] text-ap-body">
+              Feel more at home in your body, in and out of the bedroom.
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap gap-3">
+            {latest ? (
+              <Link
+                href={`/mira?chat=${latest.id}`}
+                className="inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+              >
+                Open chat
+              </Link>
             ) : null}
-          </>
-        ) : null}
-      </section>
+            <Link
+              href="/mira"
+              className={
+                latest
+                  ? "inline-flex min-h-[44px] items-center rounded-full border border-ap-line px-5 text-[14px] font-semibold"
+                  : "inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+              }
+            >
+              New chat
+            </Link>
+          </div>
+          {earlier.length ? (
+            <>
+              <ul
+                id="earlier-chats"
+                aria-label="Earlier chats"
+                className="mt-4 flex flex-col divide-y divide-ap-line border-t border-ap-line"
+              >
+                {(allChats ? earlier : earlier.slice(0, EARLIER)).map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      href={`/mira?chat=${c.id}`}
+                      className="flex min-h-[44px] items-center justify-between gap-3 py-2 text-[14px]"
+                    >
+                      <span className="truncate">{c.title}</span>
+                      <span className="shrink-0 text-[12px] text-ap-muted">
+                        {when(c.updated_at)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {/* Every chat, on any screen (CHAT-26): the chat's own list shows only from lg. */}
+              {earlier.length > EARLIER ? (
+                <button
+                  type="button"
+                  aria-expanded={allChats}
+                  aria-controls="earlier-chats"
+                  onClick={() => setAllChats(!allChats)}
+                  className={`-mx-2 mt-1 min-h-[44px] rounded-full px-2 text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline ${FOCUS_RING}`}
+                >
+                  {allChats ? "Show fewer chats" : "Show more chats"}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </section>
+      )}
 
       <div className="mt-8 flex flex-col gap-8">
         <JournalCard />
