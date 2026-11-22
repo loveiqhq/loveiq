@@ -397,7 +397,14 @@ describe("the end of a session", () => {
     finishSpeaking();
     await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(1));
     const [end] = calls("POST /api/mira/recordings");
-    expect(Object.keys(end!).sort()).toEqual(["chatId", "mode", "session", "startedAt", "turns"]);
+    expect(Object.keys(end!).sort()).toEqual([
+      "chatId",
+      "endedAt",
+      "mode",
+      "session",
+      "startedAt",
+      "turns",
+    ]);
     expect(end).toMatchObject({ mode: "service", turns: 1, chatId: null });
     expect(screen.getByText("Keep talking with Mira, for free")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Talking with Mira" })).toBeNull();
@@ -474,6 +481,35 @@ describe("the end of a session", () => {
     expect(screen.getByText(STOP_G)).toBeTruthy(); // written in the chat
     expect(calls("POST /api/mira/recordings")).toHaveLength(0);
     expect(screen.queryByText(/couldn.t be saved/)).toBeNull();
+  });
+
+  // VOI-V10: the server dated the end from the save, so time away or a late "Try again" counted.
+  it("sends when it ended: when the person left it paused, the same on a later Try again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-22T20:00:00Z"));
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: REPLY, sources: [], chatId: "6f2c4a1e-1111-4222-8333-944455556666" },
+    });
+    replies["POST /api/mira/recordings"] = () => ({ status: 500, body: { error: "Down." } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    talk();
+    await sayToMira("It's the lights");
+    finishSpeaking();
+    await waitFor(() => expect(screen.getByText("Mira is listening")).toBeTruthy());
+    vi.setSystemTime(new Date("2026-11-22T20:05:00Z"));
+    leaveTab();
+    vi.setSystemTime(new Date("2026-11-22T21:05:00Z"));
+    comeBack();
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    await screen.findByText(/couldn.t be saved/);
+    vi.setSystemTime(new Date("2026-11-22T22:00:00Z"));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(2));
+    expect(calls("POST /api/mira/recordings").map((b) => b.endedAt)).toEqual([
+      "2026-11-22T20:05:00.000Z",
+      "2026-11-22T20:05:00.000Z",
+    ]);
   });
 
   it("sends nothing for a session without a turn", async () => {

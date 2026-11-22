@@ -364,6 +364,42 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     expect(body.recording.keyPoints).toBeNull();
   });
 
+  // VOI-V10: the end was the save's arrival, so time away before End, or a "Try again" an hour
+  // later, counted as talking (up to 3 h).
+  it("dates the end from the browser's End, never after the save nor before the last turn", async () => {
+    const saved = () => called("POST /rest/v1/mira_voice_session").at(-1)!.body;
+    for (const [endedAt, end, seconds] of [
+      ["2026-11-22T20:25:00Z", "2026-11-22T20:25:00.000Z", 300], // End, five minutes before the save
+      ["2026-11-22T21:00:00Z", "2026-11-22T20:30:00.000Z", 600], // a clock ahead: the save's time
+      ["2026-11-22T20:21:30Z", "2026-11-22T20:22:06.000Z", 126], // a clock behind: its last turn
+    ] as const) {
+      tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+      await ended(request("/api/mira/recordings", "POST", { ...END, endedAt }));
+      expect(saved()).toMatchObject({ ended_at: end, seconds });
+    }
+    // Signed out, only counted: the same clock.
+    vi.mocked(getMiraAccount).mockResolvedValue(null);
+    await ended(
+      request("/api/mira/recordings", "POST", { ...END, endedAt: "2026-11-22T20:25:00Z" })
+    );
+    expect(vi.mocked(logMiraEvent).mock.calls.at(-1)![2]).toMatchObject({ seconds: 300 });
+  });
+
+  it("is counted, and kept without key points, when writing them fails after the save", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+    tables[`PATCH /rest/v1/mira_voice_session?id=eq.${SESSION}`] = new Response("{}", {
+      status: 503,
+    });
+    const res = await ended(request("/api/mira/recordings", "POST", END));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ kept: true, recording: { keyPoints: null } });
+    expect(logMiraEvent).toHaveBeenCalledWith(
+      "voice_session_ended",
+      { userId: LEA.id },
+      expect.objectContaining({ kept: true, session: SESSION, points: 0 })
+    );
+  });
+
   it("refuses what isn't a session's end", async () => {
     for (const bad of [
       { ...END, session: "nope" },

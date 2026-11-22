@@ -66,6 +66,8 @@ type SessionEnd = {
   session: string;
   chatId: string | null;
   startedAt: string;
+  /** End, or when the person left it paused: a later save (Try again) doesn't move it. */
+  endedAt: string;
   mode: RecognitionMode;
   turns: number;
 };
@@ -124,6 +126,8 @@ export function useVoice(options: {
     after: null as "end" | "forget" | null,
     muted: false,
     held: false,
+    /** When leaving the tab paused the session; until Resume, that is when it ended. */
+    awaySince: null as number | null,
     session: null as string | null,
     chatId: null as string | null,
     /** Ended while a turn was on its way: saved when its answer brings the chat's id. */
@@ -386,6 +390,7 @@ export function useVoice(options: {
       startedAt: new Date(),
       turns: 0,
       muted: false,
+      awaySince: null,
       after: null,
       quickEnds: 0,
     });
@@ -430,6 +435,7 @@ export function useVoice(options: {
 
   function resume() {
     m.muted = false;
+    m.awaySince = null;
     setPause(null);
     setTrouble(null);
     if (m.phase === "paused" || m.phase === "error") listen();
@@ -477,6 +483,7 @@ export function useVoice(options: {
         session,
         chatId: m.chatId,
         startedAt: m.startedAt.toISOString(),
+        endedAt: new Date(m.awaySince ?? Date.now()).toISOString(),
         mode: m.mode,
         turns: m.turns,
       };
@@ -532,6 +539,7 @@ export function useVoice(options: {
       micOff();
       hush();
       clear("thinking");
+      m.awaySince = Date.now();
       setPause("away");
       set("paused");
     };
