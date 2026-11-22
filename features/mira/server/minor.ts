@@ -43,6 +43,17 @@ export async function isMinor(userId: string | null): Promise<boolean> {
   return ((await res.json()) as unknown[]).length > 0;
 }
 
+/**
+ * A sign-in from a browser Mira stopped as under 18 (the stop came while signed out, so only its
+ * cookie has it): the account takes the stop too, or it would hold on this browser only. True
+ * when it did.
+ */
+export async function carryMinorStop(userId: string): Promise<boolean> {
+  if ((await cookies()).get(MINOR_COOKIE)?.value !== "1") return false;
+  await stopForMinor(userId);
+  return true;
+}
+
 /** Remembers the stop on this browser and the account. A failed write is logged, never shown. */
 export async function stopForMinor(userId: string | null): Promise<void> {
   (await cookies()).set(MINOR_COOKIE, "1", {

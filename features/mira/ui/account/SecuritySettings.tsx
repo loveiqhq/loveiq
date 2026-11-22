@@ -36,6 +36,8 @@ type Device = {
 };
 type Security = {
   email: string;
+  /** Mira stopped the account as under 18. */
+  minor?: boolean;
   recent: boolean;
   emailChange: { allowed: boolean };
   google: { allowed: boolean; connected: boolean };
@@ -281,7 +283,9 @@ function EmailRow({
     >
       {!data.emailChange.allowed ? (
         <p className="text-[13px] text-ap-muted">
-          This address is also a LoveIQ team login, so it can&apos;t be changed here.
+          {data.minor
+            ? "Mira is only for adults."
+            : "This address is also a LoveIQ team login, so it can't be changed here."}
         </p>
       ) : null}
       {open ? (

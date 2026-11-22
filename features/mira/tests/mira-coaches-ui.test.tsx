@@ -284,6 +284,12 @@ describe("Home search", () => {
     expect(box).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("isn't there for someone Mira stopped as under 18, like the coaches", async () => {
+    serve({}, 403);
+    render(<HomeSearch />);
+    await waitFor(() => expect(screen.queryByRole("combobox")).toBeNull());
+  });
+
   it("says when nothing is found, offers the finder, and counts it without the words", async () => {
     vi.useFakeTimers();
     render(<HomeSearch />);

@@ -28,7 +28,10 @@ vi.mock("@features/mira/server/devices", () => ({
   recordSession: vi.fn().mockResolvedValue(undefined),
   signOutDevices: vi.fn().mockResolvedValue(1),
 }));
-vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
+vi.mock("@features/mira/server/minor", () => ({
+  isMinor: vi.fn().mockResolvedValue(false),
+  carryMinorStop: vi.fn().mockResolvedValue(false),
+}));
 vi.mock("@features/mira/server/google", () => ({ isStaffEmail: vi.fn().mockResolvedValue(false) }));
 vi.mock("@features/mira/server/passkeys", () => ({
   MAX_PASSKEYS: 10,

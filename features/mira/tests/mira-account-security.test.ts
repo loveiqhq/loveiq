@@ -135,6 +135,7 @@ describe("GET /api/mira/security", () => {
     expect([body.passkeys.allowed, body.google.allowed]).toEqual([false, false]);
     db.tables.admin_users = [];
     vi.mocked(memberByEmail).mockResolvedValue(null);
+    expect(body.minor).toBe(false);
     db.tables.mira_user![0]!.minor_at = "2026-11-22T08:00:00.000Z";
     ({ body } = await read(await GET(at())));
     expect([body.passkeys.allowed, body.google.allowed, body.emailChange.allowed]).toEqual([
@@ -142,6 +143,7 @@ describe("GET /api/mira/security", () => {
       false,
       false,
     ]);
+    expect(body.minor).toBe(true); // so Settings says why, not that it's a team login
     db.tables.mira_user![0]!.minor_at = null;
     ({ body } = await read(await GET(at("https://loveiq-preview.vercel.app"))));
     expect(body.passkeys).toMatchObject({ allowed: false, rpID: null });

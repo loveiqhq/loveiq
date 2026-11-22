@@ -423,6 +423,18 @@ describe("Settings › Sign-in & security", () => {
     expect(screen.queryByRole("button", { name: "Add a passkey" })).toBeNull();
   });
 
+  it("tells someone stopped as under 18 why, never that the address is a team login", async () => {
+    await show({
+      minor: true,
+      emailChange: { allowed: false },
+      google: { allowed: false, connected: false },
+      passkeys: { ...SECURITY.passkeys, allowed: false, list: [] },
+    });
+    expect(screen.getByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByText(/team login/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+  });
+
   it("says once how Connect Google went, then takes it out of the address", async () => {
     window.history.replaceState(null, "", "/mira/settings?google=mismatch#security");
     await show({ google: { allowed: true, connected: false } });
