@@ -502,7 +502,8 @@ export default function MiraPrivacyPage() {
             Chats saved before stay until you delete them in Settings, or until the 12-month limit.
           </li>
           <li>
-            Your account, profile, body check answers and nudge records stay until you delete your
+            Your account, profile and nudge records stay until you delete your account. Body check
+            answers stay until you delete them in Settings with your check results, or delete your
             account. If you never finish signing up, your sign-in is deleted after 24 hours.
           </li>
           <li>

@@ -546,7 +546,8 @@ are Art. 9 data.
 - Saved chats: until deleted in Settings, with the account, or 12 months after the person's last
   message (`mira_forget_old_memory`, daily). With "Remember our conversations" off, no new chats
   are saved; earlier ones stay until deleted or the 12-month limit.
-- Account, profile, body checks, nudge records: until the account is deleted.
+- Account, profile, nudge records: until the account is deleted. Body checks: until deleted in
+  Settings with the check results (22 Nov 2026), or with the account.
 - Self-check answers: until deleted in Settings ("Delete my check results"), with the account, or
   at an under-18 stop. A check not yet finished stays in that browser tab for up to a day.
 - Weekly session: until cancelled (the cancellation email takes it out of the calendar), the
