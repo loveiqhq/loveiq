@@ -9,7 +9,6 @@ import {
   type GuidePractice,
 } from "@features/mira/content/guide";
 import { cardById, type EvidenceCard } from "@features/mira/server/cards";
-import { MiraFrame } from "@features/mira/ui/MiraShell";
 import GuideHashScroll from "@features/mira/ui/GuideHashScroll";
 import { AskMiraAbout } from "@features/mira/ui/coaches/GuideAsk";
 import { miraLinkPreview } from "@features/mira/link-preview";
@@ -26,14 +25,15 @@ export const metadata: Metadata = {
 
 /**
  * The body confidence guide, open to everyone (the text and where it comes from:
- * features/mira/content/guide.ts). Mira points here by practice number (#practice-1 to 7).
+ * features/mira/content/guide.ts). Mira points here by practice number (#practice-1 to 7). Its
+ * frame, open or signed in, is the layout's.
  */
 export default function MiraGuidePage() {
   const cards = GUIDE.sources.cards
     .map((id) => cardById(id))
     .filter((c): c is EvidenceCard => Boolean(c));
   return (
-    <MiraFrame>
+    <>
       <GuideHashScroll />
       <article className="max-w-[720px] text-[16px] leading-relaxed text-ap-body [&_h2]:mt-12 [&_h2]:font-serif [&_h2]:text-[26px] [&_h2]:font-medium [&_h2]:leading-tight [&_h2]:text-ap-ink [&_h3]:mt-8 [&_h3]:font-serif [&_h3]:text-[20px] [&_h3]:font-medium [&_h3]:text-ap-ink [&_p]:mt-3">
         <p className="text-[12px] uppercase tracking-[0.14em] text-ap-muted">{GUIDE.kicker}</p>
@@ -152,7 +152,7 @@ export default function MiraGuidePage() {
           </ul>
         </section>
       </article>
-    </MiraFrame>
+    </>
   );
 }
 

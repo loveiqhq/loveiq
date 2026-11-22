@@ -758,7 +758,7 @@ describe("Welcome", () => {
     typeAndSend("hi");
     await screen.findByText("Try this.");
     expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
-    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics BETA, Mira home" }));
+    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics BETA, talk to Mira" }));
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.queryByText("Try this.")).toBeNull();
   });
@@ -769,7 +769,7 @@ describe("Welcome", () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("hi");
     await screen.findByText("Keep talking with Mira, for free");
-    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics BETA, Mira home" }));
+    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics BETA, talk to Mira" }));
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns).toHaveLength(2);
@@ -1059,9 +1059,9 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     expect(screen.queryByText(/team may read replies I rate/)).toBeNull(); // the box went (21 Nov)
     fireEvent.click(box(/18 years of age or older/));
     fireEvent.click(box(/I accept the terms of use and I have read the privacy notice/));
-    expect(send).toBeDisabled();
+    expect(send).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(box(/sex life and health to coach me/));
-    expect(send).toBeEnabled();
+    expect(send).not.toHaveAttribute("aria-disabled");
     expect(screen.getByRole("link", { name: "terms of use" })).toHaveAttribute(
       "href",
       "/terms-of-use"

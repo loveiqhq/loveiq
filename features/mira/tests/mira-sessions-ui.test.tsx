@@ -76,7 +76,7 @@ describe("the weekly question's time picker in the chat", () => {
     });
     const { onAnswer } = weekly();
     const book = await screen.findByRole("button", { name: "Pick a day and a time" });
-    expect(book).toBeDisabled();
+    expect(book).toHaveAttribute("aria-disabled", "true");
     // Real radios: the day's whole name is read out.
     fireEvent.click(screen.getByRole("radio", { name: "Tuesday" }));
     fireEvent.click(screen.getByRole("radio", { name: "19:00" }));
@@ -96,7 +96,9 @@ describe("the weekly question's time picker in the chat", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "Monday" }));
     fireEvent.click(screen.getByRole("radio", { name: "Another time" }));
     fireEvent.change(screen.getByLabelText("Your time"), { target: { value: "07:45" } });
-    expect(screen.getByRole("button", { name: "Book Mondays at 07:45" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Book Mondays at 07:45" })).not.toHaveAttribute(
+      "aria-disabled"
+    );
   });
 
   it("says what went wrong and sends nothing to the chat when booking fails", async () => {
@@ -175,7 +177,10 @@ describe("Home's weekly session card", () => {
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     const sheet = screen.getByRole("dialog", { name: "Your weekly session" });
     expect(within(sheet).getByRole("radio", { name: "Tuesday" })).toBeChecked();
-    expect(within(sheet).getByRole("button", { name: "Keep Tuesdays at 19:00" })).toBeDisabled();
+    expect(within(sheet).getByRole("button", { name: "Keep Tuesdays at 19:00" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
   });
 
   it("opens the way in while the session is under way", async () => {
@@ -294,6 +299,8 @@ describe("the email's stop page", () => {
     render(<SessionStop token="abc.def" />);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminder emails" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Please try again");
-    expect(screen.getByRole("button", { name: "Stop reminder emails" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Stop reminder emails" })).not.toHaveAttribute(
+      "aria-disabled"
+    );
   });
 });
